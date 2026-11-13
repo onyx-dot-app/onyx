@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 import { Button, Card, OnyxLoader, Text } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -14,6 +14,8 @@ import {
 } from "@opal/illustrations";
 import type { IconFunctionComponent } from "@opal/types";
 import { completeMCPUserOAuth } from "@/lib/mcp/svc";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
+import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { useTranslations } from "next-intl";
 
 const AUTO_REDIRECT_DELAY_MS = 2000;
@@ -114,9 +116,9 @@ function buildRedirectPath(rawPath: string): string {
   return redirectUrl.pathname + redirectUrl.search;
 }
 
-export default function MCPOAuthCallbackPage() {
+function MCPOAuthCallbackPageContent() {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const [state, setState] = useState<CallbackState>({ phase: "processing" });
@@ -128,31 +130,37 @@ export default function MCPOAuthCallbackPage() {
   useEffect(() => {
     if (state.phase !== "success") return;
     const timer = setTimeout(
-      () => router.push(state.redirectPath as Route),
+      () => navigation.go(state.redirectPath as Route),
       AUTO_REDIRECT_DELAY_MS
     );
     return () => clearTimeout(timer);
-  }, [state, router]);
+  }, [state, navigation]);
 
   useEffect(() => {
     if (hasProcessedRef.current) return;
     hasProcessedRef.current = true;
 
-    const code = searchParams?.get("code");
-    const stateParam = searchParams?.get("state");
-    const providerError = searchParams?.get("error");
-    const errorDescription = searchParams?.get("error_description");
+    const code = searchParams.get("code");
+    const stateParam = searchParams.get("state");
+    const providerError = searchParams.get("error");
+    const errorDescription = searchParams.get("error_description");
 
     // The provider redirected back with an error (e.g. the user cancelled)
     if (providerError) {
-      if (stateParam) {
-        void completeMCPUserOAuth(null, stateParam, providerError).catch(
-          (error: unknown) => {
-            console.error("Failed to cancel MCP OAuth attempt:", error);
-          }
-        );
+      const error = cancelledError(t, errorDescription);
+      if (!stateParam) {
+        setState({ phase: "error", error });
+        return;
       }
-      setState({ phase: "error", error: cancelledError(t, errorDescription) });
+      // Finish the cancel request first: reporting can close this tab, which aborts it.
+      void completeMCPUserOAuth(null, stateParam, providerError)
+        .catch((cancelError: unknown) => {
+          console.error("Failed to cancel MCP OAuth attempt:", cancelError);
+        })
+        .then(() => {
+          if (reportOAuthCallback(stateParam, false, undefined, error)) return;
+          setState({ phase: "error", error });
+        });
       return;
     }
 
@@ -164,23 +172,25 @@ export default function MCPOAuthCallbackPage() {
     const handleOAuthCallback = async () => {
       try {
         const response = await completeMCPUserOAuth(code, stateParam);
+        const redirectPath = buildRedirectPath(
+          response.redirect_url || DEFAULT_REDIRECT_PATH
+        );
+        if (reportOAuthCallback(stateParam, true, redirectPath)) return;
         setState({
           phase: "success",
           serverName: response.server_name,
-          redirectPath: buildRedirectPath(
-            response.redirect_url || DEFAULT_REDIRECT_PATH
-          ),
+          redirectPath,
         });
       } catch (error) {
-        setState({
-          phase: "error",
-          error: classifyCallbackError(
-            t,
-            error instanceof Error
-              ? error.message
-              : t("mcpOauthCallback.genericError.fallbackDetail")
-          ),
-        });
+        const callbackError = classifyCallbackError(
+          t,
+          error instanceof Error
+            ? error.message
+            : t("mcpOauthCallback.genericError.fallbackDetail")
+        );
+        if (reportOAuthCallback(stateParam, false, undefined, callbackError))
+          return;
+        setState({ phase: "error", error: callbackError });
       }
     };
 
@@ -228,7 +238,11 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(state.redirectPath as Route)}
+                  onClick={() =>
+                    leaveOAuthCallback(() =>
+                      navigation.go(state.redirectPath as Route)
+                    )
+                  }
                 >
                   {t("mcpOauthCallback.continueButton.label")}
                 </Button>
@@ -249,7 +263,11 @@ export default function MCPOAuthCallbackPage() {
                 />
                 <Button
                   width="full"
-                  onClick={() => router.push(DEFAULT_REDIRECT_PATH)}
+                  onClick={() =>
+                    leaveOAuthCallback(() =>
+                      navigation.go(DEFAULT_REDIRECT_PATH)
+                    )
+                  }
                 >
                   {t("mcpOauthCallback.backToChatButton.label")}
                 </Button>
@@ -261,3 +279,5 @@ export default function MCPOAuthCallbackPage() {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(MCPOAuthCallbackPageContent);

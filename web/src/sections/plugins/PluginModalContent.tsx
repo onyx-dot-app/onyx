@@ -13,7 +13,6 @@ export default function PluginModalContent(props: PluginModalContentProps) {
       width="lg"
       height="fit"
       maxHeight="80dvh"
-      position="top"
       preventAccidentalClose={false}
     />
   );

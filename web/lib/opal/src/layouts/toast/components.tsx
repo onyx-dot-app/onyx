@@ -3,7 +3,7 @@
 import "@opal/layouts/toast/styles.css";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { cn } from "@opal/utils";
-import { Button, MessageCard, Tag, Text } from "@opal/components";
+import { Button, MessageCard, Badge, Text } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { useOpalStrings } from "@opal/strings";
@@ -237,7 +237,7 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
   return (
     <div
       data-testid="toast-container"
-      className="fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
+      className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
       <div className="opal-toast-stack">
         {[...allToasts].reverse().map((t, index) => (
@@ -265,10 +265,10 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
           design decisions). */}
       {pileCount > 0 && (
         <div className="opal-toast-pile-count">
-          <Tag
+          <Badge
             title={strings.toastMoreCount(pileCount)}
-            color="white"
-            size="md"
+            color="default"
+            size={6}
           />
         </div>
       )}

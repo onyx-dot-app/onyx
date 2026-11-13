@@ -13,6 +13,7 @@ from onyx.skills.ingest import (
     ingest_skill_bundle,
     ingested_skill_bundle,
 )
+from onyx.skills.models import PluginVersionContent
 
 
 def test_ingest_normalizes_wrapped_bundle_before_hashing_and_storage() -> None:
@@ -150,6 +151,15 @@ def test_ingested_skill_bundle_deletes_new_blob_on_failure(
             bundle_file_id="new-bundle",
             bundle_sha256="0" * 64,
             description="Description",
+            content=PluginVersionContent(
+                bundle_file_id="new-bundle",
+                bundle_sha256="0" * 64,
+                is_valid=True,
+                file_manifest=[],
+                unpacked_size_bytes=0,
+                file_count=0,
+                skills=[],
+            ),
         ),
     )
     monkeypatch.setattr(

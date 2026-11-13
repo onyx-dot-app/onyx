@@ -8,7 +8,9 @@ import {
 } from "@opal/components/inputs/texts/input-type-in-tag/TagField";
 import useUploadTarget from "@opal/components/inputs/uploads/useUploadTarget";
 import type { UploadBaseProps } from "@opal/components/inputs/uploads/UploadControl";
+import { Button } from "@opal/components/buttons/button/components";
 import { SvgImport } from "@opal/icons";
+import { noProp } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 
 export type InputMultiUploadProps = Omit<UploadBaseProps, "placeholder"> & {
@@ -29,7 +31,8 @@ function fileKey(file: File): string {
  * An upload control for many files: each file is a removable tag inside the
  * input chrome, as on `InputMultiSelect`. A click focuses the field, so
  * copied files can be pasted; a double click (or Enter or Space) opens the
- * file picker, and files can be dropped on it. Each pick, paste or drop adds
+ * file picker, as does the select button at the end, and files can be
+ * dropped on it. Each pick, paste or drop adds
  * files, skipping ones it already holds. Backspace arms the last
  * tag and Backspace or Delete removes an armed one; the clear button removes
  * them all. The drop states and copy follow `InputSingleUpload`'s.
@@ -152,6 +155,17 @@ export default function InputMultiUpload({
           openFilePicker();
         }}
         inputAriaProps={{ role: "button" }}
+        trailingAction={
+          <Button
+            onClick={noProp(openFilePicker)}
+            type="button"
+            prominence="secondary"
+            size="sm"
+            disabled={isNonEditable}
+          >
+            {strings.inputMultiUploadSelect}
+          </Button>
+        }
       />
     </div>
   );

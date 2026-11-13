@@ -1,5 +1,5 @@
+import { redirect } from "@opal/navigation";
 import { fetchSS } from "@/lib/utilsSS";
-import { redirect } from "next/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/svcSS";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";

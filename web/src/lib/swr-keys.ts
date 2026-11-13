@@ -9,12 +9,17 @@
 import type {
   CCPairRunLevel,
   CCPairRunsQuery,
+  CCPairRunStatusGroup,
   CCPairThroughputWindow,
   IndexingConnectorsQuery,
+  SyncEntityKind,
 } from "@/lib/connectors/types";
 
 /** The query string a runs feed takes, for one pair or the fleet. */
-function runsQueryParams(query: CCPairRunsQuery): string {
+function runsQueryParams(
+  query: CCPairRunsQuery,
+  ccPairIds: readonly number[] = []
+): string {
   const params = new URLSearchParams({
     page_num: String(query.pageNum),
     page_size: String(query.pageSize),
@@ -33,20 +38,48 @@ function runsQueryParams(query: CCPairRunsQuery): string {
   if (query.resolved !== null) {
     params.set("resolved", String(query.resolved));
   }
+  appendPairIds(params, ccPairIds);
   return params.toString();
 }
+
+function throughputParams(
+  window: CCPairThroughputWindow,
+  bins: number,
+  tzOffsetMinutes: number
+): string {
+  return new URLSearchParams({
+    window,
+    bins: String(bins),
+    tz_offset_minutes: String(tzOffsetMinutes),
+  }).toString();
+}
+
+/** Narrows a fleet route to these pairs. Empty leaves the backend's scope: readable on the feed, operated on the batch routes. */
+function appendPairIds(params: URLSearchParams, ccPairIds: readonly number[]) {
+  for (const ccPairId of ccPairIds) {
+    params.append("cc_pair_ids", String(ccPairId));
+  }
+}
+
+const ACTIVITY_RUNS_COUNT_TAG = "activity-runs-count";
 
 function resolvableCountParams(
   level: CCPairRunLevel | null,
   q: string,
   since: string | null,
-  until: string | null
+  until: string | null,
+  statusGroups: readonly CCPairRunStatusGroup[] | null,
+  ccPairIds: readonly number[] = []
 ): string {
   const params = new URLSearchParams();
   if (level !== null) params.set("level", level);
   if (q) params.set("q", q);
   if (since) params.set("since", since);
   if (until) params.set("until", until);
+  for (const group of statusGroups ?? []) {
+    params.append("status_groups", group);
+  }
+  appendPairIds(params, ccPairIds);
   return params.toString();
 }
 
@@ -67,6 +100,10 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  chatSessionStatus: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/status`,
+  pendingChatMessages: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/pending-messages`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
@@ -161,6 +198,7 @@ export const SWR_KEYS = {
   currentSearchSettings: "/api/search-settings/get-current-search-settings",
   secondarySearchSettings: "/api/search-settings/get-secondary-search-settings",
   reindexProgress: "/api/search-settings/reindex-progress",
+  vectorQuantizationSupport: "/api/search-settings/vector-quantization-support",
   reindexErrors: "/api/search-settings/reindex-errors",
   ccPairIdsBackfillProgress:
     "/api/search-settings/cc-pair-ids-backfill-progress",
@@ -232,6 +270,10 @@ export const SWR_KEYS = {
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
+  skillReviewRequests: "/api/skills/review-requests",
+  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
+  skillVersion: (skillId: string, versionId: string) =>
+    `/api/skills/custom/${skillId}/versions/${versionId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
@@ -273,12 +315,10 @@ export const SWR_KEYS = {
   buildSessionApprovals: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}`,
 
-  // ── Token Rate Limits ─────────────────────────────────────────────────────
-  globalTokenRateLimits: "/api/admin/token-rate-limits/global",
-  userTokenRateLimits: "/api/admin/token-rate-limits/users",
-  userGroupTokenRateLimits: "/api/admin/token-rate-limits/user-groups",
-  userGroupTokenRateLimit: (groupId: number) =>
-    `/api/admin/token-rate-limits/user-group/${groupId}`,
+  // ── Spending Limits ───────────────────────────────────────────────────────
+  spendingLimits: "/api/admin/spending-limits",
+  groupSpendingLimits: (groupId: number) =>
+    `/api/admin/spending-limits/groups/${groupId}`,
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",
@@ -352,6 +392,8 @@ export const SWR_KEYS = {
   // ── Index Attempts ────────────────────────────────────────────────────────
   ccPairLatestIndexAttempt: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/index-attempts?page_num=0&page_size=1`,
+  ccPairDocumentTypes: (ccPairId: number) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/document-types`,
   // Every runs feed query of one pair starts with this, so `mutate` can match them all.
   ccPairRunsPrefix: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/runs?`,
@@ -364,16 +406,26 @@ export const SWR_KEYS = {
     level: CCPairRunLevel | null,
     q: string,
     since: string | null,
-    until: string | null
+    until: string | null,
+    statusGroups: readonly CCPairRunStatusGroup[] | null
   ) =>
-    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until)}`,
-  ccPairThroughput: (ccPairId: number, window: CCPairThroughputWindow) =>
-    `/api/manage/admin/cc-pair/${ccPairId}/throughput?window=${window}`,
+    `${SWR_KEYS.ccPairResolvableRunsCountPrefix(ccPairId)}${resolvableCountParams(level, q, since, until, statusGroups)}`,
+  ccPairThroughput: (
+    ccPairId: number,
+    window: CCPairThroughputWindow,
+    bins: number,
+    tzOffsetMinutes: number
+  ) =>
+    `/api/manage/admin/cc-pair/${ccPairId}/throughput?${throughputParams(window, bins, tzOffsetMinutes)}`,
 
   // ── Index Monitoring ──────────────────────────────────────────────────────
   // The indexing status page's fleet-wide reads, over every readable pair.
-  indexMonitoringOverview: (window: CCPairThroughputWindow) =>
-    `/api/manage/admin/index-monitoring/overview?window=${window}`,
+  indexMonitoringOverview: (
+    window: CCPairThroughputWindow,
+    bins: number,
+    tzOffsetMinutes: number
+  ) =>
+    `/api/manage/admin/index-monitoring/overview?${throughputParams(window, bins, tzOffsetMinutes)}`,
   // Every connector list query starts with this, so `mutate` can match them all.
   indexMonitoringConnectorsPrefix:
     "/api/manage/admin/index-monitoring/connectors?",
@@ -383,7 +435,7 @@ export const SWR_KEYS = {
       page_size: String(query.pageSize),
     });
     if (query.q) params.set("q", query.q);
-    if (query.status !== null) params.set("status", query.status);
+    for (const bucket of query.status ?? []) params.append("status", bucket);
     return `${SWR_KEYS.indexMonitoringConnectorsPrefix}${params.toString()}`;
   },
   // Every fleet runs feed query starts with this, so `mutate` can match them all.
@@ -394,11 +446,17 @@ export const SWR_KEYS = {
     level: CCPairRunLevel | null,
     q: string,
     since: string | null,
-    until: string | null
+    until: string | null,
+    statusGroups: readonly CCPairRunStatusGroup[] | null,
+    ccPairIds: readonly number[]
   ) =>
-    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until)}`,
-  indexMonitoringRuns: (query: CCPairRunsQuery) =>
-    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query)}`,
+    `${SWR_KEYS.indexMonitoringResolvableRunsCountPrefix}${resolvableCountParams(level, q, since, until, statusGroups, ccPairIds)}`,
+  indexMonitoringRuns: (query: CCPairRunsQuery, ccPairIds: readonly number[]) =>
+    `${SWR_KEYS.indexMonitoringRunsPrefix}${runsQueryParams(query, ccPairIds)}`,
+  // Sums the totals of these runs feed URLs. `mutate` matches it by its first element.
+  activityRunsCountTag: ACTIVITY_RUNS_COUNT_TAG,
+  activityRunsCount: (urls: readonly string[]) =>
+    [ACTIVITY_RUNS_COUNT_TAG, ...urls] as const,
   indexAttemptStageMetrics: (indexAttemptId: number) =>
     `/api/manage/admin/index-attempt/${indexAttemptId}/stage-metrics`,
 
@@ -415,7 +473,7 @@ export const SWR_KEYS = {
   // this base key invalidates every variant under the same prefix.
   ccPairIndexingErrors: (ccPairId: number) =>
     `/api/manage/admin/cc-pair/${ccPairId}/errors`,
-  // One attempt's open errors, searched by message or document id.
+  // One attempt's errors grouped open, resolved without retry, then closed, newest first in each, searched by message, document id or entity id.
   ccPairAttemptErrors: (
     ccPairId: number,
     query: {
@@ -429,10 +487,33 @@ export const SWR_KEYS = {
       index_attempt_id: String(query.indexAttemptId),
       page_num: String(query.pageNum),
       page_size: String(query.pageSize),
-      include_resolved: "false",
+      include_resolved: "true",
+      order: "state",
     });
     if (query.q) params.set("q", query.q);
     return `/api/manage/admin/cc-pair/${ccPairId}/errors?${params.toString()}`;
+  },
+  // One group sync's failed users or groups, in the same state order as `ccPairAttemptErrors`.
+  ccPairSyncErrors: (
+    ccPairId: number,
+    query: {
+      attemptId: number;
+      entityKind: SyncEntityKind;
+      q: string;
+      pageNum: number;
+      pageSize: number;
+    }
+  ) => {
+    const params = new URLSearchParams({
+      attempt_id: String(query.attemptId),
+      entity_kind: query.entityKind,
+      page_num: String(query.pageNum),
+      page_size: String(query.pageSize),
+      include_resolved: "true",
+      order: "state",
+    });
+    if (query.q) params.set("q", query.q);
+    return `/api/manage/admin/cc-pair/${ccPairId}/sync-errors?${params.toString()}`;
   },
 
   // ── Scheduled Tasks (Craft) ───────────────────────────────────────────────

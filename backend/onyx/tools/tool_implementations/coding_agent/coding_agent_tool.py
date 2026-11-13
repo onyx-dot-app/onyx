@@ -21,7 +21,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult, UserMessage
 from onyx.prompts.coding_agent.coding_agent import MAX_CODING_AGENT_CYCLES
 from onyx.tools.interface import Tool, parse_tool_arguments
-from onyx.tools.models import ToolContext
+from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.utils.logger import setup_logger
 
@@ -55,6 +55,10 @@ class CodingAgentTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.DIRECT
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -77,8 +81,10 @@ class CodingAgentTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     CODING_AGENT_QUERY_KEY: {
                         "type": "string",

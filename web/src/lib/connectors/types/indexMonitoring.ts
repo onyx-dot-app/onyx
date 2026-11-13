@@ -20,17 +20,20 @@ export interface IndexingOverviewResponse {
   recent_docs_indexed: number;
   /** The sum of each pair's documents, so a document two pairs hold counts twice. */
   total_docs_indexed: number;
+  /** Optional: a backend that does not report it leaves Paused off the status page. */
+  paused_connectors?: number;
   throughput: CCPairThroughputResponse;
 }
 
-/** Mirrors `IndexingConnectorStatus`: the status page's buckets, in list order. */
+/** Mirrors `IndexingConnectorStatus`: the status page's buckets, in the rank order the API sorts rows by. */
 export const INDEXING_CONNECTOR_STATUSES = [
   "indexing",
+  "syncing",
   "failed",
-  "paused",
   "deleting",
   "scheduled",
   "indexed",
+  "paused",
 ] as const;
 export type IndexingConnectorStatus =
   (typeof INDEXING_CONNECTOR_STATUSES)[number];
@@ -50,8 +53,12 @@ export interface IndexingConnectorRow {
   docs_indexed: number;
   last_success: string | null;
   latest_index_attempt: IndexAttemptSnapshot | null;
-  /** The latest attempt's open errors, whole entities included. */
+  /** The latest attempt's open errors, whole entities included, plus the pair's open prune and check runs. */
   open_error_count: number;
+  /** The groups that read a private pair's documents and the viewer can see, so a scoped viewer can get 0. */
+  group_count: number;
+  /** Those groups' names, sorted. Set for private and restricted-sync pairs only. */
+  group_names: string[];
   /** Place in the line of queued index attempts, from 1, while the latest waits. */
   queue_position: number | null;
   permissions: PermissionsOf<"CCPair">;
@@ -62,6 +69,8 @@ export interface IndexingConnectorsResponse {
   items: IndexingConnectorRow[];
   total_items: number;
   status_counts: Record<IndexingConnectorStatus, number>;
+  /** Matching pairs per source over every page, so a divider's count covers rows on other pages. */
+  source_counts: Partial<Record<ValidSources, number>>;
   /** Admins only, on the first page with no status filter. */
   federated_connectors: FederatedConnectorStatus[];
 }
@@ -72,7 +81,8 @@ export interface IndexingConnectorsQuery {
   pageSize: number;
   /** Matched against the name. */
   q: string;
-  status: IndexingConnectorStatus | null;
+  /** Pairs in any of these buckets, or every pair when null. */
+  status: readonly IndexingConnectorStatus[] | null;
 }
 
 /** Mirrors `CCPairRef`: a pair named in a fleet-wide feed. */

@@ -23,7 +23,7 @@ are dropped once it closes.
 | `expanded`      | `boolean`         | —       | Whether the fold is open. Visual only; the host card owns the state |
 | `border`        | `BorderVariants`  | —       | Border style, matched to the header above                           |
 | `radius`        | `string`          | —       | Bottom corner radius in rem, matched to the header's                |
-| `borderColor`   | `StatusVariants`  | —       | Status border colour, for hosts that have one                       |
+| `borderColor`   | `StatusColor`  | —       | Status border colour, for hosts that have one                       |
 | `contentHeight` | `80 \| "full"`    | `80`    | `80` caps the body at 20rem with scroll; `"full"` does not cap      |
 | `children`      | `React.ReactNode` | —       | The folded content                                                  |
 

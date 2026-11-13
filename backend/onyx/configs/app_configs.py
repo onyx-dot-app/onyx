@@ -1167,9 +1167,12 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index
-# in a single pass. Connector deletion queues its per-document cleanup in batches
-# of this size, so the broker holds at most one batch per cc_pair.
+# in a single pass. Connector deletion queues cleanup for at most this many
+# documents per pass, so the broker holds at most one pass per cc_pair.
 DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
+
+# Documents per connector-deletion / pruning cleanup task.
+DOCUMENT_CLEANUP_BATCH_SIZE = int(os.environ.get("DOCUMENT_CLEANUP_BATCH_SIZE") or 500)
 
 DB_YIELD_PER_DEFAULT = 64
 
@@ -1207,6 +1210,18 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+# The fallback browser runs inside the calling process. Onyx kills a browser when
+# its render passes the time limit, or when all fallback browsers in the process
+# together pass the memory limit (the largest goes). 0 turns off the memory limit.
+OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS", 60)
+)
+OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB = _non_negative_int_env(
+    "OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB", 2048
+)
+OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY", 3)
 )
 
 # Limits for the built-in open_url crawler. The body read stops at the larger
@@ -1768,10 +1783,6 @@ LOG_ONYX_MODEL_INTERACTIONS = (
     os.environ.get("LOG_ONYX_MODEL_INTERACTIONS", "").lower() == "true"
 )
 
-PROMPT_CACHE_CHAT_HISTORY = (
-    os.environ.get("PROMPT_CACHE_CHAT_HISTORY", "").lower() == "true"
-)
-
 # Opt-in cap on outgoing image-count for Azure providers (any model_provider
 # starting with "azure"). When enabled, requests are capped at 50 images each
 # (matching the documented Azure OpenAI ceiling) to avoid raw 400s from the
@@ -1965,6 +1976,12 @@ MCP_SERVER_CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Run every MCP document search in retrieval-only mode (no LLM calls), whatever
+# the client asks for.
+MCP_SERVER_SEARCH_RETRIEVAL_ONLY = (
+    os.environ.get("MCP_SERVER_SEARCH_RETRIEVAL_ONLY", "").lower() == "true"
+)
+
 
 POD_NAME = os.environ.get("POD_NAME")
 POD_NAMESPACE = os.environ.get("POD_NAMESPACE")
@@ -2002,6 +2019,10 @@ SIGNUP_RATE_LIMIT_ENABLED = (
 )
 
 MOCK_CONNECTOR_FILE_PATH = os.environ.get("MOCK_CONNECTOR_FILE_PATH")
+
+# Where providers reach the webhook server. Set it when the API and web hosts
+# differ: the Helm webhook ingress is on `ingress.api.host`.
+WEBHOOK_PUBLIC_URL = os.environ.get("WEBHOOK_PUBLIC_URL") or WEB_DOMAIN
 
 # Global limit on indexing embedding requests (see embedding_rate_limit.py).
 # The window is stored in Redis, one entry per request, so the request count
@@ -2123,6 +2144,14 @@ if _uses_default_object_storage_credentials(
 S3_GENERATE_LOCAL_CHECKSUM = (
     os.environ.get("S3_GENERATE_LOCAL_CHECKSUM", "").lower() == "true"
 )
+
+# Presigned file store URLs. Keep them short: an S3 URL also stops working when
+# the session credentials that signed it expire.
+FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS = 5 * 60
+FILE_STORE_PRESIGN_MAX_TTL_SECONDS = 15 * 60
+# The largest single S3 PUT. It also bounds the hash that finalize computes on
+# stores that keep no SHA-256.
+FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024
 
 # The bundled MinIO that releases before the object store wrote to. A hand-run
 # upgrade keeps this endpoint in .env, so the files stay in MinIO.

@@ -6,8 +6,8 @@ from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
-from onyx.chat.models import ChatBasicResponse
-from onyx.chat.process_message import gather_stream, handle_stream_message_objects
+from onyx.chat.models import ChatFullResponse
+from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
@@ -310,16 +310,15 @@ def handle_regular_answer(
         new_message_request: SendMessageRequest,
         slack_context_str: str | None,
         onyx_user: User,
-    ) -> ChatBasicResponse:
+    ) -> ChatFullResponse:
         token = CURRENT_USER_ID_CONTEXTVAR.set(str(usage_user.id))
         try:
-            packets = handle_stream_message_objects(
+            answer = run_chat_turn(
                 new_msg_req=new_message_request,
                 user=onyx_user,
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
             )
-            answer = gather_stream(packets)
         finally:
             CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
@@ -373,12 +372,9 @@ def handle_regular_answer(
             tags=channel_tags or None,
         )
 
-        # Slack answers should be grounded in retrieval (pre-#7399 behavior):
-        # force the search tool on the first LLM cycle, but only when the
-        # channel persona actually has a usable one — non-search personas,
-        # disabled search tools and deployments without connectors keep the
-        # unforced behavior.
-        forced_search_tool_id = next(
+        # Prefer retrieval when this persona has usable search. Evidence and
+        # citation safeguards still apply when the model chooses to search.
+        preferred_search_tool_id = next(
             (
                 tool.id
                 for tool in persona.tools
@@ -386,15 +382,15 @@ def handle_regular_answer(
             ),
             None,
         )
-        if forced_search_tool_id is not None and not SearchTool.is_available(
+        if preferred_search_tool_id is not None and not SearchTool.is_available(
             db_session
         ):
-            forced_search_tool_id = None
+            preferred_search_tool_id = None
 
         new_message_request = SendMessageRequest(
             message=user_message.message,
             allowed_tool_ids=None,
-            forced_tool_id=forced_search_tool_id,
+            preferred_tool_id=preferred_search_tool_id,
             file_descriptors=[],
             internal_search_filters=filters,
             deep_research=False,
@@ -415,7 +411,15 @@ def handle_regular_answer(
 
         # If a channel filter was applied but no results were found, override
         # the LLM response to avoid hallucinated answers about unindexed channels
-        if channel_tags and not answer.citation_info and not answer.top_documents:
+        if (
+            channel_tags
+            and any(
+                call.tool_name == SearchTool.NAME and call.search_docs is not None
+                for call in answer.tool_calls
+            )
+            and not answer.citation_info
+            and not answer.top_documents
+        ):
             channel_names = ", ".join(f"#{tag.tag_value}" for tag in channel_tags)
             answer.answer = (
                 f"No indexed data found for {channel_names}. "

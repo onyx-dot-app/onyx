@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound } from "@opal/navigation";
 import { parsePluginId } from "@/lib/plugins/routes";
 import ExternalAppPluginDetail from "@/sections/plugins/ExternalAppPluginDetail";
 

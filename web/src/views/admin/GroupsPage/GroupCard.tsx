@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import type { UserGroup } from "@/lib/types";
 import { SvgChevronRight, SvgUser, SvgUserManage, SvgUsers } from "@opal/icons";
@@ -23,7 +23,7 @@ interface GroupCardProps {
 
 function GroupCard({ group }: GroupCardProps) {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const builtIn = isBuiltInGroup(group);
   const isAdmin = group.name === "Admin";
@@ -34,6 +34,7 @@ function GroupCard({ group }: GroupCardProps) {
   const canManageMembers = can(group, "manage_members");
 
   async function handleRename(newName: string) {
+    if (!newName) return;
     try {
       await renameGroup(group.id, newName);
       await refreshGroupLists(mutate);
@@ -46,7 +47,7 @@ function GroupCard({ group }: GroupCardProps) {
   }
 
   function openGroup() {
-    router.push(`/admin/groups/${group.id}`);
+    navigation.go(`/admin/groups/${group.id}`);
   }
 
   return (
@@ -59,11 +60,10 @@ function GroupCard({ group }: GroupCardProps) {
       onClick={canManageMembers ? openGroup : undefined}
     >
       <ContentAction
+        font="main-content-emphasis"
         icon={isAdmin ? SvgUserManage : isBasic ? SvgUser : SvgUsers}
         title={displayGroupName(group, t)}
         description={buildGroupDescription(group, t)}
-        sizePreset="main-content"
-        variant="section"
         padding={1}
         suffix={isBasic ? t("card.defaultSuffix.label") : undefined}
         editable={!isSyncing && canManage}
@@ -78,10 +78,7 @@ function GroupCard({ group }: GroupCardProps) {
             // `openGroup`, and the card is the tab stop.
             tabIndex={-1}
           >
-            {formatMemberCount(
-              group.users.filter((u) => u.is_active).length,
-              t
-            )}
+            {formatMemberCount(group.active_member_count, t)}
           </Button>
         }
       />

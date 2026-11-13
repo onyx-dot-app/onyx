@@ -1,15 +1,16 @@
 import threading
 import time
 from collections.abc import Callable
+from datetime import UTC, datetime
 from threading import Barrier
-from typing import Any
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation, ToolProgress
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.models import (
     BaseFilters,
     DocumentTimeField,
@@ -20,7 +21,7 @@ from onyx.context.search.models import (
     TimeFilter,
     UserAccessFilters,
 )
-from onyx.document_index.interfaces import DocumentIndex
+from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -35,13 +36,18 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.search.constants import MAX_SELECTED_SECTIONS
 from onyx.tools.tool_implementations.search.models import (
     SearchContext,
     SearchPlanningResult,
 )
 from onyx.tools.tool_implementations.search.search_tool import (
+    MAX_QUERIES_PER_CALL,
     SearchTool,
     update_search_context,
+)
+from onyx.tools.tool_implementations.utils import (
+    convert_inference_sections_to_llm_string,
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -57,6 +63,8 @@ def _make_tool(
     auto_detect_filters: bool = True,
     selection_llm_factory: MagicMock | None = None,
     primary_llm_cost_checked: bool = True,
+    retrieval_only: bool = False,
+    retrieval_context_chunks: int = 0,
 ) -> SearchTool:
     """Instantiate SearchTool with non-DB deps mocked; DB/LLM calls are patched in _run."""
     return SearchTool(
@@ -71,6 +79,8 @@ def _make_tool(
         auto_detect_filters=auto_detect_filters,
         selection_llm_factory=selection_llm_factory,
         primary_llm_cost_checked=primary_llm_cost_checked,
+        retrieval_only=retrieval_only,
+        retrieval_context_chunks=retrieval_context_chunks,
     )
 
 
@@ -84,6 +94,8 @@ def _run(
     progress: list[ToolProgress] | None = None,
     sections: list[InferenceSection] | None = None,
     context: ToolContext | None = None,
+    queries: list[str] | None = None,
+    federated_mock: MagicMock | None = None,
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = MagicMock(return_value=[])
@@ -98,7 +110,12 @@ def _run(
         ),
         patch(f"{MODULE}.get_current_search_settings", return_value=MagicMock()),
         patch(f"{MODULE}.EmbeddingModel"),
-        patch(f"{MODULE}.get_federated_retrieval_functions", return_value=[]),
+        patch(
+            f"{MODULE}.get_federated_retrieval_functions",
+            federated_mock
+            if federated_mock is not None
+            else MagicMock(return_value=[]),
+        ),
         patch(
             f"{MODULE}.fetch_unique_document_sources", return_value=connected_sources
         ),
@@ -115,7 +132,7 @@ def _run(
         result = tool.run(
             invocation=ToolInvocation(
                 call_id="search",
-                arguments={"queries": ["ticket"]},
+                arguments={"queries": queries or ["ticket"]},
                 cancellation=CancellationSignal(),
                 update=lambda item: (
                     progress.append(item.model_copy(deep=True))
@@ -143,6 +160,65 @@ def _run(
             ],
         )
     return mock_search_pipeline
+
+
+@pytest.mark.parametrize(
+    ("selected", "expected"),
+    [(["Engineering Wiki"], ["Engineering Wiki"]), (None, ["Persona Set"])],
+)
+def test_federated_retrieval_uses_selected_document_sets(
+    selected: list[str] | None, expected: list[str]
+) -> None:
+    """Selected document sets replace the persona's sets, as for indexed search."""
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=selected))
+    tool.persona_search_info.document_set_names = ["Persona Set"]
+    federated = MagicMock(return_value=[])
+
+    with patch(
+        "onyx.db.document_set.filter_document_set_names_by_user_access",
+        return_value=set(selected or []),
+    ):
+        _run(
+            tool,
+            connected_sources=[],
+            skip_query_expansion=True,
+            federated_mock=federated,
+        )
+
+    assert federated.call_args.kwargs["document_set_names"] == expected
+
+
+def _slack_oauth_token(connector_id: int) -> MagicMock:
+    token = MagicMock(federated_connector_id=connector_id)
+    token.federated_connector.source = FederatedConnectorSource.FEDERATED_SLACK
+    token.federated_connector.config = {"channels": ["eng"]}
+    token.token.get_value.return_value = f"slack-token-{connector_id}"
+    return token
+
+
+@pytest.mark.parametrize(
+    ("linked_connector_id", "expected_token"),
+    [(7, "slack-token-7"), (9, "slack-token-9"), (8, None)],
+)
+def test_slack_oauth_search_requires_link_to_selected_document_sets(
+    linked_connector_id: int, expected_token: str | None
+) -> None:
+    tool = _make_tool(user_selected_filters=BaseFilters(document_set=["Eng"]))
+    with (
+        patch(
+            f"{MODULE}.list_federated_connector_oauth_tokens",
+            return_value=[_slack_oauth_token(7), _slack_oauth_token(9)],
+        ),
+        patch(
+            f"{MODULE}.get_federated_connector_document_set_mappings_by_document_set_names",
+            return_value=[MagicMock(federated_connector_id=linked_connector_id)],
+        ) as mappings,
+    ):
+        access_token, _, _ = tool._prefetch_slack_data(MagicMock())
+
+    mappings.assert_called_once()
+    assert mappings.call_args.args[1] == ["Eng"]
+    assert access_token == expected_token
 
 
 def test_empty_search_never_resolves_selection_model() -> None:
@@ -246,6 +322,107 @@ def test_search_uses_one_selection_model_per_invocation(
     assert cost.call_count == (2 if with_slack or selection_mode != "configured" else 0)
 
 
+def _next_chunk(
+    chunk_requests: list[DocumentSectionRequest], **_: object
+) -> list[InferenceChunk]:
+    (request,) = chunk_requests
+    chunk = _section(request.document_id).center_chunk
+    return [
+        chunk.model_copy(
+            update={"chunk_id": 1, "content": f"next chunk of {request.document_id}"}
+        )
+    ]
+
+
+@pytest.mark.parametrize("context_chunks", [0, 2])
+def test_retrieval_only_expands_context_without_model_calls(
+    context_chunks: int,
+) -> None:
+    resolver = MagicMock()
+    decide = MagicMock(return_value=None)
+    tool = _make_tool(
+        selection_llm_factory=resolver,
+        primary_llm_cost_checked=False,
+        retrieval_only=True,
+        retrieval_context_chunks=context_chunks,
+    )
+    tool.enable_slack_search = True
+    index = cast(MagicMock, tool.document_index)
+    index.id_based_retrieval.side_effect = _next_chunk
+    sections = [_section(f"doc-{i}") for i in range(MAX_SELECTED_SECTIONS + 1)]
+    context = ToolContext()
+    with (
+        patch(f"{MODULE}.check_llm_cost_limit_for_provider") as cost,
+        patch.object(tool, "_prefetch_slack_data") as slack_prefetch,
+        patch.object(tool, "_resolve_decision_client") as decision_client,
+        patch(f"{MODULE}.populate_file_ids_on_sections") as populate_file_ids,
+        patch(f"{MODULE}.select_sections_for_expansion") as select,
+        patch(
+            f"{MODULE}.convert_inference_sections_to_llm_string",
+            wraps=convert_inference_sections_to_llm_string,
+        ) as to_llm_string,
+    ):
+        searched = _run(
+            tool,
+            context=context,
+            connected_sources=[DocumentSource.GITHUB],
+            decide_mock=decide,
+            sections=sections,
+        )
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert [
+        section.combined_content
+        for section in to_llm_string.call_args.kwargs["top_sections"]
+    ] == [
+        f"content of doc-{i}" + (f"\nnext chunk of doc-{i}" if context_chunks else "")
+        for i in range(MAX_SELECTED_SECTIONS)
+    ]
+    # Each kept section reads only the chunks below it, up to the window.
+    assert [
+        call.kwargs["chunk_requests"][0].max_chunk_ind
+        for call in index.id_based_retrieval.call_args_list
+    ] == [context_chunks] * (MAX_SELECTED_SECTIONS if context_chunks else 0)
+    # One completed search and no expansion or time decision to carry forward.
+    assert len(context.search_context.search_cycles) == 1
+    assert context.search_context.cached_expansion is None
+    assert context.search_context.time_filter_computed is False
+    assert cast(MagicMock, tool.llm).mock_calls == []
+    for step in (
+        decide,
+        slack_prefetch,
+        decision_client,
+        resolver,
+        select,
+        cost,
+        populate_file_ids,
+    ):
+        step.assert_not_called()
+
+
+def test_retrieval_only_ignores_planning_from_earlier_steps() -> None:
+    context = ToolContext()
+    context.search_context = SearchContext(
+        cached_expansion=("rephrased query", ("cached keyword",)),
+        time_filter=TimeFilter(
+            field=DocumentTimeField.UPDATED_AT, start=datetime(2026, 1, 1, tzinfo=UTC)
+        ),
+        time_filter_computed=True,
+    )
+    tool = _make_tool(
+        user_selected_filters=BaseFilters(source_type=[DocumentSource.ASANA]),
+        retrieval_only=True,
+    )
+
+    searched = _run(tool, context=context, connected_sources=[DocumentSource.ASANA])
+
+    assert sorted(_queries_sent(searched)) == ["resolve the ticket", "ticket"]
+    assert all(
+        applied.updated_at_range is None
+        for applied in _filters_passed_to_search(searched)
+    )
+
+
 def _filters_passed_to_search(mock_search_pipeline: MagicMock) -> list[Any]:
     return [
         call.kwargs["chunk_search_request"].user_selected_filters
@@ -266,6 +443,19 @@ def _emitted_filter_sources(progress: list[ToolProgress]) -> list[list[str]]:
         for item in progress
         if isinstance(item.details, SearchDocsResponse) and item.details.sources
     ]
+
+
+def test_a_call_runs_at_most_the_query_limit() -> None:
+    queries = [f"query {index}" for index in range(MAX_QUERIES_PER_CALL + 2)]
+    mock_search_pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.SLACK],
+        skip_query_expansion=True,
+        queries=queries,
+    )
+    sent = set(_queries_sent(mock_search_pipeline))
+    assert set(queries[:MAX_QUERIES_PER_CALL]) <= sent
+    assert not set(queries[MAX_QUERIES_PER_CALL:]) & sent
 
 
 def test_decided_scope_is_passed_to_search() -> None:

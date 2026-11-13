@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import stat
+import tracemalloc
 import zipfile
 
 import pytest
@@ -452,3 +453,35 @@ def test_validator_non_size_violation_returns_400() -> None:
     with pytest.raises(OnyxError) as exc_info:
         normalize_custom_bundle(b"not a zip")
     assert exc_info.value.status_code == 400
+
+
+def test_normalizer_accepts_sibling_paths_that_share_a_prefix() -> None:
+    zip_bytes = _build_zip(
+        [
+            ("hello/SKILL.md", VALID_SKILL_MD),
+            ("hello/scripts/", b""),
+            ("hello/scripts-old", b"file"),
+            ("hello/scripts/run.sh", b"script"),
+            ("hello/scripts.md", b"notes"),
+        ]
+    )
+
+    assert normalize_custom_bundle(zip_bytes).source_directory == "hello"
+
+
+def test_normalizer_checks_deep_paths_without_building_parent_paths() -> None:
+    # 20 paths of 8,000 levels: parent-path sets would hold about 1.3 GB.
+    deep = "/".join(["a"] * 8000)
+    zip_bytes = _build_zip(
+        [("hello/SKILL.md", VALID_SKILL_MD)]
+        + [(f"hello/{index}/{deep}", b"x") for index in range(20)]
+    )
+
+    tracemalloc.start()
+    try:
+        normalize_custom_bundle(zip_bytes)
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert peak < 32 * 1024 * 1024

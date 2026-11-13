@@ -70,7 +70,7 @@ export default function MemberCraftAppSkills({
       {loadError}
 
       <InputTypeIn
-        searchIcon
+        icon="search"
         value={search}
         onChange={(event) => setSearch(event.target.value)}
         placeholder={t("search")}
@@ -86,8 +86,7 @@ export default function MemberCraftAppSkills({
           {visible.map((skill) => (
             <li key={`${skill.source}:${skill.id}`} className="px-4 py-3">
               <ContentAction
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 padding={0}
                 title={skill.name}
                 titleMaxLines={1}

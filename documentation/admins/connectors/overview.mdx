@@ -47,10 +47,23 @@ The **Document Access** setting controls who can see the Connector's documents i
 **Specific Groups** (Private): Only the user who created the Connector and the User Groups you name can see its data.
 User Groups need a Business plan or higher.
 
+**Only Me**: Only the Onyx user who owns the Connector's credential can see its data through this Connector.
+If you pick a credential that another user shared with you, that user is the one who sees the data, not you.
+For a source that uses no credential, such as File or Web, the user who created the Connector sees its data.
+This option needs a Business plan or higher.
+
+A document that another Connector also indexes is visible to that Connector's readers too. For example,
+if a public Connector indexes the same document, every user can see it.
+
+<Warning>
+  If the workspace moves to the Community Edition, **Only Me** Connectors become public,
+  like all other non-public Connectors.
+</Warning>
+
 **Sync with the source**: Onyx copies the permissions from the source.
 Each user only sees documents they can open in the source.
 You can also **Restrict Access to Groups** so that only members of selected groups see the documents.
-Synced permissions still apply. The Indexing Status page shows this as **Auto-sync, restricted**.
+Synced permissions still apply. The Indexing Status page shows both as **Auto-sync permissions**.
 
 You can change the access type later from the Connector's page.
 A change starts a re-index so that search results reflect the new access.
@@ -73,6 +86,10 @@ With **Sync with the source**, Onyx keeps an access list from the source and upd
 Group membership from the source is also synced where the source supports it.
 A permission change in the source can take from a few minutes to an hour to appear in Onyx.
 Click **Sync Permissions** on the Connector's page to pull permissions now.
+If a group sync cannot read a user or a group, it skips it.
+The sync's card in the **Activities** panel counts these failed users and groups.
+Click a count to see each one with its error, and click **Resolve** to close it.
+Google Drive and Confluence report these failures.
 
 Permission syncing is available for these Connectors:
 
@@ -83,6 +100,7 @@ Permission syncing is available for these Connectors:
 - Slack (the indexed Slack Connector, not Federated Slack)
 - GitHub
 - Box
+- Egnyte
 - Canvas
 - SharePoint (certificate-based authentication)
 - OneDrive
@@ -116,7 +134,28 @@ Set a start date when you create the connector if you only need recent content, 
 ## Managing Existing Connectors
 
 To see your existing Connectors, open the **Admin Panel** and click **Indexing Status** in the sidebar.
-This page shows each Connector, its status, access type, document count, and when it was last indexed.
+This page groups Connectors by source. Each row shows the Connector's status, who can see its documents,
+its document count, and how many documents its last run processed.
+Click **Add Connector** at the top of the page to add a Connector.
+
+Two cards are above the list:
+
+- The counts card shows the active Connectors, the documents indexed (a document in two Connectors counts twice),
+  and the paused Connectors.
+- The graph card shows the Connectors that are indexing, the documents processed recently,
+  and a chart of the documents processed in the selected time window.
+  Select bars on the chart to show only the activities in that time range.
+
+The pills above the list count the Connectors in each status. Indexing and syncing Connectors share one pill,
+and its tooltip shows the two counts. Click a pill to show only its Connectors, and click it again to show all.
+The **Status** menu still has separate **Indexing** and **Syncing** items.
+Click the error count on a row to show its errors in the **Activities** panel.
+Click **View Details** on a row to see its running and latest runs, six at most, with filters for time range,
+run type and status. **View All Runs** opens the Indexing tab of the Connector's page.
+
+The **Activities** panel next to the list shows the indexing activity of all Connectors.
+It opens automatically when there are errors. Click the panel button on the counts card to show or hide it.
+On a narrow screen, the panel is below the list. Click **Activities** at the end of the list to show or hide it.
 
 <img className="rounded-image" src="/assets/admins/connectors/indexing_status.webp" alt="Onyx Existing Connectors page showing connector statuses"/>
 
@@ -146,15 +185,41 @@ The status of a Connector can be:
 
 ### Connector Details
 
+Click a Connector to open its page.
+The **Indexing Status** card shows the indexing status and the number of indexed documents.
+It does not show an estimate of the documents left to index. Click the status, or the pruning or checks icon beside it,
+to go to that run on the **Indexing** tab. Google Drive, SharePoint, OneDrive, File Upload, AWS S3, Cloudflare R2,
+Google Storage, Oracle Storage and Azure Data Lake Storage record each indexed document's file type and size.
+SharePoint site pages have no type. Documents indexed before Onyx recorded types get one on the next **Full Re-index**.
+The card shows the number of file types and, when every document has a type and a size, their total size.
+When every document has a type, click **View Details** to see the documents and size for each type.
+Types after the 11 largest show together as **Other**. Under the status,
+a scheduled Connector shows its position in the indexing queue,
+and a deleting Connector shows when the deletion started.
+Click the error count to see the latest run's errors in the **Activities** panel.
+The panel opens automatically when there are errors. When the panel is beside the page,
+use the panel button to show or hide it.
+A Connector with permission sync also shows a **Permissions Sync Status** card with the synced documents and,
+where the source syncs groups, the group memberships. Two tabs follow the status cards:
+
+- **Connector Configurations**: the account, index configurations, sharing and schedule.
+- **Indexing**: the **Document Indexing** chart and the **Indexing Runs** list.
+  The chart shows only when the selected time window has indexing. The tab is available after the first run starts.
+
 The **Manage Index** menu has these actions:
 
 - **Update Index**: pull updates and index documents since the last successful run.
+- **Sync Permissions**: pull document permissions from the source (permission-synced Connectors).
 - **Full Re-index**: re-index all documents from the source. This can take hours or days on a large source.
-- **Start Indexing**: skip the connector checks and index now.
-- **Sync Permissions**: pull who can read each document from the source now (permission-synced Connectors).
+  Not available while a re-index that switches after re-indexing builds the new index (see [Search
+  Configs](/admins/advanced_configs/search_configs)).
 - **Pause Indexing & Syncs** / **Resume Indexing & Syncs**: stop or restart indexing runs and permission syncs.
   Indexed documents stay searchable while paused.
-- **Delete**: remove the Connector and its documents from Onyx.
+- **Delete Connector**: permanently remove the Connector and the documents only it indexed.
+
+Update Index and Full Re-index show once the Connector has indexed. A paused Connector shows only Resume and Delete.
+If the connector checks hold the first index, the menu shows **Start Indexing** in their place,
+which skips the checks and indexes now.
 
 <img className="rounded-image" src="/assets/admins/connectors/connector_details.webp" alt="Onyx Connector details page showing connector details"/>
 

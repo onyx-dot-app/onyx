@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useId,
   useState,
@@ -30,7 +31,7 @@ import {
   Button,
   InputSingleSelect,
   MessageCard,
-  Tag,
+  Badge,
   Text,
 } from "@opal/components";
 import { Formik, Form, type FormikHelpers } from "formik";
@@ -123,6 +124,7 @@ export default function MCPAuthenticationPage({
   const formId = useId();
   const t = useTranslations("actions");
   const recommendedCopy = useTranslations("craft.llmPopover.recommended");
+  const navigation = useNavigation();
   const { appName } = useSettings();
   const { user } = useUser();
   const [initialValues] = useState(() => {
@@ -329,7 +331,7 @@ export default function MCPAuthenticationPage({
       clearMcpChatEnableIntent(chatEnableIntent);
       if (result.status === "authorization_required") {
         if (onAuthorize) onAuthorize(result.authorization_url);
-        else window.location.href = result.authorization_url;
+        else navigation.load(result.authorization_url);
         return;
       }
       persistedValues.current = values;
@@ -443,7 +445,10 @@ export default function MCPAuthenticationPage({
                       rightChildren={
                         selectedAuthentication !== null &&
                         selectedAuthentication === recommendedAuthentication ? (
-                          <Tag title={recommendedCopy("label")} color="green" />
+                          <Badge
+                            title={recommendedCopy("label")}
+                            color="success"
+                          />
                         ) : undefined
                       }
                       options={[

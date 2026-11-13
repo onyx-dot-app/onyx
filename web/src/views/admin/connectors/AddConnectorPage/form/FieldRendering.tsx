@@ -19,7 +19,6 @@ import {
   Text as OpalText,
 } from "@opal/components";
 import { getIn, useField, useFormikContext } from "formik";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import {
   Content,
   InputHorizontal,
@@ -82,13 +81,12 @@ const TabsField: FC<TabsFieldProps> = ({
       : tabField.description;
 
   return (
-    <GeneralLayouts.Section gap={2} alignItems="start">
+    <Section gap={2} alignItems="start">
       {tabField.label && (
         <Content
+          font="main-content-emphasis"
           title={resolvedLabel ?? ""}
           description={resolvedDescription}
-          sizePreset="main-content"
-          variant="section"
         />
       )}
 
@@ -132,7 +130,7 @@ const TabsField: FC<TabsFieldProps> = ({
           </Tabs.List>
           {tabField.tabs.map((tab) => (
             <Tabs.Content key={tab.value} value={tab.value}>
-              <GeneralLayouts.Section gap={3} alignItems="start">
+              <Section gap={3} alignItems="start">
                 {tab.fields.map((subField) => {
                   // Check visibility condition first
                   if (
@@ -153,12 +151,12 @@ const TabsField: FC<TabsFieldProps> = ({
                     />
                   );
                 })}
-              </GeneralLayouts.Section>
+              </Section>
             </Tabs.Content>
           ))}
         </Tabs>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 };
 
@@ -238,7 +236,7 @@ function CheckboxTabsField({
   >(option.name);
   // The tab strip carries strings; the form value stays a boolean.
   return (
-    <GeneralLayouts.Section gap={1} alignItems="start">
+    <Section gap={1} alignItems="start">
       <Tabs
         value={String(value ?? option.default ?? false)}
         onValueChange={(next) => {
@@ -260,7 +258,7 @@ function CheckboxTabsField({
           {error}
         </OpalText>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -300,11 +298,10 @@ function CheckboxField({
   return (
     <Label disabled={disabled}>
       <Content
+        font="main-ui-action"
         icon={checkboxIcon}
         title={label}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
       />
     </Label>
   );
@@ -763,9 +760,5 @@ export const RenderField: FC<RenderFieldProps> = ({
     );
   }
 
-  return (
-    <GeneralLayouts.Section alignItems="start">
-      {fieldContent}
-    </GeneralLayouts.Section>
-  );
+  return <Section alignItems="start">{fieldContent}</Section>;
 };

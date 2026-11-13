@@ -227,7 +227,7 @@ it("clears only the turn filter from the Outputs turn chip", async () => {
   });
   render(<BuildOutputPanel panelMode="medium" />);
   expect(
-    screen.getByText("Turn 4 outputs").closest(".opal-chip")
+    screen.getByText("Turn 4 outputs").closest(".opal-tag")
   ).toBeInTheDocument();
   fireEvent.click(
     screen.getByRole("button", { name: "Remove Turn 4 outputs" })
@@ -875,7 +875,7 @@ describe("Files integration", () => {
     store().setCurrentSession(null);
     store().openOutputsTab(null);
     render(<BuildOutputPanel panelMode="medium" />);
-    const search = screen.getByRole("textbox", { name: "Search outputs" });
+    const search = screen.getByRole("searchbox", { name: "Search outputs" });
     fireEvent.change(search, { target: { value: "notes" } });
     act(() => {
       store().createSession("provisioned");
@@ -911,16 +911,16 @@ describe("Files integration", () => {
       store().openOutputsTab("saved");
       store().updateOutputsTabState("saved", { searchQuery: "saved query" });
     });
-    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
-      "saved query"
-    );
+    expect(
+      screen.getByRole("searchbox", { name: "Search outputs" })
+    ).toHaveValue("saved query");
     act(() => {
       store().setCurrentSession(null);
       store().openOutputsTab(null);
     });
-    expect(screen.getByRole("textbox", { name: "Search outputs" })).toHaveValue(
-      ""
-    );
+    expect(
+      screen.getByRole("searchbox", { name: "Search outputs" })
+    ).toHaveValue("");
     expect(store().sessions.get("saved")?.outputsTabState.searchQuery).toBe(
       "saved query"
     );
@@ -939,7 +939,7 @@ describe("Files integration", () => {
       .mocked(fetchDirectoryListing)
       .mockResolvedValue({ path: "", entries: [] });
     render(<BuildOutputPanel panelMode="medium" />);
-    const search = screen.getByRole("textbox", { name: "Search files" });
+    const search = screen.getByRole("searchbox", { name: "Search files" });
     fireEvent.change(search, { target: { value: "notes" } });
     act(() => {
       store().createSession("provisioned");
@@ -947,17 +947,21 @@ describe("Files integration", () => {
         preProvisioning: { status: "ready", sessionId: "provisioned" },
       });
     });
-    expect(screen.getByRole("textbox", { name: "Search files" })).toBe(search);
+    expect(screen.getByRole("searchbox", { name: "Search files" })).toBe(
+      search
+    );
     expect(search).toHaveValue("notes");
     act(() => store().setCurrentSession("provisioned"));
-    expect(screen.getByRole("textbox", { name: "Search files" })).toBe(search);
+    expect(screen.getByRole("searchbox", { name: "Search files" })).toBe(
+      search
+    );
     expect(search).toHaveValue("notes");
     act(() => {
       store().createSession("unrelated");
       store().setCurrentSession("unrelated");
       store().openFilesTab("unrelated");
     });
-    expect(screen.getByRole("textbox", { name: "Search files" })).toHaveValue(
+    expect(screen.getByRole("searchbox", { name: "Search files" })).toHaveValue(
       ""
     );
     await act(async () => {});

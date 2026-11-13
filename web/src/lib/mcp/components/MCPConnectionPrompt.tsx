@@ -13,6 +13,7 @@ import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { useMcpAuthentication } from "@/lib/mcp/hooks";
 import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
 import { MCPConnectionStatus } from "@/lib/mcp/types";
+import { oauthFailureDetail } from "@/lib/oauth/launch";
 import { MCPUserCredentialsContent } from "@/lib/mcp/components/MCPUserCredentialsModal";
 
 interface MCPConnectionPromptProps {
@@ -195,14 +196,13 @@ export default function MCPConnectionPrompt({
                       className="w-full rounded-12 border border-border-01 bg-background-neutral-00 p-2"
                     >
                       <ContentAction
+                        font="main-ui-action"
                         icon={connected ? SvgCheck : SvgServer}
                         color={connected ? "success" : "default"}
                         title={server.name}
                         description={
                           connected ? t("connected.label") : undefined
                         }
-                        sizePreset="main-ui"
-                        variant="section"
                         padding={2}
                         rightChildren={
                           !connected && (
@@ -245,8 +245,14 @@ export default function MCPConnectionPrompt({
                 {authenticationError && (
                   <div role="alert">
                     <Text font="main-ui-body" color="text-04">
-                      {t("error.description")}
+                      {oauthFailureDetail(authenticationError)?.title ??
+                        t("error.description")}
                     </Text>
+                    {oauthFailureDetail(authenticationError) && (
+                      <Text font="secondary-body" color="text-03">
+                        {oauthFailureDetail(authenticationError)?.description}
+                      </Text>
+                    )}
                   </div>
                 )}
               </div>

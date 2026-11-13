@@ -42,8 +42,7 @@ export function KnowledgeSidebar({
   return (
     <TableLayouts.SidebarLayout aria-label="knowledge-sidebar">
       <LineItemButton
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={SvgFiles}
         title={t("sidebar.yourFiles.label")}
         onClick={onNavigateToRecent}
@@ -66,8 +65,7 @@ export function KnowledgeSidebar({
       {vectorDbEnabled && (
         <>
           <LineItemButton
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={SvgFolder}
             title={t("sidebar.documentSet.label")}
             onClick={onNavigateToDocumentSets}
@@ -101,9 +99,8 @@ export function KnowledgeSidebar({
 
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={connectedSource.source}
-                sizePreset="main-ui"
-                variant="section"
                 icon={sourceMetadata.icon}
                 title={sourceMetadata.displayName}
                 onClick={() => onNavigateToSource(connectedSource.source)}

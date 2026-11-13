@@ -11,6 +11,7 @@ import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
 import { openSource } from "@/chat/openSource";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
+import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import {
   CitedSourcesBar,
   CitedSourcesSheet,
@@ -27,6 +28,7 @@ import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
 
 // Non-final display groups don't complete the message.
 const NOOP = (): void => {};
+const GENERATED_IMAGE_SIZE = 160;
 
 function UserMessage({ node }: { node: Message }) {
   const files = node.files.map(fileDescriptorToDisplayFile);
@@ -85,12 +87,12 @@ function AssistantMessage({
   const {
     processed,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
     stopReason,
-    isGeneratingImage,
-    generatedImageCount,
+    generatedImages,
     finalAnswerComing,
     toolProcessingDuration,
     onRenderComplete,
@@ -150,11 +152,24 @@ function AssistantMessage({
         hasDisplayContent={hasDisplayContent}
         finalAnswerComing={pacedFinalAnswerComing}
         processingDurationSeconds={node.processingDurationSeconds ?? undefined}
-        isGeneratingImage={isGeneratingImage}
-        generatedImageCount={generatedImageCount}
+        generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
+        codeModeWorking={codeModeWorking}
       />
+      {/* Images from every image generation step lead the answer. */}
+      {generatedImages.length > 0 ? (
+        <View className="flex-row flex-wrap gap-8 px-12">
+          {generatedImages.map((image) => (
+            <AttachmentImage
+              key={image.file_id}
+              fileId={image.file_id}
+              size={GENERATED_IMAGE_SIZE}
+              contentFit="contain"
+            />
+          ))}
+        </View>
+      ) : null}
       {hasDisplayContent ? (
         // px-12 aligns the answer under the avatar rail (web's px-3).
         <View className="gap-12 px-12">
@@ -192,6 +207,13 @@ function AssistantMessage({
           </Text>
         </View>
       ) : null}
+      {stopPacketSeen && stopReason === StopReason.TIMED_OUT ? (
+        <View className="px-12">
+          <Text font="secondary-body" color="text-04">
+            The response stopped because it reached its time limit.
+          </Text>
+        </View>
+      ) : null}
       {sources && sources.hasSources ? (
         <View className="px-12">
           <CitedSourcesBar
@@ -226,6 +248,8 @@ function MessageRowComponent({
 }) {
   if (node.type === "user") return <UserMessage node={node} />;
   if (node.type === "error") return <ErrorMessage node={node} />;
+  // The follow-up answer after it renders the agents' results.
+  if (node.type === "agent_results") return null;
   return <AssistantMessage node={node} agent={agent} />;
 }
 

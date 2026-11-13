@@ -9,6 +9,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
+from onyx.agents.models import PreparedStep
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_request import ChatCompletionMessage, SystemMessage, UserMessage
 from onyx.llm.model_response import ModelResponseStream
 from onyx.llm.models import (
@@ -16,15 +20,18 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationOptions,
     GenerationRequest,
+    NamedToolChoice,
     ToolCallEndEvent,
     ToolChoiceOptions,
     ToolDefinition,
+    ToolResult,
     apply_generation_event,
 )
 from onyx.llm.models import (
     UserMessage as AppUserMessage,
 )
 from onyx.llm.multi_llm import LitellmLLM
+from onyx.tracing.flows import LLMFlow
 from tests.external_dependency_unit.llm.mock_llm_server.conftest import make_llm
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.mock_services.mock_llm_server.models import (
@@ -175,6 +182,23 @@ def test_text_reply_finishes_with_stop(script: MockLLMScript, llm: LitellmLLM) -
     assert result["finish_reasons"] == ["stop"]
 
 
+def test_error_after_text_fails_the_stream_after_its_text(
+    script: MockLLMScript, llm: LitellmLLM
+) -> None:
+    script.conversation(
+        "main",
+        Reply(text="Partial answer", error_after_text="Provider failed"),
+        conditions=TOOL_FREE,
+    )
+    content = ""
+    with pytest.raises(Exception, match="Provider failed"):
+        for chunk in llm.stream_raw(prompt=PROMPT):
+            content += chunk.choice.delta.content or ""
+
+    assert content == "Partial answer"
+    script.verify()
+
+
 def test_stream_usage_follows_include_usage(
     script: MockLLMScript, llm: LitellmLLM
 ) -> None:
@@ -233,6 +257,90 @@ def test_invoke_without_streaming(script: MockLLMScript, llm: LitellmLLM) -> Non
     (request,) = script.requests
     assert not request.body.get("stream")
     assert request.tool_choice == "required"
+
+
+def test_named_tool_choice_matches_script_with_other_tools_available(
+    script: MockLLMScript, llm: LitellmLLM
+) -> None:
+    choice = {"type": "function", "function": {"name": "internal_search"}}
+    script.conversation(
+        "forced",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="search",
+                    name="internal_search",
+                    arguments={"queries": ["alpha"]},
+                )
+            ],
+            conditions=RequestConditions(
+                offers=["internal_search", "web_search"], tool_choice=choice
+            ),
+        ),
+    )
+    response = llm.invoke_raw(
+        prompt=PROMPT, tools=TOOLS, tool_choice=NamedToolChoice(name="internal_search")
+    )
+    assert [
+        call.function.name for call in response.choice.message.tool_calls or []
+    ] == ["internal_search"]
+    (request,) = script.requests
+    assert request.tool_choice == choice
+    assert request.tools == ["internal_search", "web_search"]
+    assert not RequestConditions(tool_choice="required").matches(request)
+    assert not RequestConditions(
+        tool_choice={"type": "function", "function": {"name": "web_search"}}
+    ).matches(request)
+    script.verify()
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_step_permissions_keep_provider_tool_definitions_stable(
+    script: MockLLMScript, llm: LitellmLLM, stream: bool
+) -> None:
+    named = {"type": "function", "function": {"name": "internal_search"}}
+    script.conversation(
+        "steps",
+        *[
+            Reply(
+                text="answer",
+                conditions=RequestConditions(
+                    offers=["internal_search", "web_search", "other"],
+                    tool_choice=choice,
+                ),
+            )
+            for choice in [named, "auto", "auto", "required", "none"]
+        ],
+    )
+    definitions = [
+        ToolDefinition.model_validate(tool["function"])
+        for tool in [*TOOLS, _tool("other")]
+    ]
+    for allowed, choice in [
+        (frozenset({"internal_search"}), ToolChoiceOptions.REQUIRED),
+        (None, ToolChoiceOptions.AUTO),
+        (frozenset({"internal_search"}), ToolChoiceOptions.AUTO),
+        (frozenset({"internal_search", "web_search"}), ToolChoiceOptions.REQUIRED),
+        (frozenset(), ToolChoiceOptions.NONE),
+    ]:
+        request = GenerationRequest(
+            messages=[AppUserMessage(content="hi")],
+            tools=definitions,
+            allowed_tool_names=allowed,
+            options=GenerationOptions(tool_choice=choice),
+        )
+        original = request.model_dump_json()
+        if stream:
+            list(llm.stream(request))
+        else:
+            llm.invoke(request)
+        assert request.model_dump_json() == original
+    requests = script.requests
+    assert len(requests) == 5
+    assert all(
+        request.body["tools"] == requests[0].body["tools"] for request in requests
+    )
+    script.verify()
 
 
 @pytest.mark.parametrize("inject_env", [False, True])
@@ -309,3 +417,98 @@ def test_scripts_are_isolated(
         assert len(script.requests) == 1 and len(other.requests) == 1
     finally:
         other.close()
+
+
+@pytest.mark.parametrize("streaming", [False, True])
+@pytest.mark.parametrize("case", ["disabled", "disallowed", "bare_arguments"])
+def test_response_recovery_obeys_permissions_over_http(
+    script: MockLLMScript, llm: LitellmLLM, streaming: bool, case: str
+) -> None:
+    text = (
+        '{"queries":["alpha"]}'
+        if case == "bare_arguments"
+        else '<function_calls><invoke name="web_search"></invoke></function_calls>'
+    )
+    script.conversation("main", Reply(text=text))
+    request = GenerationRequest(
+        messages=[AppUserMessage(content="Search")],
+        tools=[ToolDefinition.model_validate(tool["function"]) for tool in TOOLS],
+        allowed_tool_names=frozenset()
+        if case == "disabled"
+        else frozenset({"internal_search"}),
+        options=GenerationOptions(
+            tool_choice=ToolChoiceOptions.REQUIRED
+            if case == "bare_arguments"
+            else ToolChoiceOptions.AUTO
+        ),
+    )
+    if streaming:
+        message = AssistantMessage()
+        for event in llm.stream(request):
+            apply_generation_event(message, event)
+    else:
+        message = llm.invoke(request)
+    assert [call.name for call in message.tool_calls] == (
+        ["internal_search"]
+        if case == "bare_arguments"
+        else ["web_search"]
+        if case == "disallowed"
+        else []
+    )
+    if case == "disabled":
+        assert message.text == text
+    script.verify()
+
+
+@pytest.mark.parametrize("mode", ["auto", "required_one", "required_many"])
+def test_recovered_forbidden_call_returns_error_without_execution(
+    script: MockLLMScript, llm: LitellmLLM, mode: str
+) -> None:
+    script.conversation(
+        "main",
+        Reply(
+            text='<function_calls><invoke name="web_search"></invoke></function_calls>'
+        ),
+        Reply(text="Answered after the permission error."),
+    )
+    executed: list[str] = []
+    approved: list[str] = []
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.call_id)
+        return ToolResult(content="unexpected execution")
+
+    agent = Agent(
+        llm,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition.model_validate(tool["function"]),
+                execute=execute,
+            )
+            for tool in [*TOOLS, _tool("other")]
+        ],
+        prepare_step=lambda _: PreparedStep(
+            allowed_tool_names=frozenset({"internal_search", "other"})
+            if mode == "required_many"
+            else frozenset({"internal_search"}),
+            options=GenerationOptions(
+                tool_choice=ToolChoiceOptions.REQUIRED
+                if mode != "auto"
+                else ToolChoiceOptions.AUTO
+            ),
+        ),
+        before_tool_call=lambda context: approved.append(context.call.name),
+    )
+    run = agent.start(messages=[AppUserMessage(content="Search")], max_steps=2)
+    try:
+        assert run.result(10).output.text == "Answered after the permission error."
+        assert executed == approved == []
+        assert len(script.requests) == 2
+        assert "Tool web_search is unavailable for this step." in str(
+            script.requests[1].body
+        )
+        script.verify()
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(10)

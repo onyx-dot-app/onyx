@@ -103,7 +103,13 @@ session-ended message.
 routes load the row on each request (`server/oidc_multi.py`,
 `server/saml_multi.py`), so a new provider needs no restart. SAML has one
 callback for all providers and finds the provider from the response issuer
-(`_resolve_saml_provider_by_issuer`). Cloud discovery
+(`_resolve_saml_provider_by_issuer`). The callback only accepts a POST whose
+`InResponseTo` names an AuthnRequest id the authorize route stored in the cache
+backend, consumes the id, records the assertion id until it expires, parks the
+validated login behind a one-time ticket and redirects to `/auth/saml/complete`,
+a same-site GET that must carry the per-request login cookie the authorize
+route set, so IdP-initiated sign-in, login CSRF and replays are refused. Cloud
+discovery
 (`server/sso_discovery.py:discover_sso_providers`) maps the email to a
 workspace, by membership first and verified domain second, and returns a
 short-lived signed workspace token that pins the next authorize call to that
@@ -252,8 +258,9 @@ unknown emails, so that access is ready at signup ([[permission-sync]]).
 ## Known issues
 
 - **User deletion fails while the user owns private skills**
-  (`db/users.py:delete_user_from_db__no_commit`). The admin must transfer or
-  delete them first.
+  (`db/users.py:delete_user_from_db__no_commit`). The check asks whether the
+  user's "My uploads" holds a plugin. The admin must transfer or delete those
+  first. Published plugins stay with no author ([[skills#plugin-tables]]).
 - **Anonymous access can turn itself off.** `auth/users.py` reads
   `anonymous_user_enabled` from the same cache key as the settings store, and
   the key expires ([[chat-preferences]] Known issues).

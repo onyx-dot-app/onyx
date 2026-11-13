@@ -70,6 +70,15 @@ Check expected results, not only equality between two implementation paths.
 Shared fixtures live in `backend/tests/conftest.py`. Test subdirectories can define
 their own `conftest.py` for directory-scoped fixtures.
 
+External dependency chat tests can use `make_test_user` and
+`default_llm_provider` from `backend/tests/external_dependency_unit/conftest.py`.
+The user fixture removes users and their owned chat,
+agent, tool, and MCP rows after each test. Shared agents remain intact. Set
+`Persona.user_id` when a test creates an agent that the fixture must remove.
+The provider fixture creates a unique provider, restores the previous chat
+default, and removes its provider. Use these fixtures instead of direct setup
+helpers when the test commits database changes.
+
 ## Running Tests Repeatedly (`pytest-repeat`)
 
 Use `pytest-repeat` to catch flaky tests by running them multiple times:

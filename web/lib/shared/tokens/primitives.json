@@ -271,6 +271,14 @@
     "value": "#397bff",
     "type": "color"
   },
+  "blue-45-a20": {
+    "value": "#397bff33",
+    "type": "color"
+  },
+  "blue-45-a05": {
+    "value": "#397bff0d",
+    "type": "color"
+  },
   "blue-40": {
     "value": "#508afb",
     "type": "color"
@@ -673,6 +681,22 @@
   },
   "neon-magenta-05": {
     "value": "#fff5ff",
+    "type": "color"
+  },
+  "neon-mint": {
+    "value": "#36f1a4",
+    "type": "color"
+  },
+  "neon-coral": {
+    "value": "#ff8162",
+    "type": "color"
+  },
+  "neon-rose": {
+    "value": "#ff87b9",
+    "type": "color"
+  },
+  "neon-indigo": {
+    "value": "#8d90ff",
     "type": "color"
   },
   "stone-98": {

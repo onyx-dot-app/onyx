@@ -19,7 +19,9 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    MessageDelivery,
     RunFailure,
+    RunFailureKind,
     RunStatus,
     StepRecord,
     messages_from_steps,
@@ -31,7 +33,8 @@ from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchConfiguration
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
+from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
     ExtractedContextFiles,
@@ -44,7 +47,9 @@ from onyx.llm.models import (
     Message,
     ReasoningEffort,
     ToolResultMessage,
+    UserMessage,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
@@ -56,7 +61,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
-from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
+from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
     GeneratedImage,
@@ -64,14 +69,31 @@ from onyx.tools.models import (
     SearchToolUsage,
     ToolCallInfo,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
 MAX_DISCOVERED_AGENTS = 128
 _MESSAGE_ADAPTER = TypeAdapter(Message)
-_INCOGNITO_SOURCE_DETAILS = TypeAdapter(
-    Annotated[SearchDocsResponse | ResearchAgentCallResult, Field(discriminator="type")]
-)
+_INCOGNITO_IMAGES = TypeAdapter(list[SavedLoadedFile])
+_INCOGNITO_DETAILS = TypeAdapter(SavedToolResultDetails)
+
+
+class PendingChatMessage(BaseModel):
+    id: str
+    message: str
+    delivery: MessageDelivery
+    target_response_id: int | None
+    deep_research: bool = False
+    llm_override: LLMOverride | None = None
+
+
+class QueuedChatTurn(BaseModel):
+    """The next root turn: a submitted message, or unread agent results when None."""
+
+    parent_response_id: int | None
+    message: PendingChatMessage | None
 
 
 class PromptMetadata(CompactionMetadata):
@@ -81,7 +103,6 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
-    omit_tool_result_content: bool = False
 
 
 class FileContextResult(BaseModel):
@@ -145,7 +166,7 @@ class ResponseRecord(BaseModel):
     agent_id: str | None = None
     agent_path: str = "/root"
     agent_description: str = ""
-    restoration_config: ResearchConfiguration | None = None
+    restoration_config: ResearchConfiguration | ChatConfiguration | None = None
     previous_run_id: str | None = None
     parent_run_id: str | None = None
     parent_tool_call_id: str | None = None
@@ -188,7 +209,7 @@ class ResponseStatus(BaseModel):
     message_id: int
     root_message_id: int
     root_session_id: UUID
-    parent_agent_id: str | None
+    ancestor_agent_ids: list[str]
     status: RunStatus
 
 
@@ -199,11 +220,92 @@ class ResponseAncestry(BaseModel):
     spawned_by_message_id: int | None
     parent_session_id: UUID | None
     parent_response_id: int | None
+    # For a child run, the agent's previous run; it can belong to a later turn.
+    previous_response_id: int | None = None
+
+
+class AgentResultState(BaseModel):
+    """An unread child result on a branch; it is readable once its response finishes."""
+
+    recipient_id: UUID
+    # The agent whose run delivers the result.
+    agent_id: UUID
+    response_id: int
+    # The root response that the run belongs to.
+    root_response_id: int
+    status: RunStatus
+    failure: RunFailure | None = None
+
+    @property
+    def wakes_recipient(self) -> bool:
+        """A finished result starts its idle recipient's next run.
+
+        A run the user stopped does not: its recipient reads the stop as a
+        notice at its next step instead.
+        """
+        return self.status.is_terminal and (
+            self.failure is None or self.failure.kind != RunFailureKind.STOPPED_BY_USER
+        )
+
+    @property
+    def is_active(self) -> bool:
+        """An active background agent: an unfinished run that delivers this result.
+
+        Only `spawn_agent` runs have result rows, so foreground workers never count.
+        """
+        return not self.status.is_terminal
+
+
+class AgentWait(BaseModel):
+    """A root `wait_agents` call on a branch, as `AgentWaitDetails` records it."""
+
+    response_id: int
+    agent_ids: frozenset[UUID] | None
+    # A message to one of its agents still waits to start that agent's run.
+    queued: bool
+
+    def holds(self, agent_id: UUID, root_response_id: int) -> bool:
+        return root_response_id <= self.response_id and (
+            self.agent_ids is None or agent_id in self.agent_ids
+        )
+
+
+class AgentInboxWork(BaseModel):
+    """An idle child's next run: a queued message, or its unread results when None."""
+
+    agent_id: str
+    message: UserMessage | None
+    # None: the step limit of the chat agent that hosts the run.
+    max_steps: int | None
+    total_timeout_s: float | None
+    parent_run_id: str
+    parent_message_id: str
+    parent_tool_call_id: str
 
 
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
+
+
+class ChatInbox(BaseModel):
+    """Running children and startable work on a conversation's selected branch."""
+
+    branch: ChatBranch
+    selected_response_id: int | None
+    # The running selected response and active background agents. Each can have
+    # lost its owner.
+    running_response_ids: list[int] = Field(default_factory=list)
+    results: list[AgentResultState] = Field(default_factory=list)
+    next_turn: QueuedChatTurn | None = None
+    child_work: list[AgentInboxWork] = Field(default_factory=list)
+    # Unfinished latest runs of agents whose messages wait for them.
+    waiting_response_ids: list[int] = Field(default_factory=list)
+
+    @property
+    def unfinished_response_ids(self) -> list[int]:
+        """Running and waited-for responses; any of them can have lost its owner."""
+        return [*self.running_response_ids, *self.waiting_response_ids]
 
 
 class ResponseLink(BaseModel):
@@ -214,26 +316,11 @@ class ResponseLink(BaseModel):
     status: RunStatus
 
 
-class IncognitoContext(BaseModel):
-    """Temporary conversation history and its latest saved response."""
-
-    messages: list[Message]
-    previous_run_id: str | None = None
-
-
-class IncognitoAgentState(BaseModel):
-    parent_agent_id: str | None = None
-    agent_id: str
-    agent_path: str
-    description: str
-    configuration: ResearchConfiguration | None
-    responses: list[ResponseRecord]
-    sources: dict[int, SearchDoc] = Field(default_factory=dict)
-
-
 class IncognitoAgentResponse(BaseModel):
+    run_id: str | None = None
+    checkpoint: CompactionCheckpoint | None = None
+    message_ids: list[str] = Field(default_factory=list)
     replay_digest: str
-    agents: list[IncognitoAgentState] = Field(default_factory=list)
 
 
 def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
@@ -241,6 +328,16 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
         return value
     data = dict(value)
     raw_metadata = data.pop("metadata", {})
+    if isinstance(raw_metadata, dict) and raw_metadata.get("image_files"):
+        raw_metadata = {
+            **raw_metadata,
+            "image_files": [
+                image.restore()
+                for image in _INCOGNITO_IMAGES.validate_python(
+                    raw_metadata["image_files"]
+                )
+            ],
+        }
     metadata = (
         ChatMessageMetadata.model_validate(raw_metadata)
         if isinstance(raw_metadata, dict) and "sources" in raw_metadata
@@ -250,12 +347,13 @@ def _read_incognito_message(value: dict[str, JsonValue] | Message) -> Message:
     message = _MESSAGE_ADAPTER.validate_python(data)
     message.metadata = metadata
     if details is not None and isinstance(message, ToolResultMessage):
-        message.details = _INCOGNITO_SOURCE_DETAILS.validate_python(details)
+        message.details = _INCOGNITO_DETAILS.validate_python(details)
     return message
 
 
 def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
-    """Retain replay text and citation sources, excluding execution files and state."""
+    """Retain replay text, citation sources and saved tool result details, excluding
+    execution files and state."""
     metadata = (
         message.metadata
         if isinstance(message.metadata, PromptMetadata)
@@ -267,15 +365,21 @@ def serialize_incognito_message(message: Message) -> dict[str, JsonValue]:
     data["metadata"] = (
         message.metadata.model_dump(mode="json", include={"sources"})
         if isinstance(message.metadata, ChatMessageMetadata)
-        else metadata.model_dump(exclude={"image_files", "image_token_count"})
+        else {
+            **metadata.model_dump(exclude={"image_files"}),
+            "image_files": [
+                SavedLoadedFile.capture(image).model_dump(mode="json")
+                for image in metadata.image_files
+            ]
+            if metadata.image_files is not None
+            else None,
+        }
     )
-    if isinstance(message, ToolResultMessage):
-        if isinstance(message.details, SearchDocsResponse):
-            data["details"] = message.details.model_dump(
-                mode="json", include={"type", "search_docs", "citation_mapping"}
-            )
-        elif isinstance(message.details, ResearchAgentCallResult):
-            data["details"] = message.details.model_dump(mode="json")
+    if isinstance(message, ToolResultMessage) and isinstance(
+        message.details, SAVED_TOOL_RESULT_TYPES
+    ):
+        # Dumped as the saved type: staged files stay in execution state.
+        data["details"] = _INCOGNITO_DETAILS.dump_python(message.details, mode="json")
     return data
 
 
@@ -287,7 +391,9 @@ IncognitoMessage = Annotated[
 
 
 class IncognitoState(BaseModel):
+    format_version: Literal[3] = 3
     messages: list[IncognitoMessage] = Field(default_factory=list)
+    file_metadata: dict[str, FileToolMetadata] = Field(default_factory=dict)
     previous_run_id: str | None = None
     responses: dict[str, IncognitoAgentResponse] = Field(default_factory=dict)
 
@@ -296,7 +402,7 @@ class SavedAgentContext(BaseModel):
     """Saved history, settings, and sources used to rebuild an agent."""
 
     agent_id: str
-    configuration: ResearchConfiguration | None
+    configuration: ResearchConfiguration | ChatConfiguration | None
     messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
     previous_run_id: str | None = None
@@ -310,6 +416,13 @@ class ChatMessageMetadata(BaseModel):
     documents: list[SearchDoc] = Field(default_factory=list)
     include_citations: bool = True
     elapsed_seconds: float = 0
+
+
+class ReceivedAgentInputs(BaseModel):
+    """Received messages and the citation numbers their sources add."""
+
+    messages: list[UserMessage]
+    new_citations: dict[int, SearchDoc]
 
 
 class ToolRecordReference(BaseModel):
@@ -430,8 +543,22 @@ class SearchParams(BaseModel):
     search_usage: SearchToolUsage
 
 
-class ChatSearchResult(SearchDocsResponse):
-    """Search documents with files staged before the tool result is committed."""
+class ResultSources(BaseModel):
+    """Documents carried by one tool result and the citation numbers it gave them."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The documents the result carries: every search result, or only the cited
+    # documents of a research result.
+    documents: list[SearchDoc]
+    # The documents to show for the call; a search can select a subset. None when
+    # the call shows no documents of its own.
+    displayed: list[SearchDoc] | None
+    citations: dict[int, SearchDoc]
+
+
+class StagedChatFiles(BaseModel):
+    """Files of a tool result's documents, staged before the result is committed."""
 
     staged_files: list[ChatFile]
 
@@ -450,6 +577,14 @@ class ChatSearchResult(SearchDocsResponse):
             else SavedChatFile.model_validate(file).restore()
             for file in value
         ]
+
+
+class ChatSearchResult(StagedChatFiles, SearchDocsResponse):
+    """Search documents with their files staged."""
+
+
+class ChatCodeModeResult(StagedChatFiles, CodeModeExecutionResult):
+    """A code mode result with the files of its nested searches staged."""
 
 
 class ToolHistorySnapshot(BaseModel):
@@ -528,7 +663,6 @@ class AvailableFiles(BaseModel):
 
 
 class ChatReminderContext(BaseModel):
-    ran_image_gen: bool
     has_open_url_tool: bool
     out_of_cycles: bool
     persona_task_prompt: str | None
@@ -586,9 +720,11 @@ class ChatFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     include_citations: bool
     inject_memories: bool
-    forced_tool_id: int | None
+    preferred_tool_id: int | None = None
+    code_mode: bool
     base_prompt: str
     custom_prompt: str | None
+    request_context: str | None = None
     reminders_enabled: bool
 
     elapsed_seconds: float
@@ -597,7 +733,6 @@ class ChatFeatureState(BaseModel):
     gathered_documents: list[SearchDoc]
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
-    ran_image_gen: bool
     search_context: SearchContext
 
 
@@ -625,12 +760,14 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     research_tool_id: int | None
     checkpoint: CompactionCheckpoint | None
-    user_message_id: int
+    # Child-result delivery has no new user message.
+    user_message_id: int | None
     user_identity: LLMUserIdentity
     responses: list[ReservedChatResponse]
     messages: list[Message]
     input_messages: list[Message]
     previous_run_id: str | None = None
+    additional_context: str | None = None
     extracted_context_files: ExtractedContextFiles
     # Fences processing status and identifies the buffered stream.
     stream_id: int
@@ -638,7 +775,10 @@ class ChatTurnSetup(BaseModel):
     search_params: SearchParams
     all_injected_file_metadata: dict[str, FileToolMetadata]
     available_files: AvailableFiles
-    forced_tool_id: int | None
+    preferred_tool_id: int | None
+    # The preferred tool comes from the chat's saved selection, which can
+    # outlive the tool or its plugin; the turn then runs without it.
+    preferred_tool_saved: bool = False
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext

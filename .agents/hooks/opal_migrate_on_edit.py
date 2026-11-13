@@ -8,7 +8,10 @@ file and keeps the design-system diagnostics:
 - `react/forbid-elements`: a raw `<button>`, `<input>`, `<select>` or `<textarea>`;
 - `no-restricted-imports`: `lucide-react`, `react-icons` or `@/components/*`;
 - `opal/no-layout-div`: a `<div>`/`<span>` flex or grid container;
-- `opal/no-section-utility-classes`: padding, gap or size classes on `Section`.
+- `opal/no-section-utility-classes`: padding, gap or size classes on `Section`;
+- `navigation/no-naked-navigation`: navigation outside `@opal/navigation` (a
+  `next/navigation` or `next/link` import, `router.push`, a `window.location`
+  write, a static internal `href`, a bare back).
 
 Files in the design-system baseline only warn on `react/forbid-elements` and
 `no-restricted-imports`, and files in the layout baseline only warn on
@@ -35,13 +38,16 @@ _RULES = {
     "eslint(no-restricted-imports)",
     "opal(no-layout-div)",
     "opal(no-section-utility-classes)",
+    "navigation(no-naked-navigation)",
 }
+_NAVIGATION_RULE = "navigation(no-naked-navigation)"
 _BASELINES = {
     "Design-system baseline": {
         "react(forbid-elements)",
         "eslint(no-restricted-imports)",
     },
     "Layout baseline": {"opal(no-layout-div)"},
+    "Navigation baseline": {"navigation(no-naked-navigation)"},
 }
 
 
@@ -102,16 +108,29 @@ def main() -> int:
     except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError):
         return 0
 
-    reported = [_format(d) for d in diagnostics if _is_reported(d)]
-    if reported:
-        give_feedback(
-            payload,
-            "PostToolUse",
+    reported = [d for d in diagnostics if _is_reported(d)]
+    navigation = [_format(d) for d in reported if d.get("code") == _NAVIGATION_RULE]
+    opal = [_format(d) for d in reported if d.get("code") != _NAVIGATION_RULE]
+    sections = []
+    if opal:
+        sections.append(
             "Migrate these files to Opal before you continue:\n"
-            + "\n".join(reported)
+            + "\n".join(opal)
             + "\nEach Opal component has a README.md next to it under "
-            "web/lib/opal/src/. Read it for the props. Do not change behavior.",
+            "web/lib/opal/src/. Read it for the props. Do not change behavior."
         )
+    if navigation:
+        sections.append(
+            "Navigate through @opal/navigation before you continue:\n"
+            + "\n".join(navigation)
+            + "\nRead web/lib/opal/src/navigation/README.md. Import everything "
+            "navigational from @opal/navigation: useNavigation (go, linkTo, "
+            "clampedBack, refresh, load), NavLink, and Next's re-exported "
+            "helpers (usePathname, useSearchParams, redirect). Use a "
+            "useAppPosition() method for /app positions."
+        )
+    if sections:
+        give_feedback(payload, "PostToolUse", "\n\n".join(sections))
         return 0
 
     rc_path = web / ".oxlintrc.json"

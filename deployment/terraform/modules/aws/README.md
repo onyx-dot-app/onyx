@@ -245,6 +245,7 @@ On an existing cluster, set it to the principal in the current `cluster_creator`
   - `postgres_endpoint`, `postgres_port`, `postgres_db_name`, `postgres_username` (sensitive), `postgres_dbi_resource_id`
   - `redis_connection_url` (sensitive): hostname:port
   - `opensearch_endpoint`, `opensearch_dashboard_endpoint`, `opensearch_domain_arn` (null unless `enable_opensearch`)
+  - `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_arn` (null unless `enable_sandbox_archive_bucket`)
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
@@ -258,6 +259,8 @@ Inputs (common):
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
 - Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
+- `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
+  session archives. See "Sandbox archive bucket" below
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
@@ -310,6 +313,28 @@ Key inputs include:
 - Access can be scoped to an S3 gateway VPC endpoint (`s3_vpc_endpoint_id`), and
   optionally to source IPs or VPCs (`allow_anonymous_read` with
   `allowed_source_ips` / `allowed_vpc_ids`)
+- `create_kms_key` (default false) creates a customer-managed KMS key with
+  rotation and an `alias/<bucket_name>` alias (dots become hyphens), and
+  encrypts the bucket with it. It cannot be combined with `kms_key_id` or
+  `allow_anonymous_read`. Output: `kms_key_arn` (the created key, null when off)
+- `abort_incomplete_multipart_upload_days` (default 0, off) removes unfinished
+  multipart uploads
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `s3` instance when `enable_sandbox_archive_bucket` is
+true. The bucket holds Craft sandbox session archives:
+
+- Its own KMS key (`create_kms_key = true`), with rotation
+- Public access blocked, TLS required, versioning on
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7). Unfinished multipart uploads are removed after 7 days
+- No Intelligent-Tiering, because objects are short-lived
+- No node or pod role gets access. The bucket is not in `s3_bucket_names` and
+  has no VPC endpoint grant. The api_server will hand out presigned URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store or
+  upload bucket name, so the expiry rules cannot reach those buckets
 
 ### `opensearch`
 - Creates an Amazon OpenSearch domain inside the VPC
@@ -357,6 +382,55 @@ the previous default, set the value explicitly before applying.
 
 **The Craft sandbox node group's key changed** from `craft_sandbox` to `sandbox`.
 A `moved` block handles the relabel, so the group is not recreated.
+
+### AWS provider 6 and EKS module v21
+
+The `eks`, `onyx`, `vpc`, `opensearch`, `redis` and `waf` modules now need AWS
+provider `~> 6.59`. The `s3` and `postgres` modules still allow `>= 5.100, < 7.0`.
+The `eks` module uses `terraform-aws-modules/eks/aws` `~> 21.23` (was `~> 20.0`),
+which resolves to a release that needs AWS provider 6.59 or later. EKS module
+21.23 is the first version with the nested-virtualization launch template
+option.
+
+Before you upgrade:
+
+1. Allow `hashicorp/aws` `~> 6.59` in your root module.
+2. Run `terraform init -upgrade` to update `.terraform.lock.hcl`.
+3. Run `terraform plan` and check that it replaces nothing.
+
+**The inputs of these modules did not change.** The `eks` module maps its inputs
+to the renamed upstream inputs:
+
+| Upstream v20 input | Upstream v21 input |
+|---|---|
+| `cluster_name` | `name` |
+| `cluster_version` | `kubernetes_version` |
+| `cluster_endpoint_public_access` | `endpoint_public_access` |
+| `cluster_endpoint_private_access` | `endpoint_private_access` |
+| `cluster_endpoint_public_access_cidrs` | `endpoint_public_access_cidrs` |
+| `cluster_enabled_log_types` | `enabled_log_types` |
+| `cluster_addons` | `addons` |
+| `eks_managed_node_group_defaults` | removed; the `eks` module merges defaults into each group |
+| `enable_security_groups_for_pods` | removed; the `eks` module attaches `AmazonEKSVPCResourceController` itself |
+
+**The `eks` module keeps the v20 node group defaults.** Upstream v21 changed
+them, which would roll every node. The module pins the v20 values: IMDS hop
+limit 2, detailed monitoring on, no automatic move to the latest AMI release,
+and no EFA-only network interfaces. The Craft sandbox group keeps hop limit 1.
+
+**Expected plan changes:**
+- One move: the cluster role's `AmazonEKSVPCResourceController` attachment.
+- In-place tag updates: upstream v21 no longer adds the
+  `terraform-aws-modules = "eks"` tag to the cluster and its KMS key.
+- The `vpc` flow log now sets `log_destination`, because provider 6 removed
+  `log_group_name`. The value is the ARN the flow log already has, so the plan
+  must not replace it.
+
+**If you pass your own `eks_managed_node_groups`:** upstream v21 types each
+group, so every attribute must exist in the v21 node group object. Rename
+`cluster_version` to `kubernetes_version`. Remove `platform`, `schedules`,
+`create_schedule`, `elastic_gpu_specifications`, `elastic_inference_accelerator`,
+`placement_group_az` and `placement_group_strategy`. `taints` can be a list or a map.
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.
@@ -419,6 +493,75 @@ kubectl -n onyx-sandboxes get sa sandbox -o yaml
 To tear down a cluster, run `helm uninstall` before `terraform destroy`. If destroy
 fails with `DependencyViolation`, delete orphaned `aws-K8S-*` network interfaces
 that the VPC CNI left, then run destroy again.
+
+### Craft sandboxes on Firecracker
+
+Craft can run each sandbox as a Firecracker microVM instead of a pod. This
+needs `/dev/kvm` on the sandbox nodes. Set it on the sandbox node group:
+
+```hcl
+enable_craft                       = true
+craft_sandbox_runtime              = "firecracker"
+craft_sandbox_node_instance_types  = ["m8i.2xlarge"]
+craft_sandbox_node_disk_iops       = 6000
+craft_sandbox_node_disk_throughput = 500
+```
+
+With `"firecracker"`, the `eks` module:
+
+- turns on nested virtualization in the launch template (non-metal types only);
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+- sets `vm.max_map_count` to `1048576` with a cloud-init script that runs
+  before nodeadm (AL2023 ships `524288`);
+- keeps the group on-demand. A spot reclaim stops every microVM on the node;
+- keeps IMDSv2 with hop limit 1.
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on these nodes. To keep pod sandboxes, add a
+small pod sandbox group next to the Firecracker group:
+
+```hcl
+enable_craft_pod_sandbox_node_group = true
+craft_pod_sandbox_node_instance_types = ["m8i.xlarge"] # default
+craft_pod_sandbox_node_min_size       = 1              # default
+craft_pod_sandbox_node_max_size       = 2              # default
+```
+
+This group has the label `onyx.app/workload=sandbox` and the taint
+`workload=sandbox:NoSchedule`, but no `onyx.app/kvm` label or taint. It uses
+`craft_sandbox_node_disk_size_gb` with baseline gp3 (3000 IOPS, 125 MiB/s).
+EKS updates the taints of an existing node group in place; it does not replace
+the nodes. `NoSchedule` does not evict running pods, and the new pod group does
+not move them. Pod sandboxes and the prepuller pod that already run on a
+Firecracker node stay there until they stop. Let those sandboxes finish, delete
+the prepuller pod on that node, and check that no such pod is left:
+
+```bash
+kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
+```
+
+The default, `"pod"`, leaves the group as it is. A change to
+`craft_sandbox_runtime` makes a new launch template version (user data, and
+nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
+`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
+volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
+500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
+needed.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Nested virtualization | Intel `c8i`, `m8i`, `r8i` and their `-flex` types | `m7i` and older Intel (no nested virtualization or slow page faults), Graviton (`g`), AMD (`a`) |
+| Metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal`, `a1.metal`, `mac*.metal` |
+| AMI | AL2023 (module default `AL2023_x86_64_STANDARD`). Use an AMI release with kernel 6.18, the tested host kernel. | — |
+| Capacity | On-demand | Spot |
+| `vm.max_map_count` | `1048576` or more (set by the module) | The AL2023 default `524288` |
+
+The module refuses a blocked type, and a group that mixes `.metal` and
+nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
+AMD, or older Intel non-metal sandbox nodes.
 
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.

@@ -99,12 +99,12 @@ describe("ActionsMenu", () => {
     expect(labels).toEqual(["Search", "Generate Image"]);
   });
 
-  it("forces the tapped tool and closes", () => {
+  it("prefers the tapped tool and closes", () => {
     const value = renderMenu();
     fireEvent.press(screen.getByLabelText("Manage Actions"));
     fireEvent.press(screen.getByText("Generate Image"));
 
-    expect(value.toggleForcedTool).toHaveBeenCalledWith(2);
+    expect(value.togglePreferredTool).toHaveBeenCalledWith(2);
     expect(screen.queryByText("Generate Image")).toBeNull();
   });
 
@@ -149,10 +149,10 @@ describe("ActionsMenu", () => {
     expect(screen.getByText("Generate Image")).toBeTruthy();
   });
 
-  it("marks the forced row and counts its sources", () => {
+  it("marks the preferred row and counts its sources", () => {
     // The leaf takes these as props; only the menu can prove it derives them the right way round.
     renderMenu({
-      forcedToolId: 1,
+      preferredToolId: 1,
       sourceToolId: 1,
       sourceOptions: ["notion", "web", "jira"],
       enabledSourceCount: 2,
@@ -162,9 +162,9 @@ describe("ActionsMenu", () => {
     expect(screen.getByText("2 of 3")).toBeTruthy();
   });
 
-  it("closes instead of drilling in when the forced search row is tapped", () => {
+  it("closes instead of drilling in when the preferred search row is tapped", () => {
     const value = renderMenu({
-      forcedToolId: 1,
+      preferredToolId: 1,
       sourceToolId: 1,
       sourceOptions: ["notion"],
       enabledSourceCount: 1,
@@ -172,7 +172,7 @@ describe("ActionsMenu", () => {
     fireEvent.press(screen.getByLabelText("Manage Actions"));
     fireEvent.press(screen.getByText("Search"));
 
-    expect(value.toggleForcedTool).toHaveBeenCalledWith(1);
+    expect(value.togglePreferredTool).toHaveBeenCalledWith(1);
     expect(screen.queryByText("Notion")).toBeNull();
   });
 

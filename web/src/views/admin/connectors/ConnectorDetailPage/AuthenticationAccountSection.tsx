@@ -132,7 +132,7 @@ export default function AuthenticationAccountSection({
           </Modal.Content>
         </Modal>
       )}
-      <Content title={t("title")} sizePreset="main-content" variant="section" />
+      <Content font="main-content-emphasis" title={t("title")} />
       {credential !== null && isEditableSource(source) ? (
         <AuthenticationAccountCard
           credential={credential}
@@ -165,6 +165,7 @@ export default function AuthenticationAccountSection({
       ) : (
         <Card border="solid" rounding={4} padding={2}>
           <ContentAction
+            font="main-ui-action"
             icon={getSourceMetadata(source).icon}
             title={
               ccPair.credential.name ||
@@ -175,8 +176,6 @@ export default function AuthenticationAccountSection({
             description={tAccount("addedOn.label", {
               date: formatDateLog(ccPair.credential.time_created),
             })}
-            sizePreset="main-ui"
-            variant="section"
             padding={0}
             rightChildren={editAction ?? undefined}
           />

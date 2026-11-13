@@ -5,7 +5,11 @@ from __future__ import annotations
 import pytest
 
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.metadata import parse_skill_document, serialize_skill_md
+from onyx.skills.metadata import (
+    frontmatter_for_jsonb,
+    parse_skill_document,
+    serialize_skill_md,
+)
 
 
 def _skill_md(frontmatter: str, body: str = "Do the work.") -> bytes:
@@ -154,3 +158,25 @@ def test_parse_skill_document_requires_directory_name_match() -> None:
             raw,
             directory_name="other",
         )
+
+
+def test_deep_yaml_is_invalid_input() -> None:
+    raw = _skill_md("metadata: " + "[" * 5000 + "]" * 5000)
+    with pytest.raises(OnyxError, match="not valid YAML"):
+        parse_skill_document(raw)
+
+
+def test_frontmatter_for_jsonb_drops_only_an_integer_json_cannot_write() -> None:
+    # Hex parsing skips Python's int digit limit; decimal output does not.
+    document = parse_skill_document(
+        _skill_md(
+            "name: deploy\ndescription: Deploy it.\nlicense: MIT\n"
+            f"huge: 0x{'f' * 4000}\nsmall: 7"
+        )
+    )
+    assert frontmatter_for_jsonb(document) == {
+        "name": "deploy",
+        "description": "Deploy it.",
+        "license": "MIT",
+        "small": 7,
+    }

@@ -104,6 +104,35 @@
       "mode": "chat",
       "name": "codestral-mamba-latest"
     },
+    "deepseek-v4-1-flash-1017": {
+      "attachment": false,
+      "cost": {
+        "cache_read": 0.007,
+        "input": 0.3,
+        "output": 1.2
+      },
+      "family": "deepseek-flash",
+      "limit": {
+        "context": 1048576,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "DeepSeek V4.1 Flash 1017",
+      "open_weights": true,
+      "reasoning": true,
+      "release_date": "2026-10-17",
+      "structured_output": true,
+      "temperature": true,
+      "tool_call": true
+    },
     "devstral-2512": {
       "attachment": false,
       "cost": {
@@ -209,6 +238,7 @@
       },
       "mode": "chat",
       "name": "devstral-small-latest",
+      "reasoning": true,
       "structured_output": true,
       "tool_call": true
     },
@@ -626,6 +656,7 @@
       },
       "mode": "chat",
       "name": "mistral-code-agent-latest",
+      "reasoning": true,
       "structured_output": true,
       "tool_call": true
     },
@@ -770,9 +801,9 @@
     "mistral-large-4": {
       "attachment": true,
       "cost": {
-        "cache_read": 0.14,
-        "input": 1.36,
-        "output": 4.18
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.1
       },
       "family": "mistral-large",
       "limit": {
@@ -801,12 +832,13 @@
     },
     "mistral-large-4-0": {
       "cost": {
-        "cache_read": 0.068,
-        "input": 0.6799999999999999,
-        "output": 2.09
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.0999999999999996
       },
       "limit": {
-        "context": 1048576
+        "context": 1048576,
+        "output": 1048576
       },
       "modalities": {
         "input": [
@@ -821,6 +853,37 @@
       "name": "mistral-large-4-0",
       "reasoning": true,
       "structured_output": true,
+      "tool_call": true
+    },
+    "mistral-large-4-0-8": {
+      "attachment": true,
+      "cost": {
+        "cache_read": 0.07,
+        "input": 0.7,
+        "output": 2.1
+      },
+      "family": "mistral-large",
+      "limit": {
+        "context": 1048576,
+        "output": 262144
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "name": "Mistral Large 4.0.8",
+      "open_weights": false,
+      "reasoning": true,
+      "release_date": "2026-10-06",
+      "status": "beta",
+      "structured_output": true,
+      "temperature": true,
       "tool_call": true
     },
     "mistral-large-latest": {
@@ -1101,7 +1164,8 @@
     },
     "mistral-ocr-4-0": {
       "mode": "ocr",
-      "name": "mistral-ocr-4-0"
+      "name": "mistral-ocr-4-0",
+      "status": "deprecated"
     },
     "mistral-ocr-4-1": {
       "mode": "ocr",
@@ -1131,6 +1195,7 @@
       },
       "mode": "chat",
       "name": "mistral-small",
+      "reasoning": true,
       "structured_output": true,
       "tool_call": true
     },

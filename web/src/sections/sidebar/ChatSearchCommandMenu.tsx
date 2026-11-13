@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useCallback } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";

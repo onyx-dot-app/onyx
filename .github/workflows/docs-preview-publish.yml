@@ -1,0 +1,205 @@
+name: Docs Preview Publish
+
+# Runs from main after "Docs Preview" builds a docs pull request (see docs-preview.yml).
+# This is the only place the Mintlify key and a write token exist. It runs nothing from
+# the pull request: it treats the built docs as data, pushes them to a
+# docs-preview/pr-<number> branch, asks Mintlify to preview that branch, and comments.
+on:
+  workflow_run: # zizmor: ignore[dangerous-triggers]
+    workflows: ["Docs Preview"]
+    types: [completed]
+
+# One publish at a time per pull request, so an older run cannot overwrite a newer preview.
+concurrency:
+  group: Docs-Preview-Publish-${{ github.event.workflow_run.pull_requests[0].number || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && github.event.workflow_run.head_repository.full_name == github.repository
+      && github.event.workflow_run.actor.login != 'dependabot[bot]'
+      && github.event.workflow_run.conclusion != 'cancelled'
+      && github.event.workflow_run.conclusion != 'skipped'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: docs-preview
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      MINTLIFY_API_KEY: ${{ secrets.MINTLIFY_API_KEY }}
+      MINTLIFY_PROJECT_ID: ${{ vars.MINTLIFY_PROJECT_ID }}
+      BUILD_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      BUILD_URL: ${{ github.event.workflow_run.html_url }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+      BUILD_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+    steps:
+      - name: Check the pull request and Mintlify configuration
+        id: config
+        run: |
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "No pull request for this run; nothing to preview"
+            exit 0
+          fi
+          if [ -z "$MINTLIFY_PROJECT_ID" ] || [ -z "$MINTLIFY_API_KEY" ]; then
+            echo "::warning::Set MINTLIFY_API_KEY and MINTLIFY_PROJECT_ID in the docs-preview environment to build previews"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+          echo "branch=docs-preview/pr-$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+      # An older build, failed or not, must not replace a newer preview or its comment.
+      # Compare builds, not the pull request head: a later commit that changes no docs
+      # starts no new build, and this build is then still the latest one. run_number grows
+      # strictly and a rerun keeps it. Runs of another pull request (a fork that reuses the
+      # branch name lists none) do not count.
+      - name: Check for a newer docs build
+        id: latest
+        if: steps.config.outputs.ready == 'true'
+        run: |
+          newer="$(gh api --method GET "repos/$GITHUB_REPOSITORY/actions/workflows/docs-preview.yml/runs" \
+            -f event=pull_request -f branch="$HEAD_BRANCH" -f per_page=50 \
+            --jq "[.workflow_runs[] | select(.run_number > $BUILD_RUN_NUMBER and any(.pull_requests[]; .number == $PR_NUMBER))] | length")"
+          if [ "$newer" != "0" ]; then
+            echo "A newer docs build exists for this pull request; skipping ${HEAD_SHA::7}"
+            echo "outdated=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: >-
+          steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+          && steps.latest.outputs.outdated != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # ratchet:actions/download-artifact@v4
+        with:
+          name: docs-preview
+          path: ${{ runner.temp }}/docs-preview
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push the preview branch
+        id: push
+        if: >-
+          steps.config.outputs.ready == 'true' && env.BUILD_CONCLUSION == 'success'
+          && steps.latest.outputs.outdated != 'true'
+        env:
+          PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
+        run: |
+          in="$RUNNER_TEMP/docs-preview"
+          # The artifact must describe the run that triggered this workflow.
+          [ "$(jq -r '.pr_number' "$in/meta.json")" = "$PR_NUMBER" ]
+          [ "$(jq -r '.head_sha' "$in/meta.json")" = "$HEAD_SHA" ]
+          # Accept only regular files and folders under documentation/. Links or other
+          # paths could reach files outside the tree. Here-strings avoid pipefail races.
+          listing="$(tar -tvzf "$in/documentation.tar.gz")"
+          names="$(tar -tzf "$in/documentation.tar.gz")"
+          if grep -qv '^[-d]' <<<"$listing" \
+            || grep -qvE '^documentation(/|$)' <<<"$names" \
+            || grep -qE '(^|/)(\.\.?|\.git)(/|$)' <<<"$names"; then
+            echo "::error::The docs artifact has an entry that is not a file or folder under documentation/"
+            exit 1
+          fi
+          work="$RUNNER_TEMP/docs-tree"
+          mkdir -p "$work"
+          tar -xzf "$in/documentation.tar.gz" -C "$work" --no-same-owner --no-same-permissions documentation
+          # Keep git metadata outside the unpacked tree, so no config from the archive applies.
+          export GIT_DIR="$RUNNER_TEMP/preview.git"
+          git init -q
+          git -c core.hooksPath=/dev/null -c core.fsmonitor=false --work-tree="$work" add -f -- "$work/documentation"
+          tree="$(git write-tree)"
+          commit="$(git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit-tree "$tree" -m "docs: preview of #$PR_NUMBER at ${HEAD_SHA::7}")"
+          pr_state() { gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state; }
+          # docs-preview-cleanup.yml deletes the branch once, when the pull request closes.
+          # Do not push for a closed pull request, and undo a push that raced the close.
+          # A plain assignment makes a failed lookup fail the step, not read as closed.
+          state="$(pr_state)"
+          if [ "$state" != "OPEN" ]; then
+            echo "The pull request is closed; no preview"
+            echo "closed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          gh auth setup-git
+          git push -q --force "https://github.com/${GITHUB_REPOSITORY}.git" "$commit:refs/heads/$PREVIEW_BRANCH"
+          state="$(pr_state)"
+          if [ "$state" != "OPEN" ]; then
+            git push -q "https://github.com/${GITHUB_REPOSITORY}.git" --delete "$PREVIEW_BRANCH"
+            echo "closed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Build the Mintlify preview
+        id: preview
+        if: steps.push.outputs.pushed == 'true'
+        env:
+          PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
+        run: |
+          api="https://api.mintlify.com/v1/project"
+          # Only members of the Onyx Mintlify organization can open the preview.
+          body="$(jq -n --arg branch "$PREVIEW_BRANCH" '{branch: $branch, auth: {type: "mintlify"}}')"
+          response="$(curl -fsS -X POST -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+            -H "Content-Type: application/json" -d "$body" "$api/preview/$MINTLIFY_PROJECT_ID")"
+          status_id="$(jq -r '.statusId' <<<"$response")"
+          echo "url=$(jq -r '.previewUrl' <<<"$response")" >> "$GITHUB_OUTPUT"
+          status="timeout"
+          for _ in $(seq 1 40); do
+            sleep 15
+            # A failed poll is not a result; keep polling until the build ends.
+            if ! current="$(curl -fsS -H "Authorization: Bearer $MINTLIFY_API_KEY" \
+              "$api/update-status/$status_id" | jq -r '.status')"; then
+              echo "Status request failed; retrying"
+              continue
+            fi
+            echo "Mintlify preview: $current"
+            if [ "$current" = "success" ] || [ "$current" = "failure" ]; then
+              status="$current"
+              break
+            fi
+          done
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      - name: Comment the preview result
+        if: ${{ !cancelled() && steps.config.outputs.ready == 'true' && steps.latest.outputs.outdated != 'true' && steps.push.outputs.closed != 'true' }}
+        env:
+          PREVIEW_URL: ${{ steps.preview.outputs.url }}
+          PREVIEW_STATUS: ${{ steps.preview.outputs.status }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$BUILD_CONCLUSION" != "success" ]; then
+            state="❌ Docs build failed"; link="[build run]($BUILD_URL)"
+          else
+            case "$PREVIEW_STATUS" in
+              success) state="✅ Ready"; link="$PREVIEW_URL" ;;
+              failure) state="❌ Mintlify build failed"; link="[run]($RUN_URL)" ;;
+              timeout) state="⏳ Timed out waiting for Mintlify"; link="$PREVIEW_URL ([run]($RUN_URL))" ;;
+              *) state="❌ Preview not built"; link="[run]($RUN_URL)" ;;
+            esac
+          fi
+          marker="<!-- docs-preview -->"
+          comment="$marker
+          **Docs Preview** (Mintlify, visible to the Onyx Mintlify organization)
+
+          | Status | Preview | Commit | Updated |
+          | --- | --- | --- | --- |
+          | $state | $link | \`${HEAD_SHA::7}\` | $(date -u '+%Y-%m-%d %H:%M:%S UTC') |"
+          # Match only this workflow's comment. --paginate: on a long pull request the
+          # comment can sit past the first page.
+          existing="$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR_NUMBER/comments" \
+            --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -1)"
+          if [ -n "$existing" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/issues/comments/$existing" --method PATCH --field body="$comment"
+          else
+            gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$comment"
+          fi
+          if [ "$BUILD_CONCLUSION" != "success" ] || [ "$PREVIEW_STATUS" != "success" ]; then
+            exit 1
+          fi

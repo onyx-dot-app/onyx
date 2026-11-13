@@ -5,7 +5,7 @@ from collections.abc import Callable, Generator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from functools import wraps
-from typing import ParamSpec, TypeVar
+from typing import Literal, ParamSpec, TypeVar
 
 from onyx.utils.logger import setup_logger
 
@@ -16,24 +16,36 @@ class AgentCancelled(BaseException):
     """Cancellation control flow bypasses ordinary model/tool error recovery."""
 
 
+# Why work was cancelled: a caller asked for it, the work reached its deadline,
+# or the user stopped it.
+CancelReason = Literal["requested", "deadline", "user"]
+
+
 class CancellationSignal:
     def __init__(self) -> None:
         self._cancelled = threading.Event()
         self._lock = threading.Lock()
         self._callbacks: set[Callable[[], None]] = set()
+        self._reason: CancelReason | None = None
 
     @property
     def cancelled(self) -> bool:
         return self._cancelled.is_set()
 
+    @property
+    def reason(self) -> CancelReason | None:
+        """The reason of the first cancel() call; None while not cancelled."""
+        return self._reason
+
     def check(self) -> None:
         if self.cancelled:
             raise AgentCancelled()
 
-    def cancel(self) -> None:
+    def cancel(self, reason: CancelReason = "requested") -> None:
         with self._lock:
             if self.cancelled:
                 return
+            self._reason = reason
             self._cancelled.set()
             callbacks = tuple(self._callbacks)
             self._callbacks.clear()

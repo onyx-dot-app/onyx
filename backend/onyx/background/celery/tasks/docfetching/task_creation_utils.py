@@ -16,6 +16,7 @@ from onyx.db.connector_credential_pair import lock_connector_credential_pair_row
 from onyx.db.connector_edit_requests import (
     create_pending_backfill_attempt__no_commit,
 )
+from onyx.db.document import has_secondary_only_sync_pending_documents
 from onyx.db.enums import ConnectorCredentialPairStatus, IndexModelStatus
 from onyx.db.index_attempt import (
     claim_waiting_index_attempt,
@@ -24,6 +25,7 @@ from onyx.db.index_attempt import (
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import ConnectorCredentialPair, SearchSettings
 from onyx.db.port_attempt import reindex_finalizing
+from onyx.db.search_settings import get_secondary_search_settings
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 _LOCK_TIMEOUT = 30
@@ -68,15 +70,20 @@ def docfetching_priority(
     search_settings: SearchSettings,
 ) -> OnyxCeleryPriority:
     """First-time indexing goes before refreshes of indexed connectors. While a
-    port-flow reindex finalizes, its FUTURE attempts go first too: the swap waits
-    on them. Priority only orders the queue, it does not interrupt a running
+    port-flow reindex finalizes, FUTURE attempts go before PRESENT refreshes, and
+    FUTURE attempts of connectors with docs pending for FUTURE go first: the swap
+    waits on them. Priority only orders the queue, it does not interrupt a running
     attempt."""
     if cc_pair.last_successful_index_time is None:
         return OnyxCeleryPriority.HIGH
-    if search_settings.status == IndexModelStatus.FUTURE and reindex_finalizing(
-        db_session, search_settings
-    ):
-        return OnyxCeleryPriority.HIGH
+    if search_settings.status == IndexModelStatus.FUTURE:
+        if not reindex_finalizing(db_session, search_settings):
+            return OnyxCeleryPriority.MEDIUM
+        if has_secondary_only_sync_pending_documents(db_session, cc_pair.id):
+            return OnyxCeleryPriority.HIGH
+        return OnyxCeleryPriority.MEDIUM
+    if reindex_finalizing(db_session, get_secondary_search_settings(db_session)):
+        return OnyxCeleryPriority.LOW
     return OnyxCeleryPriority.MEDIUM
 
 

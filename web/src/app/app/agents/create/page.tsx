@@ -1,1 +1,1 @@
-export { default } from "@/views/AgentEditorPage";
+export { default } from "@/views/AgentEditorPage/page";

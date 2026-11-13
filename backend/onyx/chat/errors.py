@@ -3,6 +3,7 @@ import traceback
 from onyx.agents.models import RunFailure
 from onyx.agents.runtime import RunFailed
 from onyx.configs.app_configs import DEV_MODE
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.exceptions import ClassifiedLLMError, litellm_exception_to_safe_error
@@ -157,7 +158,9 @@ def chat_error(
             error=error.detail,
             error_code=error.error_code.code,
             is_retryable=error.status_code >= 500,
-            details=details,
+            # The structured payload a 429 would carry (scope, reset_at, ...)
+            # must survive when the error is raised mid-turn.
+            details={**details, **(error.extra or {})},
         )
     elif isinstance(error, ValueError) and llm is None:
         return StreamingError(
@@ -192,4 +195,18 @@ def chat_error(
         error_code=info.error_code,
         is_retryable=info.is_retryable,
         details=details,
+    )
+
+
+def unhandled_stream_error(error: Exception) -> StreamingError:
+    """Client payload for an exception that escapes the chat stream handlers.
+
+    Only OnyxError detail is client-safe; other exception text stays in server logs.
+    """
+    if isinstance(error, OnyxError):
+        return chat_error(error)
+    return StreamingError(
+        error="An unexpected error occurred. Please try again.",
+        error_code=OnyxErrorCode.INTERNAL_ERROR.code,
+        is_retryable=True,
     )

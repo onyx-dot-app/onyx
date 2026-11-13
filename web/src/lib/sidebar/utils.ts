@@ -5,12 +5,6 @@ import { toast } from "@opal/layouts";
 import { ChatSession } from "@/app/app/types";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { FoldableLogo } from "@/lib/app/components";
-import type { IconFunctionComponent } from "@opal/types";
-
-export function renderSidebarLogo(folded: boolean): IconFunctionComponent {
-  return (props) => React.createElement(FoldableLogo, { ...props, folded });
-}
 
 /** Parameters shared by move-operation helpers. */
 export interface MoveOperationParams {

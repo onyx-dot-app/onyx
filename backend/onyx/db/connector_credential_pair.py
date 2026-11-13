@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from datetime import datetime
 from enum import Enum
 from typing import TypeVarTuple
@@ -85,6 +85,22 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         .correlate(ConnectorCredentialPair)
         .exists()
     )
+    # A PERSONAL pair on an ownerless credential is read by its creator.
+    ownerless_credential = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id.is_(None),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    personal_creator = and_(
+        ConnectorCredentialPair.access_type == AccessType.PERSONAL,
+        ConnectorCredentialPair.creator_id == user_id,
+        ownerless_credential,
+    )
     group_access_clause_fn = fetch_versioned_implementation(
         "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
     )
@@ -92,7 +108,7 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         ConnectorCredentialPair.access_type == AccessType.PUBLIC,
         and_(
             ConnectorCredentialPair.access_type.notin_(AccessType.perm_synced_types()),
-            or_(credential_owner, group_access_clause_fn(user_id)),
+            or_(credential_owner, personal_creator, group_access_clause_fn(user_id)),
         ),
     )
 
@@ -582,6 +598,29 @@ def get_cc_pair_groups_for_ids(
     return list(db_session.scalars(stmt).all())
 
 
+def get_data_access_group_names_for_cc_pairs(
+    db_session: Session,
+    cc_pair_ids: Collection[int],
+    visible_group_ids: set[int] | None,
+) -> dict[int, list[str]]:
+    """Each pair's data-access group names, sorted, kept to ``visible_group_ids``
+    unless it is None. Pairs with none are absent."""
+    if not cc_pair_ids or visible_group_ids == set():
+        return {}
+    stmt: Select[tuple[int, str]] = (
+        select(UserGroup__CCPairDataAccess.cc_pair_id, UserGroup.name)
+        .join(UserGroup, UserGroup.id == UserGroup__CCPairDataAccess.user_group_id)
+        .where(UserGroup__CCPairDataAccess.cc_pair_id.in_(cc_pair_ids))
+        .order_by(UserGroup.name)
+    )
+    if visible_group_ids is not None:
+        stmt = stmt.where(UserGroup.id.in_(visible_group_ids))
+    names: dict[int, list[str]] = {}
+    for cc_pair_id, name in db_session.execute(stmt):
+        names.setdefault(cc_pair_id, []).append(name)
+    return names
+
+
 # For use with our thread-level parallelism utils. Note that any relationships
 # you wish to use MUST be eagerly loaded, as the session will not be available
 # after this function to allow lazy loading.
@@ -836,8 +875,10 @@ def get_connector_credential_pairs_for_source(
     return list(db_session.scalars(stmt).unique().all())
 
 
-def _has_unresolved_entity_error() -> ColumnElement[bool]:
-    """Correlates to the enclosing query's IndexAttempt row."""
+def has_unresolved_entity_error() -> ColumnElement[bool]:
+    """Correlates to the enclosing query's IndexAttempt row. Reads
+    ``is_resolved`` alone, since an entity an admin resolved without retry
+    still needs its time range fetched again."""
     return (
         select(IndexAttemptError.id)
         .where(
@@ -890,7 +931,7 @@ def get_last_successful_attempt_poll_range_end(
                 IndexAttempt.status == IndexingStatus.SUCCESS,
                 and_(
                     IndexAttempt.status == IndexingStatus.COMPLETED_WITH_ERRORS,
-                    ~_has_unresolved_entity_error(),
+                    ~has_unresolved_entity_error(),
                 ),
             ),
             IndexAttempt.is_backfill.is_(False),
@@ -1074,6 +1115,7 @@ def _relate_groups_to_cc_pair__no_commit(
 def _relate_data_access_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
+    access_type: AccessType,
     user_group_ids: list[int],
 ) -> None:
     if not user_group_ids:
@@ -1096,8 +1138,36 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
 
     for group_id in set(user_group_ids):
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group_id, cc_pair_id=cc_pair_id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=group_id, cc_pair_id=cc_pair_id, access_type=access_type
+            )
         )
+
+
+def ensure_personal_has_reader(
+    access_type: AccessType,
+    credential_user_id: UUID | None,
+    creator_id: UUID | None,
+) -> None:
+    """A PERSONAL pair is read by its credential's owner, or by its creator
+    when the credential has no owner, so one of them must exist."""
+    if (
+        access_type == AccessType.PERSONAL
+        and credential_user_id is None
+        and creator_id is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An owner-only connector needs a credential owner or a creator.",
+        )
+
+
+def fetch_cc_pair_creator_id(db_session: Session, cc_pair_id: int) -> UUID | None:
+    return db_session.scalar(
+        select(ConnectorCredentialPair.creator_id).where(
+            ConnectorCredentialPair.id == cc_pair_id
+        )
+    )
 
 
 def add_credential_to_connector(
@@ -1144,6 +1214,8 @@ def add_credential_to_connector(
             status_code=401,
             detail=error_msg,
         )
+    # The creating user becomes the pair's creator.
+    ensure_personal_has_reader(access_type, credential.user_id, user.id)
 
     existing_association = (
         db_session.query(ConnectorCredentialPair)
@@ -1183,14 +1255,16 @@ def add_credential_to_connector(
     if access_type == AccessType.PRIVATE:
         # Callers that set only manage groups keep today's meaning: the
         # manage groups also get data access.
+        private_group_ids = (
+            data_access_group_ids
+            if data_access_group_ids is not None
+            else list(manage_access)
+        )
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
-            user_group_ids=(
-                data_access_group_ids
-                if data_access_group_ids is not None
-                else list(manage_access)
-            ),
+            access_type=access_type,
+            user_group_ids=private_group_ids,
         )
     elif access_type == AccessType.SYNC_RESTRICTED:
         # With no data-access group the pair would be visible to nobody.
@@ -1202,6 +1276,7 @@ def add_credential_to_connector(
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
+            access_type=access_type,
             user_group_ids=data_access_group_ids,
         )
 

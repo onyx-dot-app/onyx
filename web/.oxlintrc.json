@@ -17,6 +17,10 @@
     {
       "name": "opal",
       "specifier": "./tools/oxlint/opal/index.ts"
+    },
+    {
+      "name": "navigation",
+      "specifier": "./tools/oxlint/navigation/index.ts"
     }
   ],
   "options": {
@@ -26,6 +30,7 @@
     "correctness": "error"
   },
   "rules": {
+    "navigation/no-naked-navigation": "error",
     "nextjs/no-img-element": "off",
     "jsx-a11y/prefer-tag-over-role": "off",
     "react/exhaustive-deps": "off",
@@ -108,6 +113,23 @@
     ]
   },
   "overrides": [
+    {
+      // @opal/navigation is where navigation lives, and tests use paths as
+      // data.
+      "files": [
+        "lib/opal/src/navigation/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "**/__tests__/**",
+        "**/__mocks__/**",
+        "tests/**"
+      ],
+      "rules": {
+        "navigation/no-naked-navigation": "off"
+      }
+    },
     {
       "files": [
         "**/*.test.ts",
@@ -277,7 +299,7 @@
         "src/sections/skills/InstructionsDisplayModeToggle.tsx",
         "src/sections/skills/SkillBundlePicker.tsx",
         "src/sections/skills/SkillFilesPicker.tsx",
-        "src/views/AgentEditorPage.tsx",
+        "src/views/AgentEditorPage/page.tsx",
         "src/views/AppPage.tsx",
         "src/views/SettingsPage.tsx",
         "src/views/admin/connectors/AddConnectorPage/form/FieldRendering.tsx",
@@ -370,7 +392,6 @@
         "src/app/app/message/messageComponents/IoBlockLabel.tsx",
         "src/app/app/message/messageComponents/MessageToolbar.tsx",
         "src/app/app/message/messageComponents/renderers/CustomToolRenderer.tsx",
-        "src/app/app/message/messageComponents/renderers/ImageToolRenderer.tsx",
         "src/app/app/message/messageComponents/timeline/AgentTimeline.tsx",
         "src/app/app/message/messageComponents/timeline/ParallelTimelineTabs.tsx",
         "src/app/app/message/messageComponents/timeline/StepContainer.tsx",
@@ -491,12 +512,11 @@
         "src/ee/views/admin/HooksPage/index.tsx",
         "src/layouts/chromes/AdminChrome.tsx",
         "src/layouts/chromes/AppChrome.tsx",
-        "src/layouts/general-layouts.tsx",
         "src/lib/agents/components/AgentButton.tsx",
         "src/lib/agents/components/AgentViewerModal.tsx",
         "src/lib/agents/components/MoveCustomAgentChatModal.tsx",
         "src/lib/agents/components/ShareAgentModal.tsx",
-        "src/lib/app/components.tsx",
+        "src/lib/app/components/Logo.tsx",
         "src/lib/auth/components.tsx",
         "src/lib/connectors/components/ConnectorGroupRestrictionPicker.tsx",
         "src/lib/connectors/components/GroupShareList.tsx",
@@ -506,11 +526,8 @@
         "src/lib/projects/components/ProjectContextPanel.tsx",
         "src/lib/tools/components/SwitchList.tsx",
         "src/refresh-components/Attachment.tsx",
-        "src/refresh-components/Chip.tsx",
         "src/refresh-components/ConnectionProviderIcon.tsx",
-        "src/refresh-components/Divider.tsx",
         "src/refresh-components/Keycap.tsx",
-        "src/refresh-components/OverflowDiv.tsx",
         "src/refresh-components/ScrollIndicatorDiv.tsx",
         "src/refresh-components/TextSeparator.tsx",
         "src/refresh-components/avatars/CustomAgentAvatar.tsx",
@@ -523,7 +540,6 @@
         "src/refresh-components/form/LabeledCheckboxField.tsx",
         "src/refresh-components/messages/InfoBlock.tsx",
         "src/refresh-components/popovers/FilePickerPopover.tsx",
-        "src/refresh-components/skeletons/ChatSessionSkeleton.tsx",
         "src/refresh-components/texts/ExpandableTextDisplay.tsx",
         "src/refresh-components/tiles/ButtonTile.tsx",
         "src/refresh-components/tiles/FileTile.tsx",
@@ -541,10 +557,8 @@
         "src/sections/actions/oauth/OAuthConnectionCheck.tsx",
         "src/sections/actions/oauth/OAuthTestCallback.tsx",
         "src/sections/admin/AdminListHeader.tsx",
-        "src/sections/agents/AgentCard.tsx",
         "src/sections/banners/OpenSearchResourceWarning.tsx",
         "src/sections/cards/FileCard.tsx",
-        "src/sections/cards/SkillCard.tsx",
         "src/sections/chat/ChatScrollContainer.tsx",
         "src/sections/chat/ChatUI.tsx",
         "src/sections/document-sidebar/ChatDocumentDisplay.tsx",
@@ -564,11 +578,9 @@
         "src/sections/modals/PreviewModal/variants/imageVariant.tsx",
         "src/sections/modals/PreviewModal/variants/unsupportedVariant.tsx",
         "src/sections/modals/ShareAccessRow.tsx",
-        "src/sections/modals/SkillPreviewModal.tsx",
         "src/sections/modals/TransferOwnershipView.tsx",
         "src/sections/modals/languageModels/CustomModal.tsx",
         "src/sections/modals/languageModels/shared.tsx",
-        "src/sections/modals/skills/ImportSkillsFromGitHubModal.tsx",
         "src/sections/modals/skills/ShareSkillModal.tsx",
         "src/sections/model-selector/ModelSelectorContent.tsx",
         "src/sections/model-selector/MultiModelSelector.tsx",
@@ -596,9 +608,9 @@
         "src/sections/plugins/PluginRowLayout.tsx",
         "src/sections/plugins/PluginsPage.tsx",
         "src/sections/settings/Memories.tsx",
-        "src/sections/sidebar/AccountPopover.tsx",
+        "src/lib/app/components/AccountPopover.tsx",
         "src/sections/sidebar/ChatSearchCommandMenu.tsx",
-        "src/sections/sidebar/NotificationsPopover.tsx",
+        "src/lib/app/components/NotificationsPopover.tsx",
         "src/sections/skills/InstructionsDisplayModeToggle.tsx",
         "src/sections/skills/SkillBundlePicker.tsx",
         "src/sections/skills/SkillFileTree.tsx",
@@ -606,12 +618,10 @@
         "src/sections/usage/AnalyticsChart.tsx",
         "src/sections/usage/SpendByUserTable.tsx",
         "src/sections/usage/UserUsageDetailModal.tsx",
-        "src/views/AgentEditorPage.tsx",
-        "src/views/AgentsNavigationPage.tsx",
+        "src/views/AgentEditorPage/page.tsx",
+        "src/views/AgentsCatalogPage/page.tsx",
         "src/views/AppPage.tsx",
         "src/views/SettingsPage.tsx",
-        "src/views/SkillEditorPage.tsx",
-        "src/views/SkillsPage.tsx",
         "src/views/admin/AgentsPage/AgentRowActions.tsx",
         "src/views/admin/AgentsPage/AgentsTable.tsx",
         "src/views/admin/ChatPreferencesPage.tsx",
@@ -648,7 +658,6 @@
         "src/views/admin/connectors/CatalogPage.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/InlineFileManagement.tsx",
         "src/views/admin/connectors/ConnectorDetailPage/SharingSettingsSection.tsx",
-        "src/views/admin/connectors/ConnectorDetailPage/ThroughputChart.tsx",
         "src/views/admin/connectors/FederatedDetailPage/index.tsx",
         "src/views/admin/connectors/OAuthCallbackPage/index.tsx",
         "src/views/admin/connectors/OAuthFinalizePage/index.tsx"

@@ -59,7 +59,9 @@ resource "aws_elasticache_replication_group" "redis" {
   # If transit_encryption_enabled is true, AWS requires an auth_token to be set.
   # For IAM authentication, auth_token can be null
   auth_token = var.enable_redis_iam_auth ? null : var.auth_token
-  tags       = var.tags
+  # Provider 6 dropped the ROTATE default; keep it so existing groups see no diff.
+  auth_token_update_strategy = var.enable_redis_iam_auth || nonsensitive(var.auth_token == null) ? null : "ROTATE"
+  tags                       = var.tags
 }
 
 # The single member node's cluster id (num_cache_clusters = 1). ElastiCache

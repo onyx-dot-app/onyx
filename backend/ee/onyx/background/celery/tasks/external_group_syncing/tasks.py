@@ -19,6 +19,8 @@ from ee.onyx.db.external_perm import (
     remove_stale_external_groups,
     upsert_external_groups,
 )
+from ee.onyx.db.sync_attempt_error import create_sync_attempt_error
+from ee.onyx.external_permissions.models import SyncEntityFailure
 from ee.onyx.external_permissions.sync_params import (
     external_group_sync_seconds,
     get_all_cc_pair_agnostic_group_sync_sources,
@@ -488,11 +490,12 @@ def _timed_perform_external_group_sync(
         seen_users: set[str] = set()  # Track unique users across all groups
         total_groups_processed = 0
         total_group_memberships_synced = 0
+        total_entity_failures: int = 0
         cumulative_upsert_time = 0.0
         start_time = time.monotonic()
         try:
             external_user_group_generator = ext_group_sync_func(tenant_id, cc_pair)
-            for external_user_group in external_user_group_generator:
+            for synced_item in external_user_group_generator:
                 # Check if the task has exceeded its timeout
                 # NOTE: Celery's soft_time_limit does not work with thread pools,
                 # so we must enforce timeouts internally.
@@ -512,6 +515,14 @@ def _timed_perform_external_group_sync(
                         f"cc_pair={cc_pair_id} attempt={attempt_id}"
                     )
 
+                if isinstance(synced_item, SyncEntityFailure):
+                    create_sync_attempt_error(
+                        db_session, attempt_id, cc_pair_id, synced_item
+                    )
+                    total_entity_failures += 1
+                    continue
+
+                external_user_group = synced_item
                 external_user_group_batch.append(external_user_group)
 
                 # Track progress
@@ -591,14 +602,15 @@ def _timed_perform_external_group_sync(
             total_users_processed=total_users_processed,
             total_groups_processed=total_groups_processed,
             total_group_memberships_synced=total_group_memberships_synced,
-            errors_encountered=0,
+            errors_encountered=total_entity_failures,
         )
         logger.info(
-            "Completed external group sync attempt %s: %s groups, %s users, %s memberships",
+            "Completed external group sync attempt %s: %s groups, %s users, %s memberships, %s skipped users or groups",
             attempt_id,
             total_groups_processed,
             total_users_processed,
             total_group_memberships_synced,
+            total_entity_failures,
         )
 
         inc_group_sync_groups_processed(connector_type, total_groups_processed)

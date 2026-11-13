@@ -30,7 +30,9 @@ type ComposeOptions struct {
 	Ports map[string]string
 	// ExcludeServices are infra services left out of an --infra start.
 	ExcludeServices []string
-	Output          io.Writer
+	// Env is extra environment for docker compose, e.g. an image override.
+	Env    []string
+	Output io.Writer
 }
 
 // NewComposeCommand creates a new compose command for launching docker
@@ -378,7 +380,7 @@ func runComposeTarget(profile string, opts *ComposeOptions, target devstack.Targ
 	if output == nil {
 		output = os.Stdout
 	}
-	if err := execDockerComposeOutput(args, envForTag(opts.Tag), output); err != nil {
+	if err := execDockerComposeOutput(args, append(envForTag(opts.Tag), opts.Env...), output); err != nil {
 		return err
 	}
 

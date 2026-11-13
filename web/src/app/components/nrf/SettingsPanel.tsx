@@ -181,7 +181,7 @@ export const SettingsPanel = ({
               <div className="flex items-center justify-center w-10 h-10 rounded-xl bg-background-tint-02">
                 <SvgSettings className="w-5 h-5 stroke-text-03" />
               </div>
-              <Text font="heading-h3" color="text-04">
+              <Text font="heading-section" color="text-04">
                 {t("nrf.settingsPanel.header.title")}
               </Text>
             </div>

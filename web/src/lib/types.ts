@@ -35,6 +35,7 @@ interface UserPreferences {
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Input preferences
   paste_as_tile?: boolean;
+  interrupt_on_send?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -79,7 +80,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
-  MANAGE_SKILLS = "manage:skills",
+  MANAGE_PLUGINS = "manage:plugins",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",
@@ -187,7 +188,12 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync" | "sync_restricted";
+export type AccessType =
+  | "public"
+  | "private"
+  | "sync"
+  | "sync_restricted"
+  | "personal";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -422,6 +428,8 @@ export interface DeletionAttemptSnapshot {
   connector_id: number;
   credential_id: number;
   status: TaskStatus;
+  // When the running deletion took its fence, null while it only waits to start.
+  started_at: string | null;
 }
 
 // DOCUMENT SETS
@@ -558,7 +566,10 @@ export interface SlackBotTokens {
 export interface UserGroup {
   id: number;
   name: string;
+  // Empty when the list was fetched without members; use member_count.
   users: User[];
+  member_count: number;
+  active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];

@@ -1,10 +1,10 @@
 "use client";
 
+import { useSearchParams, useNavigation } from "@opal/navigation";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { useSearchParams } from "next/navigation";
 import { useUser } from "@/providers/UserProvider";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import { Button } from "@opal/components";
 import { Modal } from "@opal/components";
@@ -47,7 +47,6 @@ import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
-import { Section } from "@/layouts/general-layouts";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 
@@ -65,6 +64,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { setUseOnyxAsNewTab } = useNRFPreferences();
 
   const searchParams = useSearchParams();
+  const navigation = useNavigation();
   // Shared with the tools popover in AppInputBar below. Mounted by the route.
   const { user, authTypeMetadata, refreshUser } = useUser();
 
@@ -141,6 +141,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: existingChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // State
@@ -305,7 +306,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  useChatSessionController({
+  const { queue } = useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
     firstMessage: undefined,
@@ -572,6 +573,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                queue={queue}
                 toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
@@ -699,7 +701,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                       if (window.top) {
                         window.top.location.href = "/auth/login";
                       } else {
-                        window.location.href = "/auth/login";
+                        navigation.load("/auth/login");
                       }
                     }}
                   >
@@ -717,7 +719,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           width="full"
           prominence="secondary"
           onClick={() => {
-            window.location.href = ADMIN_ROUTES.LLM_MODELS.path;
+            navigation.load(ADMIN_ROUTES.LLM_MODELS.path);
           }}
         >
           {t("nrf.page.setupLlmButton.label")}

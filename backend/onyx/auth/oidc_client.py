@@ -4,6 +4,7 @@ trusted only when the IdP marks it verified, and the discovery document's
 issuer must own the configured discovery URL, so one provider's tokens cannot
 be replayed against another provider's callback (OIDC mix-up defense)."""
 
+from typing import Literal
 from urllib.parse import unquote, urlsplit
 
 import httpx
@@ -133,6 +134,31 @@ class VerifiedEmailOpenID(OpenID):
         validate_issuer_owns_config_url(
             self.openid_configuration.get("issuer"), openid_configuration_endpoint
         )
+
+    async def get_authorization_url(
+        self,
+        redirect_uri: str,
+        state: str | None = None,
+        scope: list[str] | None = None,
+        code_challenge: str | None = None,
+        code_challenge_method: Literal["plain", "S256"] | None = None,
+        extras_params: dict[str, str] | None = None,
+    ) -> str:
+        """httpx-oauth always appends `?{params}`. Some IdPs advertise an
+        authorize endpoint that already has a query (Azure AD B2C: `?p=<policy>`
+        when discovered via the issuer-owned URL), so join with `&` instead."""
+        url = await super().get_authorization_url(
+            redirect_uri,
+            state=state,
+            scope=scope,
+            code_challenge=code_challenge,
+            code_challenge_method=code_challenge_method,
+            extras_params=extras_params,
+        )
+        if "?" not in self.authorize_endpoint:
+            return url
+        params = url.removeprefix(f"{self.authorize_endpoint}?")
+        return f"{self.authorize_endpoint}&{params}"
 
     @property
     def expected_issuer(self) -> str:

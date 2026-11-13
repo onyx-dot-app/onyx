@@ -6,13 +6,14 @@ deletes only those marked chunks for a recorded doc. See
 docs/plans/reindexing/deleted-doc-resurrection-during-port.md.
 """
 
+from collections import defaultdict
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, delete, select, text
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
-from onyx.db.document import get_cc_pairs_for_document
+from onyx.db.document import get_linked_cc_pair_ids_for_documents
 from onyx.db.models import PortOrphanCandidate, SearchSettings
 
 
@@ -89,7 +90,19 @@ def record_port_orphan_candidates_for_document(
     primary: SearchSettings,
     secondary: SearchSettings | None,
 ) -> list[int]:
-    """Record a candidate under each cc_pair owning `document_id`, if a port is active.
+    """Single-document form of record_port_orphan_candidates_for_documents."""
+    return record_port_orphan_candidates_for_documents(
+        db_session, [document_id], primary, secondary
+    )
+
+
+def record_port_orphan_candidates_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+    primary: SearchSettings,
+    secondary: SearchSettings | None,
+) -> list[int]:
+    """Record a candidate under each cc_pair owning each document, if a port is active.
     The single choke point every index-delete entry point (connector cleanup, ingestion)
     funnels through. Returns the ids of the rows this call inserted (empty when none), so a
     failed delete rolls back only its own recording — never a candidate another cc_pair or
@@ -98,10 +111,16 @@ def record_port_orphan_candidates_for_document(
     target_settings_id = port_target_settings_id(primary, secondary)
     if target_settings_id is None:
         return []
+    doc_ids_by_cc_pair: dict[int, list[str]] = defaultdict(list)
+    for document_id, cc_pair_ids in get_linked_cc_pair_ids_for_documents(
+        db_session, document_ids
+    ).items():
+        for cc_pair_id in cc_pair_ids:
+            doc_ids_by_cc_pair[cc_pair_id].append(document_id)
     recorded_ids: list[int] = []
-    for cc_pair in get_cc_pairs_for_document(db_session, document_id):
+    for cc_pair_id, cc_pair_doc_ids in doc_ids_by_cc_pair.items():
         recorded_ids += record_port_orphan_candidates(
-            db_session, target_settings_id, cc_pair.id, [document_id]
+            db_session, target_settings_id, cc_pair_id, cc_pair_doc_ids
         )
     return recorded_ids
 
@@ -113,9 +132,9 @@ def record_port_orphan_candidates_for_user_file(
     primary: SearchSettings,
     secondary: SearchSettings | None,
 ) -> list[int]:
-    """User-file analog of _for_document: record the deleted file under its user scope
-    if a port is active. User files have no cc_pair, so the _for_document recorder (keyed
-    on get_cc_pairs_for_document) never covers them — this is their choke point. Caller
+    """User-file analog of _for_documents: record the deleted file under its user scope
+    if a port is active. User files have no cc_pair, so the _for_documents recorder (keyed
+    on cc_pair links) never covers them — this is their choke point. Caller
     commits before the index delete."""
     target_settings_id = port_target_settings_id(primary, secondary)
     if target_settings_id is None:

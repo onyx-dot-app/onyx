@@ -36,7 +36,7 @@
   --sidebar-tab-label-visibility-delay: var(--duration-sidebar-fold);
 }
 
-/* A string label's row. It reproduces the `ContentAction` > `ContentSm`
+/* A string label's row. It reproduces the `ContentAction` row
    layout the tab used before: the label and icon start-aligned with a 2px
    gap, and the truncation spacer 1rem after them. */
 .opal-sidebar-tab__row {
@@ -93,6 +93,6 @@
 
 /* A passive tag lets clicks fall through to the row's click target. */
 .opal-sidebar-tab__actions
-  > .opal-auxiliary-tag:not([data-clickable]):not([data-type="editable"]) {
+  > .opal-badge:not([data-clickable]):not([data-type="editable"]) {
   @apply pointer-events-none;
 }

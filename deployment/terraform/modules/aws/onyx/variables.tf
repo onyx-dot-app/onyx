@@ -169,6 +169,40 @@ variable "enable_upload_bucket" {
   default     = false
 }
 
+variable "enable_sandbox_archive_bucket" {
+  type        = bool
+  description = "Create an S3 bucket for Craft sandbox session archives, encrypted with its own KMS key. No node or pod role gets access to it."
+  default     = false
+}
+
+variable "sandbox_archive_bucket_name" {
+  type        = string
+  description = "Name of the sandbox archive bucket. Null derives <name>-sandbox-archive-<workspace>."
+  default     = null
+}
+
+variable "sandbox_archive_expiration_days" {
+  type        = number
+  description = "Days after which sandbox archives are deleted"
+  default     = 30
+
+  validation {
+    condition     = var.sandbox_archive_expiration_days >= 1
+    error_message = "sandbox_archive_expiration_days must be at least 1."
+  }
+}
+
+variable "sandbox_archive_noncurrent_expiration_days" {
+  type        = number
+  description = "Days to keep overwritten or deleted sandbox archive versions"
+  default     = 7
+
+  validation {
+    condition     = var.sandbox_archive_noncurrent_expiration_days >= 1
+    error_message = "sandbox_archive_noncurrent_expiration_days must be at least 1."
+  }
+}
+
 variable "irsa_additional_service_account_names" {
   type        = list(string)
   description = "Additional service accounts in the Onyx namespace that may assume the workload IRSA role. Use the rendered ServiceAccount name for chart-created workloads, such as onyx-sandbox-proxy, that also need RDS IAM auth."
@@ -367,6 +401,54 @@ variable "craft_sandbox_node_disk_size_gb" {
   default     = 200
 }
 
+variable "craft_sandbox_node_disk_iops" {
+  type        = number
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. 6000 is the tested value for Firecracker sandboxes."
+  default     = 3000
+}
+
+variable "craft_sandbox_node_disk_throughput" {
+  type        = number
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
+  default     = 125
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run: \"pod\" (default) or \"firecracker\". \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) or Intel .metal craft_sandbox_node_instance_types. The eks module checks the types."
+  default     = "pod"
+}
+
+variable "enable_craft_pod_sandbox_node_group" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group without the onyx.app/kvm taint. Pod sandboxes and the image prepuller run there."
+  default     = false
+}
+
+variable "craft_pod_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the pod sandbox node group next to a Firecracker group."
+  default     = ["m8i.xlarge"]
+}
+
+variable "craft_pod_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
+variable "craft_pod_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the pod sandbox node group next to a Firecracker group."
+  default     = 2
+}
+
+variable "craft_pod_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
 # OpenSearch Configuration Variables
 variable "enable_opensearch" {
   type        = bool
@@ -376,8 +458,8 @@ variable "enable_opensearch" {
 
 variable "opensearch_engine_version" {
   type        = string
-  description = "OpenSearch engine version"
-  default     = "3.3"
+  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7. A domain on 1.3 or 2.x must upgrade to 2.19 before 3.x."
+  default     = "3.7"
 }
 
 variable "opensearch_instance_type" {

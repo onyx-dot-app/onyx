@@ -1,11 +1,10 @@
+import { NavLink } from "@opal/navigation";
 import { useLocale, useTranslations } from "next-intl";
 import { SvgArrowUpRight, SvgFilterPlus, SvgUserSync } from "@opal/icons";
-import { ContentAction } from "@opal/layouts";
+import { ContentAction, Section } from "@opal/layouts";
 import { Button, Card, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { clickOnKeyDown } from "@opal/utils";
-import { Section } from "@/layouts/general-layouts";
-import Link from "next/link";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 // ---------------------------------------------------------------------------
@@ -86,14 +85,13 @@ function ScimCard() {
     <Card border="solid" padding={3} rounding={4}>
       <Section alignItems="start" height="fit" gap={2}>
         <ContentAction
+          font="main-ui-action"
           icon={SvgUserSync}
           title={t("summary.scim.title")}
           description={t("summary.scim.description")}
-          sizePreset="main-ui"
-          variant="section"
           padding={0}
           rightChildren={
-            <Link href={ADMIN_ROUTES.SCIM.path}>
+            <NavLink href={ADMIN_ROUTES.SCIM.path}>
               <Button
                 prominence="tertiary"
                 rightIcon={SvgArrowUpRight}
@@ -101,7 +99,7 @@ function ScimCard() {
               >
                 {t("summary.scim.manageButton.label")}
               </Button>
-            </Link>
+            </NavLink>
           }
         />
       </Section>

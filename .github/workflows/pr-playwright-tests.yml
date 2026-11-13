@@ -526,6 +526,13 @@ jobs:
           - project: exclusive
             shard: 1
             shards: 1
+          # The `@code-mode` specs again, against a backend with code mode on.
+          - project: code-mode
+            shard: 1
+            shards: 1
+    # Read by the backend through the compose .env and by the specs.
+    env:
+      CODE_MODE_ENABLED: ${{ matrix.project == 'code-mode' }}
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
@@ -578,6 +585,7 @@ jobs:
           EXA_API_KEY=${EXA_API_KEY_VALUE}
           REQUIRE_EMAIL_VERIFICATION=false
           DISABLE_TELEMETRY=true
+          CODE_MODE_ENABLED=${CODE_MODE_ENABLED}
           # MCP E2E tests register mock servers on host.docker.internal (a private
           # host-gateway address); opt in so the SSRF guard allows it. Cloud-
           # metadata/link-local stays blocked regardless.

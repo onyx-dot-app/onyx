@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
-import { Button, Fold, OverflowText, Text } from "@opal/components";
+import { Button, Fold, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp, SvgExternalLink } from "@opal/icons";
 import { LineLoader } from "@opal/loaders";
@@ -98,7 +98,9 @@ function NodeRow({ entry }: NodeRowProps) {
   return (
     <BreakdownRow docCount={entry.doc_count}>
       {/* A SharePoint key is a whole site URL, so the key truncates and the link rides on an icon. */}
-      <OverflowText
+      <Text
+        maxLines={1}
+        overflowTooltip
         // A numeric key (a Confluence page ID) reads as an ID.
         font={
           /^\d+$/.test(entry.raw_node_id) ? "main-ui-mono" : "main-ui-action"
@@ -106,7 +108,7 @@ function NodeRow({ entry }: NodeRowProps) {
         color={entry.doc_count === null ? "text-03" : "text-04"}
       >
         {entry.raw_node_id}
-      </OverflowText>
+      </Text>
       {entry.link !== null && (
         <Button
           icon={SvgExternalLink}
@@ -119,9 +121,14 @@ function NodeRow({ entry }: NodeRowProps) {
         />
       )}
       {entry.display_name !== null && (
-        <OverflowText font="secondary-body" color="text-03">
+        <Text
+          maxLines={1}
+          overflowTooltip
+          font="secondary-body"
+          color="text-03"
+        >
           {t("displayName", { name: entry.display_name })}
-        </OverflowText>
+        </Text>
       )}
     </BreakdownRow>
   );

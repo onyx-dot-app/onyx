@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 // The field reuses InputTypeIn's .opal-input-field base, color, and placeholder rules.
 import "@opal/components/inputs/texts/input-type-in/styles.css";
 import "@opal/components/inputs/texts/input-text-area/styles.css";
@@ -95,7 +95,7 @@ function InputTextArea({
   }, [adjustHeight, props.value]);
 
   return (
-    <div className="opal-input opal-input-textarea" data-variant={variant}>
+    <InputContainer className="opal-input-textarea" variant={variant} grows>
       {/* raw-ok: Opal ships no textarea element, this component IS the library's textarea */}
       <textarea
         ref={mergeRefs(internalRef, ref)}
@@ -119,7 +119,7 @@ function InputTextArea({
       {rightSection && (
         <div className="opal-input-textarea-right">{rightSection}</div>
       )}
-    </div>
+    </InputContainer>
   );
 }
 

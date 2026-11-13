@@ -16,8 +16,10 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
 - **An end user** asks for an image in chat. A progress indicator shows, then
   the image appears in the answer. The user can ask for changes to an image
   they attached or to one that the assistant made, and the model uses it as a
-  reference. After an image call, the assistant answers without calling more
-  tools in that turn.
+  reference. After an image call, the assistant can continue with other tools
+  or generate another image before answering. Generated images from all steps
+  appear once above the answer. With code mode on, a program can generate
+  images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
   models of each connected LLM provider. The recommended view, the default,
   shows the non-deprecated catalog image models; the full view shows every
@@ -49,7 +51,8 @@ It does not own:
   `LLMProvider` row, which [[llm-providers]] owns.
 - File storage and the session stamp on generated images
   ([[file-store-and-user-files]]).
-- The chat cycle that ends tool calls after an image ([[core-chat-loop]]).
+- How the timeline and the answer show the images ([[chat-frontend]]).
+- The chat cycle and its tool-call limit ([[core-chat-loop]]).
 - The Craft `image-generation` skill, which calls the CLI ([[skills]]). The
   skill is offered only when `is_image_generation_configured` is true.
 
@@ -89,8 +92,10 @@ edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 
 **Model catalogue.** `llm/model_catalog.py:iter_image_generation_models` gives
 the recommended models: catalog entries with an image mode and no deprecated
-status. `GET /admin/image-generation/llm-providers` adds every stored model of
-the provider for the unfiltered view. A linked config has the ID
+status, without supplement-only entries (upstream pruned them) or dated
+snapshots that have an undated alias.
+`GET /admin/image-generation/llm-providers` adds the dated snapshots and every
+stored model of the provider for the unfiltered view. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them.
 `web/src/views/admin/ImageGenerationPage/constants.ts` now only names the
@@ -130,16 +135,13 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    `image_gen/generation.py:is_image_generation_configured` calls `validate_credentials`, which checks
    only that the fields are present. It does not call the provider. A wrong key
    shows the tool and fails at run time.
-3. `image-ends-tool-phase` **Image generation ends the tool phase.**
-   [[core-chat-loop]] owns the stopping-tool rule.
-   `chat/agent.py:ChatAgent._update_tool_context` sets `ran_image_gen` when a
-   step calls `generate_image`, even if the call fails. Other calls in that step
-   still run. Then `chat/agent.py:ChatAgent._prepare_step` offers no tools for
-   the rest of the turn, so the model cannot retry. The flag resets at the next
-   turn and is saved in `ChatFeatureState`. When reminders are on,
-   `chat/prompt_utils.py:build_chat_reminder` uses
-   `prompts/chat_prompts.py:IMAGE_GEN_REMINDER`. Any tool added to
-   `tools/built_in_tools.py:STOPPING_TOOLS_NAMES` gets the same rule and reminder.
+3. `image-ends-tool-phase` **Image generation does not end the tool phase.**
+   `chat/agent.py:ChatAgent._prepare_step` keeps tools available after successful
+   or failed image calls. The final cycle disables tool calls
+   ([[core-chat-loop#stopping-tools]]). When reminders
+   are on, a result with generated images adds `IMAGE_GEN_REMINDER` without
+   replacing the agent's task prompt. The reminder allows continued work and
+   tells the model not to link or embed the generated images.
 4. `response-format-per-model` **`response_format` depends on the model.**
    `image_gen/generation.py:response_format_for_model` leaves it out for
    `gpt-image-*` models, which reject it, and asks for `b64_json` for the rest.
@@ -172,7 +174,9 @@ and saves no files. The caller needs `Permission.GENERATE_IMAGE`.
    names.** The web enum calls the finished-image packet
    `IMAGE_GENERATION_TOOL_DELTA`, but its value is `"image_generation_final"`
    (`web/src/app/app/services/streamingModels.ts`). The renderer treats "start
-   with no end" as running. Match packets by their string value.
+   with no end" as running. An empty final packet shows "No images
+   generated"; a call that ends with no final packet (Stop, or an interrupted
+   code mode program) shows as stopped. Match packets by their string value.
 9. `one-image-per-chat-call` **The chat tool makes one image per call.**
    `ImageGenerationTool._generate_image` passes `n=1`. Only the standalone
    endpoint accepts `n`, up to `server/features/image_generation/api.py:_MAX_IMAGES`.

@@ -9,8 +9,6 @@ import {
   isActualToolCallPacket,
   isDisplayPacket,
   isSearchToolPacket,
-  isStreamingComplete,
-  isFinalAnswerComing,
 } from "./packetUtils";
 
 // Helper to create a mock packet with a specific type
@@ -45,6 +43,10 @@ describe("packetUtils", () => {
       PacketType.INTERMEDIATE_REPORT_START,
       PacketType.INTERMEDIATE_REPORT_DELTA,
       PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
+      PacketType.IMAGE_GENERATION_TOOL_START,
+      PacketType.IMAGE_GENERATION_TOOL_DELTA,
+      PacketType.CODE_MODE_START,
+      PacketType.CODE_MODE_DELTA,
     ];
 
     test.each(toolPacketTypes)(
@@ -172,9 +174,9 @@ describe("packetUtils", () => {
       expect(isDisplayPacket(packet)).toBe(true);
     });
 
-    test("returns true for IMAGE_GENERATION_TOOL_START", () => {
+    test("returns false for IMAGE_GENERATION_TOOL_START", () => {
       const packet = createPacket(PacketType.IMAGE_GENERATION_TOOL_START);
-      expect(isDisplayPacket(packet)).toBe(true);
+      expect(isDisplayPacket(packet)).toBe(false);
     });
 
     test("returns false for other packet types", () => {
@@ -202,56 +204,6 @@ describe("packetUtils", () => {
     test("returns false for other packet types", () => {
       const packet = createPacket(PacketType.PYTHON_TOOL_START);
       expect(isSearchToolPacket(packet)).toBe(false);
-    });
-  });
-
-  describe("isStreamingComplete", () => {
-    test("returns true when packets contain STOP", () => {
-      const packets = [
-        createPacket(PacketType.MESSAGE_START),
-        createPacket(PacketType.MESSAGE_DELTA),
-        createPacket(PacketType.STOP),
-      ];
-      expect(isStreamingComplete(packets)).toBe(true);
-    });
-
-    test("returns false when packets do not contain STOP", () => {
-      const packets = [
-        createPacket(PacketType.MESSAGE_START),
-        createPacket(PacketType.MESSAGE_DELTA),
-      ];
-      expect(isStreamingComplete(packets)).toBe(false);
-    });
-
-    test("returns false for empty array", () => {
-      expect(isStreamingComplete([])).toBe(false);
-    });
-  });
-
-  describe("isFinalAnswerComing", () => {
-    test("returns true when packets contain MESSAGE_START", () => {
-      const packets = [
-        createPacket(PacketType.SEARCH_TOOL_START),
-        createPacket(PacketType.MESSAGE_START),
-      ];
-      expect(isFinalAnswerComing(packets)).toBe(true);
-    });
-
-    test("returns true when packets contain IMAGE_GENERATION_TOOL_START", () => {
-      const packets = [createPacket(PacketType.IMAGE_GENERATION_TOOL_START)];
-      expect(isFinalAnswerComing(packets)).toBe(true);
-    });
-
-    test("returns false when no display packets present", () => {
-      const packets = [
-        createPacket(PacketType.SEARCH_TOOL_START),
-        createPacket(PacketType.REASONING_START),
-      ];
-      expect(isFinalAnswerComing(packets)).toBe(false);
-    });
-
-    test("returns false for empty array", () => {
-      expect(isFinalAnswerComing([])).toBe(false);
     });
   });
 });

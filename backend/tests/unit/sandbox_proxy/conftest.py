@@ -119,6 +119,7 @@ def make_flow(
     headers: dict[str, str] | None = None,
 ) -> http.HTTPFlow:
     flow = MagicMock(spec=http.HTTPFlow)
+    flow.id = str(uuid4())
     flow.client_conn = MagicMock()
     flow.client_conn.peername = peername
     flow.client_conn.id = conn_id

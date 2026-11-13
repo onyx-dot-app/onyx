@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
@@ -53,6 +54,7 @@ export default function SetupCard({
 }: SetupCardProps) {
   const t = useTranslations("craft.setupCard");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -220,10 +222,10 @@ export default function SetupCard({
           )}
         >
           <Content
-            sizePreset="secondary"
-            variant="body"
+            font="secondary-body"
             icon={Logo}
-            color={connected ? "muted" : "danger"}
+            color={connected ? "default" : "error"}
+            titleColor="text-03"
             title={
               connected
                 ? t("connected.title", { app: appName })
@@ -233,7 +235,9 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              href={`/craft/v1/plugins?actionPolicies=app-${externalAppId}`}
+              {...navigation.linkTo(
+                `/craft/v1/plugins?actionPolicies=app-${externalAppId}`
+              )}
             >
               {tActionPolicies("title")}
             </Button>
@@ -250,8 +254,7 @@ export default function SetupCard({
         className="rounded-08 border border-status-info-03 bg-background-neutral-00 p-3 flex flex-col gap-2"
       >
         <Content
-          sizePreset="main-ui"
-          variant="section"
+          font="main-ui-action"
           icon={Logo}
           title={t("connect.title", { app: appName })}
           description={reason ?? t("reason.fallback", { app: appName })}

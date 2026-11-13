@@ -649,6 +649,7 @@ export default function ModelSelectorContent({
       <Disabled key={llmOptionKey(option)} disabled={disabled}>
         <Hoverable.Root group="model-row">
           <LineItemButton
+            font="main-ui-action"
             selectVariant="select-heavy"
             state={selected ? "selected" : "empty"}
             icon={
@@ -677,7 +678,6 @@ export default function ModelSelectorContent({
                 </Hoverable.Item>
               ) : null
             }
-            sizePreset="main-ui"
             rounding={2}
           />
         </Hoverable.Root>
@@ -698,7 +698,7 @@ export default function ModelSelectorContent({
   return (
     <Section gap={2}>
       <InputTypeIn
-        searchIcon
+        icon="search"
         variant="internal"
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
@@ -710,6 +710,7 @@ export default function ModelSelectorContent({
           ...(includeGlobalDefault && !isLoading
             ? [
                 <LineItemButton
+                  font="main-ui-action"
                   key="global-default"
                   selectVariant="select-heavy"
                   state={
@@ -719,7 +720,6 @@ export default function ModelSelectorContent({
                   title={GLOBAL_DEFAULT_LLM_OPTION.displayName}
                   description={globalDefaultDisplayNameProp ?? undefined}
                   onClick={() => onSelect(GLOBAL_DEFAULT_LLM_OPTION)}
-                  sizePreset="main-ui"
                   rounding={2}
                 />,
               ]
@@ -765,9 +765,8 @@ export default function ModelSelectorContent({
                             >
                               <div className="ps-2 pe-1 py-1 w-full rounded-08 bg-background-tint-01">
                                 <ContentAction
-                                  sizePreset="secondary"
-                                  variant="body"
-                                  color="muted"
+                                  font="secondary-body"
+                                  titleColor="text-03"
                                   icon={group.Icon}
                                   title={group.displayName}
                                   padding={0}

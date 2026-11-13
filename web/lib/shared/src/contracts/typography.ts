@@ -10,10 +10,10 @@
  */
 
 export type TextFont =
-  | "heading-h1"
-  | "heading-h2"
-  | "heading-h3"
-  | "heading-h3-muted"
+  | "heading-hero"
+  | "heading-headline"
+  | "heading-section"
+  | "heading-section-muted"
   | "main-content-body"
   | "main-content-muted"
   | "main-content-emphasis"
@@ -25,7 +25,6 @@ export type TextFont =
   | "secondary-body"
   | "secondary-action"
   | "secondary-mono"
-  | "secondary-mono-label"
   | "figure-small-label"
   | "figure-small-value"
   | "figure-keystroke";

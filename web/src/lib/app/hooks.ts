@@ -1,9 +1,9 @@
 "use client";
 
-import { useLayoutEffect } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@opal/navigation";
+import { useLayoutEffect, useSyncExternalStore } from "react";
 import { useTranslations } from "next-intl";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import useChatSessions from "@/hooks/useChatSessions";
 import { useCurrentSessionPersonaId } from "@/app/app/stores/useChatSessionStore";
@@ -78,5 +78,18 @@ export function useChatSessionSupportsRetrieval(): boolean | null {
     (tool) =>
       tool.in_code_tool_id &&
       [SEARCH_TOOL_ID, WEB_SEARCH_TOOL_ID].includes(tool.in_code_tool_id)
+  );
+}
+
+function subscribeToNothing(): () => void {
+  return () => {};
+}
+
+/** This instance's URL (the page's origin); null while rendering on the server. */
+export function useInstanceUrl(): string | null {
+  return useSyncExternalStore(
+    subscribeToNothing,
+    () => window.location.origin,
+    () => null
   );
 }

@@ -360,10 +360,9 @@ export default function WebSearchPage() {
         <SettingsLayouts.Body>
           <div className="flex w-full flex-col gap-3">
             <Content
+              font="main-content-emphasis"
               title={t("searchEngine.title")}
               description={t("searchEngine.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             {!hasActiveSearchProvider && (
@@ -472,10 +471,9 @@ export default function WebSearchPage() {
 
           <div className="flex w-full flex-col gap-3">
             <Content
+              font="main-content-emphasis"
               title={t("crawler.title")}
               description={t("crawler.description")}
-              sizePreset="main-content"
-              variant="section"
             />
 
             <div

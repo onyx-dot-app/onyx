@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useId, useState, useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
@@ -15,7 +16,6 @@ import * as Yup from "yup";
 import isEqual from "lodash/isEqual";
 import { InputHorizontal, InputVertical, toast } from "@opal/layouts";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
 import { useDefaultAssistantConfiguration } from "@/lib/agents/hooks";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -34,6 +34,7 @@ import {
 } from "@/lib/mcp/types";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { usePlanBadge } from "@/lib/badges/components";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useSettings } from "@/lib/settings/hooks";
@@ -99,7 +100,7 @@ export default function MCPServerDetailsPage({
   );
 
   const { user, userResolution } = useUser();
-  const router = useRouter();
+  const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
   const {
@@ -268,7 +269,7 @@ export default function MCPServerDetailsPage({
         },
       });
       if (intent) {
-        router.push(
+        navigation.go(
           withPluginSearchParams(
             pluginDetailHref({ kind: "mcp", id: server.id }),
             {
@@ -526,6 +527,7 @@ export function MCPAccessControl({
   disabled = false,
 }: MCPAccessControlProps) {
   const t = useTranslations("actions.addMcpModal.access");
+  const businessBadge = usePlanBadge(Tier.BUSINESS);
   const { values, setValues } =
     useFormikContext<MCPServerConfigurationValues>();
   const options: SelectOption[] = [
@@ -542,7 +544,7 @@ export function MCPAccessControl({
       value: "groups",
       title: t("groups.label"),
       description: t("groups.description"),
-      tag: { title: t("planTag"), color: "blue", size: "md" },
+      tag: businessBadge,
       disabled: !canRestrict,
       tooltip: !canRestrict ? t("planNote") : undefined,
     },

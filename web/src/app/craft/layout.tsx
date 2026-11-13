@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/svcSS";

@@ -13,7 +13,7 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 from urllib.parse import urlsplit, urlunsplit
 
 API_SELECTOR = "app=api-server,app.kubernetes.io/instance=onyx"
@@ -27,11 +27,28 @@ class Cluster:
     name: str = "onyx-dev"
     namespace: str = "onyx"
     sandbox_namespace: str = "onyx-sandboxes"
+    env_file_name: ClassVar[str] = ".vscode/.env.k8s"
 
     @property
     def context(self) -> str:
         """Return the explicit kubectl context for this kind cluster."""
         return f"kind-{self.name}"
+
+    @property
+    def kubectl(self) -> tuple[str, ...]:
+        """Return kubectl with the pinned context; never the current context."""
+        return ("kubectl", "--context", self.context)
+
+    def pinned_environment(
+        self,
+        settings: dict[str, str],  # noqa: ARG002 - subclasses pin deployed values
+    ) -> dict[str, str]:
+        """Return settings that personal env files cannot override."""
+        return {
+            "K8S_CONTEXT": self.context,
+            "SANDBOX_BACKEND": "kubernetes",
+            "SANDBOX_NAMESPACE": self.sandbox_namespace,
+        }
 
     def command(self, *args: str, capture: bool = True, timeout: float = 30) -> str:
         """Run a bounded command, keeping captured configuration and secrets out of terminal output."""
@@ -59,9 +76,7 @@ class Cluster:
     ) -> str:
         """Run kubectl with an explicit context, namespace, and request timeout."""
         return self.command(
-            "kubectl",
-            "--context",
-            self.context,
+            *self.kubectl,
             "--request-timeout=10s",
             "-n",
             namespace or self.namespace,
@@ -188,7 +203,7 @@ class Cluster:
         settings = dict(self.deployment_env() if settings is None else settings)
         result = dict(os.environ)
         result.update(settings)
-        path = env_file or self.root / ".vscode/.env.k8s"
+        path = env_file or self.root / self.env_file_name
         if path.is_file():
             result.update(
                 {
@@ -224,11 +239,7 @@ class Cluster:
                             + (f":{url.port}" if url.port else "")
                         )
                     )
-        result.update(
-            K8S_CONTEXT=self.context,
-            SANDBOX_BACKEND="kubernetes",
-            SANDBOX_NAMESPACE=self.sandbox_namespace,
-        )
+        result.update(self.pinned_environment(settings))
         return result
 
     def database_environment(self, env_file: Path | None = None) -> dict[str, str]:
@@ -342,20 +353,21 @@ class Cluster:
 
     def telepresence_workloads(self) -> list[dict[str, Any]]:
         """List workloads as the traffic manager sees them in the application namespace."""
-        return json.loads(
+        result: list[dict[str, Any]] | dict[str, Any] = json.loads(
             self.command(
                 "telepresence",
                 "list",
                 "--namespace",
                 self.namespace,
-                "--format",
+                "--output",
                 "json",
             )
         )
+        return result["stdout"] if isinstance(result, dict) else result
 
     def intercept_active(self, name: str) -> bool:
         """Check for an active API intercept in this cluster and namespace."""
-        status = json.loads(self.command("telepresence", "status", "--format", "json"))
+        status = json.loads(self.command("telepresence", "status", "--output", "json"))
         user = status.get("user_daemon", {})
         if (
             user.get("kubernetes_context") != self.context

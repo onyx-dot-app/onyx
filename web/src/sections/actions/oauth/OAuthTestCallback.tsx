@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, MessageCard } from "@opal/components";
 import { completeOAuthTest } from "@/lib/oauth/api";
@@ -23,6 +23,7 @@ export default function OAuthTestCallback({
 }: OAuthTestCallbackProps) {
   const t = useTranslations("actions.openApiAuthModal.connectionCheck");
   const query = useSearchParams();
+  const navigation = useNavigation();
   const [result, setResult] = useState<OAuthTestResult | null>(null);
   const completion = useRef<Promise<OAuthTestResult> | null>(null);
   const code = query?.get("code");
@@ -61,11 +62,10 @@ export default function OAuthTestCallback({
       if (!subscribed) return;
       setResult(outcome);
       // Remove the code and marker before reporting; reloading cannot redeem twice.
-      window.history.replaceState(
-        null,
-        "",
-        "/oauth-config/callback?oauth_test_completed=1"
-      );
+      navigation.go("/oauth-config/callback?oauth_test_completed=1", {
+        replace: true,
+        shallow: true,
+      });
       try {
         window.sessionStorage.removeItem(oauthTestStorageKey(expectedState));
         window.sessionStorage.removeItem(OAUTH_TEST_ACTIVE_KEY);
@@ -93,7 +93,7 @@ export default function OAuthTestCallback({
     return () => {
       subscribed = false;
     };
-  }, [code, state, error, expectedState]);
+  }, [code, state, error, expectedState, navigation]);
 
   return (
     <div className="flex min-h-screen items-center justify-center p-6">

@@ -1,28 +1,26 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useFocusOnMount, useGridNavigation, useHotkey } from "@opal/hooks";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { SvgExternalLink, SvgUsers } from "@opal/icons";
-import { Button, MessageCard } from "@opal/components";
+import { SvgUsers } from "@opal/icons";
+import { Button } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { UserGroup } from "@/lib/types";
 import { Permission } from "@/lib/types";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 import { useUser } from "@/providers/UserProvider";
 import { hasPermission } from "@/lib/permissions/utils";
 import { can } from "@/lib/permissions/resource-actions";
 import GroupsList from "./GroupsList";
 import AdminListHeader from "@/sections/admin/AdminListHeader";
-import { useSettings } from "@/lib/settings/hooks";
 
 function GroupsPage() {
   const t = useTranslations("admin.groups");
-  const { appName } = useSettings();
-  const router = useRouter();
+  const navigation = useNavigation();
   const [searchQuery, setSearchQuery] = useState("");
   const { user } = useUser();
 
@@ -38,7 +36,7 @@ function GroupsPage() {
     error,
     isLoading,
   } = useSWR<UserGroup[]>(
-    SWR_KEYS.adminUserGroupsWithDefault,
+    userGroupListUrl({ includeDefault: true, includeMembers: false }),
     errorHandlingFetcher
   );
 
@@ -117,33 +115,11 @@ function GroupsPage() {
       error={error ? t("list.loadError.description") : false}
     >
       <div data-testid="groups-page-heading">
-        <SettingsLayouts.Header icon={SvgUsers} title={t("page.title")} divider>
-          <MessageCard
-            variant="info"
-            title={t("permissionsChanged.title")}
-            description={t("permissionsChanged.description", { appName })}
-            outerPadding={1}
-            innerPadding={1}
-            // Matches the md button's padding, so its label lines up with the
-            // title.
-            contentPadding={1}
-            rightChildren={
-              <Button
-                icon={SvgExternalLink}
-                size="md"
-                onClick={() =>
-                  window.open(
-                    "https://docs.onyx.app/admins/permissions/whats_changing",
-                    "_blank",
-                    "noopener,noreferrer"
-                  )
-                }
-              >
-                {t("permissionsChanged.learnMore.label")}
-              </Button>
-            }
-          />
-        </SettingsLayouts.Header>
+        <SettingsLayouts.Header
+          icon={SvgUsers}
+          title={t("page.title")}
+          divider
+        />
       </div>
 
       {/* The search row's own padding spaces it from the cards. */}
@@ -156,7 +132,7 @@ function GroupsPage() {
           emptyStateText={t("list.empty.text")}
           onAction={
             canCreateGroup
-              ? () => router.push("/admin/groups/create")
+              ? () => navigation.go("/admin/groups/create")
               : undefined
           }
           actionLabel={canCreateGroup ? t("list.newGroup.label") : undefined}

@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import type { Route } from "next";
 import { requireAuth } from "@/lib/auth/svcSS";
 import { Permission } from "@/lib/types";
@@ -9,7 +9,7 @@ interface CraftManageLayoutProps {
 }
 
 // Two routes share this factory but need different gates: /skills/manage passes
-// MANAGE_SKILLS (lets scoped managers in), /apps/manage passes FULL_ADMIN_PANEL_ACCESS
+// MANAGE_PLUGINS (lets scoped managers in), /apps/manage passes FULL_ADMIN_PANEL_ACCESS
 // (its /admin/apps endpoints are admin-only). Both read admin_capabilities, which adds
 // the scoped-manager perms but never the full-admin token — so the apps gate still
 // rejects scoped managers.

@@ -145,7 +145,7 @@ export const ConnectorMultiSelect = ({
       <Dropdown open={open} onOpenChange={setOpen}>
         <Dropdown.Trigger asChild typeIn behavior="open">
           <InputTypeIn
-            searchIcon
+            icon="search"
             placeholder={effectivePlaceholder}
             value={searchQuery}
             variant={isInputDisabled ? "disabled" : undefined}

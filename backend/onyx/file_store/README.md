@@ -180,6 +180,82 @@ The `FileStore` abstract base class defines the following methods:
 - `change_file_id(old_file_id, new_file_id)`: Rename a file
 - `list_files_by_prefix(prefix)`: List files matching a prefix
 
+## Presigned URLs
+
+A presigned URL lets a client without storage credentials (for example a Craft
+sandbox node) read or write one object directly. The api_server signs each URL
+for one object and one method. The default TTL is 5 minutes and the maximum is
+15 minutes (`FILE_STORE_PRESIGN_DEFAULT_TTL_SECONDS` and
+`FILE_STORE_PRESIGN_MAX_TTL_SECONDS` in `app_configs.py`).
+
+- `presign_download(file_id)` returns a GET request for an existing file.
+- `presign_upload(display_name, file_origin, file_type, size, sha256)` reserves a
+  file ID and returns a PUT request and a pending upload ID. It writes no
+  `file_record` row. The pending upload is kept in the cache backend.
+- Uploads are at most 5 GiB (`FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES`), the largest
+  single S3 PUT.
+- `presign_download` checks no user. Authorize the caller before you hand out
+  the URL.
+- `finalize_presigned_upload(pending_upload_id)` checks the size and SHA-256 of
+  the uploaded object, then writes the `file_record` row. On a mismatch it
+  deletes the object and raises `PresignedUploadVerificationError`.
+
+The client must send every header in `PresignedRequest.headers` unchanged.
+An upload object that is never finalized stays in the bucket without a record.
+
+Only the cloud backends (S3, GCS, Azure) have presigned URLs. These methods are
+on the `PresignableFileStore` subclass, not on `FileStore`, so callers check
+`isinstance(store, PresignableFileStore)`.
+The PostgreSQL backend has none. GCS and Azure raise
+`PresignedUrlsNotSupportedError` when their credentials are not allowed to sign.
+S3 signs locally, so a credential problem only shows when the client uses the
+URL. Temporary errors (network, metadata server) are raised as they are.
+
+### S3 and S3-compatible stores
+
+- URLs use SigV4. The signature covers `Content-Length` and
+  `x-amz-checksum-sha256`, so an upload URL accepts only the expected bytes.
+  Finalize reads the SHA-256 from a HEAD request.
+- IAM roles (IRSA) and other session credentials work. A URL stops working when
+  the session credentials that signed it expire, even before its TTL.
+- The URL host comes from `S3_ENDPOINT_URL`, and the host is part of the
+  signature. Clients must reach the store at that same host. If clients reach
+  the store at a different host than the api_server does, the URLs do not work,
+  and a proxy that changes the `Host` header breaks the signature.
+- Legacy MinIO store (`S3_LEGACY_ENDPOINT_URL`): a presigned PUT skips the dual
+  write. Finalize marks the object out of sync, and the replay loop
+  (`legacy_copy --replay`) copies it into MinIO within a few minutes. A file
+  that is only in the legacy store gets no download URL.
+
+### Google Cloud Storage
+
+- URLs use V4 signing. A service account key file signs locally.
+- Workload Identity or the metadata server (no key file) signs through the IAM
+  Credentials `signBlob` API. Grant `roles/iam.serviceAccountTokenCreator` on
+  the service account to the service account itself. Without it, the presign
+  methods raise `PresignedUrlsNotSupportedError`.
+- Signing needs an IAM service account. A direct Workload Identity principal
+  (`principal://...`, the default of `deployment/terraform/modules/gcp`) has
+  none, so it cannot sign. Map the Kubernetes service account to an IAM service
+  account first. That module does this when `craft_sandbox_runtime =
+  "firecracker"`.
+- An upload URL signs `x-goog-if-generation-match: 0` and
+  `x-goog-content-length-range`, so it creates the object once and with the
+  expected size. GCS keeps no SHA-256, so finalize reads the object once and
+  hashes it.
+
+### Azure Blob Storage
+
+- An account key (`AZURE_STORAGE_ACCOUNT_KEY`, or `AccountKey` in the connection
+  string) signs a service SAS.
+- Workload Identity or a managed identity (`DefaultAzureCredential`) signs a
+  user delegation SAS. The identity needs `Storage Blob Delegator` on the storage
+  account, in addition to `Storage Blob Data Contributor`.
+- Each SAS is for one blob, with one permission (`r` for downloads, `c` for
+  uploads) and a short expiry. Create permission cannot overwrite a blob. A SAS
+  cannot limit the size or content, so finalize checks the size and reads the
+  blob once to hash it.
+
 ## Usage Example
 
 ```python

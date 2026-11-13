@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useState } from "react";
 import {
   getSourceDisplayName,
@@ -175,6 +176,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     null
   );
   const [isAuthorizing, setIsAuthorizing] = useState(false);
+  const navigation = useNavigation();
 
   const displayName = getSourceDisplayName(sourceType) || sourceType;
   const methods = getCredentialCreationMethods(oauthDetails);
@@ -210,10 +212,7 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
     if (method === CredentialCreationMethod.OAuth && oauthDetails) {
       if (shouldRedirectToOAuth(oauthDetails)) {
         try {
-          window.location.href = await getConnectorOauthRedirectUrl(
-            sourceType,
-            {}
-          );
+          navigation.load(await getConnectorOauthRedirectUrl(sourceType, {}));
         } catch (error) {
           return errorMessage(error);
         }
@@ -266,6 +265,10 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
 
   async function authorize(invalidUrlMessage: string): Promise<string | null> {
     setIsAuthorizing(true);
+    // Open the tab inside the click: popup blockers, and the desktop app,
+    // only allow windows that the user gesture opens.
+    const popup = window.open("about:blank", "_blank");
+    if (popup) popup.opener = null;
     try {
       // Read at call time: the page can change its own query string, and a
       // click only ever happens in the browser.
@@ -274,10 +277,18 @@ export function useCredentialSetup(sourceType: ValidSources): CredentialSetup {
         window.location.href,
         invalidUrlMessage
       );
-      if (!response.url) return invalidUrlMessage;
-      window.open(response.url, "_blank", "noopener,noreferrer");
+      if (!response.url) {
+        popup?.close();
+        return invalidUrlMessage;
+      }
+      if (popup) {
+        popup.location.href = response.url;
+      } else {
+        window.open(response.url, "_blank", "noopener,noreferrer");
+      }
       return null;
     } catch (error) {
+      popup?.close();
       return errorMessage(error);
     } finally {
       setIsAuthorizing(false);

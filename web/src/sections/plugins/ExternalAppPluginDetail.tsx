@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import useSWR from "swr";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, Modal } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -37,7 +37,7 @@ export default function ExternalAppPluginDetail({
 }
 
 function AuthorizedExternalAppDetail({ appId }: ExternalAppPluginDetailProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   const t = useTranslations("actions.plugins");
   const tApps = useTranslations("admin.externalApps");
   const apps = useSWR<ExternalAppAdminResponse[], Error>(
@@ -52,7 +52,7 @@ function AuthorizedExternalAppDetail({ appId }: ExternalAppPluginDetailProps) {
     errorHandlingFetcher
   );
   function close() {
-    router.replace(ADMIN_ROUTES.PLUGINS.path, { scroll: false });
+    navigation.go(ADMIN_ROUTES.PLUGINS.path, { replace: true, scroll: false });
   }
   function saved() {
     void apps.mutate();

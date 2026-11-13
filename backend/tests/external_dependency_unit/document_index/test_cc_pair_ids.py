@@ -18,7 +18,9 @@ from sqlalchemy.orm import Session
 from onyx.background.celery.tasks.cc_pair_ids_backfill import (
     tasks as backfill_tasks,
 )
-from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
+from onyx.background.celery.tasks.shared.tasks import (
+    document_batch_by_cc_pair_cleanup_task,
+)
 from onyx.background.celery.tasks.vespa.tasks import document_index_metadata_sync_task
 from onyx.connectors.models import IndexAttemptMetadata
 from onyx.db.connector_credential_pair import get_non_deleting_cc_pair_ids
@@ -225,9 +227,9 @@ def test_metadata_sync_and_cleanup_update_cc_pair_ids(
         "onyx.background.celery.tasks.shared.tasks.get_default_document_index",
         return_value=opensearch_index,
     ):
-        result = document_by_cc_pair_cleanup_task.apply(
+        result = document_batch_by_cc_pair_cleanup_task.apply(
             args=(
-                doc_id,
+                [doc_id],
                 pairs.second.connector_id,
                 pairs.second.credential_id,
                 POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,

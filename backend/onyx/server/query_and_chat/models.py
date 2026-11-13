@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -14,6 +14,7 @@ from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
+from onyx.tools.models import ChatToolSelection
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
@@ -50,6 +51,20 @@ class MultiModelMessageResponseIDInfo(BaseModel):
 
     user_message_id: int | None
     responses: list[ModelResponseSlot]
+
+
+def response_id_info(
+    user_message_id: int | None, responses: list[ModelResponseSlot]
+) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
+    """The packet that names a turn's saved question and reserved responses."""
+    if len(responses) > 1:
+        return MultiModelMessageResponseIDInfo(
+            user_message_id=user_message_id, responses=responses
+        )
+    return MessageResponseIDInfo(
+        user_message_id=user_message_id,
+        reserved_assistant_message_id=responses[0].message_id,
+    )
 
 
 class SourceTag(Tag):
@@ -113,7 +128,17 @@ class SendMessageRequest(BaseModel):
     llm_overrides: list[LLMOverride] | None = None
 
     allowed_tool_ids: list[int] | None = None
-    forced_tool_id: int | None = None
+    preferred_tool_id: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_forced_action(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use preferred_tool_id for "
+                "an optional Action preference; invocation is not guaranteed."
+            )
+        return data
 
     file_descriptors: list[FileDescriptor] = []
 
@@ -127,6 +152,15 @@ class SendMessageRequest(BaseModel):
 
     # Origin of the message for telemetry tracking
     origin: MessageOrigin = MessageOrigin.UNSET
+
+    accepts_follow_ups: bool = Field(
+        default=False,
+        description=(
+            "Set to true if the client can receive automatic follow-up answers "
+            "after the stream ends. This enables background agents for the "
+            "turn. Clients that only read the streamed answer leave it false."
+        ),
+    )
 
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
@@ -154,6 +188,12 @@ class SendMessageRequest(BaseModel):
     additional_context: str | None = None
 
     @model_validator(mode="after")
+    def check_preference_supported(self) -> "SendMessageRequest":
+        if self.deep_research and self.preferred_tool_id is not None:
+            raise ValueError("preferred_tool_id is not supported with deep_research")
+        return self
+
+    @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":
         # If neither is provided, default to creating a new chat session using the
         # default ChatSessionCreationRequest values.
@@ -170,6 +210,47 @@ class SendMessageRequest(BaseModel):
 
 class ChatMessageIdentifier(BaseModel):
     message_id: int
+
+
+class PendingChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    delivery: MessageDelivery = Field(
+        description=(
+            "send adds input at the next step; queue waits for normal completion; "
+            "interrupt stops current work and starts a new turn."
+        )
+    )
+    target_response_id: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "The response that receives a send. Omit to use the current response."
+        ),
+    )
+    deep_research: bool = Field(
+        default=False,
+        description=(
+            "Start the message's turn as Deep Research when it is queued or "
+            "interrupts. A send into a running response ignores it."
+        ),
+    )
+    llm_override: LLMOverride | None = Field(
+        default=None,
+        description=(
+            "The model that a queued or interrupting message's turn uses. Omit it "
+            "to use the chat's saved model. A send into a running response "
+            "ignores it."
+        ),
+    )
+
+    @field_validator("message")
+    @classmethod
+    def require_message_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A pending message must contain text")
+        return value
 
 
 class ChatRenameRequest(BaseModel):
@@ -191,6 +272,11 @@ class RenameChatSessionResponse(BaseModel):
 
 class StopChatResponse(BaseModel):
     message: str
+
+
+class StopSubagentsResponse(BaseModel):
+    # The running agent runs that were interrupted.
+    stopped_count: int
 
 
 class ChatSessionDetails(BaseModel):
@@ -272,6 +358,13 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    # Background agents are active on the selected branch, or their queued work waits.
+    has_active_subagents: bool = False
+    # Queued input or unread root results can start a turn now; a paused queue cannot.
+    has_startable_input: bool = False
+    # The newest response on the selected branch.
+    latest_response_id: int | None = None
+    current_stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -296,6 +389,10 @@ class ChatSessionDetailResponse(BaseModel):
     # True for sessions pinned to an incognito record mode, so a reload can
     # restore the incognito UI state.
     incognito: bool = False
+    # Set on a paged load when the current branch has messages before the page.
+    has_older_messages: bool = False
+    # The owner's saved tools and search filters; NULL means the agent's tools.
+    tool_selection: ChatToolSelection | None = None
 
 
 class AdminSearchRequest(BaseModel):

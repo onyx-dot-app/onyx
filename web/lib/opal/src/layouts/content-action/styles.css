@@ -27,15 +27,63 @@
   max-width: var(--block-width-form-input-column-max);
 }
 
-/* Responsive form-input rows: on desktop, the control column grows to the
-   input column max instead of hugging its content. The responsive branch
-   hands the control to ContentMd's stacked grid, so this widens that grid's
-   control column. 724px is ContentMd's desktop breakpoint. */
+/* Responsive rows. Mobile-first: the title, the control (e.g. an input)
+   and the description stack full-width. At 724px the grid reflows: title and
+   description on the left, the control on the right spanning both rows. */
+.opal-content-action-responsive {
+  display: grid;
+  gap: 0.25rem;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    "title"
+    "control"
+    "description";
+}
+
+.opal-content-action-responsive-title {
+  grid-area: title;
+  min-width: 0;
+}
+
+.opal-content-action-responsive-control {
+  grid-area: control;
+  @apply w-full;
+}
+
+.opal-content-action-responsive-description {
+  grid-area: description;
+  min-width: 0;
+}
+
 @media (min-width: 724px) {
-  /* `> *` skips the wrapper `Content` puts around `ContentMd`. */
-  .opal-content-action-responsive[data-fill]
-    > *
-    > .opal-content-md[data-stacked] {
+  .opal-content-action-responsive {
+    /* Title and description sit flush on desktop; the 4px stacking gap only
+       applies to the mobile column. */
+    row-gap: 0;
+    column-gap: 1rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title       control"
+      "description control";
+  }
+
+  .opal-content-action-responsive-control {
+    min-width: 12rem;
+  }
+
+  /* With an icon, the description sits under the title: one icon box (`1lh`
+     of the title font) and the 0.25rem gap in. Flush titles have no gap. */
+  .opal-content-action-responsive-description[data-indent] {
+    padding-inline-start: calc(1lh + 0.25rem);
+  }
+
+  .opal-content-action-responsive-description[data-indent][data-flush] {
+    padding-inline-start: 1lh;
+  }
+
+  /* Form-input rows: the control column grows to the input column max
+     instead of hugging its content. */
+  .opal-content-action-responsive[data-fill] {
     grid-template-columns:
       minmax(0, 1fr)
       minmax(12rem, var(--block-width-form-input-column-max));

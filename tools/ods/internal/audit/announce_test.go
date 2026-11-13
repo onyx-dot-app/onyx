@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -105,20 +106,73 @@ func TestPlanAnnouncement_allRepeatsPostNothingNewAndCarryARetriedTriage(t *test
 	if plan.Post != nil || len(plan.Markers) != 0 {
 		t.Fatalf("want no new post: %+v", plan)
 	}
-	if len(plan.Replies) != 1 || plan.Replies[0].TS != "111.1" {
+	if len(plan.Replies) != 2 || plan.Replies[0].TS != "111.1" || plan.Replies[1].TS != "111.1" {
 		t.Fatalf("replies: %+v", plan.Replies)
 	}
-	reply := plan.Replies[0].Text
-	if strings.Count(reply, "also failed on this run") != 3 || !strings.Contains(reply, "Verdict affected") {
-		t.Errorf("reply:\n%s", reply)
+	if strings.Count(plan.Replies[0].Text, "also failed on this run") != 3 || !strings.Contains(plan.Replies[1].Text, "Verdict affected") {
+		t.Errorf("replies: %+v", plan.Replies)
 	}
 	if len(plan.Issues) != 1 {
 		t.Errorf("a retried triage is announced in its thread: %v", plan.Issues)
 	}
 
 	opts.Triage = nil
-	if plan := PlanAnnouncement(opts); len(plan.Issues) != 0 || strings.Contains(plan.Replies[0].Text, "Verdict") {
+	if plan := PlanAnnouncement(opts); len(plan.Issues) != 0 || len(plan.Replies) != 1 || strings.Contains(plan.Replies[0].Text, "Verdict") {
 		t.Errorf("untriaged repeats: %+v", plan)
+	}
+}
+
+func TestPlanAnnouncement_retriedPackagesSplitBelowSlackSplitSize(t *testing.T) {
+	opts := baseAnnounce()
+	opts.Threads = map[string]string{}
+	var curlAdvs []Advisory
+	for i := range 12 {
+		id := fmt.Sprintf("DEBIAN-CVE-2026-%d", 9000+i)
+		curlAdvs = append(curlAdvs, Advisory{ID: id, Images: []string{"sandbox"}})
+		opts.Threads[id] = "111.1"
+	}
+	curl := Alert{Key: "Debian:13/curl", Ecosystem: "Debian:13", Package: "curl", Issue: 17, IssueURL: "https://i/17", Advisories: curlAdvs}
+	chromium := chromiumAlert()
+	for _, adv := range chromium.Advisories {
+		opts.Threads[adv.ID] = "111.1"
+	}
+	opts.Failing = []Alert{chromium, curl}
+	long := strings.Repeat("n", noteLimit)
+	opts.Triage = map[int]TriageSummary{
+		16065: {Issue: 16065, Fix: "*Fix PR:* none.", Verdict: "affected", Note: long, Reason: strings.Repeat("r", 200)},
+		17:    {Issue: 17, Fix: "*Fix PR:* none.", Verdict: "not_affected", Note: long, Reason: strings.Repeat("r", 200)},
+	}
+	plan := PlanAnnouncement(opts)
+
+	var all []string
+	for i, r := range plan.Replies {
+		if r.TS != "111.1" {
+			t.Errorf("reply %d went to thread %q", i, r.TS)
+		}
+		if n := runeLen(r.Text); n > slackMessageLimit {
+			t.Errorf("reply %d has %d characters, past the limit", i, n)
+		}
+		if strings.Count(r.Text, "```")%2 != 0 {
+			t.Errorf("reply %d leaves a code block open:\n%s", i, r.Text)
+		}
+		all = append(all, r.Text)
+	}
+	text := strings.Join(all, "\n")
+	if c, u := strings.Index(text, "*chromium (Debian:13)*"), strings.Index(text, "*curl (Debian:13)*"); c < 0 || u < c {
+		t.Errorf("want chromium's section, then curl's: chromium at %d, curl at %d", c, u)
+	}
+	for _, adv := range append(chromium.Advisories, curlAdvs...) {
+		if got := strings.Count(text, "ods audit ignore add "+adv.ID+" "); got != 2 {
+			t.Errorf("%s has %d ignore commands, want 2", adv.ID, got)
+		}
+	}
+}
+
+func TestPackageSection_fitsOneMessageWhenSmall(t *testing.T) {
+	opts := baseAnnounce()
+	a := chromiumAlert()
+	if msgs := packageSection(a, a.Advisories, opts.Triage[16065], true, opts); len(msgs) != 1 {
+		t.Errorf("want one message, got %d", len(msgs))
 	}
 }
 

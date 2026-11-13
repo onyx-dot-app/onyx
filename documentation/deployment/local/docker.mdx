@@ -70,6 +70,51 @@ import DeploymentNextSteps from "/snippets/deployment-next-steps.mdx"
 After the containers start, Onyx initializes its database and search index.
 Then open [localhost:3000](http://localhost:3000).
 
+## Upgrading
+
+Update the Compose files and the images to the same release. If you change only `IMAGE_TAG`,
+the new images run on the old Compose files and miss new services and settings.
+The [Onyx CLI](/deployment/local/onyx_cli#upgrade) does these steps for you.
+
+<Steps>
+  <Step title="Read the release notes">
+    Read the Deployment Changes of each release after your current version in the [Release Notes](/changelog).
+    Some releases need `.env` changes,
+    such as the [Object Store Migration](/admins/advanced_configs/object_store_migration) in `v5.0.0`.
+  </Step>
+
+  <Step title="Update the Compose files">
+    In `onyx/deployment/docker_compose`, check out the tag of the new release, for example `v5.0.4`.
+    [GitHub Releases](https://github.com/onyx-dot-app/onyx/releases) lists the tags.
+
+    If `git status` shows edits to files that Git tracks, run `git stash` first.
+
+    ```bash
+    git fetch --depth 1 origin tag <version>
+    git switch --detach <version>
+    ```
+
+    If you ran `git stash`, run `git stash pop` to apply your edits again. If it reports a conflict,
+    fix the marked lines before you restart Onyx.
+  </Step>
+
+  <Step title="Update the .env file">
+    Git does not track `.env`, so the checkout keeps it. Do not replace it with a new copy of `env.template`.
+    The template holds settings for a new install, such as `MINIO_REPLICAS=0`.
+
+    Set `IMAGE_TAG` to the same release, for example `IMAGE_TAG=v5.0.4`.
+    Make the `.env` changes from the release notes in the same edit.
+  </Step>
+
+  <Step title="Restart Onyx">
+    Run the command that you use to start Onyx, with all its `-f`, `-p`, and `--build` options. For the default setup:
+
+    ```bash
+    docker compose up -d
+    ```
+  </Step>
+</Steps>
+
 ## Onyx Lite
 
 Onyx Lite runs the core chat experience with only PostgreSQL. It starts no OpenSearch, Redis, model servers,

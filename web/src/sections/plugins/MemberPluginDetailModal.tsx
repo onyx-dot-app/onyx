@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import isEqual from "lodash/isEqual";
 import { useId, useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Card,
@@ -224,7 +224,7 @@ export function MemberPluginDetailContent({
   onDisconnected,
 }: MemberPluginDetailModalProps) {
   const t = useTranslations("actions.memberPlugins");
-  const router = useRouter();
+  const navigation = useNavigation();
   const craftEnabled = useSettings().onyx_craft_enabled === true;
   const actions = useTranslations("actions");
   const switchCopy = useTranslations("skills.page.switchModal");
@@ -351,7 +351,7 @@ export function MemberPluginDetailContent({
   function reviewSkills() {
     if (plugin.kind !== "external-app" || saving) return;
     guard.requestLeave(() =>
-      router.push(`/craft/v1/skills?externalAppId=${plugin.app.id}`)
+      navigation.go(`/craft/v1/skills?externalAppId=${plugin.app.id}`)
     );
   }
 
@@ -828,7 +828,7 @@ export function MemberPluginDetailContent({
                     ) : (
                       <div className="flex flex-col gap-4">
                         <InputTypeIn
-                          searchIcon
+                          icon="search"
                           value={endpointSearch}
                           onChange={(event) =>
                             setEndpointSearch(event.target.value)
@@ -890,7 +890,11 @@ export function MemberPluginDetailContent({
                     <div className="flex flex-1">
                       <Button
                         prominence="tertiary"
-                        href={`/craft/v1/skills?externalAppId=${plugin.app.id}`}
+                        href={
+                          navigation.linkTo(
+                            `/craft/v1/skills?externalAppId=${plugin.app.id}`
+                          ).href
+                        }
                         onClick={(event) => {
                           event.preventDefault();
                           reviewSkills();

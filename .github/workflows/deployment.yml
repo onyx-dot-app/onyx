@@ -38,6 +38,7 @@ jobs:
       is-test-run: ${{ steps.check.outputs.is-test-run }}
       sanitized-tag: ${{ steps.check.outputs.sanitized-tag }}
       short-sha: ${{ steps.check.outputs.short-sha }}
+      commit-date: ${{ steps.commit-date.outputs.commit-date }}
     steps:
       - name: Checkout (for git tags)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -45,6 +46,10 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
           fetch-tags: true
+
+      - name: Read the commit date
+        id: commit-date
+        run: echo "commit-date=$(git log -1 --format=%cI)" >> "$GITHUB_OUTPUT"
 
       # Routing lives in tools/ods next to this workflow, so build ods from the
       # same commit: a pinned release would lag behind the outputs used here.
@@ -87,20 +92,24 @@ jobs:
       id-token: write # OIDC for fetching the S3 allowlist and the registry credentials
       vulnerability-alerts: read # read Dependabot alerts
       security-events: write # SARIF uploads of the image audits
+    outputs:
+      sandbox-status: ${{ steps.base-image-audit.outputs.sandbox-status }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
-      - name: Setup uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
         with:
-          version: "0.11.25"
-          enable-cache: false
+          go-version-file: tools/ods/go.mod
+          cache: false
 
-      - name: Install ods from uv.lock
-        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Build audit from this revision
+        working-directory: tools/ods
+        run: |
+          go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
+          echo "${RUNNER_TEMP}" >> "$GITHUB_PATH"
 
       - name: Configure AWS credentials
         continue-on-error: true # the audit still runs (with no suppressions) if creds are unavailable
@@ -112,7 +121,7 @@ jobs:
       - name: Run dependency audit
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: uv run --no-sync ods audit --fail-on=critical
+        run: ods-audit --fail-on=critical
 
       # The same registry credentials the builds use, fetched the same way, so
       # the bases scanned are the bases shipped. Missing credentials fail the
@@ -142,11 +151,22 @@ jobs:
       # os stage built here. All four are scanned before the step fails, so one run shows
       # every blocker, and --strict keeps an empty scan from passing.
       - name: Run base image audit
+        id: base-image-audit
         run: |
           status=0
           for component in web model-server backend sandbox; do
             image="$(.github/scripts/base-image-ref.sh "${component}")"
-            uv run --no-sync ods audit image "${image}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || status=1
+            args=()
+            if [ "${component}" = sandbox ]; then
+              args+=(--sbom /opt/chrome/browser.cdx.json --update-policy s3://onyx-internal-tools/audit/updates.json)
+            fi
+            component_status=success
+            ods-audit image "${image}" "${args[@]}" --fail-on=critical --strict --format=sarif,text > "image-audit-${component}.sarif" || component_status=failure
+            if [ "${component}" = sandbox ]; then
+              echo "sandbox-status=${component_status}" >> "$GITHUB_OUTPUT"
+            elif [ "${component_status}" != success ]; then
+              status=1
+            fi
             if [ ! -s "image-audit-${component}.sarif" ]; then
               # $schema is a literal SARIF key, not a shell variable.
               # shellcheck disable=SC2016
@@ -1138,6 +1158,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1159,6 +1182,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -1234,6 +1260,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:latest
@@ -1255,6 +1284,9 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             ONYX_VERSION=${{ github.ref_name }}
+            ONYX_COMMIT_SHA=${{ github.sha }}
+            ONYX_COMMIT_DATE=${{ needs.determine-builds.outputs.commit-date }}
+            ONYX_GIT_REF=${{ github.ref_name }}
           cache-from: |
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge-dev
             type=registry,ref=${{ env.REGISTRY_IMAGE }}:edge
@@ -1642,6 +1674,15 @@ jobs:
       REGISTRY_IMAGE: onyxdotapp/sandbox
       SANDBOX_CONTEXT: backend/onyx/server/features/build/sandbox/image
     steps:
+      - name: Require a passing sandbox audit before sandbox publication
+        env:
+          SANDBOX_STATUS: ${{ needs.audit-gate.outputs.sandbox-status }}
+        run: |
+          if [ "$SANDBOX_STATUS" != success ]; then
+            echo "::error::Sandbox image audit failed. See audit-gate for the policy and vulnerability findings."
+            exit 1
+          fi
+
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
@@ -2036,7 +2077,7 @@ jobs:
     needs: [determine-builds, audit-gate, merge-web, merge-backend, merge-model-server]
     if: >-
       always() && !cancelled() && needs.determine-builds.outputs.is-test-run != 'true' &&
-      (needs.audit-gate.result == 'failure' || startsWith(github.ref_name, 'v'))
+      (needs.audit-gate.result == 'failure' || needs.audit-gate.outputs.sandbox-status == 'failure' || startsWith(github.ref_name, 'v'))
     runs-on: ubuntu-slim
     timeout-minutes: 5
     permissions:
@@ -2058,6 +2099,7 @@ jobs:
             ref="release/v${BASH_REMATCH[1]}"
           fi
           gh workflow run cve-alerts.yml --repo "${REPO}" --ref "${ref}" -f "source-run=${SERVER_URL}/${REPO}/actions/runs/${RUN_ID}"
+
 
   notify-slack-on-failure:
     needs:

@@ -272,7 +272,11 @@ describe("packetProcessor", () => {
       };
       const start: Packet = {
         placement: { turn_index: 0 },
-        obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+        obj: {
+          type: PacketType.CUSTOM_TOOL_START,
+          tool_name: "Lookup",
+          display_name: "Lookup",
+        },
       };
       const pending = processPackets(createInitialState(1), [debug]);
       expect(pending.toolGroupKeys.size).toBe(0);
@@ -299,6 +303,7 @@ describe("packetProcessor", () => {
     test.each([
       [PacketType.SEARCH_TOOL_START, "SEARCH_TOOL_START"],
       [PacketType.PYTHON_TOOL_START, "PYTHON_TOOL_START"],
+      [PacketType.IMAGE_GENERATION_TOOL_START, "IMAGE_GENERATION_TOOL_START"],
       [PacketType.FETCH_TOOL_START, "FETCH_TOOL_START"],
       [PacketType.CUSTOM_TOOL_START, "CUSTOM_TOOL_START"],
       [PacketType.FILE_READER_START, "FILE_READER_START"],
@@ -314,16 +319,16 @@ describe("packetProcessor", () => {
     });
 
     // Parameterized tests for display packet types
-    test.each([
-      [PacketType.MESSAGE_START, "MESSAGE_START"],
-      [PacketType.IMAGE_GENERATION_TOOL_START, "IMAGE_GENERATION_TOOL_START"],
-    ])("%s categorizes as display group", (packetType) => {
-      const state = createInitialState(1);
-      const packets = [createPacket(packetType, { turn_index: 0 })];
-      const result = processPackets(state, packets);
+    test.each([[PacketType.MESSAGE_START, "MESSAGE_START"]])(
+      "%s categorizes as display group",
+      (packetType) => {
+        const state = createInitialState(1);
+        const packets = [createPacket(packetType, { turn_index: 0 })];
+        const result = processPackets(state, packets);
 
-      expect(result.displayGroupKeys.has("0-0")).toBe(true);
-    });
+        expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      }
+    );
   });
 
   describe("SECTION_END and ERROR tracking", () => {
@@ -816,14 +821,14 @@ describe("packetProcessor", () => {
       expect(result.finalAnswerComing).toBe(true);
     });
 
-    test("sets finalAnswerComing on IMAGE_GENERATION_TOOL_START", () => {
+    test("does not start the answer on IMAGE_GENERATION_TOOL_START", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
       ];
       const result = processPackets(state, packets);
 
-      expect(result.finalAnswerComing).toBe(true);
+      expect(result.finalAnswerComing).toBe(false);
     });
 
     test("captures toolProcessingDuration from MESSAGE_START", () => {
@@ -875,6 +880,23 @@ describe("packetProcessor", () => {
       // First stop reason should be preserved
       expect(result.stopReason).toBe(StopReason.FINISHED);
     });
+
+    test("ends each open nested call, which gets no packets after Stop", () => {
+      const nested = { turn_index: 0, sub_turn_index: 0 };
+      const result = processPackets(createInitialState(1), [
+        createPacket(
+          PacketType.CODE_MODE_START,
+          { turn_index: 0 },
+          { code: "" }
+        ),
+        createPacket(PacketType.CUSTOM_TOOL_START, nested, {
+          tool_name: "lookup",
+        }),
+        createStopPacket(StopReason.USER_CANCELLED),
+      ]);
+
+      expect(result.toolGroups[0]!.nestedCalls[0]!.complete).toBe(true);
+    });
   });
 
   describe("handleToolAfterMessagePacket", () => {
@@ -887,6 +909,25 @@ describe("packetProcessor", () => {
       const result = processPackets(state, packets);
 
       expect(result.finalAnswerComing).toBe(false);
+    });
+
+    test("a tool's debug packet waits for its start to reset finalAnswerComing", () => {
+      const packets = [
+        createMessageStartPacket({ turn_index: 0 }),
+        createPacket(
+          PacketType.TOOL_CALL_DEBUG,
+          { turn_index: 1 },
+          { tool_call_id: "call-1", tool_name: "search", tool_args: {} }
+        ),
+      ];
+      const afterDebug = processPackets(createInitialState(1), packets);
+      expect(afterDebug.finalAnswerComing).toBe(true);
+
+      const afterStart = processPackets(afterDebug, [
+        ...packets,
+        createSearchToolStartPacket({ turn_index: 1 }),
+      ]);
+      expect(afterStart.finalAnswerComing).toBe(false);
     });
 
     test("REASONING_START does NOT reset finalAnswerComing (critical fix)", () => {
@@ -928,17 +969,35 @@ describe("packetProcessor", () => {
       // Stop already seen, so finalAnswerComing should remain true
       expect(result.finalAnswerComing).toBe(true);
     });
+
+    test("a tool whose arguments streamed before the message resets it when it starts", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(
+          PacketType.TOOL_CALL_ARGUMENT_DELTA,
+          { turn_index: 0 },
+          { tool_type: "python", argument_deltas: { code: "print(1)" } }
+        ),
+        createMessageStartPacket({ turn_index: 1 }),
+      ];
+      expect(processPackets(state, packets).finalAnswerComing).toBe(true);
+
+      const result = processPackets(state, [
+        ...packets,
+        createPythonToolStartPacket("print(1)", { turn_index: 0 }),
+      ]);
+      expect(result.finalAnswerComing).toBe(false);
+    });
   });
 
   describe("image generation counting", () => {
-    test("sets isGeneratingImage on IMAGE_GENERATION_TOOL_START", () => {
+    test("categorizes image generation as a tool step", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
       ];
       const result = processPackets(state, packets);
-
-      expect(result.isGeneratingImage).toBe(true);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
     });
 
     test("counts images from IMAGE_GENERATION_TOOL_DELTA", () => {
@@ -949,10 +1008,42 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.generatedImageCount).toBe(2);
+      expect(result.generatedImages.length).toBe(2);
     });
 
-    test("accumulates image count from multiple DELTA packets", () => {
+    test("collects images from nested image calls", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
+        createImageDeltaPacket(2, { turn_index: 0 }, "top"),
+        createPacket(PacketType.SECTION_END, { turn_index: 0 }),
+        createPacket(
+          PacketType.CODE_MODE_START,
+          { turn_index: 1 },
+          {
+            code: "await generate_image(prompt='x')",
+          }
+        ),
+        createPacket(PacketType.IMAGE_GENERATION_TOOL_START, {
+          turn_index: 1,
+          sub_turn_index: 0,
+        }),
+        createImageDeltaPacket(
+          1,
+          { turn_index: 1, sub_turn_index: 0 },
+          "nested"
+        ),
+      ];
+      const result = processPackets(state, packets);
+
+      expect(result.generatedImages.map((i) => i.file_id)).toEqual([
+        "top-0",
+        "top-1",
+        "nested-0",
+      ]);
+    });
+
+    test("deduplicates images from repeated DELTA packets", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(PacketType.IMAGE_GENERATION_TOOL_START, { turn_index: 0 }),
@@ -962,7 +1053,7 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.generatedImageCount).toBe(4);
+      expect(result.generatedImages.length).toBe(2);
     });
   });
 
@@ -1143,10 +1234,9 @@ describe("packetProcessor", () => {
       ];
       const result = processPackets(state, packets);
 
-      expect(result.isGeneratingImage).toBe(true);
-      expect(result.generatedImageCount).toBe(1);
-      expect(result.finalAnswerComing).toBe(true);
-      expect(result.displayGroupKeys.has("0-0")).toBe(true);
+      expect(result.generatedImages.length).toBe(1);
+      expect(result.finalAnswerComing).toBe(false);
+      expect(result.toolGroupKeys.has("0-0")).toBe(true);
     });
 
     test("deep research with sub-agents", () => {
@@ -1222,5 +1312,313 @@ describe("packetProcessor", () => {
 
       expect(result.toolGroupKeys.has("0-999")).toBe(true);
     });
+  });
+
+  describe("code mode", () => {
+    const parent = { turn_index: 1, tab_index: 0 };
+    const nested = { ...parent, sub_turn_index: 0 };
+
+    function codeModeStart(): Packet[] {
+      return [
+        createPacket(PacketType.TOOL_CALL_ARGUMENT_DELTA, parent, {
+          tool_type: "execute_code",
+          tool_id: "call-1",
+          argument_deltas: { code: "print(1)" },
+        }),
+        createPacket(PacketType.CODE_MODE_START, parent, { code: "print(1)" }),
+      ];
+    }
+
+    test("a group with only the streamed program is a tool step", () => {
+      const state = createInitialState(1);
+      const result = processPackets(state, codeModeStart().slice(0, 1));
+
+      expect(result.toolGroups.length).toBe(1);
+    });
+
+    test("nested calls join the code mode group", () => {
+      const state = createInitialState(1);
+      const result = processPackets(state, [
+        ...codeModeStart(),
+        createSearchToolStartPacket(nested),
+        createPacket(PacketType.SECTION_END, nested),
+      ]);
+
+      expect(result.toolGroups.length).toBe(1);
+      expect(result.toolGroups[0]?.packets.length).toBe(2);
+      expect(result.toolGroups[0]?.streamPackets.length).toBe(4);
+      expect(result.toolGroups[0]?.nestedCalls).toHaveLength(1);
+    });
+
+    test("nested search documents feed the document map", () => {
+      const state = createInitialState(1);
+      const result = processPackets(state, [
+        ...codeModeStart(),
+        createSearchToolStartPacket(nested),
+        createSearchToolDocumentsPacket(
+          [{ document_id: "doc-1", semantic_identifier: "Doc 1" }],
+          nested
+        ),
+        createFetchToolDocumentsPacket([{ document_id: "doc-2" }], {
+          ...parent,
+          sub_turn_index: 1,
+        }),
+      ]);
+
+      expect(result.documentMap.has("doc-1")).toBe(true);
+      expect(result.documentMap.has("doc-2")).toBe(true);
+    });
+
+    test("a nested image generation start is not the final answer", () => {
+      const state = createInitialState(1);
+      const result = processPackets(state, [
+        ...codeModeStart(),
+        createPacket(PacketType.IMAGE_GENERATION_TOOL_START, nested),
+      ]);
+
+      expect(result.finalAnswerComing).toBe(false);
+      expect(result.displayGroupKeys.size).toBe(0);
+    });
+
+    describe("cells", () => {
+      const waitObservation = { turn_index: 2, tab_index: 0 };
+      const answer = { turn_index: 3, tab_index: 0 };
+
+      function runningObservation(): Packet[] {
+        return [
+          createPacket(PacketType.CODE_MODE_START, parent, {
+            code: "print(1)",
+            cell_id: null,
+            observation: 0,
+          }),
+          createPacket(PacketType.CODE_MODE_DELTA, parent, {
+            stdout: "1\n",
+            status: "running",
+            cell_id: 1,
+            observation: 0,
+          }),
+          createPacket(PacketType.SECTION_END, parent),
+        ];
+      }
+
+      function closingRecord(): Packet[] {
+        return [
+          createPacket(PacketType.IMAGE_GENERATION_TOOL_START, nested),
+          createImageDeltaPacket(1, nested, "closing"),
+          createPacket(PacketType.SECTION_END, nested),
+          createPacket(PacketType.CODE_MODE_DELTA, parent, { stdout: "2\n" }),
+          createPacket(PacketType.CODE_MODE_DELTA, parent, {
+            status: "terminated",
+            tool_call_count: 1,
+            response_ended: true,
+          }),
+        ];
+      }
+
+      test("each observation of a cell is its own step", () => {
+        const result = processPackets(createInitialState(1), [
+          ...runningObservation(),
+          createPacket(PacketType.CODE_MODE_START, waitObservation, {
+            code: "",
+            cell_id: 1,
+            observation: 1,
+          }),
+          createPacket(PacketType.CODE_MODE_DELTA, waitObservation, {
+            stdout: "2\n",
+            status: "completed",
+            cell_id: 1,
+            observation: 1,
+          }),
+          createPacket(PacketType.SECTION_END, waitObservation),
+        ]);
+
+        expect(
+          result.toolGroups.map((g) => [g.turn_index, g.tab_index])
+        ).toEqual([
+          [1, 0],
+          [2, 0],
+        ]);
+        expect(result.groupKeysWithSectionEnd.has("1-0")).toBe(true);
+        expect(result.groupKeysWithSectionEnd.has("2-0")).toBe(true);
+      });
+
+      test("a closing record after the answer joins its observation", () => {
+        const result = processPackets(createInitialState(1), [
+          ...runningObservation(),
+          createMessageStartPacket(answer),
+          createPacket(PacketType.MESSAGE_DELTA, answer, { content: "Done." }),
+          ...closingRecord(),
+        ]);
+
+        expect(result.toolGroups.length).toBe(1);
+        expect(result.toolGroups[0]?.packets.at(-1)?.obj).toMatchObject({
+          type: PacketType.CODE_MODE_DELTA,
+          response_ended: true,
+        });
+        // A late packet of a known step is not a new tool call.
+        expect(result.finalAnswerComing).toBe(true);
+        expect(result.generatedImages.map((i) => i.file_id)).toEqual([
+          "closing-0",
+        ]);
+      });
+
+      test("a replayed response gives the same steps as the live one", () => {
+        // The closing record follows the step's SECTION_END in both. Live, it
+        // also follows the streamed answer; replay sends it before the answer.
+        const live = processPackets(createInitialState(1), [
+          ...runningObservation(),
+          createMessageStartPacket(answer),
+          createPacket(PacketType.MESSAGE_DELTA, answer, { content: "Done." }),
+          ...closingRecord(),
+          createStopPacket(),
+        ]);
+        const replay = processPackets(createInitialState(2), [
+          ...runningObservation(),
+          ...closingRecord(),
+          createPacket(PacketType.MESSAGE_START, answer, {
+            id: "msg-1",
+            content: "Done.",
+            final_documents: null,
+          }),
+          createPacket(PacketType.SECTION_END, answer),
+          createStopPacket(),
+        ]);
+
+        expect(replay.toolGroups).toEqual(live.toolGroups);
+        expect(replay.groupKeysWithSectionEnd).toEqual(
+          live.groupKeysWithSectionEnd
+        );
+        expect(replay.generatedImages).toEqual(live.generatedImages);
+        expect(live.finalAnswerComing).toBe(true);
+        expect(replay.finalAnswerComing).toBe(true);
+      });
+    });
+  });
+});
+
+describe("nested packet ownership", () => {
+  const parents = [
+    ["research agent", PacketType.RESEARCH_AGENT_START, { research_task: "R" }],
+    ["code mode", PacketType.CODE_MODE_START, { code: "" }],
+    ["coding agent", PacketType.CODING_AGENT_START, { query: "q", repo: "r" }],
+  ] as const;
+  test.each(
+    parents.flatMap(([name, type, fields]) =>
+      [PacketType.SECTION_END, PacketType.ERROR].map(
+        (endType) => [name, endType, type, fields] as const
+      )
+    )
+  )(
+    "%s: nested %s leaves the parent open until next turn or Stop",
+    (_name, endType, parentType, parentFields) => {
+      for (const closing of [
+        createMessageStartPacket({ turn_index: 1 }),
+        createStopPacket(),
+      ]) {
+        const nested = { turn_index: 0, sub_turn_index: 0 };
+        const packets = [
+          createPacket(parentType, { turn_index: 0 }, parentFields),
+          createSearchToolStartPacket(nested),
+          createPacket(endType, nested),
+          createMessageStartPacket({ turn_index: 0, sub_turn_index: 1 }, 99),
+          createPacket(
+            PacketType.MESSAGE_DELTA,
+            { turn_index: 0, sub_turn_index: 1 },
+            { content: "Child answer" }
+          ),
+        ];
+        const state = processPackets(createInitialState(1), packets);
+        expect(state.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+        expect(state.finalAnswerComing).toBe(false);
+        expect(state.toolProcessingDuration).toBeUndefined();
+        const result = processPackets(state, [...packets, closing]);
+        const parentEnds = (result.groupedPacketsMap.get("0-0") ?? []).filter(
+          (packet) =>
+            packet.obj.type === PacketType.SECTION_END &&
+            packet.placement.sub_turn_index == null
+        );
+        expect(parentEnds).toHaveLength(1);
+        expect(result.groupKeysWithSectionEnd.has("0-0")).toBe(true);
+        expect(result.finalAnswerComing).toBe(
+          closing.obj.type === PacketType.MESSAGE_START
+        );
+      }
+    }
+  );
+
+  test("nested messages preserve the top-level answer timing", () => {
+    const state = processPackets(createInitialState(1), [
+      createMessageStartPacket({ turn_index: 0 }, 7),
+      createMessageStartPacket({ turn_index: 0, sub_turn_index: 0 }, 99),
+    ]);
+    expect(state.toolProcessingDuration).toBe(7);
+  });
+});
+
+test.each([undefined, null])(
+  "explicit parent ends prevent duplicate closure (%s)",
+  (subTurnIndex) => {
+    for (const endType of [PacketType.SECTION_END, PacketType.ERROR]) {
+      const state = processPackets(createInitialState(1), [
+        createSearchToolStartPacket({ turn_index: 0 }),
+        createPacket(endType, { turn_index: 0, sub_turn_index: subTurnIndex }),
+        createStopPacket(),
+      ]);
+      const ends = (state.groupedPacketsMap.get("0-0") ?? []).filter(
+        (packet) =>
+          packet.obj.type === PacketType.SECTION_END ||
+          packet.obj.type === PacketType.ERROR
+      );
+      expect(ends).toHaveLength(1);
+    }
+  }
+);
+
+describe("nested calls", () => {
+  const parentStart = createPacket(
+    PacketType.RESEARCH_AGENT_START,
+    { turn_index: 0 },
+    { research_task: "R" }
+  );
+  const call = (subTurnIndex: number) => ({
+    turn_index: 0,
+    sub_turn_index: subTurnIndex,
+  });
+
+  test("a group exposes its own packets and each nested call once", () => {
+    const first = [
+      parentStart,
+      createSearchToolStartPacket(call(1)),
+      createSearchToolStartPacket(call(0)),
+    ];
+    const state = processPackets(createInitialState(1), first);
+    const [group] = state.toolGroups;
+    expect(group!.packets).toEqual([parentStart]);
+    expect(group!.streamPackets).toEqual(first);
+    expect(group!.nestedCalls.map((c) => c.subTurnIndex)).toEqual([0, 1]);
+    expect(
+      group!.nestedCalls
+        .flatMap((c) => c.packets)
+        .map((p) => p.placement.sub_turn_index)
+    ).toEqual([null, null]);
+    expect(group!.nestedCalls.map((c) => c.complete)).toEqual([false, false]);
+
+    const second = [...first, createPacket(PacketType.SECTION_END, call(0))];
+    const ended = processPackets(state, second);
+    const [afterEnd] = ended.toolGroups;
+    expect(afterEnd!.nestedCalls.map((c) => c.complete)).toEqual([true, false]);
+    expect(afterEnd!.nestedCalls[1]).toBe(group!.nestedCalls[1]);
+    expect(afterEnd!.packets).toEqual([parentStart]);
+    expect(ended.groupKeysWithSectionEnd.has("0-0")).toBe(false);
+
+    const report = createPacket(
+      PacketType.INTERMEDIATE_REPORT_DELTA,
+      { turn_index: 0 },
+      { content: "Report" }
+    );
+    const reported = processPackets(ended, [...second, report]);
+    const [afterReport] = reported.toolGroups;
+    expect(afterReport!.nestedCalls).toBe(afterEnd!.nestedCalls);
+    expect(afterReport!.packets).toEqual([parentStart, report]);
   });
 });

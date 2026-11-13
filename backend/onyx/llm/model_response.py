@@ -20,6 +20,7 @@ from onyx.llm.models import (
     GenerationDoneEvent,
     GenerationEvent,
     GenerationRequest,
+    NamedToolChoice,
     TextContent,
     TextDeltaEvent,
     ThinkingContent,
@@ -119,8 +120,10 @@ class ModelResponse(BaseModel):
     model: str | None = None
 
 
-class _CachedTokens(BaseModel):
+class _PromptTokensDetails(BaseModel):
     cached_tokens: int | None = None
+    cache_write_tokens: int | None = None
+    cache_creation_tokens: int | None = None
 
 
 class _ProviderUsage(BaseModel):
@@ -129,19 +132,25 @@ class _ProviderUsage(BaseModel):
     total_tokens: int | None = None
     cache_creation_input_tokens: int | None = None
     cache_read_input_tokens: int | None = None
-    prompt_tokens_details: _CachedTokens | None = None
+    prompt_tokens_details: _PromptTokensDetails | None = None
 
     def to_usage(self) -> Usage:
         cached = self.cache_read_input_tokens
         if cached is None and self.prompt_tokens_details is not None:
             cached = self.prompt_tokens_details.cached_tokens
+        created = self.cache_creation_input_tokens
+        if created is None and self.prompt_tokens_details is not None:
+            # These are aliases for the same writes, not separate token buckets.
+            created = self.prompt_tokens_details.cache_write_tokens
+            if created is None:
+                created = self.prompt_tokens_details.cache_creation_tokens
         # NOTE: sometimes the usage data dictionary has these keys and the values are None
         # hence the "or 0" instead of just using default values
         return Usage(
             completion_tokens=self.completion_tokens or 0,
             prompt_tokens=self.prompt_tokens or 0,
             total_tokens=self.total_tokens or 0,
-            cache_creation_input_tokens=self.cache_creation_input_tokens or 0,
+            cache_creation_input_tokens=created or 0,
             cache_read_input_tokens=cached or 0,
         )
 
@@ -389,6 +398,37 @@ def _finish_tool_call(
         call.argument_error = "Tool arguments are not a valid JSON object."
 
 
+def _taken_call_ids(request: GenerationRequest) -> set[str]:
+    """Tool call IDs that the request's messages already use."""
+    return {
+        call.id
+        for message in request.messages
+        if isinstance(message, AssistantMessage)
+        for call in message.tool_calls
+    }
+
+
+def _unique_call_id(
+    provider_id: str | None, request: GenerationRequest, taken: set[str]
+) -> str:
+    """The provider's tool call ID, or a new one when it is missing, `taken` or
+    reserved by the request.
+
+    Some providers repeat IDs across responses. Results, amendments and nested
+    code mode calls find a call by its ID, so IDs stay unique within a
+    conversation. The returned ID joins `taken`.
+    """
+    call_id = (
+        provider_id
+        if provider_id
+        and provider_id not in taken
+        and provider_id not in request.reserved_tool_call_ids
+        else str(uuid4())
+    )
+    taken.add(call_id)
+    return call_id
+
+
 def to_assistant_message(
     response: ModelResponse, request: GenerationRequest
 ) -> AssistantMessage:
@@ -410,6 +450,7 @@ def to_assistant_message(
     if source.content:
         message.content.append(TextContent(text=source.content))
     definitions = {tool.name: tool for tool in request.tools}
+    taken = _taken_call_ids(request)
     for source_call in source.tool_calls or []:
         if not source_call.function.name:
             logger.warning(
@@ -418,7 +459,7 @@ def to_assistant_message(
             continue
         arguments = source_call.function.arguments or ""
         call = ToolCall(
-            id=source_call.id or str(uuid4()),
+            id=_unique_call_id(source_call.id, request, taken),
             name=source_call.function.name,
             arguments={},
             raw_arguments=arguments,
@@ -570,10 +611,8 @@ class MessageAccumulator:
     ) -> Generator[GenerationEvent, None, None]:
         """Stream provider text as events, then recover calls written as text."""
         ids: dict[int, str] = {}
-        recovery_enabled = (
-            bool(request.tools)
-            and request.options.tool_choice != ToolChoiceOptions.NONE
-        )
+        taken = _taken_call_ids(request)
+        recovery_enabled = bool(_recovery_tools(request))
         recover = recovery_enabled
         raw_text: list[str] = []
         raw_thinking: list[str] = []
@@ -585,7 +624,9 @@ class MessageAccumulator:
         def add_filtered(chunk: ModelResponseStream) -> list[GenerationEvent]:
             chunk = chunk.model_copy(deep=True)
             for call in chunk.choice.delta.tool_calls:
-                call.id = ids.setdefault(call.index, call.id or str(uuid4()))
+                if call.index not in ids:
+                    ids[call.index] = _unique_call_id(call.id, request, taken)
+                call.id = ids[call.index]
             if content_filter is not None and chunk.choice.delta.content:
                 chunk.choice.delta.content = content_filter.process(
                     chunk.choice.delta.content
@@ -673,23 +714,43 @@ class MessageAccumulator:
         return events
 
 
+def _recovery_tools(request: GenerationRequest) -> list[ToolDefinition]:
+    """Select candidates for implicit recovery; explicit calls retain provider names."""
+    if request.options.tool_choice == ToolChoiceOptions.NONE:
+        return []
+    allowed = request.allowed_tool_names
+    return [tool for tool in request.tools if allowed is None or tool.name in allowed]
+
+
 def recover_tool_calls(
     message: AssistantMessage, request: GenerationRequest
 ) -> AssistantMessage:
     """Recover provider text tool payloads when native calls are absent."""
-    if message.tool_calls or request.options.tool_choice == ToolChoiceOptions.NONE:
+    eligible_tools = _recovery_tools(request)
+    if message.tool_calls or not eligible_tools:
         return message
     should_try = (
         request.options.tool_choice == ToolChoiceOptions.REQUIRED
+        or isinstance(request.options.tool_choice, NamedToolChoice)
         or bool(message.thinking and not message.text)
         or looks_like_xml_tool_call_payload(message.text)
         or looks_like_xml_tool_call_payload(message.thinking)
     )
     if not should_try:
         return message
+    eligible_names = {tool.name for tool in eligible_tools}
+    implicit_names = (
+        eligible_names & {request.options.tool_choice.name}
+        if isinstance(request.options.tool_choice, NamedToolChoice)
+        else eligible_names
+    )
     calls = extract_tool_calls_from_response_text(
-        message.text, request.tools
-    ) or extract_tool_calls_from_response_text(message.thinking, request.tools)
+        message.text, request.tools, implicit_tool_names=implicit_names
+    ) or extract_tool_calls_from_response_text(
+        message.thinking, request.tools, implicit_tool_names=implicit_names
+    )
+    # Explicit provider calls retain their names, like native calls. The runtime
+    # rejects forbidden calls and returns tool errors; only inference is restricted.
     if not calls:
         return message
     tools = {tool.name: tool for tool in request.tools}

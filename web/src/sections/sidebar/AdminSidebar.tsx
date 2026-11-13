@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation, usePathname } from "@opal/navigation";
 import React, {
   useCallback,
   useEffect,
@@ -8,12 +9,17 @@ import React, {
   useState,
 } from "react";
 import { useAdminNavLabels } from "@/lib/adminNavLabels";
-import { usePathname } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { SidebarLayouts, useSidebarState } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
-import { InputTypeIn, SidebarTab, Tag, type TagProps } from "@opal/components";
+import {
+  InputTypeIn,
+  SidebarTab,
+  Badge,
+  type BadgeProps,
+} from "@opal/components";
 import { SvgSearch, SvgX } from "@opal/icons";
 import { Disabled } from "@opal/core";
 import {
@@ -28,7 +34,7 @@ import {
 import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
 import useFilter from "@/hooks/useFilter";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { AccountPopover } from "@/lib/app/components";
 import {
   BETA_SECTION_IDS,
   buildItems,
@@ -37,14 +43,12 @@ import {
   type FeatureFlags,
   type SidebarItemEntry,
 } from "@/lib/admin-sidebar-utils";
-import { SidebarLogoMark, SidebarWordmark } from "@/lib/app/components";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 
 export default function AdminSidebar() {
   const t = useTranslations("sidebar");
   const plans = usePlans();
   const { folded, setFolded } = useSidebarState();
-  const showLogoWhenFolded = useShowLogoWhenFolded();
   const searchRef = useRef<HTMLInputElement>(null);
   const [focusSearch, setFocusSearch] = useState(false);
 
@@ -54,6 +58,7 @@ export default function AdminSidebar() {
       setFocusSearch(false);
     }
   }, [focusSearch, folded]);
+  const navigation = useNavigation();
   const pathname = usePathname();
   const { adminCapabilities } = useUser();
   const settings = useSettings();
@@ -103,11 +108,11 @@ export default function AdminSidebar() {
     [t]
   );
 
-  const betaTag: TagProps = useBetaTag();
+  const betaTag: BadgeProps = useBetaTag();
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
   const itemTag = (beta: boolean | undefined) =>
-    beta ? <Tag {...betaTag} /> : undefined;
+    beta ? <Badge {...betaTag} /> : undefined;
 
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(
@@ -124,11 +129,7 @@ export default function AdminSidebar() {
 
   return (
     <SidebarLayouts.Root>
-      <SidebarLayouts.Header
-        logo={<SidebarLogoMark size={28} />}
-        wordmark={<SidebarWordmark size={28} />}
-        showLogoWhenFolded={showLogoWhenFolded}
-      >
+      <BrandedSidebarHeader>
         {folded ? (
           <SidebarTab
             icon={SvgSearch}
@@ -143,14 +144,14 @@ export default function AdminSidebar() {
           <InputTypeIn
             ref={searchRef}
             variant="internal"
-            searchIcon
+            icon="search"
             placeholder={t("adminSidebar.searchInput.placeholder")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             clearButton
           />
         )}
-      </SidebarLayouts.Header>
+      </BrandedSidebarHeader>
 
       <SidebarLayouts.Body scrollKey="admin-sidebar">
         {enabledGroups.map((group, groupIndex) => (
@@ -165,7 +166,8 @@ export default function AdminSidebar() {
                 <SidebarTab
                   key={link}
                   icon={icon}
-                  href={link}
+                  // SAFETY: sidebar links are the paths in `ADMIN_ROUTES`.
+                  {...navigation.linkTo(link as Route, { scroll: false })}
                   selected={pathname.startsWith(link)}
                   rightChildren={itemTag(beta)}
                 >
@@ -217,7 +219,10 @@ export default function AdminSidebar() {
         {!folded && <SidebarLayouts.Divider />}
         <SidebarTab
           icon={SvgX}
-          href={pathname?.startsWith("/admin/craft") ? "/craft/v1" : "/app"}
+          {...navigation.linkTo(
+            pathname.startsWith("/admin/craft") ? "/craft/v1" : "/app",
+            { scroll: false }
+          )}
           variant="sidebar-light"
         >
           {t("adminSidebar.exitAdminPanel.label")}

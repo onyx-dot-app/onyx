@@ -1,9 +1,9 @@
 "use client";
 
+import { useParams, useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
-import { useParams, useRouter } from "next/navigation";
 import useSWR, { useSWRConfig } from "swr";
 import {
   ConfirmationModalLayout,
@@ -11,7 +11,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Text, useCreateModal } from "@opal/components";
 import {
   SvgChevronDown,
   SvgChevronUp,
@@ -30,7 +30,7 @@ import {
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
 import RunHistoryTable from "@/app/craft/v1/tasks/components/RunHistoryTable";
 
-import { taskStatusTag } from "@/app/craft/v1/tasks/components/StatusBadge";
+import { TaskStatusBadge } from "@/app/craft/v1/tasks/components/StatusBadge";
 import { TASKS_PATH, taskEditPath } from "@/app/craft/v1/tasks/constants";
 import type {
   ScheduledTaskDetail,
@@ -45,7 +45,7 @@ export default function ScheduledTaskDetailPage() {
   const t = useTranslations("craft.tasks.detailPage");
   const tTasks = useTranslations("craft.tasks");
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const taskId = params?.id;
 
   const { data, error, isLoading, mutate } = useSWR<ScheduledTaskDetail>(
@@ -58,14 +58,15 @@ export default function ScheduledTaskDetailPage() {
 
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const scheduleDescription = data
     ? humanReadableScheduleFromCron(data.editor_mode, data.cron_expression)
     : undefined;
 
   const handleBack = useCallback(() => {
-    router.push(TASKS_PATH);
-  }, [router]);
+    navigation.go(TASKS_PATH);
+  }, [navigation]);
 
   const handleToggleStatus = useCallback(async () => {
     if (!data) return;
@@ -124,15 +125,15 @@ export default function ScheduledTaskDetailPage() {
           },
         { revalidate: false }
       );
-      setConfirmDelete(false);
-      router.replace(TASKS_PATH);
+      toggleDeleteModal(false);
+      navigation.go(TASKS_PATH, { replace: true });
     } catch (err) {
       toast.error(
         err instanceof Error ? err.message : t("toasts.deleteFailed")
       );
       setBusy(false);
     }
-  }, [data, globalMutate, router, t]);
+  }, [data, globalMutate, navigation, t, toggleDeleteModal]);
 
   if (!taskId) {
     return (
@@ -159,16 +160,16 @@ export default function ScheduledTaskDetailPage() {
         <SettingsLayouts.Header
           title={data?.name ?? t("fallbackTitle")}
           description={scheduleDescription}
-          descriptionTag={data ? taskStatusTag(data.status) : undefined}
           stackActionsOnMobile
           actions={
             data
               ? [
+                  <TaskStatusBadge key="status" status={data.status} />,
                   <Button
                     key="edit"
                     icon={SvgEdit}
                     prominence="tertiary"
-                    href={taskEditPath(data.id)}
+                    {...navigation.linkTo(taskEditPath(data.id))}
                     disabled={busy}
                   >
                     {t("editButton")}
@@ -201,7 +202,7 @@ export default function ScheduledTaskDetailPage() {
                     key="delete"
                     icon={SvgTrash}
                     prominence="tertiary"
-                    onClick={() => setConfirmDelete(true)}
+                    onClick={() => toggleDeleteModal(true)}
                     disabled={busy}
                     data-testid="delete-button"
                     aria-label={t("deleteButton")}
@@ -274,27 +275,29 @@ export default function ScheduledTaskDetailPage() {
           )}
         </SettingsLayouts.Body>
 
-        {confirmDelete && data && (
-          <ConfirmationModalLayout
-            icon={SvgTrash}
-            title={t("confirmDelete.title", { name: data.name })}
-            description={t("confirmDelete.description")}
-            onClose={() => setConfirmDelete(false)}
-            submit={
-              <Button
-                variant="danger"
-                prominence="primary"
-                onClick={() => void handleDelete()}
-                disabled={busy}
-                data-testid="confirm-delete-task"
-              >
-                {busy
-                  ? t("confirmDelete.deletingButton")
-                  : t("confirmDelete.deleteButton")}
-              </Button>
-            }
-          />
-        )}
+        <deleteModal.Provider>
+          {data && (
+            <ConfirmationModalLayout
+              icon={SvgTrash}
+              title={t("confirmDelete.title", { name: data.name })}
+              description={t("confirmDelete.description")}
+              onClose={() => toggleDeleteModal(false)}
+              submit={
+                <Button
+                  variant="danger"
+                  prominence="primary"
+                  onClick={() => void handleDelete()}
+                  disabled={busy}
+                  data-testid="confirm-delete-task"
+                >
+                  {busy
+                    ? t("confirmDelete.deletingButton")
+                    : t("confirmDelete.deleteButton")}
+                </Button>
+              }
+            />
+          )}
+        </deleteModal.Provider>
       </SettingsLayouts.Root>
     </Section>
   );

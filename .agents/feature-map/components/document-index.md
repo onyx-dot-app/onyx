@@ -117,7 +117,8 @@ check_for_port / run_port_attempt          tasks/port/tasks.py
 check_and_perform_index_swap               db/swap_index.py, run by check_for_indexing
   INSTANT: swap at once, the port keeps filling the live index
   REINDEX / ACTIVE_ONLY: swap when _port_swap_ready
-_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit
+_perform_index_swap: PRESENT -> PAST, FUTURE -> PRESENT, one commit, and in it
+  _clear_what_future_missed: hashes PRESENT wrote after FUTURE's last poll -> NULL
 check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
   PENDING -> SOAKING -> DELETING -> RECLAIMED (row kept), or BLOCKED
 ```
@@ -125,8 +126,12 @@ check_for_old_index_reclaim                tasks/index_reclaim/tasks.py
 The reindex never fetches sources again. It copies and re-embeds stored chunks
 (`document_index/opensearch/port_copy.py`), and connectors keep indexing new
 changes into both generations. Once every connector port succeeds, the reindex
-is finalizing. The swap then waits while any FUTURE index attempt of a required
-pair runs (`db/swap_index.py:_no_writer_left_in_flight`).
+is finalizing. The swap then waits for every required port to succeed, for
+pending user-file reconciles, and for any running FUTURE index attempt of a
+required pair (`db/swap_index.py:_port_swap_ready`, `_no_writer_left_in_flight`).
+It does not wait for FUTURE to catch up with what PRESENT wrote during the
+port: it clears the content hash of those documents instead, so the next poll
+on the new PRESENT re-indexes them ([[#swap-clears-what-future-missed]]).
 [[indexing-pipeline#future-attempts-first]] keeps those attempts from waiting
 behind PRESENT refreshes. Reclaim waits `OLD_INDEX_RETENTION_HOURS` in SOAKING,
 then requires the new index to be not red and to answer a count query
@@ -155,19 +160,20 @@ it deletes the old one.
    needs an orphan record.** A copy can recreate a document that was deleted
    after the copy read it. The cleanup task records a port orphan candidate
    before it deletes
-   (`background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`),
+   (`background/celery/tasks/shared/tasks.py:document_batch_by_cc_pair_cleanup_task`),
    and the port sweeps it.
 5. `missing-secondary-defers-sync` **A sync to a document the port has not
    copied is deferred, not failed.** This applies to FUTURE, and to a PRESENT
    that an INSTANT reindex promoted while its port still runs.
    `document_index/opensearch/opensearch_document_index.py:OpenSearchIndexPair.update`
    raises `SecondaryIndexDocumentMissingError` in both cases. The sync then sets
-   `secondary_only_sync_pending`, and the swap waits for those documents to
-   drain. Clearing `needs_sync` instead lets the
-   port install a stale ACL. A document with no indexable cc-pair
+   `secondary_only_sync_pending` and keeps re-syncing the document until the
+   copy lands. The swap does not wait for those documents: it turns the flag
+   into a plain needs-sync ([[#swap-clears-what-future-missed]]), so the new
+   PRESENT gets their permissions on the next sync. Clearing `needs_sync`
+   instead lets the port install a stale ACL. A document with no indexable cc-pair
    (`backend/onyx/db/document.py:document_has_indexable_cc_pair`) is marked
-   synced instead: the port never copies it, so its flag would hold the swap
-   for ever.
+   synced instead: the port never copies it, so its flag would never clear.
 6. `filters-in-one-place` **All index-side filtering goes through one
    builder.**
    `document_index/opensearch/search.py:DocumentQuery._get_search_filters` is
@@ -191,24 +197,54 @@ it deletes the old one.
    (`document_index/opensearch/opensearch_document_index.py:OpenSearchDocumentIndex.verify_and_create_index_if_necessary`,
    run by `setup.py:setup_document_index`) adds a new field to an existing
    index, but a changed field type fails there and needs a reindex. Chunks
-   written before the change have no value for the new field.
+   written before the change have no value for the new field. OpenSearch also
+   rejects a change to most field parameters, such as `store`,
+   `index_options` or a vector encoder; a few, such as `ignore_above`, update
+   in place and apply only to chunks written after the change. Index setup
+   keeps two known older values: `store: true` on `content`, and the 7-bit
+   encoder without `confidence_interval`. Any other rejected change fails
+   setup and needs a reindex.
 9. `swap-one-commit` **Swap both statuses in one commit.**
    `db/swap_index.py:_perform_index_swap` uses
    `db/search_settings.py:update_search_settings_status__no_commit` twice and
    one commit. Two commits leave a moment with no PRESENT row, and
-   `get_current_search_settings` raises.
-10. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each
+   `get_current_search_settings` raises. The clear pass of
+   [[#swap-clears-what-future-missed]] runs in that same transaction, after the
+   two status updates.
+10. `swap-clears-what-future-missed` **The swap clears what FUTURE may lack
+   instead of waiting for it.** During a port-flow reindex PRESENT keeps
+   indexing and stamping `content_hash`, so a document edited after its port
+   copy is newer in PRESENT, and the hash gate would make the new PRESENT skip
+   it for good. `db/swap_index.py:_clear_what_future_missed__no_commit` nulls
+   the hash of each required pair's documents modified at or after
+   `db/reindex_clear.py:get_pair_clear_bounds`' `clear_from` (FUTURE's last
+   successful poll end minus the poll overlap; the reindex start when FUTURE
+   never polled; the epoch, so everything, for a pair with neither a seed nor
+   a port attempt), nulls the hash of documents with an `IndexAttemptError` on a
+   FUTURE attempt, and turns `secondary_only_sync_pending` into a plain
+   needs-sync. It runs inside the flip's transaction with `FOR UPDATE SKIP
+   LOCKED`, and once more right after the commit. A batch locks its document
+   rows first and takes the settings share lock only at its stamp, so the flip
+   waits for every stamp in flight and the in-flip pass sees them all; a row a
+   batch still holds is skipped, never waited for (waiting could deadlock with
+   that batch, which reads PAST and stamps nothing), and the pass after the
+   commit clears it. Accepted: about one poll period
+   of lag after the swap; documents a FUTURE attempt failed on need Retry; a
+   load-only connector needs a manual run; a crash between the flip's commit
+   and the pass after it leaves a skipped document's old hash in place (no
+   retry, that would need a persisted marker).
+11. `reclaim-forward-only` **Reclaim moves forward one step at a time.** Each
     `advance_to_*` helper in `db/search_settings.py` acts only from the exact
     prior status. Do not set `reclaim_status` outside those helpers. An
     abandoned FUTURE goes straight to DELETING
     (`db/search_settings.py:mark_abandoned_future_for_reclaim__no_commit`),
     because it never served search.
-11. `registry-entries-immutable` **Do not change a model that indices use.** The
+12. `registry-entries-immutable` **Do not change a model that indices use.** The
     dimension, prefixes and normalization of a registry entry are baked into
     every vector. Add a new entry instead.
     `web/src/lib/searchSettings/constants.ts` must match the registry
     (`backend/tests/unit/shared_configs/test_web_embedding_model_registry_parity.py`).
-12. `contextual-rag-validator` **Contextual-RAG settings pass one validator, and
+13. `contextual-rag-validator` **Contextual-RAG settings pass one validator, and
     the default flow follows PRESENT.**
     `server/manage/search_settings.py:validate_contextual_rag_model` rejects a
     model without the CHAT flow type, and rejects enabling the feature with no
@@ -231,6 +267,26 @@ it deletes the old one.
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
+- **Hybrid search reads chunk keys first, then the top hits.** On a
+  single-shard index, OpenSearch fetches every hybrid candidate before
+  normalization keeps the top hits: up to `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES`
+  per subquery, about 1,000 chunks at the default of 500.
+  `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
+  fetches the source of the top hits in a second request. That request applies
+  the search filters again and builds the match highlights from the keyword
+  subquery. This path runs only on a single-shard index with explain off (the
+  default). A multi-shard search already fetches only the top hits, and a
+  second request would go to every shard. Explain describes the hybrid
+  scoring, so it keeps one request.
+- **New self-hosted indexes preload their search files.**
+  `DocumentSchema.get_index_settings_based_on_environment` sets
+  `index.store.preload` to the vectors, HNSW graph, postings, terms, doc
+  values and compound files. When a shard opens, OpenSearch reads them in one
+  sequential pass. Without it, the first searches after a restart each wait on
+  thousands of random reads, and search stays slow for minutes. A quantized
+  index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
+  Stored text is not preloaded: only the top hits read it. AWS managed indexes
+  do not set it. The setting applies only when the index is created.
 
 ## Known issues
 

@@ -1,6 +1,6 @@
 {
-  "version": "1.24",
-  "updated_at": "2026-10-26T00:00:00Z",
+  "version": "1.26",
+  "updated_at": "2026-11-09T00:00:00Z",
   "providers": {
     "openai": {
       "default_model": "gpt-6.1-sol",
@@ -33,10 +33,6 @@
         {
           "name": "claude-haiku-5-5",
           "display_name": "Claude Haiku 5.5"
-        },
-        {
-          "name": "claude-fable-5-1",
-          "display_name": "Claude Fable 5.1"
         }
       ]
     },
@@ -73,8 +69,8 @@
           "display_name": "DeepSeek V4.1 Flash 1017"
         },
         {
-          "name": "qwen/qwen3.8-max-0902",
-          "display_name": "Qwen3.8 Max 0902"
+          "name": "qwen/qwen3.8-flash",
+          "display_name": "Qwen3.8 Flash"
         },
         {
           "name": "moonshotai/kimi-k3.1-pro",

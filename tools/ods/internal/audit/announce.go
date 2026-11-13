@@ -44,7 +44,8 @@ type AnnouncePlan struct {
 	// Markers lists, per issue, the advisory names the post announces, so a
 	// later run threads them under it.
 	Markers []ThreadMarker `json:"markers"`
-	// Replies go in the threads of advisories announced by an earlier run.
+	// Replies go in the threads of advisories announced by an earlier run,
+	// split so no message passes Slack's split size.
 	Replies []SlackReply `json:"replies"`
 	// Issues lists the issues the plan announces, in the post or a reply.
 	Issues []int `json:"issues"`
@@ -68,9 +69,13 @@ type SlackReply struct {
 	Text string `json:"text"`
 }
 
-// noteLimit caps Claude's note per package, so a thread reply stays far
-// below Slack's message size.
+// noteLimit caps Claude's note per package, so the note and the package
+// header fit in one message.
 const noteLimit = 2500
+
+// slackMessageLimit keeps each message below the ~4,000 characters past
+// which Slack splits it, even mid code block.
+const slackMessageLimit = 3800
 
 // PlanAnnouncement splits a run's failing advisories into those announced
 // before, which get a follow-up in their thread, and new ones, which all go
@@ -88,6 +93,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	plan := AnnouncePlan{Markers: []ThreadMarker{}, Replies: []SlackReply{}, Issues: []int{}}
 	var lines, sections []string
 	repeats := map[string][]string{}
+	retried := map[string][]string{}
 	announced := map[int]bool{}
 	count := 0
 	for _, a := range opts.Failing {
@@ -108,7 +114,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 			// A retried triage has no new advisory, so its result goes in the
 			// thread the package was announced in.
 			if triaged && a.Issue > 0 {
-				repeats[firstTS] = append(repeats[firstTS], packageSection(a, a.Advisories, triage, true, opts))
+				retried[firstTS] = append(retried[firstTS], packageSection(a, a.Advisories, triage, true, opts)...)
 				announced[a.Issue] = true
 			}
 			continue
@@ -118,7 +124,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 			lines = append(lines, fmt.Sprintf("• %s in *%s*: %s (%s) %s%s", advisoryLink(adv), imageLabel(adv.Images),
 				a.Package, a.Ecosystem, versionLabel(a.Versions), issueLink(a)))
 		}
-		sections = append(sections, packageSection(a, fresh, triage, triaged, opts))
+		sections = append(sections, packageSection(a, fresh, triage, triaged, opts)...)
 		if a.Issue > 0 {
 			var ids []string
 			for _, adv := range fresh {
@@ -152,6 +158,9 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	sort.Strings(tss)
 	for _, ts := range tss {
 		plan.Replies = append(plan.Replies, SlackReply{TS: ts, Text: strings.Join(repeats[ts], "\n")})
+		for _, section := range retried[ts] {
+			plan.Replies = append(plan.Replies, SlackReply{TS: ts, Text: section})
+		}
 	}
 	for issue := range announced {
 		plan.Issues = append(plan.Issues, issue)
@@ -170,8 +179,10 @@ func threadOf(adv Advisory, threads map[string]string) string {
 }
 
 // packageSection is the thread reply for one package: its fix, Claude's
-// note, and an ignore command for every advisory listed.
-func packageSection(a Alert, advs []Advisory, triage TriageSummary, triaged bool, opts AnnounceOptions) string {
+// note, and an ignore command for every advisory listed. It is one message
+// unless it passes slackMessageLimit; then it splits between whole lines,
+// and each message closes every code block it opens.
+func packageSection(a Alert, advs []Advisory, triage TriageSummary, triaged bool, opts AnnounceOptions) []string {
 	images := map[string]bool{}
 	var imgs []string
 	for _, adv := range advs {
@@ -197,16 +208,63 @@ func packageSection(a Alert, advs []Advisory, triage TriageSummary, triaged bool
 	}
 	fmt.Fprintf(&b, "*Installed:* %s\n", truncateRunes(strings.Join(a.Versions, ", "), 200))
 	reason := ignoreReason(triage.Reason)
-	b.WriteString("If Onyx is not affected, suppress it:\n```\n")
+	var ignores, expiring []string
 	for _, adv := range advs {
-		fmt.Fprintf(&b, "ods audit ignore add %s --reason \"%s\"\n", adv.ID, reason)
+		ignores = append(ignores, fmt.Sprintf("ods audit ignore add %s --reason \"%s\"", adv.ID, reason))
+		expiring = append(expiring, fmt.Sprintf("ods audit ignore add %s --reason \"%s\" --expires %s", adv.ID, reason, opts.Expires))
 	}
-	b.WriteString("```\nIf Onyx is affected and no fix exists yet, suppress it for 30 days:\n```\n")
-	for _, adv := range advs {
-		fmt.Fprintf(&b, "ods audit ignore add %s --reason \"%s\" --expires %s\n", adv.ID, reason, opts.Expires)
+	units := []string{strings.TrimSuffix(b.String(), "\n")}
+	units = append(units, commandBlocks("If Onyx is not affected, suppress it:", ignores)...)
+	units = append(units, commandBlocks("If Onyx is affected and no fix exists yet, suppress it for 30 days:", expiring)...)
+	return packMessages(units)
+}
+
+// commandBlocks puts the commands in as few code blocks as fit in a
+// message each; the intro heads the first block.
+func commandBlocks(intro string, cmds []string) []string {
+	var blocks, chunk []string
+	head := intro + "\n"
+	flush := func() {
+		if len(chunk) > 0 {
+			blocks = append(blocks, head+"```\n"+strings.Join(chunk, "\n")+"\n```")
+			head, chunk = "", nil
+		}
 	}
-	b.WriteString("```")
-	return b.String()
+	size := 0
+	for _, cmd := range cmds {
+		// The fences and the intro take the rest of the budget.
+		if size+runeLen(cmd)+1 > slackMessageLimit-runeLen(intro)-10 {
+			flush()
+			size = 0
+		}
+		chunk = append(chunk, cmd)
+		size += runeLen(cmd) + 1
+	}
+	flush()
+	return blocks
+}
+
+// packMessages joins units with newlines into as few messages as stay
+// within slackMessageLimit. A unit is never split.
+func packMessages(units []string) []string {
+	var msgs []string
+	cur := ""
+	for _, u := range units {
+		if cur != "" && runeLen(cur)+1+runeLen(u) > slackMessageLimit {
+			msgs = append(msgs, cur)
+			cur = ""
+		}
+		if cur == "" {
+			cur = u
+		} else {
+			cur += "\n" + u
+		}
+	}
+	return append(msgs, cur)
+}
+
+func runeLen(s string) int {
+	return len([]rune(s))
 }
 
 // ignoreReason keeps Claude's reason a plain double-quoted shell string that

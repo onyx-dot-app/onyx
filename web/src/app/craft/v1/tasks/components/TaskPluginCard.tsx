@@ -95,7 +95,7 @@ export default function TaskPluginCard({
                   gap={2}
                   className="min-w-0"
                 >
-                  <Content sizePreset="main-content" title={app.name} />
+                  <Content font="main-content-emphasis" title={app.name} />
                   {needsConnection && (
                     <span
                       aria-hidden

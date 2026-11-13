@@ -27,7 +27,7 @@ import { Card } from "@opal/components";
 | `rounding`    | `Rounding`                      | `3`                    | Corner radius step (`N / 4` rem, or `"full"`)                                                                 |
 | `color`       | `CardColor`                     | `"background-tint-00"` | Surface color, named for the token it paints (`"transparent"`, `"background-tint-01"`, `"status-info-00"`, …) |
 | `border`      | `"none" \| "dashed" \| "solid"` | `"none"`               | Border style                                                                                                  |
-| `borderColor` | `StatusVariants`                | `"default"`            | Status-palette border color (needs `border` ≠ `"none"`)                                                       |
+| `borderColor` | `StatusColor`                | `"default"`            | Status-palette border color (needs `border` ≠ `"none"`)                                                       |
 | `disabled`    | `boolean`                       | `false`                | Dims the card and shows a not-allowed cursor. Visual only — see below.                                        |
 | `height`      | `"fit" \| "full"`               | `"fit"`                | `"full"` fills the parent, shrinks to a capped one, and lays the children out as a column so one can scroll   |
 | `ref`         | `React.Ref<HTMLDivElement>`     | —                      | Ref forwarded to the root div                                                                                 |
@@ -166,7 +166,7 @@ type CardBaseProps = Omit<React.HTMLAttributes<HTMLDivElement>, "color" | "style
   rounding?: Rounding;
   color?: CardColor;
   border?: "none" | "dashed" | "solid";
-  borderColor?: StatusVariants;
+  borderColor?: StatusColor;
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
 };

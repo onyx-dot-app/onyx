@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Route } from "next";
-import { useRouter } from "next/navigation";
 import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
 
 interface UnsavedChangesGuardOptions {
@@ -14,7 +14,7 @@ export default function useUnsavedChangesGuard({
   isDirty,
   onDiscard,
 }: UnsavedChangesGuardOptions) {
-  const router = useRouter();
+  const navigation = useNavigation();
   const { registerGuard } = useUnsavedChangesNavigation();
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const pendingNavigation = useRef<(() => void) | null>(null);
@@ -95,7 +95,7 @@ export default function useUnsavedChangesGuard({
 
       event.preventDefault();
       requestLeave(() =>
-        router.push(
+        navigation.go(
           `${destination.pathname}${destination.search}${destination.hash}` as Route
         )
       );
@@ -107,7 +107,7 @@ export default function useUnsavedChangesGuard({
       window.removeEventListener("beforeunload", warnBeforeUnload);
       document.removeEventListener("click", guardInternalLink, true);
     };
-  }, [isDirty, requestLeave, router]);
+  }, [isDirty, requestLeave, navigation]);
 
   return {
     confirmationOpen,

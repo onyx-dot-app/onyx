@@ -12,8 +12,15 @@ from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    SearchResults,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.utils import (
+    SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
 from onyx.tools.tool_implementations.web_search.models import (
@@ -112,6 +119,10 @@ class WebSearchTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -122,6 +133,10 @@ class WebSearchTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @property
     def supports_site_filter(self) -> bool:
@@ -140,8 +155,10 @@ class WebSearchTool(Tool):
         return ToolDefinition(
             name=self.name,
             description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     QUERIES_FIELD: {
                         "type": "array",
@@ -308,12 +325,10 @@ class WebSearchTool(Tool):
 
         # Format for LLM
         if not all_search_results:
-            docs_str = json.dumps(
-                {
-                    "results": [],
-                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
-                }
-            )
+            docs_str = SearchResults(
+                results=[],
+                message="The web search completed but returned no results for any of the queries. Do not search again.",
+            ).model_dump_json()
             citation_mapping: dict[int, str] = {}
         else:
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(

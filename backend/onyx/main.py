@@ -88,6 +88,7 @@ from onyx.server.documents.targeted_reindex import router as targeted_reindex_ro
 from onyx.server.features.admin_banner.api import admin_router as admin_banner_router
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
+from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
 from onyx.server.features.build.static_preview import (
     public_router as static_preview_router,
 )
@@ -104,6 +105,7 @@ from onyx.server.features.input_prompt.api import (
 from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
+from onyx.server.features.microvm.api import router as microvm_router
 from onyx.server.features.notifications.api import router as notification_router
 from onyx.server.features.oauth_config.api import (
     admin_router as admin_oauth_config_router,
@@ -507,7 +509,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
 
 
 def log_http_error(request: Request, exc: Exception) -> JSONResponse:
-    status_code = getattr(exc, "status_code", 500)  # ods: ignore[getattr]
+    status = getattr(exc, "status_code", None)  # ods: ignore[getattr]
+    status_code = status if isinstance(status, int) else 500
 
     if isinstance(exc, BasicAuthenticationError):
         # For BasicAuthenticationError, just log a brief message without stack trace
@@ -599,6 +602,8 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, targeted_reindex_router)
     include_router_with_global_prefix_prepended(application, projects_router)
     include_router_with_global_prefix_prepended(application, public_build_router)
+    if SANDBOX_RUNTIME is SandboxRuntime.FIRECRACKER:
+        include_router_with_global_prefix_prepended(application, microvm_router)
     include_router_with_global_prefix_prepended(application, static_preview_router)
     include_router_with_global_prefix_prepended(application, build_router)
     include_router_with_global_prefix_prepended(application, build_admin_router)

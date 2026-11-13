@@ -1,44 +1,8 @@
-import os
 from collections.abc import Iterator, Mapping
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy.orm import Session
-
-from onyx.db.enums import LLMModelFlowType
-from onyx.db.llm import update_default_model, upsert_llm_provider
-from onyx.llm.constants import LlmProviderNames
-from onyx.server.manage.llm.models import (
-    LLMProviderUpsertRequest,
-    ModelConfigurationUpsertRequest,
-)
-from tests.common.models import CI_OPENAI_MODEL
-
-
-def ensure_default_llm_provider(db_session: Session) -> None:
-    """Ensure a default LLM provider exists for tests that exercise chat flows."""
-
-    llm_provider_request = LLMProviderUpsertRequest(
-        name="test-provider",
-        provider=LlmProviderNames.OPENAI,
-        api_key=os.environ.get("OPENAI_API_KEY", "test"),
-        is_public=True,
-        model_configurations=[
-            ModelConfigurationUpsertRequest(
-                name=CI_OPENAI_MODEL,
-                is_visible=True,
-            )
-        ],
-        groups=[],
-    )
-    provider = upsert_llm_provider(
-        llm_provider_upsert_request=llm_provider_request,
-        db_session=db_session,
-    )
-    update_default_model(
-        db_session, provider.id, CI_OPENAI_MODEL, LLMModelFlowType.CHAT
-    )
 
 
 @pytest.fixture

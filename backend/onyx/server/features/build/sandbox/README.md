@@ -422,12 +422,51 @@ import one, add it to `initial-requirements.in`.
   pptxgenjs for skill scripts (about 700 MB). Skills are pushed at session setup,
   but their runtime tools must be in the image. CI builds use `false`. Put a new
   heavy system dependency for a skill inside the `ENABLE_SKILLS` block.
-- `ENABLE_BROWSER` (default `true`) installs Chromium, `certutil`, and
+- `ENABLE_BROWSER` (default `true`) installs Chrome for Testing, `certutil`, and
   `agent-browser` (about 400 MB). The runtime `ENABLE_BROWSER` setting in
   `configs.py` gates the built-in `browser` skill and must match the build
   argument. Otherwise the skill is advertised without its runtime.
 
 ### Browser runtime
+
+`image/install-browser.sh` pins Chrome for Testing and verifies the archive hash
+for amd64 or arm64. Update the version and both hashes together. The browser
+lives at `/opt/chrome/chrome`; Debian supplies its shared libraries and `certutil`.
+The build checks the installed version and writes `/opt/chrome/browser.cdx.json`.
+
+ODS scans the explicit inventory with Grype alongside the image's OSV scan.
+Both scanners use the same reports, advisory exceptions, and CVE alert workflow.
+Critical findings and scanner errors block publication.
+
+Update deadlines use separate state at `s3://onyx-internal-tools/audit/updates.json`.
+Routine updates warn immediately, alert after 24 hours, and block after 72 hours.
+The deadline starts at the first observed newer release. Later releases do not reset it.
+Emergency minimum versions block immediately. CVE Tracking owns release observation
+and the policy object. Its optional `minimum` input can raise Chrome's minimum.
+A failed upstream lookup leaves recorded deadlines intact. Stale observations alert.
+PR audits scan vulnerabilities without update-policy access. Deployment audits also enforce freshness.
+Missing policy fails deployment; missing required inventory fails every audit.
+
+Deployment applies the sandbox result before publication, including cached image reuse.
+Other components can continue. CVE collection disables freshness checks and still collects vulnerabilities.
+Backport the gate to supported release branches; existing tags retain their original audit code.
+
+The updater uses the shared task-PR workflow for main and four supported release lines.
+The shared workflow owns script execution and PR publication.
+The browser validator accepts only a version increase and both checksum changes.
+Branches run independently. Identical output does not push another commit.
+On main, native rendering, screenshot, and vulnerability checks run on both architectures.
+Release PRs use their target branch’s checks. Backport the audit tooling and rendering
+checks before merging release-branch pin updates.
+The updater opens PRs for the normal review and merge process.
+
+Run the policy and publication tests from the repository root:
+
+```bash
+(cd tools/ods && go test ./internal/audit ./internal/auditcmd)
+uv run python -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
+uv run python -m unittest discover -s .github/scripts -p test_browser_update_pr.py -v
+```
 
 `image/browser-cli.sh` installs as `/usr/local/bin/browser`, a PATH executable,
 because the agent's `bash` tool does not read aliases. It pins the browser

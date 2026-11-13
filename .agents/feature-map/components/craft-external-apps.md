@@ -48,7 +48,8 @@ workspace DENY), never a session directory.
 
 This component owns:
 - the `sandbox-proxy` process: TLS termination with its own CA, sandbox
-  identity by source IP, destination checks, request recognition, the policy
+  identity (source IP, or a relay-signed token for Firecracker VMs),
+  destination checks, request recognition, the policy
   verdict, approval waits and credential injection;
 - external-app models, provider catalogs, URL matching and OAuth token
   refresh;
@@ -77,13 +78,16 @@ Neighbours:
 
 ```
 sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
- 1 http_connect     caches the session tag from Proxy-Authorization on CONNECT
+ 1 http_connect     caches the session tag on CONNECT: Proxy-Authorization
+                    basic auth (pod), or X-Onyx-Session-Hint (Firecracker)
  2 destinations     resolve_destination: public, or the exact ONYX_SERVER_URL
                     host:port, or a Craft MCP origin the user can reach with
                     tenant SSRF settings that allow it; server_connect pins
                     the validated IPs (no second DNS lookup)
- 3 identity         IdentityResolver.resolve_sandbox(source IP) -> sandbox,
-                    user, tenant; unknown IP -> 403
+ 3 identity         signed `Proxy-Authorization: Bearer` on the connection's
+                    first request -> SignedIdentityVerifier, bound to the
+                    client connection; else IdentityResolver.resolve_sandbox
+                    (source IP) -> sandbox, user, tenant; failure -> 403
  4 body cap         raw_content None or > PARSER_MAX_BODY_BYTES -> 403
  5 recognition      CompositeRequestEvaluator: external apps first, then MCP
                     None -> no gate; host-claiming resolvers may still inject
@@ -106,7 +110,8 @@ prefix among the user's Craft-enabled servers
 (`sandbox_proxy/resolvers/mcp_matching.py:match_request`), then parses the
 JSON-RPC body (`sandbox_proxy/mcp_jsonrpc.py:classify_mcp_request`). Protocol
 messages need a session and task access but no approval. `tools/call` gives one
-action per tool, default Ask. Grants, policies and approvals key off
+action per tool. Its default is Ask, or Always when the server marks the tool
+read-only (`Tool.mcp_read_only`, from `readOnlyHint`). Grants, policies and approvals key off
 `GatedTarget.key`, never a display name ([[craft-admin#gated-app-identity-by-id]]).
 
 **Policy precedence.** `db/action_policy.py:resolve_action_policies` and
@@ -203,8 +208,15 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    No approval row is written. The upstream TLS connection can already be
    open, because mitmproxy connects before `request()` runs. Do not treat "a
    connection opened" as "the request was sent".
-3. `source-ip-is-identity` **The source IP is the identity boundary; the
-   session tag is not.**
+3. `source-ip-is-identity` **The source IP or the relay-signed token is the
+   identity boundary; the session tag is not.** The signed path exists only with
+   `SANDBOX_RUNTIME=firecracker`; with the default `pod` the proxy ignores
+   `Bearer` headers. Firecracker VMs share the host relay's IP, so the relay
+   stamps an EdDSA token per connection (`sandbox_proxy/sandbox_identity/signed.py`).
+   The proxy holds node public keys only and checks the cache placement record
+   (`microvm/registry.py`; no schema change).
+   A bad token is a 403, never an IP fallback; a signed plain-HTTP connection
+   allows one request.
    `sandbox_proxy/sandbox_identity/resolution.py:IdentityResolver.resolve_session_by_id` accepts a tag
    only for a session of the IP-resolved user. A forged tag can only move an
    approval to another session of the same user. The comment in
@@ -213,6 +225,10 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    two sandboxes share an IP
    (`backend/onyx/sandbox_proxy/sandbox_identity/kubernetes.py:K8sInformerLookup._initial_list`,
    `backend/onyx/sandbox_proxy/sandbox_identity/docker.py:DockerEventsLookup._initial_sync`).
+   A frozen cache rejects every sandbox created after it froze. The Kubernetes
+   watch has a read deadline, and `K8sInformerLookup.is_synced` turns false
+   when the last relist is stale, so `/healthz` fails and the liveness probe
+   restarts the proxy.
 4. `url-patterns-credential-boundary` **An app's URL patterns are its
    credential boundary.** A wide pattern lets a prompt-injected agent spend the
    tenant's token on another account of the same vendor.
@@ -302,11 +318,11 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 
 - The proxy does not scrub responses. An upstream API that echoes request
   headers in its response body returns the injected credential to the agent.
-- The MCP tool default (Ask) is written twice and the copies must agree:
-  `sandbox_proxy/request_evaluator.py:MCP_TOOL_DEFAULT_POLICY` for the proxy and
-  `db/action_policy.py:_catalog_defaults` for storage, which drops an override
-  equal to the default. The constant of the same name in
-  `server/features/mcp/api.py` has no readers; it is a false lead.
+- The MCP tool default comes from the server's unverified `readOnlyHint`
+  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, the policy view
+  and workspace saves all use it. A workspace save drops an override equal to
+  the default, so an admin Ask chosen while the default was Ask has no row. That
+  tool becomes Always when a later sync marks it read-only.
 
 ---
 

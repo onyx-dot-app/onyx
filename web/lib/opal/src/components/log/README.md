@@ -26,8 +26,8 @@ body below it with `expandable`.
 ## Variants
 
 `LogVariant` is `"default"` or a status and a weight, e.g. `"error-heavy"`. The
-statuses are a subset of `StatusVariants`:
-`LogStatus = Extract<StatusVariants, "default" | "info" | "success" | "warning" | "error">`.
+statuses are a subset of `StatusColor`:
+`LogStatus = Extract<StatusColor, "default" | "info" | "success" | "warning" | "error">`.
 
 | Status    | Icon                | `heavy` background  |
 | --------- | ------------------- | ------------------- |

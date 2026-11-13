@@ -30,7 +30,8 @@ and volume ports accept requests without credentials, so they listen on loopback
 
 A `.env` from a release before v5.0 still points at MinIO (`S3_ENDPOINT_URL=http://minio:9000`).
 `onyx-cli deploy upgrade` rewrites it. For a hand-run upgrade,
-set `S3_ENDPOINT_URL=http://object-store:8333` and `S3_LEGACY_ENDPOINT_URL=http://minio:9000`,
+first [update the Compose files](/deployment/local/docker#upgrading) to v5.0 or later.
+Then set `S3_ENDPOINT_URL=http://object-store:8333` and `S3_LEGACY_ENDPOINT_URL=http://minio:9000`,
 then keep the `minio` service until the copy completes.
 
 ## Helm

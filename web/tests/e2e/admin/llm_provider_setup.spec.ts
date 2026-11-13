@@ -417,7 +417,7 @@ test.describe("LLM Provider Setup @exclusive", () => {
         secondModelName
       );
       await page
-        .getByRole("textbox", { name: "Search" })
+        .getByRole("searchbox", { name: "Search" })
         .and(page.locator(":focus"))
         .fill(secondModelDisplayName);
 

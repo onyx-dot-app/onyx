@@ -686,6 +686,19 @@ def test_onedrive_document_keeps_raw_graph_identity_and_scoped_hierarchy() -> No
     assert not document.external_access.is_public
 
 
+def test_onedrive_document_reports_the_graph_mime_type_and_size() -> None:
+    item = _file_item()
+    document = drive_item_document(
+        DriveItemData.from_graph_json(item.to_graph_json()),
+        _drive(),
+        DriveItemContent(sections=[TextSection(link=item.web_url, text="body")]),
+        hierarchy_item_id("drive-1", "folder-1"),
+    )
+
+    assert document.source_mime_type == "text/plain"
+    assert document.source_size_bytes == 4
+
+
 def test_onedrive_hierarchy_is_drive_scoped_and_private_in_ce() -> None:
     folder = DriveDeltaItem.model_validate(
         {

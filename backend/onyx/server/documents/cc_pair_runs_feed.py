@@ -11,9 +11,14 @@ from onyx.db.cc_pair_run_resolution import get_resolution_times
 from onyx.db.cc_pair_runs import (
     count_cc_pair_runs_by_status_group,
     get_cc_pair_run_page,
+    get_group_sync_error_counts,
     get_superseded_runs,
 )
-from onyx.db.cc_pair_runs_models import CCPairRunFilter, CCPairRunPage
+from onyx.db.cc_pair_runs_models import (
+    CCPairRunFilter,
+    CCPairRunPage,
+    GroupSyncErrorCounts,
+)
 from onyx.db.enums import CCPairRunErrors, CCPairRunKind, CCPairRunStatusGroup
 from onyx.db.index_attempt import (
     OpenErrorCounts,
@@ -53,6 +58,7 @@ def run_item(
     page: CCPairRunPage,
     error_counts: dict[int, int],
     open_counts: dict[int, OpenErrorCounts],
+    group_sync_error_counts: dict[int, GroupSyncErrorCounts],
 ) -> CCPairRun:
     match kind:
         case CCPairRunKind.INDEXING:
@@ -60,6 +66,7 @@ def run_item(
             open_errors = open_counts.get(run_id, OpenErrorCounts())
             return CCPairIndexRun(
                 time_created=attempt.time_created,
+                is_retry=attempt.targeted_reindex_job_id is not None,
                 attempt=IndexAttemptSnapshot.from_index_attempt_db_model(
                     attempt,
                     error_count=error_counts.get(run_id, 0),
@@ -80,7 +87,8 @@ def run_item(
             return CCPairGroupSyncRun(
                 time_created=group_sync.time_created,
                 attempt=ExternalGroupSyncAttemptSnapshot.from_external_group_sync_attempt_db_model(
-                    group_sync
+                    group_sync,
+                    group_sync_error_counts.get(run_id, GroupSyncErrorCounts()),
                 ),
             )
         case CCPairRunKind.PRUNING:
@@ -118,6 +126,9 @@ def fetch_run_feed(
     open_counts = get_open_error_counts_for_index_attempts(
         db_session, list(page.index_attempts)
     )
+    group_sync_error_counts = get_group_sync_error_counts(
+        db_session, list(page.group_syncs)
+    )
     resolved_at = get_resolution_times(db_session, page.order)
     superseded = get_superseded_runs(db_session, run_filter, page.order)
     status_counts = count_cc_pair_runs_by_status_group(db_session, kinds, run_filter)
@@ -125,7 +136,9 @@ def fetch_run_feed(
     return RunFeed(
         page=page,
         items=[
-            run_item(kind, run_id, page, error_counts, open_counts).model_copy(
+            run_item(
+                kind, run_id, page, error_counts, open_counts, group_sync_error_counts
+            ).model_copy(
                 update={
                     "resolved_at": resolved_at.get((kind, run_id)),
                     "superseded": (kind, run_id) in superseded,
@@ -176,6 +189,8 @@ def _open_level_filter(
             CCPairRunStatusGroup.CANCELED,
         }
         errors = CCPairRunErrors.UNRESOLVED
+    if request.status_groups is not None:
+        status_groups &= set(request.status_groups)
     # A search lists superseded runs too, so they resolve with the rest.
     superseded = None if query else False
     return CCPairRunFilter(

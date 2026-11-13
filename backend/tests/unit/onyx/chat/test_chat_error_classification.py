@@ -12,6 +12,8 @@ from onyx.chat.errors import (
     build_empty_llm_response_error,
     chat_error,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.interfaces import GenerationContext, LLMConfig
 from onyx.llm.models import (
     AssistantMessage,
@@ -155,3 +157,19 @@ def test_empty_response_diagnostics_survive_saved_run_failure(
         "finish_reason": "length",
     }
     assert packet.stack_trace is None
+
+
+def test_rate_limit_payload_survives_a_mid_turn_error() -> None:
+    error = OnyxError(
+        OnyxErrorCode.RATE_LIMITED,
+        "You've reached the gpt-model budget for your organization.",
+        extra={"scope": "global", "reset_at": "2026-11-01T00:00:00+00:00"},
+    )
+
+    streamed = chat_error(error)
+
+    assert streamed.error_code == OnyxErrorCode.RATE_LIMITED.code
+    assert streamed.details == {
+        "scope": "global",
+        "reset_at": "2026-11-01T00:00:00+00:00",
+    }

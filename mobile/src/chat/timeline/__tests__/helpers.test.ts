@@ -53,6 +53,9 @@ describe("packetUtils / packetHelpers", () => {
   it("identifies display packets", () => {
     expect(isDisplayPacket(message)).toBe(true);
     expect(isDisplayPacket(reasoning)).toBe(false);
+    expect(
+      isDisplayPacket(makePlacedPacket({ type: "image_generation_start" })),
+    ).toBe(false);
   });
 
   it("has per-family predicates", () => {
@@ -66,7 +69,11 @@ describe("packetUtils / packetHelpers", () => {
     ).toBe(true);
     expect(
       isCodingAgentPackets([
-        makePlacedPacket({ type: "bash_tool_start", cmd: "ls" }),
+        makePlacedPacket({
+          type: "coding_agent_start",
+          query: "q",
+          repo: null,
+        }),
       ]),
     ).toBe(true);
   });
@@ -84,6 +91,21 @@ describe("toolDisplay", () => {
     expect(getToolName([searchInternet])).toBe("Web Search");
     expect(getToolName([searchInternal])).toBe("Internal Search");
     expect(getToolName([])).toBe("Tool");
+    expect(
+      getToolName([
+        makePlacedPacket({
+          type: "custom_tool_start",
+          tool_name: "mcp__3__my__srv__create_issue",
+          display_name: "create_issue",
+        }),
+      ]),
+    ).toBe("create_issue");
+    // Servers that predate display names send only the tool name.
+    expect(
+      getToolName([
+        makePlacedPacket({ type: "custom_tool_start", tool_name: "lookup" }),
+      ]),
+    ).toBe("lookup");
   });
 
   it("detects completion and errors", () => {
@@ -91,19 +113,5 @@ describe("toolDisplay", () => {
     expect(isToolComplete([reasoning])).toBe(false);
     expect(hasToolError([reasoning, errorPacket])).toBe(true);
     expect(hasToolError([reasoning, sectionEnd])).toBe(false);
-  });
-
-  it("only counts a research agent complete on a parent-level SECTION_END", () => {
-    const researchStart: Packet = makePlacedPacket({
-      type: "research_agent_start",
-      research_task: "t",
-    });
-    const nestedEnd: Packet = makePlacedPacket(
-      { type: "section_end" },
-      { turn_index: 0, sub_turn_index: 1 },
-    );
-    const parentEnd: Packet = makePlacedPacket({ type: "section_end" });
-    expect(isToolComplete([researchStart, nestedEnd])).toBe(false);
-    expect(isToolComplete([researchStart, parentEnd])).toBe(true);
   });
 });

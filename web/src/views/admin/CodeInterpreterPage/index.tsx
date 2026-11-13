@@ -3,7 +3,7 @@
 import { IconLoader } from "@opal/loaders";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   SvgArrowExchange,
   SvgCheckCircle,
@@ -13,9 +13,14 @@ import {
   SvgXOctagon,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import { Section } from "@/layouts/general-layouts";
-import { Button, Popover, SelectCard, Text } from "@opal/components";
-import { Card, Content, ContentAction } from "@opal/layouts";
+import {
+  Button,
+  Popover,
+  SelectCard,
+  Text,
+  useCreateModal,
+} from "@opal/components";
+import { Card, Content, ContentAction, ReverseContent } from "@opal/layouts";
 import { Hoverable } from "@opal/core";
 import { richNodes } from "@opal/utils";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -37,7 +42,7 @@ const STATUS_CONFIG: Record<
   {
     labelKey: StatusLabelKey;
     icon: typeof SvgCheckCircle;
-    color: "success" | "danger";
+    color: "success" | "error";
   }
 > = {
   healthy: {
@@ -48,12 +53,12 @@ const STATUS_CONFIG: Record<
   unhealthy: {
     labelKey: "status.unhealthy.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
   connection_lost: {
     labelKey: "status.connectionLost.label",
     icon: SvgXOctagon,
-    color: "danger",
+    color: "error",
   },
 };
 
@@ -71,14 +76,11 @@ function CheckingStatus() {
       alignItems="center"
       padding={2}
     >
-      <Content
-        sizePreset="main-ui"
-        variant="body"
-        orientation="reverse"
-        width="fit"
+      <ReverseContent
+        font="main-ui-body"
         icon={IconLoader}
         title={t("status.checking.label")}
-        color="muted"
+        titleColor="text-03"
       />
     </Section>
   );
@@ -106,14 +108,12 @@ function ConnectionStatus({
 
   const { labelKey, icon, color } = STATUS_CONFIG[status];
   const statusContent = (
-    <Content
-      sizePreset="main-ui"
-      variant="body"
-      orientation="reverse"
-      width="fit"
+    <ReverseContent
+      font="main-ui-body"
       icon={icon}
       title={t(labelKey)}
       color={color}
+      titleColor="text-03"
     />
   );
 
@@ -210,7 +210,7 @@ function CardActions({
 export default function CodeInterpreterPage() {
   const t = useTranslations("admin.codeInterpreter");
   const { status, error, isEnabled, isLoading, refetch } = useCodeInterpreter();
-  const [showDisconnectModal, setShowDisconnectModal] = useState(false);
+  const disconnectModal = useCreateModal();
   const [isReconnecting, setIsReconnecting] = useState(false);
   const [isErrorOpen, setIsErrorOpen] = useState(false);
   const closeTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -256,7 +256,7 @@ export default function CodeInterpreterPage() {
         );
         return;
       }
-      setShowDisconnectModal(false);
+      disconnectModal.toggle(false);
       await refetch();
     } finally {
       setIsReconnecting(false);
@@ -277,7 +277,7 @@ export default function CodeInterpreterPage() {
           <Popover open={hasError && isErrorOpen} onOpenChange={setIsErrorOpen}>
             <Hoverable.Root
               group="code-interpreter/Card"
-              interaction={showDisconnectModal ? "hover" : "rest"}
+              interaction={disconnectModal.isOpen ? "hover" : "rest"}
             >
               {/* The error popover opens under the whole card, not the status. */}
               <Popover.Anchor>
@@ -289,8 +289,7 @@ export default function CodeInterpreterPage() {
                 >
                   <Card.Header>
                     <ContentAction
-                      sizePreset="main-ui"
-                      variant="section"
+                      font="main-ui-action"
                       icon={SvgTerminal}
                       title={t("card.title")}
                       strikethrough={isConnectionLost}
@@ -306,7 +305,7 @@ export default function CodeInterpreterPage() {
                           <CardActions
                             disabled={isLoading || isReconnecting}
                             isReconnecting={isReconnecting}
-                            onDisconnect={() => setShowDisconnectModal(true)}
+                            onDisconnect={() => disconnectModal.toggle(true)}
                             onReconnect={() => void handleToggle(true)}
                           />
                         </Section>
@@ -328,10 +327,9 @@ export default function CodeInterpreterPage() {
               onMouseLeave={() => handleErrorHover(false)}
             >
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgXOctagon}
-                color="danger"
+                color="error"
                 titleColor="text-04"
                 title={
                   status === "connection_lost"
@@ -351,8 +349,7 @@ export default function CodeInterpreterPage() {
               onClick={() => handleToggle(true)}
             >
               <ContentAction
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={SvgTerminal}
                 title={t("card.disconnectedTitle")}
                 description={t("card.description")}
@@ -365,7 +362,7 @@ export default function CodeInterpreterPage() {
                       <CardActions
                         disabled
                         isReconnecting={false}
-                        onDisconnect={() => setShowDisconnectModal(true)}
+                        onDisconnect={() => disconnectModal.toggle(true)}
                         onReconnect={() => void handleToggle(true)}
                       />
                     </Section>
@@ -388,11 +385,11 @@ export default function CodeInterpreterPage() {
         )}
       </SettingsLayouts.Body>
 
-      {showDisconnectModal && (
+      <disconnectModal.Provider>
         <ConfirmationModalLayout
           icon={SvgUnplug}
           title={t("disconnectModal.header.title")}
-          onClose={() => setShowDisconnectModal(false)}
+          onClose={() => disconnectModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={() => handleToggle(false)}>
               {t("disconnectModal.submitButton.label")}
@@ -411,7 +408,7 @@ export default function CodeInterpreterPage() {
             )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </disconnectModal.Provider>
     </SettingsLayouts.Root>
   );
 }

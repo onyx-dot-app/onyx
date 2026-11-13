@@ -1,65 +1,148 @@
 ---
 title: "Spending Limits"
-description: "Cap LLM token or cost usage for the workspace, a user, or a group"
+description: "Cap LLM token or cost usage for the workspace, each user, a group, or one model"
 icon: "dollar-sign"
 ---
 
 ## Overview
 
-Spending limits cap how many LLM tokens, or how much LLM cost, Onyx spends in a time period. When a limit is reached,
-Onyx rejects new chat messages until the period resets.
+Spending limits cap how many LLM tokens, or how much LLM cost, Onyx spends in a reset period. When a limit is reached,
+Onyx blocks new LLM requests until the period resets.
 
 <Info>
-  **Business Plan Feature**
+  **Enterprise Plan Feature**
 
-  Spending limits require a Business plan or higher. Per-user and per-group limits require an Enterprise plan.
-  Onyx Cloud includes all of them. [View plans](/admins/billing/overview).
+  Spending limits require an Enterprise plan. Onyx Cloud includes them. [View plans](/admins/billing/overview).
 </Info>
 
-To manage limits, open the **Admin Panel**, select **Usage** under **Usage**,
-and scroll to **Manage spending limits** at the bottom of the page.
+To manage limits, open the **Admin Panel** and select **Spending Limits** under **Usage**.
 
-<img className="rounded-image" src="/assets/admins/advanced_configs/spending_limits.webp" alt="Manage spending limits on the Usage page"/>
+<img className="rounded-image" src="/assets/admins/advanced_configs/spending_limits.webp" alt="The Spending Limits page with workspace and group limit cards"/>
 
-## Scopes
+## Limit Cards
 
-| Applies to | Who it caps | Plan |
-|---|---|---|
-| **Workspace** | Every user, group, and API key together | Business |
-| **Per user** | Each user on their own | Enterprise |
-| **User group** | All members of one group together | Enterprise |
+The page shows one card for each set of limits. A folded card shows a summary of its limits and the next reset.
+A shared budget card also shows how much of the budget the users spent in this period.
 
-On an Enterprise plan the table has **Global**, **Users**, and **Groups** tabs.
-You can also add limits for one group from its page under **Groups**.
+| Card | Who it caps |
+|---|---|
+| **Workspace Limits → Shared Budget** | All users, groups, and API keys together |
+| **Workspace Limits → Per-User Limit** | Each user on their own |
+| **Group Limits → Shared Group Budget** | All members of one group together |
+| **Group Limits → Per-Member Limit** | Each member of one group on their own |
 
-When a user is in several groups, the most permissive group limit applies.
-A user is blocked only when every limit that applies to them is reached.
+Each card holds one or more limits. Each limit has a reset period, a cost limit, a token limit, or both.
+A limit with both budgets blocks when the first one is reached.
 
-## Create a limit
+## Reset Periods
+
+All periods use UTC.
+
+| Period | Resets |
+|---|---|
+| **Daily** | Every day at 00:00 UTC |
+| **Weekly** | Every Monday at 00:00 UTC |
+| **Monthly** | On the 1st of every month at 00:00 UTC |
+
+## Create or Change a Limit
 
 <Steps>
-  <Step title="Choose the scope">
-    Click **Create spending limit**. Under **Applies to**, select **Workspace**, **Per user**, or **User group**.
+  <Step title="Open the card">
+    On an empty card, click **Add Limit**. On a card with limits, click the expand icon.
+
+    To add a card for a group, click **Add Group Limit**. Select the group,
+    then select **Shared Group Budget** or **Per-Member Limit**.
   </Step>
 
   <Step title="Set the budget">
-    Enter a **Cost budget** in USD, a **Token budget** in tokens, or both.
-    A limit with both budgets blocks when either one is reached.
+    Select the **Reset Period**. Enter a **Cost Limit** in USD, a **Token Limit** in thousands of tokens, or both.
+
+    Click **Add Limit** to add a limit for a different period.
   </Step>
 
-  <Step title="Set the reset period">
-    Enter the **Reset period** in days. Budgets reset at midnight UTC.
+  <Step title="Add model budgets">
+    Under **Model Budget**, click **Add Model Budget** and select a model.
+    A model budget counts only the usage of that model. When it is reached, Onyx blocks only that model.
+    Other models stay available.
 
-    Click **Create limit**. The limit takes effect at once.
+    Usage of the model also counts toward the card's other limits.
+  </Step>
+
+  <Step title="Save">
+    Click **Save Updates**, or **Create Limit** for a new card. The limits apply at once.
   </Step>
 </Steps>
 
-## Manage limits
+A card can hold only one limit for each model and period. For example,
+a card can have one daily limit for all models and one daily limit for each model.
 
-Turn a limit's toggle off to pause it without deleting it.
+To remove a limit, click its remove icon and save the card.
+
+## Turn Off a Card
+
+To pause all the limits on a card, open the card and click the **Turn off all limits** icon.
+The card keeps its limits and shows **Inactive limit**. To turn the limits on again, click **Re-enable**.
+
+## Reset a Limit's Usage
+
+To let users continue before a limit's next reset,
+open the card and click **Reset Limit Usage Now** under the limit's next reset time.
+
+<img className="rounded-image" src="/assets/admins/advanced_configs/spending_limits_reset.webp" alt="An open group limit card with the Reset Limit Usage Now link under the next reset time"/>
+
+The limit then counts usage from now until its next reset. Onyx keeps the usage records,
+so usage reports and exports do not change.
+
+If you save the card later, a limit keeps its reset only if you did not change its period or model.
+A limit with a new period or model starts again from the start of its period.
+
+A reset applies to everyone the limit covers. For a per-user limit, each user's usage counts from the time of the reset.
+
+Admins can reset any limit. Group managers can reset the limits on their group's **Shared Group Budget**.
+
+## How Limits Combine
+
+Onyx checks these rules before each LLM request. The user must pass all of them:
+
+- **Workspace shared budget.** The budget must have room. When it is full, Onyx blocks all users.
+- **Group shared budgets.** When the user's groups have shared budgets for a period, one of them must have room.
+  A user in several groups can continue while any one of these budgets has room.
+- **Per-user allowance.** For each period, Onyx uses the largest per-member limit among the user's groups.
+  When none of the user's groups has a per-member limit for that period, Onyx uses the workspace per-user limit.
+- **Model budgets.** A model budget counts only the usage of its model, and it blocks only that model.
+
+API keys and other shared accounts use only the workspace shared budget.
 
 <Note>
   Spending limits count LLM usage from chat, agents, Craft, the Slack bot, and the API.
   Onyx records usage a few seconds after each response,
   so a user can go slightly over a budget before the block applies.
 </Note>
+
+## Group Pages
+
+Each group's page under **Groups** has a **Spending Limits** section with the group's two cards.
+
+- Group managers can change the **Shared Group Budget**.
+- Only admins can change the **Per-Member Limit**, because it can give a member more than the workspace per-user limit.
+
+## API
+
+The `/admin/spending-limits` API manages the same cards. It replaces the `/admin/token-rate-limits` API,
+which Onyx removed.
+
+| Method and path | Action |
+|---|---|
+| `GET /admin/spending-limits` | Lists the workspace cards and every group's cards |
+| `GET /admin/spending-limits/groups/{group_id}` | Gets one group's cards |
+| `PUT /admin/spending-limits/workspace/pool` | Replaces the workspace shared budget |
+| `PUT /admin/spending-limits/workspace/per-user` | Replaces the workspace per-user limit |
+| `PUT /admin/spending-limits/groups/{group_id}/pool` | Replaces a group's shared budget |
+| `PUT /admin/spending-limits/groups/{group_id}/per-member` | Replaces a group's per-member limit |
+| `DELETE /admin/spending-limits/groups/{group_id}` | Removes all of a group's limits |
+| `POST /admin/spending-limits/groups/{group_id}/pool/limits/{limit_id}/reset-usage` | Counts one group shared budget limit's usage from now and returns its card |
+| `POST /admin/spending-limits/limits/{limit_id}/reset-usage` | Counts any limit's usage from now and returns its card (admins only) |
+| `GET /admin/spending-limits/users/{user_id}/effective` | Shows the limits that apply to one user |
+
+A `PUT` replaces every limit on the card. Send `enabled` and the full list of `limits`. In each limit,
+`token_budget` is in thousands of tokens and `cost_budget_cents` is in cents.

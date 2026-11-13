@@ -647,15 +647,18 @@ def test_tool_recovery_does_not_delay_answer_text(
         events.close()
 
 
-@pytest.mark.parametrize("has_tools", [False, True])
-def test_disabled_recovery_preserves_literal_xml(has_tools: bool) -> None:
+@pytest.mark.parametrize("mode", ["no_tools", "choice_none", "empty_permissions"])
+def test_disabled_recovery_preserves_literal_xml(mode: str) -> None:
     text = '<function_calls><invoke name="search"></invoke></function_calls>'
     request = GenerationRequest(
         tools=[ToolDefinition(name="search", description="Search", parameters={})]
-        if has_tools
+        if mode != "no_tools"
         else [],
+        allowed_tool_names=frozenset() if mode == "empty_permissions" else None,
         options=GenerationOptions(
-            tool_choice=ToolChoiceOptions.NONE if has_tools else ToolChoiceOptions.AUTO
+            tool_choice=ToolChoiceOptions.NONE
+            if mode == "choice_none"
+            else ToolChoiceOptions.AUTO
         ),
     )
     accumulator = MessageAccumulator(request.tools)
@@ -719,14 +722,15 @@ def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
 
 @pytest.mark.parametrize("streaming", [False, True], ids=["invoke", "stream"])
 @pytest.mark.parametrize(
-    "cache_fields, expected_cache_read_tokens",
+    "cache_fields, expected_cache_read_tokens, expected_cache_creation_tokens",
     [
-        pytest.param({}, 0, id="missing"),
-        pytest.param({"cache_read_input_tokens": None}, 0, id="null"),
-        pytest.param({"prompt_tokens_details": None}, 0, id="null-details"),
+        pytest.param({}, 0, 100, id="missing"),
+        pytest.param({"cache_read_input_tokens": None}, 0, 100, id="null"),
+        pytest.param({"prompt_tokens_details": None}, 0, 100, id="null-details"),
         pytest.param(
             {"prompt_tokens_details": {"cached_tokens": 400}},
             400,
+            100,
             id="nested-only",
         ),
         pytest.param(
@@ -735,6 +739,7 @@ def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
                 "prompt_tokens_details": {"cached_tokens": 400},
             },
             400,
+            100,
             id="null-flat-falls-back",
         ),
         pytest.param(
@@ -743,6 +748,7 @@ def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
                 "prompt_tokens_details": {"cached_tokens": 400},
             },
             0,
+            100,
             id="zero-flat-wins",
         ),
         pytest.param(
@@ -751,14 +757,88 @@ def test_thinking_fragments_form_signed_blocks_for_replay() -> None:
                 "prompt_tokens_details": {"cached_tokens": 400},
             },
             200,
+            100,
             id="positive-flat-wins",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": None,
+                "prompt_tokens_details": {"cache_write_tokens": 6327},
+            },
+            0,
+            6327,
+            id="nested-write",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": None,
+                "prompt_tokens_details": {"cache_creation_tokens": 6327},
+            },
+            0,
+            6327,
+            id="nested-creation-alias",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": None,
+                "prompt_tokens_details": {
+                    "cache_write_tokens": 6327,
+                    "cache_creation_tokens": 6327,
+                },
+            },
+            0,
+            6327,
+            id="aliases-not-added",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": None,
+                "prompt_tokens_details": {
+                    "cache_write_tokens": 0,
+                    "cache_creation_tokens": 6327,
+                },
+            },
+            0,
+            0,
+            id="zero-write-wins",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": None,
+                "prompt_tokens_details": {
+                    "cache_write_tokens": None,
+                    "cache_creation_tokens": 6327,
+                },
+            },
+            0,
+            6327,
+            id="null-write-falls-back",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": 0,
+                "prompt_tokens_details": {"cache_write_tokens": 6327},
+            },
+            0,
+            0,
+            id="zero-flat-write-wins",
+        ),
+        pytest.param(
+            {
+                "cache_creation_input_tokens": 100,
+                "prompt_tokens_details": {"cache_write_tokens": 6327},
+            },
+            0,
+            100,
+            id="positive-flat-write-wins",
         ),
     ],
 )
 def test_response_conversion_preserves_cached_token_usage(
     streaming: bool,
-    cache_fields: dict[str, int | None | dict[str, int]],
+    cache_fields: dict[str, int | None | dict[str, int | None]],
     expected_cache_read_tokens: int,
+    expected_cache_creation_tokens: int,
 ) -> None:
     payload = (
         _build_usage_only_chunk_payload()
@@ -786,7 +866,7 @@ def test_response_conversion_preserves_cached_token_usage(
     assert response.usage.prompt_tokens == 1000
     assert response.usage.completion_tokens == 20
     assert response.usage.total_tokens == 1020
-    assert response.usage.cache_creation_input_tokens == 100
+    assert response.usage.cache_creation_input_tokens == expected_cache_creation_tokens
 
 
 @pytest.mark.parametrize("call_type", [None, "function", "unsupported"])

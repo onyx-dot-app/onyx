@@ -59,6 +59,21 @@ output "storage_container_name" {
   value       = module.storage.container_name
 }
 
+output "sandbox_archive_storage_account_name" {
+  description = "Craft sandbox archive storage account. Null unless enable_sandbox_archive_storage is true."
+  value       = var.enable_sandbox_archive_storage ? module.storage_sandbox_archive[0].storage_account_name : null
+}
+
+output "sandbox_archive_container_name" {
+  description = "Craft sandbox archive container. Null unless enable_sandbox_archive_storage is true."
+  value       = var.enable_sandbox_archive_storage ? module.storage_sandbox_archive[0].container_name : null
+}
+
+output "sandbox_archive_key_vault_key_id" {
+  description = "Versionless ID of the key that encrypts the sandbox archive account. Null unless enable_sandbox_archive_storage is true."
+  value       = var.enable_sandbox_archive_storage ? module.storage_sandbox_archive[0].key_vault_key_id : null
+}
+
 output "postgres_host" {
   description = "Private hostname of the database server"
   value       = module.postgres.fqdn

@@ -5,17 +5,20 @@ import {
   useUnsavedChangesNavigation,
 } from "@/providers/UnsavedChangesNavigationProvider";
 
-const mockPush = jest.fn();
+const mockReplace = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockReplace }),
 }));
 
 describe("useUnsavedChangesGuard", () => {
   afterEach(() => {
     cleanup();
     jest.restoreAllMocks();
-    mockPush.mockReset();
+    mockReplace.mockReset();
     document.body.replaceChildren();
   });
 
@@ -101,9 +104,9 @@ describe("useUnsavedChangesGuard", () => {
 
     expect(event.defaultPrevented).toBe(true);
     expect(result.current.confirmationOpen).toBe(true);
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockReplace).not.toHaveBeenCalled();
 
     act(() => result.current.discardAndLeave());
-    expect(mockPush).toHaveBeenCalledWith("/target?tab=one#section");
+    expect(mockReplace).toHaveBeenCalledWith("/target?tab=one#section");
   });
 });

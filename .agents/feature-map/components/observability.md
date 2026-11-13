@@ -38,8 +38,10 @@ for the usage report, log export, query history and workspace analytics.
   the stdout and events of every pod. A second start during an export gets a
   429.
 - **An EE admin with query-history permission** reads and exports chat
-  sessions. The `query_history_type` setting can hide user emails or turn the
-  feature off.
+  sessions. Each answer lists the messages its response accepted while it
+  ran, such as mid-response user messages and background agent results, in
+  model order. The `query_history_type` setting can hide user emails or turn
+  the feature off.
 - **An EE admin** sees workspace analytics: query, active-user, Slack bot and
   per-agent counts. A user with agent-analytics permission sees the stats of
   an agent.
@@ -107,7 +109,11 @@ With no flow set, they tag `UNTAGGED_INVOKE` or `UNTAGGED_STREAM`.
 the gateway's. `traced_llm_call` is for a direct SDK call or a call to the
 model server, such as image generation, voice, embedding and rerank. A span in
 `TraceContentMode.METADATA_ONLY` records tokens and model but no prompt or
-response. Indexing work, such as contextual RAG, uses it.
+response. Indexing work, such as contextual RAG, uses it. `Tool.run` opens a
+function span per tool call, with `ToolInvocation.trace_metadata` as the span's
+`metadata`; Braintrust and Langfuse export it. A code mode cell opens a
+`code_mode_cell` span, the parent of its nested tool spans
+([[code-execution]]).
 
 **Usage and cost.** `UserUsageTracingProcessor` takes each generation span with
 token usage, and each image generation span. It prices the span with `llm/cost.py:compute_cost_cents`, and upserts additive
@@ -120,14 +126,24 @@ the admin system view shows it under that flow. Otherwise it is `UNATTRIBUTED`
 (`tracing/processors/user_usage_processor.py:_system_attribution`). An admin
 price override applies per model configuration (`db/cost_override.py`). A call
 outside `LLM` gets it only when it passes `model_configuration_id` to
-`traced_llm_call`.
+`traced_llm_call`. Each row also stores that `model_configuration_id`, and the
+dedup indexes key on `COALESCE(model_configuration_id, 0)`. So two
+configurations that share a model name and provider type get separate rows.
+The column has no foreign key: a deleted configuration keeps its id on old
+rows, and ids are never reused. Image generation and voice calls don't pass the id yet, so their rows store
+NULL.
 
 **Metrics.** `backend/onyx/server/metrics/README.md` explains how each process
 serves metrics and how to add one. Workers start an unauthenticated server
 from `server/metrics/metrics_server.py:start_metrics_server`. Task lifecycle
 metrics come from `server/metrics/celery_task_metrics.py`, called from each
 worker app's own signal handlers. The monitoring worker serves metrics but does
-not wire these handlers.
+not wire these handlers. Code mode capacity metrics (`onyx_code_mode_*`) are
+per API server process. `server/metrics/code_mode.py` defines them; each
+capacity budget has a matching `_limit` gauge, without a tenant label. The
+counters of the use of that capacity carry `tenant_id`.
+`tools/tool_implementations/code_mode/sandbox.py` and
+`tools/tool_implementations/code_mode/cells.py` update them where they own the state ([[code-execution]]).
 
 **Audit.** `utils/audit.py:emit_audit_event` writes one JSON line to the child
 logger `onyx.audit.<ocsf_class>`. The module owns its stdout handler, set at
@@ -149,15 +165,11 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    budgets do not count it. A new Celery task or endpoint that calls an LLM
    must wrap its work in `tracing/framework/create.py:trace` or
    `tracing/framework/create.py:ensure_trace`.
-   **Trap: the chat root trace ends at the first suspension.**
-   `chat/execution.py:ChatTurnExecution._run_response` wraps only
-   `chat_agent.start(background=False)` in `trace`. The call returns when the
-   run suspends on a `ChildRunWait` (deep research, coding agent). Steps that
-   resume after the children finish run in a thread with the copied context
-   of the ended trace (`agents/runtime.py:Run._wake_execution`). Langfuse then
-   makes orphan spans, and the per-trace incognito drop no longer applies. A
-   root trace must stay open until the run is terminal, or each processor must
-   handle spans after trace end.
+   `chat/execution.py:ChatTurnExecution.run` owns one trace for the turn's
+   models and child agents. It stays open through suspension and until all
+   locally owned child work drains, including background agents after the
+   browser stream closes. Ending the trace earlier loses provider parent
+   links and per-trace content controls for later spans.
 2. `tag-llm-flow` **Tag each new LLM, embedding, rerank, image or voice call
    with an `LLMFlow`.** Set `GenerationContext.flow` on `invoke` or `stream`,
    or use `tracing/llm_utils.py:llm_generation_span` or

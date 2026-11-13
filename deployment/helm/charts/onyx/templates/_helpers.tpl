@@ -291,6 +291,156 @@ true
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/* craft.sandboxRuntime: "pod" (default) or "firecracker". Mirrors Terraform craft_sandbox_runtime. */}}
+{{- define "onyx.craftSandboxRuntime" -}}
+{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "pod")) -}}
+{{- if not (has $runtime (list "pod" "firecracker")) -}}
+{{- fail (printf "craft.sandboxRuntime must be \"pod\" or \"firecracker\", not %q" $runtime) -}}
+{{- end -}}
+{{- $runtime -}}
+{{- end }}
+
+{{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint
+that Terraform puts on Firecracker nodes (kubelet does not count VM memory).
+Only the host agent and the preflight use this; pod sandboxes and the
+prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
+{{- define "onyx.craftKvmNodeTolerations" -}}
+{{- $sandboxPod := .ctx.Values.sandboxPod | default dict -}}
+{{- $base := .tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
+{{- $out := list -}}
+{{- $hasKvm := false -}}
+{{- range $base -}}
+{{- $out = append $out . -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- $exists := eq (toString .operator) "Exists" -}}
+{{- $keyMatches := and (eq (toString .key) "onyx.app/kvm") (or $exists (eq (toString .value) "true")) -}}
+{{- if and $effectMatches (or $keyMatches (and (not .key) $exists)) -}}{{- $hasKvm = true -}}{{- end -}}
+{{- end -}}
+{{- if not $hasKvm -}}
+{{- $out = append $out (dict "key" "onyx.app/kvm" "operator" "Equal" "value" "true" "effect" "NoSchedule") -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
+onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+{{- define "onyx.craftCheckSandboxTolerations" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
+{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) with craft.sandboxRuntime=firecracker: pod sandboxes must stay off the Firecracker nodes" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/* Prometheus job label of the host agent series (alert rules, dashboard).
+The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
+{{- define "onyx.craftHostAgentMetricsJob" -}}
+{{- $job := (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- if not (regexMatch "^[A-Za-z0-9_.:/-]+$" $job) -}}
+{{- fail "craft.hostAgent.metrics.job may only have letters, digits and _ . : / -" -}}
+{{- end -}}
+{{- $job -}}
+{{- end }}
+
+{{/*
+Increase of a counter selector over a window, for alert rules. A labeled
+counter series starts at its first event, and increase() does not count that
+event, so a series with no sample in the hour before the window gives its
+full value. The hour keeps a short scrape gap from making an old series new.
+Input: (list "<selector>" "<window>").
+*/}}
+{{- define "onyx.craftFcCounterIncrease" -}}
+{{- $x := index . 0 -}}
+{{- $w := index . 1 -}}
+(({{ $x }} unless present_over_time({{ $x }}[1h] offset {{ $w }})) or increase({{ $x }}[{{ $w }}]))
+{{- end }}
+
+{{- define "onyx.craftHostAgentNamespace" -}}
+{{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
+{{- end }}
+
+{{/*
+Craft Firecracker host agent /metrics auth, the same rules as the api_server
+/metrics: "disabled" with configMap.DISABLE_METRICS_AUTH=true, "token" with
+auth.metricsAuth.enabled, else "locked" (every scrape gets 401).
+*/}}
+{{- define "onyx.craftHostAgentMetricsAuth" -}}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict -}}
+{{- if eq (lower (toString ((.Values.configMap | default dict).DISABLE_METRICS_AUTH | default ""))) "true" -}}
+disabled
+{{- else if dig "enabled" false $metricsAuth -}}
+token
+{{- else -}}
+locked
+{{- end -}}
+{{- end }}
+
+{{/*
+mTLS client of the Craft Firecracker host agents, for the pods that call them:
+api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
+unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+*/}}
+{{- define "onyx.craftFcAgentClient.secretName" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- $name := dig "hostAgent" "client" "existingSecret" "" (.Values.craft | default dict) -}}
+{{- if not $name -}}
+{{- fail "craft.hostAgent.client.existingSecret is required with craft.sandboxRuntime=firecracker" -}}
+{{- end -}}
+{{- $name -}}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.env" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: SANDBOX_FC_AGENT_CLIENT_CERT_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.crt
+- name: SANDBOX_FC_AGENT_CLIENT_KEY_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.key
+- name: SANDBOX_FC_AGENT_CA_PATH
+  value: /etc/onyx/craft-fc-agent-client/ca.crt
+{{- with dig "hostAgent" "client" "tlsServerName" "" (.Values.craft | default dict) }}
+- name: SANDBOX_FC_AGENT_TLS_SERVER_NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* YAML lists, for concat with the pod's own volumeMounts and volumes. */}}
+{{- define "onyx.craftFcAgentClient.volumeMounts" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  mountPath: /etc/onyx/craft-fc-agent-client
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.volumes" -}}
+{{- with include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end -}}
+{{- end }}
+
+{{/*
+Key of the metrics token in auth.metricsAuth's Secret; the agent namespace
+copy uses the same key.
+*/}}
+{{- define "onyx.craftHostAgentMetricsKey" -}}
+{{- default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" ((.Values.auth | default dict).metricsAuth | default dict)) -}}
+{{- end }}
+
+{{/*
+Secret with the metrics token in the agent namespace (Secrets are namespaced).
+*/}}
+{{- define "onyx.craftHostAgentMetricsSecret" -}}
+{{- (dig "hostAgent" "metrics" "authExistingSecret" "" (.Values.craft | default dict)) | default (printf "%s-metrics-auth" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
 {{/*
 Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
 and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
@@ -329,8 +479,9 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 - { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
 - { name: https_proxy, value: "{{ $proxyUrl }}" }
 - { name: http_proxy, value: "{{ $proxyUrl }}" }
-- { name: NO_PROXY, value: "127.0.0.1,localhost,::1" }
-- { name: no_proxy, value: "127.0.0.1,localhost,::1" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: no_proxy, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: NODE_USE_ENV_PROXY, value: "1" }
 - { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
 - { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }

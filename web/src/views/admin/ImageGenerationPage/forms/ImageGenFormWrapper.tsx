@@ -112,7 +112,6 @@ export function ImageGenFormWrapper<T extends FormValues>({
         ? transformValues(values)
         : {
             modelName: imageProvider.model_name,
-            imageProviderId: imageProvider.image_provider_id,
             provider: imageProvider.provider_name,
             apiKey: (values as Record<string, unknown>).api_key as
               | string

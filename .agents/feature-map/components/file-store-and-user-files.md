@@ -90,7 +90,9 @@ translates. `fetch_chat_file` accepts either id.
 **One record for every backend.** `db/file_record.py:upsert_filerecord` writes
 the `FileRecord` row for every backend. The Postgres backend adds a
 `FileContent` row that points at a large object. Callers use `FileStore`
-through `get_default_file_store` and never branch on the backend.
+through `get_default_file_store` and never branch on the backend. The one
+exception is presigned URLs: only the cloud backends have them, so a caller
+checks `isinstance(store, PresignableFileStore)` first.
 `upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
 turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
 `chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
@@ -134,6 +136,8 @@ preview.
    `ChatMessage.files` lists it; readers of the session stamped on a generated
    file; and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
+   `FileStore.presign_download` checks no user: a caller that hands a URL to
+   anyone else must authorize first.
 2. `generated-file-session-stamp` **Every generated file must carry the
    session stamp.** A `CHAT_IMAGE_GEN` file with no `chat_session_id` in
    `file_metadata` is open to every signed-in user
@@ -224,7 +228,10 @@ preview.
     failed MinIO write leaves an out-of-sync marker for
     `python -m onyx.file_store.legacy_copy`. A new method that writes, deletes
     or reads objects must use the same helpers, or files written before the
-    upgrade disappear.
+    upgrade disappear. A presigned upload skips the dual write, so its finalize
+    leaves the marker instead
+    (`file_store/file_store.py:S3BackedFileStore._on_presigned_upload_finalized`),
+    and a file only in MinIO gets no download URL.
 
 ---
 
@@ -278,7 +285,9 @@ preview.
   current backends in `file_store/file_store.py:get_default_file_store`.
   Implement every `FileStore` method, write the record through
   `upsert_filerecord` so incognito blobs get their cleanup stamp, and keep
-  [[#file-id-write-once]].
+  [[#file-id-write-once]]. An object-store backend subclasses
+  `PresignableFileStore` and implements its signing hooks, because the Craft
+  Firecracker runtime will move files through presigned URLs.
 - `investigate-file-404` **Investigate a 404 on `/chat/file/{file_id}`.** Find which id the caller
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,

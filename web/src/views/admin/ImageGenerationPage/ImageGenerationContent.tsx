@@ -3,6 +3,7 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
+import { useLabelBadge } from "@/lib/badges/components";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -60,6 +61,9 @@ interface DisconnectTarget {
   image_provider_id: string;
   title: string;
   llmProviderOwned: boolean;
+  /** Whether it is the default. Tracks the live default while the confirm is
+   *  open and freezes on close, so the copy holds while the card fades out. */
+  isDefault: boolean;
 }
 
 function linkedModelTitle(model: ImageGenerationProviderModel): string {
@@ -86,23 +90,19 @@ function ConnectedModelCard({
   onEdit,
 }: ConnectedModelCardProps) {
   const t = useTranslations("admin.imageGeneration");
+  const defaultBadge = useLabelBadge("default");
   const ariaTitle = typeof title === "string" ? title : title.raw;
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
-        tag={
-          isDefault
-            ? { title: t("defaultTag.label"), color: "blue" }
-            : undefined
-        }
+        badge={isDefault ? defaultBadge : undefined}
         rightChildren={
           <Section flexDirection="row" width="fit" height="fit" gap={0}>
             <Button
@@ -147,13 +147,12 @@ function AvailableModelCard({
   return (
     <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -224,6 +223,8 @@ export default function ImageGenerationContent() {
   const [replacementProviderId, setReplacementProviderId] = useState<
     string | null
   >(null);
+  // The target stays set on close so the modal can animate out; opening resets it.
+  const disconnectModal = useCreateModal();
 
   const connectedProviderIds = useMemo(() => {
     return new Set(configs.map((c) => c.image_provider_id));
@@ -367,8 +368,7 @@ export default function ImageGenerationContent() {
         error instanceof Error ? error.message : t("disconnectError.message")
       );
     } finally {
-      setDisconnectProvider(null);
-      setReplacementProviderId(null);
+      disconnectModal.toggle(false);
     }
   };
 
@@ -379,9 +379,7 @@ export default function ImageGenerationContent() {
   };
 
   // Compute replacement options when disconnecting an active provider
-  const isDisconnectingDefault =
-    disconnectProvider &&
-    defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
+  const isDisconnectingDefault = disconnectProvider?.isDefault;
 
   const replacementGroups = useMemo(() => {
     if (!disconnectProvider) return [];
@@ -403,6 +401,18 @@ export default function ImageGenerationContent() {
       if (firstOption) setReplacementProviderId(firstOption.value);
     }
   }, [disconnectProvider]);
+
+  // Follow the live default while the confirm is open, so a default that
+  // changes meanwhile still asks for a replacement. Closing freezes it, so the
+  // copy holds while the card fades out.
+  useEffect(() => {
+    if (!disconnectModal.isOpen || !disconnectProvider) return;
+    const isDefault =
+      defaultConfig?.image_provider_id === disconnectProvider.image_provider_id;
+    if (isDefault !== disconnectProvider.isDefault) {
+      setDisconnectProvider({ ...disconnectProvider, isDefault });
+    }
+  }, [disconnectModal.isOpen, disconnectProvider, defaultConfig]);
 
   if (configError) {
     return (
@@ -474,9 +484,8 @@ export default function ImageGenerationContent() {
             justifyContent="start"
           >
             <Content
+              font="main-content-emphasis"
               title={t("connectedModels.title")}
-              sizePreset="main-content"
-              variant="section"
             />
             <Section gap={2} height="fit" alignItems="stretch">
               {configs.map((config) => {
@@ -508,13 +517,17 @@ export default function ImageGenerationContent() {
                         : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
                     }
                     isDefault={config.is_default}
-                    onDisconnect={() =>
+                    onDisconnect={() => {
                       setDisconnectProvider({
                         image_provider_id: imageProviderId,
                         title,
                         llmProviderOwned: config.llm_provider_owned,
-                      })
-                    }
+                        isDefault:
+                          defaultConfig?.image_provider_id === imageProviderId,
+                      });
+                      setReplacementProviderId(null);
+                      disconnectModal.toggle(true);
+                    }}
                     onEdit={
                       legacyProvider
                         ? () => handleEdit(legacyProvider)
@@ -539,10 +552,9 @@ export default function ImageGenerationContent() {
           justifyContent="start"
         >
           <Content
+            font="main-content-emphasis"
             title={t("availableModels.title")}
             description={t("availableModels.description")}
-            sizePreset="main-content"
-            variant="section"
           />
           <Tabs
             variant="pill"
@@ -618,87 +630,86 @@ export default function ImageGenerationContent() {
         </Section>
       )}
 
-      {disconnectProvider && (
-        <ConfirmationModalLayout
-          icon={SvgUnplug}
-          title={markdown(
-            t("disconnectModal.header.title", {
-              title: disconnectProvider.title,
-            })
-          )}
-          description={
-            disconnectProvider.llmProviderOwned
-              ? t("disconnectModal.header.description")
-              : t("disconnectModal.linkedHeader.description")
-          }
-          onClose={() => {
-            setDisconnectProvider(null);
-            setReplacementProviderId(null);
-          }}
-          submit={
-            <Button
-              variant="danger"
-              onClick={() => void handleDisconnect()}
-              disabled={
-                needsReplacement && hasReplacements && !replacementProviderId
-              }
-            >
-              {t("disconnectModal.submitButton.label")}
-            </Button>
-          }
-        >
-          {needsReplacement ? (
-            hasReplacements ? (
-              <Section alignItems="start">
-                <Text as="p" color="text-03">
-                  {markdown(
-                    t("disconnectModal.defaultWithReplacement.description", {
-                      title: disconnectProvider.title,
-                    })
-                  )}
-                </Text>
-                <Section alignItems="start" gap={1}>
-                  <Text as="p" color="text-04">
-                    {t("disconnectModal.replacement.label")}
+      <disconnectModal.Provider>
+        {disconnectProvider && (
+          <ConfirmationModalLayout
+            icon={SvgUnplug}
+            title={markdown(
+              t("disconnectModal.header.title", {
+                title: disconnectProvider.title,
+              })
+            )}
+            description={
+              disconnectProvider.llmProviderOwned
+                ? t("disconnectModal.header.description")
+                : t("disconnectModal.linkedHeader.description")
+            }
+            onClose={() => disconnectModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                onClick={() => void handleDisconnect()}
+                disabled={
+                  needsReplacement && hasReplacements && !replacementProviderId
+                }
+              >
+                {t("disconnectModal.submitButton.label")}
+              </Button>
+            }
+          >
+            {needsReplacement ? (
+              hasReplacements ? (
+                <Section alignItems="start">
+                  <Text as="p" color="text-03">
+                    {markdown(
+                      t("disconnectModal.defaultWithReplacement.description", {
+                        title: disconnectProvider.title,
+                      })
+                    )}
                   </Text>
-                  <InputSingleSelect
-                    value={replacementProviderId ?? ""}
-                    onValueChange={(v) => setReplacementProviderId(v)}
-                    placeholder={t("disconnectModal.replacement.placeholder")}
-                    options={[...replacementGroups, noDefaultOption]}
-                  />
+                  <Section alignItems="start" gap={1}>
+                    <Text as="p" color="text-04">
+                      {t("disconnectModal.replacement.label")}
+                    </Text>
+                    <InputSingleSelect
+                      value={replacementProviderId ?? ""}
+                      onValueChange={(v) => setReplacementProviderId(v)}
+                      placeholder={t("disconnectModal.replacement.placeholder")}
+                      options={[...replacementGroups, noDefaultOption]}
+                    />
+                  </Section>
                 </Section>
-              </Section>
+              ) : (
+                <>
+                  <Text as="p" color="text-03">
+                    {markdown(
+                      t("disconnectModal.defaultNoReplacement.description", {
+                        title: disconnectProvider.title,
+                      })
+                    )}
+                  </Text>
+                  <Text as="p" color="text-03">
+                    {t("disconnectModal.connectAnother.description")}
+                  </Text>
+                </>
+              )
             ) : (
               <>
                 <Text as="p" color="text-03">
                   {markdown(
-                    t("disconnectModal.defaultNoReplacement.description", {
+                    t("disconnectModal.nonDefault.description", {
                       title: disconnectProvider.title,
                     })
                   )}
                 </Text>
                 <Text as="p" color="text-03">
-                  {t("disconnectModal.connectAnother.description")}
+                  {t("disconnectModal.sessionHistory.description")}
                 </Text>
               </>
-            )
-          ) : (
-            <>
-              <Text as="p" color="text-03">
-                {markdown(
-                  t("disconnectModal.nonDefault.description", {
-                    title: disconnectProvider.title,
-                  })
-                )}
-              </Text>
-              <Text as="p" color="text-03">
-                {t("disconnectModal.sessionHistory.description")}
-              </Text>
-            </>
-          )}
-        </ConfirmationModalLayout>
-      )}
+            )}
+          </ConfirmationModalLayout>
+        )}
+      </disconnectModal.Provider>
 
       {activeProvider && (
         <modal.Provider>

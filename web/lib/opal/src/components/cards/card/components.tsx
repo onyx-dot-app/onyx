@@ -6,7 +6,7 @@ import type {
   Spacing,
   Rounding,
   ShadowVariants,
-  StatusVariants,
+  StatusColor,
 } from "@opal/types";
 import { roundingToRem, spacingToRem } from "@opal/shared";
 import { cn } from "@opal/utils";
@@ -82,7 +82,7 @@ type CardBaseProps = Omit<
    *
    * @default "default"
    */
-  borderColor?: StatusVariants;
+  borderColor?: StatusColor;
 
   /**
    * Drop-shadow depth.

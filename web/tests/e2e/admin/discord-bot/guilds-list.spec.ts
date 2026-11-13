@@ -13,6 +13,7 @@ import {
   expect,
   gotoDiscordBotPage,
 } from "@tests/e2e/admin/discord-bot/fixtures";
+import { DiscordBotPage } from "@tests/e2e/pages/DiscordBotPage";
 
 // Disable retries for Discord bot tests - attempt once at most
 test.describe.configure({ retries: 0 });
@@ -275,22 +276,12 @@ test.describe("Guilds List Page", () => {
 
     await adminPage.goto("/admin/discord-bot");
 
-    // Should show loading indicator (OnyxLoader)
-    // The loader should appear while data is being fetched.
-    // OnyxLoader exposes role="status" on its wrapper.
-    const loader = adminPage.getByRole("status");
-    // Give it a moment to appear
-    await expect(loader).toBeVisible({ timeout: 5000 });
+    const discordBotPage = new DiscordBotPage(adminPage);
+    // The loader shows while the delayed data is fetched.
+    await expect(discordBotPage.loader).toBeVisible({ timeout: 5000 });
 
-    // Wait for page to finish loading
     await adminPage.waitForLoadState("networkidle");
-
-    // After loading, page title should be visible
-    await expect(
-      adminPage
-        .locator('[aria-label="admin-page-title"]')
-        .getByText("Discord Integration")
-    ).toBeVisible();
+    await expect(discordBotPage.title).toBeVisible();
   });
 
   test("error state shows error message", async ({ adminPage }) => {

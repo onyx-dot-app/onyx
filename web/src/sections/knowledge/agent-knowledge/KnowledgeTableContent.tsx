@@ -3,7 +3,6 @@
 import React, { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import { useSettings } from "@/lib/settings/hooks";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
@@ -12,7 +11,7 @@ import type { CCPairSummary, DocumentSetSummary } from "@/lib/types";
 import type { ValidSources } from "@/lib/connectors/types/source";
 import SourceHierarchyBrowser from "@/sections/knowledge/SourceHierarchyBrowser";
 import { Text, Button } from "@opal/components";
-import { Content } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import { timeAgo } from "@opal/time";
 import { SvgFiles, SvgFolder, SvgPlusCircle } from "@opal/icons";
 
@@ -47,12 +46,7 @@ export function DocumentSetsTableContent({
       header: t("table.columns.name.header"),
       sortable: true,
       render: (ds) => (
-        <Content
-          icon={SvgFolder}
-          title={ds.name}
-          sizePreset="main-ui"
-          variant="section"
-        />
+        <Content font="main-ui-action" icon={SvgFolder} title={ds.name} />
       ),
     },
     {
@@ -123,7 +117,7 @@ export function SourcesTableContent({
   initialNodeId,
 }: SourcesTableContentProps) {
   return (
-    <GeneralLayouts.Section gap={2} alignItems="stretch">
+    <Section gap={2} alignItems="stretch">
       <SourceHierarchyBrowser
         source={source}
         selectedDocumentIds={selectedDocumentIds}
@@ -138,7 +132,7 @@ export function SourcesTableContent({
         onSelectionCountChange={onSelectionCountChange}
         initialNodeId={initialNodeId}
       />
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -174,12 +168,7 @@ export function RecentFilesTableContent({
       header: t("table.columns.name.header"),
       sortable: true,
       render: (file) => (
-        <Content
-          icon={SvgFiles}
-          title={file.name}
-          sizePreset="main-ui"
-          variant="section"
-        />
+        <Content font="main-ui-action" icon={SvgFiles} title={file.name} />
       ),
     },
     {
@@ -198,7 +187,7 @@ export function RecentFilesTableContent({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   return (
-    <GeneralLayouts.Section gap={2} alignItems="stretch">
+    <Section gap={2} alignItems="stretch">
       <TableLayouts.HiddenInput
         inputRef={fileInputRef}
         type="file"
@@ -229,12 +218,12 @@ export function RecentFilesTableContent({
       />
 
       {hasProcessingFiles && (
-        <GeneralLayouts.Section height="auto" alignItems="start">
+        <Section height="auto" alignItems="start">
           <Text as="p" color="text-03" font="secondary-body">
             {t("recentFiles.processing.description", { appName })}
           </Text>
-        </GeneralLayouts.Section>
+        </Section>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

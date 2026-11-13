@@ -9,7 +9,6 @@ import {
 const SECTION_SOURCES = new Set([
   "@opal/layouts",
   "@opal/layouts/general/components",
-  "@/layouts/general-layouts",
 ]);
 // Section sets `gap` and `padding` as inline styles, so these classes never apply.
 const DEAD_CLASS = /^(p[xytrblse]?-.+|gap(-[xy])?-.+)$/;

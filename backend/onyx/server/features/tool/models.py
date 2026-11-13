@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
+from onyx.db.enums import ActionPolicy
 from onyx.db.models import Tool
 from onyx.server.features.tool.tool_visibility import (
     get_tool_visibility_config,
@@ -54,10 +55,15 @@ class ToolSnapshot(BaseModel):
     chat_selectable: bool = True
     agent_creation_selectable: bool = True
     default_enabled: bool = False
+    default_action_policy: ActionPolicy | None = None
 
     @classmethod
     def from_model(
-        cls, tool: Tool, *, permissions: dict[str, bool] | None = None
+        cls,
+        tool: Tool,
+        *,
+        permissions: dict[str, bool] | None = None,
+        default_action_policy: ActionPolicy | None = None,
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
@@ -83,6 +89,7 @@ class ToolSnapshot(BaseModel):
                 config.agent_creation_selectable if config else True
             ),
             default_enabled=config.default_enabled if config else False,
+            default_action_policy=default_action_policy,
         )
 
 

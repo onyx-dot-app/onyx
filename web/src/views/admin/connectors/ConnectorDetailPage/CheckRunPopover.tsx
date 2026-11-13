@@ -1,15 +1,8 @@
 "use client";
 
 import { useFormatter, useTranslations } from "next-intl";
-import {
-  Button,
-  Popover,
-  SelectButton,
-  ShadowDiv,
-  Text,
-} from "@opal/components";
+import { Popover, ShadowDiv, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
-import { SvgListCheck, SvgX } from "@opal/icons";
 import type { CheckRunSnapshot, CheckRunStatus } from "@/lib/connectors/types";
 import type {
   CapabilityCheckResult,
@@ -25,6 +18,10 @@ import {
   shownCheckResults,
 } from "@/views/admin/connectors/ConnectorDetailPage/RunRow";
 import {
+  DetailsCloseButton,
+  InlineDetailsCard,
+} from "@/views/admin/connectors/ConnectorDetailPage/InlineDetails";
+import {
   PLACEMENT_PROPS,
   type PopoverPlacement,
 } from "@/views/admin/connectors/ConnectorDetailPage/popoverPlacement";
@@ -36,38 +33,14 @@ const RUN_STATUS: Record<CheckRunStatus, ConnectorChecksStatus> = {
   failed_to_run: "failedToRun",
 };
 
-/** Opens the results of one check run. Place it inside the Popover that holds the content. */
-export interface CheckRunTriggerProps {
-  /** Whether its popover is open. The open trigger shows selected. */
-  open?: boolean;
-}
-export function CheckRunTrigger({ open = false }: CheckRunTriggerProps) {
-  const t = useTranslations("admin.connector.runs");
-  return (
-    <Popover.Trigger asChild>
-      <SelectButton
-        icon={SvgListCheck}
-        variant="select-light"
-        state={open ? "selected" : "empty"}
-        size="xs"
-        tooltip={t("actions.checks")}
-        aria-label={t("actions.checks")}
-      />
-    </Popover.Trigger>
-  );
-}
-
-export interface CheckRunPopoverContentProps {
+interface CheckRunDetailsProps {
   run: CheckRunSnapshot;
-  /** Opens beside or below a card from a small trigger, such as an activity card's tag; unset, under a row-wide anchor. */
-  placement?: PopoverPlacement;
+  /** Closes an inline card. Unset, the close button closes the enclosing Popover. */
+  onClose?: () => void;
 }
 
-/** The checks of one run grouped by outcome. Under a row it is as wide as the caller's Popover.Anchor. */
-export default function CheckRunPopoverContent({
-  run,
-  placement,
-}: CheckRunPopoverContentProps) {
+/** The checks of one run grouped by outcome, under a header with their summary. */
+function CheckRunDetails({ run, onClose }: CheckRunDetailsProps) {
   const t = useTranslations("admin.connector.runs.checkResults");
   const tChecks = useTranslations("admin.connectorChecks");
   const format = useFormatter();
@@ -94,74 +67,98 @@ export default function CheckRunPopoverContent({
     RUN_STATUS[run.status],
     results.some((result) => result.status === "failed" && result.required)
   );
+  return (
+    <Section alignItems="stretch" gap={0} height="auto" className="min-h-0">
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        alignItems="start"
+        gap={1}
+        height="fit"
+        className="shrink-0"
+      >
+        <Section
+          alignItems="start"
+          gap={0}
+          padding={1}
+          height="fit"
+          className="min-w-0 flex-1"
+        >
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            gap={1}
+            height="fit"
+          >
+            <Ring size={16} className="shrink-0" />
+            <Text font="main-ui-action" color="text-04">
+              {t("title")}
+            </Text>
+            <Text font="main-ui-muted" color="text-03">
+              {t("count", { count: results.length })}
+            </Text>
+          </Section>
+          <Text font="secondary-body" color="text-03">
+            {summary}
+          </Text>
+        </Section>
+        <DetailsCloseButton label={t("close")} onClose={onClose} />
+      </Section>
+      <ShadowDiv>
+        {/* The inline card lists outcomes only, so its rows do not fold open. */}
+        <CheckLineGroups
+          lines={results.map((result) => ({
+            ...result,
+            state: result.status,
+          }))}
+          withDetails={onClose === undefined}
+        />
+      </ShadowDiv>
+    </Section>
+  );
+}
 
+export interface CheckRunPopoverContentProps {
+  run: CheckRunSnapshot;
+  /** Where it opens beside or below a card from a small trigger, such as an activity card's tag. */
+  placement: PopoverPlacement;
+}
+
+/** A check run's results in a popover beside or below a card. */
+export default function CheckRunPopoverContent({
+  run,
+  placement,
+}: CheckRunPopoverContentProps) {
+  const t = useTranslations("admin.connector.runs.checkResults");
   return (
     <Popover.Content
-      width={placement === undefined ? "trigger" : 160}
-      {...(placement === undefined
-        ? { align: "start", sideOffset: -8 }
-        : PLACEMENT_PROPS[placement])}
+      width={160}
+      {...PLACEMENT_PROPS[placement]}
       aria-label={t("title")}
     >
       <Section
         alignItems="stretch"
-        gap={0}
         padding={1}
         height="auto"
         className="min-h-0"
       >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          alignItems="start"
-          gap={1}
-          height="fit"
-          className="shrink-0"
-        >
-          <Section
-            alignItems="start"
-            gap={0}
-            padding={1}
-            height="fit"
-            className="min-w-0 flex-1"
-          >
-            <Section
-              flexDirection="row"
-              justifyContent="start"
-              alignItems="center"
-              gap={1}
-              height="fit"
-            >
-              <Ring size={16} className="shrink-0" />
-              <Text font="main-ui-action" color="text-04">
-                {t("title")}
-              </Text>
-              <Text font="main-ui-muted" color="text-03">
-                {t("count", { count: results.length })}
-              </Text>
-            </Section>
-            <Text font="secondary-body" color="text-03">
-              {summary}
-            </Text>
-          </Section>
-          <Popover.Close asChild>
-            <Button
-              icon={SvgX}
-              prominence="tertiary"
-              size="xs"
-              aria-label={t("close")}
-            />
-          </Popover.Close>
-        </Section>
-        <ShadowDiv>
-          <CheckLineGroups
-            lines={results.map((result) => ({
-              ...result,
-              state: result.status,
-            }))}
-          />
-        </ShadowDiv>
+        <CheckRunDetails run={run} />
       </Section>
     </Popover.Content>
+  );
+}
+
+export interface CheckRunCardProps {
+  run: CheckRunSnapshot;
+  onClose: () => void;
+}
+
+/** A check run's results in a card directly under its run line. */
+export function CheckRunCard({ run, onClose }: CheckRunCardProps) {
+  const t = useTranslations("admin.connector.runs.checkResults");
+  return (
+    <InlineDetailsCard label={t("title")} onClose={onClose}>
+      <CheckRunDetails run={run} onClose={onClose} />
+    </InlineDetailsCard>
   );
 }

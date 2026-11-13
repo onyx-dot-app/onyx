@@ -1,7 +1,7 @@
+import { Section } from "@opal/layouts";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgDownload, SvgZoomIn, SvgZoomOut } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 
 interface DownloadButtonProps {
   fileUrl: string;

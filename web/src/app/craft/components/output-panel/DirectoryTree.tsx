@@ -281,11 +281,10 @@ function WorkspaceEntryRow({
     <div className="relative" style={{ paddingInlineStart: depth * 16 }}>
       <Hoverable.Root group="workspace-file-row">
         <LineItemButton
+          font="secondary-body"
           width="full"
           title={entry.name}
           titleMaxLines={1}
-          sizePreset="secondary"
-          variant="body"
           padding={0}
           rounding={1}
           aria-expanded={entry.is_directory ? expanded : undefined}

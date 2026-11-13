@@ -27,7 +27,7 @@ Match kubectl to the cluster's supported version skew. Set `KIND_NODE_IMAGE` whe
 make craft-doctor
 kind get clusters
 kubectl config get-contexts
-telepresence status --format json
+telepresence status --output json
 make craft-up
 ```
 
@@ -65,6 +65,21 @@ Worker profiles connect without recreating the API intercept.
 After starting the API and web server, run `make craft-ready` to verify the API through the frontend proxy.
 The VS Code compound also starts this check. Readiness failure is not a successful startup.
 A connection alone does not start the local API or create its intercept.
+
+## Remote Firecracker cluster
+
+For Firecracker sandboxes, run the local API against the shared remote cluster with ODS:
+`ods craft-dev doctor`, then `ods craft-dev api` and `ods craft-dev web`. Until the next
+`onyx-devtools` release, run `go -C tools/ods run . craft-dev ...` from the repository root.
+Do not add Make targets for this flow.
+The profile file (`--profile`, `CRAFT_DEV_PROFILE`, or `dev/craft-dev.yaml` in the
+onyx-internal checkout) holds the cluster facts; never hard-code them.
+For your own VM, use `ods craft-dev vms`, `skills push <dir>`, `exec -- <cmd>`, `logs`,
+and `reset`. They need `CRAFT_DEV_USER` (or `--user`) and act only on that user's VM.
+The user runs `telepresence connect` in a real terminal (sudo). Do not start local Celery
+workers or migrations against the shared cluster; the launcher refuses both.
+If the Alembic head differs, do not bypass the check. Read the
+"Remote Firecracker cluster" section of the README.
 
 ## Choose the smallest refresh
 

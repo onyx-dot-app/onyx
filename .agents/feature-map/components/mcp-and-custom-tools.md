@@ -30,12 +30,13 @@
 - **A member connects an account.** On a per-user server, each member connects
   their own API key or OAuth account. One member's connection never serves
   another member.
-- **A user in chat** sees each call as a tool step. A missing, expired or
-  rejected credential gives an error that tells the user to connect from the
-  MCP menu. When Onyx cannot resolve any credential for a server, that
-  server's tools are left out of the turn with no message. A down MCP server gives "Tool execution failed" with the reason. An
-  OpenAPI tool says that it could not reach its server. Only that call fails;
-  the turn continues.
+- **A user in chat** sees each call as a tool step. When Onyx cannot
+  authenticate a server, its tools are left out of the turn. The composer
+  prompts the user to connect. Credentials that expire or are rejected during
+  a call produce an error that tells the user to connect from the MCP menu.
+  A down MCP server gives "Tool execution failed" with the reason. An OpenAPI
+  tool says that it could not reach its server. Only that call fails; the turn
+  continues.
 
 The plugin screens, Default Chat selection and personal preferences are in
 [[plugins]].
@@ -68,7 +69,8 @@ Its neighbours own:
 ```
 Admin config                                Turn time (tools/tool_constructor.py)
 MCPServer --1:N--> Tool (mcp_server_id,      resolve_mcp_credentials(server, user)
-   |               mcp_input_schema)           once per server -> one MCPTool per
+   |               mcp_input_schema,           once per server -> one MCPTool per
+   |               mcp_output_schema)
    +--admin_connection_config (shared)          saved Tool row, schema from the DB
    +--MCPConnectionConfig per user_email
 Tool (openapi_schema) ---------------------> build_custom_tools_from_openapi_schema_
@@ -131,8 +133,12 @@ The admin's choice at setup decides the scope, and the `MCPServer` row shows it:
 - `NONE`: no credential. A header template with required fields asks each user
   for values (`web/src/lib/mcp/auth.ts:getMcpAuthenticationFlow`).
 
-When resolution raises `MCPCredentialsError`, `_construct_tools_impl` leaves
-that server's tools out of the turn and logs a warning. The user sees no error.
+`_construct_tools_impl` and `MCPTool._run` both use
+`ResolvedMCPCredentials.can_authenticate_with_headers`. Construction excludes
+servers with missing or rejected credentials before exposing tools to the model.
+Refreshable OAuth tokens remain available. Request-supplied headers can replace
+missing credentials, but denylisted headers and grants that need reauthentication
+cannot pass this gate. Resolution errors also exclude the server and log a warning.
 
 **Outbound safety.** `server/features/mcp/ssrf.py:mcp_ssrf_httpx_client_factory`
 checks every request the MCP SDK makes, redirects included, at the admin SSRF
@@ -183,7 +189,13 @@ Policy precedence is in [[craft-external-apps]].
    (`_list_mcp_tools_by_id` with `is_admin`, which
    `admin_list_mcp_tools_by_id` and `get_mcp_server_tools_snapshots` call). The
    member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
-   tools need no sync.
+   tools need no sync. The same sync saves the tool's declared `outputSchema`
+   in `Tool.mcp_output_schema`, and sets it to NULL when the server declares
+   none. It also saves `annotations.readOnlyHint` in `Tool.mcp_read_only` (NULL
+   when absent), which sets the Craft default policy
+   ([[craft-external-apps]]). `server.action_policies` holds only stored
+   overrides, so `MCPServerToolsEditor` reads each tool's default from
+   `ToolSnapshot.default_action_policy` on the tool snapshot route.
 6. `sync-matches-by-name` **Sync matches tools by name.**
    `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
    remote server renames as a new tool: it is deleted and inserted again with
@@ -212,7 +224,12 @@ Policy precedence is in [[craft-external-apps]].
     fingerprint is overwritten without a conflict.
 11. `expected-failure-tool-response` **An expected failure returns an error
     `ToolResult`.** `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run`
-    catches every exception and reports an auth error for a 401,
+    preserves `CallToolResult.isError` as a failed result without marking
+    credentials for reauthentication. Text content takes precedence; a result
+    with only `structuredContent` is JSON-encoded, then parsed for the model.
+    `server/features/mcp/client.py:process_mcp_result` uses image/audio omission
+    notices only when neither readable content nor structured content exists.
+    Transport exceptions report an auth error for a 401,
     `MCPReauthenticationRequired`, or auth words in the message.
     `tools/tool_implementations/custom/custom_tool.py:CustomTool._run` returns a
     failed result for a blocked destination, a timeout, a connection error
@@ -238,6 +255,18 @@ Policy precedence is in [[craft-external-apps]].
     change or a delete; users who lose access are not in the
     set afterwards. The reload only restamps `mcp_config_hash`; it does not push
     skill files.
+
+14. `cancel-in-flight-request` **Chat cancellation stops an active MCP request.**
+    `tools/tool_implementations/mcp/mcp_tool.py:MCPTool._run` passes its
+    invocation signal to `server/features/mcp/client.py:call_mcp_tool`.
+    The synchronous client cancels and drains the request coroutine before
+    raising `AgentCancelled`. This bypasses ordinary tool error recovery and
+    records `cancelled`, not `error`, in MCP call metrics.
+    `utils/threadpool_concurrency.py:run_until_cancelled` owns coroutine cancellation
+    and cleanup. The MCP client supplies signal callbacks and `AgentCancelled`.
+    A result that already completed wins a concurrent cancellation. Discovery
+    calls that have no signal keep the existing synchronous behavior. Stopping
+    the local request cannot undo work already performed by the remote server.
 
 `Tool.enabled` gates MCP tools everywhere and OpenAPI tools only in Default
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
@@ -278,7 +307,6 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - `MCPTransport.STDIO` is accepted by `MCPToolCreateRequest`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
-- OpenAPI tool names can collide on one agent. See [[tools-framework]].
 - A per-tool OAuth token replaces a static `Authorization` header with only a
   log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
   Save rejects that pair only for `passthrough_auth`

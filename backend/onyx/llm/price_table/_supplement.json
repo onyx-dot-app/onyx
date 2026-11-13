@@ -109,5 +109,18 @@
         "tool_call": true
       }
     }
+  },
+  "vertex_ai": {
+    "models": {
+      "gemini-3-pro-image-preview": {
+        "status": "deprecated"
+      },
+      "gemini-3.1-flash-image-preview": {
+        "status": "deprecated"
+      },
+      "virtual-try-on-001": {
+        "status": "deprecated"
+      }
+    }
   }
 }

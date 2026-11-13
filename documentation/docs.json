@@ -8,10 +8,6 @@
     "dark": "#0050B4"
   },
   "favicon": "assets/logo/onyx_favicon.svg",
-  "banner": {
-    "content": "**Permissions update:** Onyx now uses group-based permissions. [Understand permissions](/admins/permissions/understanding_permissions) or [review migration details](/admins/permissions/whats_changing)",
-    "dismissible": true
-  },
   "navigation": {
     "tabs": [
       {
@@ -451,6 +447,7 @@
                 "icon": "magnifying-glass",
                 "pages": [
                   "developers/api_reference/search/search",
+                  "developers/api_reference/search/raw_search",
                   "developers/api_reference/search/handle_send_search_message",
                   "developers/api_reference/search/get_search_history",
                   "developers/api_reference/search/search_flow_classification",
@@ -616,23 +613,6 @@
                 ]
               },
               {
-                "group": "Token Limits",
-                "icon": "gauge",
-                "pages": [
-                  "developers/api_reference/miscellaneous/get_global_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_global_token_limit_settings",
-                  "developers/api_reference/miscellaneous/update_token_limit_settings",
-                  "developers/api_reference/miscellaneous/delete_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_all_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/update_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/delete_group_token_limit_settings",
-                  "developers/api_reference/miscellaneous/get_user_token_limit_settings",
-                  "developers/api_reference/miscellaneous/create_user_token_limit_settings"
-                ]
-              },
-              {
                 "group": "Usage & Cost",
                 "icon": "chart-line",
                 "pages": [
@@ -795,6 +775,50 @@
     }
   },
   "redirects": [
+    {
+      "source": "/developers/api_reference/miscellaneous/get_global_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_global_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/update_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/delete_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_all_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/update_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/delete_group_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/get_user_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
+    {
+      "source": "/developers/api_reference/miscellaneous/create_user_token_limit_settings",
+      "destination": "/admins/advanced_configs/spending_limits"
+    },
     {
       "source": "/admins/advanced_configs/doc_processing",
       "destination": "/admins/managing_features/rag_and_search"

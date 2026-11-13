@@ -2,10 +2,10 @@
 
 import {
   redirect,
+  useNavigation,
   usePathname,
-  useRouter,
   useSearchParams,
-} from "next/navigation";
+} from "@opal/navigation";
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
@@ -18,7 +18,6 @@ import {
   useState,
 } from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { Section } from "@/layouts/general-layouts";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
@@ -95,10 +94,11 @@ import {
   RootLayout,
   toast,
   useToastFromQuery,
+  Section,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -158,7 +158,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // });
 
   const t = useTranslations("chat.app");
-  const router = useRouter();
+  const navigation = useNavigation();
   const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
 
@@ -168,8 +168,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       type: "success",
     },
   });
-  const searchParams = useSearchParams();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
   const {
@@ -213,9 +213,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
     ) {
       params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-      router.replace(`?${params.toString()}`, { scroll: false });
+      navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
     }
-  }, [searchParams, router]);
+  }, [searchParams, navigation]);
 
   const toolConfiguration = useToolConfiguration();
   const pluginCopy = useTranslations("actions.memberPlugins");
@@ -262,7 +262,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       toast.error(pluginCopy("chat.intent.unavailable"));
     }
     const remaining = withoutChatPluginIntent(params).toString();
-    router.replace(remaining ? `/app?${remaining}` : "/app", {
+    navigation.go(remaining ? `/app?${remaining}` : "/app", {
+      replace: true,
       scroll: false,
     });
   }, [
@@ -272,7 +273,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     memberPlugins,
     pathname,
     pluginCopy,
-    router,
+    navigation,
     searchParams,
     toolConfiguration,
   ]);
@@ -280,6 +281,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in
@@ -528,20 +530,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     restoreInputBar,
   });
 
-  const { onMessageSelection, sessionFetchError } = useChatSessionController({
-    existingChatSessionId: currentChatSessionId,
-    searchParams,
-    firstMessage,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    chatInputBarRef,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, sessionFetchError, queue } =
+    useChatSessionController({
+      existingChatSessionId: currentChatSessionId,
+      searchParams,
+      firstMessage,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      chatInputBarRef,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   // A link can arrive carrying both a prompt and a search scope. Declared here
   // because it submits, so it needs `onSubmit` above it.
@@ -940,9 +943,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     height="full"
                   >
                     <Section justifyContent="start" gap={0}>
+                      {/* The store's session, not the URL's: the store takes
+                          the URL's chat one effect late, and the scroll reset
+                          must see the messages of the chat it opens. */}
                       <ChatScrollContainer
                         ref={scrollContainerRef}
-                        sessionId={currentChatSessionId!}
+                        sessionId={storeSessionId ?? undefined}
                         anchorSelector={anchorSelector}
                         autoScroll={autoScrollEnabled}
                         isStreaming={isStreaming}
@@ -1193,6 +1199,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        queue={queue}
                         toolConfiguration={toolConfiguration}
                         memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}

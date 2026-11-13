@@ -20,14 +20,38 @@
   the steps, or sending a message, ends onboarding in that browser.
 - **A user sends a message** and watches it work: reasoning, search and other
   tool steps appear as a timeline, then the answer streams with citation chips.
-  The user can stop at any time. The partial answer stays, marked as stopped.
-  The input stays busy until the server confirms that the turn is saved. If
-  the client cannot confirm it, the send button changes to a manual check,
-  and the typed text stays.
-- **A user types while an answer streams.** The message joins a short queue
-  and sends by itself when the answer has finished drawing on screen and the
-  server is idle. After an error or a failed save, the queue pauses until the
-  user sends again.
+  The user can stop the answer until its stop packet arrives. The partial
+  answer stays, marked as stopped. After the stop packet, Stop goes away while
+  the answer finishes drawing. The input stays busy until the server confirms
+  that the turn is saved. Text sent before then becomes pending input, which
+  the server starts. If the
+  client cannot confirm the turn, the send button changes to a manual check,
+  and the typed text stays. A failed refresh of a server-started turn uses the
+  same recovery action.
+- **A user types while an answer streams.** Enter and the send arrow add text
+  at the next model step by default. The account's Send Behavior setting can
+  make them interrupt instead. Ctrl/Cmd+Enter always queues the next turn.
+  Each pending message has Send now, which interrupts current work first.
+  Arrow keys in the empty input highlight a pending message, and Enter sends
+  it now. Interrupting also stops speech playback. Queued text survives reload
+  and browser closure. A send that arrives
+  after the response ends becomes a queued turn. One pending request runs at a
+  time; text sent meanwhile stays in the input. Editing withdraws the pending
+  message before its text returns to the input; accepted messages cannot be
+  withdrawn. Stop and failed responses pause the queue; a step limit does not.
+  Pending submission is text-only and unavailable in incognito and for
+  anonymous users. Craft keeps its own queue; only the queue display and
+  keyboard navigation are shared.
+- **Subagents can continue after the answer ends.** A small activity indicator
+  stays visible while background work remains. It shares a row with the
+  pending-input hint. Its Stop subagents button stops every active
+  background agent on the selected branch; it sits outside the `role="status"`
+  text, so the live region announces only the status. The input stays usable. While
+  subagents run, status polling finds automatic follow-up responses in an idle
+  chat and loads them through the normal refresh and replay path. Internal
+  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
+  automatic follow-up response. That response shows its model label but
+  cannot be regenerated.
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -45,14 +69,31 @@
   tab-separated text so a spreadsheet keeps the columns. A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
   sign-in.
+- **The incognito start button** appears only on the new chat page when
+  incognito is available and unlocked.
 - **A user in incognito** cannot turn incognito on or off once the session
-  exists, and answers show no rating buttons. Leaving the chat, reloading or
+  exists, and answers show no rating buttons. Deep Research and the Coding
+  Agent are greyed out and never sent. Leaving the chat, reloading or
   closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
   the chat to retry.
 - **When a send fails**, the partial answer stays and an error banner follows
   it. In a multi-model turn, only the failed panel shows the error. In a
   single-model send, a usage limit shows a banner with the reset time and no
   retry ([[rate-and-usage-limits]]).
+- **After a failed answer**, the next message continues the conversation
+  after it. The model sees the question and the saved partial answer. While
+  the failed answer is the latest message, its banner offers **Regenerate**.
+  It sends a new copy of the question as a sibling branch, and the failed turn
+  moves to the hidden branch. After a later message, the banner has no
+  **Regenerate**.
+- **When the server rejects a send before it saves the question** (an HTTP
+  error, a usage limit or a setup error, with no message IDs), nothing of the
+  turn stays in the chat. The tree returns to its state before the send, the
+  text goes back to the input bar, and the error shows below the chat with no
+  **Regenerate**. A rejected regeneration keeps the earlier answer. A network
+  failure without IDs can still have reached the server, so its turn stays in
+  the tree. The next message follows the last saved message, so that turn
+  becomes a hidden branch until saved history replaces it.
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
   answers that route with a 404 and a message that nginx must serve `/api`
@@ -103,7 +144,7 @@ AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatControl
   drain loop, one store update per animation frame
     updateSessionMessageTree(frozenSessionId, ...)
   settleChatSession                                 web/src/lib/chat/settleChatSession.ts
-    await ack and reader -> waitForChatSessionIdle -> reload history if asked -> "input"
+    await ack and reader -> waitForChatResponseEnd -> follow next stream or release input
 AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
   groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
   tool groups -> timeline steps;  display groups -> answer
@@ -113,61 +154,167 @@ AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProc
 **The store.** `web/src/app/app/stores/useChatSessionStore.ts` holds a `Map`
 of session data keyed by session id, plus `currentSessionId`. Each session has
 its own message tree, chat state, `AbortController`, `sendAcknowledged` and
-`readerFinished` promises, and message queue. The `AbortController` identifies
+`readerFinished` promises, and display state. The server queue and session
+status live in SWR (see Pending input below); the store has no copy of either.
+The `AbortController` identifies
 the request that owns the session; late work from an older request checks it
 and stops. A stream keeps writing to the session that started it
 (`frozenSessionId`), so a user can switch chats while one streams. Chat states
 beyond `input`, `loading` and `streaming` include `cancelling` (Stop sent),
-`unconfirmed` (the client could not confirm that the server is idle) and
+`unconfirmed` (the client could not confirm execution status or load saved history) and
 `uploading` (attachments upload). `onSubmit` ignores a send unless the state
-is `input`, so the input bar queues a send made during an upload.
+is `input`. Pending messages use a separate endpoint. They name the target
+response when the client knows its ID; otherwise the server targets the running
+response. They allow no new attachments and need an explicit choice for a
+multi-model turn.
 Each `setCurrentSession` runs `cleanupOldSessions`, which keeps at most ten
-sessions in memory. It drops only idle ones: not current, in `input`, with no
-queued messages, and known not to be incognito (or still empty). An incognito chat cannot be
+sessions in memory. It drops only idle ones: not current, in `input`, and
+known not to be incognito (or still empty). Pending messages live on the server. An incognito chat cannot be
 rebuilt from the server, so the tab holds its only copy. A dropped chat loads
 from the server again when the user opens it, so state kept only in the store
-does not survive it. Within `/app`,
-`web/src/lib/position/hooks.ts:AppPosition` switches views by writing the URL
-with the history API, not a server navigation; in-app links use its `linkTo*`
-props.
+does not survive it. Navigation goes through
+`web/lib/opal/src/navigation/hooks.ts:Navigation.go`: it writes the URL with the
+history API first, so the tabs follow the click, then asks Next to render a new
+route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
+`web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
+`AppPage` renders itself, so writing the URL is the whole switch; in-app links
+use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+`web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
+URL's page loader (the agents catalog, the agent editor, the page loader, or
+blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
+loader shows while Next commits the route.
 
 **The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
 nodes keyed by `nodeId`, each with `latestChildNodeId`.
 `getLatestMessageChain` walks it to get what the page shows. On load,
 `app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
-session response and its replay packets ([[chat-persistence]]). A saved
+session response and its replay packets ([[chat-persistence]]). Refreshing the
+latest page preserves loaded history that connects to that page. Incognito
+recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
+Unless it edits, regenerates or makes an implicit multi-model pick, `onSubmit`
+puts a new message after the last chain node that has a `messageId`, a saved
+failed response included, and sends that ID as `parent_message_id`. The local
+parent and the server parent are the same node. When the server answers
+without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
+`null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
+send's nodes and restores the links of their parent. The error goes to the
+session's `uncaughtError`, a `SessionError` with the error code and details,
+after settlement.
+An automatic follow-up response has a hidden `agent_results` question node as
+its parent. `ChatUI` and the shared chat view render that node with
+`web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+look for the last `user` node skip it, and export omits it. A multi-model turn
+is unresolved only while the chain tip's parent is its user message
+(`web/src/app/app/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
+reopen response selection.
 
 **Packet processing.** `processPackets` is incremental. It processes only
 packets past `nextPacketIndex` and keeps its state in a ref. It decides each
 group's kind from the group's first tool or display packet, and keeps it: a
-tool packet (`isToolPacket`) makes a timeline step, and `MESSAGE_START` or
-`IMAGE_GENERATION_TOOL_START` makes an answer group. Debug and control packets
+tool packet (`isToolPacket`), including image generation, makes a timeline
+step. `MESSAGE_START` makes an answer group. Debug and control packets
 that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
 `CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
-making their own step. A group that mixes answer text and generated images
-renders through `MixedContentHandler`.
+making their own step. Generated images accumulate across tool steps, unique
+by file ID, and render once above the answer as soon as they arrive. Later tool
+calls do not hide them. An image call does not mark the
+answer as final; later search or image calls can continue the timeline.
 
-A group closes on its own `SECTION_END` or `ERROR`; a new `turn_index` or a
-stop packet adds a `SECTION_END` to each open group. Parallel tools share a
-`turn_index` and differ by `tab_index`. A subagent's child packets carry the
-parent's key plus `sub_turn_index`, which the processor ignores, so they join
-the parent group. `ResearchAgentRenderer` and `CodingAgentRenderer` split on
-`sub_turn_index`, and `app/app/message/messageComponents/toolDisplayHelpers.tsx:isToolComplete` ignores nested
-`SECTION_END` packets.
+A group closes on its own parent-level `SECTION_END` or `ERROR`
+(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+shared by `isToolComplete` and the packet processor); a new `turn_index` or a
+stop packet adds a parent-level `SECTION_END` to each open group. A stop
+packet also ends each open nested call, because no packet follows it. Parallel
+tools share a `turn_index` and differ by `tab_index`. The child packets of a
+subagent, a coding agent (its bash calls and thinking) or a code mode program
+carry the parent's key plus `sub_turn_index`, so they join the parent group,
+and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
+does not start the answer.
+The packet processor splits each group once
+(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+`GroupedPacket.packets` holds only the group's own packets. The step-kind checks
+in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+`findRenderer`, the header, and `isToolComplete` read only these, so a research
+step with a nested search is a research step, not a search step.
+`GroupedPacket.nestedCalls` holds the nested calls, made with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+Each `NestedCall` holds one call's packets placed at parent level, so the tool's
+own renderer reads it as a direct call. The snapshot reuses the object of each
+unchanged call, so memoized renderers of finished calls do not redraw.
+`GroupedPacket.streamPackets` holds every packet in stream order. Every renderer
+receives all three as required props. `ResearchAgentRenderer` draws each entry
+of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
+`streamPackets`, because its thinking and bash sections interleave in stream
+order.
+After the answer starts, a tool packet of a group whose tool has not started
+is a new tool call and sets `finalAnswerComing` back to false. The tool starts
+with its first tool packet other than a streamed argument, so a call whose
+arguments streamed before the answer also counts when it starts. A later
+packet of a started tool, such as a code mode closing record, joins its group,
+and the answer stays shown. The stop packet sets `finalAnswerComing` again
+when the latest display group is text, not a user message. Nothing follows the
+stop, so the text of a step that ends the response with a tool call, such as
+`wait_agents`, is the answer. A cancelled or failed turn shows its latest text
+the same way, as its saved answer does. Live,
+the closing record follows the answer. On replay, it follows its tab's section
+end, before the answer's `message_start`. Both orders give the same groups.
+The mobile app copies the group end and step-kind rules in
+`mobile/src/chat/timeline/packetHelpers.ts` and
+`mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has
+`nestedCalls` for code mode steps, but no `streamPackets`.
+
+**Code mode steps.** Code mode runs behind the scenes: the timeline shows the
+tool calls a program makes, not the program.
+`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+turns each nested call of an `execute_code` or `wait_code` group into its own
+step, drawn by that tool's renderer as a direct call would be. The packet
+processor adds each nested packet to its call as the packet arrives, and after
+each processed batch builds `GroupedPacket.nestedCalls` for each group with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+It reuses the `NestedCall` object of each unchanged call, and
+`expandCodeModeSteps` reuses the step it made for that object, so memoized
+renderers of finished calls do not redraw. A call is its cell and
+`sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
+states, so the latest report replaces the earlier ones in place. Pacing
+compares the last packet of each step, because a new report can have as many
+packets as the old one. The program, its output, `wait_code`
+calls, yields and closing records have no step. A program without tool calls
+shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
+in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
+reports a status, and a running program whose cell has no running call sets
+it. A yield (status `running`) ends the program's turn: the model acts next.
+`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
+even when the last turn group is parallel.
+The header names a step's activity from its own first packet; nested packets
+do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+so pacing still knows restored steps. The expanded timeline renders one list
+keyed by step (a parallel group by its first step), not by position, because a
+cell's new call can move later steps into another turn group. Concurrent calls of one program show as
+sequential steps, not parallel tabs: on replay the backend emits each call's
+packets one after another, and the saved calls have no start or end order, so
+the client cannot tell which calls overlapped. Mobile mirrors these transforms
+in its own module, `mobile/src/chat/timeline/transformers.ts`, so change both;
+its tests mirror the web cases. Mobile processes all packets again on each
+flush, so it does not reuse call or step objects.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
 When the response has `current_stream`, Stop can target that stream ID at
-once. When the ID is an assistant node, `resumeInFlightRun` calls
+once. `lib/chat/settleChatSession.ts:prepareSavedChat` turns the saved page and
+the local tree into the tree to show and the stream to replay; load and
+`refreshChatSession` both use it. When the ID is an assistant node,
+`lib/chat/settleChatSession.ts:followChatSession` calls
 `resumeStream` with the stream ID and the node's `replayCursor` (0 on a fresh
 page). It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
 `AgentMessage` shows it without animation. `resumeStream` does not drop
-heartbeats, so `resumeInFlightRun` drops `chat_heartbeat` itself. A resumed
-error packet turns the node into an `error` node and pauses the queue. When
+heartbeats, so `followChatSession` drops `chat_heartbeat` itself. A resumed
+error packet turns the node into an `error` node. The backend decides whether
+queued input can run. When
 the reader ends, it settles the session. A multi-model turn, whose stream ID
 is the user message, only settles.
 
@@ -183,17 +330,58 @@ in one of these states, or it stays busy.
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader, then polls `/status` once a second, with no time limit, until idle.
+reader, then `lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
+until that response releases ownership. The status includes the current stream
+ID. A queued response can take ownership without making the session idle;
+`refreshChatSession` loads the latest page and `followChatSession` attaches to
+it. `refreshChatSession` runs only when no reader owns the session: when
+settlement finds a next stream, or when a status read shows an idle chat a
+running turn or a latest response it does not have. Readiness polls write each
+status into the SWR status cache, so `lib/chat/hooks.ts:useChatSessionQueue`
+sees every status read; a changed `latest_response_id` also reloads the
+pending list.
+Overlapping calls for one session share one in-flight refresh. It drops its
+result if a new send replaced the session's `AbortController`. Refresh and
+settlement merge saved pages through one function that keeps local failed
+turns and remaps the selected response.
 After a resume, a Stop, an error or a failed save it also reloads saved
 history. `preserveFailedMessages` keeps a local error unless the saved row's
 `response_status` is `complete`, `limit` or `cancelled` (text or files when
 the field is absent). After a clean send, the streamed tree stays. Settlement
 never reloads history for an incognito session, in either record mode; on a
 reload or recovery it only adds a stop packet to the last answer if it has
-none. A failed or timed-out (10 s) request, or a session that is busy again
-during the reload, sets `unconfirmed` and pauses the queue. Recovery comes
+none. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+A newly active stream during reload transfers to the same replay reader. Recovery comes
 from the input bar's manual check or from loading the session again (see
 Resume).
+
+**Pending input.** `lib/chat/hooks.ts:useChatSessionQueue` holds the pending
+list and session status in SWR. `useChatSessionController` mounts it once per
+chat page and passes it to `AppInputBar`, which only renders it. The hook
+subscribes to primitives and memoizes its result, so streamed frames do not
+re-render the memoized `AppInputBar`; submit reads its target response from
+the store when it runs. Incognito chats and anonymous users get a disabled
+queue. One pending-message request runs at a time, and its cache writes use
+the key of the chat that made it. Each request revalidates session status when
+it ends, so polling starts for input it made startable. Submit appends the
+accepted message, then revalidates, because a turn can take it at once. The list does not poll. A turn reloads it
+once, when the status shows a new `latest_response_id` for the same chat: the
+server takes a queued input in the transaction that starts its response.
+Input that joins a running response arrives as a `user_message` packet;
+`app/app/services/lib.tsx` removes that ID from the cached list on either
+reader, with no request. Saved replay emits the same packets from each step's
+human inputs, so both paths render user bubbles between response sections.
+Status polls every 2 seconds while `has_startable_input` or
+`has_active_subagents` is true. `stopSubagents` posts
+`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status. An idle chat that sees a running or unknown
+response refreshes history and attaches to the stream.
+`app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
+the latest response's last packet is a turn-level stop. `AppInputBar` then
+hides Stop and treats the response as finished, since a Stop would reach the
+finished stream while the server starts the next queued turn. The keyboard
+highlight in `hooks/useQueuedMessageNavigation.ts` is keyed by message ID, so a
+message that leaves the queue drops the highlight. `sections/input/inputBarKeys.ts`
+ignores keys during IME composition.
 
 **First-run onboarding.** `AppPage` renders
 `web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
@@ -204,9 +392,12 @@ so another browser starts again. The input lock is a comparison against
 `STEP_CONFIG[OnboardingStep.OptionalSetup].index` in the input bar's
 `disabled` prop in `AppPage`; a change to the step order must keep it.
 
-**Forced tools.** At send time `onSubmit` filters the forced tool through
-`web/src/lib/plugins/chat.ts:effectiveChatForcedToolId`. The stored per-chat
-choice does not change. [[plugins]] owns the rule.
+**Action preference.** At send time `onSubmit` filters the selected Action through
+`web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. Sending a message
+preserves the selected preference for later messages in that chat. Each request
+sends the current eligible selection, except Deep Research requests send no
+preference. A preference does not restrict which available tools may run.
+[[plugins]] owns Action availability.
 
 **The development `/api` proxy.**
 `web/src/app/api/[...path]/route.ts` forwards every method under `/api` to
@@ -224,9 +415,12 @@ its header tabs and section titles at once. Each section (agents, projects,
 recents) shows Opal's `SidebarLoader` until its own data loads, so a fast
 section does not wait for a slow one; `usePinnedAgents` stays loading until the
 user's pins are in its list. Folded, the header keeps the unfolded button
-order. The header row is the logo mark and the wordmark from
+order. The header is
+`web/src/sections/sidebar/BrandedSidebarHeader.tsx:BrandedSidebarHeader`, which
+the admin and Craft sidebars share: the logo mark and the wordmark from
 [[whitelabelling-and-theme]], and the fold button, which moves with the
-column's edge as the sidebar folds.
+column's edge as the sidebar folds. A sidebar renders it rather than setting
+up its own branding.
 
 ## Contracts and traps
 
@@ -237,7 +431,7 @@ column's edge as the sidebar folds.
    one of the same or greater length keeps the state built from the old
    packets. `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage`
    memoizes on `packetCount`, not on the array. Update both together, as
-   `web/src/hooks/useChatSessionController.ts:resumeInFlightRun` does.
+   `web/src/lib/chat/settleChatSession.ts:followChatSession` does.
 2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
    [[streaming-protocol]] lists the hand-mirrored places, including
    `findRenderer`. The web client keeps more hand-written sets that switch on
@@ -277,32 +471,32 @@ column's edge as the sidebar folds.
    before it builds error nodes, so an abort renders no error node. Make the
    same check in any new consumer of the FIFO before it turns `stack.error`
    into UI.
-6. `queue-needs-three-flags` **The queue needs three flags.**
-   `sections/input/AppInputBar.tsx:AppInputBar` sends
-   the next queued message when the chat state is `input`,
-   `latestMessageRenderComplete` is true and `queuedMessagesPaused` is false.
-   It sends on the change into that state, not while in it, so clearing the
-   pause alone sends nothing.
-   `AgentMessage` sets render-complete when its text has drawn;
-   `app/app/message/MultiModelResponseView.tsx` sets it when every visible
-   successful panel has drawn. A path that ends a stream without the text
-   renderer finishing must have `settleChatSession` set it
-   (`completeRendering`). If none does, the queue stalls with no error.
-   `onSubmit` clears the pause; errors, failed saves and failed settlement set
-   it.
+6. `server-owns-queue` **Only the backend starts queued turns.**
+   `sections/input/AppInputBar.tsx:AppInputBar` submits text through
+   `useChatSessionQueue`. It does not wait for rendering or call normal send
+   when a response ends. SWR owns the pending-list cache. Accepted between-step
+   inputs use the same ordered packets for live display and reload. A failed
+   POST returns the text to the composer, ahead of any text typed since, or to
+   that chat's draft when the chat is no longer open. Editing waits for DELETE to
+   return the withdrawn text and makes that chat's composer read-only
+   meanwhile, so typed text cannot collide with it. If the user switched chats
+   during the request, the returned text goes to the original chat's draft. A conflict refreshes the list without
+   restoring text that was already accepted.
 7. `branch-switch-reaches-server` **A branch switch must reach the server.**
    `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
    local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The
    backend accepts a send only when its parent is on the server's active branch
    ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
    server's branch. A UI path that changes `latestChildNodeId` without the PUT
-   breaks both.
+   breaks both. After selection succeeds, refresh session status: an idle
+   branch has no polling timer to discover another branch's active children.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
    applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
-   waits for that PUT before dispatch. If it fails, the send fails and only
-   the preference is cleared, so a retry runs the PUT again; a newer explicit
-   pick is kept. A Stop while it waits is a before-dispatch abort.
+   waits for that PUT before dispatch. If it fails, the send fails: only the
+   preference is cleared, so a retry runs the PUT again; a newer explicit
+   pick is kept. The send's nodes go away and its text returns to the input
+   bar. A Stop while it waits is a before-dispatch abort.
 9. `usage-limit-is-packet` **A 429 usage limit is a packet, not a throw.**
    `app/app/services/lib.tsx:sendMessage` turns it into a `StreamingError` with
    `is_retryable: false` and no `model_index`, so in a single-model send the
@@ -350,6 +544,22 @@ column's edge as the sidebar folds.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
+15. `scroll-follow-intent` **Content growth must not cancel following.**
+    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
+    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
+    catch up if auto-scroll is enabled and the user has not scrolled away.
+    During the opening-follow window, content observers can also catch up with
+    auto-scroll disabled. Scrolling up ends that window. Content observers
+    update visual state without treating layout growth as a user scroll. When
+    the content shrinks, an upward scroll up to the shrinkage is layout, not
+    the user, so only movement beyond it stops following.
+    Every scroll baseline records the position and the content height
+    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
+    turn sent from the page, which passes through `loading`. A run the page
+    resumes starts at `streaming` and gets no space. The scroll element is
+    keyed by session, so a chat switch remounts the spacer. Its unmount clears
+    its state and the shared spacer height.
+
 ---
 
 ## Decisions
@@ -372,7 +582,7 @@ column's edge as the sidebar folds.
   `details.model_index`, and the 429 packet has none. The panels also get no
   stop packet.
 - **Resume covers one model only.** For a multi-model turn, `current_stream`
-  is the user message id, so `resumeInFlightRun` skips it. The page shows no
+  is the user message id, so `followChatSession` does not replay it. The page shows no
   live output for that turn; settlement loads the answers when the run ends.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
@@ -395,7 +605,7 @@ column's edge as the sidebar folds.
 - [[llm-providers]]: `useLlmManager` and model capabilities.
 - [[file-store-and-user-files]]: `beginUpload` and attached files.
 - [[voice]]: `VoiceModeProvider` wraps the layout.
-- [[plugins]]: the forced-tool rule and the member plugins sent with a turn.
+- [[plugins]]: the Action-preference rule and the member plugins sent with a turn.
 - [[rate-and-usage-limits]]: the 429 usage-limit response shape.
 
 ---
@@ -433,6 +643,8 @@ column's edge as the sidebar folds.
   `web/tests/e2e/utils/`.
 - Jest: the `*.test.ts` and `*.test.tsx` files beside the code in
   `web/src/app/app/`.
-- By hand: force a tool call, edit, switch back, stop mid-answer, and reload.
+- By hand: select an Action preference, edit, switch back, stop mid-answer, and reload.
   Citations resolve, the branch holds, and the partial answer stays. Queue a
-  message during an answer: it sends only after the input returns to idle.
+  message with Ctrl/Cmd+Enter during an answer: the server starts it after completion.
+  Enter adds text at the next model step by default. Choose Send now on a
+  queued message to interrupt. Reload and verify pending and accepted text.

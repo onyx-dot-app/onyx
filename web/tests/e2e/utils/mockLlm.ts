@@ -45,6 +45,12 @@ export const MOCK_LLM_MODELS = [
   { name: "mock-model-alt", displayName: "Mock Alt Model" },
 ] as const;
 export const MOCK_LLM_DEFAULT_MODEL = MOCK_LLM_MODELS[0];
+/**
+ * Whether the backend offers tools through `execute_code` programs. Set
+ * CODE_MODE_ENABLED for the runner to the backend's value; CI sets both.
+ */
+export const CODE_MODE_ENABLED =
+  process.env.CODE_MODE_ENABLED?.toLowerCase() === "true";
 
 const HEALTH_TIMEOUT_MS = 30_000;
 const HEALTH_POLL_INTERVAL_MS = 1_000;
@@ -72,6 +78,9 @@ export interface MockLlmRequestConditions {
 
 export interface MockLlmReply {
   pause_after_first_chunk?: string;
+  heartbeat_while_paused?: boolean;
+  /** End the stream with this provider error after the reply text. */
+  error_after_text?: string;
   reasoning?: string;
   text?: string;
   tool_calls?: MockLlmToolCall[];
@@ -88,6 +97,39 @@ export interface MockLlmConversation {
 export interface MockLlmScript {
   conversations?: MockLlmConversation[];
   default_reply?: MockLlmReply | null;
+}
+
+/**
+ * A reply that calls tools the way the backend offers them: native tool calls,
+ * or with code mode on, one `execute_code` program that awaits each call in
+ * order. A program names a tool with its other characters as `_`; it can call
+ * a deferred (MCP or custom) function without `tool_search`. The program call
+ * takes the first call's id, so a later reply can wait for
+ * `has_results_for: [calls[0].id]` in both modes.
+ */
+export function mockLlmToolCallReply(calls: MockLlmToolCall[]): MockLlmReply {
+  if (!CODE_MODE_ENABLED) {
+    return {
+      tool_calls: calls,
+      conditions: { offers: calls.map((call) => call.name) },
+    };
+  }
+  const code = calls
+    .map((call) => {
+      const args = Object.entries(call.arguments ?? {}).map(
+        ([name, value]) =>
+          `${name}=json.loads(${JSON.stringify(JSON.stringify(value))})`
+      );
+      const name = call.name.replace(/[^0-9A-Za-z_]/g, "_");
+      return `await ${name}(${args.join(", ")})`;
+    })
+    .join("\n");
+  return {
+    tool_calls: [
+      { id: calls[0]!.id, name: "execute_code", arguments: { code } },
+    ],
+    conditions: { offers: ["execute_code"] },
+  };
 }
 
 /** The `api_base` of a provider that the given script answers. */

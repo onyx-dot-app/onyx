@@ -6,7 +6,7 @@ import { Slot } from "@radix-ui/react-slot";
 import type { RichStr, Spacing } from "@opal/types";
 import { spacingToRem } from "@opal/shared";
 import { ContentAction, Section } from "@opal/layouts";
-import { Button, type TagProps } from "@opal/components";
+import { Button, type BadgeProps } from "@opal/components";
 import { Fold } from "@opal/components/fold/components";
 import { SvgExpand, SvgFold } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
@@ -15,8 +15,8 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 interface CollapsibleProps {
   title: string | RichStr;
   description?: string | RichStr;
-  /** Tag shown next to the title. */
-  tag?: TagProps;
+  /** Badge shown next to the title. */
+  tag?: BadgeProps;
   /** Controlled open state. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -101,11 +101,10 @@ function CollapsibleSectionLayout({
         onPointerLeave={() => setHovered(false)}
       >
         <ContentAction
+          font="main-content-emphasis"
           title={title}
           description={description}
-          tag={tag}
-          sizePreset="main-content"
-          variant="section"
+          badge={tag}
           padding={0}
           center
           rightChildren={

@@ -1,0 +1,201 @@
+name: Release Craft Runtime
+
+on:
+  push:
+    tags: ["*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  determine-builds:
+    runs-on: ubuntu-slim
+    timeout-minutes: 15
+    outputs:
+      build-sandbox: ${{ steps.classify.outputs.build-sandbox }}
+      is-stable: ${{ steps.classify.outputs.is-stable }}
+      is-latest: ${{ steps.classify.outputs.is-latest }}
+      is-beta-standalone: ${{ steps.classify.outputs.is-beta-standalone }}
+      is-test-run: ${{ steps.classify.outputs.is-test-run }}
+      sanitized-tag: ${{ steps.classify.outputs.sanitized-tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          fetch-tags: true
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+      - name: Build release classifier
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods" .
+      - name: Classify the Onyx release
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          "${RUNNER_TEMP}/ods" release classify \
+            --ref "${GITHUB_REF_NAME}" --sha "${GITHUB_SHA}" \
+            --event "${EVENT_NAME}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    needs: determine-builds
+    if: needs.determine-builds.outputs.build-sandbox == 'true'
+    runs-on:
+      - runs-on
+      - runner=8cpu-linux-x64
+      - family=m8i.2xlarge
+      - ram=32
+      - nested-virt=true
+      - spot=false
+      - volume=80gb
+      - run-id=${{ github.run_id }}-craft-runtime-release
+      - extras=ecr-cache
+    timeout-minutes: 60
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      REGISTRY_IMAGE: onyxdotapp/craft-runtime
+      EDGE_TAG: ${{ startsWith(github.ref_name, 'nightly-latest') || github.ref_name == 'edge' }}
+    steps:
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-2
+      - name: Get AWS Secrets
+        uses: aws-actions/aws-secretsmanager-get-secrets@2cb1a461cbd4865ac4299648312e4704c646cd53
+        with:
+          secret-ids: |
+            DOCKER_USERNAME, deploy/docker-username
+            DOCKER_TOKEN, deploy/docker-token
+          parse-json-secrets: true
+      - name: Login to Docker Hub
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ env.DOCKER_TOKEN }}
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # ratchet:docker/setup-buildx-action@v4
+      - name: Build runtime
+        uses: docker/bake-action@d3418bd7d0e9324001bca92fa8ba175ea7e6dc9b
+        env:
+          IMAGE_VERSION: ${{ github.ref_name }}
+          TAG: release-check
+        with:
+          source: .
+          files: deployment/craft-runtime/docker-bake.hcl
+          targets: runtime
+          load: true
+          no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+          set: |
+            runtime.platform=linux/amd64
+            runtime.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:edge
+            runtime.cache-from+=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:latest
+            runtime.cache-to=type=inline
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+      - name: Audit runtime and supplemental inventory
+        working-directory: tools/ods
+        run: go run ./odsaudit image onyxdotapp/craft-runtime:release-check --sbom /opt/chrome/browser.cdx.json --sbom-only --strict --update-policy s3://onyx-internal-tools/audit/updates.json
+      - name: Check runtime offline
+        run: |
+          docker run --rm --network none --shm-size=256m \
+            --security-opt seccomp=unconfined \
+            onyxdotapp/craft-runtime:release-check /opt/onyx/check-runtime
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: microvm/go.mod
+          cache: false
+      - name: Check interrupted command diagnostics
+        working-directory: microvm
+        run: go test -tags kvm -run '^TestCollectKeepsPartialOutput$' ./internal/guestd/kvmtest
+      - name: Install rootfs build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends e2fsprogs file openssl python3
+      - name: Build pinned Firecracker test artifacts
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
+        with:
+          context: deployment/craft-fc
+          file: deployment/craft-fc/Dockerfile.artifacts
+          target: artifacts
+          platforms: linux/amd64
+          build-args: |
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          outputs: type=local,dest=${{ runner.temp }}/craft-runtime-artifacts
+      - name: Check runtime in Firecracker KVM
+        run: |
+          sudo modprobe kvm_intel
+          sudo env "PATH=$PATH" "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}" \
+            "DOCKER_CONFIG=${DOCKER_CONFIG:-$HOME/.docker}" \
+            bash deployment/craft-runtime/check-kvm.sh onyxdotapp/craft-runtime:release-check \
+              "${RUNNER_TEMP}/craft-runtime-artifacts/craft-fc"
+      - name: Setup uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # ratchet:astral-sh/setup-uv@v10.0.1
+        with:
+          version: "0.11.25"
+          enable-cache: false
+      - name: Install ods from uv.lock
+        run: uv sync --frozen --no-install-project --only-group ods
+      - name: Audit the checked runtime image
+        run: uv run --no-sync ods audit image onyxdotapp/craft-runtime:release-check --fail-on=critical --strict
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('craft-runtime-{0}', needs.determine-builds.outputs.sanitized-tag) || github.ref_name }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta' || '' }}
+            type=semver,pattern={{version}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}},enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+      - name: Docker meta (dev)
+        id: meta-dev
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302
+        with:
+          images: ${{ needs.determine-builds.outputs.is-test-run == 'true' && env.RUNS_ON_ECR_CACHE || env.REGISTRY_IMAGE }}
+          flavor: |
+            latest=false
+          tags: |
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run == 'true' && format('craft-runtime-{0}-dev', needs.determine-builds.outputs.sanitized-tag) || format('{0}-dev', github.ref_name) }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-latest == 'true' && 'latest-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && env.EDGE_TAG == 'true' && 'edge-dev' || '' }}
+            type=raw,value=${{ needs.determine-builds.outputs.is-test-run != 'true' && needs.determine-builds.outputs.is-beta-standalone == 'true' && 'beta-dev' || '' }}
+            type=semver,pattern={{version}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}.{{minor}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+            type=semver,pattern={{major}}-dev,enable=${{ needs.determine-builds.outputs.is-stable == 'true' }}
+      - name: Publish checked image
+        env:
+          META_TAGS: ${{ steps.meta.outputs.tags }}
+          META_DEV_TAGS: ${{ steps.meta-dev.outputs.tags }}
+        run: |
+          set -euo pipefail
+          mapfile -t tags < <(printf '%s\n%s\n' "$META_TAGS" "$META_DEV_TAGS" | sed '/^$/d')
+          if [ "${#tags[@]}" -eq 0 ]; then
+            echo "::error::No Craft runtime tags were generated"
+            exit 1
+          fi
+          for tag in "${tags[@]}"; do
+            docker tag onyxdotapp/craft-runtime:release-check "$tag"
+            docker push "$tag"
+          done

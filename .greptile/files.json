@@ -2,7 +2,7 @@
   {
     "scope": [],
     "path": "contributing_guides/best_practices.md",
-    "description": "Best practices for contributing to the codebase"
+    "description": "Engineering best practices: the team's coding standards"
   },
   {
     "scope": ["web/**"],

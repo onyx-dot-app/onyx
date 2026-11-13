@@ -132,6 +132,7 @@ export default function InputSingleUpload(props: InputSingleUploadProps) {
       placeholder={props.placeholder ?? strings.inputUploadPlaceholder}
       dropToAdd={strings.inputUploadDropToAdd}
       dropOverValue={strings.inputUploadDropToReplace}
+      selectLabel={strings.inputUploadSelect}
       onFiles={(files) => {
         const file = files[0];
         if (file) takeFile(file);

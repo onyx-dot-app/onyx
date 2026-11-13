@@ -1,8 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { memo } from "react";
 import type { Route } from "next";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { SvgExternalLink } from "@opal/icons";
@@ -10,7 +10,6 @@ import { ContentAction, Section } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { FINAL_SETUP_CONFIG } from "@/lib/onboarding/constants";
 import { useSettings } from "@/lib/settings/hooks";
-import { noProp } from "@/lib/utils";
 
 interface FinalStepItemProps {
   icon: IconFunctionComponent;
@@ -28,29 +27,32 @@ function FinalStepItemInner({
   buttonText,
   buttonHref,
 }: FinalStepItemProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
+  const link = navigation.linkTo(buttonHref);
 
   return (
     <SelectCard
       state="empty"
       padding={1}
       rounding={4}
-      onClick={() => router.push(buttonHref)}
+      onClick={() => navigation.go(buttonHref)}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={title}
         description={description}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
             prominence="tertiary"
             rightIcon={SvgExternalLink}
-            href={buttonHref}
+            href={link.href}
             // The link navigates itself; the card must not navigate again.
-            onClick={noProp()}
+            onClick={(event) => {
+              event.stopPropagation();
+              link.onClick(event);
+            }}
           >
             {buttonText}
           </Button>

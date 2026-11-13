@@ -31,7 +31,7 @@ from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.credential_families import to_source_credential_json
 from onyx.connectors.models import InputType
 from onyx.db.backfill_models import PendingBackfill
-from onyx.db.cc_pair_runs_models import CCPairRunPage
+from onyx.db.cc_pair_runs_models import CCPairRunPage, GroupSyncErrorCounts
 from onyx.db.enums import (
     AccessType,
     CapabilityCheckRunStatus,
@@ -105,6 +105,8 @@ class DeletionAttemptSnapshot(BaseModel):
     connector_id: int
     credential_id: int
     status: TaskStatus
+    # When the running deletion took its fence. None while it only waits to start.
+    started_at: datetime | None = None
 
 
 class ConnectorBase(BaseModel):
@@ -517,13 +519,20 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
     total_users_processed: int
     total_groups_processed: int
     total_group_memberships_synced: int
+    # Users and groups the sync could not read, resolved ones included.
+    failed_users: int
+    failed_groups: int
+    # Of those, the ones no admin resolved.
+    open_error_count: int
     time_created: str
     time_started: str | None
     time_finished: str | None
 
     @classmethod
     def from_external_group_sync_attempt_db_model(
-        cls, attempt: ExternalGroupPermissionSyncAttempt
+        cls,
+        attempt: ExternalGroupPermissionSyncAttempt,
+        error_counts: GroupSyncErrorCounts,
     ) -> "ExternalGroupSyncAttemptSnapshot":
         return ExternalGroupSyncAttemptSnapshot(
             id=attempt.id,
@@ -533,6 +542,9 @@ class ExternalGroupSyncAttemptSnapshot(BaseModel):
             total_users_processed=attempt.total_users_processed or 0,
             total_groups_processed=attempt.total_groups_processed or 0,
             total_group_memberships_synced=attempt.total_group_memberships_synced or 0,
+            failed_users=error_counts.users,
+            failed_groups=error_counts.groups,
+            open_error_count=error_counts.open_count,
             time_created=attempt.time_created.isoformat(),
             time_started=(
                 attempt.time_started.isoformat() if attempt.time_started else None
@@ -561,6 +573,8 @@ class CCPairIndexRun(CCPairRunClosure):
     kind: Literal[CCPairRunKind.INDEXING] = CCPairRunKind.INDEXING
     time_created: datetime
     attempt: IndexAttemptSnapshot
+    # A targeted reindex of chosen documents, not a run over the whole pair.
+    is_retry: bool
 
 
 class CCPairDocPermissionSyncRun(CCPairRunClosure):
@@ -718,16 +732,37 @@ class CCPairThroughputRun(BaseModel):
     status: IndexingStatus
 
 
+class CCPairThroughputSliceRun(BaseModel):
+    attempt_id: int
+    status: IndexingStatus
+    # An admin resolved the run or a newer run superseded it, so it is no open failure.
+    resolved: bool
+
+
+class CCPairThroughputSlice(BaseModel):
+    start: datetime
+    end: datetime
+    docs_indexed: int
+    # A running run is in every slice from its start to the slice holding now.
+    runs: list[CCPairThroughputSliceRun]
+
+
 class CCPairThroughputResponse(BaseModel):
     """A rough estimate of the documents indexed in each equal slice of the
     window, oldest first (each run's total spread evenly over its span, since
     nothing records when a document landed), and the runs that overlap it,
-    oldest first."""
+    oldest first. Slice boundaries are multiples of the slice width since
+    midnight 1970-01-01 in the caller's UTC offset, so a width that divides a
+    day starts on their clock and any other width keeps its own grid. The
+    window ends on the first boundary at or after now. ``slices`` repeats the
+    counts with each slice's bounds and runs; the flat ``docs_indexed`` and
+    ``runs`` stay for web pods a deploy behind."""
 
     window_start: datetime
     window_end: datetime
     docs_indexed: list[int]
     runs: list[CCPairThroughputRun]
+    slices: list[CCPairThroughputSlice]
 
 
 class IndexingOverviewResponse(BaseModel):
@@ -737,6 +772,7 @@ class IndexingOverviewResponse(BaseModel):
 
     indexing_connectors: int
     active_connectors: int
+    paused_connectors: int
     # Estimated from each run's count spread over its span. A run counts a
     # document each time it processes it, failures included.
     recent_docs_indexed: int
@@ -745,13 +781,17 @@ class IndexingOverviewResponse(BaseModel):
     throughput: CCPairThroughputResponse
 
 
+# The most runs or pairs one batch request names.
+CC_PAIR_RUN_BATCH_MAX = 500
+
+
 class CCPairRunKey(BaseModel):
     kind: CCPairRunKind
     attempt_id: int
 
 
 class CCPairRunsResolveRequest(BaseModel):
-    runs: list[CCPairRunKey] = Field(min_length=1, max_length=500)
+    runs: list[CCPairRunKey] = Field(min_length=1, max_length=CC_PAIR_RUN_BATCH_MAX)
 
 
 class CCPairRunLevel(str, Enum):
@@ -770,6 +810,13 @@ class CCPairRunsResolveMatchingRequest(BaseModel):
     since: datetime | None = None
     until: datetime | None = None
     kinds: list[CCPairRunKind] | None = None
+    # Narrows each level's own groups, so a level outside them matches nothing.
+    status_groups: list[CCPairRunStatusGroup] | None = None
+    # The fleet routes narrow to these of the caller's pairs, None or empty
+    # meaning all. The pair routes reject it.
+    cc_pair_ids: list[int] | None = Field(
+        default=None, max_length=CC_PAIR_RUN_BATCH_MAX
+    )
 
 
 class CCPairRunsResolveResponse(BaseModel):
@@ -784,6 +831,14 @@ class CCPairRunsResolveMatchingResponse(BaseModel):
 
 class CCPairRunsResolvableCountResponse(BaseModel):
     count: int
+
+
+class IndexAttemptErrorsResolveRequest(BaseModel):
+    error_ids: list[int] = Field(min_length=1, max_length=CC_PAIR_RUN_BATCH_MAX)
+
+
+class IndexAttemptErrorsResolveResponse(BaseModel):
+    resolved_count: int
 
 
 class CCPairRef(BaseModel):
@@ -819,7 +874,7 @@ class IndexingRunsResponse(BaseModel):
 
 
 class IndexingConnectorStatus(str, Enum):
-    """How the status page buckets a pair, in the order the list sorts them."""
+    """How the status page buckets a pair. The list sorts by rank, not member order."""
 
     INDEXING = "indexing"
     FAILED = "failed"
@@ -827,6 +882,8 @@ class IndexingConnectorStatus(str, Enum):
     DELETING = "deleting"
     SCHEDULED = "scheduled"
     INDEXED = "indexed"
+    # A permission or group sync runs and no index run does.
+    SYNCING = "syncing"
 
 
 class IndexingConnectorRow(BaseModel):
@@ -846,8 +903,12 @@ class IndexingConnectorRow(BaseModel):
     docs_indexed: int
     last_success: datetime | None
     latest_index_attempt: IndexAttemptSnapshot | None
-    # The latest attempt's open errors, whole entities included.
+    # The latest attempt's open errors, whole entities included, plus the open
+    # prune and check runs.
     open_error_count: int
+    # The groups that read the pair's documents and the caller can see, sorted by name. Empty for public and synced pairs.
+    group_count: int
+    group_names: list[str]
     # Place by age in the line of index attempts handed to the queue, from 1,
     # while the latest waits there. The queue serves first runs ahead of
     # repeats, so a repeat can wait a little longer than its place says.
@@ -858,13 +919,15 @@ class IndexingConnectorRow(BaseModel):
 
 
 class IndexingConnectorsResponse(BaseModel):
-    """One page of the readable pairs, sorted by status then name."""
+    """One page of the readable pairs, sorted by rank then name."""
 
     items: list[IndexingConnectorRow]
     # Pairs matching the search and the status filter.
     total_items: int
     # Per status, ignoring the status filter, so the counts stay put while one is applied.
     status_counts: dict[IndexingConnectorStatus, int]
+    # Per source over every matching pair, not the page's, so a source split across pages counts in full.
+    source_counts: dict[DocumentSource, int]
     # Federated connectors have no runs or documents. Admins see them after the
     # pairs on the first page, under the search but outside the status filter.
     federated_connectors: list[FederatedConnectorStatus]
@@ -986,6 +1049,8 @@ class CCPairFullInfo(BaseModel):
 
     # Set while the first index attempt waits on the capability checks.
     indexing_hold: IndexingHold | None = None
+    # Place by age in the index queue, from 1, while an attempt of the pair waits there.
+    queue_position: int | None = None
     pending_backfills: list[PendingBackfillSnapshot]
 
     @classmethod
@@ -1041,6 +1106,7 @@ class CCPairFullInfo(BaseModel):
         supports_targeted_reindex: bool = False,
         has_named_checks: bool = False,
         indexing_hold: IndexingHold | None = None,
+        queue_position: int | None = None,
     ) -> "CCPairFullInfo":
         # figure out if we need to artificially deflate the number of docs indexed.
         # This is required since the total number of docs indexed by a CC Pair is
@@ -1115,6 +1181,7 @@ class CCPairFullInfo(BaseModel):
             auto_sync_options=cc_pair_model.auto_sync_options,
             processing_mode=cc_pair_model.processing_mode,
             indexing_hold=indexing_hold,
+            queue_position=queue_position,
             pending_backfills=[
                 PendingBackfillSnapshot.from_pending(pending)
                 for pending in cc_pair_model.pending_backfills
@@ -1210,6 +1277,27 @@ class ConnectorIndexingStatusLiteResponse(BaseModel):
     current_page: int
     total_pages: int
     indexing_statuses: Sequence[ConnectorIndexingStatusLite | FederatedConnectorStatus]
+
+
+class DocumentTypeCount(BaseModel):
+    mime_type: str
+    count: int
+    # Documents of this type with a reported size. The size is complete only
+    # when this equals count.
+    sized_count: int
+    # Sum of the reported sizes. None when no document of this type has one.
+    size_bytes: int | None
+
+
+class CCPairDocumentTypeBreakdown(BaseModel):
+    """A cc-pair's indexed documents by the MIME type their source reports."""
+
+    types: list[DocumentTypeCount]
+    # Indexed documents whose source reported no type.
+    untyped_count: int
+    # The read hit its statement timeout, so the empty lists mean "unknown",
+    # not "no documents".
+    timed_out: bool = False
 
 
 class ConnectorCredentialPairIdentifier(BaseModel):
@@ -1455,3 +1543,14 @@ class IndexingStatusRequest(BaseModel):
     name_filter: str | None = None
     source_to_page: dict[DocumentSource, int] = Field(default_factory=dict)
     get_all_connectors: bool = False
+
+
+class EventSourceSnapshot(BaseModel):
+    """What an admin needs to wire one source's webhook up at the provider."""
+
+    source: DocumentSource
+    # One per endpoint, in the spec's order.
+    callback_urls: list[str]
+    # False until an active event connector exists; until then a provider's
+    # validation handshake fails.
+    receiving: bool

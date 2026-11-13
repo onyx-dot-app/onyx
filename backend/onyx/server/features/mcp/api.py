@@ -32,12 +32,12 @@ from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.db.action_policy import (
     get_or_create_gated_app_id,
     get_workspace_action_policies,
+    mcp_tool_default_policy,
     replace_workspace_action_policies,
     users_can_manage_policies,
 )
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
-    ActionPolicy,
     GatedAppKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -186,11 +186,6 @@ from onyx.utils.variable_functionality import (
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
-
-# A tool with no stored override is treated as ASK; stored policies stay sparse
-# by omitting this value (mirrors the gate evaluator's default).
-MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
-
 
 _SSRF_HINT_NEVER_ALLOWED = (
     " localhost, unspecified, and link-local/cloud-metadata addresses are never "
@@ -1665,6 +1660,7 @@ def get_mcp_server_tools_snapshots(
         ToolSnapshot.from_model(
             tool,
             permissions=tool_permissions(can_manage=can_manage_tool(user, tool)),
+            default_action_policy=mcp_tool_default_policy(tool.mcp_read_only),
         )
         for tool in mcp_tools
     ]
@@ -1700,11 +1696,14 @@ def _upsert_db_tools(
         annotations_title = tool.annotations.title if tool.annotations else None
         display_name = tool.title or annotations_title or tool_name
         input_schema = tool.inputSchema
+        read_only = tool.annotations.readOnlyHint if tool.annotations else None
 
         if existing_tool := existing_by_name.get(tool_name):
             existing_tool.description = description
             existing_tool.display_name = display_name
             existing_tool.mcp_input_schema = input_schema
+            existing_tool.mcp_output_schema = tool.outputSchema
+            existing_tool.mcp_read_only = read_only
             continue
 
         new_tool = create_tool__no_commit(
@@ -1720,6 +1719,8 @@ def _upsert_db_tools(
         )
         new_tool.display_name = display_name
         new_tool.mcp_input_schema = input_schema
+        new_tool.mcp_output_schema = tool.outputSchema
+        new_tool.mcp_read_only = read_only
         # Register it so a repeated name in this response is not inserted again.
         existing_by_name[tool_name] = new_tool
 

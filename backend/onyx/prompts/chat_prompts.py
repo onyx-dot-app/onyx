@@ -90,7 +90,7 @@ If you do have enough to answer, remember to provide INLINE citations using the 
 
 
 IMAGE_GEN_REMINDER = """
-Very briefly describe the image(s) generated. Do not include any links or attachments.
+Do not link or embed the generated image(s). Continue the task if needed; otherwise briefly describe them.
 """.strip()
 
 
@@ -113,6 +113,20 @@ Here is some additional context which may be relevant to the user query:
 
 {additional_context}
 """.strip()
+
+
+TOOL_PREFERENCE_REMINDER = (
+    "The user selected these operations for this request: {operations}. "
+    "{guidance} "
+    "If the selected operations are unsuitable or unavailable, explain why."
+)
+TOOL_PREFERENCE_GUIDANCE = (
+    "Prefer them when they help answer the request. "
+    "You may use other available tools or answer without tools."
+)
+TOOL_PREFERENCE_LAST_STEP_GUIDANCE = (
+    "No more tools can run. Answer from the available evidence."
+)
 
 
 TOOL_CALL_RESPONSE_CROSS_MESSAGE = """
@@ -147,3 +161,11 @@ Provide a short name for the conversation. Refer to other messages in the conver
 IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POSSIBLE. NEVER USE MORE THAN 5 WORDS, LESS IS FINE.
 """.strip()
 # ruff: noqa: E501, W605 end
+
+
+SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent agent gave you a task; you do not see the user's conversation. Your final answer goes to your parent.
+You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
+
+
+ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
+To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""

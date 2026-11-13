@@ -13,6 +13,7 @@ from onyx.db.enums import (
     SSOProviderType,
     SupportedLanguage,
     ThemePreference,
+    VectorQuantization,
 )
 from onyx.db.memory import MAX_MEMORIES_PER_USER
 from onyx.db.models import AllowedAnswerFilters, ChannelConfig, User
@@ -120,6 +121,7 @@ class UserPreferences(BaseModel):
 
     # Input preferences
     paste_as_tile: bool | None = None
+    interrupt_on_send: bool = False
 
     # Voice preferences
     voice_auto_send: bool | None = None
@@ -229,6 +231,7 @@ class UserInfo(BaseModel):
                     chat_background=user.chat_background,
                     default_app_mode=user.default_app_mode,
                     paste_as_tile=user.paste_as_tile,
+                    interrupt_on_send=user.interrupt_on_send,
                     voice_auto_send=user.voice_auto_send,
                     voice_auto_playback=user.voice_auto_playback,
                     voice_playback_speed=user.voice_playback_speed,
@@ -643,3 +646,22 @@ class CCPairIdsBackfillStatus(BaseModel):
 
 class CCPairAccessModeUpdateRequest(BaseModel):
     mode: CCPairAccessMode
+
+
+class VectorQuantizationLevelSupport(BaseModel):
+    """Whether the OpenSearch cluster can index one vector quantization level."""
+
+    vector_quantization: VectorQuantization
+    supported: bool
+    # "major.minor" of the oldest OpenSearch that can index this level, or None
+    # when any version can.
+    min_opensearch_version: str | None
+
+
+class VectorQuantizationSupport(BaseModel):
+    """The cluster's OpenSearch version and the quantization levels it supports.
+    A null version means the cluster does not report one, so nothing is
+    restricted."""
+
+    opensearch_version: str | None
+    levels: list[VectorQuantizationLevelSupport]

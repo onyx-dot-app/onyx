@@ -5,14 +5,22 @@ import ScheduleTaskForm, {
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
 import type { PickerEntry } from "@/lib/skills/picker";
 
-const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockCreateScheduledTask = jest.fn();
 const mockUpdateScheduledTask = jest.fn();
 const mockMutate = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockRouterReplace }),
 }));
+
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/craft/v1/tasks/new");
+});
 
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
@@ -131,7 +139,7 @@ function renderForm({
 
 describe("ScheduleTaskForm app picker", () => {
   beforeEach(() => {
-    mockRouterPush.mockReset();
+    mockRouterReplace.mockReset();
     mockCreateScheduledTask.mockReset();
     mockUpdateScheduledTask.mockReset();
     mockMutate.mockReset();
@@ -153,7 +161,7 @@ describe("ScheduleTaskForm app picker", () => {
     await waitFor(() =>
       expect(prompt).toHaveValue('[Use external app "Slack" (ID: 1)] ')
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
   it("routes an unauthenticated app to connection without inserting it", async () => {
@@ -164,7 +172,7 @@ describe("ScheduleTaskForm app picker", () => {
     await user.type(prompt, "/");
     await user.click(screen.getByRole("button", { name: "Connect Gmail" }));
 
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
     expect(prompt).toHaveValue("/");
   });
 
@@ -238,6 +246,6 @@ describe("ScheduleTaskForm app picker", () => {
     expect(mockMutate).toHaveBeenCalledWith(
       "/api/build/scheduled-tasks/task-id/action-policies"
     );
-    expect(mockRouterPush).toHaveBeenCalledWith("/craft/v1/tasks/task-id");
+    expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/tasks/task-id");
   });
 });

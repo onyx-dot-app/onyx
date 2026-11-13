@@ -33,20 +33,18 @@ export async function navigateToAgentInHistorySidebar(
 }
 
 export async function sendMessage(page: Page, message: string) {
-  // Count existing AI messages before sending
-  const existingMessageCount = await page
-    .locator('[data-testid="onyx-ai-message"]')
-    .count();
+  const chat = new ChatPage(page);
 
   await page.locator("#onyx-chat-input-textbox").click();
   await page.locator("#onyx-chat-input-textbox").fill(message);
   await page.locator("#onyx-chat-input-send-button").click();
 
-  // Wait for a NEW AI message to appear (count should increase)
-  await expect(page.locator('[data-testid="onyx-ai-message"]')).toHaveCount(
-    existingMessageCount + 1,
-    { timeout: 30000 }
-  );
+  // Wait on the latest turn, not on a count of AI messages: a long chat
+  // mounts only the messages near the viewport.
+  await expect(chat.humanMessages.last()).toContainText(message, {
+    timeout: 30000,
+  });
+  await chat.expectLatestReplyComplete();
 
   // Wait for up to 10 seconds for the URL to contain 'chatId='
   await page.waitForFunction(

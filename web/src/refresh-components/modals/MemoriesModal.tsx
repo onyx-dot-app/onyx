@@ -3,12 +3,11 @@
 import { Fragment, useState, useRef, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Text, Modal } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { InputTextArea, InputTypeIn } from "@opal/components";
 import { Button, Divider } from "@opal/components";
 import CharacterCount from "@/refresh-components/CharacterCount";
 import TextSeparator from "@/refresh-components/TextSeparator";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import { useModalClose } from "@opal/components";
 import { SvgAddLines, SvgMinusCircle, SvgPlusCircle } from "@opal/icons";
 import {
@@ -264,7 +263,7 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      <Modal.Content width="sm" height="lg" position="top">
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
           title={t("title")}
@@ -276,7 +275,7 @@ export default function MemoriesModal({
               placeholder={t("modal.searchPlaceholder")}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              searchIcon
+              icon="search"
             />
             <Button
               disabled={!canAddMemory}

@@ -104,10 +104,9 @@ export default function ManageAccessField({
     role: (
       <div className="me-5.5">
         <Content
+          font="main-ui-action"
           icon={SvgEditBig}
           title={t("role.editor.label")}
-          sizePreset="main-ui"
-          variant="section"
           width="fit"
         />
       </div>
@@ -117,11 +116,10 @@ export default function ManageAccessField({
   return (
     <Section gap={3} alignItems="stretch" height="fit">
       <Content
+        font="main-ui-action"
         title={t("title")}
         description={t("description")}
-        tag={businessTier ? undefined : plans[Tier.BUSINESS].tag}
-        sizePreset="main-ui"
-        variant="section"
+        badge={businessTier ? undefined : plans[Tier.BUSINESS].tag}
       />
       <GroupShareList
         name="groups"

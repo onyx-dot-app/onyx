@@ -104,13 +104,13 @@ from onyx.db.index_attempt import (
     create_index_attempt_error,
     get_active_index_attempts_without_task,
     get_index_attempt,
-    get_index_attempt_errors_for_cc_pair,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
     mark_attempt_succeeded,
+    resolve_index_attempt_entity_errors__no_commit,
     resolve_index_attempt_errors_for_documents,
 )
 from onyx.db.index_attempt_metrics import (
@@ -123,6 +123,7 @@ from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SearchSettings
 from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
+    port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
 from onyx.error_handling.exceptions import OnyxError
@@ -526,22 +527,6 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
-def _resolve_indexing_entity_errors(
-    cc_pair_id: int,
-    db_session: Session,
-) -> None:
-    unresolved_errors = get_index_attempt_errors_for_cc_pair(
-        cc_pair_id=cc_pair_id,
-        unresolved_only=True,
-        db_session=db_session,
-    )
-    for error in unresolved_errors:
-        if error.entity_id:
-            error.is_resolved = True
-            db_session.add(error)
-    db_session.commit()
-
-
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -695,10 +680,12 @@ def check_indexing_completion(
                 logger.info(
                     "Resolving indexing entity errors for attempt %s", index_attempt_id
                 )
-                _resolve_indexing_entity_errors(
-                    cc_pair_id=attempt.connector_credential_pair_id,
+                resolve_index_attempt_entity_errors__no_commit(
                     db_session=db_session,
+                    cc_pair_id=attempt.connector_credential_pair_id,
+                    resolved_by_index_attempt_id=index_attempt_id,
                 )
+                db_session.commit()
 
     # Clean up FileStore storage (still needed for document batches during transition)
     try:
@@ -771,6 +758,7 @@ class _KickoffResult:
     skipped_active: int = 0
     skipped_not_found: int = 0
     skipped_not_indexable: int = 0
+    skipped_waiting_for_swap: int = 0
     failed_to_create: int = 0
 
     @property
@@ -780,6 +768,7 @@ class _KickoffResult:
             + self.skipped_active
             + self.skipped_not_found
             + self.skipped_not_indexable
+            + self.skipped_waiting_for_swap
             + self.failed_to_create
         )
 
@@ -857,9 +846,11 @@ def _try_creating_pending_backfill(
     """Settles the pair's ended backfill attempts, then creates the attempt of
     its oldest ready backfill on the current index. The caller checked that no
     attempt is active there. The backfill waits while the pair is not ACTIVE,
-    and while an indexing trigger, a prune-after-reindex or a full re-index
-    request is pending: that run goes first, and a full re-index covers the
-    backfill. The creation checks these again under the pair's row lock."""
+    while an indexing trigger, a prune-after-reindex or a full re-index
+    request is pending (that run goes first, and a full re-index covers the
+    backfill), and while a port-flow reindex builds FUTURE (see
+    port_reindex_in_progress). The creation checks these again under the
+    pair's row lock."""
     if not search_settings.status.is_current() or not cc_pair.pending_backfills:
         return False
     if (
@@ -867,6 +858,7 @@ def _try_creating_pending_backfill(
         or cc_pair.indexing_trigger is not None
         or cc_pair.prune_after_reindex_requested_at is not None
         or cc_pair.full_reindex_requested_at is not None
+        or port_reindex_in_progress(db_session)
         or (DISABLE_INDEX_UPDATE_ON_SWAP and secondary_index_building)
     ):
         return False
@@ -1000,6 +992,25 @@ def _kickoff_indexing_tasks(
             f"search_settings={search_settings.id}, "
             f"secondary_index_building={secondary_index_building}"
         )
+
+        # A full run during a port-flow reindex adds documents FUTURE never
+        # fetches. Leave the request as it is; it runs after the swap, on the
+        # new index (see raise_if_port_reindex_in_progress).
+        if (
+            search_settings.status.is_current()
+            and (
+                cc_pair.indexing_trigger == IndexingMode.REINDEX
+                or cc_pair.full_reindex_requested_at is not None
+                or cc_pair.prune_after_reindex_requested_at is not None
+            )
+            and port_reindex_in_progress(db_session)
+        ):
+            task_logger.debug(
+                f"_kickoff_indexing_tasks - Full run waits for the reindex swap: "
+                f"cc_pair={cc_pair.id}"
+            )
+            result.skipped_waiting_for_swap += 1
+            continue
 
         reindex = False
         # the indexing trigger is only checked and cleared with the current search settings
@@ -1460,6 +1471,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         f"skipped_active={primary_result.skipped_active} "
         f"skipped_not_found={primary_result.skipped_not_found} "
         f"skipped_not_indexable={primary_result.skipped_not_indexable} "
+        f"skipped_waiting_for_swap={primary_result.skipped_waiting_for_swap} "
         f"failed={primary_result.failed_to_create}]"
         + (
             f" secondary=[evaluated={secondary_result.evaluated} "
@@ -2069,6 +2081,7 @@ def _docprocessing_task(
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
+            written_search_settings_id=search_settings_id,
         )
 
         # Track chunk indexing usage for cloud usage limits
@@ -2111,6 +2124,7 @@ def _docprocessing_task(
                     for document in documents
                     if document.id not in failed_document_ids
                 ],
+                resolved_by_index_attempt_id=index_attempt_id,
             )
 
         # Post-coordination tail; whatever isn't timed falls into BATCH_UNACCOUNTED.

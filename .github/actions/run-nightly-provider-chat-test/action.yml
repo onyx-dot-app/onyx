@@ -137,4 +137,5 @@ runs:
             -e NIGHTLY_LLM_STRICT="${NIGHTLY_LLM_STRICT}" \
             -e ONYX_DEV_LICENSE \
             "${DEVCONTAINER_IMAGE}" \
-            uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py
+            uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py \
+              tests/integration/tests/llm_workflows/test_nightly_provider_image_generation.py

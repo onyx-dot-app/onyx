@@ -44,7 +44,7 @@ function SummaryMetric({ label, value }: SummaryMetricProps) {
       <Text font="secondary-body" color="text-03">
         {label}
       </Text>
-      <Text font="heading-h3">{value.toLocaleString(locale)}</Text>
+      <Text font="heading-section">{value.toLocaleString(locale)}</Text>
     </Section>
   );
 }
@@ -135,7 +135,7 @@ export function AgentStats({ agentId }: AgentStatsProps) {
     >
       {/* sm:flex-row / sm:items-center / sm:justify-between have no Section equivalent, kept as a raw div */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <Text font="heading-h2">{t("analytics.agentChart.title")}</Text>
+        <Text font="heading-headline">{t("analytics.agentChart.title")}</Text>
         <InputDateRangePicker value={dateRange} onValueChange={setDateRange} />
       </div>
 

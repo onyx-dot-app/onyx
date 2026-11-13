@@ -16,6 +16,7 @@ from zipfile import BadZipFile
 
 import chardet
 import openpyxl
+import psutil
 from openpyxl.worksheet._read_only import ReadOnlyWorksheet
 
 from onyx.configs.app_configs import (
@@ -51,6 +52,11 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 TEXT_SECTION_SEPARATOR = "\n\n"
+
+# PDFium holds every page's fonts until the document closes, so a scan with a
+# distinct non-embedded font per page grows tens of MiB a page. Past this
+# budget the document is reopened before each page.
+PDFIUM_REOPEN_RSS_GROWTH_BYTES = 256 * 1024 * 1024
 
 # A full collection costs about 0.1 s in a loaded worker. One follows every
 # spreadsheet (openpyxl leaves cycles) and otherwise at most one per interval,
@@ -247,10 +253,18 @@ def _extract_pdf_text_pdfium(file_bytes: bytes, password: str | None) -> str:
     """
     import pypdfium2 as pdfium
 
+    process = psutil.Process()
     pdf = pdfium.PdfDocument(file_bytes, password=password)
+    rss_at_open = process.memory_info().rss
     try:
         page_texts: list[str] = []
-        for page in pdf:
+        for index in range(len(pdf)):
+            # RSS does not drop after a close, so a reset baseline lets the process
+            # keep climbing. Kept fixed, every page past the budget reopens.
+            if process.memory_info().rss - rss_at_open > PDFIUM_REOPEN_RSS_GROWTH_BYTES:
+                pdf.close()
+                pdf = pdfium.PdfDocument(file_bytes, password=password)
+            page = pdf[index]
             # Per-page try/finally so a get_textpage() failure still closes the
             # native page handle instead of leaking it until GC.
             try:

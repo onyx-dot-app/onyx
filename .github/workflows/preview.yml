@@ -202,7 +202,20 @@ jobs:
             rm -f "$body" "$err"
           }
 
-          DEPLOY=$(api POST /api/deploys "$(jq -nc --arg ref "$PREVIEW_SHA" '{repo: "onyx", ref: $ref, rebuild: false}')")
+          # A POST that times out client-side can still be creating the deploy
+          # on the server, so curl's retry races it and gets 400 "already
+          # exists". Once the first one commits, the same POST returns the
+          # existing deploy, so wait and ask again.
+          PAYLOAD=$(jq -nc --arg ref "$PREVIEW_SHA" '{repo: "onyx", ref: $ref, rebuild: false}')
+          for attempt in 1 2 3 4 5 6; do
+            if DEPLOY=$(api POST /api/deploys "$PAYLOAD"); then
+              break
+            fi
+            if [ "$attempt" = 6 ] || ! tail -1 out.txt | grep -q '"already exists"'; then
+              exit 1
+            fi
+            sleep 15
+          done
           ID=$(jq -r .id <<<"$DEPLOY")
           STATUS=$(jq -r .status <<<"$DEPLOY")
           echo "deploy $ID: $STATUS" | tee -a out.txt

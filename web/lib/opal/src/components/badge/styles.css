@@ -1,0 +1,28 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   Badge
+
+   A coloured pill around a `Content`, which draws the icon and title. The
+   height comes from the title's line and the padding: 4 is a 12px
+   `figure-small-value` line with 2px padding (1rem); 5 is a 16px
+   `secondary-body` line with 2px padding (1.25rem); 6 is that line with
+   4px padding (1.5rem).
+   --------------------------------------------------------------------------- */
+
+.opal-badge {
+  @apply flex flex-row items-center shrink-0;
+  border-radius: var(--radius-04);
+  padding: 0.125rem;
+  gap: 0;
+}
+
+.opal-badge[data-size="6"] {
+  border-radius: var(--radius-08);
+  padding: 0.25rem;
+}
+
+/* The title is always capped: an ellipsis past 10rem. */
+.opal-badge [data-opal-content-title] {
+  max-width: 10rem;
+}

@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import { Button, Calendar, Popover, Text } from "@opal/components";
@@ -279,9 +279,8 @@ function InputDatePicker({
   // Commit when focus leaves the whole field. The calendar content is
   // portaled, so containment is checked against it too or opening the
   // popover would commit (or revert) a half-typed draft.
-  function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
+  function handleFieldBlur(e: React.FocusEvent<HTMLDivElement>) {
     const next = e.relatedTarget as Node | null;
-    if (e.currentTarget.contains(next)) return;
     if (next && popoverContentRef.current?.contains(next)) return;
     setFocused(false);
     commit(segments);
@@ -306,11 +305,11 @@ function InputDatePicker({
   return (
     <div className="opal-input-segmented-root">
       <Popover open={open} onOpenChange={setOpen}>
-        <div
-          className="opal-input opal-input-segmented"
-          data-variant={variant}
+        <InputContainer
+          className="opal-input-segmented"
+          variant={variant}
           onFocus={() => setFocused(true)}
-          onBlur={handleRootBlur}
+          onFieldBlur={handleFieldBlur}
         >
           <div
             className="opal-input-segmented-content"
@@ -387,7 +386,7 @@ function InputDatePicker({
               />
             )}
           </div>
-        </div>
+        </InputContainer>
 
         <Popover.Content ref={popoverContentRef} align="end">
           <Calendar

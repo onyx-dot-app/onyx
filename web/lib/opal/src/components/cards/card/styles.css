@@ -49,6 +49,10 @@
   @apply bg-theme-amber-01;
 }
 
+.opal-card[data-color="theme-purple-01"] {
+  @apply bg-theme-purple-01;
+}
+
 /* Disabled — visual only. The card dims and takes a not-allowed cursor, but
    its children stay interactive: a card is a container, and suppressing what
    it holds is a stronger claim than dimming it. Compose `Disabled` from
@@ -144,6 +148,10 @@
 
 .opal-card-expandable-header[data-color="theme-amber-01"] {
   @apply bg-theme-amber-01;
+}
+
+.opal-card-expandable-header[data-color="theme-purple-01"] {
+  @apply bg-theme-purple-01;
 }
 
 .opal-card-expandable-header[data-border="none"] {

@@ -11,16 +11,16 @@ import {
   useMemo,
   useRef,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname } from "@opal/navigation/next";
 import {
+  Text,
   Button,
   Divider,
-  OverflowText,
   ShadowDiv,
   Spacer,
-  Tag,
+  Badge,
   Tooltip,
-  type TagProps,
+  type BadgeProps,
 } from "@opal/components";
 import { iconWrapper } from "@opal/components/buttons/icon-wrapper";
 import { Disabled, Hoverable, Interactive } from "@opal/core";
@@ -63,9 +63,12 @@ function SidebarRoot({ foldable = false, children }: SidebarRootProps) {
 
   // ⌘E / Ctrl+E folds the sidebar wherever it can fold: a foldable column,
   // or the overlay that small screens force on every sidebar. Only a
-  // non-foldable sidebar at full width ignores it.
+  // non-foldable sidebar at full width ignores it. It works while the user
+  // types too: no text field uses the shortcut, so it always means the
+  // sidebar.
   useHotkey("mod+e", () => setFolded((prev) => !prev), {
     enabled: foldable || isMobile || isSmallScreen,
+    whileTyping: true,
   });
 
   useEffect(() => {
@@ -398,7 +401,7 @@ function SidebarFooter({ children }: SidebarFooterProps) {
 interface SidebarSectionProps {
   title?: string | RichStr;
   /** Optional tag at the end of the header, in line with tab `rightChildren`. */
-  tag?: TagProps;
+  tag?: BadgeProps;
   /** Optional action shown on hover, e.g. a "+" button. */
   action?: React.ReactNode;
   /** When true, dims the section header to indicate it is unavailable. */
@@ -423,13 +426,18 @@ function SidebarSection({
               {/* One line: a title too long for the row is cut, and shows
                   in full in a tooltip. */}
               <div className="opal-sidebar-section__title">
-                <OverflowText font="secondary-body" color="text-02">
+                <Text
+                  maxLines={1}
+                  overflowTooltip
+                  font="secondary-body"
+                  color="text-02"
+                >
                   {title}
-                </OverflowText>
+                </Text>
               </div>
               {tag && (
                 <div className="opal-sidebar-section__tag">
-                  <Tag {...tag} />
+                  <Badge {...tag} />
                 </div>
               )}
               {action && (

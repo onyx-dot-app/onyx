@@ -3,8 +3,13 @@
 import { IconLoader } from "@opal/loaders";
 import { useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Section } from "@/layouts/general-layouts";
-import { Button, Card, InputPasswordTypeIn, Text } from "@opal/components";
+import {
+  Button,
+  Card,
+  InputPasswordTypeIn,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@opal/components";
 import {
@@ -12,7 +17,7 @@ import {
   useDiscordGuilds,
 } from "@/app/admin/discord-bot/hooks";
 import { createBotConfig, deleteBotConfig } from "@/app/admin/discord-bot/lib";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import { getFormattedDateTime } from "@/lib/dateUtils";
 
@@ -29,7 +34,7 @@ export function BotConfigCard() {
 
   const [botToken, setBotToken] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const deleteModal = useCreateModal();
 
   // Don't render anything if managed externally (Cloud or env var)
   if (isManaged) {
@@ -94,22 +99,22 @@ export function BotConfigCard() {
       );
     } finally {
       setIsSubmitting(false);
-      setShowDeleteConfirm(false);
+      deleteModal.toggle(false);
     }
   };
 
   return (
     <>
-      {showDeleteConfirm && (
+      <deleteModal.Provider>
         <ConfirmEntityModal
           danger
           entityType={t("botToken.deleteModal.entityType")}
           entityName={t("botToken.deleteModal.entityName")}
-          onClose={() => setShowDeleteConfirm(false)}
+          onClose={() => deleteModal.toggle(false)}
           onSubmit={handleDeleteToken}
           additionalDetails={t("botToken.deleteModal.additionalDetails")}
         />
-      )}
+      </deleteModal.Provider>
       <Card border="solid" rounding={4}>
         <Section alignItems="start" height="fit">
           <Section flexDirection="row" justifyContent="between">
@@ -138,7 +143,7 @@ export function BotConfigCard() {
                 <Button
                   disabled={isSubmitting || hasServerConfigs}
                   variant="danger"
-                  onClick={() => setShowDeleteConfirm(true)}
+                  onClick={() => deleteModal.toggle(true)}
                 >
                   {t("botToken.deleteButton.label")}
                 </Button>

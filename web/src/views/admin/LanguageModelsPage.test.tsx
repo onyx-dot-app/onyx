@@ -12,6 +12,9 @@ import type {
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ back: jest.fn() }),
   usePathname: () => "/admin/language-models",
 }));

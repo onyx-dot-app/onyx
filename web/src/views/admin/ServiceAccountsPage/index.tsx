@@ -7,7 +7,7 @@ import { useSettings } from "@/lib/settings/hooks";
 import useSWR, { mutate } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   BasicModalFooter,
   Button,
@@ -17,8 +17,9 @@ import {
   MessageCard,
   Modal,
   Table,
-  Tag,
+  Badge,
   Text,
+  useCreateModal,
   type TableColumn,
 } from "@opal/components";
 import { Content } from "@opal/layouts";
@@ -48,7 +49,6 @@ import type { APIKey } from "@/views/admin/ServiceAccountsPage/interfaces";
 import { DISCORD_SERVICE_API_KEY_NAME } from "@/views/admin/ServiceAccountsPage/interfaces";
 import ApiKeyFormModal from "@/views/admin/ServiceAccountsPage/ApiKeyFormModal";
 import EditServiceAccountModal from "@/views/admin/ServiceAccountsPage/EditServiceAccountModal";
-import { Section } from "@/layouts/general-layouts";
 
 const API_KEY_SWR_KEY = SWR_KEYS.adminApiKeys;
 const route = ADMIN_ROUTES.API_KEYS;
@@ -74,7 +74,7 @@ export default function ServiceAccountsPage() {
     billingData.status === BillingStatus.TRIALING;
 
   const [fullApiKey, setFullApiKey] = useState<string | null>(null);
-  const [showCreateUpdateForm, setShowCreateUpdateForm] = useState(false);
+  const formModal = useCreateModal();
   const [selectedApiKey, setSelectedApiKey] = useState<APIKey | undefined>();
   const [search, setSearch] = useState("");
   const [regenerateTarget, setRegenerateTarget] = useState<APIKey | null>(null);
@@ -82,6 +82,10 @@ export default function ServiceAccountsPage() {
   const [groupsRolesTarget, setGroupsRolesTarget] = useState<APIKey | null>(
     null
   );
+  // Targets stay set on close so each modal stays mounted while it animates out.
+  const regenerateModal = useCreateModal();
+  const deleteModal = useCreateModal();
+  const groupsRolesModal = useCreateModal();
 
   const visibleApiKeys = (apiKeys ?? []).filter(
     (key) => key.api_key_name !== DISCORD_SERVICE_API_KEY_NAME
@@ -142,9 +146,8 @@ export default function ServiceAccountsPage() {
         weight: 25,
         cell: (value) => (
           <Content
+            font="main-ui-body"
             title={value || t("table.name.unnamed")}
-            sizePreset="main-ui"
-            variant="body"
           />
         ),
       },
@@ -179,12 +182,12 @@ export default function ServiceAccountsPage() {
           return (
             <div className="flex items-center gap-1 overflow-hidden flex-nowrap min-w-0">
               {visible.map((g) => (
-                <Tag key={g.id} title={g.name} size="md" />
+                <Badge key={g.id} title={g.name} size={6} />
               ))}
               {overflow > 0 && (
-                <Tag
+                <Badge
                   title={t("table.groups.overflow.label", { count: overflow })}
-                  size="md"
+                  size={6}
                 />
               )}
             </div>
@@ -199,7 +202,10 @@ export default function ServiceAccountsPage() {
               icon={SvgRefreshCw}
               prominence="tertiary"
               tooltip={t("table.regenerateButton.tooltip")}
-              onClick={() => setRegenerateTarget(row)}
+              onClick={() => {
+                setRegenerateTarget(row);
+                regenerateModal.toggle(true);
+              }}
             />
             <Dropdown>
               <Dropdown.Trigger asChild>
@@ -218,7 +224,10 @@ export default function ServiceAccountsPage() {
                     id: "groups",
                     icon: SvgUsers,
                     title: t("table.actions.groups.label"),
-                    onSelect: () => setGroupsRolesTarget(row),
+                    onSelect: () => {
+                      setGroupsRolesTarget(row);
+                      groupsRolesModal.toggle(true);
+                    },
                   },
                   {
                     kind: "action",
@@ -227,7 +236,7 @@ export default function ServiceAccountsPage() {
                     title: t("table.actions.edit.label"),
                     onSelect: () => {
                       setSelectedApiKey(row);
-                      setShowCreateUpdateForm(true);
+                      formModal.toggle(true);
                     },
                   },
                   {
@@ -236,7 +245,10 @@ export default function ServiceAccountsPage() {
                     icon: SvgTrash,
                     danger: true,
                     title: t("table.actions.delete.label"),
-                    onSelect: () => setDeleteTarget(row),
+                    onSelect: () => {
+                      setDeleteTarget(row);
+                      deleteModal.toggle(true);
+                    },
                   },
                 ]}
               />
@@ -280,7 +292,7 @@ export default function ServiceAccountsPage() {
             emptyStateText={t("list.empty.description")}
             onAction={() => {
               setSelectedApiKey(undefined);
-              setShowCreateUpdateForm(true);
+              formModal.toggle(true);
             }}
             actionLabel={t("list.createButton.label")}
           />
@@ -342,92 +354,99 @@ export default function ServiceAccountsPage() {
         </Modal.Content>
       </Modal>
 
-      {showCreateUpdateForm && (
+      <formModal.Provider>
         <ApiKeyFormModal
           onCreateApiKey={(apiKey) => {
             setFullApiKey(apiKey.api_key);
           }}
           onClose={() => {
-            setShowCreateUpdateForm(false);
-            setSelectedApiKey(undefined);
+            // `selectedApiKey` stays set until the next open, so the modal
+            // keeps its edit/create mode while it animates out.
+            formModal.toggle(false);
             mutate(API_KEY_SWR_KEY);
           }}
           apiKey={selectedApiKey}
         />
-      )}
+      </formModal.Provider>
 
-      {groupsRolesTarget && (
-        <EditServiceAccountModal
-          apiKey={groupsRolesTarget}
-          onClose={() => setGroupsRolesTarget(null)}
-          onMutate={() => mutate(API_KEY_SWR_KEY)}
-        />
-      )}
+      <groupsRolesModal.Provider>
+        {groupsRolesTarget && (
+          <EditServiceAccountModal
+            apiKey={groupsRolesTarget}
+            onClose={() => groupsRolesModal.toggle(false)}
+            onMutate={() => mutate(API_KEY_SWR_KEY)}
+          />
+        )}
+      </groupsRolesModal.Provider>
 
-      {regenerateTarget && (
-        <ConfirmationModalLayout
-          icon={SvgRefreshCw}
-          title={t("regenerateModal.title")}
-          onClose={() => setRegenerateTarget(null)}
-          submit={
-            <Button
-              variant="danger"
-              onClick={async () => {
-                const target = regenerateTarget;
-                setRegenerateTarget(null);
-                await handleRegenerate(target);
-              }}
-            >
-              {t("regenerateModal.submit.label")}
-            </Button>
-          }
-        >
-          <Text as="p" color="text-03">
-            {markdown(
-              t("regenerateModal.description", {
-                name: regenerateTarget.api_key_name || t("table.name.unnamed"),
-                keyDisplay: regenerateTarget.api_key_display,
-              })
-            )}
-          </Text>
-        </ConfirmationModalLayout>
-      )}
-
-      {deleteTarget && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={t("deleteModal.title")}
-          onClose={() => setDeleteTarget(null)}
-          submit={
-            <Button
-              variant="danger"
-              onClick={async () => {
-                await handleDelete(deleteTarget);
-                setDeleteTarget(null);
-              }}
-            >
-              {t("deleteModal.submit.label")}
-            </Button>
-          }
-        >
-          <Section alignItems="start" gap={2}>
+      <regenerateModal.Provider>
+        {regenerateTarget && (
+          <ConfirmationModalLayout
+            icon={SvgRefreshCw}
+            title={t("regenerateModal.title")}
+            onClose={() => regenerateModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  regenerateModal.toggle(false);
+                  await handleRegenerate(regenerateTarget);
+                }}
+              >
+                {t("regenerateModal.submit.label")}
+              </Button>
+            }
+          >
             <Text as="p" color="text-03">
               {markdown(
-                t("deleteModal.description", {
-                  name: escapeMarkdown(
-                    deleteTarget.api_key_name || t("table.name.unnamed")
-                  ),
-                  keyDisplay: deleteTarget.api_key_display,
-                  appName: escapeMarkdown(appName),
+                t("regenerateModal.description", {
+                  name:
+                    regenerateTarget.api_key_name || t("table.name.unnamed"),
+                  keyDisplay: regenerateTarget.api_key_display,
                 })
               )}
             </Text>
-            <Text as="p" color="text-03">
-              {t("deleteModal.warning")}
-            </Text>
-          </Section>
-        </ConfirmationModalLayout>
-      )}
+          </ConfirmationModalLayout>
+        )}
+      </regenerateModal.Provider>
+
+      <deleteModal.Provider>
+        {deleteTarget && (
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={t("deleteModal.title")}
+            onClose={() => deleteModal.toggle(false)}
+            submit={
+              <Button
+                variant="danger"
+                onClick={async () => {
+                  await handleDelete(deleteTarget);
+                  deleteModal.toggle(false);
+                }}
+              >
+                {t("deleteModal.submit.label")}
+              </Button>
+            }
+          >
+            <Section alignItems="start" gap={2}>
+              <Text as="p" color="text-03">
+                {markdown(
+                  t("deleteModal.description", {
+                    name: escapeMarkdown(
+                      deleteTarget.api_key_name || t("table.name.unnamed")
+                    ),
+                    keyDisplay: deleteTarget.api_key_display,
+                    appName: escapeMarkdown(appName),
+                  })
+                )}
+              </Text>
+              <Text as="p" color="text-03">
+                {t("deleteModal.warning")}
+              </Text>
+            </Section>
+          </ConfirmationModalLayout>
+        )}
+      </deleteModal.Provider>
     </SettingsLayouts.Root>
   );
 }

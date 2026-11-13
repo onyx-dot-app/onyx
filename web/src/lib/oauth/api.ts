@@ -4,6 +4,8 @@ import {
   OAuthConfigCreate,
   OAuthConfigUpdate,
 } from "@/lib/tools/types";
+import { loadPage } from "@opal/navigation";
+import { launchOAuth, OAuthLaunchError } from "@/lib/oauth/launch";
 
 // Admin OAuth Config Management
 
@@ -112,11 +114,24 @@ export async function initiateOAuthFlow(
   returnPath: string,
   invalidUrlMessage: string
 ): Promise<void> {
-  window.location.href = await getOAuthAuthorizationUrl(
-    oauthConfigId,
-    returnPath,
-    invalidUrlMessage
-  );
+  try {
+    await launchOAuth(() =>
+      getOAuthAuthorizationUrl(oauthConfigId, returnPath, invalidUrlMessage)
+    );
+  } catch (error) {
+    if (
+      !(error instanceof OAuthLaunchError) ||
+      error.reason !== "popup_blocked"
+    )
+      throw error;
+    loadPage(
+      await getOAuthAuthorizationUrl(
+        oauthConfigId,
+        returnPath,
+        invalidUrlMessage
+      )
+    );
+  }
 }
 
 export interface OAuthTestRequest {

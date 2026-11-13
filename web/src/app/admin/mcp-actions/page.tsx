@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import {
   legacyMcpListHref,
   type PluginSearchParams,

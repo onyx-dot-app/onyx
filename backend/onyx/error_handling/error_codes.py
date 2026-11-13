@@ -88,6 +88,9 @@ class OnyxErrorCode(Enum):
     # A connector edit plan whose pair changed after it was computed. The client
     # computes a new plan.
     EDIT_PLAN_STALE = ("EDIT_PLAN_STALE", 409)
+    # An edit that started from a plugin version older than the newest one.
+    # The client loads the newest version and makes the change again.
+    PLUGIN_VERSION_STALE = ("PLUGIN_VERSION_STALE", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
@@ -116,6 +119,8 @@ class OnyxErrorCode(Enum):
     INTERNAL_ERROR = ("INTERNAL_ERROR", 500)
     NOT_IMPLEMENTED = ("NOT_IMPLEMENTED", 501)
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
+    # No Firecracker node can start a sandbox VM now; `extra.reason` says why.
+    SANDBOX_CAPACITY_UNAVAILABLE = ("SANDBOX_CAPACITY_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
     HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)
@@ -137,6 +142,15 @@ class OnyxErrorCode(Enum):
         if canonical is not None:
             return canonical
         return cls.INTERNAL_ERROR if status_code >= 500 else cls.BAD_REQUEST
+
+    @classmethod
+    def for_code(cls, code: str | None) -> "OnyxErrorCode":
+        """The member whose string code is ``code``; INTERNAL_ERROR when none
+        matches, such as a chat-only code like AGENT_EXECUTION_FAILED."""
+        for member in cls:
+            if member.code == code:
+                return member
+        return cls.INTERNAL_ERROR
 
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.

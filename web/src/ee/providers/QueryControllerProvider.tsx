@@ -9,7 +9,7 @@ import {
   SearchFullResponse,
 } from "@/lib/search/types";
 import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useIsSearchModeAvailable } from "@/lib/settings/hooks";

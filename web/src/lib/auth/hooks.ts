@@ -1,7 +1,7 @@
 "use client";
 
+import { usePathname } from "@opal/navigation";
 import { useEffect, useRef, useState } from "react";
-import { usePathname } from "next/navigation";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";

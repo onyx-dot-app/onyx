@@ -78,10 +78,11 @@ You can also use them individually if you need more granular control.
 
   <Step title="Clone the Onyx repo">
     ```bash
-    git clone --depth 1 https://github.com/onyx-dot-app/onyx.git
+    git clone --depth 1 --branch tf/v1.0.2 https://github.com/onyx-dot-app/onyx.git
     cd onyx/deployment/terraform
     ```
 
+    Clone a `tf/vX.Y.Z` tag, not the default branch. The provider versions in the Quickstart match that tag.
     The modules live under `modules/aws/`. You will create a small root module that calls them.
   </Step>
 </Steps>
@@ -271,6 +272,23 @@ Set `vespa_node_enabled = false` to skip the dedicated in-cluster index node gro
 <ParamField path="enable_opensearch" type="bool" default="false">
   Provision an Amazon OpenSearch domain inside the VPC.
 </ParamField>
+
+<ParamField path="opensearch_engine_version" type="string" default="3.7">
+  OpenSearch version of the Amazon OpenSearch domain. 1-bit vector quantization needs version 3.6 or later.
+</ParamField>
+
+<Warning>
+  The module default is OpenSearch 3.7. If you do not set `opensearch_engine_version`,
+  the next `terraform apply` upgrades an existing domain that runs an earlier version to 3.7.
+  A change to `opensearch_engine_version` also starts an upgrade. To keep your current version,
+  set `opensearch_engine_version` to that version, for example `"3.3"`.
+
+  Before you apply:
+
+  - Run `aws opensearch list-versions` to confirm that your AWS account and Region offer OpenSearch 3.7.
+  - Review the `terraform plan` output and take a manual snapshot of the domain.
+  - If the domain runs OpenSearch 1.3 or 2.x, upgrade it to 2.19 first: apply with `opensearch_engine_version = "2.19"`, then with `"3.7"`.
+</Warning>
 
 <ParamField path="opensearch_instance_type" type="string" default="r8g.large.search" />
 <ParamField path="opensearch_instance_count" type="number" default="3" />

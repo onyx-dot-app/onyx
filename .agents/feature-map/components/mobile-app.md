@@ -18,23 +18,29 @@ SSO providers (OIDC, SAML) have no mobile sign-in.
 The user can then:
 - start a chat or open a past session from the sidebar, and open a project;
 - pick an agent and a model, attach a document or a photo from the library,
-  turn on deep research, force a tool, and turn tools and sources on or off;
+  turn on deep research, prefer an Action, and turn tools and sources on or off;
 - watch the answer stream, open its citations in a sources sheet, and stop
   the answer.
 
 A tool disabled on mobile is also disabled on web, because the server saves
-the setting per agent. The forced tool, the deep-research switch and the
+the setting per agent. The preferred tool, the deep-research switch and the
 source selection stay on the device.
 
 The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
-timeline. Only the answer text and reasoning render.
+timeline. A code mode program has no step; each tool call it makes shows as its
+own step. Answer text and reasoning render. Generated images from all steps
+appear once above the answer, with their full contents visible.
 
 After an answer ends, Send stays disabled until the server confirms that the
 session is idle. A send that the server does not accept keeps its draft.
 
-On failure: a stream error shows in the message. A failed token refresh signs
+On failure: a stream error shows in the message. The next message continues
+after the failed answer, as on web. A send that the server rejects before it
+sends message IDs (an error packet, or an HTTP status below 500 other than
+408) leaves no turn: the tree returns to its state before the send, a toast
+shows the error, and the composer keeps the draft. A failed token refresh signs
 the user out only when the server rejects the token. A network failure keeps
 the session. When the user switches instance, the app never shows data or
 uses a token from the previous instance.
@@ -115,14 +121,19 @@ processor of the web app. Packets group by `getGroupKey` (`turn_index` and
 `tab_index`). The backend closes each answer, reasoning and tool group with
 `section_end`, also on Stop. `injectSectionEnd` closes groups that are still
 open when a new turn starts or on `stop`, for a stream that ends on a root
-error or a dropped connection. Two hooks differ from web because the mobile
+error or a dropped connection. As on web ([[chat-frontend]]), after the answer
+starts only a tool packet of a tool that has not started takes the answer
+back; a late packet of a started tool, such as a code mode closing record, does
+not. Code
+mode steps, `codeModeWorking` and the turn group keys follow the web rules. Two hooks
+differ from web because the mobile
 lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `forced_tool_id`,
+`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
 `allowed_tool_ids` and the search filters at send time. Sources are tied to the
-search tool: turning a source on forces search, and turning search off clears
+search tool: turning a source on prefers search, and turning search off clears
 the sources.
 
 ---
@@ -167,10 +178,11 @@ the sources.
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
 10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
-    `chat/execution.py` releases the session admission lease only after
-    delivery finishes and child-run work drains. A send before the release
-    fails with a `CONFLICT` `StreamingError`, so only the status poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
-    to `input`. A transient failure keeps polling. An auth error or a 404
+    `chat/execution.py` releases the session admission lease after the
+    turn's saves drain, before the stream ends. The app still returns the
+    session to `input` only through the status poll in
+    `chat/sessionReadiness.ts:waitForSessionIdle`, which also covers a send
+    that another client started. A transient failure keeps polling. An auth error or a 404
     stops the poll and leaves the state `unconfirmed`. A server without the
     status route answers 404, so a new app on an older server cannot send a
     second message in a session. Keep each `stillOurs` guard in
@@ -200,9 +212,9 @@ the sources.
 
 ## Known issues
 
-- **Only text and reasoning render.** Every tool family falls through to
+- **Tool timeline details are not rendered.** Every tool family falls through to
   `null` in `components/chat/renderers/findRenderer.ts`. The comments mark each
-  slot as planned work.
+  slot as planned work. Generated images render separately above the answer.
 - **The mobile enum keeps packet types that the backend never sends**
   (`MESSAGE_END`, `TOP_LEVEL_BRANCHING`), and `chat/messageProcessor.ts` still
   checks `MESSAGE_END` for `isComplete` ([[streaming-protocol]]).

@@ -13,6 +13,9 @@ import ActionPolicyEditorModal, {
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: jest.fn() }),
   usePathname: () => "/admin/craft/apps",
 }));

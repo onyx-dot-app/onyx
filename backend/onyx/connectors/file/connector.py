@@ -92,6 +92,7 @@ def _process_file(
     file_type: str | None,
     stage: RawFileCallback | None,
     skip_spreadsheet_content: bool = False,
+    file_size: int | None = None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -152,6 +153,8 @@ def _process_file(
                     primary_owners=primary_owners,
                     secondary_owners=secondary_owners,
                     metadata=custom_tags,
+                    source_mime_type=file_type,
+                    source_size_bytes=file_size,
                 )
             ]
         except Exception as e:
@@ -296,6 +299,8 @@ def _process_file(
             secondary_owners=secondary_owners,
             metadata=custom_tags,
             file_id=doc_file_id,
+            source_mime_type=file_type,
+            source_size_bytes=file_size,
         )
     ]
 
@@ -366,6 +371,7 @@ class LocalFileConnector(LoadConnector):
                 file_type=file_record.file_type,
                 stage=self.raw_file_callback,
                 skip_spreadsheet_content=self.skip_spreadsheet_content,
+                file_size=file_record.file_size,
             )
             documents.extend(new_docs)
 

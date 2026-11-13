@@ -20,6 +20,15 @@ on:
       - ".github/actions/**"
       - "tools/ods/**"
       - "tools/ods-audit/**"
+      - ".github/scripts/*browser*"
+      - ".github/scripts/base-image-ref.sh"
+      - ".github/scripts/chrome-stable-version.sh"
+      - ".github/scripts/test_base_image_ref.py"
+      - ".github/scripts/*supported*release*"
+      - ".github/scripts/update-sandbox-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/Dockerfile"
+      - "backend/onyx/server/features/build/sandbox/image/install-browser.sh"
+      - "backend/onyx/server/features/build/sandbox/image/browser-cli.sh"
   schedule:
     # Nightly at 09:00 UTC.
     - cron: "0 9 * * *"
@@ -110,3 +119,66 @@ jobs:
         with:
           sarif_file: audit.sarif
           category: ods-audit
+
+  browser-audit:
+    name: Sandbox browser audit (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: 4cpu-linux-x64
+          - arch: arm64
+            runner: 4cpu-linux-arm64
+    runs-on:
+      - runs-on
+      - runner=${{ matrix.runner }}
+      - run-id=${{ github.run_id }}-browser-audit-${{ matrix.arch }}
+      - extras=ecr-cache
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
+
+      - name: Log in to ECR pull-through cache
+        uses: ./.github/actions/login-ecr-pullthrough-cache
+        with:
+          ecr-registry: ${{ vars.ECR_REGISTRY }}
+
+      - name: Test image resolver and gate failures
+        run: |
+          python3 -m unittest discover -s .github/scripts -p test_base_image_ref.py -v
+          python3 -m unittest discover -s .github/scripts -p test_browser_update_pr.py -v
+          python3 -m unittest discover -s .github/scripts -p test_supported_release_branches.py -v
+
+      - name: Build browser OS stage
+        run: >-
+          docker build --target os --build-arg ENABLE_SKILLS=false
+          --build-arg "BASE_IMAGE_REGISTRY=${BASE_IMAGE_REGISTRY}"
+          --tag onyx-sandbox-browser:audit
+          backend/onyx/server/features/build/sandbox/image
+
+      - name: Verify browser rendering and screenshots
+        run: |
+          docker run --rm --network none onyx-sandbox-browser:audit bash -e -c '
+            /opt/chrome/chrome --headless --no-sandbox --disable-dev-shm-usage \
+              --dump-dom "data:text/html,<body><script>document.write(1+1)</script></body>" | grep -q "</script>2"
+            /opt/chrome/chrome --headless --no-sandbox --disable-dev-shm-usage \
+              --screenshot=/tmp/browser.png "data:text/html,<h1>Browser smoke test</h1>"
+            test -s /tmp/browser.png
+          '
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: tools/ods/go.mod
+          cache-dependency-path: tools/ods/go.sum
+
+      - name: Scan image and supplemental inventory through ODS
+        working-directory: tools/ods
+        run: go run ./odsaudit image onyx-sandbox-browser:audit --sbom /opt/chrome/browser.cdx.json --sbom-only --strict

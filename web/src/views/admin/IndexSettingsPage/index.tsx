@@ -1,21 +1,27 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useLifecycleBadge } from "@/lib/badges/components";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Formik } from "formik";
 import { markdown } from "@opal/utils";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import { useConnectorIndexingStatusWithPagination } from "@/lib/hooks";
 import type { ConnectorIndexingStatusLite } from "@/lib/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
-import { Content, IllustrationContent, StickyBox, toast } from "@opal/layouts";
+import {
+  Content,
+  IllustrationContent,
+  StickyBox,
+  toast,
+  Section,
+} from "@opal/layouts";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { InputHorizontal } from "@opal/layouts";
 import {
   Button,
@@ -31,6 +37,7 @@ import {
   Tabs,
   Text,
   type SelectDivider,
+  type SelectOption,
   type SelectOptions,
 } from "@opal/components";
 import {
@@ -60,6 +67,7 @@ import {
   EmbeddingProviderName,
   SwitchoverType,
   VectorQuantization,
+  type VectorQuantizationLevelSupport,
   type ConfiguredEmbeddingProvider,
   type EmbeddingModel,
   type EmbeddingModelRef,
@@ -106,6 +114,7 @@ import {
   useCurrentSearchSettings,
   useReindexProgress,
   useSecondarySearchSettings,
+  useVectorQuantizationSupport,
 } from "@/lib/searchSettings/hooks";
 import { useLlmDefaults } from "@/lib/languageModels/hooks";
 import { SimpleModelSelector } from "@/lib/languageModels/components";
@@ -183,11 +192,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
   if (!isCloudBased(providerName)) {
     return (
       <Content
+        font="secondary-body"
         icon={SvgServer}
         title={t("providerInfo.selfHosted.title")}
-        sizePreset="secondary"
-        variant="body"
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
     );
@@ -198,11 +206,10 @@ function EmbeddingProviderInfo({ providerName }: EmbeddingProviderInfoProps) {
   return (
     <>
       <Content
+        font="secondary-body"
         icon={SvgCloud}
         title={t("providerInfo.cloudProvider.title")}
-        sizePreset="secondary"
-        variant="body"
-        color="muted"
+        titleColor="text-03"
         width="fit"
       />
       {provider.costslink && (
@@ -454,12 +461,13 @@ function ProviderGroup({
         />
       </providerCreationModal.Provider>
 
-      <GeneralLayouts.Section gap={1}>
+      <Section gap={1}>
         <div className="px-1 pt-1 w-full h-(--height-line-h1-headline)">
-          <GeneralLayouts.Section flexDirection="row" gap={0}>
+          <Section flexDirection="row" gap={0}>
             <Spacer orientation="horizontal" rem={0.675} />
             <div className="flex flex-row justify-between items-center w-full py-1">
               <Content
+                font="secondary-action"
                 icon={provider.icon}
                 title={
                   provider.docsLink
@@ -468,11 +476,10 @@ function ProviderGroup({
                       )
                     : provider.displayName
                 }
-                sizePreset="secondary"
               />
 
               {isCloud && isConfigured ? (
-                <GeneralLayouts.Section flexDirection="row" gap={1} width="fit">
+                <Section flexDirection="row" gap={1} width="fit">
                   <Button
                     icon={SvgUnplug}
                     prominence="tertiary"
@@ -494,10 +501,10 @@ function ProviderGroup({
                     onClick={() => editCredentialsModal.toggle(true)}
                   />
                   <Spacer orientation="horizontal" rem={0.25} />
-                </GeneralLayouts.Section>
+                </Section>
               ) : undefined}
             </div>
-          </GeneralLayouts.Section>
+          </Section>
         </div>
 
         {models.map(renderModelCard)}
@@ -509,12 +516,11 @@ function ProviderGroup({
             onClick={() => providerCreationModal.toggle(true)}
           >
             <ContentAction
+              font="secondary-body"
               title={t("providerGroup.addConfig.title", {
                 provider: provider.displayName,
               })}
-              sizePreset="secondary"
-              variant="body"
-              color="muted"
+              titleColor="text-03"
               padding={1}
               rightChildren={
                 <Button
@@ -529,7 +535,7 @@ function ProviderGroup({
             />
           </SelectCard>
         )}
-      </GeneralLayouts.Section>
+      </Section>
     </>
   );
 }
@@ -550,6 +556,7 @@ function EmbeddingModelCard({
   onSelect,
 }: EmbeddingModelCardProps) {
   const t = useTranslations("admin.indexSettings");
+  const legacyBadge = useLifecycleBadge("legacy");
   const { appName } = useSettings();
   const topRightButton = (() => {
     switch (modelState) {
@@ -602,32 +609,30 @@ function EmbeddingModelCard({
       onClick={onSelect}
       data-testid={`embedding-model-card:${provider.providerName}:${model.modelName}`}
     >
-      <GeneralLayouts.Section flexDirection="row" alignItems="start">
-        <GeneralLayouts.Section gap={0} padding={2} alignItems="start">
+      <Section flexDirection="row" alignItems="start">
+        <Section gap={0} padding={2} alignItems="start">
           <Content
+            font="main-ui-action"
             icon={provider.icon}
             title={model.modelName}
             description={embeddingModelDescription(model, t, appName)}
-            tag={
+            badge={
               model.legacy
-                ? {
-                    title: t("modelCard.legacy.tag"),
-                    color: "amber",
-                    tooltip: t("modelCard.legacy.tooltip"),
-                  }
+                ? { ...legacyBadge, tooltip: t("modelCard.legacy.tooltip") }
                 : model.gpuRecommended
-                  ? { title: t("modelCard.gpuRecommended.tag"), color: "gray" }
+                  ? {
+                      title: t("modelCard.gpuRecommended.tag"),
+                      color: "default",
+                    }
                   : undefined
             }
-            sizePreset="main-ui"
-            variant="section"
           />
           <div className="flex flex-row px-6 pt-2 gap-4">
             <EmbeddingProviderInfo providerName={provider.providerName} />
           </div>
-        </GeneralLayouts.Section>
+        </Section>
         {topRightButton && <div className="shrink-0">{topRightButton}</div>}
-      </GeneralLayouts.Section>
+      </Section>
     </SelectCard>
   );
 }
@@ -641,8 +646,8 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
   const t = useTranslations("admin.indexSettings");
   const { appName } = useSettings();
   return (
-    <GeneralLayouts.Section gap={1}>
-      <GeneralLayouts.Section
+    <Section gap={1}>
+      <Section
         flexDirection="row"
         justifyContent="start"
         gap={0}
@@ -652,11 +657,11 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
       >
         <Spacer orientation="horizontal" rem={0.675} />
         <Content
+          font="secondary-action"
           icon={CUSTOM_PROVIDER.icon}
           title={t("modelPicker.customModels.title")}
-          sizePreset="secondary"
         />
-      </GeneralLayouts.Section>
+      </Section>
 
       <SelectCard
         state="filled"
@@ -665,10 +670,9 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
         onClick={onAddCustomModel}
       >
         <ContentAction
+          font="secondary-body"
           title={t("modelPicker.customModel.title")}
-          sizePreset="secondary"
-          variant="body"
-          color="muted"
+          titleColor="text-03"
           padding={1}
           rightChildren={
             <Button
@@ -687,7 +691,7 @@ function CustomModelGroup({ onAddCustomModel }: CustomModelGroupProps) {
           {markdown(t("modelPicker.customModels.hint", { appName }))}
         </Text>
       </div>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -871,8 +875,10 @@ type ImagePersistResult = "skipped" | "saved" | "failed";
 export default function IndexSettingsPage() {
   const t = useTranslations("admin.indexSettings");
   const tInputSelect = useTranslations("common.inputSelect");
+  const unavailableBadge = useLifecycleBadge("temporarily-unavailable");
+  const legacyBadge = useLifecycleBadge("legacy");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const editModal = useCreateModal();
   const [viewAllModelsOpen, setViewAllModelsOpen] = useState(false);
@@ -886,6 +892,38 @@ export default function IndexSettingsPage() {
   // INSTANT switchover swaps immediately — no secondary settings — and backfills on the
   // current index. The reindex-progress endpoint still reports that active port target,
   // so treat it as reindexing too; otherwise the banner never shows for INSTANT.
+  const {
+    data: vectorQuantizationSupport,
+    isLoading: vectorQuantizationSupportLoading,
+  } = useVectorQuantizationSupport({ enabled: !NEXT_PUBLIC_CLOUD_ENABLED });
+  // A level the cluster cannot index stays visible but disabled, with the
+  // OpenSearch version it needs.
+  const quantizationOption = (
+    value: VectorQuantization,
+    title: string,
+    description: string
+  ): SelectOption => {
+    const level: VectorQuantizationLevelSupport | undefined =
+      vectorQuantizationSupport?.levels.find(
+        (l) => l.vector_quantization === value
+      );
+    if (!level || level.supported || !level.min_opensearch_version) {
+      return { value, title, description };
+    }
+    return {
+      value,
+      title,
+      description,
+      disabled: true,
+      suffix: t("vectorQuantization.needsVersion", {
+        version: level.min_opensearch_version,
+      }),
+      tooltip: t("vectorQuantization.unsupportedTooltip", {
+        version: level.min_opensearch_version,
+        current: vectorQuantizationSupport?.opensearch_version ?? "",
+      }),
+    };
+  };
   const { data: reindexProgress } = useReindexProgress({
     pollIntervalMs: 5000,
   });
@@ -1170,11 +1208,11 @@ export default function IndexSettingsPage() {
   const commitImageProcessing = useCallback(
     (result: ImagePersistResult) => {
       if (result !== "saved") return;
-      router.refresh();
+      navigation.refresh();
       void mutate(SWR_KEYS.settings);
       void mutate(SWR_KEYS.llmProviders);
     },
-    [router]
+    [navigation]
   );
 
   // Applies to documents indexed from now on, without a re-index.
@@ -1787,7 +1825,7 @@ export default function IndexSettingsPage() {
                           })
                         )}
                         bottomChildren={
-                          <GeneralLayouts.Section
+                          <Section
                             flexDirection="row"
                             gap={2}
                             justifyContent="end"
@@ -1795,7 +1833,9 @@ export default function IndexSettingsPage() {
                           >
                             <Button
                               icon={SvgExternalLink}
-                              href={ADMIN_ROUTES.INDEXING_STATUS.path}
+                              {...navigation.linkTo(
+                                ADMIN_ROUTES.INDEXING_STATUS.path
+                              )}
                             >
                               {t("reindexBanner.seeConnectors.label")}
                             </Button>
@@ -1806,7 +1846,7 @@ export default function IndexSettingsPage() {
                             >
                               {t("reindexBanner.cancelReindex.label")}
                             </Button>
-                          </GeneralLayouts.Section>
+                          </Section>
                         }
                       />
                     )
@@ -1832,14 +1872,14 @@ export default function IndexSettingsPage() {
                           bottomChildren={
                             bannerActive ? (
                               contextualForwardChange ? (
-                                <GeneralLayouts.Section
+                                <Section
                                   flexDirection="row"
                                   alignItems="center"
                                   gap={2}
                                   padding={2}
                                   height="fit"
                                 >
-                                  <GeneralLayouts.Section
+                                  <Section
                                     flexDirection="row"
                                     gap={2}
                                     width="fit"
@@ -1855,7 +1895,7 @@ export default function IndexSettingsPage() {
                                     >
                                       {t("actions.applyForward.label")}
                                     </Button>
-                                  </GeneralLayouts.Section>
+                                  </Section>
                                   <Text
                                     font="secondary-body"
                                     color="text-03"
@@ -1863,22 +1903,22 @@ export default function IndexSettingsPage() {
                                   >
                                     {t("changesBanner.orSeparator.label")}
                                   </Text>
-                                  <GeneralLayouts.Section
+                                  <Section
                                     flexDirection="row"
                                     gap={2}
                                     height="fit"
                                     className="flex-1 min-w-0"
                                   >
-                                    <GeneralLayouts.Section
+                                    <Section
                                       height="fit"
                                       alignItems="stretch"
                                       className="flex-1 min-w-0"
                                     >
                                       {switchoverStrategySelect}
-                                    </GeneralLayouts.Section>
+                                    </Section>
                                     {rebuildButton}
-                                  </GeneralLayouts.Section>
-                                </GeneralLayouts.Section>
+                                  </Section>
+                                </Section>
                               ) : (
                                 <div className="flex flex-row items-end gap-4 p-2">
                                   {/* Cloud has no re-index strategies to pick. */}
@@ -1909,32 +1949,30 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Embedding Model ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("embeddingModel.title")}
                         description={t("embeddingModel.description", {
                           appName: settings.appName,
                         })}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       {NEXT_PUBLIC_CLOUD_ENABLED ? (
                         <CloudDisabled>
                           <Card border="solid" rounding={4} padding={2}>
-                            <GeneralLayouts.Section padding={2}>
+                            <Section padding={2}>
                               <Content
+                                font="main-ui-action"
                                 icon={SvgVector}
                                 title={t("embeddingModel.cloudManaged.title")}
-                                sizePreset="main-ui"
-                                variant="section"
                               />
-                            </GeneralLayouts.Section>
+                            </Section>
                           </Card>
                         </CloudDisabled>
                       ) : (
@@ -1956,14 +1994,11 @@ export default function IndexSettingsPage() {
                                 <>
                                   <Tabs.Content value={MODEL_TAB_CLOUD}>
                                     {filteredCloudProviders.length > 0 ? (
-                                      <GeneralLayouts.Section
-                                        gap={2}
-                                        padding={2}
-                                      >
+                                      <Section gap={2} padding={2}>
                                         {filteredCloudProviders.map(
                                           renderCloudProviderGroup
                                         )}
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
@@ -1980,10 +2015,7 @@ export default function IndexSettingsPage() {
                                   <Tabs.Content value={MODEL_TAB_SELF}>
                                     {filteredSelfHostedProviders.length > 0 ||
                                     customModelMatched ? (
-                                      <GeneralLayouts.Section
-                                        gap={2}
-                                        padding={2}
-                                      >
+                                      <Section gap={2} padding={2}>
                                         <Text
                                           font="secondary-body"
                                           color="text-03"
@@ -2026,7 +2058,7 @@ export default function IndexSettingsPage() {
                                             }
                                           />
                                         )}
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     ) : (
                                       <IllustrationContent
                                         illustration={SvgNoResult}
@@ -2050,7 +2082,7 @@ export default function IndexSettingsPage() {
                                         "modelPicker.search.placeholder"
                                       )}
                                       variant="internal"
-                                      searchIcon
+                                      icon="search"
                                       value={query}
                                       onChange={(e) => setQuery(e.target.value)}
                                     />
@@ -2095,12 +2127,13 @@ export default function IndexSettingsPage() {
                                   className="flex flex-row items-start w-full"
                                   data-testid="current-embedding-model"
                                 >
-                                  <GeneralLayouts.Section
+                                  <Section
                                     padding={2}
                                     gap={0}
                                     alignItems="start"
                                   >
                                     <Content
+                                      font="main-ui-action"
                                       icon={currentProvider?.icon ?? SvgServer}
                                       title={currentEmbeddingModel.model_name}
                                       description={embeddingModelDescription(
@@ -2108,16 +2141,11 @@ export default function IndexSettingsPage() {
                                         t,
                                         settings.appName
                                       )}
-                                      tag={
+                                      badge={
                                         currentRegistryModel?.legacy
-                                          ? {
-                                              title: t("modelCard.legacy.tag"),
-                                              color: "amber",
-                                            }
+                                          ? legacyBadge
                                           : undefined
                                       }
-                                      sizePreset="main-ui"
-                                      variant="section"
                                     />
                                     <div className="flex flex-row items-center gap-2 pt-2 px-6">
                                       {currentProviderName && (
@@ -2127,7 +2155,7 @@ export default function IndexSettingsPage() {
                                       )}
                                     </div>
                                     {currentRegistryModel?.legacy && (
-                                      <GeneralLayouts.Section
+                                      <Section
                                         alignItems="start"
                                         width="auto"
                                         height="fit"
@@ -2140,9 +2168,9 @@ export default function IndexSettingsPage() {
                                         >
                                           {t("currentModel.legacyHint")}
                                         </Text>
-                                      </GeneralLayouts.Section>
+                                      </Section>
                                     )}
-                                  </GeneralLayouts.Section>
+                                  </Section>
 
                                   <div className="flex flex-col justify-start items-end shrink-0 gap-1 p-2">
                                     <Button
@@ -2196,40 +2224,33 @@ export default function IndexSettingsPage() {
                           >
                             <InputSingleSelectField
                               name="vector_quantization"
+                              // Wait for the cluster's support so an
+                              // unsupported level cannot be picked first.
+                              disabled={vectorQuantizationSupportLoading}
                               defaultOption={VectorQuantization.NONE}
                               placeholder={tInputSelect("placeholder.fallback")}
                               options={[
-                                {
-                                  value: VectorQuantization.NONE,
-                                  title: t("vectorQuantization.none.label"),
-                                  description: t(
-                                    "vectorQuantization.none.description"
-                                  ),
-                                },
-                                {
-                                  value: VectorQuantization.SCALAR_7_BIT,
-                                  title: t(
-                                    "vectorQuantization.scalar7Bit.label"
-                                  ),
-                                  description: t(
-                                    "vectorQuantization.scalar7Bit.description"
-                                  ),
-                                },
-                                {
-                                  value: VectorQuantization.SCALAR_1_BIT,
-                                  title: t(
-                                    "vectorQuantization.scalar1Bit.label"
-                                  ),
-                                  description: t(
-                                    "vectorQuantization.scalar1Bit.description"
-                                  ),
-                                },
+                                quantizationOption(
+                                  VectorQuantization.NONE,
+                                  t("vectorQuantization.none.label"),
+                                  t("vectorQuantization.none.description")
+                                ),
+                                quantizationOption(
+                                  VectorQuantization.SCALAR_7_BIT,
+                                  t("vectorQuantization.scalar7Bit.label"),
+                                  t("vectorQuantization.scalar7Bit.description")
+                                ),
+                                quantizationOption(
+                                  VectorQuantization.SCALAR_1_BIT,
+                                  t("vectorQuantization.scalar1Bit.label"),
+                                  t("vectorQuantization.scalar1Bit.description")
+                                ),
                               ]}
                             />
                           </InputHorizontal>
                         </Card>
                       )}
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                   <Disabled
@@ -2237,17 +2258,16 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Retrieval Optimization ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("retrieval.title")}
                         description={t("retrieval.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       <CloudDisabled
@@ -2258,10 +2278,7 @@ export default function IndexSettingsPage() {
                           <InputHorizontal
                             title={t("multipass.title")}
                             description={t("multipass.description")}
-                            tag={{
-                              title: t("multipass.tag.label"),
-                              color: "gray",
-                            }}
+                            tag={unavailableBadge}
                             withLabel
                           >
                             <InputSwitch
@@ -2291,10 +2308,7 @@ export default function IndexSettingsPage() {
                           borderColor={contextualCardBorder}
                           rounding={4}
                         >
-                          <GeneralLayouts.Section
-                            width="full"
-                            alignItems="stretch"
-                          >
+                          <Section width="full" alignItems="stretch">
                             <InputHorizontal
                               title={t("contextualRetrieval.title")}
                               description={t("contextualRetrieval.description")}
@@ -2337,10 +2351,10 @@ export default function IndexSettingsPage() {
                                 />
                               </InputHorizontal>
                             </Disabled>
-                          </GeneralLayouts.Section>
+                          </Section>
                         </Card>
                       </CloudDisabled>
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
                   <Divider paddingParallel={0} paddingPerpendicular={0} />
                   <Disabled
@@ -2348,17 +2362,16 @@ export default function IndexSettingsPage() {
                     tooltip={t("reindexing.disabledTooltip")}
                   >
                     {/* ── Image Processing ── */}
-                    <GeneralLayouts.Section
+                    <Section
                       gap={3}
                       height="fit"
                       alignItems="stretch"
                       justifyContent="start"
                     >
                       <Content
+                        font="main-content-emphasis"
                         title={t("imageProcessing.title")}
                         description={t("imageProcessing.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
 
                       <Disabled
@@ -2378,10 +2391,7 @@ export default function IndexSettingsPage() {
                           borderColor={imageCardBorder}
                           rounding={4}
                         >
-                          <GeneralLayouts.Section
-                            width="full"
-                            alignItems="stretch"
-                          >
+                          <Section width="full" alignItems="stretch">
                             <InputHorizontal
                               title={t("imageExtraction.title")}
                               description={t("imageExtraction.description")}
@@ -2391,10 +2401,9 @@ export default function IndexSettingsPage() {
                                 <InputSwitchField name="image_processing_enabled" />
                                 {captioningModelMissing && (
                                   <Content
+                                    font="secondary-body"
                                     icon={SvgAlertTriangle}
                                     title={t("imageProcessing.noModelSelected")}
-                                    sizePreset="secondary"
-                                    variant="body"
                                     color="warning"
                                   />
                                 )}
@@ -2438,10 +2447,10 @@ export default function IndexSettingsPage() {
                                 />
                               </InputHorizontal>
                             </Disabled>
-                          </GeneralLayouts.Section>
+                          </Section>
                         </Card>
                       </Disabled>
-                    </GeneralLayouts.Section>
+                    </Section>
                   </Disabled>
 
                   {/* Outside the re-index lock: the limit matters most during a re-index. */}

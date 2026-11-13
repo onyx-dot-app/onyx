@@ -1,9 +1,9 @@
 "use client";
 
+import { useParams, useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { useParams, useRouter } from "next/navigation";
 import useSWR from "swr";
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
@@ -20,7 +20,7 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 export default function EditScheduledTaskPage() {
   const t = useTranslations("craft.tasks.editPage");
   const params = useParams<{ id: string }>();
-  const router = useRouter();
+  const navigation = useNavigation();
   const taskId = params?.id;
 
   const { data, error, isLoading } = useSWR<ScheduledTaskDetail>(
@@ -30,9 +30,9 @@ export default function EditScheduledTaskPage() {
   );
 
   const handleBack = useCallback(() => {
-    if (taskId) router.push(taskDetailPath(taskId));
-    else router.push(TASKS_PATH);
-  }, [router, taskId]);
+    if (taskId) navigation.go(taskDetailPath(taskId));
+    else navigation.go(TASKS_PATH);
+  }, [navigation, taskId]);
 
   if (!taskId) {
     return (

@@ -103,7 +103,7 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 # under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
 # still runs under bun; Node is here only as the runtime for the test runner.
 # The test runner's chromium binary is installed at test time, not baked here,
-# so its version tracks web/package.json's floating @playwright/test (the
+# so its version tracks web/package.json's pinned @playwright/test (the
 # chromium baked further down serves only the pinned Playwright MCP server).
 #
 # Copied from the official node image (digest-pinned in the node_source stage at the

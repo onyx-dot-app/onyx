@@ -35,6 +35,9 @@ function SetupModal() {
 }
 jest.mock("next/navigation", () => ({
   ...jest.requireActual("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => mockRouter,
   usePathname: () => "/admin/plugins",
 }));
@@ -140,7 +143,7 @@ beforeEach(() => {
         onyx_craft_available: craftAvailable,
       });
     if (path === "/api/enterprise-settings") return json({});
-    if (path === "/api/manage/admin/user-group")
+    if (path === "/api/manage/admin/user-group?include_users=false")
       return json([{ id: 1, name: "Engineering", users: [] }]);
     if (path === "/api/auth/type")
       return json({ auth_type: "basic", oauth_enabled: false });

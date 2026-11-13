@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import {
   ArrayHelpers,
   ErrorMessage,
@@ -28,7 +29,6 @@ import {
   Tooltip,
 } from "@opal/components";
 
-import { Section } from "@/layouts/general-layouts";
 import { transformLinkUri } from "@/lib/utils";
 import { cn } from "@opal/utils";
 import { RichTextSubtext } from "./RichTextSubtext";

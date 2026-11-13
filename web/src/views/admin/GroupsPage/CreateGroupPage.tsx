@@ -1,34 +1,30 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
 import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { InputTypeIn, Text } from "@opal/components";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
   saveGroupPermissions,
 } from "./svc";
 import { makeMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
 import GroupPermissionsSection from "./GroupPermissionsSection";
-import TokenLimitSection from "./TokenLimitSection";
-import type { TokenLimit } from "./TokenLimitSection";
 import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
   const t = useTranslations("admin.groups");
-  const router = useRouter();
+  const navigation = useNavigation();
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -39,15 +35,6 @@ function CreateGroupPage() {
   const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
     new Set()
   );
-  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    {
-      tokenId: null,
-      enabled: true,
-      tokenBudget: null,
-      periodDays: null,
-      costBudgetDollars: null,
-    },
-  ]);
 
   const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
@@ -81,9 +68,8 @@ function CreateGroupPage() {
       }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
-      await saveTokenLimits(groupId, tokenLimits, []);
       toast.success(t("create.toasts.created", { name: trimmed }));
-      router.push("/admin/groups");
+      navigation.go("/admin/groups");
     } catch (e) {
       toast.error(
         e instanceof Error ? e.message : t("create.toasts.createFailed")
@@ -109,7 +95,7 @@ function CreateGroupPage() {
         icon={SvgUsers}
         title={t("create.header.title")}
         divider
-        cancel={() => router.push("/admin/groups")}
+        cancel={() => navigation.go("/admin/groups")}
         actions={headerActions}
       />
 
@@ -153,7 +139,7 @@ function CreateGroupPage() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder={t("members.searchUsers.placeholder")}
-              searchIcon
+              icon="search"
             />
             <Table
               items={allRows}
@@ -188,11 +174,6 @@ function CreateGroupPage() {
           onDocSetIdsChange={setSelectedDocSetIds}
           selectedAgentIds={selectedAgentIds}
           onAgentIdsChange={setSelectedAgentIds}
-        />
-
-        <TokenLimitSection
-          limits={tokenLimits}
-          onLimitsChange={setTokenLimits}
         />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

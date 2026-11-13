@@ -1,7 +1,7 @@
 import "@opal/components/buttons/text-button/styles.css";
 import type { HTMLAttributes } from "react";
 import type { Route } from "next";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
 import type { RichStr, WithoutStyles } from "@opal/types";
 import { Text, type TextFont } from "@opal/components";
@@ -44,7 +44,7 @@ type TextButtonProps = Pick<InteractiveStatelessProps, "passive"> &
  * `Button` (no `icon`/`rightIcon`, `variant`, `prominence`, `tooltip`, or
  * `size`).
  *
- * Renders its `<Link>`/`<button>` directly as `Interactive.Stateless`'s
+ * Renders its `<NavLink>`/`<button>` directly as `Interactive.Stateless`'s
  * single child — Radix `Slot` auto-merges `className`, data-attributes, and
  * `onClick` onto it (`className`/`style` are joined, handlers are chained,
  * everything else falls through), so no separate surface component is
@@ -82,15 +82,15 @@ function TextButton({
       target={target}
       {...rest}
     >
-      {href ? (
-        <Link
-          href={(disabled ? undefined : href) as Route}
+      {href && !disabled ? (
+        <NavLink
+          href={href as Route}
           target={target}
           rel={target === "_blank" ? "noopener noreferrer" : undefined}
           className="opal-text-label interactive-foreground"
         >
           {label}
-        </Link>
+        </NavLink>
       ) : (
         <div className="opal-text-label interactive-foreground">{label}</div>
       )}

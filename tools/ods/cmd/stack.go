@@ -400,6 +400,21 @@ func (p *stackProvider) AppPorts(opts devstack.Options) []devstack.PortRequest {
 	return devstack.AppPortRequests(opts)
 }
 
+// devModelServerImage is built from main, so it bundles the checkout's default
+// embedding model. The release image (`latest`) can lack it and then downloads
+// it from Hugging Face on the first embed, unauthenticated, which stalls or
+// breaks a fresh stack when the download is throttled.
+const devModelServerImage = "onyxdotapp/onyx-model-server:edge"
+
+// modelServerImageEnv pins the dev stack's model server image unless the
+// caller chose an image or an image tag.
+func modelServerImageEnv(getenv func(string) string) []string {
+	if getenv("ONYX_MODEL_SERVER_IMAGE") != "" || getenv("IMAGE_TAG") != "" {
+		return nil
+	}
+	return []string{"ONYX_MODEL_SERVER_IMAGE=" + devModelServerImage}
+}
+
 // ComposeUp starts the infrastructure on the leased ports. With a local
 // model server the Compose inference server stays down.
 func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opts devstack.Options) error {
@@ -412,6 +427,16 @@ func (p *stackProvider) ComposeUp(ctx context.Context, ports map[string]int, opt
 		}
 	}
 	composeOpts := &ComposeOptions{Wait: true, Infra: true, Ports: composePorts, Output: os.Stderr}
+	composeOpts.Env = modelServerImageEnv(os.Getenv)
+	if composeOpts.Env != nil {
+		// edge is a moving tag and compose reuses a cached image, so refresh
+		// it first. A failed pull (offline) keeps the cached image.
+		pull := append(baseArgs("dev", p.stack.Project), "pull", "--ignore-pull-failures",
+			"inference_model_server", "indexing_model_server")
+		if err := execDockerComposeOutput(pull, composeOpts.Env, os.Stderr); err != nil {
+			return err
+		}
+	}
 	if opts.LocalModelServer {
 		composeOpts.ExcludeServices = []string{"inference_model_server"}
 		ids, err := exec.CommandContext(ctx, "docker", "ps",

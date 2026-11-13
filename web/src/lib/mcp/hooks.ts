@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import useSWR, { mutate } from "swr";
 import { useMemo, useState } from "react";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -11,6 +12,11 @@ import type {
 } from "@/lib/mcp/types";
 import { MCPAuthenticationType, MCPConnectionStatus } from "@/lib/mcp/types";
 import { getMcpAuthenticationFlow } from "@/lib/mcp/auth";
+import {
+  isSilentOAuthOutcome,
+  launchOAuth,
+  OAuthLaunchError,
+} from "@/lib/oauth/launch";
 import {
   getMCPUserOAuthNavigationUrl,
   saveMCPUserCredentials,
@@ -138,6 +144,7 @@ export function useMcpAuthentication(
     errorHandlingFetcher
   );
   const [loadingServerId, setLoadingServerId] = useState<number | null>(null);
+  const navigation = useNavigation();
   const [authenticationError, setAuthenticationError] = useState<Error | null>(
     null
   );
@@ -149,17 +156,65 @@ export function useMcpAuthentication(
     forceReauthentication: boolean
   ) {
     setLoadingServerId(server.id);
-    try {
-      const result = await startMCPUserOAuth(
-        server.id,
-        window.location.pathname + window.location.search,
-        { forceReauthentication }
+    const returnPath = window.location.pathname + window.location.search;
+    const start = () =>
+      startMCPUserOAuth(server.id, returnPath, { forceReauthentication });
+    // Opened inside the click; resolves once the tab is open, so the page
+    // stays usable while the provider page is up.
+    return new Promise<void>((resolve, reject) => {
+      let opened = false;
+      const fail = (error: unknown) => {
+        setLoadingServerId(null);
+        if (!opened) {
+          reject(error);
+          return;
+        }
+        setAuthenticationError(
+          error instanceof Error ? error : new Error(String(error))
+        );
+      };
+      launchOAuth(
+        async () => {
+          const result = await start();
+          return result.status === "authorization_required"
+            ? result.authorization_url
+            : null;
+        },
+        {
+          onOpened: () => {
+            opened = true;
+            setLoadingServerId(null);
+            resolve();
+          },
+        }
+      ).then(
+        () => {
+          setLoadingServerId(null);
+          resolve();
+          return refresh();
+        },
+        async (error: unknown) => {
+          if (
+            error instanceof OAuthLaunchError &&
+            error.reason === "popup_blocked"
+          ) {
+            try {
+              navigation.load(getMCPUserOAuthNavigationUrl(await start()));
+              resolve();
+            } catch (fallbackError) {
+              fail(fallbackError);
+            }
+            return;
+          }
+          if (isSilentOAuthOutcome(error)) {
+            setLoadingServerId(null);
+            resolve();
+            return;
+          }
+          fail(error);
+        }
       );
-      window.location.href = getMCPUserOAuthNavigationUrl(result);
-    } catch (error) {
-      setLoadingServerId(null);
-      throw error;
-    }
+    });
   }
 
   async function authenticate(

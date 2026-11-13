@@ -112,24 +112,44 @@ captured tools in order and applies these gates:
      (`DEFAULT_PERSONA_ID`). The MCP branch then applies
      `user_can_access_mcp_server` in Default Chat only
      ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials once per server, and builds every `MCPTool` of that server
-     from the captured rows.
+     credentials once per server, including unavailable servers, and applies
+     the same `can_authenticate_with_headers` gate
+     as execution before building `MCPTool` instances from the captured rows.
+     Missing or rejected credentials exclude the server's tools; refreshable
+     OAuth grants and request-supplied credentials remain usable
+     ([[mcp-and-custom-tools]]).
 
 Two tools are added outside this loop. `SearchTool` is added when the request
 forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
 the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). Last, `_disambiguate_mcp_tool_names`
-renames MCP tools whose names collide.
+is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
+qualified names at construction, independent of the other selected tools.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
 such as arguments, `call_index`, the cancellation signal and the progress
-callback, comes in `agents/tools.py:ToolInvocation`. `invocation.update` can
-raise `AgentCancelled`; do not catch it. An update sent after `_run` returns is
-dropped, and a result that arrives after the run closes is discarded.
+callback, comes in `agents/tools.py:ToolInvocation`. `invocation.messages` is
+the model's view after compaction, as owned copies without result details
+(`agents/tool_execution.py:_tool_view`); `invocation.recorded_results` holds
+every recorded tool result before the call, with details and without
+compaction: earlier steps, then this step's completed results. Tools only read
+it. Use it for state derived from the whole conversation. `invocation.update`
+can raise `AgentCancelled`; do not catch it. An update sent after `_run`
+returns is dropped, and a result that arrives after the run closes is
+discarded.
 Per-request data, such as chat files, memory and the next citation number,
 comes in `tools/models.py:ToolContext`. `ChatAgent._tool_context` and
 `ResearchAgent._tool_context` build it when the call starts.
+
+Code mode reads these `Tool` members: `code_mode_exposure` (abstract: `DIRECT`,
+`IMMEDIATE` or `DEFERRED`; a tool with `result_from_children` must be
+`DIRECT`), `code_mode_function_name` (MCP tools add their server as a
+namespace) and `code_mode_result` (the value and stub type a program
+receives); see [[code-execution]]. A tool that must not run twice sets
+`interrupted_result`: on restore, the runtime saves it as the result of a call
+that a lost execution owner left running (`agents/tools.py:AgentTool`).
+`inner_tools` lists the tools that run inside a tool's calls, such as the
+functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -139,14 +159,62 @@ result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
 
+**Default subagent controls.** `ChatAgent` adds the tools in
+`tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
+`chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller
+delivers follow-up responses, the request sets `accepts_follow_ups`, as the web chat does, and
+the turn has one model.
+Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
+(`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
+omit these controls. In incognito, chat also excludes the coding agent from tool configuration
+(`chat/execution.py:create_chat_agent`), and preparation rejects deep research before it saves
+the user message (`chat/process_message.py:prepare_chat_turn`). These controls have no
+catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
+with `build_chat_agent`, the same builder that restores saved children.
+Each child builds its own controls and conversation state.
+Agents nest two levels below the root (`agents/agent_coordination.py:MAX_CHILD_DEPTH`); an agent
+at that depth gets no `spawn_agent`. A chat runs at most ten active background agents on a branch
+(`chat/run_store.py:MAX_RUNNING_AGENTS`); `chat/models.py:AgentResultState.is_active` defines them:
+unfinished runs with a result row, so foreground workers never count. A spawn beyond that
+returns a tool error, and inbox work for an idle agent waits until a run finishes. Each run checks the owner's token rate limits: root turns when they are sent
+or leave the queue, and runs that agents start in `chat/run_store.py:ChatRunStore.reserve_run_id`,
+where inbox work checks capacity first. The `stop-subagents` route takes the chat lock, drops
+pending work for agents below the root (`db/chat_inputs.py:drop_agent_work__no_commit`), and stops
+the active background agents with the reason "user". A parent's Stop refuses its later spawns.
+A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the user", and its
+result wakes no agent; the root reads it at its next step.
+The controls stay direct in code mode. Each child inherits code mode but owns
+its own code cells.
+`list_agents` shows running and suspended agents, and agents whose latest run belongs to the
+current user turn (`AgentInfo.current_turn`); `include_finished` adds the rest. It marks the caller
+and accepts a `path_prefix` filter. An agent can message
+any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
+with fresh limits; a message to the root waits for the root's next run and never starts one.
+`send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
+agent's active run, except the caller's and the root's, including its in-flight tool calls and
+foreground children; agents it started in the background keep running. The
+interrupted run reports no result and starts no follow-up; its conversation remains.
+Cancellation is cooperative: the runtime signals each tool's `ToolInvocation.cancellation`
+and discards results that arrive later, but a tool that does not check the signal keeps
+running until it returns.
+Results reach the agent's spawner automatically before its next model call.
+A subagent suspends before completing until the results of children it spawned are available.
+The root can finish its response while background children continue.
+An idle agent starts a follow-up response for unread child results.
+Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
+stay in model history; only the parent's response appears as a chat message.
+Tool replies use concise text. The `agent_id` from spawn/list is the control
+handle; paths are display labels and need not be unique.
+
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
 return `ChildRunWait`; the runtime calls `result_from_children` when the child
 ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
 `CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
 `coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
-with no tools on the last step, after a `generate_answer` call, or after a step
-with no tool calls. Their control functions, such as `think_tool`, `generate_report` and
+with tool execution disabled on the last step, after a `generate_answer` call, or after a step
+with no tool calls. Definitions remain advertised for cache reuse where the provider permits it.
+Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 
@@ -216,22 +284,34 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
    `ToolExecutionError`. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
    completion emit it. Streamed argument
-   deltas go only to `run_python` (`chat/renderer.py:MessageRenderer.consume`).
-   Saved responses replay through the same renderer
+   deltas go only to `run_python` and `execute_code`
+   (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
+   `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
+   `tool_renderer` picks by tool name. A result that a run release hook sets
+   streams through `ToolRenderer.amend`. Only a code mode card renders what
+   the amendment added (the cell's closing record), after the call's section
+   end, live and on replay. The generic display adds nothing live; replay
+   shows the saved, amended result. Saved responses replay through the same renderer
    (`chat/presentation.py:replay_response`), so a change here changes reload too.
 8. `durable-details-registered` **A new `details` type must be registered
-   twice.** Chat saves `details` through the discriminated union in
-   `db/models.py:StoredToolResult`, keyed by the model's `type` literal, and
-   checkpoints it through `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`. A new
-   `type` literal missing from the union fails every save with a
-   `ValidationError`. A subclass that keeps its parent's `type` literal saves as
+   once.** `db/models.py:SavedToolResultDetails` is the one union of saved
+   details, keyed by the model's `type` literal. `StoredToolResult` saves
+   through it, `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` tags each member
+   `result.<type>.v1`, and temporary chats keep it
+   (`chat/models.py:serialize_incognito_message`). A new `type` literal missing
+   from the union fails every save with a `ValidationError`. A tool that code
+   mode programs can call also needs its details type in
+   `tools/tool_implementations/code_mode/models.py:CodeModeCallDetails`, the
+   union of nested call details.
+   `tools/tool_implementations/code_mode/cells.py:durable_details` drops
+   details of any other type, so the nested call saves and replays without
+   them. A subclass that keeps its parent's `type` literal saves as
    the parent and drops its own fields with no error.
    `chat/agent.py:ChatAgent._finalize_tool` replaces each `SearchDocsResponse`
    with `chat/models.py:ChatSearchResult` in this way, and its `staged_files`
    are not saved. Only the unwired checkpoint handoff path reads the registry
    ([[agent-runtime]]), so a missing registration fails only that path and its
-   tests. Saved rows and checkpoints keep the `type` value and the tag, so
-   never rename them.
+   tests. Saved rows and checkpoints keep the `type` value, so never rename it.
 9. `parallel-by-default` **Calls in one step run in parallel and share one
    `ToolContext`.** `agents/tool_execution.py:ToolBatch` starts every call of a
    step together. `ChatAgent._tool_context` advances only after the step, so
@@ -256,7 +336,17 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
    `chat/execution.py:ChatTurnExecution._run_response` find tools by name, so
    two tools with one name make one unreachable. OpenAI and Bedrock accept only
    `[a-zA-Z0-9_-]`. Tools that take user-supplied names, such as MCP and OpenAPI
-   tools, must pass them through `tools/tool_name.py:sanitize_tool_name`.
+   tools, use `tools/tool_name.py:normalize_external_tool_name`. MCP names are
+   `mcp__<server id>__<server name>__<tool>`; OpenAPI names are
+   `custom__<tool id>__<operation>`. The ID comes first, so a user-chosen name
+   cannot make two tools collide.
+   Names fit 64 characters; sanitation and truncation add a stable hash.
+   Execution retains the original upstream name. Users see the tool's
+   `display_name`. Each call's `ToolExecutionRecord.display_name` keeps it,
+   and `tool_call.display_name` saves it, so replay reads it from the call.
+   `CustomToolStart` carries it (`chat/renderer.py:ToolRenderer`), and code
+   mode calls keep it in `CodeModeCall.display_name`. Web, mobile and CLI
+   labels, including auth cards, read only the start packet's field.
 11. `replay-by-class-name` **Replay finds a tool by its name or its class
    name.** Saved responses replay by tool name
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
@@ -269,7 +359,8 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
     calls to the same tool when the tool sets `merge_list_argument` and all
     other arguments match (`tools/interface.py:merge_tool_arguments`). Both
     lists must be non-empty string lists, and the merged list must stay within
-    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`). No merge happens
+    `merge_list_limit` (`open_url` sets `MAX_URLS_PER_CALL`, search
+    `MAX_QUERIES_PER_CALL`). No merge happens
     when the run has `before_tool_call`, or when arguments are truncated or
     invalid. A parallel tool can merge calls that are not next to each other;
     a `SEQUENTIAL` tool merges only up to its first call that cannot merge. One
@@ -319,14 +410,6 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
 - **A step with more than 64 tool calls fails the run.**
   `agents/tool_execution.py:ToolBatch` raises `ValueError` above
   `MAX_TOOL_CALLS_PER_STEP`.
-- **A failed MCP credential lookup hides the server's tools with no user
-  error.** `_construct_tools_impl` catches `MCPCredentialsError`, logs a
-  warning and skips the server.
-- **OpenAPI tool names can collide.** `_disambiguate_mcp_tool_names` renames
-  only `MCPTool`. One OpenAPI schema rejects its own duplicate operation IDs
-  (`tools/tool_implementations/custom/openapi_parsing.py`), but nothing checks
-  across two OpenAPI tools on one agent, or against a built-in name. The
-  by-name maps keep the last one ([[#tool-name-is-lookup-key]]).
 - **`tools/utils.py:is_image_generation_available` has no caller,** and its
   rule differs from the image tool's ([[image-generation]]).
 
@@ -405,13 +488,17 @@ with no tool calls. Their control functions, such as `think_tool`, `generate_rep
   no vector DB. For Default Chat, check the user's plugin preferences. For MCP,
   look for the credential warning. Last, check for a name collision (Known
   issues).
-- `force-tool-call` **Force a tool call in a test or a reproduction.** Send `forced_tool_id` with
-  the message. Copy `backend/tests/integration/tests/tools/test_force_tool_use.py`.
-  `chat/process_message.py:prepare_chat_turn` drops a forced ID with no error
-  when the tool fails `is_tool_available_for_persona`, or when it is search and
-  search is disabled; the model then answers without the forced call. Any
-  other forced ID that construction did not build makes
-  `chat/execution.py:create_chat_agent` fail the message with `BAD_REQUEST`.
+- `force-tool-call` **Prefer an Action for the current request.** Send
+  `preferred_tool_id` with the message. The trailing reminder names that Action's
+  operations on every model step. The model may call another tool or answer directly;
+  the preference does not change tool definitions or execution permissions.
+  Use a scripted model to test a required call deterministically, as in
+  `backend/tests/integration/tests/llm_workflows/test_tool_policy_enforcement.py`.
+  When project files replace retrieval, preparation omits an enabled, configured,
+  allowed Search preference and its reminder for that request.
+  Unavailable preferred Actions return `BAD_REQUEST`; Deep Research rejects a
+  preference at request validation. Non-null `forced_tool_id` requests are rejected
+  with migration guidance, rather than silently weakening the old contract.
 
 ---
 

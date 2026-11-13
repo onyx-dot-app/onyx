@@ -1,6 +1,6 @@
 "use client";
 
-import "@opal/components/inputs/shared.css";
+import { InputContainer } from "@opal/components/inputs/container";
 import React from "react";
 import type { InputVariants } from "@opal/types";
 import { Button } from "@opal/components";
@@ -187,19 +187,14 @@ function InputTime({
   const handleSegmentKeyDown = makeSegmentKeyDownHandler(segments, commit);
 
   // Commit when focus leaves the whole field, not on intra-field tabbing.
-  function handleRootBlur(e: React.FocusEvent<HTMLDivElement>) {
-    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    commit(segments);
-  }
-
   const separator = <SegmentSeparator>:</SegmentSeparator>;
 
   return (
     <div className="opal-input-segmented-root">
-      <div
-        className="opal-input opal-input-segmented"
-        data-variant={variant}
-        onBlur={handleRootBlur}
+      <InputContainer
+        className="opal-input-segmented"
+        variant={variant}
+        onFieldBlur={() => commit(segments)}
       >
         <div
           className="opal-input-segmented-content"
@@ -215,7 +210,13 @@ function InputTime({
                 disabled={disabled}
                 ref={segmentRefs[part]}
                 id={part === "hours" ? id : undefined}
-                aria-label={strings[part]}
+                // With an id, the field's <label> names the hours segment; an
+                // aria-label would override that name.
+                aria-label={
+                  part === "hours" && id !== undefined
+                    ? undefined
+                    : strings[part]
+                }
                 placeholder={SEGMENT_PLACEHOLDERS[part]}
                 maxLength={2}
                 value={segments[part]}
@@ -257,7 +258,7 @@ function InputTime({
             />
           </div>
         )}
-      </div>
+      </InputContainer>
     </div>
   );
 }

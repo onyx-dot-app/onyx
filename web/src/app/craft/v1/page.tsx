@@ -1,8 +1,10 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { usePathname, useSearchParams } from "@opal/navigation";
+import { useState } from "react";
+import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { useBuildSessionController } from "@/app/craft/hooks/useBuildSessionController";
-import { getSessionIdFromSearchParams } from "@/app/craft/services/searchParams";
+import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import CraftWorkspace from "@/app/craft/components/CraftWorkspace";
 import VideoBackground from "@/app/craft/components/video-background/VideoBackground";
 
@@ -15,8 +17,16 @@ import VideoBackground from "@/app/craft/components/video-background/VideoBackgr
  * Renders the 2-panel layout (chat + output) and handles session controller setup.
  */
 export default function BuildV1Page() {
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const sessionId = getSessionIdFromSearchParams(searchParams);
+  const urlSessionId = searchParams.get(CRAFT_SEARCH_PARAM_NAMES.SESSION_ID);
+  // A navigation writes the next page's URL before that page renders, while
+  // this one is still mounted. Follow the URL only while it names this page,
+  // so leaving does not read as "no session" (clearing it, pre-provisioning).
+  const [sessionId, setSessionId] = useState(urlSessionId);
+  if (pathname === CRAFT_PATH && urlSessionId !== sessionId) {
+    setSessionId(urlSessionId);
+  }
 
   useBuildSessionController({ existingSessionId: sessionId });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import {
   useCallback,
   useMemo,
@@ -9,7 +10,7 @@ import {
   useRef,
 } from "react";
 import useNotifications from "@/hooks/useNotifications";
-import { useRouter } from "next/navigation";
+import type { Route } from "next";
 import { useTranslations } from "next-intl";
 import { useSettings } from "@/lib/settings/hooks";
 import { MinimalAgent } from "@/lib/agents/types";
@@ -49,9 +50,8 @@ import { useProjectsContext } from "@/lib/projects/providers";
 import { removeChatSessionFromProject } from "@/lib/projects/svc";
 import type { Project } from "@/lib/projects/types";
 import { SidebarLoader } from "@opal/loaders";
-import { SidebarLayouts, useSidebarState } from "@opal/layouts";
-import { SidebarLogoMark, SidebarWordmark } from "@/lib/app/components";
-import { useShowLogoWhenFolded } from "@/lib/sidebar/hooks";
+import { SidebarLayouts, useSidebarState, Section } from "@opal/layouts";
+import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 import { Button as OpalButton, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { Disabled } from "@opal/core";
@@ -69,7 +69,7 @@ import { SidebarTab } from "@opal/components";
 import { ChatSession } from "@/app/app/types";
 import { useUser } from "@/providers/UserProvider";
 import { getFirstPermittedAdminRoute } from "@/lib/permissions/utils";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
@@ -86,13 +86,12 @@ import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
-import { Section } from "@/layouts/general-layouts";
 import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
 import { dismissNotification } from "@/lib/notifications/api";
-import AccountPopover from "@/sections/sidebar/AccountPopover";
+import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
@@ -220,7 +219,7 @@ export default function AppSidebar() {
   const tCraftUpgrade = useTranslations("craft.upgrade");
   const moveChatErrorMessage = t("appSidebar.moveChatError.message");
   const { folded } = useSidebarState();
-  const router = useRouter();
+  const navigation = useNavigation();
   const combinedSettingsData = useSettings();
   const { newTenantInfo, invitationInfo } = useModalContext();
   const { setAppMode, reset } = useQueryController();
@@ -260,8 +259,7 @@ export default function AppSidebar() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useCreateModal();
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
@@ -462,7 +460,7 @@ export default function AppSidebar() {
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           return;
         }
 
@@ -501,13 +499,14 @@ export default function AppSidebar() {
       refreshCurrentProjectDetails,
       refreshProjects,
       moveChatErrorMessage,
+      moveCustomAgentModal.toggle,
     ]
   );
 
   const { hasAdminAccess, adminCapabilities, user, isAdmin } = useUser();
   const activeSidebarTab = useAppPosition();
+  const craftLink = navigation.linkTo(CRAFT_PATH, { scroll: false });
   const createProjectModal = useCreateModal();
-  const showLogoWhenFolded = useShowLogoWhenFolded();
   const defaultAppMode =
     (user?.preferences?.default_app_mode?.toLowerCase() as "chat" | "search") ??
     "chat";
@@ -520,7 +519,7 @@ export default function AppSidebar() {
             ? SvgOnyxOctagon
             : SvgMoreHorizontal
         }
-        href="/app/agents"
+        {...navigation.linkTo("/app/agents", { scroll: false })}
         selected={activeSidebarTab.isMoreAgents()}
         variant={folded ? "sidebar-heavy" : "sidebar-light"}
       >
@@ -554,10 +553,10 @@ export default function AppSidebar() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
           }}
@@ -570,7 +569,7 @@ export default function AppSidebar() {
             }
             const chat = pendingMoveChatSession;
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
             if (chat && target != null) {
@@ -582,7 +581,7 @@ export default function AppSidebar() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       {/* Intro animation overlay */}
       <AnimatePresence>
@@ -603,7 +602,7 @@ export default function AppSidebar() {
               onTryBuildMode={() => {
                 setShowIntroAnimation(false);
                 dismissBuildModeNotification();
-                router.push(CRAFT_PATH);
+                navigation.go(CRAFT_PATH);
               }}
             />
           </motion.div>
@@ -611,11 +610,7 @@ export default function AppSidebar() {
       </AnimatePresence>
 
       <SidebarLayouts.Root foldable>
-        <SidebarLayouts.Header
-          showLogoWhenFolded={showLogoWhenFolded}
-          logo={<SidebarLogoMark size={28} />}
-          wordmark={<SidebarWordmark size={28} />}
-        >
+        <BrandedSidebarHeader>
           <div data-testid="AppSidebar/new-session">
             <SidebarTab
               icon={SvgEditBig}
@@ -654,10 +649,13 @@ export default function AppSidebar() {
               >
                 <SidebarTab
                   icon={SvgDevKit}
-                  href={hasCraftTier ? CRAFT_PATH : undefined}
+                  href={hasCraftTier ? craftLink.href : undefined}
                   onClick={
                     hasCraftTier
-                      ? () => track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR)
+                      ? (event) => {
+                          track(AnalyticsEvent.CLICKED_CRAFT_IN_SIDEBAR);
+                          craftLink.onClick(event);
+                        }
                       : undefined
                   }
                   rightChildren={
@@ -685,7 +683,7 @@ export default function AppSidebar() {
           )}
           <SidebarTab
             icon={SvgPlug}
-            href="/app/plugins"
+            {...navigation.linkTo("/app/plugins", { scroll: false })}
             selected={activeSidebarTab.isPlugins()}
           >
             {t("appSidebar.plugins.label")}
@@ -694,7 +692,7 @@ export default function AppSidebar() {
               unfolded order: Agents, then Projects. */}
           {folded && moreAgentsButton}
           {folded && <FoldedProjectsPopover />}
-        </SidebarLayouts.Header>
+        </BrandedSidebarHeader>
 
         <SidebarLayouts.Body scrollKey="app-sidebar">
           <>
@@ -772,7 +770,11 @@ export default function AppSidebar() {
           <div>
             {hasAdminAccess && (
               <SidebarTab
-                href={getFirstPermittedAdminRoute(adminCapabilities)}
+                {...navigation.linkTo(
+                  // SAFETY: the first permitted admin route is a page of this app.
+                  getFirstPermittedAdminRoute(adminCapabilities) as Route,
+                  { scroll: false }
+                )}
                 icon={SvgSettings}
               >
                 {t("appSidebar.adminPanel.label")}

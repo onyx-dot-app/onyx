@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive.doc_sync import gdrive_doc_sync
 from ee.onyx.external_permissions.google_drive.group_sync import gdrive_group_sync
 from ee.onyx.external_permissions.models import DocSyncResume
@@ -166,6 +167,8 @@ def test_gdrive_perm_sync_with_real_data(
     group_id_to_email_mapping: dict[str, set[str]] = defaultdict(set)
     groups_with_anyone_access: set[str] = set()
     for group in external_user_groups:
+        # The test drive reads clean, so no user or group may be skipped.
+        assert isinstance(group, ExternalUserGroup)
         for email in group.user_emails:
             group_id_to_email_mapping[group.id].add(email)
 

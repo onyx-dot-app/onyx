@@ -78,6 +78,7 @@ how it gates deploys.`,
 	cmd.AddCommand(newAuditAlertCommand())
 	cmd.AddCommand(newAuditAnnounceCommand())
 	cmd.AddCommand(newAuditTrackCommand())
+	cmd.AddCommand(newAuditUpdatesCommand())
 
 	return cmd
 }

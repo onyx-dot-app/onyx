@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel
 
+from onyx.db.enums import IndexAttemptErrorResolvedReason
 from onyx.db.models import IndexAttemptError
 
 
@@ -20,6 +21,9 @@ class IndexAttemptErrorPydantic(BaseModel):
 
     failure_message: str
     is_resolved: bool = False
+    resolved_reason: IndexAttemptErrorResolvedReason | None = None
+    resolved_by_index_attempt_id: int | None = None
+    resolved_at: datetime | None = None
 
     time_created: datetime
 
@@ -42,6 +46,9 @@ class IndexAttemptErrorPydantic(BaseModel):
             failed_time_range_end=model.failed_time_range_end,
             failure_message=model.failure_message,
             is_resolved=model.is_resolved,
+            resolved_reason=model.resolved_reason,
+            resolved_by_index_attempt_id=model.resolved_by_index_attempt_id,
+            resolved_at=model.resolved_at,
             time_created=model.time_created,
             index_attempt_id=model.index_attempt_id,
             error_type=model.error_type,

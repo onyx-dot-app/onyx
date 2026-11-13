@@ -2,7 +2,7 @@
 
 import { useState, KeyboardEvent } from "react";
 import InputTypeIn from "@opal/components/inputs/texts/input-type-in/components";
-import { Chip } from "@opal/components/chip/components";
+import { Tag } from "@opal/components/tag/components";
 
 export interface InputListProps {
   values: string[];
@@ -61,7 +61,7 @@ export function InputList({
       <div className="mt-3">
         <div className="flex flex-wrap gap-1.5">
           {values.map((value, index) => (
-            <Chip
+            <Tag
               key={index}
               title={value}
               disabled={disabled}

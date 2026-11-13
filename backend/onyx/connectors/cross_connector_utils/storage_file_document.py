@@ -1,4 +1,3 @@
-import mimetypes
 from datetime import datetime
 from io import BytesIO
 
@@ -13,7 +12,7 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
 )
 from onyx.connectors.models import Document, ImageSection, TabularSection, TextSection
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, guess_mime_type
 from onyx.file_processing.image_utils import (
     make_image_callback,
     store_image_and_create_section,
@@ -47,6 +46,10 @@ def build_storage_file_document(
     when the file yields nothing to index. Raises on extraction and file-store
     errors, so the caller decides how a failed file is reported.
     """
+    # Callers pass no content type, so the extension decides.
+    mime_type = guess_mime_type(file_name)
+    size_bytes = len(file_bytes)
+
     if get_file_ext(file_name) in OnyxFileExtensions.IMAGE_EXTENSIONS:
         # TODO(evan-onyx): Refactor to avoid direct DB access in connector
         # This will require broader refactoring across the codebase
@@ -64,6 +67,8 @@ def build_storage_file_document(
             semantic_identifier=file_name,
             doc_updated_at=last_modified,
             metadata={},
+            source_mime_type=mime_type,
+            source_size_bytes=size_bytes,
         )
 
     if is_tabular_file(file_name):
@@ -73,11 +78,10 @@ def build_storage_file_document(
                 file_name,
             )
             return None
-        content_type, _ = mimetypes.guess_type(file_name)
         result = extract_and_stage_tabular_file(
             file=BytesIO(file_bytes),
             file_name=file_name,
-            content_type=content_type or DEFAULT_CONTENT_TYPE,
+            content_type=mime_type or DEFAULT_CONTENT_TYPE,
             raw_file_callback=raw_file_callback,
             link=link,
             skip_content=SKIP_SPREADSHEET_CONTENT,
@@ -93,6 +97,8 @@ def build_storage_file_document(
             doc_updated_at=last_modified,
             metadata={},
             file_id=result.staged_file_id,
+            source_mime_type=mime_type,
+            source_size_bytes=size_bytes,
         )
 
     sections: list[TextSection | ImageSection | TabularSection] = []
@@ -121,4 +127,6 @@ def build_storage_file_document(
         metadata=custom_tags,
         primary_owners=onyx_metadata.primary_owners,
         secondary_owners=onyx_metadata.secondary_owners,
+        source_mime_type=mime_type,
+        source_size_bytes=size_bytes,
     )

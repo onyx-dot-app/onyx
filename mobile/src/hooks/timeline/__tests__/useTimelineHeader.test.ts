@@ -24,9 +24,21 @@ describe("useTimelineHeader — text map", () => {
     expect(result.current.hasPackets).toBe(false);
   });
 
-  it("shows the image header when generating with no tool packets", () => {
-    const { result } = renderHook(() => useTimelineHeader([], undefined, true));
-    expect(result.current.headerText).toBe("Generating image...");
+  it("shows Working while work without a step runs", () => {
+    const turn: TurnGroup = makeTurn(0, [
+      makeStep(0, 0, [
+        makePacket(
+          PacketType.SEARCH_TOOL_START,
+          { turn_index: 0 },
+          { is_internet_search: false },
+        ),
+        makePacket(PacketType.SECTION_END, { turn_index: 0 }),
+      ]),
+    ]);
+    const { result } = renderHook(() =>
+      useTimelineHeader([turn], undefined, true),
+    );
+    expect(result.current.headerText).toBe("Working");
   });
 
   it("maps each activity packet type to its label", () => {
@@ -56,6 +68,33 @@ describe("useTimelineHeader — text map", () => {
       "Executing Jira",
     );
     expect(headerFor(PacketType.CUSTOM_TOOL_START)).toBe("Executing tool");
+  });
+
+  it("names an external tool by its display name, not its qualified name", () => {
+    expect(
+      headerFor(PacketType.CUSTOM_TOOL_START, {
+        tool_name: "mcp__3__my__srv__create_issue",
+        display_name: "create_issue",
+      }),
+    ).toBe("Executing create_issue");
+  });
+
+  it("names the tool when a non-tool packet comes first", () => {
+    const turn: TurnGroup = makeTurn(0, [
+      makeStep(0, 0, [
+        makePacket(PacketType.SECTION_END),
+        makePacket(
+          PacketType.CUSTOM_TOOL_START,
+          { turn_index: 0 },
+          {
+            tool_name: "Jira",
+          },
+        ),
+      ]),
+    ]);
+    expect(
+      renderHook(() => useTimelineHeader([turn])).result.current.headerText,
+    ).toBe("Executing Jira");
   });
 
   it("falls back to Thinking... for an unmapped first packet", () => {

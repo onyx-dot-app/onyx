@@ -76,6 +76,7 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 | Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
 | Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
 | Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+| Run Craft against the shared Firecracker dev cluster | `ods craft-dev api` and `ods craft-dev web` | Foreground, stop with Ctrl-C |
 
 Source commands use the selected project's ports and environment. Shared
 infrastructure is the default. `--project NAME` selects an existing project;
@@ -247,6 +248,49 @@ ods backend model-server
 ods backend model-server --port 9001
 ```
 
+### `craft-dev` - Run Craft Against the Firecracker Dev Cluster
+
+Run a local Craft API and web server against the shared remote Firecracker dev
+cluster, and work with your own sandbox VM there. The commands run the Python
+launchers in `deployment/helm/dev` with `uv run`. That directory's
+[README](../../deployment/helm/dev/README.md) has the full workflow.
+
+A profile file holds the cluster facts: `--profile`, else `CRAFT_DEV_PROFILE`,
+else `dev/craft-dev.yaml` in the onyx-internal checkout next to this repository.
+kubectl always gets an explicit context. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in the profile's `kube.allowed_contexts`.
+
+```shell
+ods craft-dev <subcommand>
+```
+
+**Subcommands:**
+
+- `doctor` - Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head. Changes nothing.
+- `api` - Start the local API server. Needs `telepresence connect`. Arguments after `--` go to uvicorn.
+- `web` - Start the local web server against the local API.
+- `vms` - Show your VM.
+- `skills push <dir>` - Put a local directory on a managed mount of your VM (`--mount`, `--wake`).
+- `exec -- <command>` - Run a command in your VM as the sandbox user (`--wake`, `--cwd`).
+- `logs` - Show the guest and agent lines of your VM (`--guest`, `--agent`, `--since`, `--tail`, `-f`).
+- `reset` - Save your sessions, then stop your VM (`--force` skips the save).
+
+The VM commands act only on your user: `--user`, else `CRAFT_DEV_USER`, else
+`user.email` in the profile.
+
+**Examples:**
+
+```shell
+ods craft-dev doctor
+ods craft-dev api --port 8081
+ods craft-dev web --port 8081
+CRAFT_DEV_USER=me@example.com ods craft-dev skills push ./my-skills --wake
+ods craft-dev exec -- ls -la /mnt/skills
+```
+
+Until an `onyx-devtools` release includes `craft-dev`, run it from source at the
+repository root: `go -C tools/ods run . craft-dev doctor`.
+
 ### `stack` - Run the Local Dev Stack of a Worktree
 
 Run the whole local dev stack from a source checkout without an editor:
@@ -348,9 +392,15 @@ forgets a service. `down` also stops the Compose containers; volumes are kept.
 | `default` | `minimal` plus the primary, light, beat, docfetching, docprocessing and user_file_processing Celery workers |
 | `full` | Every service in the `Run All Onyx Services` compound |
 
-The model server comes from Compose. `--local-model-server` runs it from the
-checkout instead, on its own leased port, and leaves the Compose inference
-server down. The Slack bot (`full` only) binds its metrics server to port 8000;
+The model server comes from Compose and runs the `edge` image, which is built
+from `main` and bundles the checkout's default embedding model. The release
+image (`latest`) can lack that model, and the model server then downloads it
+from Hugging Face on the first embed. `up` pulls the current `edge` image and
+applies it when it creates or recreates the Compose containers; a failed pull
+keeps the cached image. `start` and `restart` do not touch the containers.
+Set `ONYX_MODEL_SERVER_IMAGE` or `IMAGE_TAG` in your shell to run another
+image. `--local-model-server` runs it from the checkout instead, on its own
+leased port, and leaves the Compose inference server down. The Slack bot (`full` only) binds its metrics server to port 8000;
 the stack never leases 8000 and skips the bot when the port is taken.
 
 **Flags** (`up`, `start`, `restart`):
@@ -529,6 +579,7 @@ later arguments go to the suite's test runner.
 | `ods` | | `tools/ods` | `go test` |
 | `cli` | | `cli` | `go test` |
 | `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `microvm` | | `microvm` | `go test` |
 
 The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
 takes packages rather than files, such as `go test`, runs the package that holds
@@ -573,8 +624,8 @@ number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
 own tests never assert on.
 
-The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
-`terraform`. A module directory such as `tools/ods` is accepted in place of a
+The suites are the same Go modules `ods test` knows: `ods`, `cli`,
+`terraform` and `microvm`. A module directory such as `tools/ods` is accepted in place of a
 suite name, which is what CI passes.
 
 **Flags:**
@@ -995,6 +1046,28 @@ ods audit --format=sarif,text > audit.sarif
 # Every tracked bun.lock and uv.lock, not just the root and web ones
 ods audit --all-lockfiles --web --python
 ```
+
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
 
 #### Checking a release branch before a tag
 

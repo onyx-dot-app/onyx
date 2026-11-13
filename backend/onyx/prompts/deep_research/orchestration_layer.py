@@ -72,7 +72,7 @@ In these cases, ensure that the new directions are thoroughly investigated prior
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You may use up to {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
@@ -165,7 +165,7 @@ Between calls, think deeply on what to do next. Be curious, identify knowledge g
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You may use up to {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \

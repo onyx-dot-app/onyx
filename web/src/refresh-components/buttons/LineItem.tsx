@@ -1,11 +1,11 @@
+import { NavLink } from "@opal/navigation";
+import { Section } from "@opal/layouts";
 import React, { useState } from "react";
 import { cn, richNodes } from "@opal/utils";
 import type { IconProps } from "@opal/types";
-import { OverflowText, Text, Tooltip, type TextFont } from "@opal/components";
+import { Text, Tooltip, type TextFont } from "@opal/components";
 import { useOverflow } from "@opal/hooks";
-import Link from "next/link";
 import type { Route } from "next";
-import { Section } from "@/layouts/general-layouts";
 import type { WithoutStyles } from "@opal/types";
 
 const rowClassNames = {
@@ -196,7 +196,7 @@ export default function LineItem({
 
   const emphasisKey = emphasized ? "emphasized" : "normal";
 
-  // OverflowText takes only strings, so rich labels measure their own clamp.
+  // `overflowTooltip` takes only strings, so rich labels measure their own clamp.
   const [richLabel, setRichLabel] = useState<HTMLElement | null>(null);
   const richLabelOverflowing = useOverflow(richLabel);
 
@@ -281,13 +281,15 @@ export default function LineItem({
                   so it sits on a wrapper and the text inherits it. */}
               <div className={cn("w-full min-w-0", textClassNames[variant])}>
                 {typeof children === "string" ? (
-                  <OverflowText
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
                     as="p"
                     font={textFonts[variant]}
                     color="inherit"
                   >
                     {children}
-                  </OverflowText>
+                  </Text>
                 ) : (
                   <Tooltip
                     tooltip={children}
@@ -327,9 +329,15 @@ export default function LineItem({
                 </div>
               ) : (
                 <div className="w-full min-w-0">
-                  <OverflowText as="p" font="secondary-body" color="text-03">
+                  <Text
+                    maxLines={1}
+                    overflowTooltip
+                    as="p"
+                    font="secondary-body"
+                    color="text-03"
+                  >
                     {description}
-                  </OverflowText>
+                  </Text>
                 </div>
               ))}
           </>
@@ -348,9 +356,15 @@ export default function LineItem({
               </div>
             ) : (
               <div className="w-full min-w-0">
-                <OverflowText as="p" font="secondary-body" color="text-03">
+                <Text
+                  maxLines={1}
+                  overflowTooltip
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                >
                   {description}
-                </OverflowText>
+                </Text>
               </div>
             )}
             {rightChildren && (
@@ -378,8 +392,8 @@ export default function LineItem({
 
   if (!href) return content;
   return (
-    <Link href={href as Route} rel={rel} target={target}>
+    <NavLink href={href as Route} rel={rel} target={target}>
       {content}
-    </Link>
+    </NavLink>
   );
 }

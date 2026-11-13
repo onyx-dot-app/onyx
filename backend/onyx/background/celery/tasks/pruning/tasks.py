@@ -827,21 +827,21 @@ def connector_pruning_generator_task(
                 task_logger.info(
                     f"RedisConnector.prune.generate_tasks starting. cc_pair={cc_pair_id}"
                 )
-                tasks_generated = redis_connector.prune.generate_tasks(
+                docs_queued = redis_connector.prune.generate_tasks(
                     set(doc_ids_to_remove), self.app, db_session, None
                 )
-                if tasks_generated is None:
+                if docs_queued is None:
                     return None
 
                 task_logger.info(
-                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} tasks_generated={tasks_generated}"
+                    f"RedisConnector.prune.generate_tasks finished. cc_pair={cc_pair_id} docs_queued={docs_queued}"
                 )
             finally:
                 observe_pruning_diff_duration(
                     time.monotonic() - diff_start, connector_type
                 )
 
-            redis_connector.prune.generator_complete = tasks_generated
+            redis_connector.prune.generator_complete = docs_queued
 
             # --- Hierarchy node pruning ---
             live_node_ids = _get_live_hierarchy_node_ids(

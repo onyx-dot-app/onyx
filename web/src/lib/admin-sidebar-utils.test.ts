@@ -100,3 +100,17 @@ test.each([
 test("matches canonical plugin details to the Plugins registry entry", () => {
   expect(matchAdminRoute("/admin/plugins/mcp/7")).toBe(ADMIN_ROUTES.PLUGINS);
 });
+
+test("shows Skills only to full admins when Craft is available", () => {
+  const craftFlags = { ...flags, craftAvailable: true };
+  expect(
+    buildItems([Permission.FULL_ADMIN_PANEL_ACCESS], craftFlags, null).map(
+      (item) => item.link
+    )
+  ).toContain("/admin/skills");
+  expect(
+    buildItems([Permission.MANAGE_PLUGINS], craftFlags, null).map(
+      (item) => item.link
+    )
+  ).not.toContain("/admin/skills");
+});

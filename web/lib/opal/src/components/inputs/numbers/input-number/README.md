@@ -22,6 +22,7 @@ With a negative `min`, the value can be typed with a leading minus sign.
 | `disabled`      | `boolean`                         | `false`     | Disables input and steppers                                                                |
 | `placeholder`   | `string`                          | —           | Shown while the field is empty                                                             |
 | `suffix`        | `string`                          | —           | Unit text after the value                                                                  |
+| `valueSuffix`   | `string \| RichStr`               | —           | Muted text right against the value (the `K` of `100K`). Hidden while the field is empty.   |
 | `id`            | `string`                          | —           | Input id, for `<label htmlFor>`                                                            |
 | `allowEmpty`    | `boolean`                         | `true`      | When false, a blank field settles to `defaultValue` (or its last value) instead of `null`  |
 | `plain`         | `boolean`                         | `false`     | A plain type-in field: no steppers, the value in mono, the unit in `text-02`               |

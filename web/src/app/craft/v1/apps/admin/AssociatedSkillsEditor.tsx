@@ -6,7 +6,7 @@ import {
   Button,
   Card,
   Dropdown,
-  Tag,
+  Badge,
   Text,
   type DropdownItem,
   type DropdownView,
@@ -348,7 +348,7 @@ export default function AssociatedSkillsEditor({
                     <Text font="main-ui-action">{name}</Text>
                   </div>
                   {(skill?.is_valid ?? summary?.is_valid) === false && (
-                    <Tag title={t("invalidTag")} color="amber" />
+                    <Badge title={t("invalidTag")} color="pending" />
                   )}
                   <Button
                     size="md"

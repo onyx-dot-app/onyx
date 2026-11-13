@@ -1,6 +1,6 @@
-import type { RichStr } from "@opal/types";
+import type { RichNodes, RichStr } from "@opal/types";
 import type { IconFunctionComponent } from "@opal/types";
-import type { TagProps } from "@opal/components/tag/components";
+import type { BadgeProps } from "@opal/components/badge/components";
 import type { InputTypeInTagProps } from "@opal/components/inputs/texts/input-type-in-tag/components";
 
 /**
@@ -15,10 +15,12 @@ export type SelectOption = {
   description?: string | RichStr;
   /** Muted text beside the title in the list, like "(Default)". */
   suffix?: string;
+  /** Muted note at the end of the row, like what is already set for it. */
+  info?: string | RichStr | RichNodes;
   icon?: IconFunctionComponent;
   disabled?: boolean;
-  /** Tag beside the title, like a plan badge. */
-  tag?: TagProps;
+  /** Badge beside the title, like a plan badge. */
+  tag?: BadgeProps;
   /** Hover text on the row, for the reason it is disabled. Accepts markdown. */
   tooltip?: string | RichStr;
   /** Makes the row a link: picking it follows `href` instead of selecting it. */

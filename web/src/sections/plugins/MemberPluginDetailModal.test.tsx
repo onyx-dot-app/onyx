@@ -27,8 +27,12 @@ import {
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   usePathname: () => "/app/plugins",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 let mockCraftEnabled: boolean | undefined = true;
@@ -297,7 +301,9 @@ test("Craft App details share the connection card and searchable Skills tab with
   expect(screen.getByRole("tab", { name: "Tools" })).toBeVisible();
   await setupUser().click(screen.getByRole("tab", { name: "Skills" }));
   expect(await screen.findByText("GitHub workflow")).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "Search skills" })).toBeVisible();
+  expect(
+    screen.getByRole("searchbox", { name: "Search skills" })
+  ).toBeVisible();
   expect(screen.getByRole("link", { name: "Review skills" })).toHaveAttribute(
     "href",
     "/craft/v1/skills?externalAppId=7"
@@ -452,7 +458,7 @@ test("Tools tab searches stored tools and expands full descriptions without live
   expect(screen.getByText("Search issues")).toBeVisible();
   expect(screen.getByText(description.trim())).toBeVisible();
   expect(screen.getByText("1 tool")).toBeVisible();
-  expect(screen.getByRole("textbox", { name: "Search tools" })).toBeVisible();
+  expect(screen.getByRole("searchbox", { name: "Search tools" })).toBeVisible();
   expect(requests).toHaveBeenCalledTimes(1);
   expect(requests).toHaveBeenCalledWith(
     "/api/build/action-policies/mcp_server/7"
@@ -709,7 +715,7 @@ test("OpenAPI tools search matches name and description and reports no results",
   });
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Tools" }));
-  const search = screen.getByRole("textbox", { name: "Search tools" });
+  const search = screen.getByRole("searchbox", { name: "Search tools" });
   for (const query of ["createDeployment", "Schedule"]) {
     await user.clear(search);
     await user.type(search, query);
@@ -930,7 +936,7 @@ test("Craft Tools groups available actions and approval settings without writing
   expect(await screen.findByText("Send report")).toBeVisible();
   expect(screen.queryByText("Delete report")).not.toBeInTheDocument();
   await user.type(
-    screen.getByRole("textbox", {
+    screen.getByRole("searchbox", {
       name: memberPluginMessages.actions.mcpTools.search,
     }),
     "missing"

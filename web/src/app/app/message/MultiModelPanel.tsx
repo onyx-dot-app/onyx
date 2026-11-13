@@ -129,8 +129,7 @@ export default function MultiModelPanel({
   const headerContent = (
     <>
       <ContentAction
-        sizePreset="main-ui"
-        variant="body"
+        font="main-ui-body"
         padding={2}
         icon={ModelIcon}
         title={isHidden ? markdown(`~~${displayName}~~`) : displayName}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
@@ -10,7 +11,6 @@ import {
 } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import {
   Button,
   Table,
@@ -22,8 +22,7 @@ import SvgLock from "@opal/icons/lock";
 
 import { markdown } from "@opal/utils";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import { Section } from "@/layouts/general-layouts";
-import { toast } from "@opal/layouts";
+import { toast, Section } from "@opal/layouts";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
 import {
   listScheduledTaskRuns,
@@ -253,7 +252,7 @@ function buildColumns(
 
 export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
   const t = useTranslations("craft.tasks.runHistory");
-  const router = useRouter();
+  const navigation = useNavigation();
   const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
   const [olderNextCursor, setOlderNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -424,7 +423,7 @@ export default function RunHistoryTable({ taskId }: RunHistoryTableProps) {
         selectionBehavior="single-select"
         onRowClick={(row) => {
           if (!getNonClickableReason(row, tReason) && row.session_id) {
-            router.push(buildSessionPath(row.session_id));
+            navigation.go(buildSessionPath(row.session_id));
           }
         }}
       />

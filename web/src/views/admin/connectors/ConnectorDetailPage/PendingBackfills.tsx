@@ -2,7 +2,7 @@
 
 import { windowCoversAllHistory } from "@/lib/connectors/edit/window";
 import { useFormatter, useTranslations } from "next-intl";
-import { Card, Tag } from "@opal/components";
+import { Card, Badge } from "@opal/components";
 import { Content, ContentAction, Section } from "@opal/layouts";
 import { SvgHistory } from "@opal/icons";
 import type { PendingBackfillSnapshot } from "@/lib/connectors/types";
@@ -25,14 +25,14 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
     <Card border="solid" padding={4} rounding={3}>
       <Section gap={2} alignItems="stretch" height="fit">
         <Content
+          font="main-ui-action"
           icon={SvgHistory}
           title={t("title")}
           description={t("description")}
-          sizePreset="main-ui"
-          variant="section"
         />
         {backfills.map((backfill) => (
           <ContentAction
+            font="main-ui-action"
             key={`${backfill.window_start}-${backfill.requested_at}`}
             title={
               windowCoversAllHistory(backfill.window_start)
@@ -52,15 +52,13 @@ export default function PendingBackfills({ backfills }: PendingBackfillsProps) {
                       time: dateTime(backfill.retry_after),
                     })
             }
-            sizePreset="main-ui"
-            variant="section"
             rightChildren={
               <Section flexDirection="row" gap={1} height="fit" width="fit">
-                {backfill.scoped && <Tag title={t("scoped")} color="blue" />}
+                {backfill.scoped && <Badge title={t("scoped")} color="info" />}
                 {backfill.failure_count > 0 && (
-                  <Tag
+                  <Badge
                     title={t("failures", { count: backfill.failure_count })}
-                    color="amber"
+                    color="pending"
                   />
                 )}
               </Section>

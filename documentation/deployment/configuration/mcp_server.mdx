@@ -194,6 +194,9 @@ Onyx supports:
   Onyx fetches the document during authorization. The document's `client_id` must equal that URL,
   and the URL must be publicly reachable: private or blocked destinations are rejected as an invalid client.
   A fetch failure returns `503`; an invalid document returns an invalid-client error.
+  A document can declare another token authentication method, such as `private_key_jwt`.
+  Onyx then serves the client as a public client and ignores any client assertion.
+  Onyx rejects such a document as an invalid client if any of its redirect URIs is a loopback address.
 - **Public client metadata:** one to ten redirect URIs, `authorization_code` grant, and `code` response type,
   for both registration methods.
 - **Authorization code flow with PKCE:** use `code_challenge_method=S256` and supply the matching verifier when exchanging the code.
@@ -231,6 +234,7 @@ the client must obtain a new user authorization to reconnect.
 | `MCP_SERVER_PORT` | `8090` | MCP service listening port. |
 | `MCP_SERVER_CORS_ORIGINS` | Empty | Comma-separated additional allowed browser origins. |
 | `MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS` | `300` | Read timeout for MCP requests to the API service. |
+| `MCP_SERVER_SEARCH_RETRIEVAL_ONLY` | `false` | Run every `search_indexed_documents` call with `retrieval_only`, so MCP searches make no LLM calls. |
 | `API_SERVER_PROTOCOL` | `http` | Protocol used by MCP to reach the API service. |
 | `API_SERVER_HOST` | `127.0.0.1` | API service hostname; bundled deployments supply the service address. |
 | `API_SERVER_URL_OVERRIDE_FOR_HTTP_REQUESTS` | Unset | Override the API service URL for deployments with custom internal networking. |

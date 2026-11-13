@@ -16,6 +16,9 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import (
     ExecutionStatus,
+    RunFailure,
+    RunFailureKind,
+    RunOutcome,
     RunState,
     RunStatus,
     StepRecord,
@@ -1416,3 +1419,32 @@ def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() 
         release_internal.set()
         run.cancel()
         assert run.wait_for_idle(10)
+
+
+@pytest.mark.parametrize(
+    "outcome, failure, reason",
+    [
+        (RunStatus.COMPLETE, None, "finished"),
+        (RunStatus.LIMIT, None, "finished"),
+        (RunStatus.ERROR, None, "finished"),
+        (RunStatus.CANCELLED, None, "user_cancelled"),
+        (
+            RunStatus.CANCELLED,
+            RunFailure(kind=RunFailureKind.DEADLINE, message="deadline"),
+            "timed_out",
+        ),
+    ],
+)
+def test_stop_reason_is_the_same_live_and_on_replay(
+    outcome: RunOutcome, failure: RunFailure | None, reason: str
+) -> None:
+    output: list[Packet] = []
+    ResponsePresenter(_emitter(output)).consume(
+        AgentEndEvent(run_id="r", outcome=outcome, failure=failure)
+    )
+    replay = replay_response(
+        ResponseRecord(run_id="r", status=outcome, failure=failure), {}, {}, {}
+    )
+    for packets in (output, replay):
+        stops = [p.obj for p in packets if isinstance(p.obj, OverallStop)]
+        assert [stop.stop_reason for stop in stops] == [reason]

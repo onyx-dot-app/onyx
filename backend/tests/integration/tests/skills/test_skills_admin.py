@@ -11,9 +11,10 @@ from sqlalchemy import select
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Skill
+from onyx.db.models import Plugin, PluginVersion, Skill
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
+from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.skill import (
@@ -36,10 +37,13 @@ def _fetch_skill_row(skill_id: UUID) -> Skill | None:
 
 
 def _mark_skill_invalid(skill_id: UUID) -> None:
+    """Classify the current version invalid; readers use the version."""
     with get_session_with_current_tenant() as db_session:
-        skill = db_session.get(Skill, skill_id)
-        assert skill is not None
-        skill.is_valid = False
+        plugin = db_session.get(Plugin, skill_id)
+        assert plugin is not None
+        version = db_session.get(PluginVersion, plugin.current_version_id)
+        assert version is not None
+        version.is_valid = False
         db_session.commit()
 
 
@@ -227,8 +231,8 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
     streaming size check sees the uncompressed size and raises
     ``PAYLOAD_TOO_LARGE`` (413).
     """
-    # CI lowers SKILL_BUNDLE_PER_FILE_MAX_BYTES to 1 MiB; a 2 MiB file trips it.
-    oversized_payload = b"A" * (2 * 1024 * 1024)
+    # 26 MiB of one byte is over the 25 MiB per-file limit and compresses to ~26 KiB.
+    oversized_payload = b"A" * (26 * 1024 * 1024)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(
@@ -245,6 +249,45 @@ def test_create_skill_413_on_oversized_bundle(admin_user: DATestUser) -> None:
             bundle_bytes=big_bundle,
         )
     assert exc_info.value.response.status_code == 413
+
+
+def _bundle_with_file_count(name: str, file_count: int) -> bytes:
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f"{name}/", b"")
+        zf.writestr(
+            f"{name}/SKILL.md",
+            f"---\nname: {name}\ndescription: Many files\n---\nbody\n",
+        )
+        zf.writestr(f"{name}/refs/", b"")
+        for index in range(file_count - 1):
+            zf.writestr(f"{name}/refs/{index}.md", b"x")
+    return buf.getvalue()
+
+
+def test_create_skill_file_count_limit(admin_user: DATestUser) -> None:
+    """Enforce the configured file count; folders do not count."""
+    too_many = f"too-many-{uuid4().hex[:8]}"
+    with pytest.raises(httpx.HTTPStatusError) as exc_info:
+        SkillManager.create_custom(
+            admin_user,
+            name=too_many,
+            bundle_bytes=_bundle_with_file_count(too_many, DEFAULT_MAX_FILE_COUNT + 1),
+            auto_enable=False,
+        )
+    response = exc_info.value.response
+    assert response.status_code == 413
+    assert response.json()["limit"] == "file_count"
+    assert response.json()["limit_value"] == DEFAULT_MAX_FILE_COUNT
+
+    at_limit = f"at-limit-{uuid4().hex[:8]}"
+    created = SkillManager.create_custom(
+        admin_user,
+        name=at_limit,
+        bundle_bytes=_bundle_with_file_count(at_limit, DEFAULT_MAX_FILE_COUNT),
+        auto_enable=False,
+    )
+    assert created.name == at_limit
 
 
 # ---------------------------------------------------------------------------

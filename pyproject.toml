@@ -54,6 +54,11 @@ backend = [
     "google-auth-oauthlib==1.4.0",
     "google-cloud-storage>=3.0.0,<4.0.0",
     "graphql-core==3.2.12",
+    # Craft Firecracker host agent client (backend/onyx/microvm/). The
+    # generated stubs need protobuf; googleapis-common-protos has ErrorInfo.
+    "googleapis-common-protos==1.72.0",
+    "grpcio==1.80.0",
+    "protobuf==6.33.5",
     # GPT4All library has issues running on Macs and python:3.11.4-slim-bookworm
     # will reintroduce this when library version catches up
     # "gpt4all==2.0.2",
@@ -82,10 +87,12 @@ backend = [
     # import namespace). passlib 1.7.4 is unmaintained and imports the stdlib
     # `crypt` module, which was removed in Python 3.13.
     "libpass==1.9.3",
-    "playwright==1.58.0",
+    "playwright==1.64.1",
     "psutil==7.1.3",
     "psycopg2-binary==2.9.10",
     "puremagic==1.28",
+    # Sandbox for code mode programs that call tools.
+    "pydantic-monty==1.5.0",
     "pyairtable==3.0.1",
     "pycryptodome==3.19.1",
     "PyGithub==2.5.0",
@@ -139,6 +146,7 @@ dev = [
     "celery-types==0.26.0",
     "faker==40.38.0",
     "hatchling==1.28.0",
+    "hypothesis==6.170.14",
     "ipykernel==6.29.5",
     "manygo==0.2.0",
     "matplotlib==3.10.8",
@@ -175,7 +183,7 @@ dev = [
 # One-tool groups, installed with `--only-group` by the pre-commit hooks: each
 # tool comes from hash-verified uv.lock artifacts without a full project sync,
 # and each pin below is the only one in the repo.
-ods = ["onyx-devtools[audit]==0.13.15"]
+ods = ["onyx-devtools[audit]==0.13.16"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
@@ -280,6 +288,8 @@ typeCheckingMode = "off"
 [tool.ruff]
 line-length = 88
 target-version = "py313"
+# protoc output (backend/onyx/microvm/generated/regenerate.sh).
+extend-exclude = ["backend/onyx/microvm/generated"]
 
 [tool.ruff.lint]
 ignore = [

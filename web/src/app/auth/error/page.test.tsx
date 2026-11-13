@@ -8,9 +8,13 @@ const mockReplace = jest.fn();
 let mockError: string | null = null;
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ replace: mockReplace }),
   usePathname: () => "/auth/error",
-  useSearchParams: () => ({ get: () => mockError }),
+  useSearchParams: () =>
+    new URLSearchParams(mockError === null ? {} : { error: mockError }),
 }));
 
 // The shell fetches workspace settings, which this page's behavior doesn't use.
@@ -24,6 +28,8 @@ const STALE_SIGN_IN_MESSAGE =
 
 beforeEach(() => {
   window.sessionStorage.clear();
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/auth/error");
 });
 
 afterEach(() => {
@@ -48,6 +54,7 @@ describe("auth error page", () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
     first.unmount();
     mockReplace.mockReset();
+    window.history.replaceState(null, "", "/auth/error");
 
     render(<Page />);
 
@@ -62,6 +69,8 @@ describe("auth error page", () => {
     await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1));
     first.unmount();
     now.mockReturnValue(1_000_000 + 5 * 60 * 1000);
+    // The first restart moved the URL to /auth/login.
+    window.history.replaceState(null, "", "/auth/error");
 
     render(<Page />);
 

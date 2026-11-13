@@ -38,11 +38,10 @@ export default function Suggestions({ onSubmit }: SuggestionsProps) {
         >
           <Interactive.Container width="full" rounding={2} size="lg">
             <Content
+              font="main-ui-body"
               title={message}
-              sizePreset="main-ui"
-              variant="body"
               width="full"
-              color="muted"
+              titleColor="text-03"
             />
           </Interactive.Container>
         </Interactive.Stateless>

@@ -1,5 +1,5 @@
 "use client";
-import { redirect } from "next/navigation";
+import { redirect, useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
 import { useTranslations } from "next-intl";
 
@@ -9,6 +9,7 @@ export default function AnonymousPage({
   anonymousPath: string;
 }) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   const loginAsAnonymousUser = async () => {
     try {
       const response = await fetch(
@@ -29,7 +30,7 @@ export default function AnonymousPage({
         throw new Error("Failed to login as anonymous user");
       }
       // Redirect to the chat page and force a refresh
-      window.location.href = "/app";
+      navigation.load("/app");
     } catch (error) {
       console.error("Error logging in as anonymous user:", error);
       redirect("/auth/signup?error=Anonymous");

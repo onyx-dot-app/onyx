@@ -8,7 +8,7 @@ export default function CloudError() {
   const { appName } = useSettings();
   return (
     <ErrorPageLayout>
-      <Text as="p" font="heading-h2" color="text-05">
+      <Text as="p" font="heading-headline" color="text-05">
         {t("heading.title")}
       </Text>
 

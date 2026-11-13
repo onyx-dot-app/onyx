@@ -1,17 +1,17 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { useCallback, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
   Button,
   Table,
   Text,
   Tooltip,
+  useCreateModal,
   type TableColumn,
 } from "@opal/components";
 import { IllustrationContent } from "@opal/layouts";
@@ -164,7 +164,7 @@ function buildColumns(
 
 export default function ScheduledTasksListPage() {
   const t = useTranslations("craft.tasks.listPage");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { data, error, isLoading, mutate } = useSWR<ScheduledTaskListResponse>(
     SWR_KEYS.scheduledTasks,
     errorHandlingFetcher,
@@ -183,6 +183,8 @@ export default function ScheduledTasksListPage() {
   );
   const [pendingDelete, setPendingDelete] =
     useState<ScheduledTaskListItem | null>(null);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const [busyTaskId, setBusyTaskId] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
@@ -195,7 +197,7 @@ export default function ScheduledTasksListPage() {
     try {
       await deleteScheduledTask(pendingDelete.id);
       toast.success(t("toasts.deleted", { name: pendingDelete.name }));
-      setPendingDelete(null);
+      toggleDeleteModal(false);
       refresh();
     } catch (err) {
       toast.error(
@@ -204,7 +206,7 @@ export default function ScheduledTasksListPage() {
     } finally {
       setBusyTaskId(null);
     }
-  }, [pendingDelete, refresh, t]);
+  }, [pendingDelete, refresh, t, toggleDeleteModal]);
 
   const tTasks = useTranslations("craft.tasks");
   const unviewedLabel = tTasks("unviewedResults");
@@ -213,12 +215,15 @@ export default function ScheduledTasksListPage() {
       buildColumns(
         {
           busyTaskId,
-          onDelete: (task) => setPendingDelete(task),
+          onDelete: (task) => {
+            setPendingDelete(task);
+            toggleDeleteModal(true);
+          },
         },
         t,
         unviewedLabel
       ),
-    [busyTaskId, t, unviewedLabel]
+    [busyTaskId, t, unviewedLabel, toggleDeleteModal]
   );
 
   const headerActions = useMemo(
@@ -228,13 +233,13 @@ export default function ScheduledTasksListPage() {
         variant="default"
         prominence="primary"
         icon={SvgPlus}
-        href={NEW_TASK_PATH}
+        {...navigation.linkTo(NEW_TASK_PATH)}
         data-testid="new-task-button"
       >
         {t("newTaskButton")}
       </Button>
     ),
-    [t]
+    [navigation, t]
   );
 
   return (
@@ -273,7 +278,7 @@ export default function ScheduledTasksListPage() {
               tasks.length > 0 ? Math.min(tasks.length, TASKS_PAGE_SIZE) : 1
             }
             selectionBehavior="single-select"
-            onRowClick={(row) => router.push(taskDetailPath(row.id))}
+            onRowClick={(row) => navigation.go(taskDetailPath(row.id))}
             emptyState={
               <IllustrationContent
                 illustration={SvgNoResult}
@@ -285,27 +290,29 @@ export default function ScheduledTasksListPage() {
         )}
       </SettingsLayouts.Body>
 
-      {pendingDelete && (
-        <ConfirmationModalLayout
-          icon={SvgTrash}
-          title={t("confirmDelete.title", { name: pendingDelete.name })}
-          description={t("confirmDelete.description")}
-          onClose={() => setPendingDelete(null)}
-          submit={
-            <Button
-              variant="danger"
-              prominence="primary"
-              onClick={() => void handleDelete()}
-              disabled={busyTaskId === pendingDelete.id}
-              data-testid="confirm-delete-task"
-            >
-              {busyTaskId === pendingDelete.id
-                ? t("confirmDelete.deletingButton")
-                : t("confirmDelete.deleteButton")}
-            </Button>
-          }
-        />
-      )}
+      <deleteModal.Provider>
+        {pendingDelete && (
+          <ConfirmationModalLayout
+            icon={SvgTrash}
+            title={t("confirmDelete.title", { name: pendingDelete.name })}
+            description={t("confirmDelete.description")}
+            onClose={() => toggleDeleteModal(false)}
+            submit={
+              <Button
+                variant="danger"
+                prominence="primary"
+                onClick={() => void handleDelete()}
+                disabled={busyTaskId === pendingDelete.id}
+                data-testid="confirm-delete-task"
+              >
+                {busyTaskId === pendingDelete.id
+                  ? t("confirmDelete.deletingButton")
+                  : t("confirmDelete.deleteButton")}
+              </Button>
+            }
+          />
+        )}
+      </deleteModal.Provider>
     </SettingsLayouts.Root>
   );
 }

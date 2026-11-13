@@ -9,7 +9,7 @@ import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import { Interactive, type InteractiveStatelessInteraction } from "@opal/core";
-import { cn } from "@opal/utils";
+import { clickOnKeyDown, cn } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 
 // ---------------------------------------------------------------------------
@@ -244,6 +244,12 @@ function FoldableDivider({
           rounding={2}
           size="fit"
           width="full"
+          // The header is the fold's one keyboard stop; its chevrons stay
+          // out of the Tab order.
+          role="button"
+          tabIndex={0}
+          aria-expanded={isOpen}
+          onKeyDown={clickOnKeyDown(toggle)}
           {...headerProps}
         >
           <div className="opal-divider">
@@ -254,12 +260,15 @@ function FoldableDivider({
                   data-position="start"
                   data-open={isOpen}
                   data-folded-chevron={foldedChevron}
+                  // The header is the control; a nested button would be
+                  // flattened inside its role="button".
+                  aria-hidden
                 >
                   <Button
                     icon={SvgChevronDown}
                     size="sm"
                     prominence="internal"
-                    aria-expanded={isOpen}
+                    tabIndex={-1}
                     tooltip={
                       isOpen ? strings.collapsibleFold : strings.dividerViewAll
                     }
@@ -282,11 +291,16 @@ function FoldableDivider({
               </div>
               <div className="opal-divider-line" />
               {chevronPosition === "end" && (
-                <div className="opal-divider-chevron" data-open={isOpen}>
+                <div
+                  className="opal-divider-chevron"
+                  data-open={isOpen}
+                  aria-hidden
+                >
                   <Button
                     icon={SvgChevronRight}
                     size="sm"
                     prominence="tertiary"
+                    tabIndex={-1}
                   />
                 </div>
               )}

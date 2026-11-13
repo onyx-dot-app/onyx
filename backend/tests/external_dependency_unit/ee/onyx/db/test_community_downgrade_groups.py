@@ -2,6 +2,7 @@
 access away: what a group shared becomes public and its members keep a group.
 Each test rolls its transaction back."""
 
+import logging
 from uuid import UUID, uuid4
 
 import pytest
@@ -12,12 +13,13 @@ from ee.onyx.db.community_downgrade import (
     _UNCASCADED_GROUP_LINKS,
     remove_custom_user_groups__no_commit,
 )
-from onyx.configs.constants import TokenRateLimitScope
+from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.enums import (
     AccountType,
     GrantSource,
     Permission,
     PersonaSharePermission,
+    PluginInstallationPolicy,
     SkillSharePermission,
     UserFileStatus,
 )
@@ -33,21 +35,28 @@ from onyx.db.models import (
     Persona,
     Persona__UserFile,
     Persona__UserGroup,
+    Plugin,
+    Plugin__UserGroup,
     Skill,
     Skill__UserGroup,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
     User,
     User__UserGroup,
     UserFile,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
+from onyx.db.skill import replace_skill_shares, set_skill_public_permission
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
     assign_user_to_default_groups__no_commit,
     fetch_default_group,
+)
+from tests.utils.plugin_access import (
+    ORGANIZATION_LIBRARY_ID,
+    plugin_access_mismatches,
 )
 
 
@@ -139,7 +148,10 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         )
         group_id = group.id
         rate_limit = TokenRateLimit(
-            token_budget=1, period_hours=1, scope=TokenRateLimitScope.USER_GROUP
+            token_budget=1,
+            period=TokenRateLimitPeriod.DAILY,
+            scope=TokenRateLimitScope.USER_GROUP,
+            user_group_id=group_id,
         )
         db_session.add(rate_limit)
         db_session.flush()
@@ -149,12 +161,6 @@ def test_groups_are_removed_and_members_keep_a_group(db_session: Session) -> Non
         )
         db_session.refresh(basic_member)
         assert basic_member.is_group_manager
-        db_session.add(
-            TokenRateLimit__UserGroup(
-                rate_limit_id=rate_limit_id, user_group_id=group_id
-            )
-        )
-        db_session.flush()
 
         removed = remove_custom_user_groups__no_commit(db_session)
 
@@ -291,10 +297,10 @@ def test_what_a_group_shared_becomes_public(db_session: Session) -> None:
         db_session.rollback()
 
 
-def _make_skill(db_session: Session, author: User) -> Skill:
+def _make_skill(db_session: Session, author: User, name: str | None = None) -> Skill:
     skill = Skill(
         id=uuid4(),
-        name=f"downgrade-{uuid4().hex[:8]}",
+        name=name or f"downgrade-{uuid4().hex[:8]}",
         description="",
         bundle_file_id=f"downgrade-{uuid4().hex[:8]}",
         bundle_sha256="0" * 64,
@@ -302,7 +308,118 @@ def _make_skill(db_session: Session, author: User) -> Skill:
         author_user_id=author.id,
     )
     db_session.add(skill)
+    db_session.flush()
+    create_skill_plugin__no_commit(
+        skill, legacy_skill_version_content(skill), None, db_session
+    )
     return skill
+
+
+def _share_with_group(db_session: Session, skill: Skill, group: UserGroup) -> None:
+    replace_skill_shares(
+        skill=skill,
+        group_shares={group.id: SkillSharePermission.VIEWER},
+        db_session=db_session,
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
+    db_session: Session,
+) -> None:
+    """The downgrade cannot stop, so a plugin whose name the Organization
+    library has takes the next free name. The skill keeps its name."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        other = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        published = _make_skill(db_session, other)
+        shared = _make_skill(db_session, owner, name=published.name)
+        set_skill_public_permission(
+            skill=published,
+            public_permission=SkillSharePermission.VIEWER,
+            db_session=db_session,
+        )
+        _share_with_group(db_session, shared, group)
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        db_session.refresh(shared)
+        assert shared.public_permission == SkillSharePermission.VIEWER
+        assert shared.name == published.name
+        plugin = db_session.get(Plugin, shared.id)
+        assert plugin is not None
+        db_session.refresh(plugin)
+        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+        assert plugin.name == f"{published.name}-2"
+        assert plugin.published_version_id == plugin.current_version_id
+        assert plugin_access_mismatches(db_session, [published.id, shared.id]) == []
+    finally:
+        db_session.rollback()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_downgrade_publishes_from_plugin_group_grants_only(
+    db_session: Session, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The plugin group grants decide. A row with no permission (a group
+    install setting only) or with NOT_AVAILABLE never publishes. The rows of
+    the removed groups go with them, and the log names each published
+    plugin."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        shared = _make_skill(db_session, owner)
+        setting_only = _make_skill(db_session, owner)
+        not_available = _make_skill(db_session, owner)
+        legacy_only = _make_skill(db_session, owner)
+        _share_with_group(db_session, shared, group)
+        db_session.add_all(
+            [
+                Plugin__UserGroup(
+                    plugin_id=setting_only.id,
+                    user_group_id=group.id,
+                    permission=None,
+                    installation_policy=PluginInstallationPolicy.REQUIRED,
+                ),
+                Plugin__UserGroup(
+                    plugin_id=not_available.id,
+                    user_group_id=group.id,
+                    permission=SkillSharePermission.VIEWER,
+                    installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+                ),
+                # A legacy row with no plugin grant does not publish.
+                Skill__UserGroup(skill_id=legacy_only.id, user_group_id=group.id),
+            ]
+        )
+        db_session.flush()
+
+        with caplog.at_level(logging.INFO):
+            remove_custom_user_groups__no_commit(db_session)
+
+        library_ids = set(
+            db_session.scalars(
+                select(Plugin.id).where(
+                    Plugin.marketplace_id == ORGANIZATION_LIBRARY_ID,
+                    Plugin.id.in_(
+                        [shared.id, setting_only.id, not_available.id, legacy_only.id]
+                    ),
+                )
+            )
+        )
+        assert library_ids == {shared.id}
+        assert (
+            db_session.scalar(
+                select(Plugin__UserGroup.plugin_id).where(
+                    Plugin__UserGroup.user_group_id == group.id
+                )
+            )
+            is None
+        )
+        assert str(shared.id) in caplog.text
+        assert str(setting_only.id) not in caplog.text
+    finally:
+        db_session.rollback()
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -339,10 +456,10 @@ def test_group_shared_providers_servers_and_skills_become_public(
                 MCPServer__UserGroup(
                     mcp_server_id=servers[0].id, user_group_id=group.id
                 ),
-                Skill__UserGroup(skill_id=skills[0].id, user_group_id=group.id),
             ]
         )
         db_session.flush()
+        _share_with_group(db_session, skills[0], group)
 
         remove_custom_user_groups__no_commit(db_session)
 

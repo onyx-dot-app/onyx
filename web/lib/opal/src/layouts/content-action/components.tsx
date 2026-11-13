@@ -1,5 +1,12 @@
 import "@opal/layouts/content-action/styles.css";
-import { Content, type ContentProps } from "@opal/layouts/content/components";
+import {
+  Content,
+  ContentDescription,
+  contentColorStyle,
+  hasIconGap,
+  type ContentProps,
+} from "@opal/layouts/content/components";
+import { cn } from "@opal/utils";
 import { spacingToRem } from "@opal/shared";
 import type { Spacing } from "@opal/types";
 
@@ -41,11 +48,9 @@ type ContentActionProps = ContentProps & {
   center?: boolean;
 
   /**
-   * When true, `rightChildren` reflows responsively — forwarded into the
-   * `ContentMd` slot so it sits to the right of the title/description on desktop
-   * and stacks between them on narrow viewports. Requires a `main-*` size
-   * preset (the only ones with the slot); other presets fall back to the
-   * standard right-hand column. `center` is ignored in this mode.
+   * When true, `rightChildren` reflows responsively: it sits to the right of
+   * the title and description on desktop, and between them on narrow
+   * viewports. `center` and `gapping` are ignored in this mode.
    *
    * @default false
    */
@@ -68,19 +73,6 @@ type ContentActionProps = ContentProps & {
 // ContentAction
 // ---------------------------------------------------------------------------
 
-// Only the `main-*` presets route to ContentMd — the one layout with a
-// `rightChildren` slot — so `responsive` can only reflow for those.
-function routesToContentMd(props: {
-  sizePreset?: string;
-  variant?: string;
-}): boolean {
-  const isMdPreset =
-    props.sizePreset === "main-content" ||
-    props.sizePreset === "main-ui" ||
-    props.sizePreset === "secondary";
-  return isMdPreset && props.variant !== "body";
-}
-
 /**
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
@@ -100,8 +92,7 @@ function routesToContentMd(props: {
  *   icon={SvgSettings}
  *   title="OpenAI"
  *   description="GPT"
- *   sizePreset="main-content"
- *   variant="section"
+ *   font="main-content-emphasis"
  *   padding={2}
  *   rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
  * />
@@ -118,9 +109,17 @@ function ContentAction({
 }: ContentActionProps) {
   const paddingStyle = { padding: spacingToRem(padding) };
 
-  // Responsive: forward rightChildren into the ContentMd slot, which reflows it
-  // to the right on desktop and between the title/description on narrow widths.
-  if (responsive && rightChildren && routesToContentMd(contentProps)) {
+  // Responsive: the title, the control and the description share a grid that
+  // puts the control on the right on desktop, and between the title and the
+  // description on narrow widths.
+  if (responsive && rightChildren) {
+    const { description, descriptionMaxLines, ...titleProps } = contentProps;
+    const font = contentProps.font ?? "main-ui-action";
+    // Only an icon before the title pushes the title in; reversed or
+    // stacked, the description already lines up with it.
+    const indent =
+      !!contentProps.icon &&
+      (contentProps.orientation ?? "inline") === "inline";
     // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
@@ -128,9 +127,40 @@ function ContentAction({
       <div
         className="opal-content-action-responsive w-full min-w-0"
         data-fill={fillRight || undefined}
-        style={paddingStyle}
+        data-content-color={contentProps.color ?? "default"}
+        // The same colour variables Content sets, so the description and the
+        // control inherit the content's colours.
+        style={{
+          ...paddingStyle,
+          ...contentColorStyle(
+            contentProps.color ?? "default",
+            contentProps.titleColor
+          ),
+        }}
       >
-        <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
+        <div className="opal-content-action-responsive-title">
+          <Content {...(titleProps as ContentProps)} />
+        </div>
+        <div className="opal-content-action-responsive-control">
+          {rightChildren}
+        </div>
+        {description && (
+          // With an icon, the description lines up under the title: one icon
+          // box (`1lh` of the title font) and the gap in.
+          <div
+            className={cn(
+              "opal-content-action-responsive-description",
+              indent && `font-${font}`
+            )}
+            data-indent={indent || undefined}
+            data-flush={(indent && !hasIconGap(font)) || undefined}
+          >
+            <ContentDescription
+              description={description}
+              maxLines={descriptionMaxLines}
+            />
+          </div>
+        )}
       </div>
     );
   }

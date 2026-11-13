@@ -11,10 +11,12 @@ import {
   SvgEditBig,
 } from "@opal/icons";
 import { useSettings } from "@/lib/settings/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 
 export default function SharedAppInputBar() {
   const t = useTranslations("chat.input");
   const { appName } = useSettings();
+  const appPosition = useAppPosition();
 
   return (
     <div className="relative w-full">
@@ -53,7 +55,11 @@ export default function SharedAppInputBar() {
 
       {/* CTA button */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <Button prominence="secondary" icon={SvgEditBig} href="/app">
+        <Button
+          prominence="secondary"
+          icon={SvgEditBig}
+          {...appPosition.linkToNewSession()}
+        >
           {t("sharedAppInputBar.startSessionButton.label")}
         </Button>
       </div>

@@ -1,29 +1,13 @@
 # `sections/agents/`
 
-Shared UI components for rendering and interacting with agents. Any component
-that is used across multiple agent-related pages (admin agents table, explore
-agents page, agent viewer modal, etc.) belongs here.
+Agent UI shared by several agent pages (admin agents table, agents catalog,
+agent viewer, etc.) that is not a component of its own: hooks such as the
+filter bar, and menus. Agent components, `AgentCard` among them, live in
+`@/lib/agents/components`.
 
 ---
 
 ## Components
-
-### `AgentCard`
-
-A card component that displays a single agent with its avatar, name,
-description, and quick actions (pin, share, edit, stats, try).
-
-```tsx
-import AgentCard from "@/sections/agents/AgentCard";
-
-<AgentCard agent={agent} />;
-```
-
-**Props:**
-
-- `agent: MinimalPersonaSnapshot` — the agent to display.
-
----
 
 ### `AgentsFilters` (`useAgentsFilters`)
 
@@ -33,16 +17,23 @@ and "Actions" filter popovers.
 
 ```tsx
 import { useAgentsFilters } from "@/sections/agents/AgentsFilters";
+import { AgentCard } from "@/lib/agents/components";
 
 function MyAgentsPage() {
   const { agents } = useAgents();
   const { filtered, filterBar } = useAgentsFilters(agents);
+  const [viewedAgentId, setViewedAgentId] = useState<number | null>(null);
 
   return (
     <>
       <div className="flex flex-row gap-2">{filterBar}</div>
       {filtered.map((agent) => (
-        <AgentCard key={agent.id} agent={agent} />
+        <AgentCard
+          key={agent.id}
+          agent={agent}
+          viewing={agent.id === viewedAgentId}
+          onView={() => setViewedAgentId(agent.id)}
+        />
       ))}
     </>
   );

@@ -22,6 +22,7 @@ from onyx.connectors.google_drive.constants import (
     DRIVE_RESOURCE_KEY_FIELD,
     DRIVE_SHORTCUT_TYPE,
 )
+from onyx.connectors.google_drive.form_extraction import get_form_text
 from onyx.connectors.google_drive.models import GDriveMimeType, GoogleDriveFileType
 from onyx.connectors.google_drive.section_extraction import (
     HEADING_DELIMITER,
@@ -210,6 +211,7 @@ _FALLBACK_WEB_VIEW_LINK_TEMPLATES = {
     GDriveMimeType.DOC.value: "https://docs.google.com/document/d/{}/view",
     GDriveMimeType.SPREADSHEET.value: "https://docs.google.com/spreadsheets/d/{}/view",
     GDriveMimeType.PPT.value: "https://docs.google.com/presentation/d/{}/view",
+    GDriveMimeType.FORM.value: "https://docs.google.com/forms/d/{}/view",
 }
 # Fallback template for non-native (uploaded binary) Drive files.
 _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE = "https://drive.google.com/file/d/{}/view"
@@ -664,6 +666,18 @@ def convert_drive_item_to_document(
     return first_error
 
 
+def _drive_file_size(file: GoogleDriveFileType) -> int | None:
+    """Byte size from the file listing, None when the listing has none."""
+    size_str = file.get("size")
+    if not size_str:
+        return None
+    try:
+        return int(size_str)
+    except ValueError:
+        logger.warning("Parsing string to int failed: size_str=%s", size_str)
+        return None
+
+
 def _convert_drive_item_to_document(
     ops: GoogleDriveSourceOperations,
     allow_images: bool,
@@ -713,20 +727,14 @@ def _convert_drive_item_to_document(
             logger.info("bug: raw shortcut/folder reached document conversion.")
             return None
 
-        size_str = file.get("size")
-        if size_str:
-            try:
-                size_int = int(size_str)
-            except ValueError:
-                logger.warning("Parsing string to int failed: size_str=%s", size_str)
-            else:
-                if size_int > size_threshold:
-                    logger.warning(
-                        "%s exceeds size threshold of %s. Skipping.",
-                        file.get("name"),
-                        size_threshold,
-                    )
-                    return None
+        size_bytes = _drive_file_size(file)
+        if size_bytes is not None and size_bytes > size_threshold:
+            logger.warning(
+                "%s exceeds size threshold of %s. Skipping.",
+                file.get("name"),
+                size_threshold,
+            )
+            return None
 
         # If it's a Google Doc, we might do advanced parsing
         if file.get("mimeType") == GDriveMimeType.DOC.value:
@@ -795,6 +803,33 @@ def _convert_drive_item_to_document(
                     "Error in advanced parsing: %s. Using basic extraction.",
                     e,
                 )
+        # Drive cannot export a Google Form; the Forms API reads its questions.
+        elif file.get("mimeType") == GDriveMimeType.FORM.value:
+            try:
+                form = ops.fetch_google_form(
+                    user_email=retriever_email,
+                    form_id=file["id"],
+                    max_response_bytes=size_threshold,
+                )
+            except GoogleDriveHttpError as e:
+                if not e.api_disabled:
+                    raise
+                logger.warning(
+                    "Skipping Google Form %s: the Google Forms API is off.",
+                    file.get("name"),
+                )
+                return None
+            if form is None:
+                logger.warning(
+                    "Skipping Google Form %s: exceeds size threshold of %s.",
+                    file.get("name"),
+                    size_threshold,
+                )
+                return None
+            if form_text := get_form_text(form):
+                sections = [
+                    TextSection(link=file.get(WEB_VIEW_LINK_KEY, ""), text=form_text)
+                ]
         # Not Google Doc, attempt basic extraction
         else:
             basic_extraction = _basic_extraction()
@@ -868,6 +903,8 @@ def _convert_drive_item_to_document(
             external_access=external_access,
             parent_hierarchy_raw_node_id=(file.get("parents") or [None])[0],
             file_id=staged_file_id,
+            source_mime_type=mime_type or None,
+            source_size_bytes=size_bytes,
         )
     except Exception as e:
         doc_id = "unknown"

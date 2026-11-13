@@ -1,53 +1,44 @@
 # Tag
 
-**Import:** `import { Tag, type TagProps } from "@opal/components";`
+**Import:** `import { Tag, TAG_REMOVE_ATTR, type TagProps } from "@opal/components";`
 
-A small coloured label for status, category or metadata: an icon and a title in a tinted pill, drawn by a `Content` (`secondary` preset, `body` variant, so the title is `secondary-body`). It does nothing on click. 1rem tall at `sm`, 1.375rem at `md`.
+A gray, 1.5rem-tall `Interactive` pill around a `Content` (`secondary` preset): a tag-field value, a filter toggle or a popover trigger. For a coloured label, use [`Badge`](../badge/README.md).
 
-For a removable, clickable or chip-field pill, use [`Chip`](../chip/README.md). For a hover tooltip, wrap the tag in `Tooltip`. `Tag` takes no DOM attributes, but its ref and the props a wrapping `Tooltip` or popover trigger injects still reach its root.
+- **Static** (no `onClick` or `onRemove`): the tag look without the hover, such as a tag field's locked tag.
+- **Removable** (`onRemove`): a remove `Button` after the title, marked with `TAG_REMOVE_ATTR` for tag-field keyboard flows. Tag fields select a tag by focusing its remove button: the tag turns into a dark pill with an outer ring (Figma State=Focus). Removable titles are always capped.
+- **Clickable** (`onClick`): a button (`Interactive.Stateless`, default + secondary). As a popover or dropdown trigger (`aria-haspopup`) it shows the hover look while open, as `Button` does. With `aria-pressed` it is a filter toggle (`Interactive.Stateful`, `select-filter`), inverted while pressed.
 
-| Variant   | Background        | Icon             | Label            | Use                                     |
-| --------- | ----------------- | ---------------- | ---------------- | --------------------------------------- |
-| `default` | the color's `-01` | the color's text | the color's text | Category and metadata labels            |
-| `status`  | the color's `-01` | the color's text | `text-04`        | Status pills (Indexing, Paused, Failed) |
-| `count`   | none              | the color's text | `text-04`        | Warning and failure counts in rows      |
+`onClick` and `onRemove` cannot be combined. A disabled tag is wrapped in `Disabled`: it dims as a whole, hides its remove button, and its `tooltip` shows the reason.
 
 ## Props
 
-| Prop      | Type                               | Default        | Description                     |
-| --------- | ---------------------------------- | -------------- | ------------------------------- |
-| `title`   | `string \| RichStr`                | **(required)** | Tag label text                  |
-| `icon`    | `IconFunctionComponent`            | —              | Optional icon before the title  |
-| `color`   | `TagColor`                         | `"gray"`       | Color variant                   |
-| `variant` | `"default" \| "status" \| "count"` | `"default"`    | How the color is applied        |
-| `size`    | `"sm" \| "md"`                     | `"sm"`         | Size (Figma Small / Regular)    |
-
-### `TagColor`
-
-`"green" | "blue" | "purple" | "amber" | "orange" | "red" | "gray" | "white"`
-
-| Color    | Background           | Text                                  |
-| -------- | -------------------- | ------------------------------------- |
-| `green`  | `theme-green-01`     | `theme-green-05`                      |
-| `blue`   | `theme-blue-01`      | `theme-blue-05`                       |
-| `purple` | `theme-purple-01`    | `theme-purple-05`                     |
-| `amber`  | `theme-amber-01`     | `theme-amber-05`                      |
-| `orange` | `status-warning-01`  | `status-warning-05`                   |
-| `red`    | `status-error-01`    | `status-error-05`                     |
-| `gray`   | `background-tint-02` | `text-03`                             |
-| `white`  | `background-tint-00` | `text-04`, for a pill on a tinted row |
+| Prop               | Type                                   | Default        | Description                                                                 |
+| ------------------ | -------------------------------------- | -------------- | --------------------------------------------------------------------------- |
+| `title`            | `string \| RichStr`                    | **(required)** | Tag label text                                                             |
+| `icon`             | `IconFunctionComponent`                | —              | Optional icon before the title                                              |
+| `iconColor`        | `StatusColor`                         | —              | Icon colour when it is not the tag's gray, kept in every state             |
+| `onClick`          | `MouseEventHandler<HTMLButtonElement>` | —              | Makes the tag a button. `ref` is then a `Ref<HTMLButtonElement>`           |
+| `onRemove`         | `() => void`                           | —              | Renders the remove button                                                   |
+| `removeInTabOrder` | `boolean`                              | `true`         | Removable only: whether the remove button is a Tab stop                     |
+| `disabled`         | `boolean`                              | `false`        | Static and removable: dims the tag and hides the remove button             |
+| `truncate`         | `boolean`                              | `false`        | Cap the title at 160px with an ellipsis; a cut title shows in full on hover |
+| `tooltip`          | `string`                               | —              | Hover tooltip; on a disabled tag, the reason                               |
+| `error`            | `boolean`                              | `false`        | Warning icon after the title, for a value the field rejects                 |
 
 ## Usage
 
 ```tsx
-import { Tag, Tooltip } from "@opal/components";
-import { SvgAlertTriangle, SvgRefreshCw } from "@opal/icons";
+import { Tag } from "@opal/components";
+import { SvgAlertTriangle, SvgUsers } from "@opal/icons";
 
-<Tag title="Beta" color="blue" />
+<Tag icon={SvgUsers} title="engineering" onRemove={() => removeGroup(id)} />
 
-<Tag icon={SvgRefreshCw} title="Indexing" color="blue" variant="status" size="md" />
+<Tag
+  icon={SvgAlertTriangle}
+  iconColor="warning"
+  title="3 failed"
+  onClick={openDetails}
+/>
 
-<Tooltip tooltip="3 warnings" side="top">
-  <Tag icon={SvgAlertTriangle} title="3" color="orange" variant="count" />
-</Tooltip>
+<Tag title="Failed" aria-pressed={selected} onClick={toggle} />
 ```

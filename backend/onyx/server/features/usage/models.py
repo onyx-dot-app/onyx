@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.enums import SystemUsageAttribution
 from onyx.db.models import ModelCostOverride
 from onyx.db.user_usage import UserUsageByDay as UsageDayModel
@@ -135,17 +136,17 @@ class EffectiveCostBudget(BaseModel):
 
     budget_cents: float
     remaining_cents: float
-    period_hours: int
+    period: TokenRateLimitPeriod
     reset_at: datetime
 
 
 class UserUsageResponse(BaseModel):
     per_day_by_model: list[UsageDayModel]
     window_cost_cents: float
-    # Effective cost cap + remainder + period (hours); null if no cost limit.
+    # Effective cost cap + remainder + period; null if no cost limit.
     budget_cents: float | None
     budget_remaining_cents: float | None
-    budget_period_hours: int | None = None
+    budget_period: TokenRateLimitPeriod | None = None
     budget_reset_at: datetime | None = None
     selected_model_price: ModelPrice | None
     available_model_prices: list[ModelPrice] = Field(default_factory=list)

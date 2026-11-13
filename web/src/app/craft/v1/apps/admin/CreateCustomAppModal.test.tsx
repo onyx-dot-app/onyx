@@ -18,7 +18,7 @@ import type { ExternalAppAdminResponse } from "@/app/craft/v1/apps/registry";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
 
 const mockUseUserSkills = jest.fn();
-const mockRouterPush = jest.fn();
+const mockRouterReplace = jest.fn();
 const mockInspectSkillBundle = jest.fn();
 
 jest.mock("@/app/craft/services/externalAppsService");
@@ -48,9 +48,17 @@ jest.mock("@/hooks/useUserSkills", () => ({
   default: () => mockUseUserSkills(),
 }));
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockRouterPush }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: mockRouterReplace }),
   usePathname: () => "/admin/craft/apps",
 }));
+
+beforeEach(() => {
+  // Navigation skips a URL it is already on, so each test starts here.
+  window.history.replaceState(null, "", "/admin/craft/apps");
+});
 
 const CUSTOM_APP: ExternalAppAdminResponse = {
   id: 17,
@@ -217,7 +225,6 @@ describe("CreateCustomAppModal", () => {
     fireEvent.change(name, { target: { value: "Draft" } });
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("data-width", "lg");
-    expect(dialog).toHaveAttribute("data-position", "top");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(
@@ -241,7 +248,6 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     expect(confirmation).toHaveAttribute("data-width", "lg");
-    expect(confirmation).toHaveAttribute("data-position", "top");
   });
 
   beforeEach(() => {
@@ -566,7 +572,7 @@ describe("CreateCustomAppModal", () => {
     );
     expect(
       screen.getByText(
-        "App-associated skills must be available to everyone. This change is applied when you save the app."
+        "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone."
       )
     ).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
@@ -631,12 +637,12 @@ describe("CreateCustomAppModal", () => {
       screen.getByRole("menuitem", { name: /^Start from scratch/ })
     );
 
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(
       screen.getByRole("dialog", { name: "Discard unsaved changes?" })
     ).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
-    expect(mockRouterPush).toHaveBeenCalledWith(
+    expect(mockRouterReplace).toHaveBeenCalledWith(
       "/craft/v1/skills/new?externalAppId=17&externalAppName=Acme+CRM"
     );
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();
@@ -789,7 +795,7 @@ describe("CreateCustomAppModal", () => {
     const confirmation = await screen.findByRole("dialog", {
       name: "Discard unsaved changes?",
     });
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     fireEvent.click(
       within(confirmation).getByRole("button", { name: "Cancel" })
     );
@@ -798,7 +804,7 @@ describe("CreateCustomAppModal", () => {
     await waitFor(() =>
       expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled()
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
   it("rejects an uploaded skill whose name is already associated", async () => {
@@ -831,7 +837,7 @@ describe("CreateCustomAppModal", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "App “Acme CRM” already has an associated skill named “hubspot-crm”. Upload a skill with a different name."
     );
-    expect(mockRouterPush).not.toHaveBeenCalled();
+    expect(mockRouterReplace).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Review skill" })).toBeEnabled();
   });
 

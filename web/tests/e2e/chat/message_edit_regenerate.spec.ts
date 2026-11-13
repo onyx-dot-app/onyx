@@ -9,7 +9,7 @@ import {
   mockLlmNonce,
 } from "@tests/e2e/utils/mockLlm";
 
-test.describe("Message Edit and Regenerate Tests", () => {
+test.describe("Message Edit and Regenerate Tests @code-mode", () => {
   test.beforeEach(async ({ page }) => {
     // Clear cookies and log in as a random user
     await page.context().clearCookies();

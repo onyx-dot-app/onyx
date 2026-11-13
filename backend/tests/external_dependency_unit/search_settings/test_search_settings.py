@@ -147,6 +147,8 @@ def _run_indexing_pipeline_with_mocks(
         tenant_id="public",
         adapter=MagicMock(),
         chunker=MagicMock(chunk_token_limit=512),
+        # What a caller resolves when its batch starts: the live PRESENT row.
+        written_search_settings_id=get_current_search_settings(db_session).id,
     )
 
 

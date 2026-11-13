@@ -44,11 +44,10 @@ export default function CraftLlmSetup() {
       aria-label="craft-llm-setup"
     >
       <ContentAction
+        font="main-ui-action"
         icon={SvgCpu}
         title={t("title")}
         description={t("description")}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
       />
       <Divider />

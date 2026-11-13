@@ -250,6 +250,8 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     - `title`: Used for search (defaults to `semantic_identifier` if not specified)
     - `from_ingestion_api`: Whether this document came from the Ingestion API
     - `additional_info`: Connector-specific information that other parts of Onyx may need
+    - `source_mime_type`: The original file's MIME type as the source reports it
+    - `source_size_bytes`: The original file's size in bytes as the source reports it
     - `external_access`: Permission sync data (Enterprise Edition only)
 
     <Note>
@@ -280,6 +282,9 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
       additional_info: Any = None
 
       external_access: ExternalAccess | None = None
+
+      source_mime_type: str | None = None
+      source_size_bytes: int | None = None
     ```
   </Accordion>
 

@@ -16,12 +16,15 @@ limits are CE.
 
 - **A user over a token or cost budget** sees the message fail with a "Usage
   limit reached" banner. The banner names the scope that tripped (your account,
-  your user group or your organization) and when the budget resets. It has no
-  retry button, because a retry trips the same budget. Craft shows the same
-  banner.
-- **An EE admin** sets budgets at Admin > Token Rate Limits: thousands of tokens
-  or cents, over a period, for the whole workspace, each user, or a user group. A
-  CE workspace has no such page.
+  your group allowance, your user group or your organization) and when the
+  budget resets. A limit on one model also says other models are still
+  available. It has no retry button, because a retry trips the same budget.
+  Craft shows the same banner.
+- **An Enterprise admin** sets budgets at Admin > Spending Limits: cost or
+  thousands of tokens per day, week or month, on all models or one model, for
+  the workspace pool, each user, a group's pool or each member of a group. A
+  group manager edits their group's pool on the group page; per-member limits
+  are admin-only. A CE workspace has no such page.
 - **A cloud tenant** that passes its weekly LLM cost, indexed chunks or API calls
   gets a 429 that names the metric and asks it to upgrade or wait. A trial has
   lower limits than a paid tenant. Its own admin cannot raise the limit.
@@ -40,7 +43,7 @@ which one you are touching before you change it.
 
 | Mechanism | Limits | Scope | Storage | Entry point |
 |---|---|---|---|---|
-| Token and cost budgets | LLM tokens or cents in a period, set by an admin | GLOBAL, USER, USER_GROUP | `user_usage` daily rollup | `check_token_rate_limits` |
+| Token and cost budgets | LLM tokens or cents in a period, on all models or one, set by an admin | GLOBAL, USER, USER_GROUP, USER_GROUP_MEMBER | `user_usage` daily rollup | `check_token_rate_limits`, `check_model_spend_limits` |
 | Tenant usage limits | Weekly LLM cost, indexed chunks, API calls, non-streaming calls, set by the Onyx control plane | Tenant, trial or paid | `tenant_usage` fixed window | `check_usage_and_raise`, `check_llm_cost_limit_for_provider` |
 | API key and PAT call cap | One tenant usage limit, counted per request | Tenant | `tenant_usage.api_calls` | `check_api_key_usage` |
 | HTTP rate limits | Requests to the auth and OAuth provider routers, and to chat feedback | IP and User-Agent, or user | Redis (`fastapi_limiter`) | `get_auth_rate_limiters`, `get_feedback_rate_limiters` |
@@ -64,14 +67,76 @@ calls exist where no route dependency can apply: the Slack bot
 naming, the AI Gateway, the EE search flow when it runs LLM steps, and the
 indexing pipeline (`check_global_token_rate_limits`, GLOBAL scope, no user).
 
-**Token and cost budgets.** `check_token_rate_limits` returns at once when
-`any_rate_limit_exists()` says the tenant has no enabled budget. That answer is
-cached per tenant for 60 s. Otherwise it dispatches to the CE or EE
-`_check_token_rate_limits` through `fetch_versioned_implementation`. EE runs the
-USER, USER_GROUP and GLOBAL checks in parallel. Each scope sums the `user_usage`
-buckets in the widest window and raises at the latest reset among the budgets it
-exceeds. A caller who waits until that time does not trip a budget that clears
-later.
+**Token and cost budgets.** Each `token_rate_limit` row sets a token budget, a
+cost budget or both, for one period: a UTC calendar day, a week from Monday, or
+a calendar month (`TokenRateLimitPeriod`). A row applies to all models, or to
+one `model_configuration_id`. Only enabled `BLOCK` rows are enforced;
+`ALERT_ONLY` rows are stored for a future notification feature. The four scopes
+combine like this
+(`backend/ee/onyx/server/query_and_chat/token_limit.py`):
+
+- **GLOBAL**, the workspace pool: every budget must have room.
+- **USER_GROUP**, a group pool of all members' usage: the user passes if any
+  of their groups with an applicable pool has room. Group pools never block
+  across groups.
+- **USER_GROUP_MEMBER** and **USER**, the per-user allowance: for each
+  (period, unit) the largest group value among the user's groups wins, and the
+  workspace default (USER) fills each pair no group sets
+  (`resolve_member_allowance`). Only the user's own usage counts.
+
+There are two entry points. `check_token_rate_limits` checks the all-models
+rows before a request runs. `check_model_spend_limits` checks the rows for one
+model, and runs where the user's chosen model is known: chat turns
+(`backend/onyx/chat/process_message.py:_select_models`), chat naming when it
+runs the chat's own model, the AI Gateway and the public search API. A chat override must name a configured model
+(`backend/onyx/llm/factory.py:_resolve_provider_and_model`), so every chat call
+carries the id that model rows match. Usage of a model also counts toward the all-models rows.
+Helper calls on the default or utility models count toward model usage but are
+blocked only by all-models rows. Each check returns at once when a cached,
+per-tenant flag says the tenant has no enforced row of its kind. Otherwise it
+dispatches to the CE or EE `_check_spend_limits` through
+`fetch_versioned_implementation`. EE runs the three checks in parallel. Each
+raises at the latest reset among the budgets it exceeds, so a caller who waits
+until then does not trip a budget that clears later.
+
+**Spending limit admin API.** `/admin/spending-limits`
+(`backend/ee/onyx/server/spending_limits/api.py`) is shaped like the admin
+page's cards: the workspace pool, the workspace per-user default, and each
+group's pool and per-member allowance. A `PUT` replaces every row on one card in
+one transaction, so the page sends the rows it can't edit (ALERT_ONLY) back
+unchanged. The replace locks the card first: the `user_group` row (`NOT_FOUND`
+when the group does not exist), or an advisory lock for a workspace card. A
+card with any enabled row reads as enabled and lists only its enabled rows. A scoped `MANAGE_USER_GROUPS` holder can read their group's cards
+and edit its pool. Everything else needs full admin, including a group's
+per-member card: a group allowance beats the workspace default upward, so a
+manager could otherwise lift their own limit. `GET /users/{user_id}/effective` returns each budget a
+user is held to and the group it comes from; for a shared principal it returns
+only the GLOBAL pools ([[#shared-principals-global-only]]). Every write calls
+`invalidate_any_rate_limit_exists_cache`. A limit raised inside a chat turn
+reaches the client as a `StreamingError` whose `details` carry the 429's
+`extra` (`backend/onyx/chat/errors.py:chat_error`).
+
+**Usage reset.** A reset sets `token_rate_limit.usage_reset_at` to now and
+snapshots what the current daily usage bucket holds. It does not delete usage
+rows, so history and exports stay. Every limit stores one
+`token_rate_limit_usage_baseline` row per user with usage in that bucket, every
+user, not only those it covers now. A per-user limit subtracts the user's own
+row. A pool subtracts the sum over the users it covers now
+(`backend/onyx/db/token_limit.py:fetch_pool_usage_baselines`), so the baseline
+always matches the pool's usage query when members join or leave. Deleting a
+user's usage (`POST /admin/usage/reset`) deletes their baselines for resets in
+that window. A limit then counts the buckets after the reset day in full, and
+the reset day's bucket minus the baseline, clamped at 0. Earlier buckets drop out. One helper does this math
+(`backend/onyx/db/user_usage.py:sum_limit_usage`), and `BudgetWindow` carries
+the reset and baseline into enforcement, pool usage on the cards and the Usage
+tab budget. A per-user check without the user's baselines counts the whole
+reset day, so a missed lookup blocks too early, never too late. A reset in an
+earlier period changes nothing. Group managers reset their group's pool limits
+through `POST /groups/{group_id}/pool/limits/{limit_id}/reset-usage`; every
+other limit resets through the admin-only
+`POST /limits/{limit_id}/reset-usage`. The reset takes the card lock, and a
+card replace keeps a current reset and its baselines on the new row for the
+same bucket (`backend/ee/onyx/db/token_limit.py:replace_card_token_rate_limits`).
 
 **Tenant usage limits.** These are synchronous counters on `tenant_usage`. Each
 check reads the trial status and a per-tenant override from the control plane
@@ -119,21 +184,25 @@ rejected signup attempt still counts.
    `backend/onyx/llm/factory.py:get_llm_for_persona` does not run the cost check,
    so its callers must. `get_default_utility_llm` and `get_decision_client` run
    it themselves.
-2. `budget-before-api-call-count` **Run the budget check before
+2. `budget-before-api-call-count` **Run the all-models budget check before
    `check_api_key_usage`.** `check_api_key_usage` increments the API-call counter
    when it runs. The order in `backend/onyx/server/features/search/api.py:search`
-   keeps a request that the budget rejects from using an API call.
+   keeps a request that the all-models limits reject from using an API call.
+   The checks that need the model (`check_model_spend_limits` and
+   `check_llm_cost_limit_for_provider`) run after the handler resolves the
+   model, so a request that only they reject still uses an API call.
 3. `rate-limited-shape` **The 429 shape is a client contract.**
    `backend/onyx/server/query_and_chat/token_limit.py:raise_rate_limited` sends `OnyxErrorCode.RATE_LIMITED` with `scope`,
    `reset_at` and `retry_after_seconds` in the body (passed as `OnyxError`
-   `extra`) and a `Retry-After` header. The chat client
+   `extra`) and a `Retry-After` header. A limit on one model adds `model`, the
+   model's display name. The chat client
    (`web/src/app/app/services/lib.tsx`) and Craft
    (`web/src/app/craft/services/apiServices.ts`) match `error_code` and turn it
    into a usage banner with no retry. If you change the code or drop `reset_at`,
    both show an opaque error. The HTTP limiters do not use this shape:
    `fastapi_limiter` sends a plain 429 with no `error_code`.
-4. `any-rate-limit-exists-fast-path` **Keep the `any_rate_limit_exists` fast
-   path, and keep it keyed by tenant.**
+4. `any-rate-limit-exists-fast-path` **Keep the `any_rate_limit_exists` and
+   `any_model_spend_limit_exists` fast paths, and keep them keyed by tenant.**
    (`backend/onyx/server/query_and_chat/token_limit.py:any_rate_limit_exists`)
    Most deployments have no budget. Without
    the cache, every chat message costs a query. Without the tenant key, one
@@ -153,9 +222,9 @@ rejected signup attempt still counts.
    can pass a budget before earlier usage lands. A limit test must wait for the
    flush.
 8. `shared-principals-global-only` **Shared principals get GLOBAL budgets only.**
-   Anonymous users, service accounts and API-key users skip USER and USER_GROUP
-   checks
-   (`backend/ee/onyx/server/query_and_chat/token_limit.py:_check_token_rate_limits`). A service account carries traffic
+   Anonymous users, service accounts and API-key users skip the group and
+   per-user checks
+   (`backend/ee/onyx/server/query_and_chat/token_limit.py:is_shared_spend_principal`). A service account carries traffic
    for many callers, such as every Slack user with no Onyx account, so a per-user
    budget would throttle them as one. A PAT resolves to its owner and gets all
    three scopes.
@@ -163,8 +232,8 @@ rejected signup attempt still counts.
    other's scans.** A cost-only budget skips the token query, and a long cost
    window does not extend the token cutoff
    (`backend/onyx/server/query_and_chat/token_limit.py:_user_is_rate_limited_by_global`).
-   Token budgets reset at the UTC-day boundary where the trailing window drops
-   under budget. Cost budgets reset at fixed daily, weekly or monthly boundaries.
+   Both kinds reset at the end of their calendar period
+   (`backend/onyx/db/user_usage.py:get_period_window_reset`).
 10. `cost-cap-managed-keys-only` **The cloud cost cap applies only to
     Onyx-managed provider keys.**
     `backend/onyx/server/usage_limits.py:check_llm_cost_limit_for_provider`
@@ -196,6 +265,13 @@ rejected signup attempt still counts.
   and mounts only in the EE app. CE enforcement can read a GLOBAL budget, but CE
   has no supported way to create one. The Community downgrade deletes every
   budget ([[billing]]).
+- **Group pools never block across groups, and the largest group allowance
+  wins.** A user in several groups should not be stopped by one team's pool while
+  another team pays for them, and a group exists to lift its members' limits.
+  The costs, documented for admins: joining a group can add a limit for a
+  (period, unit) the user had none for, a group must set a pair to lift the
+  workspace default for it, and a group made for one user can't lower that
+  user below a more generous group they are in.
 - **Budgets read a rollup, not a live counter.** Budgets reuse the usage data
   that tracing already records. The cost of this choice is the short lag in
   [[#budgets-lag-usage]].
@@ -241,18 +317,23 @@ rejected signup attempt still counts.
   once the provider is known. Outside a route, call the checks inline, as the
   Slack bot does. List the current entry points with
   `git grep -n "check_token_rate_limits\|check_llm_cost_limit_for_provider" backend`.
-- `add-budget-scope` **Add a budget scope.** Change the EE parallel check list, the admin UI scope
-  tabs (`web/src/app/admin/token-rate-limits/`) and
-  `backend/onyx/db/token_limit.py:get_token_rate_limit_scope_and_group_ids`.
+- `add-budget-scope` **Add a budget scope.** Change the EE checks
+  (`backend/ee/onyx/server/query_and_chat/token_limit.py:_check_spend_limits`),
+  the card routes in `backend/ee/onyx/server/spending_limits/api.py` and the
+  admin page (`web/src/views/admin/SpendingLimitsPage/`). A scope that names a group
+  also goes in the `ck_token_rate_limit_group` check on `token_rate_limit`.
 - `add-tenant-usage-type` **Add a tenant usage type.** Copy `UsageType.NON_STREAMING_API_CALLS`: add it to
   `backend/onyx/db/usage.py:UsageType`, the `tenant_usage` columns, the env
   defaults in `shared_configs/configs.py`, `_FIELD_AND_DEFAULT` in
   `backend/onyx/server/usage_limits.py`, and the override model
   `TenantUsageLimitOverrides`.
-- `trip-budget-by-hand` **Trip a budget by hand.** On an EE build, create a GLOBAL budget of
-  `token_budget: 1` (1,000 tokens) for one hour. Send one long chat message, wait
+- `trip-budget-by-hand` **Trip a budget by hand.** Do this only on a
+  disposable test workspace: the PUT replaces every limit on the workspace
+  pool. On an EE build, `PUT
+  /admin/spending-limits/workspace/pool` with one DAILY limit of
+  `cost_budget_cents: 0.001`; one chat message spends more. Send a message, wait
   2 s for the usage flush, and send another. The second gets the 429 and the
-  banner.
+  banner. A token budget is at least 1,000 tokens, more than one short message.
 - `investigate-limit-not-applied` **Investigate "my limit did not apply".** Check, in order: the entry point
   calls the check ([[#every-entry-point-checks]]); the call ran inside a root
   trace ([[#untraced-call-not-counted]]); the principal is not shared
@@ -265,7 +346,12 @@ rejected signup attempt still counts.
 ## Verification
 
 - Unit tests: `backend/tests/unit/onyx/server/query_and_chat/`,
-  `backend/tests/unit/ee/onyx/server/token_rate_limits/`,
+  `backend/tests/unit/ee/onyx/server/test_spending_limit_models.py`,
   `backend/tests/unit/onyx/server/manage/` and `backend/tests/unit/onyx/auth/`.
 - Entry-point order: `backend/tests/external_dependency_unit/server/`.
+- Resolution against real rows:
+  `backend/tests/external_dependency_unit/ee/onyx/server/query_and_chat/test_spend_limit_resolution.py`.
+- Admin API, a per-member model limit blocking chat, and group-manager gates:
+  `backend/tests/integration/tests/spending_limits/` and
+  `backend/tests/integration/tests/permissions/test_group_manager_agents.py`.
 - End-to-end usage recording: `backend/tests/integration/tests/streaming_endpoints/`.

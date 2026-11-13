@@ -86,6 +86,41 @@ claude mcp login onyx
 
 See [Claude Code's MCP documentation](https://code.claude.com/docs/en/mcp) for authentication and configuration scopes.
 
+#### Use the Onyx plugin
+
+The Onyx plugin for Claude Code connects the MCP server and tells Claude, with every question prompt,
+to search Onyx before it answers from company knowledge or uses any other search tool.
+Claude decides when a question needs Onyx, so prompts are never delayed.
+The plugin needs a personal access token with the `read:search` scope,
+which you create under **Settings > Accounts & Access > Access Tokens**.
+Add the Onyx marketplace and install the plugin:
+
+```
+/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/agent-plugin/.claude-plugin/marketplace.json
+/plugin install onyx@onyx
+```
+
+Claude Code asks for your Onyx URL and the token. The plugin's hooks run with `bun` or Node 23.6 or later.
+Turn on **Strict retrieval** to block other search tools until Onyx has been consulted for the current prompt.
+Turn on **Prefetch results** to run a raw Onyx search before each prompt and give Claude the top sections up front,
+at the cost of up to 3 seconds per prompt.
+Administrators can require the plugin on every machine through [managed
+settings](https://code.claude.com/docs/en/plugins/org).
+The [plugin README](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin) describes each option.
+
+The same plugin installs in Codex CLI. Add the Onyx MCP server as `onyx` as shown above,
+then add the Onyx marketplace and install the plugin:
+
+```
+codex plugin marketplace add onyx-dot-app/onyx --sparse extensions/agent-plugin --sparse .agents/plugins
+codex plugin add onyx@onyx
+```
+
+Open `/hooks` in Codex and trust the plugin's hooks, then start a new session. Codex has no options dialog,
+so strict retrieval and prefetch come from the environment: export `ONYX_STRICT_RETRIEVAL=true`,
+or `ONYX_PREFETCH=true` with `ONYX_URL` and `ONYX_API_TOKEN` set to your Onyx URL and token.
+Codex's built-in web search is not a tool that hooks can gate, so strict retrieval covers other MCP servers only.
+
 #### Share the configuration with a project
 
 For a team repository, put the endpoint in `.mcp.json` at the project root:
@@ -363,7 +398,7 @@ Keep our procedure and the public recommendations separate, with links for each.
 
 ### search_indexed_documents
 
-Search the knowledge indexed in Onyx. The search includes query expansion, retrieval, document selection,
+Search the knowledge indexed in Onyx. By default the search includes query expansion, retrieval, document selection,
 and context expansion.
 
 | Parameter | Type | Required | Description |
@@ -374,6 +409,7 @@ and context expansion.
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
+| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. Results are up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. The search runs no query expansion, filter detection, federated Slack search or document selection. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
 
 ```json
 {

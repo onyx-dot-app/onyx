@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import React, {
   useState,
   useMemo,
@@ -9,7 +10,6 @@ import React, {
 } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { getSourceMetadata } from "@/lib/connectors/utils";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import {
   Text,
@@ -21,7 +21,6 @@ import {
   InputTypeIn,
   Spacer,
   type DropdownItem,
-  OverflowText,
   SelectButton,
 } from "@opal/components";
 import { Hoverable } from "@opal/core";
@@ -87,7 +86,7 @@ function HierarchyBreadcrumb({
     : 0;
 
   return (
-    <GeneralLayouts.Section
+    <Section
       flexDirection="row"
       justifyContent="start"
       alignItems="center"
@@ -136,7 +135,7 @@ function HierarchyBreadcrumb({
           </React.Fragment>
         );
       })}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }
 
@@ -806,36 +805,36 @@ export default function SourceHierarchyBrowser({
   // Render loading state
   if (isLoadingNodes) {
     return (
-      <GeneralLayouts.Section height="auto" padding={4}>
+      <Section height="auto" padding={4}>
         <Text color="text-03" font="secondary-body">
           {t("browser.loadingFolders.description")}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
   // Render error state
   if (nodesError) {
     return (
-      <GeneralLayouts.Section height="auto" padding={4}>
+      <Section height="auto" padding={4}>
         <Text color="text-03" font="secondary-body">
           {nodesError}
         </Text>
-      </GeneralLayouts.Section>
+      </Section>
     );
   }
 
   return (
-    <GeneralLayouts.Section gap={0} alignItems="stretch" justifyContent="start">
+    <Section gap={0} alignItems="stretch" justifyContent="start">
       {/* Header with search */}
-      <GeneralLayouts.Section
+      <Section
         flexDirection="row"
         justifyContent="start"
         alignItems="center"
         gap={2}
         height="auto"
       >
-        <GeneralLayouts.Section height="auto" width="fit">
+        <Section height="auto" width="fit">
           <InputTypeIn
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
@@ -845,8 +844,8 @@ export default function SourceHierarchyBrowser({
               <SvgFilter className="w-4 h-4 stroke-text-02 shrink-0" />
             }
           />
-        </GeneralLayouts.Section>
-      </GeneralLayouts.Section>
+        </Section>
+      </Section>
 
       {/* Breadcrumb OR "Selected items" pill - mutually exclusive */}
       {viewSelectedOnly ? (
@@ -931,15 +930,15 @@ export default function SourceHierarchyBrowser({
         className="overflow-y-auto max-h-80"
       >
         {filteredItems.length === 0 && !isLoadingDocuments ? (
-          <GeneralLayouts.Section height="auto" padding={4}>
+          <Section height="auto" padding={4}>
             <Text color="text-03" font="secondary-body">
               {path.length === 0
                 ? t("browser.empty.root.description")
                 : t("browser.empty.folder.description")}
             </Text>
-          </GeneralLayouts.Section>
+          </Section>
         ) : (
-          <GeneralLayouts.Section gap={0} alignItems="stretch" height="auto">
+          <Section gap={0} alignItems="stretch" height="auto">
             {filteredItems.map((item) => {
               const isFolder = item.type === "folder";
               const id = isFolder ? `folder-${item.data.id}` : item.data.id;
@@ -959,14 +958,14 @@ export default function SourceHierarchyBrowser({
                   </TableLayouts.CheckboxCell>
                   <TableLayouts.TableCell flex>
                     <Hoverable.Root group="hierarchy-row" width="full">
-                      <GeneralLayouts.Section
+                      <Section
                         flexDirection="row"
                         justifyContent="start"
                         alignItems="center"
                         gap={1}
                         height="auto"
                       >
-                        <GeneralLayouts.Section
+                        <Section
                           flexDirection="column"
                           justifyContent="start"
                           alignItems="stretch"
@@ -974,25 +973,29 @@ export default function SourceHierarchyBrowser({
                           height="auto"
                           className="min-w-0 grow"
                         >
-                          <OverflowText
+                          <Text
+                            maxLines={1}
+                            overflowTooltip
                             as="p"
                             textPosition="text-start"
                             font="main-ui-body"
                             color="text-05"
                           >
                             {item.data.title}
-                          </OverflowText>
+                          </Text>
                           {subtitle && (
-                            <OverflowText
+                            <Text
+                              maxLines={1}
+                              overflowTooltip
                               as="p"
                               textPosition="text-start"
                               font="secondary-body"
                               color="text-03"
                             >
                               {subtitle}
-                            </OverflowText>
+                            </Text>
                           )}
-                        </GeneralLayouts.Section>
+                        </Section>
                         {item.data.link && (
                           <Hoverable.Item
                             group="hierarchy-row"
@@ -1018,7 +1021,7 @@ export default function SourceHierarchyBrowser({
                             }}
                           />
                         )}
-                      </GeneralLayouts.Section>
+                      </Section>
                     </Hoverable.Root>
                   </TableLayouts.TableCell>
                   <TableLayouts.TableCell width={8}>
@@ -1037,13 +1040,13 @@ export default function SourceHierarchyBrowser({
 
             {/* Loading more indicator */}
             {isLoadingDocuments && documents.length > 0 && (
-              <GeneralLayouts.Section height="auto" padding={2}>
+              <Section height="auto" padding={2}>
                 <Text color="text-03" font="secondary-body">
                   {t("browser.loadingMore.description")}
                 </Text>
-              </GeneralLayouts.Section>
+              </Section>
             )}
-          </GeneralLayouts.Section>
+          </Section>
         )}
       </div>
 
@@ -1051,7 +1054,7 @@ export default function SourceHierarchyBrowser({
       {currentSourceSelectedCount > 0 && (
         <>
           <Spacer rem={0.5} />
-          <GeneralLayouts.Section
+          <Section
             flexDirection="row"
             justifyContent="start"
             alignItems="center"
@@ -1076,9 +1079,9 @@ export default function SourceHierarchyBrowser({
               size="sm"
               onClick={handleDeselectAll}
             />
-          </GeneralLayouts.Section>
+          </Section>
         </>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

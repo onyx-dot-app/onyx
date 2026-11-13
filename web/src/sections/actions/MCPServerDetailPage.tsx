@@ -1,12 +1,17 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
+import {
+  isSilentOAuthOutcome,
+  oauthFailureDetail,
+  openOAuthAuthorization,
+} from "@/lib/oauth/launch";
 import { SvgServer } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -54,7 +59,7 @@ export default function MCPServerDetailPage({
   serverId,
 }: MCPServerDetailPageProps) {
   const t = useTranslations("actions");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   const { mutate } = useSWRConfig();
   const defaultChat = useDefaultAssistantConfiguration();
@@ -118,7 +123,7 @@ export default function MCPServerDetailPage({
     if (busy) return;
     guard.requestLeave(() => {
       clearMcpChatEnableIntent(enableChatIntent);
-      router.replace(ADMIN_ROUTES.PLUGINS.path);
+      navigation.go(ADMIN_ROUTES.PLUGINS.path, { replace: true });
     });
   };
   const selectTab = useCallback(
@@ -132,15 +137,15 @@ export default function MCPServerDetailPage({
         query.delete("enable_chat");
         query.delete("enable_chat_intent");
       }
-      router.replace(
+      navigation.go(
         withPluginSearchParams(
           pluginDetailHref({ kind: "mcp", id: serverId }),
           query
         ),
-        { scroll: false }
+        { replace: true, scroll: false }
       );
     },
-    [router, serverId, searchParams]
+    [navigation, serverId, searchParams]
   );
   const refresh = useCallback(async () => {
     await Promise.all([mutateServer(), mutate(SWR_KEYS.adminMcpServers)]);
@@ -275,14 +280,28 @@ export default function MCPServerDetailPage({
     });
   };
   const authorize = (url: string) => {
-    // Remove the unload warning before continuing the submitted OAuth flow.
+    // The blocked-tab fallback navigates away, so drop the unload warning first.
     flushSync(() => setAuthorizing(true));
-    try {
-      window.location.href = url;
-    } catch (error) {
-      setAuthorizing(false);
-      throw error;
-    }
+    openOAuthAuthorization(url)
+      .then(
+        async () => {
+          const fresh = await mutateServer();
+          if (fresh) await saveAuthentication(fresh);
+          selectTab("tools");
+        },
+        (error: unknown) => {
+          if (isSilentOAuthOutcome(error)) return;
+          const detail = oauthFailureDetail(error);
+          if (detail)
+            toast.error(detail.title, { description: detail.description });
+          else toast.error(t("mcpAuthModal.errors.oauthFailed"));
+        }
+      )
+      .catch((error: unknown) => {
+        console.error("Failed to save MCP authentication:", error);
+        toast.error(t("mcpAuthModal.errors.saveAuthFailed"));
+      })
+      .finally(() => setAuthorizing(false));
   };
   const saveAuthentication = async (saved: MCPServer) => {
     await mutateServer(saved, { revalidate: false });

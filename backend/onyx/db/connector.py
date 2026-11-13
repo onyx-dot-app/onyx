@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.app_configs import DEFAULT_PRUNING_FREQ
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.event_inbox.source_registry import webhook_source_for
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.models import InputType
 from onyx.db.enums import IndexingMode
 from onyx.db.models import (
@@ -140,6 +142,8 @@ def create_connector(
             "Connector by this name already exists, duplicate naming not allowed."
         )
 
+    _settle_event_input_type(connector_data)
+
     connector = Connector(
         name=connector_data.name,
         source=connector_data.source,
@@ -163,6 +167,24 @@ def create_connector(
     return ObjectCreationIdResponse(id=connector.id)
 
 
+def _settle_event_input_type(connector_data: ConnectorBase) -> None:
+    """A source with a webhook spec is always EVENT: as `poll` it would never
+    drain its queue. Decided here so every route that writes a connector
+    agrees."""
+    load_event_sources()
+    if webhook_source_for(connector_data.source) is None:
+        return
+    if connector_data.input_type != InputType.EVENT:
+        logger.info(
+            "Storing %s connector %r as %s, not the requested %s",
+            connector_data.source.value,
+            connector_data.name,
+            InputType.EVENT.value,
+            connector_data.input_type.value,
+        )
+    connector_data.input_type = InputType.EVENT
+
+
 def update_connector(
     connector_id: int,
     connector_data: ConnectorBase,
@@ -178,6 +200,8 @@ def update_connector(
         raise ValueError(
             "Connector by this name already exists, duplicate naming not allowed."
         )
+
+    _settle_event_input_type(connector_data)
 
     connector.name = connector_data.name
     connector.source = connector_data.source

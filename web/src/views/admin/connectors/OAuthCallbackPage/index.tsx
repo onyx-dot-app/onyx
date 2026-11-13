@@ -1,17 +1,20 @@
 "use client";
 
+import { usePathname, useSearchParams } from "@opal/navigation";
 import { useEffect, useState } from "react";
 import { getSourceMetadata, isValidSource } from "@/lib/connectors/utils";
-import { usePathname, useSearchParams } from "next/navigation";
 import { AdminPageTitle } from "@/components/admin/Title";
 import { ValidSources } from "@/lib/connectors/types/source";
 import CardSection from "@/components/admin/CardSection";
 import { handleOAuthAuthorizationResponse } from "@/lib/oauth_utils";
 import { SvgKey } from "@opal/icons";
 import { useTranslations } from "next-intl";
+import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
+import { reportOAuthCallback } from "@/lib/oauth/launch";
 
-export default function OAuthCallbackPage() {
+function OAuthCallbackPageContent() {
   const t = useTranslations("admin.connectorsList");
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   const [statusMessage, setStatusMessage] = useState(
@@ -25,11 +28,10 @@ export default function OAuthCallbackPage() {
   const [pageTitle, setPageTitle] = useState(t("oauthCallback.page.title"));
 
   // Extract query parameters
-  const code = searchParams?.get("code");
-  const state = searchParams?.get("state");
+  const code = searchParams.get("code");
+  const state = searchParams.get("state");
 
-  const pathname = usePathname();
-  const connector = pathname?.split("/")[3];
+  const connector = pathname.split("/")[3];
 
   useEffect(() => {
     const onFirstLoad = async () => {
@@ -94,6 +96,7 @@ export default function OAuthCallbackPage() {
         if (!response) {
           throw new Error("Empty response from OAuth server.");
         }
+        if (reportOAuthCallback(state, true)) return;
 
         setStatusMessage(t("oauthCallback.success.title"));
 
@@ -116,6 +119,7 @@ export default function OAuthCallbackPage() {
         setIsError(false);
       } catch (error) {
         console.error("OAuth error:", error);
+        if (reportOAuthCallback(state, false)) return;
         setStatusMessage(t("oauth.error.title"));
         setStatusDetails(t("oauthCallback.error.description"));
         setIsError(true);
@@ -151,3 +155,5 @@ export default function OAuthCallbackPage() {
     </div>
   );
 }
+
+export default withDesktopOAuthHandoff(OAuthCallbackPageContent);

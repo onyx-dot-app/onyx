@@ -1,11 +1,10 @@
 "use client";
 
+import { NavLink, useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import ErrorPageLayout from "@/components/errorPages/ErrorPageLayout";
 import { Button, Text, useCreateModal } from "@opal/components";
-import InlineExternalLink from "@/refresh-components/InlineExternalLink";
 import DowngradeToCommunityModal from "@/sections/modals/DowngradeToCommunityModal";
 import { useUser } from "@/providers/UserProvider";
 import { logout } from "@/lib/users/svc";
@@ -49,12 +48,13 @@ export default function AccessRestricted() {
   const { appName } = settings;
   const { isAdmin } = useUser();
   const downgradeModal = useCreateModal();
+  const navigation = useNavigation();
 
   // Lands on the held login page: with SSO as the only way in, a reload would
   // sign the user straight back in through the IdP session.
   async function handleLogout() {
     await logout();
-    window.location.href = loginPath({ autoRedirectToSso: false });
+    navigation.load(loginPath({ autoRedirectToSso: false }));
   }
 
   const isSeatLimitExceeded =
@@ -89,7 +89,7 @@ export default function AccessRestricted() {
       if (!url) {
         throw new Error("No redirect URL returned");
       }
-      window.location.href = url;
+      navigation.load(url);
     } catch (error) {
       console.error("Error creating resubscription session:", error);
       setError(t("accessRestricted.resubscribeError.text"));
@@ -100,7 +100,7 @@ export default function AccessRestricted() {
   return (
     <ErrorPageLayout>
       <div className="flex items-center gap-2">
-        <Text font="heading-h2" color="text-05">
+        <Text font="heading-headline" color="text-05">
           {t("accessRestricted.heading.title")}
         </Text>
         <SvgLock className="stroke-status-error-05 w-6 h-6" />
@@ -114,14 +114,14 @@ export default function AccessRestricted() {
             {richNodes(
               t.rich("accessRestricted.seatLimitAdminHint.text", {
                 userLink: (chunks) => (
-                  <Link className={linkClassName} href="/admin/users">
+                  <NavLink className={linkClassName} href="/admin/users">
                     {chunks}
-                  </Link>
+                  </NavLink>
                 ),
                 billingLink: (chunks) => (
-                  <Link className={linkClassName} href="/admin/billing">
+                  <NavLink className={linkClassName} href="/admin/billing">
                     {chunks}
-                  </Link>
+                  </NavLink>
                 ),
               })
             )}
@@ -169,9 +169,9 @@ export default function AccessRestricted() {
               t.rich("accessRestricted.billingAdminHint.text", {
                 hadLicense: hadPreviousLicense ? "true" : "false",
                 billingLink: (chunks) => (
-                  <Link className={linkClassName} href="/admin/billing">
+                  <NavLink className={linkClassName} href="/admin/billing">
                     {chunks}
-                  </Link>
+                  </NavLink>
                 ),
                 supportLink: (chunks) => (
                   <a className={linkClassName} href="mailto:support@onyx.app">
@@ -208,12 +208,14 @@ export default function AccessRestricted() {
         {richNodes(
           t.rich("needHelp.text", {
             discordLink: (chunks) => (
-              <InlineExternalLink
+              <a
                 className={linkClassName}
                 href="https://discord.gg/4NA5SbzrWb"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 {chunks}
-              </InlineExternalLink>
+              </a>
             ),
           })
         )}

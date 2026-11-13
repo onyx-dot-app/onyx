@@ -14,12 +14,11 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import { Text } from "@opal/components";
+import { ShadowDiv, Text } from "@opal/components";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
 
 // Lazy registration for hljs JSON language
@@ -69,8 +68,7 @@ function constructCustomToolState(
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  const toolName =
-    toolStart?.tool_name || toolDeltas[0]?.tool_name || fallbackToolName;
+  const toolName = toolStart?.display_name || fallbackToolName;
   const toolArgsPacket = packets.find(
     (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
   )?.obj as CustomToolArgs | null;
@@ -310,12 +308,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       status,
       supportsCollapsible: true,
       content: (
-        <FadingEdgeContainer
-          direction="bottom"
+        <ShadowDiv
+          shadowDirection="bottom-only"
+          variant="mask"
+          shadowHeight={8}
           className="max-h-24 overflow-hidden"
         >
           {content}
-        </FadingEdgeContainer>
+        </ShadowDiv>
       ),
     },
   ]);

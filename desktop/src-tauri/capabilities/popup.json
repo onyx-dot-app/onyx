@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "popup",
+  "description": "Popup windows can host third-party sites such as OAuth providers. They get only shell open, so the shell plugin's target=_blank link handler can send links to the system browser.",
+  "windows": ["popup-*"],
+  "remote": {
+    "urls": ["http://*:*", "https://*:*"]
+  },
+  "permissions": ["shell:default"]
+}

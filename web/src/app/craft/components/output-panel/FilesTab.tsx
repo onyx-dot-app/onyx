@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useEffect, useMemo, useRef, useCallback } from "react";
 import { useDirectoryLoading, useOutputRefreshStatus } from "@/lib/build/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -14,7 +15,6 @@ import {
   DirectoryTree,
   type DirectoryStatus,
 } from "@/app/craft/components/output-panel/DirectoryTree";
-import { Section } from "@/layouts/general-layouts";
 import { WorkspaceSearch } from "@/app/craft/components/output-panel/WorkspaceSearch";
 
 interface FilesTabProps {
@@ -146,7 +146,7 @@ function WorkspaceBrowser({
         padding={8}
       >
         <SvgHardDrive size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
+        <Text font="heading-section" color="text-03">
           {isProvisioning ? t("preparing.title") : t("empty.title")}
         </Text>
         <Text font="secondary-body" color="text-02">

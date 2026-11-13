@@ -368,9 +368,8 @@ export default function SecurityHardeningPage() {
         {/* Authentication */}
         <div className="flex w-full flex-col gap-3">
           <Content
+            font="main-content-emphasis"
             title={t("authentication.section.title")}
-            sizePreset="main-content"
-            variant="section"
           />
 
           <Card border="solid" rounding={4}>
@@ -475,10 +474,9 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding={4}>
               <Section>
                 <Content
+                  font="main-ui-action"
                   title={t("passwordPolicy.section.title")}
                   description={t("passwordPolicy.section.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
 
                 <div className="flex w-full items-start gap-4">
@@ -572,10 +570,9 @@ export default function SecurityHardeningPage() {
             <Card border="solid" rounding={4}>
               <Section>
                 <Content
+                  font="main-ui-action"
                   title={t("jwt.section.title")}
                   description={t("jwt.section.description")}
-                  sizePreset="main-ui"
-                  variant="section"
                 />
 
                 <JwtTextRow
@@ -618,9 +615,8 @@ export default function SecurityHardeningPage() {
         {/* Admin Controls */}
         <div className="flex w-full flex-col gap-3">
           <Content
+            font="main-content-emphasis"
             title={t("adminControls.section.title")}
-            sizePreset="main-content"
-            variant="section"
           />
 
           <Card border="solid" rounding={4}>
@@ -818,9 +814,8 @@ export default function SecurityHardeningPage() {
             (operator-controlled, env-driven in multi-tenant cloud). */}
         <div className="flex w-full flex-col gap-3">
           <Content
+            font="main-content-emphasis"
             title={t("networkSafety.section.title")}
-            sizePreset="main-content"
-            variant="section"
           />
 
           <Card border="solid" rounding={4}>

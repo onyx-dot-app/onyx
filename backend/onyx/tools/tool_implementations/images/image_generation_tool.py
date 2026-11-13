@@ -31,6 +31,9 @@ from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     GeneratedImage,
     ToolCallException,
     ToolContext,
@@ -40,6 +43,7 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageGenerationArguments,
     ImageGenerationResponse,
+    ImageResult,
 )
 from onyx.utils.b64 import get_image_type_from_bytes
 from onyx.utils.logger import setup_logger
@@ -83,6 +87,10 @@ class ImageGenerationTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -94,6 +102,15 @@ class ImageGenerationTool(Tool):
     def display_name(self) -> str:
         return self.DISPLAY_NAME
 
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.AUTO,
+            annotation=f"list[{ImageResult.__name__}]",
+            model=ImageResult,
+            returns="The images are shown to the user automatically.",
+        )
+
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:
@@ -104,36 +121,43 @@ class ImageGenerationTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     PROMPT_FIELD: {
                         "type": "string",
                         "description": "Prompt used to generate the image",
                     },
                     "shape": {
-                        "type": "string",
+                        "anyOf": [
+                            {
+                                "type": "string",
+                                "enum": [shape.value for shape in ImageShape],
+                            },
+                            {"type": "null"},
+                        ],
                         "description": (
-                            "Optional - only specify if you want a specific shape."
+                            "Use null for the default square shape."
                             " Image shape: 'square', 'portrait', or 'landscape'."
                         ),
-                        "enum": [shape.value for shape in ImageShape],
                     },
                     REFERENCE_IMAGE_FILE_IDS_FIELD: {
-                        "type": "array",
+                        "anyOf": [
+                            {"type": "array", "items": {"type": "string"}},
+                            {"type": "null"},
+                        ],
                         "description": (
                             "Optional file_ids of existing images to edit or use as reference;"
                             " the first is the primary edit source."
                             " Get file_ids from `[attached image — file_id: <id>]` tags on"
                             " user-attached images or from prior generate_image tool responses."
-                            " Omit for a fresh, unrelated generation."
+                            " Use null for a fresh, unrelated generation."
                         ),
-                        "items": {
-                            "type": "string",
-                        },
                     },
                 },
-                "required": [PROMPT_FIELD],
+                "required": [PROMPT_FIELD, "shape", REFERENCE_IMAGE_FILE_IDS_FIELD],
             },
         )
 
@@ -366,10 +390,9 @@ class ImageGenerationTool(Tool):
 
         content = json.dumps(
             [
-                {
-                    "file_id": img.file_id,
-                    "revised_prompt": img.revised_prompt,
-                }
+                ImageResult(
+                    file_id=img.file_id, revised_prompt=img.revised_prompt
+                ).model_dump()
                 for img in generated_images_metadata
             ]
         )

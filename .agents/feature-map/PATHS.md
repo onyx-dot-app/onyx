@@ -24,11 +24,11 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `backend/onyx/chat/execution.py`, `backend/onyx/chat/agent.py`, `backend/onyx/chat/errors.py` | core-chat-loop |
-| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py` | streaming-protocol, core-chat-loop |
+| `backend/onyx/chat/renderer.py`, `backend/onyx/chat/presentation.py` | streaming-protocol, core-chat-loop, code-execution |
 | `backend/onyx/chat/persistence.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/chat/history_store.py`, `backend/onyx/chat/response.py`, `backend/onyx/db/chat_checkpoint.py` | chat-persistence |
 | `backend/onyx/chat/run_store.py`, `backend/onyx/chat/checkpoint.py`, `backend/onyx/chat/restoration.py` | agent-runtime, chat-persistence |
-| `backend/onyx/chat/subagents.py` | agent-runtime |
+| `backend/onyx/tools/tool_implementations/subagents/` | core-chat-loop, tools-framework |
 | `backend/onyx/chat/files.py` | context-assembly, projects |
 | `backend/onyx/chat/README.md` | core-chat-loop, context-assembly |
 | `backend/onyx/chat/models.py` | core-chat-loop, streaming-protocol |
@@ -41,7 +41,7 @@ covers new files that match it.
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
-| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py` | chat-persistence |
+| `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_inputs.py` | chat-persistence |
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
 | `backend/onyx/server/query_and_chat/chat_backend.py`, `backend/onyx/server/query_and_chat/models.py`, `backend/onyx/server/query_and_chat/session_loading.py`, `backend/onyx/server/query_and_chat/chat_utils.py` | core-chat-loop, chat-persistence |
@@ -58,7 +58,7 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
-| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/` | code-execution |
+| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
@@ -86,6 +86,7 @@ covers new files that match it.
 | `backend/onyx/access/`, `backend/ee/onyx/access/`, `backend/onyx/db/document_access.py` | access-control |
 | `backend/onyx/db/document_set.py`, `backend/onyx/db/user_group.py`, `backend/onyx/server/features/document_set/`, `backend/ee/onyx/db/document_set.py` | access-control |
 | `backend/ee/onyx/server/user_group/`, `backend/ee/onyx/db/user_group.py` | access-control, authorization |
+| `terraform-provider-onyx/internal/provider/user_group_resource.go`, `terraform-provider-onyx/docs/resources/user_group.md`, `terraform-provider-onyx/examples/resources/onyx_user_group/`, `terraform-provider-onyx/README.md` | authorization |
 | `backend/ee/onyx/external_permissions/`, `backend/onyx/db/permission_sync_attempt.py` | permission-sync |
 | `backend/ee/onyx/external_permissions/post_query_censoring.py` | access-control |
 | `backend/ee/onyx/background/celery/tasks/doc_permission_syncing/`, `backend/ee/onyx/background/celery/tasks/external_group_syncing/`, `backend/ee/onyx/db/external_perm.py`, `backend/ee/onyx/db/document.py` | permission-sync |
@@ -99,6 +100,7 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/connectors/` | connectors |
 | `backend/onyx/webhook_server/`, `backend/onyx/webhook_server_main.py`, `deployment/helm/charts/onyx/templates/webhook-server-deployment.yaml`, `deployment/helm/charts/onyx/templates/webhook-server-service.yaml`, `deployment/helm/charts/onyx/templates/webhook-server-servicemonitor.yaml`, `deployment/helm/charts/onyx/templates/ingress-webhook.yaml` | connectors |
+| `backend/onyx/db/connector_event_inbox.py` | connectors |
 | `backend/onyx/connectors/capability_checks/`, `backend/ee/onyx/connectors/`, `backend/onyx/background/celery/tasks/capability_checks/`, `backend/onyx/server/documents/capability_check_runs.py`, `backend/onyx/server/documents/credential_capabilities.py` | connector-capability-checks |
 | `backend/onyx/connectors/*/capability_checks.py`, `backend/ee/onyx/external_permissions/*/capability_checks.py` | connector-capability-checks |
 | `backend/onyx/connectors/pairing_access.py` | access-control, cc-pairs-and-creds |
@@ -132,12 +134,12 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
-| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/server/features/skill/` | skills |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
-| `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py` | chat-preferences |
+| `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py`, `backend/onyx/server/settings/build_info.py` | chat-preferences |
 | `backend/onyx/db/hierarchy.py`, `backend/onyx/server/features/hierarchy/`, `backend/ee/onyx/db/hierarchy.py` | agents-personas, access-control |
 
 ## Backend: platform
@@ -167,6 +169,7 @@ covers new files that match it.
 | `backend/onyx/redis/redis_connector_prune.py`, `backend/onyx/redis/redis_connector_delete.py`, `backend/onyx/redis/redis_connector_stop.py` | background-jobs |
 | `backend/onyx/feature_flags/`, `backend/ee/onyx/feature_flags/`, `backend/onyx/utils/variable_functionality.py`, `backend/scripts/make_foss_repo.sh` | editions-and-gating |
 | `backend/ee/onyx/server/middleware/tier_gate.py`, `backend/ee/onyx/configs/license_enforcement_config.py`, `backend/onyx/server/settings/tier_order.py`, `web/src/lib/tiers/` | editions-and-gating |
+| `web/src/lib/badges/` | editions-and-gating |
 | `backend/onyx/configs/llm_configs.py`, `backend/onyx/configs/model_configs.py` | llm-providers |
 | `backend/onyx/configs/onyxbot_configs.py` | slack-bot |
 | `backend/onyx/tracing/`, `backend/onyx/server/manage/tracing/`, `backend/onyx/db/tracing.py`, `backend/onyx/server/metrics/` | observability |
@@ -180,8 +183,8 @@ covers new files that match it.
 | `backend/onyx/utils/fleet_telemetry.py`, `backend/onyx/utils/fleet_query_telemetry.py`, `backend/onyx/utils/fleet_telemetry_collector.py`, `backend/onyx/utils/fleet_telemetry_resources.py`, `backend/onyx/db/fleet_enrollment.py`, `backend/onyx/db/fleet_telemetry.py`, `deployment/fleet-telemetry.md` | fleet-telemetry |
 | `backend/ee/onyx/server/log_export/`, `backend/ee/onyx/background/celery/tasks/log_export/`, `deployment/helm/charts/onyx/templates/log-export-rbac.yaml`, `deployment/helm/charts/onyx/dashboards/` | observability |
 | `backend/onyx/hooks/`, `backend/ee/onyx/hooks/`, `backend/onyx/db/hook.py`, `backend/onyx/server/features/hooks/`, `backend/ee/onyx/server/features/hooks/`, `backend/onyx/utils/external_endpoint.py` | hooks |
-| `backend/onyx/db/token_limit.py`, `backend/onyx/server/token_rate_limits/`, `backend/onyx/server/usage_limits.py`, `backend/onyx/server/tenant_usage_limits.py`, `backend/onyx/server/manage/invite_rate_limit.py`, `backend/onyx/db/tenant_invite_counter.py` | rate-and-usage-limits |
-| `backend/onyx/server/api_key_usage.py`, `backend/ee/onyx/server/usage_limits.py`, `backend/ee/onyx/server/tenant_usage_limits.py`, `backend/ee/onyx/server/token_rate_limits/`, `backend/ee/onyx/db/token_limit.py`, `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
+| `backend/onyx/db/token_limit.py`, `backend/onyx/server/usage_limits.py`, `backend/onyx/server/tenant_usage_limits.py`, `backend/onyx/server/manage/invite_rate_limit.py`, `backend/onyx/db/tenant_invite_counter.py` | rate-and-usage-limits |
+| `backend/onyx/server/api_key_usage.py`, `backend/ee/onyx/server/usage_limits.py`, `backend/ee/onyx/server/tenant_usage_limits.py`, `backend/ee/onyx/server/spending_limits/`, `backend/ee/onyx/db/token_limit.py`, `backend/ee/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/server/metrics/`, `backend/scripts/seed_dev_license.py` | billing |
 | `backend/ee/onyx/server/middleware/license_enforcement.py`, `backend/ee/onyx/db/license.py`, `backend/ee/onyx/utils/license.py`, `backend/ee/onyx/utils/license_expiry.py`, `backend/ee/onyx/background/celery/tasks/license_reclaim/` | billing |
 | `backend/ee/onyx/server/tenants/proxy.py`, `backend/ee/onyx/server/tenants/product_gating.py`, `backend/ee/onyx/configs/multi_tenant_gating_config.py` | billing |
@@ -202,7 +205,7 @@ covers new files that match it.
 | `backend/onyx/onyxbot/discord/`, `backend/onyx/db/discord_bot.py`, `backend/onyx/server/manage/discord_bot/` | discord-bot |
 | `backend/onyx/server/onyx_api/` | onyx-api |
 | `backend/scripts/onyx_openapi_schema.py`, `backend/scripts/transform_openapi_for_docs.py`, `backend/scripts/api_inference_sample.py`, `documentation/scripts/generate.sh` | onyx-api |
-| `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py`, `backend/onyx/oauth_provider/auth.py` | mcp-server |
+| `backend/onyx/mcp_server/`, `backend/onyx/mcp_server_main.py`, `backend/onyx/oauth_provider/auth.py`, `extensions/agent-plugin/` | mcp-server |
 | `deployment/tests/test_oauth_proxy.py`, `deployment/tests/test_next_oauth_discovery.py`, `backend/tests/unit/onyx/oauth_provider/test_native_client_cleanup.py`, `backend/tests/unit/onyx/oauth_provider/test_codex_response_reader.py` | mcp-server |
 | `.github/workflows/mcp-compatibility.yml`, `.github/scripts/check-mcp-compatibility.py`, `deployment/tests/test_mcp_compatibility_probe.py` | mcp-server |
 | `deployment/docker_compose/docker-compose.mcp-ci.yml`, `deployment/docker_compose/mcp-ci-web.conf`, `deployment/tests/test_mcp_compose.py`, `deployment/tests/test_mcp_canary_workflow.py` | mcp-server |
@@ -232,6 +235,7 @@ covers new files that match it.
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
+| `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
 | `backend/onyx/server/features/build/sandbox/serve_transport.py` | craft-streaming, craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
@@ -240,9 +244,12 @@ covers new files that match it.
 | `backend/onyx/server/features/build/sandbox/image/opencode-plugins/webapp.ts`, `backend/onyx/server/features/build/sandbox/image/templates/outputs/web/` | craft-webapp-proxy |
 | `backend/onyx/server/features/build/session/output_cards.py` | craft-sessions, craft-scheduled-tasks |
 | `backend/onyx/sandbox_proxy/`, `deployment/helm/charts/onyx/templates/sandbox-proxy/` | craft-external-apps |
+| `backend/onyx/server/features/microvm/api.py`, `backend/onyx/microvm/registry.py` | craft-external-apps |
+| `backend/onyx/microvm/` | craft-sandboxes |
 | `backend/onyx/external_apps/`, `backend/onyx/db/external_app.py` | craft-external-apps, craft-admin |
-| `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`, `deployment/helm/charts/onyx/templates/sandbox-image-prepuller.yaml` | craft-sandboxes |
+| `deployment/helm/charts/onyx/templates/sandbox-podtemplate.yaml`, `deployment/helm/charts/onyx/templates/sandbox-rbac.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-egress.yaml`, `deployment/helm/charts/onyx/templates/network-policy-sandbox-push.yaml`, `deployment/helm/charts/onyx/templates/sandbox-image-prepuller.yaml`, `deployment/helm/charts/onyx/templates/craft-fc-preflight.yaml`, `deployment/helm/charts/onyx/scripts/craft-fc-preflight.sh` | craft-sandboxes |
 | `deployment/helm/dev/`, `.zed/run-all-k8s.sh`, `.zed/process-compose.k8s.yaml` | craft-sandboxes |
+| `microvm/` | craft-sandboxes |
 
 ## Frontend: chat and user surfaces
 
@@ -250,13 +257,18 @@ covers new files that match it.
 |---|---|
 | `web/src/app/app/`, `web/src/views/AppPage.tsx` | chat-frontend |
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
+| `web/next.config.js` | chat-frontend |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts` | chat-frontend |
-| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
+| `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
 | `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/sections/Suggestions.tsx` | chat-frontend |
+| `web/src/lib/richInputTile.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/plugins/` | plugins, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
@@ -269,8 +281,8 @@ covers new files that match it.
 | `web/src/lib/tools/` | plugins |
 | `web/src/lib/tools/components/ToolsPopover.tsx` | plugins, chat-frontend |
 | `web/src/lib/onboarding/` | chat-frontend |
-| `web/src/views/AgentEditorPage.tsx`, `web/src/views/AgentsNavigationPage.tsx`, `web/src/sections/agents/` | agents-personas |
-| `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/sections/sidebar/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
+| `web/src/views/AgentEditorPage/`, `web/src/views/AgentsCatalogPage/`, `web/src/sections/agents/` | agents-personas |
+| `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
 | `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
@@ -290,12 +302,14 @@ covers new files that match it.
 | `web/src/app/craft/v1/apps/`, `web/src/lib/externalApps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
 | `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx` | skills |
+| `web/src/app/admin/skills/` | skills |
 | `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 
 ## Frontend: admin and platform
 
 | Path | Component(s) |
 |---|---|
+| `web/src/sections/modals/NewTeamModal.tsx`, `web/src/sections/modals/NewTenantModal.tsx` | multi-tenancy |
 | `web/src/app/admin/plugins/external-app/` | craft-admin, craft-external-apps |
 | `web/src/app/admin/craft/`, `web/src/views/admin/CraftPage/`, `web/src/views/admin/CraftPreferencesPage/` | craft-admin |
 | `web/src/app/admin/connector/`, `web/src/app/admin/connectors/`, `web/src/app/admin/indexing-status/` | cc-pairs-and-creds |
@@ -310,13 +324,15 @@ covers new files that match it.
 | `web/src/sections/knowledge/`, `web/src/lib/hierarchy/` | agents-personas, access-control |
 | `web/src/app/admin/federated/`, `web/src/components/admin/federated/`, `web/src/hooks/useFederatedOAuthStatus.ts`, `web/src/app/federated/oauth/`, `web/src/components/chat/FederatedOAuthModal.tsx` | federated-search |
 | `web/src/app/admin/groups*/`, `web/src/app/ee/admin/groups/`, `web/src/views/admin/GroupsPage/` | access-control, authorization |
+| `web/src/sections/admin/AdminListHeader.tsx` | access-control, auth-and-identity |
 | `web/src/lib/permissions/` | authorization |
 | `web/src/app/admin/scim/`, `web/src/app/admin/users/`, `web/src/app/admin/service-accounts/`, `web/src/app/ee/admin/scim/`, `web/src/app/ee/admin/service-accounts/`, `web/src/views/admin/ScimPage/`, `web/src/views/admin/ServiceAccountsPage/`, `web/src/views/admin/UsersPage/` | auth-and-identity |
 | `web/src/hooks/useScimToken.ts`, `web/src/hooks/useAdminUsers.ts`, `web/src/hooks/useUsers.ts`, `web/src/hooks/useUserCounts.ts`, `web/src/providers/UserProvider.tsx`, `web/src/lib/hooks/useCaptcha.ts` | auth-and-identity |
 | `web/src/app/admin/sso-providers/`, `web/src/app/admin/security/`, `web/src/app/admin/oauth-test/`, `web/src/views/admin/SSOProvidersPage.tsx`, `web/src/views/admin/SecurityHardeningPage.tsx`, `web/src/sections/modals/sso/` | auth-and-identity |
-| `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/lib/oauth/`, `web/src/app/anonymous/` | auth-and-identity |
+| `web/src/app/auth/`, `web/src/app/oauth-config/`, `web/src/app/oauth/`, `web/src/lib/oauth/`, `web/src/app/anonymous/` | auth-and-identity |
 | `web/src/app/oauth-provider/`, `web/src/sections/oauth-provider/`, `web/src/lib/oauth-provider/`, `web/src/lib/sso/`, `web/src/lib/users/`, `web/src/lib/auth/` | auth-and-identity |
 | `web/src/app/admin/agents/`, `web/src/lib/agents/`, `web/src/views/admin/AgentsPage.tsx`, `web/src/views/admin/AgentsPage/`, `web/src/app/ee/agents/stats/` | agents-personas |
+| `web/src/sections/modals/AddPeoplePicker.tsx`, `web/src/sections/modals/TransferOwnershipView.tsx`, `web/src/sections/modals/ShareAccessRow.tsx`, `web/src/sections/modals/ShareModalPermissionControls.tsx` | agents-personas, skills |
 | `web/src/app/admin/chat-preferences/` | chat-preferences |
 | `web/src/views/admin/ChatPreferencesPage.tsx`, `web/src/views/admin/ChatTaskModelSettings.tsx` | chat-preferences, llm-providers |
 | `web/src/app/admin/language-models/`, `web/src/views/admin/LanguageModelsPage.tsx`, `web/src/sections/modals/languageModels/`, `web/src/lib/languageModels/`, `web/src/lib/hooks/useLLMProviderOptions.ts` | llm-providers |
@@ -330,7 +346,7 @@ covers new files that match it.
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |
 | `web/src/app/admin/discord-bot/` | discord-bot |
-| `web/src/app/admin/token-rate-limits/` | rate-and-usage-limits |
+| `web/src/views/admin/SpendingLimitsPage/`, `web/src/lib/spendingLimits/`, `web/src/app/ee/admin/spending-limits/` | rate-and-usage-limits |
 | `web/src/app/admin/billing/`, `web/src/lib/billing/`, `web/src/components/GatedContentWrapper.tsx`, `web/src/sections/modals/DowngradeToCommunityModal.tsx`, `web/src/components/errorPages/AccessRestrictedPage.tsx`, `web/src/providers/ProductGatingWrapper.tsx`, `web/src/hooks/useLicense.ts`, `web/src/hooks/useBillingInformation.ts`, `web/src/hooks/useCloudSubscription.ts` | billing |
 | `web/src/proxy.ts`, `web/src/app/ee/layout.tsx`, `web/src/app/ee/EEFeatureRedirect.tsx` | editions-and-gating |
 | `web/src/app/admin/hooks/`, `web/src/ee/views/admin/HooksPage/`, `web/src/ee/hooks/` | hooks |
@@ -338,7 +354,7 @@ covers new files that match it.
 | `web/src/app/ee/admin/performance/`, `web/src/app/ee/admin/export-logs/`, `web/src/app/admin/tracing/`, `web/src/app/admin/systeminfo/`, `web/src/views/admin/TracingPage/`, `web/src/views/admin/WorkspaceAnalyticsPage/`, `web/src/views/admin/CostOverridesPanel.tsx`, `web/src/views/admin/PerUserUsagePanel.tsx`, `web/src/views/admin/SystemUsagePanel.tsx` | observability |
 | `web/src/sections/usage/`, `web/src/lib/usage/`, `web/src/lib/tracing/` | observability |
 | `web/src/lib/analytics/` | observability, editions-and-gating |
-| `web/src/app/ee/admin/theme/`, `web/src/lib/app/components.tsx`, `web/src/lib/analytics/shared.tsx` | whitelabelling-and-theme |
+| `web/src/app/ee/admin/theme/`, `web/src/lib/app/components/Logo.tsx`, `web/src/lib/app/components/LanguageSelect.tsx`, `web/src/lib/analytics/shared.tsx` | whitelabelling-and-theme |
 | `web/src/app/admin/web-search/`, `web/src/views/admin/WebSearchPage/`, `web/src/lib/webSearch/` | web-search |
 | `web/src/app/admin/image-generation/`, `web/src/views/admin/ImageGenerationPage/` | image-generation |
 | `web/src/app/admin/code-interpreter/`, `web/src/views/admin/CodeInterpreterPage/`, `web/src/hooks/useCodeInterpreter.ts` | code-execution |
@@ -369,11 +385,22 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/server/middleware/api_prefix.py` | Removes the API prefix from a request path for the middlewares that match on routes. |
 | `backend/onyx/server/manage/get_state.py`, `backend/onyx/server/manage/models.py`, `backend/onyx/server/models.py`, `backend/onyx/server/utils.py`, `backend/onyx/server/utils_vector_db.py` | Health, version and auth-type probes, and models and helpers that many routes share. |
 | `deployment/` | Deployment files. Read the component of the service you deploy. |
+| `backend/Dockerfile`, `backend/Dockerfile.model_server`, `web/Dockerfile` | Image builds. `.github/workflows/deployment.yml` sets their build args, such as the version and the git details on the About page. |
 | `deployment/data/nginx/`, `cli/internal/deploy/deployfiles/embedded/data/nginx/` | Reverse-proxy templates. The `cli/` copies are generated: run `ods generate-compose --write` after you change `deployment/data/nginx/`. |
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/requirements/` | Developer tooling and dependency files. |
+| `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
+| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
+| `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
+| `backend/AGENTS.md` | Backend standards for every agent: workers, migrations, tests, errors and tracing. Read it before you work in `backend/`. |
+| `web/bun.lock` | The `web/` dependency lockfile. `bun install` writes it; do not edit it by hand. |
+| `web/.type-coverage-baseline.yaml` | Type-coverage floor of each `web/` directory. The `typescript-check` pre-commit hook fails when a directory falls below its floor (`web/AGENTS.md`, Tests). |
 | `.github/` | CI. Read the workflow. |
 | `web/src/app/ee/admin/` | A second admin route tree. `web/src/proxy.ts:EE_ROUTES` rewrites the `/admin/...` paths it lists to this tree. Check `EE_ROUTES` before you decide which copy serves an `/admin/...` path. |
-| `web/src/lib/admin-routes.ts`, `web/src/app/admin/layout.tsx` | The admin route list and the admin shell. A new admin route needs its own row above. |
-| `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/lib/admin-routes.ts`, `web/src/lib/admin-sidebar-utils.ts`, `web/src/lib/adminNavLabels.tsx`, `web/src/app/admin/layout.tsx` | The admin route list, the sidebar that filters it by permission and feature flag, its labels, and the admin shell. A new admin route needs its own row above. |
+| `web/src/lib/types.ts` | Frontend types that many components share, such as `Permission`, which must match `backend/onyx/db/enums.py`. Check the callers. |
+| `web/src/lib/swr-keys.ts` | The SWR cache keys of the whole app. A key belongs to the component that fetches it; invalidate through the key, never a string literal. |
+| `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
+| `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
+| `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

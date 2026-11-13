@@ -1,8 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { Text, Tooltip } from "@opal/components";
-import { cn } from "@opal/utils";
+import { useTranslations } from "next-intl";
+import { ProgressRing, Text, Tooltip } from "@opal/components";
+import { Section } from "@opal/layouts";
 
 interface ContextRingProps {
   usedTokens: number;
@@ -14,14 +15,12 @@ const WARN = 0.7;
 const CRIT = 0.9;
 
 const SIZE = 16;
-const STROKE = 2;
-const R = (SIZE - STROKE) / 2;
-const CIRC = 2 * Math.PI * R;
 
 export default function ContextRing({
   usedTokens,
   contextLimit,
 }: ContextRingProps) {
+  const t = useTranslations("craft.inputBar.contextRing");
   const view = useMemo(() => {
     if (!contextLimit || contextLimit <= 0 || usedTokens <= 0) return null;
     const ratio = usedTokens / contextLimit;
@@ -33,63 +32,46 @@ export default function ContextRing({
 
   if (!view) return null;
 
-  const arcColor =
+  const color =
     view.level === "crit"
-      ? "stroke-status-error-05"
+      ? "error"
       : view.level === "warn"
-        ? "stroke-status-warning-05"
-        : "stroke-text-04";
+        ? "warning"
+        : "neutral";
 
-  const tooltip = `${view.displayPct}% of context used`;
+  const tooltip = t("tooltip", { percent: view.displayPct });
 
   return (
     <Tooltip tooltip={tooltip} side="top" align="end">
-      <span
-        className="flex items-center gap-1.5 select-none"
-        role="img"
-        aria-label={`${view.displayPct} percent of context window used`}
+      <Section
+        flexDirection="row"
+        gap={1.5}
+        width="fit"
+        height="auto"
+        className="select-none"
       >
+        {/* The ring reports the value; this repeats it for sighted users. */}
         {view.level !== "ok" && (
           <Text
             font="secondary-body"
             color="text-03"
             wordWrap="whitespace-nowrap"
+            aria-hidden
           >
             {`${view.displayPct}%`}
           </Text>
         )}
-        <svg
-          width={SIZE}
-          height={SIZE}
-          viewBox={`0 0 ${SIZE} ${SIZE}`}
-          className="-rotate-90 shrink-0"
-          aria-hidden
-        >
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={R}
-            fill="none"
-            strokeWidth={STROKE}
-            className="stroke-border-03"
-          />
-          <circle
-            cx={SIZE / 2}
-            cy={SIZE / 2}
-            r={R}
-            fill="none"
-            strokeWidth={STROKE}
-            strokeLinecap="round"
-            strokeDasharray={CIRC}
-            strokeDashoffset={CIRC * (1 - view.pct)}
-            className={cn(
-              arcColor,
-              "transition-[stroke-dashoffset,stroke] duration-500 ease-out",
-              "motion-reduce:transition-none"
-            )}
-          />
-        </svg>
-      </span>
+        <ProgressRing
+          value={view.pct}
+          max={1}
+          color={color}
+          track="border"
+          size={SIZE}
+          aria-label={t("label")}
+          // The arc stops at 100%; the spoken value keeps the real percent.
+          aria-valuetext={tooltip}
+        />
+      </Section>
     </Tooltip>
   );
 }

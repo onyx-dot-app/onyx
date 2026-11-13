@@ -1,7 +1,7 @@
 "use client";
 
+import { useParams } from "@opal/navigation";
 import { useTranslations } from "next-intl";
-import { useParams } from "next/navigation";
 import { StandardAnswerCreationForm } from "@/app/ee/admin/standard-answer/StandardAnswerCreationForm";
 import {
   useStandardAnswers,

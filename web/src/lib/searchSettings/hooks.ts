@@ -20,6 +20,7 @@ import {
   ReindexErrorRow,
   ReindexProgress,
   SavedSearchSettings,
+  VectorQuantizationSupport,
 } from "@/lib/searchSettings/types";
 
 /**
@@ -141,6 +142,19 @@ export function useReindexErrors(enabled: boolean) {
 export function useConfiguredEmbeddingProviders() {
   return useSWR<ConfiguredEmbeddingProvider[]>(
     SWR_KEYS.embeddingProviders,
+    errorHandlingFetcher
+  );
+}
+
+/**
+ * Fetch which vector quantization levels the OpenSearch cluster can index.
+ * Pass `enabled: false` to skip the request.
+ */
+export function useVectorQuantizationSupport({
+  enabled = true,
+}: { enabled?: boolean } = {}) {
+  return useSWR<VectorQuantizationSupport>(
+    enabled ? SWR_KEYS.vectorQuantizationSupport : null,
     errorHandlingFetcher
   );
 }

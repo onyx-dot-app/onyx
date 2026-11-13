@@ -97,6 +97,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-12-16",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -135,7 +136,7 @@
         "output": 75.0
       },
       "limit": {
-        "context": 400000,
+        "context": 272000,
         "output": 128000
       },
       "modalities": {
@@ -1799,7 +1800,7 @@
         "output": 75.0
       },
       "limit": {
-        "context": 400000,
+        "context": 272000,
         "output": 128000
       },
       "modalities": {
@@ -2025,6 +2026,59 @@
       "temperature": false,
       "tool_call": true
     },
+    "gpt-6-astra-law": {
+      "cost": {
+        "cache_read": 1.0,
+        "input": 10.0,
+        "output": 50.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-astra-law",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
+    "gpt-6-cyber": {
+      "cost": {
+        "cache_read": 2.0,
+        "cache_write": 25.0,
+        "input": 20.0,
+        "output": 100.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-cyber",
+      "reasoning": true,
+      "structured_output": true,
+      "tool_call": true
+    },
     "gpt-6-luna": {
       "attachment": true,
       "cost": {
@@ -2075,6 +2129,33 @@
       "structured_output": true,
       "supports_none_reasoning_effort": true,
       "temperature": false,
+      "tool_call": true
+    },
+    "gpt-6-rosalind": {
+      "cost": {
+        "cache_read": 1.5,
+        "cache_write": 18.75,
+        "input": 15.0,
+        "output": 75.0
+      },
+      "limit": {
+        "context": 922000,
+        "output": 128000
+      },
+      "modalities": {
+        "input": [
+          "text",
+          "image",
+          "pdf"
+        ],
+        "output": [
+          "text"
+        ]
+      },
+      "mode": "chat",
+      "name": "gpt-6-rosalind",
+      "reasoning": true,
+      "structured_output": true,
       "tool_call": true
     },
     "gpt-6-sol": {
@@ -2431,34 +2512,13 @@
       "tool_call": true
     },
     "gpt-image-1": {
-      "attachment": true,
       "cost": {
         "cache_read": 1.25,
         "input": 5.0
       },
-      "family": "gpt-image",
-      "limit": {
-        "context": 0,
-        "input": 0,
-        "output": 0
-      },
-      "modalities": {
-        "input": [
-          "text",
-          "image"
-        ],
-        "output": [
-          "image"
-        ]
-      },
       "mode": "image_generation",
       "name": "gpt-image-1",
-      "open_weights": false,
-      "reasoning": false,
-      "release_date": "2025-04-24",
-      "status": "deprecated",
-      "temperature": false,
-      "tool_call": false
+      "status": "deprecated"
     },
     "gpt-image-1-mini": {
       "attachment": true,
@@ -2487,6 +2547,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-09-26",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -2518,6 +2579,7 @@
       "open_weights": false,
       "reasoning": false,
       "release_date": "2025-11-25",
+      "status": "deprecated",
       "temperature": false,
       "tool_call": false
     },
@@ -2599,6 +2661,22 @@
       },
       "mode": "image_generation",
       "name": "gpt-image-2.5-sunburst-2026-09-08"
+    },
+    "gpt-image-2.6-flare": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 5.0
+      },
+      "mode": "image_generation",
+      "name": "gpt-image-2.6-flare"
+    },
+    "gpt-image-2.6-sunburst": {
+      "cost": {
+        "cache_read": 1.25,
+        "input": 5.0
+      },
+      "mode": "image_generation",
+      "name": "gpt-image-2.6-sunburst"
     },
     "gpt-live-1": {
       "cost": {
@@ -2804,7 +2882,8 @@
         "image_input": 0.167
       },
       "mode": "image_generation",
-      "name": "high/1024-x-1024/gpt-image-1"
+      "name": "high/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1024/gpt-image-1.5": {
       "cost": {
@@ -2825,7 +2904,8 @@
         "image_input": 0.25
       },
       "mode": "image_generation",
-      "name": "high/1024-x-1536/gpt-image-1"
+      "name": "high/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1024-x-1536/gpt-image-1.5": {
       "cost": {
@@ -2846,7 +2926,8 @@
         "image_input": 0.25
       },
       "mode": "image_generation",
-      "name": "high/1536-x-1024/gpt-image-1"
+      "name": "high/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "high/1536-x-1024/gpt-image-1.5": {
       "cost": {
@@ -2867,7 +2948,8 @@
         "image_input": 0.011
       },
       "mode": "image_generation",
-      "name": "low/1024-x-1024/gpt-image-1"
+      "name": "low/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -2895,7 +2977,8 @@
         "image_input": 0.016
       },
       "mode": "image_generation",
-      "name": "low/1024-x-1536/gpt-image-1"
+      "name": "low/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1024-x-1536/gpt-image-1-mini": {
       "cost": {
@@ -2923,7 +3006,8 @@
         "image_input": 0.016
       },
       "mode": "image_generation",
-      "name": "low/1536-x-1024/gpt-image-1"
+      "name": "low/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "low/1536-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -2951,7 +3035,8 @@
         "image_input": 0.042
       },
       "mode": "image_generation",
-      "name": "medium/1024-x-1024/gpt-image-1"
+      "name": "medium/1024-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -2979,7 +3064,8 @@
         "image_input": 0.063
       },
       "mode": "image_generation",
-      "name": "medium/1024-x-1536/gpt-image-1"
+      "name": "medium/1024-x-1536/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1024-x-1536/gpt-image-1-mini": {
       "cost": {
@@ -3007,7 +3093,8 @@
         "image_input": 0.063
       },
       "mode": "image_generation",
-      "name": "medium/1536-x-1024/gpt-image-1"
+      "name": "medium/1536-x-1024/gpt-image-1",
+      "status": "deprecated"
     },
     "medium/1536-x-1024/gpt-image-1-mini": {
       "cost": {
@@ -3290,15 +3377,18 @@
     },
     "sora-2": {
       "mode": "video_generation",
-      "name": "sora-2"
+      "name": "sora-2",
+      "status": "deprecated"
     },
     "sora-2-pro": {
       "mode": "video_generation",
-      "name": "sora-2-pro"
+      "name": "sora-2-pro",
+      "status": "deprecated"
     },
     "sora-2-pro-high-res": {
       "mode": "video_generation",
-      "name": "sora-2-pro-high-res"
+      "name": "sora-2-pro-high-res",
+      "status": "deprecated"
     },
     "standard/1024-x-1024/gpt-image-1.5": {
       "cost": {

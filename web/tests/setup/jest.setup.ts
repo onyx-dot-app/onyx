@@ -37,6 +37,15 @@ jest.mock("@testing-library/react", () => {
   return { ...actual, render };
 });
 
+// Every link and navigation goes through `@opal/navigation`, which reads the
+// app router; see mocks/nextNavigation.ts.
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("next/navigation")>("next/navigation"),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+}));
+
 // Only set up browser-specific mocks if we're in a jsdom environment
 if (typeof window !== "undefined") {
   // Polyfill fetch for jsdom

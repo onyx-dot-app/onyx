@@ -144,7 +144,7 @@ describe("ChatTaskModelSettings", () => {
     jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
       if (input === SWR_KEYS.decisionModel) {
         if (init?.method === "POST")
-          decisionModel = { provider_id: 7, model_name: "decisions" };
+          decisionModel = JSON.parse(String(init.body)) as DefaultModel;
         if (init?.method === "DELETE") decisionModel = null;
         return new Response(
           JSON.stringify({
@@ -163,6 +163,18 @@ describe("ChatTaskModelSettings", () => {
                         supports_image_input: false,
                         supports_reasoning: false,
                         supports_chat: false,
+                        supports_decisions: true,
+                      },
+                      {
+                        id: 12,
+                        name: "gpt-6-luna",
+                        display_name: "GPT-6 Luna",
+                        display_name_code: "openai_decisions",
+                        is_visible: true,
+                        max_input_tokens: null,
+                        supports_image_input: false,
+                        supports_reasoning: false,
+                        supports_chat: true,
                         supports_decisions: true,
                       },
                     ],
@@ -188,7 +200,7 @@ describe("ChatTaskModelSettings", () => {
           defaultSearchSelection =
             init?.method === "DELETE"
               ? null
-              : { provider_id: 8, model_name: "search-mini" };
+              : (JSON.parse(String(init?.body)) as DefaultModel);
         }
         return response;
       }
@@ -319,7 +331,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT Legacy"
     );
 
@@ -342,7 +354,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(0));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -372,7 +384,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(0);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "GPT-6 Luna"
     );
     await user.click(screen.getByRole("option", { name: /GPT-6 Luna/ }));
@@ -411,7 +423,7 @@ describe("ChatTaskModelSettings", () => {
     const selector = taskSelector(1);
     await user.click(selector);
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Search Mini"
     );
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
@@ -437,7 +449,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Decision Model A"
     );
     await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
@@ -459,7 +471,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Search Mini"
     );
     await user.click(screen.getByRole("option", { name: /Search Mini/ }));
@@ -486,7 +498,7 @@ describe("ChatTaskModelSettings", () => {
 
     await user.click(taskSelector(1));
     await user.type(
-      screen.getByRole("textbox", { name: "Search" }),
+      screen.getByRole("searchbox", { name: "Search" }),
       "Decision Model A"
     );
     await user.click(screen.getByRole("option", { name: /Decision Model A/ }));
@@ -499,5 +511,70 @@ describe("ChatTaskModelSettings", () => {
       await screen.findByDisplayValue("Decision Model A")
     ).toBeInTheDocument();
     expect(taskSelector(1)).toBeEnabled();
+  });
+
+  test("lists decision models above language models, and a dual model in both", async () => {
+    const user = setupUser();
+    await renderTaskModels();
+
+    await user.click(taskSelector(1));
+    // A search opens every provider divider.
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
+    const options = screen
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "");
+    const decisionIndex = options.findIndex((text) =>
+      text.includes("OpenAI Decisions (GPT-6 Luna)")
+    );
+    const languageIndex = options.findIndex(
+      (text) => text.includes("GPT-6 Luna") && !text.includes("Decision")
+    );
+    expect(screen.getByText("Decision Models")).toBeInTheDocument();
+    expect(decisionIndex).toBeGreaterThan(-1);
+    expect(languageIndex).toBeGreaterThan(decisionIndex);
+  });
+
+  test("the language copy of a dual model keeps LLM selection", async () => {
+    const user = setupUser();
+    await renderTaskModels();
+
+    await user.click(taskSelector(1));
+    await user.type(screen.getByRole("searchbox", { name: "Search" }), "Luna");
+    const lunaOptions = screen.getAllByRole("option", { name: /GPT-6 Luna/ });
+    const languageCopy = lunaOptions.find(
+      (option) => !option.textContent?.includes("Decision")
+    );
+    if (!languageCopy) throw new Error("Missing language copy of GPT-6 Luna");
+    await user.click(languageCopy);
+
+    await waitFor(() =>
+      expect(defaultSearchSelection).toEqual({
+        provider_id: 7,
+        model_name: "gpt-6-luna",
+      })
+    );
+    expect(decisionModel).toBeNull();
+    expect(taskSelector(1)).toHaveValue("GPT-6 Luna");
+  });
+
+  test("the decision copy of a dual model takes the decision path", async () => {
+    defaultSearchSelection = { provider_id: 8, model_name: "search-mini" };
+    const user = setupUser();
+    await renderTaskModels();
+    await screen.findByDisplayValue("Search Mini");
+
+    await user.click(taskSelector(1));
+    await user.click(screen.getByRole("option", { name: /OpenAI Decisions/ }));
+
+    await waitFor(() =>
+      expect(decisionModel).toEqual({
+        provider_id: 7,
+        model_name: "gpt-6-luna",
+      })
+    );
+    await waitFor(() => expect(defaultSearchSelection).toBeNull());
+    expect(
+      await screen.findByDisplayValue("OpenAI Decisions (GPT-6 Luna)")
+    ).toBeInTheDocument();
   });
 });

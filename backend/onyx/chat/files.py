@@ -37,16 +37,18 @@ from onyx.file_store.utils import (
     plaintext_file_name_for_id,
     store_plaintext,
 )
+from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
-from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.server.query_and_chat.chat_utils import (
+    is_code_interpreter_staged_mime_type,
+    mime_type_to_chat_file_type,
+)
 from onyx.tools.models import ChatFile, SearchToolUsage
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
-
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def collect_available_file_ids(
@@ -110,8 +112,8 @@ def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular project/persona files for code-interpreter as lazy
-    ChatFile instances.
+    """Stage tabular and Office project/persona files for code-interpreter as
+    lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
     pulls from the file store only when PythonTool actually accesses
@@ -129,7 +131,7 @@ def load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not mime_type_to_chat_file_type(user_file.file_type).use_metadata_only():
+        if not is_code_interpreter_staged_mime_type(user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -341,7 +343,11 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         file_type=file_type,
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata.model_copy(
-        update={"staged_for_tools": file_type.use_metadata_only()}
+        update={
+            "staged_for_tools": is_code_interpreter_staged_mime_type(
+                user_file.file_type
+            )
+        }
     )
 
 
@@ -477,7 +483,10 @@ def _get_or_extract_plaintext(
 
 
 def _load_chat_file(
-    file_descriptor: FileDescriptor, token_count: int, content_pending: bool
+    file_descriptor: FileDescriptor,
+    token_count: int,
+    content_pending: bool,
+    include_text: bool = True,
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -502,7 +511,7 @@ def _load_chat_file(
     # cached-plaintext path avoids reading the original bytes on the steady
     # state; only the cache miss branch opens the binary stream.
     content_text: str | None = None
-    if file_type.is_text_file():
+    if include_text and file_type.is_text_file():
 
         def _extract() -> str:
             # Only invoked on cache miss; bytes-read happens here, not upfront.
@@ -573,8 +582,17 @@ def _load_chat_file(
 _MAX_PARALLEL_CHAT_FILE_LOADS = 16
 
 
-def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
-    """Load attachments from metadata without retaining a preparation session."""
+def load_chat_files(
+    inputs: list[ChatFileInput], *, text_file_ids: set[str] | None = None
+) -> list[ChatLoadedFile]:
+    """Load selected attachment text; keep every file available through lazy byte reads."""
+    if text_file_ids is not None and not text_file_ids:
+        return [
+            _load_chat_file(
+                item.descriptor, item.token_count, item.content_pending, False
+            )
+            for item in inputs
+        ]
     # Raw bytes are loaded lazily. Even so, cap fan-out so a session with
     # hundreds of files cannot start hundreds of concurrent storage reads.
     # The shared parallel helper erases each callable's return type.
@@ -584,7 +602,12 @@ def load_chat_files(inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
             [
                 (
                     _load_chat_file,
-                    (item.descriptor, item.token_count, item.content_pending),
+                    (
+                        item.descriptor,
+                        item.token_count,
+                        item.content_pending,
+                        text_file_ids is None or item.descriptor["id"] in text_file_ids,
+                    ),
                 )
                 for item in inputs
             ],

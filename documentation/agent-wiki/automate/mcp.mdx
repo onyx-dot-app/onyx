@@ -129,7 +129,8 @@ Open **Agents & Actions** in the left sidebar.
     connect in Craft and you are connected in chat too, and vice versa.
 
     <Note>
-      Craft tool calls are gated per tool at the sandbox boundary. By default the agent asks before each call;
+      Craft tool calls are gated per tool at the sandbox boundary. By default the agent asks before each call,
+      unless the server marks the tool as read-only;
       admins can set a tool to **Auto-approve** or **Disabled** in **Admin Panel → Plugins**.
     </Note>
   </Tab>
@@ -208,12 +209,6 @@ Edits are ordinary git commits attributed to you, so anything an agent does is v
 
   <Accordion title="No MCP server found from another directory">
     The server was added at local scope. Re-add it with `-s user` to make it available everywhere.
-  </Accordion>
-
-  <Accordion title="The connection drops or never establishes in local development">
-    Point the client at the backend directly (`http://localhost:8080/api/mcp`) rather than the Next.js dev server.
-    The dev server's `/api/:path*` rewrite buffers responses and breaks the transport when the client sends `Accept:
-    text/event-stream`.
   </Accordion>
 
   <Accordion title="Links in tool results point at the wrong host">

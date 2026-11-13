@@ -6,7 +6,32 @@ moved {
   to   = module.eks.module.eks_managed_node_group["sandbox"]
 }
 
+# Upstream v21 dropped enable_security_groups_for_pods (default true in v20),
+# so the cluster role keeps this policy through iam_role_additional_policies.
+moved {
+  from = module.eks.aws_iam_role_policy_attachment.this["AmazonEKSVPCResourceController"]
+  to   = module.eks.aws_iam_role_policy_attachment.additional["AmazonEKSVPCResourceController"]
+}
+
 locals {
+  # Upstream v21 changed these node group defaults. Pin the v20 values so the
+  # upgrade does not roll nodes, change AMIs or resize groups. A node group can
+  # still override any of them.
+  node_group_defaults = merge(
+    {
+      ami_type                       = "AL2023_x86_64_STANDARD"
+      enable_monitoring              = true
+      use_latest_ami_release_version = false
+      enable_efa_only                = false
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 2
+      }
+    },
+    local.node_group_iam_role_settings,
+  )
+
   s3_bucket_arns = [for name in var.s3_bucket_names : {
     bucket_arn     = "arn:aws:s3:::${name}"
     bucket_objects = "arn:aws:s3:::${name}/*"
@@ -118,6 +143,35 @@ locals {
     }
   } : {}
 
+  craft_sandbox_firecracker       = var.craft_sandbox_runtime == "firecracker"
+  craft_firecracker_max_map_count = 1048576
+  craft_firecracker_sysctl_script = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    echo "vm.max_map_count = ${local.craft_firecracker_max_map_count}" > /etc/sysctl.d/99-onyx-firecracker.conf
+    sysctl -w vm.max_map_count=${local.craft_firecracker_max_map_count}
+  EOT
+  craft_sandbox_metal = alltrue([
+    for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
+  ])
+
+  craft_sandbox_workload_taint = {
+    key    = "workload"
+    value  = "sandbox"
+    effect = "NO_SCHEDULE"
+  }
+  craft_sandbox_metadata_options = {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+  # cluster-autoscaler auto-discovery: tag the node group's ASG so demand
+  # beyond min_size adds nodes (and scales back down when idle).
+  craft_sandbox_autoscaler_tags = {
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+  }
+
   # Optional dedicated Craft sandbox node group. Sandbox pods pin here
   # via nodeSelector onyx.app/workload=sandbox + toleration of the workload taint.
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
@@ -125,27 +179,74 @@ locals {
   # stops being the binding scheduling dimension (each sandbox pod reserves ~5.5Gi
   # eph; the AMI default ~20Gi caps a node at ~3 sandboxes vs ~7 by CPU).
   craft_sandbox_node_groups = var.enable_craft ? {
-    sandbox = {
+    sandbox = merge({
       name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types
       min_size       = var.craft_sandbox_node_min_size
       max_size       = var.craft_sandbox_node_max_size
       desired_size   = var.craft_sandbox_node_desired_size
-      labels = {
-        "onyx.app/workload" = "sandbox"
-      }
-      taints = [
-        {
-          key    = "workload"
-          value  = "sandbox"
+      labels = merge(
+        { "onyx.app/workload" = "sandbox" },
+        local.craft_sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+      )
+      # Kubelet does not count microVM memory, so a Firecracker node also
+      # carries the onyx.app/kvm taint. Only the host agent and preflight
+      # tolerate it; pod sandboxes and the image prepuller stay off.
+      taints = concat(
+        [local.craft_sandbox_workload_taint],
+        local.craft_sandbox_firecracker ? [{
+          key    = "onyx.app/kvm"
+          value  = "true"
           effect = "NO_SCHEDULE"
+        }] : [],
+      )
+      metadata_options = local.craft_sandbox_metadata_options
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.craft_sandbox_node_disk_size_gb
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+            iops                  = var.craft_sandbox_node_disk_iops
+            throughput            = var.craft_sandbox_node_disk_throughput
+          }
         }
-      ]
-      metadata_options = {
-        http_endpoint               = "enabled"
-        http_tokens                 = "required"
-        http_put_response_hop_limit = 1
       }
+      tags = local.craft_sandbox_autoscaler_tags
+      },
+      # Firecracker needs /dev/kvm. Non-metal Intel types get it from nested
+      # virtualization on the launch template. A spot reclaim kills every
+      # microVM on the node, so the group stays on-demand.
+      local.craft_sandbox_firecracker ? { capacity_type = "ON_DEMAND" } : {},
+      local.craft_sandbox_firecracker ? {
+        # AL2023 ships vm.max_map_count 524288; the Firecracker host agent
+        # preflight needs 1048576.
+        cloudinit_pre_nodeadm = [{
+          content_type = "text/x-shellscript"
+          content      = local.craft_firecracker_sysctl_script
+        }]
+      } : {},
+      local.craft_sandbox_firecracker && !local.craft_sandbox_metal ? {
+        cpu_options = { nested_virtualization = "enabled" }
+      } : {},
+    )
+  } : {}
+
+  # Optional pod sandbox group beside a Firecracker group. It has the same
+  # label and taint as a pod-runtime sandbox group but no onyx.app/kvm, so pod
+  # sandboxes and the image prepuller land here and not on the KVM nodes.
+  craft_pod_sandbox_node_groups = var.enable_craft && var.enable_craft_pod_sandbox_node_group ? {
+    sandbox_pod = {
+      name             = "sandbox-pod-group"
+      instance_types   = var.craft_pod_sandbox_node_instance_types
+      min_size         = var.craft_pod_sandbox_node_min_size
+      max_size         = var.craft_pod_sandbox_node_max_size
+      desired_size     = var.craft_pod_sandbox_node_desired_size
+      labels           = { "onyx.app/workload" = "sandbox" }
+      taints           = [local.craft_sandbox_workload_taint]
+      metadata_options = local.craft_sandbox_metadata_options
       block_device_mappings = {
         xvda = {
           device_name = "/dev/xvda"
@@ -159,28 +260,23 @@ locals {
           }
         }
       }
-      # cluster-autoscaler auto-discovery: tag the node group's ASG so demand
-      # beyond min_size adds nodes (and scales back down when idle).
-      tags = {
-        "k8s.io/cluster-autoscaler/enabled"             = "true"
-        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
-      }
+      tags = local.craft_sandbox_autoscaler_tags
     }
   } : {}
 }
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.23"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  name               = var.cluster_name
+  kubernetes_version = var.cluster_version
 
-  vpc_id                               = var.vpc_id
-  subnet_ids                           = var.subnet_ids
-  cluster_endpoint_public_access       = var.public_cluster_enabled
-  cluster_endpoint_private_access      = var.private_cluster_enabled
-  cluster_endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  vpc_id                       = var.vpc_id
+  subnet_ids                   = var.subnet_ids
+  endpoint_public_access       = var.public_cluster_enabled
+  endpoint_private_access      = var.private_cluster_enabled
+  endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
   # By default the cluster-admin access entry and the KMS key administrator
   # are whoever runs Terraform, so an apply by a different principal moves
   # them. cluster_admin_principal_arn pins both. It reuses the module's own
@@ -205,18 +301,22 @@ module "eks" {
 
   iam_role_permissions_boundary = var.iam_role_permissions_boundary
   iam_role_path                 = var.iam_role_path
+  iam_role_additional_policies = {
+    AmazonEKSVPCResourceController = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSVPCResourceController"
+  }
 
   # Control plane logging
-  cluster_enabled_log_types              = var.cluster_enabled_log_types
+  enabled_log_types                      = var.cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
   # Opt-in per cluster: adopts the VPC CNI addon and turns on NetworkPolicy
   # enforcement. Off by default so existing clusters' NetworkPolicies stay
   # inert (the cloud cluster has legacy policies of unknown effect).
-  cluster_addons = var.enable_network_policy ? {
+  addons = var.enable_network_policy ? {
     vpc-cni = {
       # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
       addon_version = var.vpc_cni_addon_version
+      most_recent   = false
       # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
       # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
       resolve_conflicts_on_create = "OVERWRITE"
@@ -227,19 +327,16 @@ module "eks" {
     }
   } : {}
 
-  eks_managed_node_group_defaults = merge(
-    { ami_type = "AL2023_x86_64_STANDARD" },
-    local.node_group_iam_role_settings,
-  )
-
   eks_managed_node_groups = {
-    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups) : k => merge(v,
+    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups, local.craft_pod_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
           k == "main" ? var.main_node_instance_types :
           k == "vespa" ? var.vespa_node_instance_types :
           v.instance_types
         )
+        # Upstream v21 takes taints as a map. Accept the list form too.
+        taints = try({ for i, t in tolist(v.taints) : tostring(i) => t }, v.taints, null)
       },
       # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {

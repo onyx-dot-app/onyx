@@ -3,6 +3,9 @@ default_install_hook_types:
   - post-checkout
   - post-merge
   - post-rewrite
+# Vendored upstream skills (.agents/skills/sync-vendored-skills.sh) are copied
+# verbatim, so our linters do not apply to them.
+exclude: ^\.agents/skills/greptile/
 repos:
   - repo: https://github.com/astral-sh/uv-pre-commit
     # From: https://github.com/astral-sh/uv-pre-commit/pull/53/commits/d30b4298e4fb63ce8609e29acdbcf4c9018a483c
@@ -142,7 +145,7 @@ repos:
         # (lxml, PIL, office.*). Both are excluded from the full ty run via
         # [tool.ty.src] in pyproject; repeat here because the explicit filenames
         # bypass that discovery-time exclude too.
-        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/)
+        exclude: ^backend/onyx/(server/features/build/sandbox/image/sandbox_daemon/|skills/builtin/|microvm/generated/)
       - id: uv-run
         alias: ruff
         name: ruff
@@ -151,12 +154,16 @@ repos:
         args: ["--frozen", "--only-group", "ruff", "ruff", "check", "--fix"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: ruff-format
         name: ruff format
         args: ["--frozen", "--only-group", "ruff", "ruff", "format"]
         pass_filenames: true
         types_or: [python]
+        # protoc output (backend/onyx/microvm/generated/regenerate.sh).
+        exclude: ^backend/onyx/microvm/generated/
       - id: uv-run
         alias: terraform-fmt
         name: terraform fmt
@@ -294,6 +301,14 @@ repos:
         # Deleted chart files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: microvm-python-stubs
+        name: Firecracker Python gRPC stubs match the protos
+        language: python
+        entry: bash backend/onyx/microvm/generated/regenerate.sh --check
+        additional_dependencies: [grpcio-tools==1.80.0]
+        pass_filenames: false
+        stages: [pre-commit]
+        files: ^(microvm/proto/(hostagent|sandboxd)/v1/[^/]+\.proto|backend/onyx/microvm/generated/.*)$
       - id: i18n-copy-changes
         name: translation updates for English copy changes
         language: system

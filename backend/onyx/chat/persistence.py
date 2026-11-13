@@ -5,7 +5,7 @@ import time
 from concurrent.futures import Future
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
-from onyx.agents.models import RunState
+from onyx.agents.models import RunFailure, RunFailureKind, RunState, RunStatus
 from onyx.agents.runtime import Run, validate_run_completion
 from onyx.chat.citation_processor import CitationMapping
 from onyx.chat.errors import chat_error
@@ -19,7 +19,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.stream_buffer import ChatDelivery
-from onyx.llm.cancellation import AgentCancelled
+from onyx.llm.cancellation import AgentCancelled, CancelReason
 from onyx.llm.interfaces import LLM
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.utils.logger import setup_logger
@@ -47,7 +47,7 @@ class ChatResponsePersistence(RunStore):
         self.llm = llm
         self.delivery = delivery
         self.outcome = outcome
-        self.tool_ids: dict[str, int] = {}
+        self.tool_ids: dict[str, int | None] = {}
         self.initial_citations: CitationMapping = {}
         self.coordinator = coordinator
         self._lock = threading.Lock()
@@ -64,8 +64,22 @@ class ChatResponsePersistence(RunStore):
             error = failure
         self._save(snapshot, error, delivery_failed=run.delivery_failed)
 
-    def save_failure(self, error: BaseException) -> None:
-        self._save(None, error)
+    def save_failure(
+        self, error: BaseException, cancellation_reason: CancelReason | None = None
+    ) -> None:
+        snapshot = None
+        if isinstance(error, AgentCancelled) and cancellation_reason == "deadline":
+            # Preparation can time out before a runtime run exists.
+            snapshot = RunState(
+                run_id=str(self.message_id),
+                agent_id=str(self.history_store.chat_session_id),
+                status=RunStatus.CANCELLED,
+                failure=RunFailure(
+                    kind=RunFailureKind.DEADLINE,
+                    message="The response reached its time limit during preparation.",
+                ),
+            )
+        self._save(snapshot, error)
 
     def report_worker_failure(self, error: Exception) -> None:
         """Resolve a failed response without racing a concurrent save."""

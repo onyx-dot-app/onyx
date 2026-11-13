@@ -68,6 +68,7 @@ export default function NonAdminStep() {
           aria-label="non-admin-confirmation"
         >
           <ContentAction
+            font="main-ui-body"
             icon={({ className, ...props }) => (
               <SvgCheckCircle
                 className={cn(className, "stroke-status-success-05")}
@@ -75,9 +76,7 @@ export default function NonAdminStep() {
               />
             )}
             title={t("nonAdminStep.confirmation.title")}
-            sizePreset="main-ui"
-            variant="body"
-            color="muted"
+            titleColor="text-03"
             padding={0}
             rightChildren={
               <Button
@@ -143,6 +142,7 @@ export default function NonAdminStep() {
           >
             <div className="pl-1">
               <ContentAction
+                font="main-ui-action"
                 icon={() => (
                   <IconContainer
                     size="secondary"
@@ -151,8 +151,6 @@ export default function NonAdminStep() {
                   />
                 )}
                 title={savedName}
-                sizePreset="main-ui"
-                variant="section"
                 padding={0}
                 center
                 rightChildren={

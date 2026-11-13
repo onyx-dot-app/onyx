@@ -7,6 +7,79 @@ locals {
   # A management policy with no rules is rejected, so only create one when at
   # least one rule applies.
   has_lifecycle_rules = var.enable_versioning || var.expiration_days > 0 || var.transition_to_cool
+
+  # Key Vault names are global, 3-24 characters, and must start with a letter.
+  # 3 + 13 + 8 = 24, so a digest of the full account name always survives.
+  key_vault_name = coalesce(var.key_vault_name, "kv-${substr(var.storage_account_name, 0, 13)}${substr(sha1(var.storage_account_name), 0, 8)}")
+}
+
+# A key owned by this account alone. Azure storage encryption with a customer
+# key needs purge protection on the vault, and reaches the key through a
+# user-assigned identity. Access policies, not RBAC, so the key can be created
+# in the same apply without waiting on role propagation.
+data "azurerm_client_config" "current" {
+  count = var.create_customer_managed_key ? 1 : 0
+}
+
+resource "azurerm_user_assigned_identity" "cmk" {
+  count = var.create_customer_managed_key ? 1 : 0
+
+  name                = "${var.storage_account_name}-cmk"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tags                = var.tags
+}
+
+resource "azurerm_key_vault" "cmk" {
+  count = var.create_customer_managed_key ? 1 : 0
+
+  name                = local.key_vault_name
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  tenant_id           = data.azurerm_client_config.current[0].tenant_id
+  sku_name            = "standard"
+
+  purge_protection_enabled   = true
+  soft_delete_retention_days = var.key_vault_soft_delete_retention_days
+
+  tags = var.tags
+
+  # Whoever runs Terraform manages the key.
+  access_policy {
+    tenant_id = data.azurerm_client_config.current[0].tenant_id
+    object_id = data.azurerm_client_config.current[0].object_id
+    key_permissions = [
+      "Create", "Delete", "Get", "GetRotationPolicy", "List", "Recover",
+      "SetRotationPolicy", "Update",
+    ]
+  }
+
+  # The storage account wraps and unwraps its data key, nothing else.
+  access_policy {
+    tenant_id       = azurerm_user_assigned_identity.cmk[0].tenant_id
+    object_id       = azurerm_user_assigned_identity.cmk[0].principal_id
+    key_permissions = ["Get", "UnwrapKey", "WrapKey"]
+  }
+}
+
+resource "azurerm_key_vault_key" "cmk" {
+  count = var.create_customer_managed_key ? 1 : 0
+
+  name         = var.storage_account_name
+  key_vault_id = azurerm_key_vault.cmk[0].id
+  key_type     = "RSA"
+  key_size     = 3072
+  key_opts     = ["unwrapKey", "wrapKey"]
+
+  # No expire_after: an expired key would lock the account out if a rotation
+  # failed. The account follows the versionless ID to each new version.
+  rotation_policy {
+    automatic {
+      time_after_creation = var.key_rotation_period
+    }
+  }
+
+  tags = var.tags
 }
 
 resource "azurerm_storage_account" "this" {
@@ -30,6 +103,22 @@ resource "azurerm_storage_account" "this" {
   default_to_oauth_authentication = true
 
   tags = var.tags
+
+  dynamic "identity" {
+    for_each = var.create_customer_managed_key ? [1] : []
+    content {
+      type         = "UserAssigned"
+      identity_ids = [azurerm_user_assigned_identity.cmk[0].id]
+    }
+  }
+
+  dynamic "customer_managed_key" {
+    for_each = var.create_customer_managed_key ? [1] : []
+    content {
+      key_vault_key_id          = azurerm_key_vault_key.cmk[0].versionless_id
+      user_assigned_identity_id = azurerm_user_assigned_identity.cmk[0].id
+    }
+  }
 
   blob_properties {
     versioning_enabled = var.enable_versioning

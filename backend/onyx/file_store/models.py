@@ -1,11 +1,14 @@
 import base64
 import threading
+from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, NotRequired, Self
+from typing import Any, Callable, Literal, NotRequired, Self
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
+
+from onyx.configs.constants import FileOrigin
 
 
 class _LazyContent:
@@ -242,3 +245,46 @@ class ExtractedContextFiles(BaseModel):
     uncapped_token_count: int | None
     # File listings supplied to the model for retrieval through FileReaderTool.
     file_metadata_for_tool: list[FileToolMetadata] = []
+
+
+class PresignedRequest(BaseModel):
+    """A short-lived request for one object and one method. The client needs
+    no storage credentials."""
+
+    model_config = ConfigDict(frozen=True)
+
+    url: str
+    method: Literal["GET", "PUT"]
+    # The client must send these headers unchanged. The signature covers most
+    # of them, so a changed or missing header fails the request.
+    headers: dict[str, str]
+    expires_at: datetime
+
+
+class PresignedUpload(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    pending_upload_id: str
+    # The file ID that finalize_presigned_upload gives the file.
+    file_id: str
+    request: PresignedRequest
+
+
+class StoredObjectStat(BaseModel):
+    size: int
+    # Hex SHA-256, when the store keeps one for the object.
+    sha256: str | None
+
+
+class PendingPresignedUpload(BaseModel):
+    """What finalize_presigned_upload checks the uploaded object against.
+    Kept in the cache backend, so no file_record row exists before finalize."""
+
+    file_id: str
+    display_name: str | None
+    file_origin: FileOrigin
+    file_type: str
+    bucket_name: str
+    object_key: str
+    size: int
+    sha256: str

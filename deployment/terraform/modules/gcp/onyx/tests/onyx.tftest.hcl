@@ -10,6 +10,14 @@ mock_provider "google" {
       number = "123456789012"
     }
   }
+
+  # A mocked random string is not a valid IAM member.
+  override_data {
+    target = module.gcs_sandbox_archive[0].data.google_storage_project_service_account.this
+    values = {
+      member = "serviceAccount:service-123456789012@gs-project-accounts.iam.gserviceaccount.com"
+    }
+  }
 }
 
 mock_provider "kubernetes" {}
@@ -229,6 +237,39 @@ run "the_bucket_grant_goes_to_the_workload_service_account" {
   assert {
     condition     = output.workload_identity_principal == local.bucket_object_admin_members[0]
     error_message = "The published principal must be the one the bucket grants."
+  }
+}
+
+run "the_pod_runtime_needs_no_iam_credentials_api" {
+  command = plan
+
+  assert {
+    condition     = !contains(local.project_apis, "iamcredentials.googleapis.com") && output.workload_google_service_account_email == null
+    error_message = "Only the Firecracker runtime signs GCS URLs, so the default adds no API and no Google service account."
+  }
+}
+
+run "firecracker_grants_the_bucket_to_the_signing_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = local.bucket_object_admin_members == ["serviceAccount:onyx-default-workload@example-project.iam.gserviceaccount.com"]
+    error_message = "The pods act as the Google service account, so the bucket grant must go to it."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == "onyx-default-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The composition should publish the Google service account."
+  }
+
+  assert {
+    condition     = contains(local.project_apis, "iamcredentials.googleapis.com")
+    error_message = "signBlob is part of the IAM Credentials API."
   }
 }
 
@@ -515,4 +556,73 @@ run "rejects_a_size_that_is_not_a_tier" {
   }
 
   expect_failures = [var.size]
+}
+
+run "no_sandbox_archive_bucket_by_default" {
+  command = plan
+
+  assert {
+    condition     = length(module.gcs_sandbox_archive) == 0 && output.sandbox_archive_bucket_name == null
+    error_message = "The sandbox archive bucket must be opt-in."
+  }
+
+  assert {
+    condition     = !contains(local.project_apis, "cloudkms.googleapis.com")
+    error_message = "The Cloud KMS API should only be enabled for the sandbox archive bucket."
+  }
+}
+
+run "the_sandbox_archive_bucket_is_created_on_request" {
+  command = plan
+
+  variables {
+    enable_sandbox_archive_bucket = true
+  }
+
+  # Key, lifecycle and grant behavior is covered by the gcs module tests.
+  assert {
+    condition     = length(module.gcs_sandbox_archive) == 1
+    error_message = "enable_sandbox_archive_bucket should create the archive bucket."
+  }
+
+  assert {
+    condition     = contains(local.project_apis, "cloudkms.googleapis.com")
+    error_message = "The archive key needs the Cloud KMS API."
+  }
+
+  assert {
+    condition     = output.sandbox_archive_bucket_name == local.sandbox_archive_bucket_name
+    error_message = "The archive bucket name should reach the output."
+  }
+
+  assert {
+    condition     = local.sandbox_archive_bucket_name != local.bucket_name && can(regex("^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$", local.sandbox_archive_bucket_name))
+    error_message = "The archive bucket name must be valid and differ from the file store name."
+  }
+}
+
+run "a_long_name_keeps_the_archive_and_file_store_buckets_apart" {
+  command = plan
+
+  variables {
+    name                          = "onyx-enterprise-producti"
+    enable_sandbox_archive_bucket = true
+  }
+
+  assert {
+    condition     = length(local.sandbox_archive_bucket_name) <= 63 && local.sandbox_archive_bucket_name != local.bucket_name
+    error_message = "Truncation must not make the archive bucket name collide with the file store name."
+  }
+}
+
+run "rejects_an_archive_bucket_named_like_the_file_store" {
+  command = plan
+
+  variables {
+    enable_sandbox_archive_bucket = true
+    bucket_name                   = "onyx-files-shared"
+    sandbox_archive_bucket_name   = "onyx-files-shared"
+  }
+
+  expect_failures = [terraform_data.sandbox_archive_bucket_name_check]
 }

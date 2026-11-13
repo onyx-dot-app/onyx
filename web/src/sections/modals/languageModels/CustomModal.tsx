@@ -44,8 +44,8 @@ import {
   InputPadder,
   InputVertical,
   toast,
+  Section,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 
 // ─── Model Configuration List ─────────────────────────────────────────────────
 
@@ -471,11 +471,10 @@ export default function CustomModal({
       <InputPadder>
         <Section gap={3}>
           <Content
+            font="main-content-emphasis"
             title={t("custom.envVars.title")}
             description={markdown(t("custom.envVars.description"))}
             width="full"
-            variant="section"
-            sizePreset="main-content"
           />
 
           <CustomConfigKeyValue />
@@ -493,10 +492,9 @@ export default function CustomModal({
       <Section gap={2}>
         <InputPadder>
           <Content
+            font="main-content-emphasis"
             title={t("custom.models.title")}
             description={t("custom.models.description")}
-            variant="section"
-            sizePreset="main-content"
             width="full"
           />
         </InputPadder>

@@ -5,10 +5,9 @@ import { useTranslations } from "next-intl";
 import { ChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { copyAll } from "@/app/app/message/copyingUtils";
-import { Section } from "@/layouts/general-layouts";
 import { Modal } from "@opal/components";
 import { Button, CopyButton, InputTypeIn, SelectCard } from "@opal/components";
-import { ContentAction, toast } from "@opal/layouts";
+import { ContentAction, toast, Section } from "@opal/layouts";
 import { SvgLink, SvgShare, SvgUsers } from "@opal/icons";
 import SvgCheck from "@opal/icons/check";
 import SvgLock from "@opal/icons/lock";
@@ -71,8 +70,7 @@ function PrivacyOption({
       aria-label={ariaLabel}
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={Icon}
         title={title}
         description={description}

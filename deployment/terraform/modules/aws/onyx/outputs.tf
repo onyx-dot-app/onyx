@@ -70,3 +70,13 @@ output "opensearch_domain_arn" {
   description = "OpenSearch domain ARN"
   value       = var.enable_opensearch ? module.opensearch[0].domain_arn : null
 }
+
+output "sandbox_archive_bucket_name" {
+  description = "Name of the Craft sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.s3_sandbox_archive[0].bucket_name : null
+}
+
+output "sandbox_archive_kms_key_arn" {
+  description = "ARN of the KMS key that encrypts the sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.s3_sandbox_archive[0].kms_key_arn : null
+}

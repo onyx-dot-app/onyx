@@ -11,6 +11,8 @@ const INDEX_SETTINGS_URL = ADMIN_ROUTES.INDEX_SETTINGS.path;
 const EMBEDDING_PROVIDER_API = "**/api/admin/embedding/embedding-provider**";
 const TEST_EMBEDDING_API = "**/api/admin/embedding/test-embedding";
 const SET_NEW_SETTINGS_API = "**/api/search-settings/set-new-search-settings**";
+const VECTOR_QUANTIZATION_SUPPORT_API =
+  "**/api/search-settings/vector-quantization-support";
 const UPDATE_INFERENCE_SETTINGS_API =
   "**/api/search-settings/update-inference-settings**";
 const CURRENT_SEARCH_SETTINGS_API =
@@ -1063,6 +1065,46 @@ test.describe("Index Settings: vector quantization @exclusive", () => {
   test.beforeEach(async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
+  });
+
+  test("1-bit is disabled on an OpenSearch older than 3.6", async ({
+    page,
+  }) => {
+    await page.route(VECTOR_QUANTIZATION_SUPPORT_API, async (route) => {
+      await route.fulfill({
+        status: 200,
+        body: JSON.stringify({
+          opensearch_version: "3.3",
+          levels: [
+            {
+              vector_quantization: "none",
+              supported: true,
+              min_opensearch_version: null,
+            },
+            {
+              vector_quantization: "scalar_7_bit",
+              supported: true,
+              min_opensearch_version: "2.16",
+            },
+            {
+              vector_quantization: "scalar_1_bit",
+              supported: false,
+              min_opensearch_version: "3.6",
+            },
+          ],
+        }),
+      });
+    });
+
+    const indexSettings: IndexSettingsPage = new IndexSettingsPage(page);
+    await indexSettings.goto();
+    await indexSettings.expectVectorQuantizationOption("1-bit", {
+      disabled: true,
+      note: "Needs OpenSearch 3.6+",
+    });
+    await indexSettings.expectVectorQuantizationOption("7-bit", {
+      disabled: false,
+    });
   });
 
   test("a quantization change re-indexes with the chosen level", async ({

@@ -29,6 +29,9 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool, parse_tool_arguments
 from onyx.tools.models import (
     ChatFile,
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     LlmPythonExecutionResult,
     PythonArguments,
     PythonExecutionDelta,
@@ -102,10 +105,33 @@ def _code_references_file(filename: str, code: str) -> bool:
     return filename in code or _safe_code_interpreter_filename(filename) in code
 
 
-def _read_chat_file_content(chat_file: ChatFile) -> bytes:
+def _read_chat_file_content(chat_file: ChatFile) -> bytes | None:
     """Materialize a (possibly lazy) chat file's bytes; the object-store read
     happens here. Extracted so reads can be batched in parallel."""
-    return chat_file.content
+    # Catch here: the parallel helper logs full exception text.
+    try:
+        return chat_file.content
+    except Exception as e:
+        logger.warning(
+            "Failed to read file for Python execution: file_id=%s (%s)",
+            chat_file.file_id,
+            type(e).__name__,
+        )
+        return None
+
+
+def _upload_file_content(
+    client: CodeInterpreterClient, content: bytes, file_name: str
+) -> str | None:
+    try:
+        return client.upload_file(content, file_name)
+    except Exception as e:
+        logger.warning(
+            "Failed to upload file for Python execution: %d bytes (%s)",
+            len(content),
+            type(e).__name__,
+        )
+        return None
 
 
 def _staging_priority(chat_files: list[ChatFile], code: str) -> list[int]:
@@ -164,10 +190,6 @@ def _select_files_for_staging(
         over_budget = False
         for idx, content in zip(batch, contents, strict=True):
             if content is None:
-                logger.warning(
-                    "Failed to read file for Python execution: %s",
-                    chat_files[idx].filename,
-                )
                 read_failures.append(chat_files[idx].filename)
                 continue
             # Always stage at least one file; otherwise stop at the byte budget.
@@ -242,6 +264,10 @@ class PythonTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -252,6 +278,12 @@ class PythonTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(
+            kind=CodeModeResultKind.JSON_OBJECT, model=LlmPythonExecutionResult
+        )
 
     @override
     @classmethod
@@ -269,8 +301,10 @@ class PythonTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     CODE_FIELD: {
                         "type": "string",
@@ -313,15 +347,15 @@ class PythonTool(Tool):
         misses = [p for p in plans if p.cache_key not in self._uploaded_file_cache]
         if misses:
             upload_results = run_functions_tuples_in_parallel(
-                [(client.upload_file, (p.content, p.file_name)) for p in misses],
+                [
+                    (_upload_file_content, (client, p.content, p.file_name))
+                    for p in misses
+                ],
                 allow_failures=True,
                 max_workers=CODE_INTERPRETER_STAGING_CONCURRENCY,
             )
             for plan, ci_file_id in zip(misses, upload_results, strict=True):
                 if ci_file_id is None:
-                    logger.warning(
-                        "Failed to upload file for Python execution: %s", plan.file_name
-                    )
                     continue
                 self._uploaded_file_cache[plan.cache_key] = ci_file_id
 
@@ -333,7 +367,6 @@ class PythonTool(Tool):
                 failed_uploads.append(plan.file_name)
                 continue
             files_to_stage.append({"path": plan.file_name, "file_id": ci_file_id})
-            logger.info("Staged file for Python execution: %s", plan.file_name)
         return files_to_stage, failed_uploads
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
@@ -371,10 +404,20 @@ class PythonTool(Tool):
                 selection.read_failures + upload_failures,
             )
             if staging_notice:
-                logger.warning(staging_notice)
+                logger.warning(
+                    "Python execution staging incomplete: staged=%d dropped=%d failed=%d",
+                    len(files_to_stage),
+                    selection.dropped_by_caps,
+                    len(selection.read_failures) + len(upload_failures),
+                )
 
             try:
-                logger.debug("Executing code: %s", code)
+                logger.debug(
+                    "Executing code: %d chars, %d lines, %d staged files",
+                    len(code),
+                    code.count("\n") + 1,
+                    len(files_to_stage),
+                )
 
                 # Execute code with streaming (falls back to batch if unavailable)
                 stdout_parts: list[str] = []
@@ -467,8 +510,8 @@ class PythonTool(Tool):
                     except Exception as e:
                         logger.error(
                             "Failed to handle generated file %s: %s",
-                            workspace_file.path,
-                            e,
+                            workspace_file.file_id,
+                            type(e).__name__,
                         )
 
                 # Cleanup Code Interpreter files (generated files)
@@ -509,7 +552,7 @@ class PythonTool(Tool):
                 )
 
             except Exception as e:
-                logger.error("Python execution failed: %s", e)
+                logger.error("Python execution failed: %s", type(e).__name__)
                 error_msg = str(e)
 
                 # Return error result

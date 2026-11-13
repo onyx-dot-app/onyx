@@ -29,8 +29,10 @@ The full attachment text remains in recorded history. Project and persona file t
 A summary records what the agent knew when it was created. Changes to file content do not invalidate it.
 Chat lists files removed from context. The agent can reread them only if its available tools support file access.
 Without those tools, facts found only in the attachment body are unavailable after compaction.
-Request-only context is ineligible as a summary cutoff because it disappears between turns.
-Compaction selects the cutoff before summarizing. It can include temporary context when the summary ends at an eligible message.
+Compaction selects the cutoff before summarizing. Request-only additional context stays in the trailing prompt suffix and is not summarized.
 
-Emergency truncation stores a cutoff in run state without creating an empty SUMMARY row.
-Suspended execution saves this cutoff in its execution checkpoint. A later user turn can try summarization again.
+For chats that retain content, emergency truncation saves its cutoff in a SUMMARY row with empty summary text.
+Later turns reuse that cutoff instead of restoring discarded history.
+Content-free temporary chats keep the root checkpoint with conversation content in the temporary store,
+including empty-summary cutoffs. They never write summary content to PostgreSQL.
+Regeneration validates the cutoff against the selected history before using it.

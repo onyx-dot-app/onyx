@@ -13,6 +13,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 const mockMutate = jest.fn();
 const mockPostConnectAppDecision = jest.fn();
 
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   useSWRConfig: () => ({ mutate: mockMutate }),

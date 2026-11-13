@@ -5,7 +5,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, SerializeAsAny
 
-from onyx.agents.models import ExecutionStatus, RunStatus
+from onyx.agents.models import ExecutionStatus, RunFailure, RunOutcome
 from onyx.agents.tools import PendingToolInput, ToolProgress
 from onyx.llm.models import (
     AssistantMessage,
@@ -15,6 +15,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolCallDeltaEvent,
     ToolResult,
+    UserMessage,
 )
 
 
@@ -29,6 +30,7 @@ class AgentEventType(str, Enum):
     TOOL_START = "tool_start"
     TOOL_UPDATE = "tool_update"
     TOOL_END = "tool_end"
+    TOOL_RESULT_AMENDED = "tool_result_amended"
 
 
 class _Event(BaseModel):
@@ -59,9 +61,8 @@ class InputRequiredEvent(_AgentEvent):
 
 class AgentEndEvent(_AgentEvent):
     type: Literal[AgentEventType.AGENT_END] = AgentEventType.AGENT_END
-    outcome: Literal[
-        RunStatus.COMPLETE, RunStatus.LIMIT, RunStatus.CANCELLED, RunStatus.ERROR
-    ]
+    outcome: RunOutcome
+    failure: RunFailure | None = None
 
 
 class _MessageEvent(_AgentEvent):
@@ -72,6 +73,8 @@ class _MessageEvent(_AgentEvent):
 class MessageStartEvent(_MessageEvent):
     type: Literal[AgentEventType.MESSAGE_START] = AgentEventType.MESSAGE_START
     metadata: SerializeAsAny[BaseModel] | None = None
+    # Accepted inputs precede this assistant message in conversation order.
+    input_messages: list[UserMessage] = Field(default_factory=list)
 
 
 class MessageUpdateEvent(_MessageEvent):
@@ -88,6 +91,7 @@ class MessageEndEvent(_MessageEvent):
 class ToolStartEvent(_MessageEvent):
     type: Literal[AgentEventType.TOOL_START] = AgentEventType.TOOL_START
     tool_call: ToolCall
+    display_name: str | None = None
 
 
 class ToolUpdateEvent(_MessageEvent):
@@ -102,6 +106,17 @@ class ToolEndEvent(_MessageEvent):
     result: ToolResult
 
 
+class ToolResultAmendedEvent(_MessageEvent):
+    """A finish or suspend hook replaced the recorded result of an ended call."""
+
+    type: Literal[AgentEventType.TOOL_RESULT_AMENDED] = (
+        AgentEventType.TOOL_RESULT_AMENDED
+    )
+    tool_call: ToolCall
+    result: ToolResult
+    display_name: str | None = None
+
+
 AgentEvent = Annotated[
     AgentStartEvent
     | AgentSuspendedEvent
@@ -112,7 +127,8 @@ AgentEvent = Annotated[
     | MessageEndEvent
     | ToolStartEvent
     | ToolUpdateEvent
-    | ToolEndEvent,
+    | ToolEndEvent
+    | ToolResultAmendedEvent,
     Field(discriminator="type"),
 ]
 

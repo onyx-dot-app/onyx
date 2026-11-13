@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { BasicModalFooter, Modal } from "@opal/components";
@@ -8,7 +9,6 @@ import { SvgArrowRight, SvgUsers, SvgX } from "@opal/icons";
 import { logout } from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { NewTenantInfo } from "@/lib/types";
-import { useRouter } from "next/navigation";
 import { InputErrorText, toast } from "@opal/layouts";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 
@@ -27,7 +27,7 @@ export default function NewTenantModal({
   onClose,
 }: NewTenantModalProps) {
   const t = useTranslations("admin.modals.newTenant");
-  const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useUser();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,7 +66,9 @@ export default function NewTenantModal({
 
       // Common logout and redirect for both flows
       await logout();
-      router.push(`/auth/join?email=${encodeURIComponent(user?.email || "")}`);
+      navigation.go(
+        `/auth/join?email=${encodeURIComponent(user?.email || "")}`
+      );
       onClose?.();
     } catch (error) {
       const message =

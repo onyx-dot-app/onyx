@@ -50,3 +50,12 @@ class CCPairRunPage(BaseModel):
     # Prune runs are the pair's pruning sync records.
     prune_runs: dict[int, SyncRecord]
     check_runs: dict[int, CapabilityCheckRun]
+
+
+class GroupSyncErrorCounts(BaseModel):
+    """The users and groups a group sync could not read: every one, resolved
+    ones included, and how many are still open."""
+
+    users: int = 0
+    groups: int = 0
+    open_count: int = 0

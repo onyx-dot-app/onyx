@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ColumnElement, delete, func, or_, select, true, update
+from sqlalchemy import ColumnElement, Select, delete, func, or_, select, true, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine.cursor import CursorResult
 from sqlalchemy.orm import Session, joinedload
@@ -32,6 +32,9 @@ _SYNC_BACKOFF_LOOKBACK = 8
 
 _FAILURE_STATUSES = (PermissionSyncStatus.FAILED, PermissionSyncStatus.CANCELED)
 _OPEN_STATUSES = (PermissionSyncStatus.NOT_STARTED, PermissionSyncStatus.IN_PROGRESS)
+_RUNNING_STATUSES: tuple[PermissionSyncStatus, ...] = (
+    PermissionSyncStatus.IN_PROGRESS,
+)
 # The terminal statuses the retry backoff reads; see _get_sync_retry_after.
 _SYNC_OUTCOME_STATUSES = (
     PermissionSyncStatus.SUCCESS,
@@ -175,16 +178,50 @@ def _try_create_attempt(
     return attempt_id
 
 
-def _open_cc_pair_ids(model: _AttemptModel, db_session: Session) -> set[int]:
+def _cc_pair_ids_with_attempt_in(
+    model: _AttemptModel,
+    db_session: Session,
+    statuses: tuple[PermissionSyncStatus, ...],
+) -> set[int]:
     return {
         cc_pair_id
         for cc_pair_id in db_session.scalars(
-            select(model.connector_credential_pair_id).where(
-                model.status.in_(_OPEN_STATUSES)
-            )
+            select(model.connector_credential_pair_id).where(model.status.in_(statuses))
         )
         if cc_pair_id is not None
     }
+
+
+def get_cc_pair_ids_with_running_permission_sync(
+    db_session: Session, shared_group_sync_sources: set[DocumentSource]
+) -> set[int]:
+    """Pairs with a doc permission sync or a group sync in progress. A queued
+    sync does not count, as a queued index attempt does not. A running group
+    sync of a shared source counts for every pair of that source."""
+    doc_syncs: set[int] = _cc_pair_ids_with_attempt_in(
+        DocPermissionSyncAttempt, db_session, _RUNNING_STATUSES
+    )
+    group_syncs: set[int] = _cc_pair_ids_with_attempt_in(
+        ExternalGroupPermissionSyncAttempt, db_session, _RUNNING_STATUSES
+    )
+    if not group_syncs or not shared_group_sync_sources:
+        return doc_syncs | group_syncs
+    running_shared_sources: Select = (
+        select(Connector.source)
+        .join(ConnectorCredentialPair.connector)
+        .where(
+            ConnectorCredentialPair.id.in_(group_syncs),
+            Connector.source.in_(shared_group_sync_sources),
+        )
+    )
+    siblings: set[int] = set(
+        db_session.scalars(
+            select(ConnectorCredentialPair.id)
+            .join(ConnectorCredentialPair.connector)
+            .where(Connector.source.in_(running_shared_sources))
+        )
+    )
+    return doc_syncs | group_syncs | siblings
 
 
 def _cancel_open_attempt_where__no_commit(
@@ -265,7 +302,9 @@ def get_open_doc_permission_sync_attempt(
 def get_cc_pair_ids_with_open_doc_permission_sync_attempt(
     db_session: Session,
 ) -> set[int]:
-    return _open_cc_pair_ids(DocPermissionSyncAttempt, db_session)
+    return _cc_pair_ids_with_attempt_in(
+        DocPermissionSyncAttempt, db_session, _OPEN_STATUSES
+    )
 
 
 def cancel_open_doc_permission_sync_attempt(
@@ -624,7 +663,9 @@ def get_open_external_group_sync_attempt(
 def get_cc_pair_ids_with_open_external_group_sync_attempt(
     db_session: Session,
 ) -> set[int]:
-    return _open_cc_pair_ids(ExternalGroupPermissionSyncAttempt, db_session)
+    return _cc_pair_ids_with_attempt_in(
+        ExternalGroupPermissionSyncAttempt, db_session, _OPEN_STATUSES
+    )
 
 
 def cancel_open_external_group_sync_attempt(

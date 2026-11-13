@@ -235,6 +235,40 @@ def iter_models(provider: str, mode: str | None = None) -> list[str]:
     )
 
 
+_DATED_SNAPSHOT_SUFFIX = re.compile(r"-\d{4}-?\d{2}-?\d{2}$")
+
+
+@lru_cache(maxsize=1)
+def _supplement_only_model_ids() -> dict[str, frozenset[str]]:
+    if not _SUPPLEMENT_PATH.exists():
+        return {}
+    try:
+        supplement = json.loads(_SUPPLEMENT_PATH.read_text())
+    except Exception:
+        logger.exception("Failed to load catalog supplement %s", _SUPPLEMENT_PATH)
+        return {}
+    supplement_only: dict[str, frozenset[str]] = {}
+    for provider, section in supplement.items():
+        if provider.startswith("_"):
+            continue
+        upstream_path = _CATALOG_DIR / f"{provider}.json"
+        try:
+            upstream = (
+                json.loads(upstream_path.read_text()).get("models") or {}
+                if upstream_path.exists()
+                else {}
+            )
+        except Exception:
+            logger.exception("Failed to load catalog file %s", upstream_path)
+            continue
+        supplement_only[provider] = frozenset(
+            model_id
+            for model_id in section.get("models") or {}
+            if model_id not in upstream
+        )
+    return supplement_only
+
+
 _PRICING_PREFIX = re.compile(
     r"^(?:(?:\d+|max)-x-(?:\d+|max)|hd|standard|low|medium|high)$"
 )
@@ -245,18 +279,58 @@ def _is_pricing_or_provider_prefixed(provider: str, model_id: str) -> bool:
     return bool(sep) and (prefix == provider or bool(_PRICING_PREFIX.match(prefix)))
 
 
-def iter_image_generation_models(provider: str) -> list[str]:
-    """Non-deprecated image generation models under a provider. Pricing keys
-    prefixed with a size or quality (e.g. ``1024-x-1024/dall-e-2``) are
-    skipped."""
+def iter_image_generation_models(
+    provider: str, recommended_only: bool = True
+) -> list[str]:
+    """Non-deprecated image generation models under a provider.
+
+    Always skips pricing keys prefixed with a size or quality (e.g.
+    ``1024-x-1024/dall-e-2``) and supplement-only entries (upstream pruned
+    them as deprecated). Dated snapshots of a deprecated model count as
+    deprecated. Recommended models also skip dated snapshots whose undated
+    alias is also listed."""
     models = _catalog().get(provider, {}).get("models", {})
-    return sorted(
+    supplement_only = _supplement_only_model_ids().get(provider, frozenset())
+    candidates = {
         model_id
         for model_id, entry in models.items()
         if not _is_pricing_or_provider_prefixed(provider, model_id)
+        and model_id not in supplement_only
         and entry.get("status") != "deprecated"
+        and models.get(_DATED_SNAPSHOT_SUFFIX.sub("", model_id), {}).get("status")
+        != "deprecated"
         and _catalog_mode(entry, model_id) == "image_generation"
+    }
+    if not recommended_only:
+        return sorted(candidates)
+    return sorted(
+        model_id
+        for model_id in candidates
+        if _DATED_SNAPSHOT_SUFFIX.sub("", model_id) == model_id
+        or _DATED_SNAPSHOT_SUFFIX.sub("", model_id) not in candidates
     )
+
+
+def is_recommended_image_model(provider: str, model_name: str) -> bool:
+    """Whether a stored image model belongs in the recommended view. A name
+    that another provider's catalog lists (e.g. a proxy that serves
+    ``gpt-image-2``) follows that provider's recommendation. Unknown names
+    fall back to the name-based mode."""
+    prefix, _, bare_name = model_name.partition("/")
+    if bare_name and prefix in _catalog():
+        model_name = bare_name
+    if model_name in iter_image_generation_models(provider):
+        return True
+    if _vendored_model_entry(provider, model_name) is not None:
+        return False
+    listed_elsewhere = False
+    for other in _catalog():
+        if _vendored_model_entry(other, model_name) is None:
+            continue
+        if model_name in iter_image_generation_models(other):
+            return True
+        listed_elsewhere = True
+    return not listed_elsewhere and resolve_model_mode(model_name) == "image_generation"
 
 
 def _vendored_model_entry(provider: str, model_name: str) -> dict[str, Any] | None:
@@ -380,9 +454,78 @@ def find_remote_model_obj(
     return None
 
 
+_remote_supplement_cache: ThreadSafeDict[str, tuple[float, dict[str, Any] | None]] = (
+    ThreadSafeDict()
+)
+_SUPPLEMENT_FILE = "_supplement"
+
+
+def _remote_supplement() -> dict[str, Any] | None:
+    """``_supplement.json`` from main, TTL + negative cached."""
+    now: float = time.time()
+    cached = _remote_supplement_cache.get(_SUPPLEMENT_FILE)
+    if cached is not None and now - cached[0] < AUTO_LLM_UPDATE_INTERVAL_SECONDS:
+        return cached[1]
+    supplement: dict[str, Any] | None = None
+    try:
+        response: httpx.Response = _fetch_provider_file(_SUPPLEMENT_FILE)
+        if response.status_code == 200:
+            data: Any = response.json()
+            if isinstance(data, dict):
+                supplement = data
+        else:
+            logger.warning(
+                "Remote catalog supplement fetch returned HTTP %s",
+                response.status_code,
+            )
+    except Exception as e:
+        logger.warning("Remote catalog supplement fetch failed: %s", e)
+    _remote_supplement_cache[_SUPPLEMENT_FILE] = (now, supplement)
+    return supplement
+
+
+def iter_latest_models(provider: str, mode: str | None = None) -> list[str] | None:
+    """Like ``iter_models``, but from the provider's catalog and supplement on
+    main, so it includes models released after this deployment. Air-gapped
+    deployments use the vendored catalog. None when either remote file can't
+    be read."""
+    if ONYX_AIRGAPPED:
+        return iter_models(provider, mode)
+    section = _remote_section(provider)
+    if section is None:
+        return None
+    supplement = _remote_supplement()
+    if supplement is None:
+        return None
+    provider_supplement: Any = supplement.get(provider, {})
+    supplement_models: Any = (
+        provider_supplement.get("models", {})
+        if isinstance(provider_supplement, dict)
+        else None
+    )
+    # A partial list would read as retirements, so reject malformed files.
+    if not isinstance(supplement_models, dict) or not all(
+        isinstance(model_id, str) and isinstance(entry, dict)
+        for source in (section["models"], supplement_models)
+        for model_id, entry in source.items()
+    ):
+        logger.warning("Remote catalog for %s is malformed", provider)
+        return None
+    models: dict[str, Any] = dict(section["models"])
+    for model_id, entry in supplement_models.items():
+        if model_id not in models and not set(entry) <= set(_SUPPLEMENT_OVERRIDE_KEYS):
+            models[model_id] = entry
+    return sorted(
+        model_id
+        for model_id, entry in models.items()
+        if mode is None or _catalog_mode(entry, model_id) == mode
+    )
+
+
 def reset_remote_cache() -> None:
     """Testing hook: forget fetched sections."""
     _remote_sections.clear()
+    _remote_supplement_cache.clear()
     _remote_locks.clear()
 
 

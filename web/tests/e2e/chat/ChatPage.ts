@@ -9,6 +9,11 @@ import { type Page, type Locator, expect } from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
+interface SavedChatMessage {
+  message_type: string;
+  message: string;
+}
+
 export class ChatPage {
   readonly page: Page;
   readonly inputBar: InputBar;
@@ -17,10 +22,17 @@ export class ChatPage {
   readonly container: Locator;
   readonly scrollContainer: Locator;
 
-  // Message collections
+  // Message collections. Only messages near the viewport are mounted, so
+  // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
+  readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
+  readonly agentResultsDividers: Locator;
+  /** One row per message; far from the viewport, an empty placeholder. */
+  readonly messageRows: Locator;
+  readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  readonly errorBanners: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -39,8 +51,18 @@ export class ChatPage {
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
+    this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.agentResultsDividers = this.scrollContainer.getByText(
+      "Subagent results received",
+      { exact: true }
+    );
+    this.messageRows = this.scrollContainer.locator('[id^="message-"]');
+    this.scrollToBottomButton = page.getByRole("button", {
+      name: "Scroll to bottom",
+    });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
+    this.errorBanners = page.getByTestId("chat-error-banner");
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -65,9 +87,20 @@ export class ChatPage {
     return this.aiMessages.nth(index);
   }
 
+  /** Images a tool generated for an AI message, shown at the top of its answer. */
+  generatedImages(index = 0): Locator {
+    return this.aiMessage(index).getByRole("img", {
+      name: "Chat attachment",
+      exact: true,
+    });
+  }
+
+  answerText(text: string, index = 0): Locator {
+    return this.aiMessage(index).getByText(text, { exact: true });
+  }
+
   async goto(sessionId?: string): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
@@ -135,6 +168,32 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  async copyAnswerHtml(): Promise<string> {
+    // Capture the clipboard boundary without depending on the host clipboard.
+    await this.page.evaluate(() => {
+      sessionStorage.removeItem("test:copied-answer");
+      navigator.clipboard.write = async (items) => {
+        const [item] = items;
+        if (!item) throw new Error("Answer was not copied");
+        sessionStorage.setItem(
+          "test:copied-answer",
+          await (await item.getType("text/html")).text()
+        );
+      };
+    });
+    await this.aiMessage().getByTestId("AgentMessage/copy-button").click();
+    let html = "";
+    await expect
+      .poll(async () => {
+        html = await this.page.evaluate(
+          () => sessionStorage.getItem("test:copied-answer") || ""
+        );
+        return html;
+      })
+      .not.toBe("");
+    return html;
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")
@@ -145,8 +204,91 @@ export class ChatPage {
     await expect(this.aiMessage().getByRole("code")).toContainText(text);
   }
 
+  /** Inline citations must fit the text line: no taller than its line height. */
+  async expectInlineCitationsFitLine(count: number): Promise<void> {
+    const citations = this.aiMessage().locator("p button");
+    await expect(citations).toHaveCount(count);
+    for (const citation of await citations.all()) {
+      await expect
+        .poll(() =>
+          citation.evaluate((el) => {
+            const paragraph = el.closest("p");
+            if (!paragraph) return false;
+            const lineHeight = parseFloat(
+              getComputedStyle(paragraph).lineHeight
+            );
+            return el.getBoundingClientRect().height <= lineHeight;
+          })
+        )
+        .toBe(true);
+    }
+  }
+
+  /**
+   * Checks a failed answer at message row `row`: it keeps its partial text and
+   * shows an error banner, with Regenerate only while it is the latest answer.
+   */
+  async expectFailedAnswer(
+    row: number,
+    partialText: string,
+    canRegenerate: boolean
+  ): Promise<void> {
+    const failedRow = this.messageRows.nth(row);
+    await expect(failedRow).toContainText(partialText);
+    await expect(failedRow.getByTestId("chat-error-banner")).toBeVisible();
+    await expect(
+      failedRow.getByRole("button", { name: "Regenerate", exact: true })
+    ).toHaveCount(canRegenerate ? 1 : 0);
+  }
+
+  async expectRowText(row: number, text: string): Promise<void> {
+    await expect(this.messageRows.nth(row)).toContainText(text);
+  }
+
   async expectAnswerAbsent(text: string): Promise<void> {
     await expect(this.scrollContainer).not.toContainText(text);
+  }
+
+  /** Waits for the reply to the latest message to finish. */
+  async expectLatestReplyComplete(timeout = 30000): Promise<void> {
+    // The latest turn is always mounted, whatever the chat's length. A
+    // multi-model turn holds several replies; any complete one will do.
+    await expect(
+      this.messageRows.last().getByTestId("onyx-ai-message").first()
+    ).toBeVisible({ timeout });
+    // Text sent before the turn settles joins it as pending input.
+    await this.inputBar.expectIdle(timeout);
+  }
+
+  /**
+   * Waits until the open chat's saved messages are these user messages, in
+   * order, each with a reply. Reads the server, not the page: the page mounts
+   * only the messages near the viewport.
+   */
+  async expectSavedTurns(userMessages: string[]): Promise<void> {
+    await expect
+      .poll(
+        async () => {
+          const chatId = new URL(this.page.url()).searchParams.get("chatId");
+          if (!chatId) return null;
+          const response = await this.page.request.get(
+            `/api/chat/get-chat-session/${chatId}`
+          );
+          if (!response.ok()) return null;
+          const session: { messages: SavedChatMessage[] } =
+            await response.json();
+          return {
+            userMessages: session.messages
+              .filter((message) => message.message_type === "user")
+              .map((message) => message.message),
+            replies: session.messages.filter(
+              (message) => message.message_type === "assistant"
+            ).length,
+          };
+        },
+        { timeout: 60000 }
+      )
+      .toEqual({ userMessages, replies: userMessages.length });
   }
 
   async expectCompleteAnswers(count: number): Promise<void> {
@@ -154,7 +296,10 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  async expectCustomToolResult(name: string, json: string): Promise<void> {
+  /** Expands the timeline and checks one completed step of the tool that
+   * shows `output`. A JSON response renders as a `code` block; a text
+   * response renders as an inline code span. */
+  async expectCustomToolResult(name: string, output: string): Promise<void> {
     await this.page
       .getByRole("button", { name: "Expand timeline", exact: true })
       .click();
@@ -164,7 +309,10 @@ export class ChatPage {
     await expect(status).toBeVisible();
     await status.click();
     await expect(
-      this.scrollContainer.getByRole("code").filter({ hasText: json })
+      this.scrollContainer
+        .getByRole("code")
+        .or(this.scrollContainer.getByTestId("code-block"))
+        .filter({ hasText: output })
     ).toBeVisible();
   }
 
@@ -278,6 +426,14 @@ export class ChatPage {
     await this.openModelSettings(modelName);
     await this.modelPopover.getByRole("slider").first().press("End");
     await this.page.keyboard.press("Escape");
+  }
+
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async editHumanMessage(text: string, index = 0): Promise<void> {

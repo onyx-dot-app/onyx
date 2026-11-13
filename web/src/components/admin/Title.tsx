@@ -27,7 +27,11 @@ export function AdminPageTitle({
           ) : (
             Icon
           )}
-          <Text font="heading-h2" color="text-05" aria-label="admin-page-title">
+          <Text
+            font="heading-headline"
+            color="text-05"
+            aria-label="admin-page-title"
+          >
             {typeof title === "string" ? title : richNodes(title)}
           </Text>
         </div>

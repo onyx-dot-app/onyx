@@ -137,7 +137,7 @@ function ButtonLabel({ children, font, responsiveHide }: ButtonLabelProps) {
       ref={ref}
       className={cn(
         "overflow-x-clip whitespace-nowrap transition-opacity duration-150 ease-out motion-reduce:transition-none",
-        responsiveHide ? "hidden md:inline-block" : "inline-block",
+        responsiveHide ? "hidden md:inline-flex" : "inline-flex",
         (phase === "out" || phase === "resize") && "opacity-0"
       )}
       onTransitionEnd={(event) => {

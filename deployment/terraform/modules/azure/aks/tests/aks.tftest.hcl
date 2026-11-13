@@ -131,6 +131,131 @@ run "optional_pools_are_tainted_and_labelled" {
   }
 }
 
+run "the_sandbox_pool_runs_pods_by_default" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = contains(keys(azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels), "onyx.app/kvm") == false
+    error_message = "Only pools that can run Firecracker carry the onyx.app/kvm label."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu"
+    error_message = "The pod runtime keeps the AKS default Ubuntu image, also after a switch back from Firecracker."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints == tolist(["workload=sandbox:NoSchedule"])
+    error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
+  }
+}
+
+run "firecracker_pins_the_tested_image_and_labels_the_pool" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu2404"
+    error_message = "Ubuntu 24.04 is the tested image, and it ships vm.max_map_count 1048576."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels["onyx.app/kvm"] == "true"
+    error_message = "Nodes that can run Firecracker carry the onyx.app/kvm label."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_labels["onyx.app/workload"] == "sandbox"
+    error_message = "The chart's sandbox pods still select the pool by its workload label."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints == tolist(["workload=sandbox:NoSchedule", "onyx.app/kvm=true:NoSchedule"])
+    error_message = "Firecracker pools must add the onyx.app/kvm taint, so pod sandboxes and the prepuller stay off."
+  }
+}
+
+run "firecracker_accepts_intel_v5_to_v7_sizes" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_node_vm_size     = "Standard_D8ds_v7"
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandbox"].vm_size == "Standard_D8ds_v7"
+    error_message = "Ddsv7 is Intel and was the size the AKS test passed on."
+  }
+}
+
+run "firecracker_rejects_amd" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_node_vm_size     = "Standard_D8as_v5"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_amd_with_local_disk" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_node_vm_size     = "Standard_D8ads_v6"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_arm" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_node_vm_size     = "Standard_D8ps_v6"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "firecracker_rejects_v4" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    sandbox_node_vm_size     = "Standard_D8ds_v4"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
+run "rejects_an_unknown_sandbox_runtime" {
+  command = plan
+
+  variables {
+    craft_sandbox_runtime = "kata"
+  }
+
+  expect_failures = [var.craft_sandbox_runtime]
+}
+
 run "the_cluster_has_an_identity_to_grant_roles_to" {
   command = plan
 

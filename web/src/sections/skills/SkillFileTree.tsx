@@ -86,7 +86,7 @@ function SkillFileTreeNodes({
         <div style={{ paddingLeft: `${depth * 20}px` }}>
           {isDirectory ? (
             <LineItemButton
-              sizePreset="main-ui"
+              font="main-ui-action"
               rounding={2}
               icon={FileIcon}
               onClick={() => onToggle(node.path)}
@@ -100,7 +100,7 @@ function SkillFileTreeNodes({
             // LineItemButton applies, so the two line up.
             <div className="w-full p-1.5">
               <ContentAction
-                sizePreset="main-ui"
+                font="main-ui-action"
                 padding={0.5}
                 icon={FileIcon}
                 rightChildren={rightChildren}

@@ -36,6 +36,25 @@
     }
   },
   "accountPopover": {
+    "about": {
+      "commit": {
+        "label": "提交"
+      },
+      "commitDate": {
+        "label": "提交日期"
+      },
+      "instanceUrl": {
+        "label": "实例 URL"
+      },
+      "label": "关于",
+      "ref": {
+        "label": "Ref"
+      },
+      "unavailable": "不可用",
+      "version": {
+        "label": "版本"
+      }
+    },
     "accountFallback": {
       "label": "账户"
     },
@@ -103,6 +122,9 @@
       "authenticate": {
         "label": "身份验证"
       },
+      "codingAgentIncognito": {
+        "tooltip": "无痕模式下无法使用编码智能体"
+      },
       "configure": {
         "tooltip": "配置"
       },
@@ -120,6 +142,9 @@
       },
       "selectSearchSources": {
         "label": "选择搜索来源"
+      },
+      "preference": {
+        "tooltip": "{description}\n在此聊天中优先使用此工具。智能体也可能不使用该工具直接回答。"
       }
     },
     "addMcpModal": {
@@ -167,7 +192,6 @@
           "description": "请选择至少一个您管理的用户组。"
         },
         "retainedUsers": "{count, plural, other {还直接共享给了 # 位用户。}}",
-        "planTag": "Business",
         "planNote": "用户组访问需要 Business 套餐。"
       },
       "defaultChat": {
@@ -332,7 +356,7 @@
         "clientMetadataRejected": "提供方无法使用客户端元数据文档。如果此实例无法从公共互联网访问，请关闭“使用客户端元数据文档”后重新连接。",
         "discoveryFailed": "未找到 OAuth 登录设置。请检查服务器 URL，或输入提供商提供的端点。",
         "connectionFailed": "无法连接服务器。请检查服务器 URL 后重试。",
-        "oauthFailed": "无法开始 OAuth 登录。请检查客户端设置后重试。",
+        "oauthFailed": "OAuth 登录失败。请重试，或检查服务器的 OAuth 设置。",
         "oauthInitFailed": "发起 OAuth 失败：{detail}"
       },
       "header": {
@@ -796,6 +820,7 @@
       "search": {
         "placeholder": "搜索操作..."
       },
+      "selectionSaveFailed": "无法保存此聊天的工具选择。",
       "serverFallback": {
         "label": "服务器"
       },
@@ -2218,7 +2243,8 @@
       },
       "searchDecisionModel": {
         "description": "选择检索到的文档，并决定添加多少上下文。决策模型在一次调用中对其排序。语言模型按原方式进行选择。",
-        "title": "搜索决策模型"
+        "title": "搜索决策模型",
+        "decisionSection": "决策模型"
       },
       "taskModels": {
         "loadFailed": "无法加载任务模型",
@@ -2599,8 +2625,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "所有人保留从源系统同步的访问权限。",
-          "title": "添加群组前不设限制"
+          "description": "限制需要群组。关闭限制以保留从来源同步的访问权限。",
+          "title": "请至少选择一个群组"
         },
         "loadError": "无法加载群组。请重新加载页面后重试。",
         "memberCount": "{count, plural, other {# 名成员}}",
@@ -2629,7 +2655,8 @@
       },
       "manageMenu": {
         "delete": {
-          "label": "删除"
+          "label": "删除连接器",
+          "description": "永久移除所有已索引的文档。"
         },
         "reIndex": {
           "tooltip": {
@@ -2668,7 +2695,7 @@
         },
         "syncPermissions": {
           "label": "同步权限",
-          "description": "立即从来源拉取每个文档的可读用户。",
+          "description": "从来源拉取文档权限。",
           "tooltip": {
             "syncing": "权限同步已在排队或运行"
           }
@@ -2795,20 +2822,22 @@
         }
       },
       "statusCard": {
-        "indexingSpeed": "{speed} 文档/分钟",
-        "indexingSpeedTooltip": "自创建连接器以来每分钟索引的文档数",
         "lastIndexed": {
           "value": "上次索引 {when}"
         },
+        "deletionStarted": {
+          "value": "开始于 {when}"
+        },
         "documents": {
           "totalLabel": "已索引文档总数",
-          "recentLabel": "最近处理的文档",
-          "syncedPermissionsLabel": "已同步的权限",
-          "syncedMembershipsLabel": "已同步的群组成员关系"
+          "recentLabel": "近期处理的文档",
+          "indexedLabel": "已索引文档"
         },
         "throughput": {
           "ariaLabel": "随时间索引的文档",
           "tooltip": "{count, plural, one {# 个文档} other {# 个文档}}",
+          "lineTooltip": "{failures, plural, one {# 次失败} other {# 次失败}}，{errors, plural, one {# 个错误} other {# 个错误}}",
+          "barLabel": "{count, plural, one {# 个文档} other {# 个文档}}，{range}",
           "loadError": "无法加载图表。",
           "rangeFilter": "在图表此时间段内创建的运行"
         },
@@ -2824,13 +2853,33 @@
         "title": "索引状态",
         "sync": {
           "permissionsTitle": "权限同步状态",
-          "groupsTitle": "组成员关系同步状态",
           "last": "上次同步 {when}",
           "never": "尚未同步",
-          "neverTooltip": "在权限同步完成之前，已索引的文档可能无法被搜索。",
-          "waitingForFirstIndex": "等待首次索引"
+          "neverTooltip": "在权限同步完成之前，已索引的文档将无法被搜索。",
+          "waitingForFirstIndex": "等待首次索引",
+          "docsLabel": "已同步权限的文档",
+          "groupsLabel": "群组成员关系"
         },
-        "accessTitle": "连接器文档访问权限"
+        "actions": {
+          "showActivities": "显示活动",
+          "hideActivities": "隐藏活动",
+          "viewDetails": "查看详情",
+          "hideDetails": "隐藏详情",
+          "viewIndexingRun": "查看索引运行",
+          "viewPruningRun": "查看清理运行",
+          "viewChecksRun": "查看检查运行"
+        },
+        "types": {
+          "count": "{count, plural, other {种文档类型}}",
+          "header": "文档类型",
+          "indexed": "已索引",
+          "size": "大小",
+          "other": "其他",
+          "countWithSize": "{count}（{size}）",
+          "bytes": "字节",
+          "loadError": "无法加载文档类型。",
+          "sizeValue": "{value} {unit}"
+        }
       },
       "toasts": {
         "completeReindexStarted": "已成功启动完全重新索引",
@@ -2923,6 +2972,7 @@
           "sync": "文档访问**与 {source} 同步**",
           "managedByAdmins": "由**管理员**管理",
           "managedByGroups": "由 **{count, plural, one {# 个群组} other {# 个群组}}** 管理",
+          "onlyMe": "通过此连接器的文档**仅其所有者**可见",
           "syncRestricted": "文档访问**与 {source} 同步**，并限制为 **{count, plural, one {# 个群组} other {# 个群组}}**",
           "groupsPending": "文档与**特定群组**共享",
           "syncRestrictedPending": "文档访问**与 {source} 同步**，并限制为**特定群组**"
@@ -2960,6 +3010,7 @@
           "all": "所有类型",
           "indexing": "文档索引",
           "backfill": "文档回填",
+          "retry": "文档索引 - 重试",
           "doc_permission_sync": "权限同步",
           "group_sync": "群组成员同步",
           "pruning": "文档清理",
@@ -2967,9 +3018,10 @@
         },
         "detail": {
           "queued": "排队中",
+          "starting": "正在开始同步",
           "running": "运行中",
           "rate": "{rate} 文档/分钟",
-          "finished": "{time}（{duration}）",
+          "runtime": "运行时长 {duration}",
           "rateFinished": "{rate} 文档/分钟（{duration}）",
           "membershipRate": "{rate} 成员关系/分钟",
           "membershipRateFinished": "{rate} 成员关系/分钟（{duration}）"
@@ -2978,6 +3030,7 @@
           "stages": "查看阶段指标",
           "cancel": "取消",
           "logs": "查看日志",
+          "noLogs": "未记录日志",
           "checks": "查看检查结果"
         },
         "warnings": {
@@ -3012,16 +3065,12 @@
           "skippedChecks": "{count, plural, one {# 项检查已跳过} other {# 项检查已跳过}}",
           "syncedDocs": "{count, plural, other {已同步 # 个文档}}"
         },
-        "search": {
-          "placeholder": "搜索运行错误…"
-        },
         "window": {
           "label": "时间范围",
           "all": "全部时间",
           "h1": "过去 1 小时",
           "h24": "过去 24 小时",
-          "d7": "过去 7 天",
-          "d30": "过去 30 天"
+          "d7": "过去 7 天"
         },
         "statusGroups": {
           "label": "状态",
@@ -3032,14 +3081,13 @@
           "canceled": "已取消"
         },
         "loadError": {
-          "title": "无法加载运行记录。"
+          "title": "无法加载运行记录。",
+          "retry": "重试"
         },
         "empty": {
           "title": "暂无近期索引运行",
           "filteredTitle": "没有符合这些筛选条件的运行。",
           "pastRuns": "{count, plural, other {# 次过去的运行}}",
-          "view": "查看",
-          "viewAria": "{count, plural, other {查看 # 次过去的运行}}",
           "description": "运行在后台调度，可能需要一点时间才会显示。"
         },
         "units": "{count, plural, other {个运行}}",
@@ -3074,15 +3122,24 @@
           "all": "全部级别",
           "failures": "失败",
           "errors": "错误",
-          "other": "其他",
+          "running": "运行中",
+          "success": "成功",
+          "canceled": "已取消",
           "resolved": "已解决",
-          "toggle": "筛选"
+          "connectors": "连接器",
+          "connectorsLoading": "正在加载连接器…",
+          "connectorsLoadError": "无法加载连接器。",
+          "connectorsRetry": "重试",
+          "toggleShow": "显示筛选",
+          "toggleHide": "隐藏筛选"
         },
         "groups": {
           "failures": "{count, plural, =0 {失败} other {# 次失败}}",
           "errors": "{count, plural, =0 {错误} other {# 个错误}}",
-          "other": "其他",
-          "resolved": "{count, plural, other {# 个已解决}}"
+          "running": "{count, number} 个运行中",
+          "resolved": "已解决",
+          "success": "成功",
+          "canceled": "已取消"
         },
         "title": {
           "indexing": {
@@ -3093,9 +3150,8 @@
             "errors": "索引已完成，存在错误。",
             "resolved": "索引错误已解决。",
             "succeeded": "索引成功完成。",
-            "queued": "索引排队中。",
             "inProgress": "索引进行中。",
-            "canceled": "索引已停止。"
+            "canceled": "索引已取消。"
           },
           "doc_permission_sync": {
             "failed": "权限同步失败。",
@@ -3105,9 +3161,8 @@
             "errors": "权限已同步，存在错误。",
             "resolved": "权限同步错误已解决。",
             "succeeded": "权限同步成功。",
-            "queued": "权限同步排队中。",
             "inProgress": "正在同步权限。",
-            "canceled": "权限同步已停止。"
+            "canceled": "权限同步已取消。"
           },
           "group_sync": {
             "failed": "群组成员同步失败。",
@@ -3117,9 +3172,8 @@
             "errors": "群组成员已同步，存在错误。",
             "resolved": "群组成员同步错误已解决。",
             "succeeded": "群组成员同步成功。",
-            "queued": "群组成员同步排队中。",
             "inProgress": "正在同步群组成员。",
-            "canceled": "群组同步已停止。"
+            "canceled": "群组同步已取消。"
           },
           "pruning": {
             "failed": "清理失败。",
@@ -3129,9 +3183,8 @@
             "errors": "清理已完成，但有错误。",
             "resolved": "清理错误已解决。",
             "succeeded": "清理成功完成。",
-            "queued": "清理排队中。",
             "inProgress": "清理进行中。",
-            "canceled": "清理已停止。"
+            "canceled": "清理已取消。"
           },
           "checks": {
             "failed": "连接器检查失败。",
@@ -3141,9 +3194,8 @@
             "errors": "连接器检查已完成，但有错误。",
             "resolved": "连接器检查错误已解决。",
             "succeeded": "连接器检查通过。",
-            "queued": "连接器检查排队中。",
             "inProgress": "连接器检查进行中。",
-            "canceled": "连接器检查已停止。"
+            "canceled": "连接器检查已取消。"
           }
         },
         "description": {
@@ -3158,22 +3210,18 @@
           "stackTrace": "堆栈跟踪",
           "indexing": "{count, plural, other {# 个文档失败}}",
           "indexingItems": "{count, plural, other {# 个项目失败}}",
-          "doc_permission_sync": "{count, plural, other {# 个文档的权限同步失败}}",
-          "group_sync": "{count, plural, other {# 个群组同步失败}}",
           "pruning": "{count, plural, one {# 个文档失败} other {# 个文档失败}}",
           "checks": "{count, plural, one {# 项检查失败} other {# 项检查失败}}",
+          "users": "{count, plural, one {# 个用户同步失败} other {# 个用户同步失败}}",
+          "groups": "{count, plural, one {# 个群组同步失败} other {# 个群组同步失败}}",
           "resolved": "已解决",
-          "resolvedDocs": "{count, plural, other {# 个项目已解决}}",
           "superseded": "已被取代"
         },
         "more": "显示更多",
         "empty": {
           "title": "暂无近期活动",
-          "resolved": "没有已解决的运行",
-          "filtered": "没有与此搜索匹配的内容。",
-          "failures": "没有失败",
-          "errors": "没有错误",
-          "other": "没有其他运行"
+          "past": "过往活动",
+          "filtered": "没有与此搜索匹配的内容。"
         },
         "loadError": {
           "title": "无法加载活动。"
@@ -3181,19 +3229,32 @@
         "docs": {
           "title": "失败的项目",
           "search": {
-            "placeholder": "搜索项目…"
+            "placeholder": "搜索文档…"
           },
-          "resolveAll": "全部重试",
-          "resolveAllTooltip": "重新索引此运行中所有失败的文档",
-          "resolveAllUnsupported": "此连接器无法重新索引单个文档。请重新索引连接器以重试。",
-          "resolveOne": "重试此文档",
-          "retry": "{count, plural, other {重试 # 个文档}}",
+          "resolveAll": "重试所有文档",
+          "resolveOne": "重试文档",
+          "resolveWithoutRetry": "解决但不重试",
           "more": "更多",
           "less": "收起",
           "unknownDocument": "未知文档",
-          "empty": "没有未解决的错误",
+          "empty": "没有失败的文档",
           "loadError": "无法加载失败的项目。",
-          "open": "打开文档"
+          "open": "打开文档",
+          "resolvedGroup": "已解决的错误",
+          "resolvedWithoutRetry": "已解决但未重试",
+          "resolvedByLaterRun": "已由后续运行解决"
+        },
+        "syncErrors": {
+          "users": {
+            "title": "失败的用户",
+            "search": "搜索用户…",
+            "empty": "没有失败的用户"
+          },
+          "groups": {
+            "title": "失败的群组",
+            "search": "搜索群组…",
+            "empty": "没有失败的群组"
+          }
         },
         "trace": {
           "header": "堆栈跟踪 • 运行 ID：{id}",
@@ -3201,17 +3262,18 @@
           "runId": "运行 ID：{id}"
         },
         "actions": {
-          "resolve": "解决"
+          "resolve": "解决",
+          "resolveWithoutRetry": "解决但不重试",
+          "retryDocs": "重试文档"
         },
         "resolveAll": {
-          "button": "解决全部显示项",
-          "title": "解决所有显示的运行？",
-          "description": "这会将符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
-          "fleetDescription": "这会将您可操作的连接器上符合当前筛选条件的 {count, plural, other {# 次运行}}标记为已解决。它们保留原有状态，并移到已解决下方。",
+          "button": "全部解决",
+          "title": "解决所有显示的活动",
+          "body": "{count, plural, other {这会解决符合当前筛选条件的 # 项活动：{failures}和{errors}。Onyx 不会重试其中失败的项目。这些活动保留原有状态，并移到已解决下方。}}",
+          "body2": "仍在运行的运行可能会报告新的错误，这些错误会再次显示为未解决。您之后可以在失败文档列表中重试已解决的文档。",
+          "failures": "{count, plural, =0 {无失败} other {# 次失败}}",
+          "errors": "{count, plural, =0 {没有出错的运行} other {# 次运行有错误}}",
           "confirm": "全部解决"
-        },
-        "resolved": {
-          "label": "已解决"
         }
       },
       "stageDetails": {
@@ -3223,10 +3285,22 @@
         "calls": "批次",
         "averageTime": "平均时间",
         "maxTime": "最长时间",
+        "noDocs": "没有文档完成索引",
+        "laterCanceled": "后续阶段已取消",
+        "retry": "重试",
         "uneven": {
           "tooltip": "此阶段各批次耗时差异很大"
         },
         "close": "关闭阶段详情"
+      },
+      "tabs": {
+        "configurations": "连接器配置",
+        "indexing": "索引",
+        "indexingDisabled": "首次运行开始后可用。"
+      },
+      "indexingTab": {
+        "chartHeading": "文档索引",
+        "runsHeading": "索引运行"
       }
     },
     "connectorTitle": {
@@ -3682,15 +3756,19 @@
             "description": "此连接器索引的文档对组织中的所有人可用。",
             "title": "组织中的所有人"
           },
+          "onlyMe": {
+            "description": "只有此连接器凭据的所有者能通过它访问；对于没有凭据的来源，只有创建它的人。",
+            "title": "仅限我"
+          },
           "specificGroups": {
             "description": "指定可以访问此连接器文档的群组。",
-            "required": "请至少选择一个群组。",
             "title": "特定群组"
           },
           "sync": {
             "description": "{appName} 会与来源同步权限。用户只能搜索他们在来源中可见的内容。",
             "disabledReason": "当前凭据的认证方式不支持自动同步权限。请将凭据的认证方式更改为受支持的方式。",
-            "title": "与 {source} 同步"
+            "title": "与 {source} 同步",
+            "restrictionRequired": "请至少选择一个群组，或关闭限制。"
           },
           "title": "文档访问"
         },
@@ -5107,6 +5185,27 @@
       "unavailable": {
         "description": "Craft 由 Onyx 按部署逐一启用。请联系您的 Onyx 客户代表以获取访问权限。",
         "title": "此部署不提供 Craft"
+      },
+      "publishing": {
+        "title": "技能发布",
+        "open": {
+          "label": "开放",
+          "description": "技能作者可以立即发布到组织。"
+        },
+        "requiresReview": {
+          "label": "需要审核",
+          "description": "管理员批准每次发布和每次更新。"
+        },
+        "off": {
+          "label": "关闭",
+          "description": "只有管理员可以将技能发布到组织。"
+        },
+        "saveSuccess": {
+          "message": "已保存发布设置。"
+        },
+        "saveError": {
+          "message": "无法保存发布设置。"
+        }
       }
     },
     "credentials": {
@@ -6238,13 +6337,6 @@
           "title": "用户组权限"
         }
       },
-      "permissionsChanged": {
-        "description": "{appName} 现在使用基于用户组的权限。访问权限按用户组配置，因此用户的权限是其所属全部用户组权限的合集。",
-        "learnMore": {
-          "label": "了解更多"
-        },
-        "title": "权限已变更。"
-      },
       "sharedResources": {
         "agent": {
           "description": "智能体"
@@ -6294,28 +6386,7 @@
         }
       },
       "tokenLimits": {
-        "addLimit": {
-          "label": "添加限制"
-        },
-        "costLimit": {
-          "header": "费用上限",
-          "placeholder": "费用上限",
-          "unit": "(USD)"
-        },
-        "disabledTooltip": "Token 速率限制仅在 [Onyx 企业版](/admin/billing) 中提供。",
-        "section": {
-          "description": "限制此用户组在指定时间段内可以使用的 token 数量。",
-          "title": "Token 速率限制"
-        },
-        "timeWindow": {
-          "header": "时间窗口",
-          "unit": "(UTC 天)"
-        },
-        "tokenLimit": {
-          "header": "Token 上限",
-          "placeholder": "Token 上限（千）",
-          "unit": "(千)"
-        }
+        "disabledTooltip": "Token 速率限制仅在 [Onyx 企业版](/admin/billing) 中提供。"
       },
       "builtIn": {
         "admin": {
@@ -6326,9 +6397,6 @@
           "name": "基本",
           "description": "所有用户的默认组，拥有基本权限。"
         }
-      },
-      "placeholders": {
-        "tokenBudget": "1"
       }
     },
     "hooks": {
@@ -6620,9 +6688,6 @@
       },
       "connectedModels": {
         "title": "已连接的模型"
-      },
-      "defaultTag": {
-        "label": "默认"
       },
       "deselectError": {
         "message": "取消选择失败"
@@ -7086,7 +7151,6 @@
           "tag": "建议使用 GPU"
         },
         "legacy": {
-          "tag": "旧版",
           "tooltip": "此模型不能用于新索引。在您更换模型之前，它会继续工作。"
         },
         "selectButton": {
@@ -7139,9 +7203,6 @@
       "multipass": {
         "description": "将文档索引为不同大小的分块，以更好地识别相关来源。",
         "disabledTooltip": "多轮索引暂时禁用，将在未来提供。",
-        "tag": {
-          "label": "暂时不可用"
-        },
         "title": "多轮索引"
       },
       "openaiCompatible": {
@@ -7293,6 +7354,7 @@
       },
       "vectorQuantization": {
         "description": "使用更少的位存储文档向量，以减少向量搜索的内存占用。位数越少，搜索质量可能越低。仅更改此设置时，将使用已存储的向量重建索引，无需重新嵌入。",
+        "needsVersion": "需要 OpenSearch {version}+",
         "none": {
           "description": "完整的 32 位精度。",
           "label": "无"
@@ -7305,7 +7367,8 @@
           "description": "向量搜索内存占用降至约 1/4，搜索质量几乎无损。",
           "label": "7 位"
         },
-        "title": "向量量化"
+        "title": "向量量化",
+        "unsupportedTooltip": "此集群运行 OpenSearch {current}。请将 OpenSearch 升级到 {version} 或更高版本以使用此级别。"
       },
       "wontPortConsentModal": {
         "title": "{count, plural, one {该连接器将被删除} other {这 # 个连接器将被删除}}",
@@ -7420,37 +7483,26 @@
       }
     },
     "indexing": {
+      "addConnector": "添加连接器",
       "connectorCreated": {
         "toast": "已成功创建连接器"
       },
       "overview": {
-        "connectors": {
-          "caption": "索引中 / 活跃",
-          "label": "连接器"
-        },
-        "documents": {
-          "caption": "索引中",
-          "label": "文档",
-          "tooltip": "将每个连接器的文档数相加，因此两个连接器都包含的文档会计两次。"
-        },
-        "ratio": {
-          "whole": "/ {whole}"
-        },
-        "loadError": "无法加载概览。",
-        "processed": {
-          "caption": "时间范围内已处理",
-          "label": "文档",
-          "tooltip": "这是估算值，因为每次运行的数量会平均分摊到其运行时间内。运行每处理一次文档就计一次，包括失败的文档，因此可能超过索引中的文档数。"
-        }
+        "activeConnectors": "活跃连接器",
+        "pausedConnectors": "已暂停的连接器",
+        "indexingConnectors": "正在索引的连接器",
+        "loadError": "无法加载概览。"
       },
       "activities": {
         "title": "活动",
-        "history": "完整活动历史",
-        "viewLogs": "查看日志",
         "panel": {
-          "title": "活动历史",
+          "title": "活动",
           "close": "关闭面板",
           "pairTitle": "{name} 的活动历史"
+        },
+        "panelButton": {
+          "show": "显示活动",
+          "hide": "隐藏活动"
         }
       },
       "list": {
@@ -7459,21 +7511,23 @@
         },
         "statusFilter": {
           "label": "状态",
-          "all": "全部状态"
+          "all": "全部状态",
+          "running": "进行中"
         },
         "counts": {
           "indexed": "{count, plural, other {# 个连接器已索引}}",
-          "indexing": "{count, plural, other {# 个连接器正在索引}}",
+          "running": "{indexing, plural, other {# 个正在索引}}，{syncing, plural, other {# 个正在同步}}",
           "failed": "{count, plural, other {# 个连接器失败}}",
           "paused": "{count, plural, other {# 个连接器已暂停}}",
           "scheduled": "{count, plural, other {# 个连接器已计划}}",
           "deleting": "{count, plural, other {# 个连接器正在删除}}"
         },
         "access": {
-          "public": "组织",
-          "private": "私有",
-          "sync": "自动同步",
-          "sync_restricted": "自动同步（受限）"
+          "public": "对整个组织公开",
+          "private": "{count, plural, =0 {私有} other {已与 # 个组共享}}",
+          "sync": "自动同步权限",
+          "sync_restricted": "自动同步权限",
+          "personal": "仅限我"
         },
         "detail": {
           "queued": "队列中第 {position, selectordinal, other {#}} 位",
@@ -7482,7 +7536,7 @@
         },
         "docs": {
           "label": "文档",
-          "processed": "已处理 {count, number} 个",
+          "processed": "最近已处理 {count, number} 个",
           "processedTooltip": {
             "running": "当前运行到目前为止处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，因此可能超过该连接器的文档数。",
             "finished": "上次运行处理过的文档数，包括失败的文档。运行处理两次的文档会计两次，之后删除的文档不再计入该连接器，因此可能超过该连接器的文档数。"
@@ -7493,6 +7547,8 @@
           "manageFederated": "管理联合连接器",
           "expand": "查看详情",
           "collapse": "隐藏详情",
+          "viewErrors": "查看错误",
+          "viewAllRuns": "查看所有运行",
           "pause": "暂停",
           "resume": "恢复"
         },
@@ -7505,7 +7561,8 @@
           "filteredTitle": "没有连接器符合这些筛选条件。"
         },
         "loadError": "无法加载连接器。",
-        "units": "{count, plural, other {个连接器}}"
+        "units": "{count, plural, other {个连接器}}",
+        "sourceGroup": "{source}（{count, number}）"
       },
       "title": "连接器索引状态"
     },
@@ -7597,7 +7654,7 @@
             "targetUriParseFailed": "无法解析目标 URI — 将使用原始值。"
           },
           "validation": {
-            "targetUriInvalid": "目标 URI 必须是有效的 URL，并带有 api-version 查询参数，且路径中包含部署名称或 /openai/responses",
+            "targetUriInvalid": "目标 URI 必须是有效的 URL：/openai/v1/ URL，或带有 api-version 查询参数且路径中包含部署名称或 /openai/responses 的 URL",
             "targetUriRequired": "目标 URI 为必填项"
           }
         },
@@ -7811,7 +7868,6 @@
           "row": {
             "defaultLabel": "默认模型",
             "decisionTag": {
-              "label": "决策",
               "decisionOnly": "决策模型。不在聊天模型选择器中显示。",
               "chatAndDecision": "支持聊天和决策任务。"
             },
@@ -7820,9 +7876,6 @@
             },
             "setDefaultButton": {
               "label": "设为默认"
-            },
-            "visionMarker": {
-              "title": "视觉"
             }
           },
           "selectAllButton": {
@@ -8018,9 +8071,6 @@
         "title": "设置一个 LLM 提供商即可开始对话。"
       },
       "providerCard": {
-        "defaultTag": {
-          "label": "默认"
-        },
         "deleteButton": {
           "ariaLabel": "删除 {provider}"
         },
@@ -9866,169 +9916,6 @@
         "helpUrl": "https://docs.onyx.app"
       }
     },
-    "tokenRateLimits": {
-      "limits": {
-        "budget": {
-          "both": "最多 {cost} 或 {tokens} 个 token",
-          "cost": "最多 {cost}",
-          "none": "未设置预算",
-          "tokens": "最多 {tokens} 个 token"
-        },
-        "cadence": {
-          "label": "{days, plural, one {每天在 UTC 午夜重置} other {每 # 天在 UTC 午夜重置}}"
-        },
-        "deleteFailed": {
-          "error": "删除 token 速率限制失败"
-        },
-        "empty": {
-          "message": "尚无限额。创建支出限额以控制用量。"
-        },
-        "loadFailed": {
-          "error": "加载 token 速率限制失败"
-        },
-        "row": {
-          "delete": {
-            "ariaLabel": "删除 {label}",
-            "tooltip": "删除限额"
-          },
-          "disable": {
-            "ariaLabel": "禁用 {label}"
-          },
-          "enable": {
-            "ariaLabel": "启用 {label}"
-          },
-          "label": "{budget}，{cadence}"
-        },
-        "updateFailed": {
-          "error": "更新 token 速率限制失败"
-        }
-      },
-      "modal": {
-        "cancel": {
-          "label": "取消"
-        },
-        "costBudget": {
-          "description": "每个重置周期的最高支出。可设置费用预算、token 预算，或同时设置两者。",
-          "placeholder": "无费用限额",
-          "title": "费用预算",
-          "unit": "USD"
-        },
-        "errors": {
-          "budgetRequired": "请输入费用预算、token 预算，或同时输入两者",
-          "costMax": "最高费用预算为 ${amount, number}",
-          "costMinCents": "费用预算至少为 $0.01",
-          "costMoreThanZero": "费用预算必须大于 0",
-          "groupRequired": "请选择用户组",
-          "periodInteger": "请输入整数天数",
-          "periodMin": "至少为 1 天",
-          "periodRequired": "请输入重置周期",
-          "scopeRequired": "目标范围为必填项",
-          "tokenIncrement": "请以 1,000 个 token 为增量",
-          "tokenInteger": "请输入整数个 token",
-          "tokenMax": "最高 token 预算为 1 万亿",
-          "tokenMin": "至少为 1,000 个 token"
-        },
-        "groupMenu": {
-          "empty": "尚无用户组。请在“用户与用户组”中创建。"
-        },
-        "groupPicker": {
-          "placeholder": "选择用户组"
-        },
-        "header": {
-          "title": "创建支出限额"
-        },
-        "period": {
-          "description": "预算在 UTC 午夜重置",
-          "title": "重置周期",
-          "unit": "天"
-        },
-        "scope": {
-          "caption": {
-            "global": "工作区中的所有人共享一个预算。",
-            "group": "{group} 的成员共享一个预算。",
-            "groupUnchosen": "所选用户组的成员共享一个预算。",
-            "user": "每位用户拥有各自的预算。"
-          },
-          "title": "应用范围"
-        },
-        "scopeOptions": {
-          "global": {
-            "title": "工作区"
-          },
-          "user": {
-            "title": "每位用户"
-          },
-          "userGroup": {
-            "title": "用户组"
-          }
-        },
-        "submit": {
-          "label": "创建限额"
-        },
-        "summary": {
-          "budget": {
-            "both": "{cost} 或 {tokens} 个 token",
-            "tokens": "{tokens} 个 token"
-          },
-          "global": "{days, plural, one {工作区中的所有人每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {工作区中的所有人每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "group": "{days, plural, one {每天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {每 # 天，{group} 的成员共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "groupUnchosen": "{days, plural, one {所选用户组的成员每天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。} other {所选用户组的成员每 # 天共享最多 {budget} 的额度。在周期重置之前将无法继续使用。}}",
-          "user": "{days, plural, one {每位用户每天最多可花费 {budget}。在周期重置之前将无法继续使用。} other {每位用户每 # 天最多可花费 {budget}。在周期重置之前将无法继续使用。}}"
-        },
-        "tokenBudget": {
-          "description": "每个重置周期的最大 token 数",
-          "placeholder": "无 token 限额",
-          "title": "Token 预算",
-          "unit": "token"
-        },
-        "userGroup": {
-          "description": "选择共享此预算的用户组",
-          "title": "用户组"
-        }
-      },
-      "panel": {
-        "create": {
-          "label": "创建支出限额"
-        },
-        "createFailed": {
-          "error": "创建支出限额失败"
-        },
-        "created": {
-          "message": "支出限额已创建！"
-        },
-        "embedded": {
-          "description": "为工作区、用户和用户组的用量设置护栏。可以启用或禁用限额，无需删除其配置。",
-          "title": "管理支出限额"
-        },
-        "global": {
-          "description": "全局限额适用于所有用户、用户组和 API 密钥。达到全局限额后，将无法再消耗 token。"
-        },
-        "intro": {
-          "description": "支出限额帮助您控制在给定时间段内可以消耗多少 token。",
-          "groupLimit": "为用户组设置限额，以控制团队的支出。",
-          "toggleLimit": "根据需要启用和禁用限额。",
-          "userLimit": "为用户设置限额，避免单个用户支出过多。",
-          "workspaceLimit": "设置工作区级限额，控制团队的总体支出。"
-        },
-        "tabs": {
-          "global": {
-            "name": "全局"
-          },
-          "groups": {
-            "name": "用户组"
-          },
-          "users": {
-            "name": "用户"
-          }
-        },
-        "user": {
-          "description": "用户限额分别应用于每位用户。当用户达到限额时，将暂时无法消耗 token。"
-        },
-        "userGroup": {
-          "description": "用户组限额适用于组内的所有用户。如果用户属于多个用户组，则以最宽松的限额为准。"
-        }
-      }
-    },
     "tracing": {
       "disconnectModal": {
         "body": "LLM 调用追踪将不再发送到 **{label}**。已发送的追踪不受影响。",
@@ -10383,13 +10270,6 @@
           "label": "邀请用户"
         },
         "title": "用户与申请"
-      },
-      "permissionsNotice": {
-        "description": "{appName} 现在使用基于用户组的权限。策展人和全局策展人角色已由可配置的用户组权限取代，并可为每个用户组指定管理者，实现范围化管理。",
-        "learnMoreButton": {
-          "label": "了解更多"
-        },
-        "title": "权限已变更"
       },
       "resetPasswordModal": {
         "copyButton": {
@@ -11157,6 +11037,200 @@
         "scoped": "仅限新增或更改的项目",
         "failures": "{count, plural, other {失败 # 次}}"
       }
+    },
+    "spendingLimits": {
+      "page": {
+        "description": "设置支出限额，为组织的 LLM 支出设置护栏。",
+        "loadFailed": "无法加载支出上限。"
+      },
+      "workspace": {
+        "title": "工作区上限",
+        "description": "适用于该组织中的所有用户和账户。",
+        "pool": {
+          "title": "共享预算",
+          "description": "每个重置周期内所有人共享的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无全局工作区限额",
+          "target": "全局工作区限额",
+          "emptyDescription": "每个重置周期内所有人共享的限额。"
+        },
+        "perUser": {
+          "title": "每用户上限",
+          "description": "组织中每位用户各自的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无每用户限额",
+          "target": "全局每用户限额",
+          "emptyDescription": "组织中每位用户各自的限额。"
+        }
+      },
+      "groups": {
+        "title": "组上限",
+        "description": "适用于该组织中的特定群组。",
+        "add": {
+          "label": "添加组上限"
+        },
+        "picker": {
+          "placeholder": "选择组",
+          "limitSet": "已设限额："
+        },
+        "members": "{count, plural, other {# 名成员}}",
+        "empty": "为工作区、用户和群组的使用设置费用/令牌限额。",
+        "pool": {
+          "title": "组共享预算",
+          "description": "该群组所有人共享的限额。设置费用限额、令牌限额或两者。",
+          "empty": "无群组共享预算",
+          "target": "群组限额",
+          "emptyDescription": "该群组所有人共享的限额。",
+          "members": "{count, plural, other {# 名成员}}"
+        },
+        "perMember": {
+          "title": "每成员上限",
+          "description": "该群组每位成员各自的限额。设置费用限额、令牌限额或两者。",
+          "adminOnly": "每成员上限可以让成员高于工作区上限，因此只有管理员可以更改。",
+          "empty": "无每成员限额",
+          "target": "群组每位成员限额",
+          "emptyDescription": "该群组每位成员各自的限额。",
+          "members": "每位成员限额 • {count, plural, other {# 名成员}}"
+        },
+        "kind": {
+          "placeholder": "选择限额类型"
+        },
+        "field": {},
+        "new": {
+          "title": "新建群组限额",
+          "pool": {
+            "description": "特定群组所有人共享的限额。设置费用限额、令牌限额或两者。"
+          },
+          "perMember": {
+            "description": "特定群组每位成员各自的限额。设置费用限额、令牌限额或两者。"
+          }
+        }
+      },
+      "groupPage": {
+        "title": "支出上限",
+        "description": "限制此组在 LLM 使用上的支出。"
+      },
+      "card": {
+        "addLimit": "添加上限",
+        "addModelBudget": "添加模型预算",
+        "modelBudget": {
+          "title": "模型预算",
+          "description": "为特定模型的支出设上限。这些支出也计入共享预算。"
+        },
+        "cancel": "取消",
+        "save": "保存更改",
+        "saved": "支出上限已保存",
+        "saveFailed": "无法保存支出上限：{error}",
+        "create": "创建限额",
+        "reenable": "重新启用",
+        "disable": {
+          "tooltip": "关闭所有限额"
+        },
+        "expand": {
+          "tooltip": "管理"
+        },
+        "collapse": {
+          "tooltip": "收起"
+        },
+        "summary": {
+          "both": "<b>{cost}</b> 或 <b>{tokens}</b> 个令牌 / {period}",
+          "cost": "<b>{cost}</b> / {period}",
+          "tokens": "<b>{tokens}</b> 个令牌 / {period}",
+          "period": {
+            "DAILY": "天",
+            "WEEKLY": "周",
+            "MONTHLY": "月"
+          },
+          "separator": " • ",
+          "target": "{target} • {count, plural, other {# 个模型预算}}",
+          "nextReset": "下次重置：{at}",
+          "inactive": "已停用的限额",
+          "used": "已使用 <b>{percent}%</b>",
+          "prefix": "{name} - "
+        }
+      },
+      "alerts": {
+        "title": "提醒",
+        "description": "通过 API 设置的仅提醒上限。它们不会阻止使用，在此保存时也保持不变。",
+        "row": "{model}，{period}：{target}",
+        "allModels": "所有模型",
+        "percent": "上限的 {percent}%",
+        "tokens": "{tokens} 个令牌"
+      },
+      "row": {
+        "model": {
+          "title": "模型",
+          "placeholder": "搜索模型…"
+        },
+        "period": {
+          "title": "重置周期",
+          "options": {
+            "DAILY": {
+              "title": "每日上限",
+              "description": "每天重置",
+              "helper": "每天 00:00 UTC 重置。"
+            },
+            "WEEKLY": {
+              "title": "每周上限",
+              "description": "每周一重置",
+              "helper": "每周一 00:00 UTC 重置。"
+            },
+            "MONTHLY": {
+              "title": "每月上限",
+              "description": "每月1日重置",
+              "helper": "每月1日 00:00 UTC 重置。"
+            }
+          }
+        },
+        "nextReset": "下次重置",
+        "resetUsage": {
+          "label": "立即重置限额用量",
+          "done": "用量已重置。此限额从现在起计算，直到下次重置。",
+          "failed": "无法重置用量：{error}"
+        },
+        "remove": {
+          "tooltip": "移除上限"
+        },
+        "cost": {
+          "title": "成本上限",
+          "placeholder": "无费用限额",
+          "suffix": "USD"
+        },
+        "tokens": {
+          "title": "令牌上限",
+          "placeholder": "无令牌上限",
+          "suffix": "K",
+          "unit": "令牌"
+        },
+        "usage": {
+          "spent": "已花费 <mono>{amount}</mono>",
+          "tokens": "已使用 <mono>{tokens}</mono> 个令牌",
+          "percent": "{percent}%",
+          "blocked": {
+            "all": "在下次重置前将阻止使用。",
+            "model": "在下次重置前将阻止使用该模型。"
+          }
+        },
+        "whenReached": {
+          "title": "达到此上限时",
+          "blockAll": {
+            "title": "达到限额时阻止所有使用",
+            "description": "所有模型的使用（包括聊天、搜索、机器人和 API 调用）都将停止，直至下次重置。"
+          },
+          "blockModel": {
+            "title": "达到限额时阻止模型使用",
+            "description": "该模型的使用（包括聊天、机器人和 API 调用）将停止，直到下次重置。",
+            "summary": "达到限额时阻止模型使用"
+          }
+        },
+        "errors": {
+          "budgetOutOfRange": "请将成本设为至少 0.01 美元，令牌数不超过 1 万亿。",
+          "budgetRequired": "请设置成本上限、令牌上限或两者。",
+          "duplicate": "另一个上限已使用此周期。",
+          "modelRequired": "请选择一个模型。"
+        },
+        "edit": {
+          "tooltip": "编辑"
+        }
+      }
     }
   },
   "agents": {
@@ -11169,6 +11243,9 @@
       },
       "pin": {
         "tooltip": "固定到侧边栏"
+      },
+      "pinFailed": {
+        "message": "无法更新固定状态，请重试。"
       },
       "share": {
         "tooltip": "分享智能体"
@@ -11566,10 +11643,12 @@
     },
     "navigation": {
       "countSeparator": {
-        "label": "{count, plural, one {智能体} other {智能体}}"
+        "label": "{count, plural, one {#智能体} other {#智能体}}"
       },
       "empty": {
-        "description": "未找到智能体"
+        "description": "你创建的智能体以及与你共享的智能体会显示在这里。",
+        "filteredDescription": "没有智能体符合所选标签页和筛选条件。",
+        "item": "智能体"
       },
       "header": {
         "description": "为您和团队的使用场景定制 AI 的行为和知识。",
@@ -11583,9 +11662,6 @@
       },
       "page": {
         "ariaLabel": "智能体页面"
-      },
-      "search": {
-        "placeholder": "搜索智能体..."
       },
       "sections": {
         "all": {
@@ -12075,9 +12151,6 @@
         "builtin": {
           "label": "内置"
         },
-        "custom": {
-          "label": "自定义"
-        },
         "invalid": {
           "label": "无效"
         },
@@ -12089,6 +12162,16 @@
         },
         "unavailable": {
           "label": "不可用 - 点击了解更多"
+        },
+        "shared": {
+          "label": "共享"
+        },
+        "organization": {
+          "label": "组织"
+        },
+        "unpublished": {
+          "label": "未发布的更改",
+          "tooltip": "组织仍在使用版本 {number}。"
         }
       },
       "toggle": {
@@ -12157,6 +12240,9 @@
       },
       "firstOpenLoader": {
         "ariaLabel": "正在加载聊天"
+      },
+      "olderMessagesLoader": {
+        "ariaLabel": "正在加载更早的消息"
       },
       "newChatButton": {
         "label": "开始新聊天"
@@ -12367,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "子代理正在工作",
         "attachFilesButton": {
           "tooltip": "附加文件"
         },
@@ -12375,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "多模型模式下无法使用深度研究",
+          "incognitoTooltip": "无痕模式下无法使用深度研究",
           "label": "深度研究"
         },
         "incognitoNotice": {
@@ -12403,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "设置语音",
           "tooltip": "未配置语音。请在管理员设置中配置。"
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter 发送 · Ctrl 或 Command + Enter 加入队列",
+          "multiModelHint": "比较模型时无法加入队列。请选择一个模型以使用队列。",
+          "attachmentsHint": "请在此回复结束后发送附件。",
+          "chooseResponseHint": "请先选择回复，再将消息加入队列。",
+          "incognitoHint": "在无痕聊天中，请等待回复结束。",
+          "sendHint": "在此回复的下一步发送",
+          "interruptHint": "中断当前工作并发送此消息",
+          "sendLabel": "发送",
+          "queueLabel": "排队",
+          "interruptKeyboardHint": "Enter 中断 · Ctrl 或 Command + Enter 加入队列",
+          "interruptLabel": "中断",
+          "waitHint": "请等待回复完成。",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "停止子代理"
         }
       },
       "baseInputBar": {
@@ -12501,16 +12607,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "移除排队的消息"
+          "tooltip": "移除排队的消息",
+          "ariaLabel": "移除排队的消息：{message}"
         },
         "editHint": {
           "label": "编辑 ·"
         },
-        "item": {
-          "ariaLabel": "切换排队的消息"
-        },
         "removeHint": {
           "label": "移除"
+        },
+        "editButton": {
+          "tooltip": "编辑队列中的消息",
+          "clearDraftTooltip": "请清空草稿后再编辑队列中的消息",
+          "ariaLabel": "编辑排队的消息：{message}"
+        },
+        "sendButton": {
+          "tooltip": "中断当前工作并发送此消息",
+          "ariaLabel": "立即发送：{message}"
+        },
+        "sendHint": {
+          "label": "立即发送 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12520,6 +12636,14 @@
         "startSessionButton": {
           "label": "开始新会话"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "无法提交消息。",
+        "withdrawFailed": "无法移除待处理消息。",
+        "loadFailed": "无法加载待处理消息。",
+        "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
+        "stopSubagentsFailed": "无法停止子代理。"
       }
     },
     "mcpApiKey": {
@@ -12611,7 +12735,13 @@
       "agentMessage": {
         "stoppedGeneration": {
           "text": "用户已停止生成"
+        },
+        "timedOut": {
+          "text": "回复已达到时间限制，因此已停止。"
         }
+      },
+      "agentResults": {
+        "received": "已收到子代理结果"
       },
       "codeBlock": {
         "copyButton": {
@@ -12746,9 +12876,6 @@
         }
       },
       "imageTool": {
-        "defaultStatus": {
-          "text": "图片生成"
-        },
         "emptyState": {
           "text": "未生成图片"
         },
@@ -12758,11 +12885,11 @@
         "generatedStatus": {
           "text": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
         },
-        "generatingImagesStatus": {
-          "text": "正在生成图片..."
-        },
         "generatingStatus": {
           "text": "正在生成图片..."
+        },
+        "stoppedStatus": {
+          "text": "图片生成已停止"
         }
       },
       "memoizedLink": {
@@ -12827,6 +12954,9 @@
         },
         "tryAgainNow": {
           "text": "您现在可以重试。"
+        },
+        "otherModels": {
+          "text": "其他模型仍可使用。"
         }
       },
       "resubmit": {
@@ -12846,6 +12976,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · 退出码 {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · 失败"
           },
           "bashRequest": {
             "label": "请求"
@@ -12924,9 +13057,6 @@
           "executingTool": {
             "label": "正在执行工具"
           },
-          "generatingImage": {
-            "label": "正在生成图片..."
-          },
           "generatingImages": {
             "label": "正在生成图片"
           },
@@ -12953,6 +13083,9 @@
           },
           "updatingMemory": {
             "label": "正在更新记忆..."
+          },
+          "working": {
+            "label": "处理中"
           }
         },
         "internalSearch": {
@@ -13277,14 +13410,14 @@
           "title": "您的组织"
         },
         "permissionMenu": {
-          "edit": {
-            "label": "编辑"
+          "canEdit": {
+            "label": "可编辑"
+          },
+          "canUse": {
+            "label": "可使用"
           },
           "removeAccess": {
             "label": "移除访问权限"
-          },
-          "viewAndChat": {
-            "label": "查看和对话"
           }
         },
         "privateOption": {
@@ -14180,6 +14313,11 @@
       "completeFailed": {
         "message": "无法完成授权"
       },
+      "desktopHandoff": {
+        "button": "打开 Onyx",
+        "description": "浏览器将打开 Onyx 桌面应用以完成连接。应用打开后，您可以关闭此标签页。",
+        "title": "返回 Onyx"
+      },
       "genericError": {
         "description": "OAuth 过程中发生错误。请重试。",
         "title": "出了点问题"
@@ -14236,10 +14374,7 @@
       "upgrade": {
         "label": "升级方案"
       },
-      "availableFor": "{plan}可用",
-      "beta": {
-        "title": "测试版"
-      }
+      "availableFor": "{plan}可用"
     },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
@@ -14273,6 +14408,38 @@
     },
     "appFooter": {
       "slogan": "开源 AI 平台"
+    },
+    "states": {
+      "noItems": {
+        "itemTitle": "没有{item}",
+        "title": "没有项目"
+      },
+      "noResults": {
+        "description": "未找到与该搜索词匹配的结果。",
+        "itemTitle": "未找到{item}",
+        "title": "未找到结果"
+      }
+    },
+    "gridSearch": {
+      "itemPlaceholder": "搜索{item}，或按“/”聚焦...",
+      "placeholder": "搜索，或按“/”聚焦..."
+    },
+    "badges": {
+      "lifecycle": {
+        "alpha": "内测版",
+        "beta": "测试版",
+        "comingSoon": "即将推出",
+        "deprecated": "已弃用",
+        "temporarilyUnavailable": "暂时不可用",
+        "legacy": "旧版"
+      },
+      "labels": {
+        "default": "默认"
+      },
+      "modelTypes": {
+        "decision": "决策",
+        "vision": "视觉"
+      }
     }
   },
   "craft": {
@@ -14380,7 +14547,7 @@
         "promote": {
           "cancelButton": "取消",
           "confirmButton": "设为组织范围可用",
-          "description": "与应用关联的技能必须对所有人可用。此更改将在保存应用时生效。",
+          "description": "与应用关联的技能必须对所有人可用。保存应用时，该技能会发布到组织。发布后无法撤销。",
           "title": "将“{name}”设为组织范围可用？"
         },
         "search": {
@@ -14794,6 +14961,10 @@
       },
       "plusMenu": {
         "tooltip": "添加文件或技能"
+      },
+      "contextRing": {
+        "label": "上下文窗口用量",
+        "tooltip": "已使用 {percent}% 的上下文"
       }
     },
     "interruptHint": {
@@ -14805,9 +14976,6 @@
       }
     },
     "intro": {
-      "beta": {
-        "badge": "BETA"
-      },
       "returnHome": {
         "button": "返回首页"
       },
@@ -16057,14 +16225,16 @@
     "inputMultiUpload": {
       "placeholder": "添加文件…",
       "dropToAdd": "将文件拖放到此处以添加",
-      "dropToAddMore": "拖放到此处以添加更多文件"
+      "dropToAddMore": "拖放到此处以添加更多文件",
+      "select": "选择文件"
     },
     "inputUpload": {
       "placeholder": "添加文件…",
       "pasted": "已粘贴的文本",
       "attached": "已附加文件",
       "dropToAdd": "将文件拖放到此处以添加",
-      "dropToReplace": "拖放到此处以替换文件"
+      "dropToReplace": "拖放到此处以替换文件",
+      "select": "选择文件"
     },
     "inputImage": {
       "alt": "图片",
@@ -16313,6 +16483,12 @@
       "title": "对话",
       "toasts": {
         "saveFailed": "保存偏好设置失败"
+      },
+      "sendBehavior": {
+        "title": "工作期间的发送行为",
+        "description": "选择在回答过程中按 Enter 键和发送按钮的行为。Ctrl/Cmd+Enter 始终将后续消息加入队列。",
+        "afterStep": "当前步骤完成后",
+        "interrupt": "中断当前工作"
       }
     },
     "connectors": {
@@ -16718,6 +16894,12 @@
         },
         "webSearch": {
           "label": "网页搜索"
+        },
+        "skills": {
+          "label": "技能"
+        },
+        "spendingLimits": {
+          "label": "支出上限"
         }
       },
       "sections": {
@@ -17019,6 +17201,13 @@
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
+      "staleVersion": {
+        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。",
+        "reload": {
+          "label": "重新加载"
+        },
+        "title": "此技能在您打开后已被更改"
+      },
       "toasts": {
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
@@ -17031,6 +17220,9 @@
         "inspectFailed": "检查技能包失败",
         "saveFailed": "保存技能失败",
         "saved": "已保存“{name}”"
+      },
+      "creationAccess": {
+        "title": "访问权限"
       }
     },
     "modals": {
@@ -17069,6 +17261,13 @@
           "singleSkill": "每次只能上传一个技能。",
           "title": "文件要求",
           "zip": "ZIP 文件必须包含一个 SKILL.md 文件。"
+        },
+        "batch": {
+          "title": "上传技能的访问权限",
+          "selected": "{count, plural, one {已选择 # 个技能包} other {已选择 # 个技能包}}",
+          "result": "{imported, plural, one {已导入 # 个技能} other {已导入 # 个技能}}。{failed, plural, one {# 个失败} other {# 个失败}}。",
+          "failure": "{name}：{reason}",
+          "requirement": "选择多个 ZIP 文件以批量导入技能。每个 ZIP 必须包含一个技能。"
         }
       },
       "importGithub": {
@@ -17145,6 +17344,11 @@
         "unavailableFallback": "无法导入此技能。",
         "unavailableTag": {
           "label": "无法导入"
+        },
+        "sharing": {
+          "title": "导入技能的访问权限",
+          "configureButton": "配置访问权限",
+          "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
         }
       },
       "nameConflict": {
@@ -17204,14 +17408,9 @@
           "message": "正在加载共享详情…"
         },
         "noOwnerTitle": "没有有效的所有者",
-        "organizationPermissionMenu": {
-          "ariaLabel": "更改组织权限"
-        },
         "ownerLabel": "所有者",
         "permissionMenu": {
-          "ariaLabel": "更新 {name} 的访问权限",
-          "canUse": "可使用",
-          "canEdit": "可编辑"
+          "ariaLabel": "更新 {name} 的访问权限"
         },
         "saveButton": {
           "label": "保存"
@@ -17249,15 +17448,82 @@
         "peopleTitle": "有访问权限的人员",
         "manageIndividualAccess": "管理单独访问权限",
         "individualAccessTitle": "单独访问权限",
-        "ownershipTitle": "所有权"
+        "ownershipTitle": "所有权",
+        "published": {
+          "title": "组织",
+          "description": "已发布。组织中的所有人都可以使用此技能。"
+        },
+        "publishWarning": {
+          "title": "发布后无法撤销",
+          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。",
+          "reviewDescription": "在管理员批准请求之前，技能保持私有。批准后，您无法再将其设为私有。"
+        },
+        "reviewRequestedToast": {
+          "message": "你的发布请求已提交给管理员审核。"
+        },
+        "publishOff": {
+          "title": "发布已关闭",
+          "description": "管理员已关闭向组织发布。请让管理员发布此技能。"
+        }
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
+      },
+      "tabs": {
+        "details": "详情",
+        "sharing": "共享",
+        "versions": "版本"
+      },
+      "versions": {
+        "tableLabel": "技能版本",
+        "columns": {
+          "version": "版本",
+          "madeBy": "创建者",
+          "date": "日期"
+        },
+        "versionLabel": "版本 {number}",
+        "currentBadge": "当前",
+        "unknownAuthor": "未知",
+        "previewRow": {
+          "ariaLabel": "预览版本 {number}"
+        },
+        "restore": {
+          "label": "恢复",
+          "ariaLabel": "恢复版本 {number}",
+          "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
+          "unchangedToast": "版本 {number} 的文件与当前版本相同。",
+          "failedToast": "无法恢复此版本。",
+          "unsavedChanges": {
+            "title": "请先保存更改",
+            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
+          }
+        },
+        "loadError": {
+          "title": "无法加载版本",
+          "description": "请稍后重试。"
+        },
+        "preview": {
+          "back": "所有版本",
+          "loadError": {
+            "title": "无法加载此版本"
+          }
+        },
+        "status": {
+          "pending": "待审核",
+          "published": "已发布"
+        },
+        "publishUpdate": {
+          "label": "发布更新",
+          "successToast": "已将版本 {number} 发布到组织。",
+          "failedToast": "无法发布此更新。",
+          "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
+          "offNotice": "发布已关闭。请让管理员发布此更新。"
+        }
       }
     },
     "page": {
       "browse": {
-        "title": "浏览技能"
+        "title": "选择技能"
       },
       "countSeparator": {
         "label": "{count, plural, one {技能} other {技能}}"
@@ -17285,8 +17551,8 @@
           "title": "没有匹配的技能"
         },
         "noSkills": {
-          "description": "尚无自定义技能与您共享，也未配置内置技能。",
-          "title": "没有可用的技能"
+          "title": "暂无自定义技能",
+          "description": "创建或导入技能，将其添加到技能库。"
         }
       },
       "focusedApp": {
@@ -17323,6 +17589,9 @@
         "disableFailed": "停用 {name} 失败",
         "enableFailed": "启用 {name} 失败",
         "refreshFailed": "{name} 已更新，但技能列表无法刷新。"
+      },
+      "builtins": {
+        "title": "内置技能（{count, number}）"
       }
     },
     "sections": {
@@ -17377,6 +17646,65 @@
         "error": {
           "readFailed": "无法读取上传的内容。"
         }
+      }
+    },
+    "sharingSummary": {
+      "organization": "{count, plural, one {组织中的所有人都可以访问此技能。} other {组织中的所有人都可以访问这些技能。}}",
+      "selected": "已与 {users, plural, one {# 人} other {# 人}}和 {groups, plural, one {# 个群组} other {# 个群组}}共享。",
+      "private": "{count, plural, one {只有你可以访问此技能。} other {只有你可以访问这些技能。}}"
+    },
+    "bulk": {
+      "adminDescription": "管理整个组织的技能和访问权限。",
+      "selectAll": "选择所有可见的自定义技能",
+      "selected": "{count, plural, one {已选择 # 项} other {已选择 # 项}}",
+      "share": "分享",
+      "enable": "为我启用",
+      "disable": "为我禁用",
+      "delete": "删除",
+      "selectSkill": "选择 {name}",
+      "updated": "{count, plural, one {已更新 # 个技能} other {已更新 # 个技能}}",
+      "failed": "无法更新技能。请重试。",
+      "partialFailure": "{count, plural, one {# 个技能未能更新} other {# 个技能未能更新}}",
+      "deleteTitle": "{count, plural, one {删除 # 个技能？} other {删除 # 个技能？}}",
+      "deleteDescription": "{count, plural, one {这会为所有有访问权限的人删除所选技能。此操作无法撤销。} other {这会为所有有访问权限的人删除全部 # 个所选技能。此操作无法撤销。}}",
+      "shareTitle": "{count, plural, one {更新 # 个技能的访问权限} other {更新 # 个技能的访问权限}}",
+      "shareDescription": "将这些更改应用于每个所选技能。未更改的设置将保留当前值。",
+      "unchanged": "保持不变",
+      "everyone": "组织中的所有人",
+      "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
+      "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
+      "moreActions": "更多操作",
+      "publishWarning": {
+        "title": "发布后无法撤销",
+        "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
+      }
+    },
+    "reviewRequests": {
+      "title": "发布请求",
+      "description": "批准或拒绝将技能发布到组织的请求。",
+      "columns": {
+        "skill": "技能",
+        "version": "版本",
+        "author": "作者",
+        "saved": "保存时间"
+      },
+      "unnamedSkill": "未命名技能",
+      "review": {
+        "label": "审核",
+        "ariaLabel": "审核 {name}"
+      },
+      "approve": {
+        "label": "批准"
+      },
+      "deny": {
+        "label": "拒绝"
+      },
+      "approvedToast": "已发布 {name} 的版本 {number}。",
+      "deniedToast": "已拒绝 {name} 的版本 {number}。",
+      "failedToast": "无法更新此请求。",
+      "version": {
+        "firstPublish": "v{number} · 首次发布",
+        "update": "v{number} · 从 v{published} 更新"
       }
     }
   },

@@ -6,13 +6,13 @@ import type { ComponentType } from "react";
 import { render } from "@testing-library/react";
 import SvgSparkle from "@opal/icons/sparkle";
 import SvgClipboard from "@opal/icons/clipboard";
-import { TAG_COLORS } from "@opal/components/tag/colors";
-import type { TagColor } from "@opal/components/tag/colors";
+import { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";
+import type { StatusColor } from "@opal/types";
 import { createRichInputTileNode } from "@/lib/richInputTile";
 
 // Guards the raw-DOM tiles against drift from their source of truth (the Opal
-// Tag + icons): the mirrored path must equal the real icon, and the fill/text
-// colors must come from TAG_COLORS (blue for skill, gray for paste).
+// Badge + icons): the mirrored path must equal the real icon, and the fill/text
+// colors must come from the badge colours (blue for skill, gray for paste).
 
 function expectIconMirrors(tile: HTMLElement, realIcon: ComponentType) {
   const { container } = render(createElement(realIcon));
@@ -28,8 +28,8 @@ function expectIconMirrors(tile: HTMLElement, realIcon: ComponentType) {
   expect(tileIcon?.getAttribute("stroke-linecap")).toBe(realCap);
 }
 
-function expectColorsFromTag(tile: HTMLElement, color: TagColor) {
-  for (const cls of TAG_COLORS[color].bg.split(" ")) {
+function expectColorsFromTag(tile: HTMLElement, color: StatusColor) {
+  for (const cls of BADGE_COLORS[color].bg.split(" ")) {
     expect(tile.classList.contains(cls)).toBe(true);
   }
   for (const selector of [
@@ -37,13 +37,13 @@ function expectColorsFromTag(tile: HTMLElement, color: TagColor) {
     ".rich-input-tile-preview",
   ]) {
     const elClass = tile.querySelector(selector)?.getAttribute("class") ?? "";
-    for (const cls of TAG_COLORS[color].text.split(" ")) {
+    for (const cls of badgeTextClass(color).split(" ")) {
       expect(elClass).toContain(cls);
     }
   }
 }
 
-describe("skill tile stays in sync with the Opal Tag + sparkle icon", () => {
+describe("skill tile stays in sync with the Opal Badge + sparkle icon", () => {
   function skillTile() {
     return createRichInputTileNode({
       type: "skill",
@@ -58,12 +58,12 @@ describe("skill tile stays in sync with the Opal Tag + sparkle icon", () => {
     expectIconMirrors(skillTile(), SvgSparkle);
   });
 
-  it("sources fill + text colors from TAG_COLORS.blue", () => {
-    expectColorsFromTag(skillTile(), "blue");
+  it("sources fill + text colors from BADGE_COLORS.blue", () => {
+    expectColorsFromTag(skillTile(), "info");
   });
 });
 
-describe("paste tile stays in sync with the Opal Tag + clipboard icon", () => {
+describe("paste tile stays in sync with the Opal Badge + clipboard icon", () => {
   function pasteTile() {
     return createRichInputTileNode({
       type: "paste",
@@ -77,7 +77,7 @@ describe("paste tile stays in sync with the Opal Tag + clipboard icon", () => {
     expectIconMirrors(pasteTile(), SvgClipboard);
   });
 
-  it("sources fill + text colors from TAG_COLORS.gray", () => {
-    expectColorsFromTag(pasteTile(), "gray");
+  it("sources fill + text colors from BADGE_COLORS.gray", () => {
+    expectColorsFromTag(pasteTile(), "default");
   });
 });

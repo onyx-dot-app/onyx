@@ -1,9 +1,9 @@
 import datetime
-import json
 import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import (
@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
+from onyx.agents.models import MessageDelivery
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -28,25 +29,40 @@ from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
+    current_turn_owner,
     get_processing_stream_id,
     is_chat_session_processing,
+    stop_current_turn,
 )
 from onyx.chat.chat_utils import (
     convert_chat_history_basic,
     create_chat_session_from_request,
 )
+from onyx.chat.errors import unhandled_stream_error
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
 )
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.models import ChatFullResponse, ChatResponseOutcome, CreateChatSessionID
+from onyx.chat.models import (
+    ChatFullResponse,
+    ChatResponseOutcome,
+    CreateChatSessionID,
+    PendingChatMessage,
+)
 from onyx.chat.process_message import (
-    gather_stream_full,
+    dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
+    process_chat_query,
+    run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
+from onyx.chat.run_store import (
+    ownerless_response_ids,
+    request_response_stop,
+    stop_response,
+)
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -69,14 +85,30 @@ from onyx.db.chat import (
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
     get_chat_message,
+    get_chat_message_page_ids,
     get_chat_messages_by_session,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
+    get_owned_chat_session,
+    get_selected_branch,
     set_as_latest_chat_message,
+    set_chat_session_tool_selection__no_commit,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
+)
+from onyx.db.chat_inputs import (
+    active_agent_response_ids,
+    drop_agent_work__no_commit,
+    get_human_input_session,
+    interrupt_human_message__no_commit,
+    list_human_messages,
+    lock_agent,
+    pause_chat_queue__no_commit,
+    read_chat_inbox,
+    submit_human_message__no_commit,
+    withdraw_human_message__no_commit,
 )
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
@@ -86,7 +118,12 @@ from onyx.db.incognito import (
     is_incognito_teardown_target,
     mark_incognito_user_files_deleting,
 )
-from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
+from onyx.db.models import (
+    ChatMessage,
+    ChatSessionSharedStatus,
+    Persona,
+    User,
+)
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
@@ -137,10 +174,12 @@ from onyx.server.query_and_chat.models import (
     ChatSessionUpdateRequest,
     CurrentStreamInfo,
     MessageOrigin,
+    PendingChatMessageRequest,
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
     StopChatResponse,
+    StopSubagentsResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
@@ -154,13 +193,17 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamCursor,
     heartbeat_packet,
 )
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import (
     check_llm_cost_limit_for_provider,
     check_usage_and_raise,
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
+from onyx.tools.models import ChatToolSelection
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
@@ -168,6 +211,9 @@ from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# Largest page a client can ask of `get-chat-session`.
+MAX_CHAT_SESSION_PAGE_SIZE = 200
 
 router = APIRouter(prefix="/chat")
 
@@ -368,6 +414,29 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
+    # In `Annotated`, so a direct call (as in tests) gets the plain default.
+    limit: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=MAX_CHAT_SESSION_PAGE_SIZE,
+            description=(
+                "Return one page of the current branch: its last `limit` "
+                "messages and their children. `has_older_messages` tells "
+                "whether the branch has messages before the page. Without it, "
+                "every message on every branch is returned."
+            ),
+        ),
+    ] = None,
+    before_message_id: Annotated[
+        int | None,
+        Query(
+            description=(
+                "With `limit`, return the page that ends before this message. "
+                "Pass the oldest loaded message to load the next older page."
+            ),
+        ),
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
@@ -420,10 +489,21 @@ def get_chat_session(
         chat_session.user_id = user_id
         db_session.commit()
 
+    page_message_ids: set[int] | None = None
+    has_older_messages = False
+    if limit is not None:
+        page_message_ids, has_older_messages = get_chat_message_page_ids(
+            chat_session_id=session_id,
+            db_session=db_session,
+            limit=limit,
+            before_message_id=before_message_id,
+        )
+
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
         db_session=db_session,
+        message_ids=page_message_ids,
         # we already did a permission check above with the call to
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
@@ -483,6 +563,11 @@ def get_chat_session(
         current_stream=current_stream,
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
+        has_older_messages=has_older_messages,
+        # Only the owner's composer reads the selection; a shared view shows none.
+        tool_selection=chat_session.tool_selection
+        if user_id is not None and chat_session.user_id == user_id
+        else None,
     )
 
 
@@ -550,6 +635,7 @@ def _generate_or_fallback_chat_session_name(
                     tenant_id=get_current_tenant_id(),
                     llm_provider_api_key=llm.config.api_key,
                 )
+            check_model_spend_limits(user, llm.config.model_configuration_id)
 
         token_counter = get_llm_token_counter(llm)
         simple_chat_history = convert_chat_history_basic(
@@ -882,7 +968,7 @@ def handle_send_chat_message(
                     yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
-                yield json.dumps({"error": str(e)})
+                yield get_json_line(unhandled_stream_error(e).model_dump())
 
         return StreamingResponse(
             multi_model_stream_generator(), media_type="text/event-stream"
@@ -911,8 +997,7 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        response_future = Future[ChatResponseOutcome]()
-        packets = handle_stream_message_objects(
+        result = run_chat_turn(
             new_msg_req=chat_message_req,
             user=user,
             litellm_additional_headers=get_relevant_headers(
@@ -923,9 +1008,7 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            response_future=response_future,
         )
-        result = gather_stream_full(packets, response_future)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -958,7 +1041,7 @@ def handle_send_chat_message(
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
+            yield get_json_line(unhandled_stream_error(e).model_dump())
 
         finally:
             logger.debug("Stream generator finished")
@@ -1313,22 +1396,59 @@ _RESUME_MAX_CHUNKS_PER_READ = 32
 @router.get("/chat-session/{session_id}/status")
 def get_chat_session_processing_status(
     session_id: UUID,
+    background_tasks: BackgroundTasks,
+    request: Request,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
 ) -> ChatSessionProcessingStatus:
     with get_session_with_current_tenant() as db_session:
         try:
-            get_chat_session_by_id(
+            chat_session = get_chat_session_by_id(
                 chat_session_id=session_id,
                 user_id=user.id,
                 db_session=db_session,
             )
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
-    return ChatSessionProcessingStatus(
-        is_processing=is_chat_session_processing(session_id, get_cache_backend())
+        inbox = read_chat_inbox(db_session, session_id)
+    # Read admission after input: a turn claims admission before it consumes
+    # input, so a starting turn shows as startable input or as processing.
+    cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+    stream_id = get_processing_stream_id(session_id, cache)
+    status = ChatSessionProcessingStatus(
+        latest_response_id=inbox.selected_response_id,
+        has_active_subagents=any(result.is_active for result in inbox.results)
+        or bool(inbox.child_work),
+        has_startable_input=inbox.next_turn is not None,
+        is_processing=stream_id is not None
+        or is_chat_session_processing(session_id, cache),
+        current_stream=CurrentStreamInfo(stream_id=stream_id)
+        if stream_id is not None
+        else None,
     )
+
+    if (
+        not status.is_processing
+        and chat_session.user_id == user.id
+        and user.id is not None
+        and (
+            inbox.next_turn is not None
+            # Dispatch saves a response whose owner is gone as interrupted.
+            or ownerless_response_ids(cache, inbox.unfinished_response_ids)
+            # Agent work needs a host when no running child's store scans.
+            or (inbox.child_work and not inbox.running_response_ids)
+        )
+    ):
+        # Queued work can outlive the process that completed its previous response.
+        background_tasks.add_task(
+            dispatch_pending_chat_messages,
+            session_id,
+            user.id,
+            get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+            get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+        )
+    return status
 
 
 @router.get("/chat-session/{session_id}/resume-stream")
@@ -1422,6 +1542,155 @@ def resume_chat_stream(
     return StreamingResponse(stream_buffered_run(), media_type="text/event-stream")
 
 
+@router.post("/chat-session/{session_id}/pending-messages")
+def submit_pending_chat_message(
+    session_id: UUID,
+    body: PendingChatMessageRequest,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Submit text for the next step, normal completion, or interruption."""
+    chat_session = get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
+    pending = submit_human_message__no_commit(
+        db_session,
+        session_id,
+        message=process_chat_query(body.message, chat_session, user, db_session),
+        delivery=body.delivery,
+        target_response_id=body.target_response_id,
+        # A turn that holds admission without a stream has no response yet.
+        turn_preparing=is_chat_session_processing(session_id, cache)
+        and get_processing_stream_id(session_id, cache) is None,
+        deep_research=body.deep_research,
+        llm_override=body.llm_override,
+    )
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
+    db_session.commit()
+    if pending.delivery == MessageDelivery.INTERRUPT and interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.get("/chat-session/{session_id}/pending-messages")
+def list_pending_chat_messages(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> list[PendingChatMessage]:
+    get_human_input_session(db_session, session_id, user)
+    return list_human_messages(db_session, session_id)
+
+
+@router.delete("/chat-session/{session_id}/pending-messages/{message_id}")
+def withdraw_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> PendingChatMessage:
+    """Remove pending input and return its text for local editing or discarding."""
+    get_human_input_session(db_session, session_id, user)
+    pending = withdraw_human_message__no_commit(db_session, session_id, message_id)
+    db_session.commit()
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.post("/chat-session/{session_id}/pending-messages/{message_id}/interrupt")
+def interrupt_with_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Stop current work; the message starts the next turn."""
+    get_human_input_session(db_session, session_id, user)
+    pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
+    cache = get_cache_backend()
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
+    db_session.commit()
+    if interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.patch("/chat-session/{session_id}/tool-selection")
+def update_chat_tool_selection(
+    session_id: UUID,
+    body: ChatToolSelection,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> ChatToolSelection | None:
+    """Save the fields of the chat's tool selection that the body sets.
+
+    Returns the stored selection, or None for a chat that stores none.
+    """
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save a tool selection")
+    chat_session = get_owned_chat_session(session_id, user.id, db_session)
+    if chat_session is None or chat_session.deleted:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
+    stored = set_chat_session_tool_selection__no_commit(
+        db_session, session_id, body, user
+    )
+    if db_session.dirty:
+        db_session.commit()
+    return stored
+
+
+@router.post("/chat-session/{session_id}/stop-subagents")
+def stop_chat_subagents(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> StopSubagentsResponse:
+    """Stop every active background agent on the selected branch.
+
+    The root turn and its foreground workers keep running. Pending work for
+    agents below the root is dropped. A stopped agent's result wakes no agent;
+    the root reads it as a notice at its next step.
+    """
+    get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
+    lock_agent(db_session, str(session_id))
+    _, branch = get_selected_branch(db_session, session_id)
+    stopped = active_agent_response_ids(db_session, branch.message_ids)
+    drop_agent_work__no_commit(db_session, branch)
+    # Spawns check their parent's Stop after the chat lock, so the keys go first.
+    for response_id in stopped:
+        request_response_stop(cache, response_id, "user")
+    db_session.commit()
+    for response_id in stopped:
+        stop_response(cache, get_current_tenant_id(), response_id, "user")
+    return StopSubagentsResponse(stopped_count=len(stopped))
+
+
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
@@ -1429,7 +1698,11 @@ def stop_chat_session(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopChatResponse:
-    """Stop the requested execution without affecting a later request."""
+    """Stop one stream, or without `stream_id` the chat's current turn.
+
+    Without `stream_id`, Stop also pauses the queue, whether or not a turn is
+    running; saved responses keep their status.
+    """
     try:
         get_chat_session_by_id(
             chat_session_id=chat_session_id,
@@ -1441,8 +1714,13 @@ def stop_chat_session(
             OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
         ) from error
 
-    cache = get_cache_backend()
-    target_stream_id = stream_id or get_processing_stream_id(chat_session_id, cache)
-    if target_stream_id is not None:
-        request_stop(chat_session_id, cache, stream_id=target_stream_id)
+    if stream_id is None:
+
+        def pause_queue() -> None:
+            pause_chat_queue__no_commit(db_session, chat_session_id)
+            db_session.commit()
+
+        stop_current_turn(chat_session_id, get_cache_backend(), pause_queue=pause_queue)
+    else:
+        request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
     return StopChatResponse(message="Chat session stopped")

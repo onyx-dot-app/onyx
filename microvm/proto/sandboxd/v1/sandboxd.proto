@@ -1,0 +1,815 @@
+syntax = "proto3";
+
+package craft.sandboxd.v1;
+
+import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1;sandboxdv1";
+
+// Sandboxd is the guest daemon inside each Craft micro-VM. It listens on
+// vsock port 52. The api_server reaches it through the node agent.
+//
+// Auth: the node agent installs a per-VM key with SetKey before its Create
+// returns, so no other caller can reach the VM first. Every call except
+// Health and SetKey, Init included, must carry that key in the
+// "x-sandboxd-key" metadata. Before SetKey they fail with KEY_NOT_SET.
+// Calls other than Health, SetKey and Init fail with NOT_INITIALIZED until
+// Init succeeds.
+//
+// Routing: through the node agent pass-through, every call, Health
+// included, must also carry exactly one "x-sandbox-id" metadata value: the
+// node agent's sandbox ID of the VM. The node agent rejects a call without
+// it (INVALID_ARGUMENT) and removes it before the call reaches the daemon.
+//
+// Errors: every failed call returns a gRPC status with one
+// google.rpc.ErrorInfo detail. ErrorInfo.domain is "sandboxd.craft.onyx.app"
+// and ErrorInfo.reason is the name of an ErrorReason value.
+//
+// A command that ends in any way (exit, signal, Cancel, deadline) is a
+// normal result (ExecResult), not an error.
+service Sandboxd {
+  // Health answers before Init. It needs no key.
+  rpc Health(HealthRequest) returns (HealthResponse);
+
+  // SetKey installs the per-VM key. Only the node agent calls it, from its
+  // Create (with CreateRequest.sandboxd_key); the pass-through refuses it
+  // with PERMISSION_DENIED. It needs no key. The first key stays: a repeat
+  // call with the same key succeeds, any other key fails with
+  // KEY_ALREADY_SET.
+  rpc SetKey(SetKeyRequest) returns (SetKeyResponse);
+
+  // Init runs after every cold boot and every restore, before the sandbox
+  // is handed out. In order: set the wall clock, add host entropy to the
+  // kernel RNG, attach the per-VM drives (the image's attach script: scratch,
+  // overlays, managed drive; a no-op when init already ran it), grow the
+  // scratch file system, install the SetKey egress CA (if any), send SIGHUP
+  // to the in-guest egress relay (it resets every live connection), then
+  // install the env and session list. Before Init after a restore, the
+  // caller must also close the VM's host-side relay connections (node agent
+  // CloseConnections).
+  rpc Init(InitRequest) returns (InitResponse);
+
+  // Run starts a command and streams its events until the result. If the
+  // client goes away, the command keeps running; use Stream with the
+  // execution ID from the first event to read the rest.
+  rpc Run(RunRequest) returns (stream ExecEvent);
+
+  // Start starts a command and returns its execution ID at once.
+  rpc Start(StartRequest) returns (StartResponse);
+
+  // Stream sends the output of an execution from the given offsets, then
+  // the result. It works while the command runs and after it ended.
+  rpc Stream(StreamRequest) returns (stream ExecEvent);
+
+  // Interact writes to the stdin of a running command (started with
+  // stdin = true), or closes it.
+  rpc Interact(InteractRequest) returns (InteractResponse);
+
+  // Cancel stops an execution. With no signal (or SIGKILL) it kills every
+  // process of the execution (its cgroup) and returns the result, with
+  // completion CANCELED. With SIGINT or SIGTERM it sends that signal to the
+  // process group of the main process (as Ctrl-C in a terminal does) and
+  // returns at once, with signaled set; the command may handle the signal
+  // and keep running. Use Stream or Inspect for its result. Cancel of an
+  // ended execution returns its result. If the main process exited before
+  // the kill, the result is EXITED with its exit code.
+  rpc Cancel(CancelRequest) returns (CancelResponse);
+
+  // Inspect returns one execution record.
+  rpc Inspect(InspectRequest) returns (InspectResponse);
+
+  // List returns every execution record, optionally filtered by labels.
+  rpc List(ListRequest) returns (ListResponse);
+
+  // Files and session saves. With a session_id, every path is relative to
+  // the session directory /home/onyx/workspaces/<session_id>/ (a leading
+  // "/" is dropped). A path with "..", or a symlink that leaves the session
+  // directory, fails with INVALID_ARGUMENT. Only ReadFile, ListFiles and
+  // ZipFiles can follow a top-level link of the session into a read-only
+  // root of the daemon (--read-link-roots).
+  //
+  // With no session_id, ReadFile, WriteFile, ListFiles, DeleteFile and
+  // ZipFiles take an absolute path anywhere in the VM, and follow symlinks
+  // (DeleteFile removes a link, not its target). Paths under /proc, /sys,
+  // /dev and the daemon's own state (/run/craft-fc) fail with
+  // INVALID_ARGUMENT: ListFiles and ZipFiles leave them out, and a recursive
+  // DeleteFile of a directory that holds one fails. UploadFile,
+  // CaptureSession and RestoreSession always need a session_id.
+
+  // ReadFile streams a regular file: the first message has its info, then
+  // data chunks of at most 64 KiB.
+  rpc ReadFile(ReadFileRequest) returns (stream ReadFileResponse);
+
+  // WriteFile writes a file. The first message is the header, the later
+  // ones carry the bytes. The daemon writes a temporary file in the same
+  // directory and renames it over the path only when size (and sha256, if
+  // set) match. On any error the path does not change.
+  rpc WriteFile(stream WriteFileRequest) returns (WriteFileResponse);
+
+  // UploadFile stores an ad-hoc upload in the session's attachments
+  // directory under a free name ("a.pdf", then "a_1.pdf", ...). Same
+  // message order and checks as WriteFile.
+  rpc UploadFile(stream UploadFileRequest) returns (UploadFileResponse);
+
+  // ListFiles lists one directory, or a tree with recursive.
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+
+  // DeleteFile removes a file or a link (never its target), or a directory
+  // with recursive. A missing path is not an error (deleted is false).
+  rpc DeleteFile(DeleteFileRequest) returns (DeleteFileResponse);
+
+  // ZipFiles streams a deflate zip of the regular files under a directory.
+  // The last message is the summary. A limit error ends the stream with a
+  // status; drop the bytes received so far.
+  rpc ZipFiles(ZipFilesRequest) returns (stream ZipFilesResponse);
+
+  // CaptureSession streams a tar + zstd archive of the session's capture
+  // roots (default attachments), without the excluded names
+  // (dependencies and caches), symlinks and special files. The last message
+  // is the summary, with the SHA-256 of the stream. The node agent calls it
+  // (HostAgent CaptureSession) and spools the stream for a presigned upload.
+  rpc CaptureSession(CaptureSessionRequest) returns (stream CaptureSessionResponse);
+
+  // RestoreSession extracts an archive from CaptureSession into the
+  // session. The first message is the header, the later ones carry the
+  // bytes. The daemon extracts into a staging directory, checks size and
+  // SHA-256 of the stream, and only then replaces each capture root that
+  // the archive has. Links, devices, FIFOs, unsafe names and archives over
+  // a limit fail with ARCHIVE_INVALID or LIMIT_EXCEEDED, and change
+  // nothing. A capture and a restore of one session never run at once.
+  rpc RestoreSession(stream RestoreSessionRequest) returns (RestoreSessionResponse);
+
+  // Reserved for the browser. They return UNIMPLEMENTED.
+  rpc BrowserStart(BrowserStartRequest) returns (BrowserStartResponse);
+  rpc BrowserStop(BrowserStopRequest) returns (BrowserStopResponse);
+
+  // Managed drives. The node agent calls these during a managed drive swap
+  // (HostAgent SwapManaged), with the VM's key. Each managed mount is a
+  // read-only, noexec mount with two slot devices (A and B):
+  //
+  //   mount         mount point        slot A    slot B
+  //   skills        /mnt/skills        /dev/vdc  /dev/vdf
+  //   user-uploads  /mnt/user-uploads  /dev/vdg  /dev/vdh
+  //   spaces        /mnt/spaces        /dev/vdi  /dev/vdj
+  //
+  // An empty mount name means "skills". An unknown mount fails with
+  // INVALID_ARGUMENT. Older daemons know only one mount and leave the
+  // mount fields of the responses empty.
+
+  // ManagedStatus returns the slot that is mounted on the mount point and
+  // the state of each slot device.
+  rpc ManagedStatus(ManagedStatusRequest) returns (ManagedStatusResponse);
+
+  // MountManaged makes a slot the drive on the mount point. It waits
+  // until the device has size_bytes (Firecracker tells the guest the new
+  // size after the host changed the drive), drops the guest's cached blocks
+  // of the device, checks the ext4 UUID, mounts the device read-only
+  // (ro,noload,nodev,nosuid,noexec, private) beneath the current mount
+  // (MOVE_MOUNT_BENEATH) and detaches the old top mount (MNT_DETACH). Open
+  // files on the old drive keep working until they close. If the slot is
+  // already on the mount point with this UUID, it does nothing.
+  rpc MountManaged(MountManagedRequest) returns (MountManagedResponse);
+}
+
+// The reason of a guest daemon error (google.rpc.ErrorInfo.reason).
+enum ErrorReason {
+  ERROR_REASON_UNSPECIFIED = 0;
+  // A request field is not valid.
+  INVALID_ARGUMENT = 1;
+  // The call needs a successful Init first.
+  NOT_INITIALIZED = 2;
+  // The x-sandboxd-key metadata is missing or wrong.
+  UNAUTHENTICATED = 3;
+  // No record for the execution ID (never started, or expired).
+  EXECUTION_NOT_FOUND = 4;
+  // Interact: the command was started without stdin, or stdin is closed.
+  STDIN_NOT_OPEN = 5;
+  // Interact: the command already ended.
+  EXECUTION_ENDED = 6;
+  // The command could not start (for example, the program does not exist).
+  START_FAILED = 7;
+  // Too many running commands.
+  TOO_MANY_EXECUTIONS = 8;
+  // Init could not set the clock, add entropy, grow a file system or
+  // install the egress CA.
+  INIT_FAILED = 9;
+  // Any other error.
+  INTERNAL = 10;
+  // No key yet: the node agent has not called SetKey.
+  KEY_NOT_SET = 11;
+  // SetKey: the daemon already has a different key.
+  KEY_ALREADY_SET = 12;
+  // MountManaged: the slot device is in use (mounted, or a detached mount
+  // still has open files).
+  MANAGED_SLOT_BUSY = 13;
+  // MountManaged: the slot device does not have the expected size or ext4
+  // UUID, or it is missing.
+  MANAGED_DEVICE_MISMATCH = 14;
+  // MountManaged: the mount failed. The old drive stays mounted.
+  MANAGED_MOUNT_FAILED = 15;
+
+  // Files and session saves.
+  // The path, or a parent directory of it, does not exist.
+  FILE_NOT_FOUND = 16;
+  // WriteFile without overwrite: the path exists.
+  FILE_EXISTS = 17;
+  // A size, file count or entry limit was reached.
+  LIMIT_EXCEEDED = 18;
+  // RestoreSession: the archive is not a valid capture (bad zstd or tar, an
+  // unsafe member, or size or SHA-256 differ from the header).
+  ARCHIVE_INVALID = 19;
+  // Run or Start: the daemon already keeps the most executions (64) and all
+  // of them run, so no ended one can be dropped. Cancel one, or wait.
+  EXECUTION_CAP_REACHED = 20;
+}
+
+message HealthRequest {}
+
+message HealthResponse {
+  // True after a successful Init.
+  bool initialized = 1;
+  string version = 2;
+  // Guest wall clock when the daemon answered.
+  google.protobuf.Timestamp guest_time = 3;
+  // From the last Init. Zero before Init.
+  uint64 generation = 4;
+  string sandbox_id = 5;
+  uint32 running_executions = 6;
+  google.protobuf.Timestamp initialized_at = 7;
+  // Time since the daemon process started.
+  google.protobuf.Duration uptime = 8;
+  // True after SetKey.
+  bool key_set = 9;
+}
+
+message SetKeyRequest {
+  // Per-VM key, 32 to 512 bytes of printable ASCII with no spaces (0x21 to
+  // 0x7E), because later calls send it as x-sandboxd-key metadata. Encode
+  // random bytes, for example the hex or base64url of 32 bytes from
+  // os.urandom. Any other key fails with INVALID_ARGUMENT.
+  string key = 1;
+  // Public PEM certificate of the deployment egress CA (one CA certificate,
+  // no key, at most 16 KiB). Empty: no CA. The daemon keeps the last CA it
+  // got (also on a repeat call with the same key) and installs it at Init,
+  // after attach, into the guest trust stores. This replaces any CA that an
+  // earlier Init installed.
+  bytes egress_ca_pem = 2;
+}
+
+message SetKeyResponse {
+  // True if the daemon already had this key.
+  bool already_set = 1;
+}
+
+message InitRequest {
+  // Host wall clock. The daemon sets CLOCK_REALTIME to it. Add half the
+  // measured round trip for sub-millisecond error.
+  google.protobuf.Timestamp host_time = 1;
+  // 32 to 4096 random bytes from the host. The daemon adds them to the
+  // kernel RNG.
+  bytes entropy = 2;
+  // The key moved to SetKey.
+  reserved 3;
+  reserved "key";
+  // Base env for every command. Per-command env overrides it.
+  map<string, string> env = 4;
+  // Sessions of this sandbox (used by capture/restore).
+  repeated string session_ids = 5;
+  // Node agent VM generation and sandbox ID, for Health and logs.
+  uint64 generation = 6;
+  string sandbox_id = 7;
+  // Size of the scratch drive in bytes (CreateRequest.scratch_gib << 30).
+  // Init fails with INIT_FAILED if a grown drive is still smaller after a
+  // short wait (the resize has not reached the guest). 0 skips the check.
+  uint64 scratch_bytes = 8;
+}
+
+message InitResponse {
+  // New clock minus the old clock (how far the guest clock moved).
+  google.protobuf.Duration clock_step = 1;
+  // True if the entropy was credited (RNDADDENTROPY); false if it was only
+  // mixed in.
+  bool entropy_credited = 2;
+  repeated GrownFS grown = 3;
+  string version = 4;
+  // True if the attach script ran (it does nothing when already attached).
+  bool attached = 5;
+  // True if the egress relay got SIGHUP. False if it was not running.
+  bool relay_reset = 6;
+  // True if Init installed the SetKey egress CA in the system trust store.
+  bool egress_ca_installed = 7;
+}
+
+message GrownFS {
+  string mount_point = 1;
+  uint64 old_bytes = 2;
+  uint64 new_bytes = 3;
+}
+
+message Command {
+  // argv[0] is looked up in PATH. For a shell script use
+  // ["bash", "-c", script].
+  repeated string argv = 1;
+  // Working directory: an absolute path, or a path relative to the session
+  // directory (with session_id). Default: the session directory, or "/"
+  // with no session_id. A command may use any path in the VM.
+  string cwd = 2;
+  // Added to the Init env. Commands also get NO_COLOR=1, TERM=dumb,
+  // PAGER=cat, GIT_PAGER=cat, GH_PAGER=cat and a UTF-8 locale (LANG and
+  // LC_ALL C.UTF-8) unless the Init env or this env sets them.
+  map<string, string> env = 3;
+  // Open a stdin pipe for Interact. Otherwise stdin is /dev/null.
+  bool stdin = 4;
+  // Kill the command after this long. Default 30 min. The daemon caps it
+  // (24 h by default).
+  google.protobuf.Duration deadline = 5;
+  // Free-form labels, for example session_id or task_id. Inspect and List
+  // return them.
+  map<string, string> labels = 6;
+  // Optional session. Its directory /home/onyx/workspaces/<session_id> is
+  // the default working directory; the daemon creates it if it is missing.
+  string session_id = 7;
+}
+
+message RunRequest {
+  Command command = 1;
+}
+
+message StartRequest {
+  Command command = 1;
+}
+
+message StartResponse {
+  ExecStarted started = 1;
+}
+
+enum OutputStream {
+  OUTPUT_STREAM_UNSPECIFIED = 0;
+  STDOUT = 1;
+  STDERR = 2;
+}
+
+// How a command ended.
+enum Completion {
+  COMPLETION_UNSPECIFIED = 0;
+  // The main process exited; exit_code is set.
+  EXITED = 1;
+  // The main process was killed by a signal that the daemon did not send
+  // (for example the OOM killer); signal is set.
+  SIGNALED = 2;
+  // Cancel killed it.
+  CANCELED = 3;
+  // The deadline killed it.
+  DEADLINE_EXCEEDED = 4;
+}
+
+message ExecStarted {
+  string execution_id = 1;
+  // Guest PID of the main process.
+  int32 pid = 2;
+  google.protobuf.Timestamp started_at = 3;
+  google.protobuf.Timestamp deadline_at = 4;
+}
+
+message OutputChunk {
+  OutputStream stream = 1;
+  // Byte offset of data[0] in this stream.
+  int64 offset = 2;
+  bytes data = 3;
+}
+
+// The daemon keeps only the last bytes of each stream, and drops the output
+// of old ended executions when all output passes its memory budget. A gap
+// means the bytes [from, to) are gone.
+message OutputGap {
+  OutputStream stream = 1;
+  int64 from = 2;
+  int64 to = 3;
+}
+
+// The final event of every execution: the completion marker.
+message ExecResult {
+  Completion completion = 1;
+  // Set for EXITED. -1 otherwise.
+  int32 exit_code = 2;
+  // Signal number that ended the main process, or 0.
+  int32 signal = 3;
+  google.protobuf.Timestamp finished_at = 4;
+  // Total bytes written to each stream.
+  int64 stdout_bytes = 5;
+  int64 stderr_bytes = 6;
+}
+
+message ExecEvent {
+  oneof event {
+    // Run only: the first event.
+    ExecStarted started = 1;
+    OutputChunk output = 2;
+    OutputGap gap = 3;
+    // The last event.
+    ExecResult result = 4;
+  }
+}
+
+message StreamRequest {
+  string execution_id = 1;
+  // Resume points: the first byte of each stream to send.
+  int64 stdout_offset = 2;
+  int64 stderr_offset = 3;
+}
+
+message InteractRequest {
+  string execution_id = 1;
+  bytes data = 2;
+  // Close stdin after data is written.
+  bool close_stdin = 3;
+}
+
+message InteractResponse {
+  int64 written = 1;
+}
+
+// The signal of a Cancel.
+enum CancelSignal {
+  // Kill every process of the execution (its cgroup) and wait for the
+  // result.
+  CANCEL_SIGNAL_UNSPECIFIED = 0;
+  // Send SIGINT to the process group of the main process and return.
+  CANCEL_SIGNAL_SIGINT = 1;
+  // Send SIGTERM to the process group of the main process and return.
+  CANCEL_SIGNAL_SIGTERM = 2;
+  // The same as CANCEL_SIGNAL_UNSPECIFIED.
+  CANCEL_SIGNAL_SIGKILL = 3;
+}
+
+message CancelRequest {
+  string execution_id = 1;
+  CancelSignal signal = 2;
+}
+
+message CancelResponse {
+  // Set when the execution has ended: always for a kill, and for SIGINT or
+  // SIGTERM only if it had already ended.
+  ExecResult result = 1;
+  // True if the execution had already ended; result is its own result.
+  bool already_ended = 2;
+  // SIGINT or SIGTERM: true if the signal was sent. A command that ends from
+  // that signal has completion CANCELED.
+  bool signaled = 3;
+}
+
+enum ExecState {
+  EXEC_STATE_UNSPECIFIED = 0;
+  RUNNING = 1;
+  ENDED = 2;
+}
+
+message Execution {
+  string execution_id = 1;
+  ExecState state = 2;
+  repeated string argv = 3;
+  map<string, string> labels = 4;
+  int32 pid = 5;
+  google.protobuf.Timestamp started_at = 6;
+  google.protobuf.Timestamp deadline_at = 7;
+  int64 stdout_bytes = 8;
+  int64 stderr_bytes = 9;
+  // Set when state is ENDED.
+  ExecResult result = 10;
+}
+
+message InspectRequest {
+  string execution_id = 1;
+}
+
+message InspectResponse {
+  Execution execution = 1;
+}
+
+message ListRequest {
+  // Only records that have all these labels.
+  map<string, string> labels = 1;
+}
+
+message ListResponse {
+  repeated Execution executions = 1;
+}
+
+// Files and session saves.
+
+enum FileType {
+  FILE_TYPE_UNSPECIFIED = 0;
+  FILE_TYPE_REGULAR = 1;
+  FILE_TYPE_DIRECTORY = 2;
+  FILE_TYPE_SYMLINK = 3;
+  // A device, FIFO or socket.
+  FILE_TYPE_OTHER = 4;
+}
+
+message FileInfo {
+  // Session-relative path, "/"-separated. Absolute for a call with no
+  // session_id.
+  string path = 1;
+  string name = 2;
+  FileType type = 3;
+  // Bytes, for a regular file or a link (the length of its target).
+  int64 size = 4;
+  // Permission bits (mode & 0777).
+  uint32 mode = 5;
+  google.protobuf.Timestamp modified_at = 6;
+  // FILE_TYPE_SYMLINK only: the link target as stored. ListFiles replaces
+  // bytes that are not valid UTF-8 with U+FFFD.
+  string link_target = 7;
+}
+
+message ReadFileRequest {
+  string session_id = 1;
+  string path = 2;
+  // First byte to send.
+  int64 offset = 3;
+  // Bytes to send from offset. 0 sends to the end of the file. The bytes
+  // sent can be at most the daemon's --max-file-bytes.
+  int64 length = 4;
+}
+
+message ReadFileResponse {
+  oneof part {
+    // The first message.
+    FileInfo info = 1;
+    // Later messages, in order from offset.
+    bytes data = 2;
+  }
+}
+
+message WriteFileHeader {
+  string session_id = 1;
+  string path = 2;
+  // Exact number of bytes that follow. At most --max-file-bytes.
+  int64 size = 3;
+  // Optional hex SHA-256 of the bytes. Checked before the rename.
+  string sha256 = 4;
+  // Permission bits (& 0777). 0 means 0644.
+  uint32 mode = 5;
+  // Replace an existing file. Without it, an existing path fails with
+  // FILE_EXISTS.
+  bool overwrite = 6;
+  // Create missing parent directories (mode 0755).
+  bool make_parents = 7;
+}
+
+message WriteFileRequest {
+  oneof part {
+    // The first message.
+    WriteFileHeader header = 1;
+    // Later messages: the next bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
+    bytes data = 2;
+  }
+}
+
+message WriteFileResponse {
+  FileInfo info = 1;
+  // Hex SHA-256 of the bytes written.
+  string sha256 = 2;
+}
+
+message UploadFileHeader {
+  string session_id = 1;
+  // File name only (no "/"). The daemon replaces characters that are not
+  // safe in a name with "_".
+  string file_name = 2;
+  // Exact number of bytes that follow. At most --max-file-bytes.
+  int64 size = 3;
+  // Optional hex SHA-256 of the bytes.
+  string sha256 = 4;
+  // Session-relative directory. Default "attachments".
+  string directory = 5;
+}
+
+message UploadFileRequest {
+  oneof part {
+    UploadFileHeader header = 1;
+    bytes data = 2;
+  }
+}
+
+message UploadFileResponse {
+  // The stored file; info.path is for example "attachments/report_1.pdf".
+  FileInfo info = 1;
+  string sha256 = 2;
+}
+
+message ListFilesRequest {
+  string session_id = 1;
+  // Directory. Empty means the session directory.
+  string path = 2;
+  // List the whole tree, not only the directory.
+  bool recursive = 3;
+  // Recursive only. 0 means 64.
+  uint32 max_depth = 4;
+  // Entries with these names are not listed, and not entered.
+  repeated string exclude_names = 5;
+  // Skip names that start with ".".
+  bool skip_hidden = 6;
+  // 0 means 10,000. At most 100,000.
+  uint32 max_entries = 7;
+}
+
+message ListFilesResponse {
+  // Directories first, then by name (case-insensitive), per directory.
+  // Entries whose name is not valid UTF-8 are left out.
+  repeated FileInfo entries = 1;
+  // True if max_entries, max_depth or the response size limit (12 MiB)
+  // cut the listing.
+  bool truncated = 2;
+}
+
+message DeleteFileRequest {
+  string session_id = 1;
+  string path = 2;
+  // Allow removing a directory and everything below it.
+  bool recursive = 3;
+}
+
+message DeleteFileResponse {
+  // False if the path did not exist.
+  bool deleted = 1;
+}
+
+message ZipFilesRequest {
+  string session_id = 1;
+  // Directory to zip. Names in the zip are relative to it.
+  string path = 2;
+  repeated string exclude_names = 3;
+  bool skip_hidden = 4;
+}
+
+message ZipSummary {
+  uint32 files = 1;
+  // Bytes of the files before compression.
+  int64 input_bytes = 2;
+  // Bytes of the zip.
+  int64 zip_bytes = 3;
+  // Links, special files and unreadable entries that were left out.
+  uint32 skipped = 4;
+}
+
+message ZipFilesResponse {
+  oneof part {
+    bytes data = 1;
+    // The last message.
+    ZipSummary summary = 2;
+  }
+}
+
+// Limits of one capture or restore. 0 means the daemon default. A value
+// over the daemon's own limit fails with INVALID_ARGUMENT.
+message ArchiveLimits {
+  // Archive (zstd) bytes. Default 1 GiB.
+  int64 max_stored_bytes = 1;
+  // Total bytes of the files. Default 4 GiB.
+  int64 max_expanded_bytes = 2;
+  // Files and directories. Default 500,000.
+  int64 max_entries = 3;
+}
+
+message CaptureSessionRequest {
+  string session_id = 1;
+  // Capture roots: names of directories or regular files in the session
+  // directory. Empty means the daemon's --capture-dirs (attachments).
+  // Regular files go in the archive under the directory ".onyx-top-level",
+  // and the summary roots name ".onyx-top-level" instead of the files.
+  // Restore moves them back to the top level. A daemon without this rule
+  // restores ".onyx-top-level" as a directory. A ".onyx-top-level" root
+  // takes the regular files directly in that session directory into the
+  // archive in the same way, except names that are also top-level entries.
+  repeated string roots = 2;
+  // Names skipped at any depth. Empty means the daemon's --capture-exclude
+  // (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
+  // always skipped.
+  repeated string exclude_names = 3;
+  ArchiveLimits limits = 4;
+}
+
+message CaptureSummary {
+  // Archive bytes and their hex SHA-256 (what the node agent uploads).
+  int64 stored_bytes = 1;
+  string sha256 = 2;
+  int64 files = 3;
+  int64 directories = 4;
+  // Total bytes of the files.
+  int64 expanded_bytes = 5;
+  // Entries left out by exclude_names or as a venv.
+  int64 excluded = 6;
+  // Symlinks, special files and entries that could not be read.
+  int64 skipped = 7;
+  // Files that shrank during the capture. Their tail is zero-filled.
+  int64 changed = 8;
+  // Capture roots that exist and are in the archive. Pass them to restore.
+  repeated string roots = 9;
+}
+
+message CaptureSessionResponse {
+  oneof part {
+    bytes data = 1;
+    // The last message.
+    CaptureSummary summary = 2;
+  }
+}
+
+message RestoreSessionHeader {
+  string session_id = 1;
+  // Exact archive size and hex SHA-256 (from the capture).
+  int64 size_bytes = 2;
+  string sha256 = 3;
+  // Names the archive may hold. Empty means --capture-dirs.
+  repeated string roots = 4;
+  ArchiveLimits limits = 5;
+}
+
+message RestoreSessionRequest {
+  oneof part {
+    // The first message.
+    RestoreSessionHeader header = 1;
+    // Later messages: the archive bytes (at most 1 MiB each; the daemon accepts messages up to 4 MiB).
+    bytes data = 2;
+  }
+}
+
+message RestoreSessionResponse {
+  int64 files = 1;
+  int64 directories = 2;
+  int64 expanded_bytes = 3;
+  // Capture roots that the restore replaced.
+  repeated string roots = 4;
+}
+
+// Browser placeholders.
+message BrowserStartRequest {}
+message BrowserStartResponse {}
+message BrowserStopRequest {}
+message BrowserStopResponse {}
+
+// A managed drive slot. The devices depend on the mount (see the service).
+enum ManagedSlot {
+  MANAGED_SLOT_UNSPECIFIED = 0;
+  // skills: /dev/vdc
+  MANAGED_SLOT_A = 1;
+  // skills: /dev/vdf
+  MANAGED_SLOT_B = 2;
+}
+
+message ManagedStatusRequest {
+  // skills (the default when empty), user-uploads or spaces.
+  string mount = 1;
+}
+
+message ManagedSlotState {
+  ManagedSlot slot = 1;
+  string device = 2;
+  // False if the guest has no such block device.
+  bool present = 3;
+  // Device size and ext4 UUID (empty if the device has no ext4).
+  uint64 size_bytes = 4;
+  string fs_uuid = 5;
+  // True if this slot is the top mount on the mount point.
+  bool mounted = 6;
+  // True if the device is in use: mounted, or a detached mount still has
+  // open files.
+  bool in_use = 7;
+}
+
+message ManagedStatusResponse {
+  string mount_point = 1;
+  // The slot on the mount point. UNSPECIFIED: another file system (for
+  // example the empty tmpfs) or nothing.
+  ManagedSlot active = 2;
+  repeated ManagedSlotState slots = 3;
+  // The mount name. Empty from a daemon that has only one mount.
+  string mount = 4;
+}
+
+message MountManagedRequest {
+  ManagedSlot slot = 1;
+  // skills (the default when empty), user-uploads or spaces.
+  string mount = 4;
+  // Size of the new drive in bytes.
+  uint64 size_bytes = 2;
+  // ext4 UUID of the new drive (8-4-4-4-12 lowercase hex).
+  string fs_uuid = 3;
+}
+
+message MountManagedResponse {
+  // The slot on the mount point after the call.
+  ManagedSlot active = 1;
+  // False if the slot was already mounted with this UUID.
+  bool changed = 2;
+  // The slot that was on the mount point before (UNSPECIFIED: none).
+  ManagedSlot previous = 3;
+  // True if the previous slot device is still in use after the detach.
+  bool previous_in_use = 4;
+  // Time spent waiting for the device size, in milliseconds.
+  uint64 wait_ms = 5;
+  // The mount name. Empty from a daemon that has only one mount.
+  string mount = 6;
+}

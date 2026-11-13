@@ -27,7 +27,15 @@ let mockUserId: string | null = "user-one";
 let mockUserResolution: UserResolution = "resolved";
 let mockPathname = "/craft/v1";
 const mockMutate = jest.fn();
-jest.mock("next/navigation", () => ({ usePathname: () => mockPathname }));
+const mockRouter = {};
+jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => mockPathname,
+  useSearchParams: () => new URLSearchParams(),
+  useRouter: () => mockRouter,
+}));
 
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({

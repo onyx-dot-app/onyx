@@ -1,6 +1,6 @@
 "use client";
 
-import { OverflowText } from "@opal/components";
+import { Text } from "@opal/components";
 import React, { memo } from "react";
 import { cn } from "@opal/utils";
 import type { IconProps } from "@opal/types";
@@ -30,23 +30,27 @@ const InfoBlockInner = React.forwardRef<HTMLDivElement, InfoBlockProps>(
 
         {/* Text Content */}
         <div className="flex flex-col flex-1 items-stretch min-w-0">
-          <OverflowText
+          <Text
+            maxLines={1}
+            overflowTooltip
             as="p"
             textPosition="text-start"
             font="main-ui-action"
             color="text-04"
           >
             {title}
-          </OverflowText>
+          </Text>
           {description && (
-            <OverflowText
+            <Text
+              maxLines={1}
+              overflowTooltip
               as="p"
               textPosition="text-start"
               font="secondary-body"
               color="text-03"
             >
               {description}
-            </OverflowText>
+            </Text>
           )}
         </div>
       </div>

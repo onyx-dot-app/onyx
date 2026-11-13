@@ -34,6 +34,16 @@ def _bundle(name: str) -> bytes:
     return output.getvalue()
 
 
+def _delete_bundles(db_session: Session, name: str) -> list[Skill]:
+    """Drop the stored blobs of every skill with this name; returns the rows."""
+    rows = list(db_session.scalars(select(Skill).where(Skill.name == name)))
+    file_store = get_default_file_store()
+    for row in rows:
+        if row.bundle_file_id is not None:
+            file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+    return rows
+
+
 def test_import_creates_conflicting_skills_disabled_without_blocking_others(
     db_session: Session,
     test_user: User,
@@ -204,3 +214,116 @@ def test_import_enables_only_first_new_skill_with_each_name(
         row = db_session.get(Skill, result.skill.id)
         if row is not None and row.bundle_file_id is not None:
             file_store.delete_file(row.bundle_file_id, error_on_missing=False)
+
+
+def test_import_applies_shared_access_before_publication(
+    db_session: Session,
+    test_user: User,
+    initialize_file_store: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db.enums import SkillSharePermission
+    from onyx.server.features.skill.models import SkillShareRequest
+
+    name = f"shared-import-{uuid4().hex[:8]}"
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.fetch_github_skill_bundles",
+        lambda *_args, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repository", revision=_REVISION),
+            [
+                GitHubSkillBundle(
+                    path=name, name=name, description=name, bundle_bytes=_bundle(name)
+                )
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api._github_authorization_header",
+        lambda *_args: None,
+    )
+    published: list[SkillSharePermission | None] = []
+
+    def record_publication(_user_ids: set[UUID], session: Session) -> None:
+        skill = session.scalar(select(Skill).where(Skill.name == name))
+        published.append(skill.public_permission if skill else None)
+
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users", record_publication
+    )
+    result = import_github_skills(
+        GitHubSkillsImportRequest(
+            repository="owner/repository",
+            revision=_REVISION,
+            paths=[name],
+            sharing=SkillShareRequest(public_permission=SkillSharePermission.VIEWER),
+        ),
+        user=test_user,
+        db_session=db_session,
+    )
+    try:
+        assert result.not_imported == []
+        assert len(result.imported) == 1
+        assert published == [SkillSharePermission.VIEWER]
+    finally:
+        _delete_bundles(db_session, name)
+
+
+def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
+    db_session: Session,
+    test_user: User,
+    initialize_file_store: None,  # noqa: ARG001
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db.enums import SkillInstallationPolicy
+    from onyx.server.features.skill.models import SkillShareRequest
+
+    name = f"policy-dup-{uuid4().hex[:8]}"
+    paths = [f"first/{name}", f"second/{name}"]
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.fetch_github_skill_bundles",
+        lambda *_args, **_kwargs: (
+            GitHubRepository(owner="owner", repo="repository", revision=_REVISION),
+            [
+                GitHubSkillBundle(
+                    path=path, name=name, description=path, bundle_bytes=_bundle(name)
+                )
+                for path in paths
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api._github_authorization_header",
+        lambda *_args: None,
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
+    )
+    monkeypatch.setattr(
+        "onyx.db.plugin.has_global_permission",
+        lambda *_args, **_kwargs: True,
+    )
+
+    response = import_github_skills(
+        GitHubSkillsImportRequest(
+            repository="owner/repository",
+            revision=_REVISION,
+            paths=paths,
+            sharing=SkillShareRequest(
+                installation_policy=SkillInstallationPolicy.DEFAULT
+            ),
+        ),
+        user=test_user,
+        db_session=db_session,
+    )
+
+    try:
+        assert [result.skill.name for result in response.imported] == [name]
+        assert response.imported[0].skill.installation_policy == (
+            SkillInstallationPolicy.DEFAULT
+        )
+        assert [item.path for item in response.not_imported] == [paths[1]]
+        assert len(_delete_bundles(db_session, name)) == 1
+    finally:
+        _delete_bundles(db_session, name)

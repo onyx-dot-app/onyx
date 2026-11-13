@@ -54,7 +54,8 @@ search tool returns InferenceSections               [[internal-search]], [[web-s
                                                     call's start number; returns the JSON
                                                     for the model + {number: document_id}
   -> ChatAgent._update_tool_context                 registers the numbers after the step
-                                                    (chat/agent.py, via message_citation_sources)
+                                                    (chat/agent.py, via tool_result_sources;
+                                                    history numbers via message_citation_sources)
   -> ChatAgent._prepare_step                        copies all numbers into the next step's
                                                     ChatMessageMetadata.sources
   -> reminder message teaches "[1]" syntax          chat/prompt_utils.py:build_chat_reminder
@@ -137,7 +138,10 @@ for their display). `KEEP_MARKERS` emits no `CitationInfo`, but a report still
 lists the sources it cites in `IntermediateReportCitedDocs`
 (`chat/renderer.py:MessageRenderer.finish`).
 `chat/citation_utils.py:collapse_citations` renumbers those markers when
-`deep_research/agent.py` merges the reports. In `REMOVE` mode,
+`deep_research/agent.py` merges the reports. Chat, research and deep research
+also use `remap_received_citations` before accepting background results.
+It preserves input identities and gives the received text and next answer the same source numbers.
+In `REMOVE` mode,
 `MessageRenderer.complete` does not re-send unrendered final text, so an answer
 of only markers stays empty.
 
@@ -181,8 +185,8 @@ of only markers stays empty.
    the error, and the turn saves with no citations and no renderings. With
    `persist_content=False` (temporary chats), `save_chat_turn` saves no
    citations or search docs. `chat/history_store.py:RedisChatHistoryStore`
-   keeps those numbers in Redis instead, with `sources_by_run` for child agents.
-   A new save path must cover both history stores.
+   retains citation numbers and source documents in the cached root messages.
+   Incognito does not support subagents. A new save path must cover both history stores.
 5. `document-key-prompt-design` **The document JSON key and field order are
    prompt design.** The key is `document`, not `citation_id`, so the model does
    not write reasoning such as "I should reference citation_id: 5". The number
@@ -232,9 +236,12 @@ of only markers stays empty.
     into a citation, or drop real citations after an unclosed fence.
 12. `history-owns-numbers` **Saved history must bring its citation numbers
     back.** `chat/agent.py:ChatAgent` starts new numbers after the highest
-    number in history. Saved tool results keep `citation_mapping` but no
-    documents; `chat/response.py:restore_response_sources` refills them, and
-    the answer's sources come from its saved `MessageRendering.citation_documents`.
+    number in history. Tool results saved in the database keep
+    `citation_mapping` but no documents;
+    `chat/response.py:restore_response_sources` refills them, and the answer's
+    sources come from its saved `MessageRendering.citation_documents`. A
+    temporary chat keeps each saved result with its documents
+    (`chat/models.py:serialize_incognito_message`).
     A source that a history path drops lets a later search reuse its number,
     and an old marker then points at a new document. Chat and deep research
     both read these saved sources, so a mode switch keeps the links.
@@ -245,6 +252,15 @@ of only markers stays empty.
     The research agents do the same with their own feature state. Put new
     citation state in that feature state, or a resumed turn reuses numbers. A
     changed `include_citations` makes the restoration fail.
+14. `token-split-invariant` **The output must not depend on where tokens
+    split.** `chat/citation_processor.py:DynamicCitationProcessor` holds a
+    marker that later text can still change: a partial marker, `[n]` right
+    after an opening bracket (it can become `[[n]]`), and a marker on an
+    unfinished line that can open a code fence. The end of the stream
+    (`process_token(None)`) processes what it holds. Only `REMOVE` spacing can
+    differ, because it cannot take back a space that it already streamed.
+    `backend/tests/unit/onyx/chat/test_citation_processor_properties.py`
+    checks this.
 
 ---
 
@@ -277,14 +293,27 @@ of only markers stays empty.
 
 - `citeable-tool` **A new citeable tool.** Copy how `WebSearchTool` is wired; list the
   current set in `tools/constants.py:CITEABLE_TOOLS_NAMES`. Add the tool name
-  there. It turns on the citation reminder in `build_chat_reminder`, and
-  `chat/citation_utils.py:message_citation_sources` registers numbers only for
-  tools on that list. Without it, the numbers never reach the processor and the
-  markers render as nothing. Start its numbers at the offset in
+  there; it turns on the citation reminder in `build_chat_reminder` even when a
+  call finds nothing. Start its numbers at the offset in
   [[#number-block-per-tool-call]]. Return a `SearchDocsResponse` with
-  `citation_mapping`, and put every cited document in `search_docs`;
-  `message_citation_sources` drops numbers whose document is not there. If the
-  tool sets `merge_list_argument`, expect merged calls to share one number block.
+  `citation_mapping`, and put every cited document in `search_docs`.
+  `chat/tool_results.py` owns the contract of every details type that carries
+  documents: `tool_result_sources` reads documents and numbers,
+  `saved_result_details` and `restored_result_details` drop and refill
+  documents on save and reload, and `staged_result_details` stages their files.
+  The agent, the saved tool history and history restoration call these
+  functions. The reminder reads them through
+  `chat/citation_utils.py:result_cites_documents`. `tool_result_sources` drops
+  numbers whose document is not there.
+  A details type that the module does not know carries no numbers, so its
+  markers render as nothing. A tool that carries documents in a new
+  details type changes only that module. Code mode keeps documents only in its
+  calls' search details; the module derives the result's documents and numbers
+  from the calls of every window (`CodeModeExecutionResult.all_calls`), so
+  calls in the cell's closing record add theirs to that observation, and save
+  and restore rewrite the calls with `CodeModeExecutionResult.map_calls`. If
+  the tool sets `merge_list_argument`, expect merged calls to share one number
+  block.
 - `save-path` **A new save path.** Copy the call in
   `db/chat_response.py:save_chat_response_to_db`; list the
   callers with `git grep -n 'save_chat_turn(' backend/onyx`. Pass both
@@ -295,8 +324,8 @@ of only markers stays empty.
 - `investigate-missing-citations` **Investigate "citations disappear" or "a
   citation opens the wrong source".** Capture the stream in the browser network tab. If no
   `citation_info` packet arrives for a number that the text shows, the
-  processor had no mapping: check that the tool is in `CITEABLE_TOOLS_NAMES`
-  and returns `citation_mapping` with its documents in `search_docs`. If the packet arrives but the marker renders
+  processor had no mapping: check that `tool_result_sources` handles the
+  tool's details type and returns the cited numbers. If the packet arrives but the marker renders
   as nothing, the document is missing from the message's documents
   ([[#unresolved-citation-silent]]). If a number points at the wrong source,
   look for two tools that share a number block ([[#number-block-per-tool-call]],

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { parseErrorDetail } from "@/lib/fetcher";
 
 import {
@@ -19,12 +20,10 @@ import React, {
   useState,
 } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { Formik, Form } from "formik";
 import { mutate } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
+import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Collapsible } from "@opal/components";
 import InputTextAreaField from "@/refresh-components/form/InputTextAreaField";
 import {
@@ -69,7 +68,7 @@ import {
   MessageCard,
   Tooltip,
 } from "@opal/components";
-import { Modal } from "@opal/components";
+import { Modal, useCreateModal } from "@opal/components";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
 import { InputSwitch } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
@@ -339,6 +338,8 @@ function RetentionField({
   // A pending reduction awaiting confirmation (always a positive number; null
   // means nothing is pending).
   const [pendingValue, setPendingValue] = useState<number | null>(null);
+  // `pendingValue` stays set on close so the modal can animate out.
+  const reduceModal = useCreateModal();
 
   const customInputRef = useRef<HTMLInputElement>(null);
   const focusCustomOnShowRef = useRef(false);
@@ -437,6 +438,7 @@ function RetentionField({
     if (next === value) return;
     if (isRetentionReduction(value, next)) {
       setPendingValue(next);
+      reduceModal.toggle(true);
       return;
     }
     persist(next);
@@ -502,12 +504,12 @@ function RetentionField({
 
   const handleConfirmReduction = () => {
     if (pendingValue !== null) persist(pendingValue);
-    setPendingValue(null);
+    reduceModal.toggle(false);
   };
 
   const handleCancelReduction = () => {
     // Discard the pending change and restore the UI to the persisted value.
-    setPendingValue(null);
+    reduceModal.toggle(false);
     syncToValue(value);
   };
 
@@ -598,15 +600,17 @@ function RetentionField({
         </div>
       )}
 
-      {pendingValue !== null && (
-        <GenericConfirmModal
-          title={t("retention.reduceModal.title")}
-          message={t("retention.reduceModal.message", { days: pendingValue })}
-          confirmText={t("retention.reduceModal.confirmLabel")}
-          onClose={handleCancelReduction}
-          onConfirm={handleConfirmReduction}
-        />
-      )}
+      <reduceModal.Provider>
+        {pendingValue !== null && (
+          <GenericConfirmModal
+            title={t("retention.reduceModal.title")}
+            message={t("retention.reduceModal.message", { days: pendingValue })}
+            confirmText={t("retention.reduceModal.confirmLabel")}
+            onClose={handleCancelReduction}
+            onConfirm={handleConfirmReduction}
+          />
+        )}
+      </reduceModal.Provider>
     </div>
   );
 }
@@ -617,7 +621,7 @@ export default function ChatPreferencesPage() {
   const betaTag = useBetaTag();
   const tInputSelect = useTranslations("common.inputSelect");
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const s = settings;
   // Search Mode toggle is Business+; Chat Retention is Enterprise-only.
@@ -725,13 +729,13 @@ export default function ChatPreferencesPage() {
           );
         }
 
-        router.refresh();
+        navigation.refresh();
         await mutate(SWR_KEYS.settings);
       } catch (error) {
         toast.error(t("toasts.settingsUpdateFailed"));
       }
     },
-    [settings, router, t]
+    [settings, navigation, t]
   );
 
   return (
@@ -929,15 +933,14 @@ export default function ChatPreferencesPage() {
                   >
                     <Section width="fit" alignItems="start">
                       <Content
+                        font="main-content-emphasis"
                         title={t("connectors.title")}
                         description={t("connectors.description")}
-                        sizePreset="main-content"
-                        variant="section"
                       />
                     </Section>
                     {uniqueSources.length > 0 && (
                       <Button
-                        href="/admin/indexing-status"
+                        {...navigation.linkTo("/admin/indexing-status")}
                         prominence="tertiary"
                         rightIcon={SvgExternalLink}
                       >
@@ -965,9 +968,9 @@ export default function ChatPreferencesPage() {
                           <div key={source} className="w-40">
                             <Card padding={2} border="solid">
                               <Content
+                                font="main-ui-action"
                                 icon={meta.icon}
                                 title={meta.displayName}
-                                sizePreset="main-ui"
                               />
                             </Card>
                           </div>

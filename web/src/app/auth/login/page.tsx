@@ -1,10 +1,10 @@
+import { redirect } from "@opal/navigation";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import { validateInternalRedirect } from "@/lib/auth/utils";
 import { SSO_AUTO_REDIRECT_PARAM } from "@/lib/auth/paths";
-import { redirect } from "next/navigation";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";

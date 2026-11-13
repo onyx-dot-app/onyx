@@ -104,7 +104,6 @@ function transformValues(
 ): ImageGenSubmitPayload {
   return {
     modelName: imageProvider.model_name,
-    imageProviderId: imageProvider.image_provider_id,
     provider: "openai",
     apiKey: values.api_key,
   };

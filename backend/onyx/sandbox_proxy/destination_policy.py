@@ -12,6 +12,7 @@ from urllib.parse import SplitResult, urlsplit
 
 from onyx.sandbox_proxy.models import DestinationPolicyConfig, IPNetwork
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     PeerAddress,
     SandboxIdentityResolver,
@@ -86,11 +87,14 @@ def resolve_destination(
     identity: SandboxIdentityResolver | None = None,
     mcp_resolver: MCPServerResolver | None = None,
     upstream_addresses: tuple[str, ...] = (),
+    sandbox: ResolvedSandbox | None = None,
 ) -> tuple[str, ...] | None:
     """Validate existing upstream addresses, or resolve DNS once for a new connection.
 
     Internal MCP access requires source identity, exact origin, and tenant SSRF permission.
     Missing context denies the exception. Public and Onyx destinations need no MCP lookup.
+    `sandbox` is an already verified identity (signed relay connections); without
+    it the identity comes from the peer IP.
     """
     host = host.strip().lower()
     if not host or not 1 <= port <= 65535:
@@ -130,13 +134,16 @@ def resolve_destination(
     if is_api or not any(is_internal(config, address) for address in addresses):
         return resolved
 
-    if identity is None or mcp_resolver is None or scheme not in {"http", "https"}:
+    if mcp_resolver is None or scheme not in {"http", "https"}:
+        return None
+    if sandbox is None and identity is None:
         return None
     try:
-        src_ip = source_ip(peer)
-        if src_ip is None:
-            return None
-        sandbox = identity.resolve_sandbox(src_ip)
+        if sandbox is None and identity is not None:
+            src_ip = source_ip(peer)
+            if src_ip is None:
+                return None
+            sandbox = identity.resolve_sandbox(src_ip)
         if sandbox is None or not mcp_resolver.allows_destination(
             sandbox, scheme, host, port
         ):

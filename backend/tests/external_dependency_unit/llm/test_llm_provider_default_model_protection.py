@@ -494,9 +494,8 @@ class TestEveryFlowDefaultIsGuarded:
         db_session: Session,
         provider_name: str,
     ) -> None:
-        """sync_auto_mode_models hides models dropped from the recommendations
-        and re-points only the chat default, so a vision default can already sit
-        on a hidden model. The form then re-sends that stored visibility, and an
+        """An admin can hide a model that holds the vision default, so a vision
+        default can already sit on a hidden model. The form then re-sends that stored visibility, and an
         unrelated edit — an API key rotation — must not be refused for it."""
         provider = _create_test_provider(db_session, provider_name)
         update_default_model(

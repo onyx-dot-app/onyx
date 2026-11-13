@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
 import BigButton from "@/app/craft/components/BigButton";
+import { LifecycleBadge } from "@/lib/badges/components";
 
 interface BuildModeIntroContentProps {
   onClose: () => void;
@@ -43,7 +44,7 @@ export default function BuildModeIntroContent({
               >
                 <span className="relative inline-block leading-[3.5]">
                   <span
-                    className="font-heading-h1 text-9xl! text-white! relative inline-block"
+                    className="font-heading-hero text-9xl! text-white! relative inline-block"
                     style={{
                       fontFamily: "var(--font-kh-teka)",
                       fontWeight: 500,
@@ -52,11 +53,8 @@ export default function BuildModeIntroContent({
                     {t("wordmark.label")}
                   </span>
                 </span>
-                <span
-                  className="pointer-events-none absolute top-3 -end-14 text-[1em] uppercase tracking-[0.2em] text-white!"
-                  style={{ fontFamily: "var(--font-kh-teka)", fontWeight: 500 }}
-                >
-                  {t("beta.badge")}
+                <span className="pointer-events-none absolute top-3 -end-14">
+                  <LifecycleBadge lifecycle="beta" />
                 </span>
               </div>
             </div>

@@ -46,8 +46,6 @@ function RendererComponentImpl({
   stopReason,
   children,
 }: RendererComponentProps) {
-  // 9e: web splits mixed chat+image groups via a MixedContentHandler. No image renderer yet, so mixed
-  // groups fall through to the chat renderer (image dropped) until then.
   const RendererFn = findRenderer(packets);
 
   if (!RendererFn) {

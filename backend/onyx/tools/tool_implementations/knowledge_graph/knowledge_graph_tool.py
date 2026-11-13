@@ -4,7 +4,7 @@ from onyx.agents.tools import ToolInvocation
 from onyx.db.kg_config import get_kg_config_settings
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolContext
+from onyx.tools.models import CodeModeExposure, ToolContext
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -30,6 +30,10 @@ class KnowledgeGraphTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self._NAME
 
@@ -51,8 +55,10 @@ class KnowledgeGraphTool(Tool):
         return ToolDefinition(
             name=self.name,
             description=self.description,
+            strict=True,
             parameters={
                 "type": "object",
+                "additionalProperties": False,
                 "properties": {
                     QUERY_FIELD: {
                         "type": "string",

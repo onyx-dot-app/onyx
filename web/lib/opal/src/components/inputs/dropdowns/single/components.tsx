@@ -359,8 +359,14 @@ function SingleSelectFieldInner({
             readOnly={!typeIn}
             open={isOpen}
             // A Select shows the chosen option's icon; a ComboBox's text is
-            // typed, so it shows none.
-            icon={typeIn ? undefined : selectedOption?.icon}
+            // typed, so it shows only the search icon, when asked.
+            icon={
+              typeIn
+                ? searchIcon
+                  ? "search"
+                  : undefined
+                : selectedOption?.icon
+            }
             value={inputValue}
             onChange={handleInputChange}
             // A button trigger opens on click or ArrowDown and a second click
@@ -398,7 +404,6 @@ function SingleSelectFieldInner({
                   ? "error"
                   : undefined
             }
-            searchIcon={searchIcon}
             rightChildren={
               <>
                 {rightChildren && (

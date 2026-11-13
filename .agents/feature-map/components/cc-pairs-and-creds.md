@@ -13,8 +13,8 @@
 
 - **An admin adds a connector.** The admin picks a source, fills in its config,
   and authenticates: pastes a secret, uploads a key file, or goes through an
-  OAuth redirect. The admin picks who can see the documents (public, private,
-  or a perm-synced type) and saves. The pair starts `SCHEDULED`, and the status
+  OAuth redirect. The admin picks who can see the documents (public, private to
+  groups, owner-only, or a perm-synced type) and saves. The pair starts `SCHEDULED`, and the status
   page shows it move through `INITIAL_INDEXING` to `ACTIVE`, with its runs and
   errors.
 - **An admin manages a pair.** The admin can pause and resume it, rename it,
@@ -22,6 +22,57 @@
   attempt, resolve failed runs, and delete it. A pause stops new work and keeps
   what is indexed. A delete removes the documents that only this pair indexed,
   in the background, and keeps documents that another pair also indexes.
+- **An admin watches every pair.** The status page
+  (`web/src/views/admin/connectors/IndexingStatusPage/index.tsx`) has Add
+  Connector in its header. Its column holds a counts card (active, total
+  documents, paused) with the Activities panel button, a graph card with the
+  time picker and the fleet's chart, then the connector list. The fleet's
+  Activities panel sits beside the column, open by default only when its
+  Errors level has items. Hidden, the column centers. Below 816 px of content
+  the panel goes under the column, through the same container query as the
+  connector page (`web/src/views/admin/connectors/shared/PanelPageBody.tsx`),
+  and an Activities toggle at the end of the list replaces the counts card's
+  button. Hovering an activity, or focusing one from the chart, lifts its
+  connector's row. The list
+  (`web/src/views/admin/connectors/IndexingStatusPage/ConnectorList.tsx`) puts
+  the page's rows under a foldable divider per source. The divider counts the
+  source's matching pairs on every page (`source_counts`), and rows keep the
+  API's rank order. A row shows the access line, the status tag, the open-error
+  count, and its documents. The count adds the pair's open prune and check runs
+  to the latest run's open errors. A click focuses the latest run in the fleet's
+  Activities panel when it has open errors, else opens the pair's history.
+  Manage and Pause
+  stay disabled without operate. One row expands at a time and lists six runs,
+  running ones first, under the connector page's time range, run type and
+  status filters, and View All Runs opens the connector page on
+  `?tab=indexing`.
+- **An admin opens a pair.** The connector page
+  (`web/src/views/admin/connectors/ConnectorDetailPage/index.tsx`) shows the
+  status cards over two tabs. The Indexing card
+  (`web/src/views/admin/connectors/ConnectorDetailPage/StatusCard.tsx`) shows
+  the pair's status, the stage hint while it indexes, hints to the latest prune
+  and check runs, the open-error count and the indexed count. It shows no
+  estimate bar. It reads `GET /admin/cc-pair/{id}/document-types` every 60 s
+  for the type count and total size, and a fully typed pair unfolds to a bar
+  and a table per type
+  (`web/src/views/admin/connectors/ConnectorDetailPage/documentTypes.ts` labels
+  and folds them). Its status tag and the prune
+  and check hints go to the Indexing tab at that run
+  (`?tab=indexing&run=<id>&run_kind=<kind>`), and the stage hint opens the
+  live run's stage details on the card. Its error count focuses the latest
+  index run's card in the Activities panel. The panel opens by default only
+  when the pair has open errors, and the admin's choice holds for the session
+  (`useActivityPanelOpen`). The panel button hides and shows the panel beside
+  the column, and goes when the panel stacks under it. A pair with Sync access whose source syncs document permissions also
+  gets a Permissions Sync card: the sync's status, the documents synced and,
+  for a source that syncs groups, the group memberships. Its View Errors opens the panel with its level,
+  search and connectors reset to list the open errors. Connector Configurations holds the account, index
+  configurations, sharing and schedule. Indexing holds the documents-indexed
+  chart, hidden when its window has no indexing, and the run list. The Indexing
+  tab stays disabled until the pair has an index attempt or indexed documents,
+  a permission sync attempt or a group sync attempt, and `?tab=indexing` opens
+  the page on it. Manage Index offers Update Index and Full Re-index only once
+  the pair has an index attempt or indexed documents.
 - **A user reuses a credential.** A user a credential is shared with can pair
   it. A source with account-bound settings, such as a site URL, accepts a
   shared credential only with the settings of a pair that already uses it.
@@ -116,11 +167,18 @@ which masks when the caller passes `mask_credential_prefix`.
 
 **Run feed.** `db/cc_pair_runs.py:get_cc_pair_run_page` unions index attempts,
 doc permission syncs, group syncs, prunes and check runs into one page, newest
-first. A failed run is superseded when a newer run of the same kind on the same
-history succeeded or failed. An admin can resolve a run
+first. A queued run is in the `scheduled` group, apart from `running`. Both
+stay in every time window, and neither is superseded. A queued run is not
+resolvable, and a running run is resolvable only when it is an index run. A
+targeted reindex (Retry) attempt is an index run marked `is_retry`, listed once
+under the current model. It does not supersede a full run, does not make the
+pair indexing, and is not the pair's latest attempt. A failed run is
+superseded when a newer run of the same kind on the same history succeeded or
+failed. An admin can resolve a run
 (`db/cc_pair_run_resolution.py:resolve_runs__no_commit`). The fleet view on the
 status page reads the same builders across every pair the caller can read
-(`backend/onyx/server/documents/index_monitoring.py`).
+(`backend/onyx/server/documents/index_monitoring.py`), or across the named
+`cc_pair_ids` among them.
 
 ---
 
@@ -208,7 +266,9 @@ status page reads the same builders across every pair the caller can read
     [[billing]]) change it. A new path must call
     `connectors/pairing_access.py:validate_pairing_access`
     first, unless it only widens to public, and must mark the pair's documents
-    for sync, or the index keeps the old chunk ACLs.
+    for sync, or the index keeps the old chunk ACLs. A path that moves a pair out
+    of `private` or `sync_restricted` deletes its data-access rows before the
+    type changes: their `(cc_pair_id, access_type)` foreign key rejects it.
 13. `google-oauth-callback-by-route` **The Google OAuth callback picks Gmail or
     Drive from its `[connector]` route parameter.**
     `web/src/app/admin/connectors/[connector]/auth/callback/route.ts` accepts
@@ -222,7 +282,7 @@ user reaches each level.
 
 | Action | Level |
 |---|---|
-| Read the detail page, runs, errors, hierarchy breakdown | READ |
+| Read the detail page, runs, errors, hierarchy and document type breakdowns | READ |
 | Pause, resume, rename, change schedules, prune, start a permission or group sync, cancel an attempt, resolve runs, release the indexing hold | OPERATE |
 | Delete, set data-access or manage-access groups, pair a credential to a connector that has pairs | EDIT (on every existing pair of the connector, for pairing) |
 
@@ -251,14 +311,19 @@ on the admin routes.
   own credentials (`ConnectorCredentialPair` docstring).
 - **The pause route returns at once.** It sets signals and lets running tasks
   stop themselves, so the admin does not wait on a worker.
-- **Resolving a run leaves its error rows open.** Resolution adds a
-  `CCPairRunResolution` row and keeps `IndexAttemptError.is_resolved` false,
-  because the poll cursor and the targeted reindex (Retry) read that flag.
-  A reader that counts open errors must also exclude resolved runs, as
-  `db/index_attempt.py:get_open_error_counts_for_index_attempts` does with
-  `run_is_resolved`. Resolution clears the repeated-error flag and alert when
-  the pair's latest failed attempt is resolved, but keeps the pair's status,
-  so a Cloud auto-pause stays.
+- **Resolve without retry keeps `is_resolved` false.** Resolving a run adds a
+  `CCPairRunResolution` row and marks the errors the run filed so far, or a
+  group sync's failed users and groups, `resolved_reason = without_retry`. `POST /admin/cc-pair/{id}/errors/resolve`
+  does the same for chosen errors. Both keep `IndexAttemptError.is_resolved`
+  false, because the poll cursor and the targeted reindex (Retry) read that
+  flag. An open error has neither (`db/cc_pair_run_resolution.py:index_attempt_error_is_open`).
+  A run indexing the document, a newer error on it (`later_run`) or a Retry
+  (`retry`) sets `is_resolved` and records the closing attempt. A running
+  index run can be resolved: any open error on it, or its ending FAILED after
+  the resolution, reopens it (`run_is_resolved`, `get_resolution_times`),
+  and resolving it again moves the resolution's time. Resolution clears the
+  repeated-error flag and alert when the pair's latest failed attempt is
+  resolved, but keeps the pair's status, so a Cloud auto-pause stays.
 
 ---
 
@@ -268,9 +333,6 @@ on the admin routes.
   `backend/onyx/server/documents/connector.py:update_connector_from_model`
   checks credential bindings but does not call `validate_ccpair_for_user`. A
   bad config fails at the next index attempt.
-- **The errors route's open filter shows errors of a resolved run.**
-  `db/index_attempt.py:_cc_pair_errors` filters on `is_resolved` alone, so it
-  lists errors that the attempt's open-error count leaves out.
 - **`check_deletion_attempt_is_allowed` gates nothing.** Its only caller,
   `backend/onyx/server/documents/connector.py:get_currently_failed_indexing_status`, uses it
   to fill `is_deletable` for display. The real guard against deleting a pair

@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
 import ActionPolicyEditorModal, {
@@ -55,7 +55,7 @@ export default function ConfigureProviderModal({
   const t = useTranslations("craft.apps.configureProvider");
   const pluginCopy = useTranslations("actions.memberPlugins.externalApp");
   const tApps = useTranslations("craft.apps");
-  const router = useRouter();
+  const navigation = useNavigation();
   const savedEnabled = existingApp?.enabled ?? true;
   const [enabledDraft, setEnabledDraft] = useState<boolean | null>(null);
   const enabled = enabledDraft ?? savedEnabled;
@@ -182,12 +182,12 @@ export default function ConfigureProviderModal({
 
   function navigateToSkillEditor(draftId?: string) {
     if (!existingApp) return;
-    router.push(skillEditorUrlForApp(existingApp, draftId));
+    navigation.go(skillEditorUrlForApp(existingApp, draftId));
   }
 
   function navigateToExistingSkill(skillId: string) {
     if (!existingApp) return;
-    router.push(skillEditUrlForApp(skillId, existingApp));
+    navigation.go(skillEditUrlForApp(skillId, existingApp));
   }
 
   function validateUploadedSkill(draft: SkillCreationDraft): string | null {

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, OverflowText, Text } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { richNodes } from "@opal/utils";
 import { Section } from "@opal/layouts";
 import { SvgChevronDown, SvgChevronUp } from "@opal/icons";
@@ -132,14 +132,16 @@ function ConfigItem({ label, value, booleanLabels }: ConfigItemProps) {
       );
     }
     return (
-      <OverflowText
+      <Text
+        maxLines={1}
+        overflowTooltip
         as="p"
         font="main-ui-body"
         color="text-04"
         textPosition="text-end"
       >
         {convertObjectToString(value) || "-"}
-      </OverflowText>
+      </Text>
     );
   }
 

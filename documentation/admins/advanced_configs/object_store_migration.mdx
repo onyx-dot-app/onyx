@@ -64,14 +64,29 @@ The app keeps serving from both stores in the meantime.
 
 #### Upgrading by hand
 
-If you run `docker compose` yourself instead of the CLI, the new release starts with your old `.env`.
+If you run `docker compose` yourself instead of the CLI,
+first [update the Compose files](/deployment/local/docker#upgrading) to the new release.
+Compose files from before `v5.0.0` have no `object-store-copy` service. To check,
+run this in `onyx/deployment/docker_compose`:
+
+```bash
+grep -l "object-store-copy:" docker-compose*.yml
+```
+
+The output must list the Compose file that you start Onyx with. If it does not,
+update the Compose files before you change `.env`.
+The API server does not start when `S3_ENDPOINT_URL` points to a service that does not exist.
+
+The new release starts with your old `.env`.
 On an install that uses the bundled MinIO (`S3_ENDPOINT_URL=http://minio:9000`), that keeps the app on MinIO:
 the object store and the copy service run empty, and the app keeps writing files to MinIO,
 which a later release removes. Make these two `.env` changes before `docker compose up`.
-An install on external storage (S3, GCS, Azure) needs no change.
 
 1. Set `S3_ENDPOINT_URL=http://object-store:8333`.
 2. Add `S3_LEGACY_ENDPOINT_URL=http://minio:9000`.
+
+An install on external storage (S3, GCS, Azure) or on PostgreSQL file storage (`FILE_STORE_BACKEND=postgres`)
+needs no change.
 
 Nothing breaks if you forget: the app serves from MinIO as before,
 and the `api_server` and `object-store-copy` logs warn at startup that files are still in MinIO and name the two

@@ -44,7 +44,10 @@ jest.mock("@/app/craft/contexts/UploadFilesContext", () => {
 });
 
 jest.mock("next/navigation", () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  useRouter: () => ({ replace: jest.fn() }),
 }));
 
 jest.mock("swr", () => ({

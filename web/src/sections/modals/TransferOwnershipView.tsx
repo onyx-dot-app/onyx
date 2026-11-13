@@ -6,7 +6,7 @@ import { InputSingleComboBox } from "@opal/components";
 import { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import { PersonaOwnerGroup } from "@/lib/agents/types";
 import { MinimalUserSnapshot } from "@/lib/types";
-import { Tag, Text } from "@opal/components";
+import { Badge, Text } from "@opal/components";
 import { SvgUser, SvgUsers } from "@opal/icons";
 
 export type TransferOwnershipTarget =
@@ -130,7 +130,10 @@ export function TransferOwnershipView({
           </div>
 
           {selectedTarget.type === "group" ? (
-            <Tag color="gray" title={t("transferOwnership.groupTag.label")} />
+            <Badge
+              color="default"
+              title={t("transferOwnership.groupTag.label")}
+            />
           ) : null}
         </div>
       ) : null}

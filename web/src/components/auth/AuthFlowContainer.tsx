@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { NavLink } from "@opal/navigation";
 import { useTranslations } from "next-intl";
 import { SvgOnyxLogo } from "@opal/logos";
 import { useSettings } from "@/lib/settings/hooks";
@@ -45,12 +45,12 @@ export default function AuthFlowContainer({
               <Text font="main-ui-body" color="text-03">
                 {t("signupPrompt.text", { appName })}
               </Text>{" "}
-              <Link
+              <NavLink
                 href="/auth/signup"
                 className="text-text-05 mainUiAction underline transition-colors duration-200"
               >
                 {t("createAccountLink.label")}
-              </Link>
+              </NavLink>
             </>
           )}
         </div>
@@ -58,12 +58,12 @@ export default function AuthFlowContainer({
       {authState === "signup" && (
         <div className="text-sm mt-6 text-center w-full text-text-03 mainUiBody mx-auto">
           {t("signinPrompt.text")}{" "}
-          <Link
+          <NavLink
             href="/auth/login?autoRedirectToSignup=false"
             className="text-text-05 mainUiAction underline transition-colors duration-200"
           >
             {t("signInLink.label")}
-          </Link>
+          </NavLink>
         </div>
       )}
     </div>

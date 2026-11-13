@@ -25,7 +25,10 @@
   insufficient-permissions error, not a silent fallback.
 - **An API caller** sends `POST /search` and gets the selected, expanded
   sections with no LLM answer. It is for programmatic callers such as the
-  onyx-cli and the Craft sandbox.
+  onyx-cli and the Craft sandbox. `POST /search/raw` returns the top sections
+  in retrieval order with up to `context_chunks` neighboring chunks, and makes
+  no LLM call. It is for callers that rank results themselves, such as the
+  MCP tool's `retrieval_only` mode.
 - **An EE user** on the Search page gets ranked documents and the LLM's picks.
   If selection fails, the page still shows the documents.
 - When no connector, federated connector or user file exists, or the vector DB
@@ -92,8 +95,10 @@ sets, start date, attached documents and hierarchy nodes. Chat builds it in
 `db/tools.py:capture_persona_tool_configuration`, and the `/search` API builds
 its own.
 
-**Lanes and weights.** The rephrased semantic query, the model's own queries,
-the user's original message and the keyword queries each get a lane and an RRF
+**Lanes and weights.** A call runs at most `MAX_QUERIES_PER_CALL` (3) of the
+model's queries; `SearchTool._run` drops the rest with a log warning, and the
+tool definition states the limit. The rephrased semantic query, the model's
+own queries, the user's original message and the keyword queries each get a lane and an RRF
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
@@ -145,7 +150,9 @@ and pass it to `SearchTool` as `auto_detect_filters`. The tool keeps no state
 between calls. It reads the turn's planning state from
 `ToolContext.search_context`
 (`tools/tool_implementations/search/models.py:SearchContext`) and returns its
-new decisions as `SearchPlanningResult` in the result metadata. After each step,
+new decisions as `SearchPlanningResult` in the result metadata. A
+`retrieval_only` call reads an empty `SearchContext` instead, so it searches
+the query as written. After each step,
 `chat/agent.py:ChatAgent._after_step` and the research agent fold them with
 `tools/tool_implementations/search/search_tool.py:update_search_context`, in
 model-call order. Each completed search adds a `SearchCycle`, also one with no
@@ -162,8 +169,8 @@ and expansion run whatever the flag's value. A change to this flag changes the
 LLM cost of every multi-search chat turn.
 
 **Other entry points.** `server/features/search/api.py` builds a `SearchTool`
-and calls `SearchTool.search` outside the chat runtime, with its own trace and
-tool span. `ee/onyx/search/process_search_query.py`
+for `/search` and `/search/raw` and calls `SearchTool.search` outside the chat
+runtime, with its own trace and tool span. `ee/onyx/search/process_search_query.py`
 calls `search_pipeline` directly, with its own expansion and section target,
 and is the only caller of `FORCED_DOCUMENT_SET_NAMES` scope
 (`context/search/forced_document_set.py`). `backend/onyx/server/query_and_chat/query_backend.py:admin_search`
@@ -204,7 +211,7 @@ calls the index directly for admin document inspection.
    `displayed_docs` holds only the selected ones; `None` means all, and an empty
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages the connector files of all `search_docs`
-   for the Python tool by `SearchDoc.file_id`, which
+   for the Python tool, when the chat offers it, by `SearchDoc.file_id`, which
    `populate_file_ids_on_sections` fills ([[code-execution]]). The saved result
    (`chat/response.py:_saved_message`) drops `search_docs` and the planning
    metadata. The `ToolCall` row keeps the selected documents, so replay and
@@ -250,7 +257,7 @@ calls the index directly for admin document inspection.
 11. `decision-path-gate` **The decision path needs a configured model, a turn
     that persists content and, on cloud, a flag.**
     `tools/tool_implementations/search/search_tool.py:SearchTool._resolve_decision_client`
-    runs once per search call. It returns a client only when the DECISION
+    runs at most once per search call. It returns a client only when the DECISION
     default exists, `chat/incognito.py:current_turn_persists_content` is true,
     and the PostHog flag `onyx-search-decision-rerank-expansion` is on for the
     tenant. With the NoOp flag provider (self-hosted) the flag counts as on.
@@ -276,6 +283,17 @@ calls the index directly for admin document inspection.
     model, with no LLM fallback. A failed rerank then raises the primary
     model's budget error. Keep `_resolve_decision_client` ahead of
     `check_primary_llm_cost` in `SearchTool.search`.
+15. `retrieval-only-makes-no-model-calls` **`retrieval_only` makes no LLM or
+    decision-model call.**
+    `tools/tool_implementations/search/search_tool.py:SearchTool.search` skips
+    query expansion, scope and time detection, and the Slack lane, and returns
+    the top sections before the decision client or selection model resolves.
+    It adds `retrieval_context_chunks` neighbors with
+    `tools/tool_implementations/search/search_utils.py:expand_section_with_neighbors`,
+    which reads them from the index and classifies nothing. `/search/raw` is
+    its only API entry point and runs no LLM cost, model spend or token budget
+    check. A new model call in `search` must check `retrieval_only`, or it adds
+    cost that callers chose to avoid.
 
 ---
 

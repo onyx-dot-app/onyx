@@ -16,6 +16,7 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
+    head_and_tail_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -25,10 +26,13 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunState,
     RunStatus,
     StepInput,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import (
     Agent,
@@ -179,16 +183,7 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                 state: StepInput,
                 token_counter: Callable[[str], int] = token_counter,
                 llm_config: LLMConfig = model.config,
-                tool: AgentTool = tool,
             ) -> PreparedStep:
-                tool.definition = tool.definition.model_copy(
-                    update={
-                        "description": "Search updated sources"
-                        if state.step.index == 2
-                        else "Search"
-                    }
-                )
-
                 def assemble(messages: Sequence[Message]) -> list[Message]:
                     updated_messages = [
                         message.model_copy(update={"content": revised_evidence})
@@ -207,7 +202,9 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
                         llm_config=llm_config,
                     )
 
-                return PreparedStep(tools=[tool], assemble_messages=assemble)
+                return PreparedStep(
+                    assemble_messages=assemble,
+                )
 
             agent = Agent(
                 model,
@@ -357,7 +354,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 
 
 @pytest.mark.parametrize("long_question", [False, True])
-def test_summary_cutoff_survives_request_context_removal(long_question: bool) -> None:
+def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
         id=1,
@@ -384,22 +381,14 @@ def test_summary_cutoff_survives_request_context_removal(long_question: bool) ->
     source = convert_chat_history(
         [old_answer, question],
         files=[],
-        context_image_files=[],
-        additional_context="Temporary request detail. " * 160,
-        token_counter=len,
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
-    summary_input = "\n".join(request.messages[0].text for request in model.summaries)
-    assert "Temporary request detail" not in summary_input
 
     next_question = question.model_copy(update={"id": 3, "message": "Next question"})
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=len,
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -453,7 +442,9 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         execution_threads.append(threading.current_thread())
         step = decision.step
         prepared.append(step.index)
-        return PreparedStep(tools=tools, assemble_messages=render)
+        return PreparedStep(
+            assemble_messages=render,
+        )
 
     def render(messages: Sequence[Message]) -> list[Message]:
         assert threading.current_thread() is execution_threads[0]
@@ -523,6 +514,60 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
+
+
+@pytest.mark.parametrize("max_tokens", [1, 3, 4, 7])
+def test_head_and_tail_tokens_keep_whole_characters(max_tokens: int) -> None:
+    text = "お誕生日おめでとう 🎉" * 4
+    head, tail, count = head_and_tail_tokens(text, max_tokens)
+    assert count == count_tokens(text) > max_tokens
+    assert "\ufffd" not in head + tail
+    assert text.startswith(head) and text.endswith(tail)
+    assert count_tokens(head) + count_tokens(tail) <= max_tokens
+
+
+def test_amending_a_summarized_result_drops_the_summary() -> None:
+    model = ContextModel(tool_rounds=5)
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content=TASK)]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(
+                    content="Evidence [1] 東京 " * 180
+                ),
+            )
+        ],
+        on_finish=lambda _results: [
+            ToolResultAmendment(
+                call_id="call-1", result=ToolResult(content="Amended evidence.")
+            )
+        ],
+    )
+    run = agent.start(max_steps=6)
+    run.result()
+    assert run.wait_for_idle(2)
+    assert model.summaries
+    assert run.snapshot().checkpoint is None
+
+    # The next turn reads the amended result, not a summary of the replaced one.
+    summaries = len(model.summaries)
+    reloaded = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=agent.state.messages, checkpoint=agent.state.checkpoint
+        ),
+    )
+    reloaded.start(max_steps=1, messages=[UserMessage(content="Conclude.")]).result()
+    inputs = [message.text for message in model.generations[-1].messages] + [
+        request.messages[0].text for request in model.summaries[summaries:]
+    ]
+    assert any("Amended evidence." in text for text in inputs)
 
 
 @pytest.mark.parametrize("step_timeout", [None, 37])
@@ -608,7 +653,7 @@ def test_step_timeout_override_does_not_change_later_steps() -> None:
 
     def prepare(state: StepInput) -> PreparedStep:
         return PreparedStep(
-            tools=[tool], stall_timeout_s=37 if state.step.index == 0 else None
+            stall_timeout_s=37 if state.step.index == 0 else None,
         )
 
     agent = Agent(
@@ -802,9 +847,6 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
-        context_image_files=[],
-        additional_context=None,
-        token_counter=count_tokens,
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -924,6 +966,41 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     reloaded.start(background=False, max_steps=1).result()
     assert model.generations[-1].messages[: len(request.messages)] == request.messages
     assert reloaded.state.messages[: len(history)] == history
+
+
+def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
+    source: list[Message] = [
+        SystemMessage(id="system", content="Keep the system instructions."),
+        UserMessage(id="task", content=TASK),
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 1000)]
+        ),
+        UserMessage(
+            id="child-delivery",
+            content="Child research findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+    ]
+    expected = [source[0], source[1], source[3]]
+    input_limit = request_tokens(GenerationRequest(messages=expected))
+    checkpoint, request, size = _truncate_context(
+        CancellationSignal(),
+        source,
+        PreparedStep(),
+        token_counts={},
+        input_limit=input_limit,
+        original_size=request_tokens(GenerationRequest(messages=source)),
+        input_start=1,
+    )
+    assert [message.text for message in request.messages] == [
+        message.text for message in expected
+    ]
+    assert [message.text for message in request.messages] == [
+        message.text for message in working_messages(source, checkpoint, input_start=1)
+    ]
+    assert size == input_limit
 
 
 def test_truncation_validates_boundaries_once_across_candidates() -> None:
@@ -1254,3 +1331,32 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
     ends = [e for e in events if e.type == "message_end"]
     assert len(ends) == 1
     assert ends[0].message == state.steps[0].message
+
+
+@pytest.mark.parametrize("input_start", [None, 0])
+@pytest.mark.parametrize("covered_index", [1, 2, 3])
+def test_compaction_retains_the_user_task_instead_of_an_agent_result(
+    input_start: int | None, covered_index: int
+) -> None:
+    messages: list[Message] = [
+        UserMessage(id="question", content="Compare the findings."),
+        AssistantMessage(id="first-answer", content=[TextContent(text="Working")]),
+        UserMessage(
+            id="child-delivery",
+            content="Background findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+        AssistantMessage(id="second-answer", content=[TextContent(text="Comparison")]),
+    ]
+    covered_id = messages[covered_index].id
+    assert covered_id is not None
+    checkpoint = CompactionCheckpoint(
+        summary="Research progress", covered_through_message_id=covered_id
+    )
+    assert working_messages(messages, checkpoint, input_start=input_start) == [
+        SystemMessage(content="Conversation summary:\nResearch progress"),
+        messages[0],
+        *messages[covered_index + 1 :],
+    ]

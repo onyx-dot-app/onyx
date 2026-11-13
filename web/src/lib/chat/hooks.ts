@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigation, useSearchParams } from "@opal/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getConfiguredSources } from "@/lib/connectors/utils";
-import { useRouter, useSearchParams } from "next/navigation";
 import type { OnSubmitProps } from "@/hooks/useChatController";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { SUBMIT_MESSAGE_TYPES } from "@/lib/extension/constants";
@@ -11,7 +11,278 @@ import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useTags } from "@/lib/searchFilters/hooks";
 import { normalizeSourceSelection } from "@/lib/searchFilters/utils";
-import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import {
+  flushToolSelection,
+  type ToolConfigurationHandle,
+} from "@/lib/tools/hooks";
+
+import useSWR, { useSWRConfig } from "swr";
+import { useTranslations } from "next-intl";
+import { useShallow } from "zustand/react/shallow";
+import { toast } from "@opal/layouts";
+import {
+  errorHandlingFetcher,
+  errorHandlingFetchWith,
+  fetchErrorDetail,
+  FetchError,
+  skipRetryOnAuthError,
+} from "@/lib/fetcher";
+import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import type {
+  ChatSessionQueue,
+  ChatSessionStatus,
+  PendingChatMessage,
+} from "@/lib/chat/types";
+import {
+  getLatestMessageChain,
+  getMessageByMessageId,
+  type MessageTreeState,
+} from "@/app/app/services/messageTree";
+import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+
+const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
+const SERVER_WORK_POLL_MS = 2000;
+
+/** The response new input continues. Without a saved ID the server targets the running one. */
+function pendingInputTarget(tree: MessageTreeState | undefined) {
+  if (!tree) return { needsResponseSelection: false, targetResponseId: null };
+  const history = getLatestMessageChain(tree);
+  const needsResponseSelection = Boolean(
+    getUnresolvedMultiModelTurn(history, tree)
+  );
+  const latest = history.at(-1);
+  return {
+    needsResponseSelection,
+    targetResponseId:
+      latest?.type === "assistant" &&
+      latest.messageId != null &&
+      latest.messageId > 0 &&
+      !needsResponseSelection
+        ? latest.messageId
+        : null,
+  };
+}
+
+/**
+ * Server-owned pending messages and background activity of the current chat.
+ * Mount once per chat surface; the composer only renders the result.
+ */
+export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
+  const t = useTranslations("chat.input.pendingMessages");
+  const tReadiness = useTranslations("chat.readiness");
+  // Primitives only: the message tree changes on every streamed frame.
+  const { sessionId, idle, needsResponseSelection } = useChatSessionStore(
+    useShallow((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      const target = pendingInputTarget(session?.messageTree);
+      return {
+        sessionId: state.currentSessionId,
+        idle: session?.chatState === "input" && !session.isFetchingChatMessages,
+        needsResponseSelection: target.needsResponseSelection,
+      };
+    })
+  );
+  const pendingKey =
+    enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
+  const statusKey =
+    enabled && sessionId ? SWR_KEYS.chatSessionStatus(sessionId) : null;
+
+  // Key-addressed, unlike the mutate useSWR returns, which follows the current key.
+  const { mutate } = useSWRConfig();
+  const { data: messages, error } = useSWR<PendingChatMessage[], Error>(
+    pendingKey,
+    errorHandlingFetcher,
+    { onErrorRetry: skipRetryOnAuthError }
+  );
+  const { data: status } = useSWR<ChatSessionStatus, Error>(
+    statusKey,
+    errorHandlingFetcher,
+    {
+      // Pending input and background work can start a turn this client did not send.
+      refreshInterval: (current) =>
+        current?.has_startable_input || current?.has_active_subagents
+          ? SERVER_WORK_POLL_MS
+          : 0,
+      onErrorRetry: skipRetryOnAuthError,
+    }
+  );
+
+  // A reader owns a busy session; an idle one attaches to turns the server
+  // started, whichever status read found them.
+  const checkFailed = tReadiness("checkFailed");
+  useEffect(() => {
+    if (!sessionId || !status || !idle) return;
+    const session = useChatSessionStore.getState().sessions.get(sessionId);
+    if (!session) return;
+    const missingResponse =
+      status.latest_response_id !== null &&
+      !getMessageByMessageId(session.messageTree, status.latest_response_id);
+    if (status.is_processing || missingResponse)
+      void refreshChatSession(sessionId, checkFailed);
+  }, [sessionId, status, idle, checkFailed]);
+
+  // Every turn saves a new response, so a new latest response means a turn
+  // may have taken pending input, whoever started it and whether or not this
+  // browser read its stream.
+  const latestResponseId = status?.latest_response_id;
+  const seenResponse = useRef<{
+    sessionId: string | null;
+    responseId: number | null | undefined;
+  }>({ sessionId, responseId: latestResponseId });
+  useEffect(() => {
+    const previous = seenResponse.current;
+    seenResponse.current = { sessionId, responseId: latestResponseId };
+    if (
+      pendingKey &&
+      previous.sessionId === sessionId &&
+      previous.responseId !== undefined &&
+      latestResponseId !== undefined &&
+      latestResponseId !== previous.responseId
+    )
+      void mutate(pendingKey);
+  }, [sessionId, latestResponseId, pendingKey, mutate]);
+
+  // One request per chat at a time. The composer keeps new input until it ends.
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const busy = busyKey !== null && busyKey === pendingKey;
+  const hasActiveSubagents = status?.has_active_subagents ?? false;
+
+  return useMemo(() => {
+    // A 409 means the server already accepted the message.
+    function toastPendingFailure(error: unknown, fallback: string) {
+      toast.error(
+        error instanceof FetchError && error.status === 409
+          ? t("alreadyAccepted")
+          : (fetchErrorDetail(error) ?? fallback)
+      );
+    }
+
+    // Writes after an await target the chat that made the request.
+    async function request<T>(
+      action: (key: string) => Promise<T>
+    ): Promise<T | null> {
+      const key = pendingKey;
+      const status = statusKey;
+      if (!key || !status || busy) return null;
+      setBusyKey(key);
+      try {
+        return await action(key);
+      } finally {
+        setBusyKey((current) => (current === key ? null : current));
+        // A write can make input startable, and only a fresh status polls for
+        // the turn that takes it.
+        void mutate(status);
+      }
+    }
+
+    return {
+      enabled,
+      messages: messages ?? EMPTY_PENDING_MESSAGES,
+      error: error ? t("loadFailed") : null,
+      busy,
+      hasActiveSubagents,
+      needsResponseSelection,
+      submit: async (message, delivery, turn) =>
+        (await request(async (key) => {
+          const session = sessionId
+            ? useChatSessionStore.getState().sessions.get(sessionId)
+            : undefined;
+          // A turn the server starts reads the chat's saved tools.
+          if (sessionId) await flushToolSelection(sessionId);
+          try {
+            const accepted = await errorHandlingFetchWith<PendingChatMessage>(
+              key,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  message,
+                  delivery,
+                  target_response_id: pendingInputTarget(session?.messageTree)
+                    .targetResponseId,
+                  deep_research: turn.deepResearch,
+                  llm_override: turn.llmOverride,
+                }),
+              }
+            );
+            // Revalidates after the write, since a turn can consume it at once.
+            void mutate<PendingChatMessage[]>(key, (current = []) => [
+              ...current,
+              accepted,
+            ]);
+            return true;
+          } catch (failure) {
+            toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
+            return false;
+          }
+        })) ?? false,
+      withdraw: (id) =>
+        request(async (key) => {
+          try {
+            const withdrawn = await errorHandlingFetchWith<PendingChatMessage>(
+              `${key}/${id}`,
+              { method: "DELETE" }
+            );
+            void mutate<PendingChatMessage[]>(
+              key,
+              (current = []) => current.filter((message) => message.id !== id),
+              { revalidate: false }
+            );
+            return withdrawn;
+          } catch (failure) {
+            toastPendingFailure(failure, t("withdrawFailed"));
+            void mutate(key);
+            return null;
+          }
+        }),
+      interrupt: async (id) => {
+        await request(async (key) => {
+          if (sessionId) await flushToolSelection(sessionId);
+          try {
+            await errorHandlingFetchWith<PendingChatMessage>(
+              `${key}/${id}/interrupt`,
+              { method: "POST" }
+            );
+          } catch (failure) {
+            toastPendingFailure(failure, t("interruptFailed"));
+          } finally {
+            void mutate(key);
+          }
+        });
+      },
+      stopSubagents: async () => {
+        const status = statusKey;
+        if (!sessionId || !status) return;
+        try {
+          await errorHandlingFetchWith<unknown>(
+            `/api/chat/chat-session/${sessionId}/stop-subagents`,
+            { method: "POST" }
+          );
+        } catch (failure) {
+          toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
+        } finally {
+          void mutate(status);
+        }
+      },
+    };
+  }, [
+    enabled,
+    messages,
+    error,
+    busy,
+    hasActiveSubagents,
+    needsResponseSelection,
+    sessionId,
+    pendingKey,
+    statusKey,
+    mutate,
+    t,
+  ]);
+}
 
 interface UseSendChatMessageFromURLProps {
   /** From `useChatController`, which needs more than this hook can see. */
@@ -57,7 +328,7 @@ export function useSendChatMessageFromURL({
   deepResearch,
   toolConfiguration,
 }: UseSendChatMessageFromURLProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const { currentMessageFiles } = useProjectsContext();
@@ -74,12 +345,21 @@ export function useSendChatMessageFromURL({
     [availableSources]
   );
 
-  const [queuedQuery, setQueuedQuery] = useState<string | null>(null);
+  const [queuedQuery, setQueuedQueryState] = useState<string | null>(null);
+  // The page that queued the query. The page being left stays mounted (and
+  // hidden) while the next one renders, so a query that settles after the
+  // user moved on must not write to the new page's URL or send.
+  const queuedPathnameRef = useRef<string | null>(null);
+  const setQueuedQuery = useCallback((query: string | null) => {
+    queuedPathnameRef.current =
+      query === null ? null : window.location.pathname;
+    setQueuedQueryState(query);
+  }, []);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
 
   // Arriving with the parameters already on the URL.
   //
-  // Guarded because `router.replace` only drops `send-on-load` a tick after
+  // Guarded because `navigation.go` only drops `send-on-load` a tick after
   // the query is processed — without this the effect re-runs inside that
   // window and queues the same prompt twice.
   const sentForRef = useRef<string | null>(null);
@@ -89,7 +369,7 @@ export function useSendChatMessageFromURL({
     if (sentForRef.current === query) return;
     sentForRef.current = query;
     setQueuedQuery(query);
-  }, [searchParams]);
+  }, [searchParams, setQueuedQuery]);
 
   // The extension navigating the embedded page without a reload.
   useEffect(() => {
@@ -104,13 +384,19 @@ export function useSendChatMessageFromURL({
 
     window.addEventListener("message", onPageChange);
     return () => window.removeEventListener("message", onPageChange);
-  }, []);
+  }, [setQueuedQuery]);
 
   // Processes the queued query once every dimension it names has settled.
   // Re-runs as the loading flags flip, so a query that arrived early waits
   // here instead of resolving names against half-fetched lists.
   useEffect(() => {
     if (queuedQuery === null) return;
+    if (window.location.pathname !== queuedPathnameRef.current) {
+      // Not handled, so the same URL can queue it again on a return.
+      sentForRef.current = null;
+      setQueuedQuery(null);
+      return;
+    }
     // Writes are dropped until the composer's configuration binds to its
     // chat, so processing earlier would scope nothing and persist nothing.
     if (!toolConfiguration.ready) return;
@@ -167,14 +453,13 @@ export function useSendChatMessageFromURL({
         tagValues.length > 0
           ? tags.filter((tag) => tagValues.includes(tag.tag_value))
           : current.tags,
-      timeRange: hasRange
-        ? { from: from.toISOString(), to: to.toISOString() }
-        : current.timeRange,
+      // A search sends only the start of a range.
+      timeRange: hasRange ? { from: from.toISOString() } : current.timeRange,
     }));
 
     // Dropped before the replace so a refresh does not resend.
     params.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
-    router.replace(`?${params.toString()}`, { scroll: false });
+    navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
 
     if (message) setPendingMessage(message);
   }, [
@@ -186,8 +471,9 @@ export function useSendChatMessageFromURL({
     configuredSources,
     documentSets,
     tags,
-    router,
+    navigation,
     toolConfiguration,
+    setQueuedQuery,
   ]);
 
   // Submits one render after the filter write above landed, so `onSubmit`'s

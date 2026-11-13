@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { IconLoader } from "@opal/loaders";
 import { use, useEffect } from "react";
 import { useTranslations } from "next-intl";
@@ -14,7 +15,6 @@ import { useStandardAnswerCategories } from "@/app/ee/admin/standard-answer/hook
 import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import type { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
-import { useRouter } from "next/navigation";
 
 function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
   const t = useTranslations("admin.slackBots");
@@ -92,7 +92,7 @@ function NewChannelConfigContent({ slackBotId }: { slackBotId: number }) {
 export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
   const t = useTranslations("admin.slackBots");
   const unwrappedParams = use(props.params);
-  const router = useRouter();
+  const navigation = useNavigation();
 
   const slack_bot_id_raw = unwrappedParams?.["bot-id"] || null;
   const slack_bot_id = slack_bot_id_raw
@@ -101,9 +101,9 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
 
   useEffect(() => {
     if (!slack_bot_id || isNaN(slack_bot_id)) {
-      router.replace("/admin/bots");
+      navigation.go("/admin/bots", { replace: true });
     }
-  }, [slack_bot_id, router]);
+  }, [slack_bot_id, navigation]);
 
   if (!slack_bot_id || isNaN(slack_bot_id)) {
     return null;
@@ -115,7 +115,7 @@ export default function Page(props: { params: Promise<{ "bot-id": string }> }) {
         icon={SvgSlack}
         title={t("newChannel.header.title")}
         divider
-        cancel
+        cancel={`/admin/bots/${slack_bot_id}`}
       />
       <SettingsLayouts.Body>
         <NewChannelConfigContent slackBotId={slack_bot_id} />

@@ -1,11 +1,11 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
 import { SvgImage } from "@opal/icons";
-import { Section } from "@/layouts/general-layouts";
 
 interface ImagePreviewProps {
   src: string;
@@ -43,7 +43,7 @@ function ImageContent({
         padding={8}
       >
         <SvgImage size={48} className="stroke-text-02" />
-        <Text font="heading-h3" color="text-03">
+        <Text font="heading-section" color="text-03">
           {t("error.title")}
         </Text>
         <Text font="secondary-body" color="text-02">

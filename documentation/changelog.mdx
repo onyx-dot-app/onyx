@@ -25,9 +25,11 @@ rss: true
     On upgrade both stores run side by side: the app writes to both, reads fall back to MinIO,
     and a copy job moves every file across while Onyx keeps serving, with no downtime. Installs on external S3, GCS,
     or Azure storage are unaffected. `onyx-cli deploy upgrade` switches the endpoints for you;
-    a hand-run Compose upgrade stays on MinIO until `S3_ENDPOINT_URL=http://object-store:8333` and
-    `S3_LEGACY_ENDPOINT_URL=http://minio:9000` are set in `.env`, and the API server logs a warning until they are.
-    On Helm (chart 0.9.x), the new `objectStore` PVC takes `minio.persistence`'s size and must hold all of MinIO's data,
+    a hand-run Compose upgrade must [update the Compose files](https://docs.onyx.app/deployment/local/docker#upgrading)
+    first,
+    then stays on MinIO until `S3_ENDPOINT_URL=http://object-store:8333` and `S3_LEGACY_ENDPOINT_URL=http://minio:9000`
+    are set in `.env`, and the API server logs a warning until they are. On Helm (chart 0.9.x),
+    the new `objectStore` PVC takes `minio.persistence`'s size and must hold all of MinIO's data,
     air-gapped registries must mirror `chrislusf/seaweedfs`, and from chart 0.9.21 disabling MinIO keeps its PVC.
     Retiring MinIO is optional in 5.0.
     See [Object Store Migration](https://docs.onyx.app/admins/advanced_configs/object_store_migration) before upgrading.

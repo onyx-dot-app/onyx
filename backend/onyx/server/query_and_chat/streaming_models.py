@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
+from onyx.tools.tool_implementations.code_mode.models import CodeModeStatus
 
 
 class StreamingError(BaseModel):
@@ -37,6 +38,7 @@ class StreamingType(Enum):
 
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
+    USER_MESSAGE = "user_message"
     SEARCH_TOOL_START = "search_tool_start"
     SEARCH_TOOL_QUERIES_DELTA = "search_tool_queries_delta"
     SEARCH_TOOL_FILTER_DELTA = "search_tool_filter_delta"
@@ -79,6 +81,9 @@ class StreamingType(Enum):
     BASH_TOOL_START = "bash_tool_start"
     BASH_TOOL_DELTA = "bash_tool_delta"
 
+    CODE_MODE_START = "code_mode_start"
+    CODE_MODE_DELTA = "code_mode_delta"
+
 
 class BaseObj(BaseModel):
     type: str = ""
@@ -107,6 +112,12 @@ class PacketException(BaseObj):
 # Payload-less keepalive so idle proxies don't kill an otherwise-silent stream
 class ChatHeartbeat(BaseObj):
     type: Literal["chat_heartbeat"] = StreamingType.CHAT_HEARTBEAT.value
+
+
+class UserMessagePacket(BaseObj):
+    type: Literal["user_message"] = StreamingType.USER_MESSAGE.value
+    id: str
+    message: str
 
 
 ################################################
@@ -269,7 +280,10 @@ class PythonToolDelta(BaseObj):
 class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = StreamingType.CUSTOM_TOOL_START.value
 
+    # The name the model calls; custom and MCP tools use a qualified name.
     tool_name: str
+    # The name users see.
+    display_name: str
     tool_id: int | None = None
 
 
@@ -422,10 +436,50 @@ class BashToolDelta(BaseObj):
 
 
 ################################################
+# Code Mode Packets
+################################################
+# Nested tool calls use their own packets at sub_turn_index = call index.
+class CodeModeStart(BaseObj):
+    """Starts one observation of a cell: `execute_code` or `wait_code`."""
+
+    type: Literal["code_mode_start"] = StreamingType.CODE_MODE_START.value
+    # Empty for wait_code.
+    code: str
+    # From the call arguments: None for execute_code, whose cell gets its id when it runs.
+    cell_id: int | None = None
+    # 0 starts a cell (execute_code); 1 continues one (wait_code). The final delta
+    # carries the exact observation number.
+    observation: int = 0
+
+
+class CodeModeDelta(BaseObj):
+    type: Literal["code_mode_delta"] = StreamingType.CODE_MODE_DELTA.value
+    # Appended to the stdout shown so far, or replaces it when `replace_stdout` is set.
+    stdout: str = ""
+    # Set on a final delta whose saved stdout differs from the streamed stdout.
+    replace_stdout: bool = False
+    result: str | None = None
+    error: str | None = None
+    # Set only on the final delta.
+    status: CodeModeStatus | None = None
+    duration_seconds: float | None = None
+    tool_call_count: int | None = None
+    # Keys the program saved with store(); set only on the final delta.
+    stored_keys: list[str] | None = None
+    # The cell and the observation number; set only on the final delta.
+    cell_id: int | None = None
+    observation: int | None = None
+    # Set on the final delta of a cell's closing record: the cell stopped, or was
+    # found ended, when its response ended.
+    response_ended: bool = False
+
+
+################################################
 # Packet Object
 ################################################
 # Discriminated union of all possible packet object types
 PacketObj = Union[
+    UserMessagePacket,
     # Control Packets
     OverallStop,
     SectionEnd,
@@ -477,6 +531,9 @@ PacketObj = Union[
     # Bash Tool Packets
     BashToolStart,
     BashToolDelta,
+    # Code Mode Packets
+    CodeModeStart,
+    CodeModeDelta,
 ]
 
 

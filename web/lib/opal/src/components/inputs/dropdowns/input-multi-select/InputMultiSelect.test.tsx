@@ -102,7 +102,7 @@ describe("InputMultiSelect", () => {
         />
       );
       await user.click(screen.getByRole("combobox", { name: "Pick" }));
-      const search = screen.getByRole("textbox", { name: "Search" });
+      const search = screen.getByRole("searchbox", { name: "Search" });
       expect(search).toHaveFocus();
       await user.type(search, "ban");
       expect(screen.getAllByRole("option")).toHaveLength(1);

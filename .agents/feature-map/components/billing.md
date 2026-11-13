@@ -138,15 +138,19 @@ The web client blocks pages separately, through
 (`backend/ee/onyx/server/license/api.py:downgrade_to_community`) runs only while
 `is_access_gated` is true, the same rule that sets `GATED_ACCESS` in settings. In
 one commit (`backend/ee/onyx/db/community_downgrade.py`):
-- `make_all_cc_pairs_public__no_commit` sets every pair that is not PUBLIC to
-  PUBLIC, clears the sync options and timestamps, deletes the data-access group
-  links and the external group rows, clears the external ACL columns on documents
+- `make_all_cc_pairs_public__no_commit` deletes the data-access group links
+  first (their foreign key rejects a pair leaving a group type while it has
+  them), sets every pair that is not PUBLIC to PUBLIC, clears the sync options
+  and timestamps, deletes the external group rows, clears the external ACL columns on documents
   and hierarchy nodes, and marks the pairs' documents for the metadata sync.
   Chunk ACLs stay old until that sync runs ([[document-index]]). A permission sync
   already in flight can write some rows back; they grant nothing on a public pair.
 - `remove_custom_user_groups__no_commit` deletes the non-default groups directly,
   not through group sync. First it makes their shared agents, document sets, LLM
-  providers, MCP servers and skills public. Members who held admin rights through
+  providers, MCP servers and skills public. A skill is published when its plugin
+  has a `plugin__user_group` row with a permission for a removed group and no
+  `NOT_AVAILABLE` setting; a name clash takes the next free name, and the log
+  names each published plugin ([[skills]]). Members who held admin rights through
   a removed group join Admin, and members left in no default group join Basic.
 - `disable_paid_features__no_commit` deletes token budgets, marks hooks deleted,
   turns off standard answers, sets every SCIM token inactive and removes API keys

@@ -36,10 +36,9 @@ export default function PluginAvailabilitySwitch({
   );
   return (
     <ContentAction
+      font="main-ui-action"
       title={label}
       description={description}
-      sizePreset="main-ui"
-      variant="section"
       padding={0}
       rightChildren={
         <InputSwitch

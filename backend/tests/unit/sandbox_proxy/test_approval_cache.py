@@ -52,6 +52,18 @@ class _MemoryCache(CacheBackend):
     def expire(self, key: str, seconds: int) -> None:
         self.expirations.append((key, seconds))
 
+    def replace_if_value(
+        self,
+        key: str,  # noqa: ARG002
+        expected: bytes,  # noqa: ARG002
+        value: str | bytes | int | float,  # noqa: ARG002
+        ex: int | None = None,  # noqa: ARG002
+    ) -> bool:
+        raise NotImplementedError
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:  # noqa: ARG002
+        raise NotImplementedError
+
     def delete(self, key: str) -> None:
         self.values.pop(key, None)
 

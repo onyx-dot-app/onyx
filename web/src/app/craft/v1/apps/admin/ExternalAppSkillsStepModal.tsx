@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import isEqual from "lodash/isEqual";
 import { Button, MessageCard, Modal } from "@opal/components";
@@ -37,7 +37,7 @@ export default function ExternalAppSkillsStepModal({
 }: ExternalAppSkillsStepModalProps) {
   const t = useTranslations("craft.apps.skillsStep");
   const tApps = useTranslations("craft.apps");
-  const router = useRouter();
+  const navigation = useNavigation();
   const [selectedSkillIds, setSelectedSkillIds] =
     useSyncedAssociatedSkillIds(app);
   const upload = useSkillUploadModal();
@@ -50,7 +50,7 @@ export default function ExternalAppSkillsStepModal({
   const unsavedChanges = useUnsavedChangesGuard({ isDirty });
 
   function navigateToSkillEditor(draft?: SkillCreationDraft) {
-    router.push(
+    navigation.go(
       skillEditorUrlForApp(
         app,
         draft ? stageSkillCreationDraft(draft) : undefined
@@ -153,7 +153,7 @@ export default function ExternalAppSkillsStepModal({
                   onChange={setSelectedSkillIds}
                   onOpenSkill={(skillId) =>
                     unsavedChanges.requestLeave(() =>
-                      router.push(skillEditUrlForApp(skillId, app))
+                      navigation.go(skillEditUrlForApp(skillId, app))
                     )
                   }
                   onCreateSkill={() =>

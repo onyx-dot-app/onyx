@@ -40,6 +40,9 @@ let mockManage = false;
 let mockSearchParams = new URLSearchParams();
 
 jest.mock("next/navigation", () => ({
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
   useRouter: () => ({ push: mockPush, replace: mockReplace }),
   useSearchParams: () => mockSearchParams,
   usePathname: () => "/app/plugins",
@@ -100,6 +103,7 @@ function network({
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, "", "/");
   mockManage = false;
   mockPush.mockClear();
   mockSearchParams = new URLSearchParams();
@@ -242,7 +246,7 @@ test("search matches descriptions and URLs and can clear an empty result", async
   render(<MemberPluginsPage />);
   await screen.findByRole("button", { name: "View Linear" });
   const user = setupUser();
-  const search = screen.getByRole("textbox", { name: "Search plugins" });
+  const search = screen.getByRole("searchbox", { name: "Search plugins" });
   await user.type(search, "weekly");
   expect(
     screen.getByRole("button", { name: "View Reports API" })

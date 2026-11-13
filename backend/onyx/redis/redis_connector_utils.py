@@ -1,3 +1,4 @@
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.db.connector_credential_pair import get_connector_credential_pair
@@ -23,11 +24,20 @@ def _get_deletion_status(
         return None
 
     redis_connector = RedisConnector(tenant_id, cc_pair.id)
-    if redis_connector.delete.fenced:
+    # One read of the fence, so the status and its start come from the same state.
+    try:
+        fence = redis_connector.delete.payload
+        fenced = fence is not None
+    except (UnicodeDecodeError, ValidationError):
+        # The fence is up but unreadable: the deletion runs, its start is unknown.
+        fence = None
+        fenced = True
+    if fenced:
         return TaskQueueState(
             task_id="",
             task_name=redis_connector.delete.fence_key,
             status=TaskStatus.STARTED,
+            start_time=fence.submitted if fence is not None else None,
         )
 
     if cc_pair.status == ConnectorCredentialPairStatus.DELETING:
@@ -56,4 +66,5 @@ def get_deletion_attempt_snapshot(
         connector_id=connector_id,
         credential_id=credential_id,
         status=deletion_task.status,
+        started_at=deletion_task.start_time,
     )

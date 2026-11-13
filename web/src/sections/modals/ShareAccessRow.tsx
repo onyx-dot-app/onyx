@@ -104,6 +104,7 @@ export function ShareAccessRow({
   return (
     <div className="min-h-11 w-full rounded-12 bg-background-tint-01 px-1">
       <ContentAction
+        font="main-ui-action"
         responsive
         description={description}
         icon={LeadingIcon}
@@ -114,9 +115,7 @@ export function ShareAccessRow({
             trailing={trailing}
           />
         }
-        sizePreset="main-ui"
         title={title ?? ""}
-        variant="section"
       />
     </div>
   );

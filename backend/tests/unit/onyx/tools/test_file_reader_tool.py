@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
 import pytest
+from jsonschema import Draft202012Validator
+from pydantic import JsonValue
 
 from onyx.agents.tools import ToolInvocation
 from onyx.file_store.models import ChatFileType, InMemoryChatFile
@@ -69,7 +71,16 @@ class TestToolMetadata:
         assert FILE_ID_FIELD in props
         assert START_CHAR_FIELD in props
         assert NUM_CHARS_FIELD in props
-        assert defn.parameters["required"] == [FILE_ID_FIELD]
+        assert defn.strict
+        assert defn.parameters["additionalProperties"] is False
+        assert defn.parameters["required"] == [
+            FILE_ID_FIELD,
+            START_CHAR_FIELD,
+            NUM_CHARS_FIELD,
+        ]
+        Draft202012Validator(defn.parameters).validate(
+            {FILE_ID_FIELD: "file", START_CHAR_FIELD: None, NUM_CHARS_FIELD: None}
+        )
 
 
 # ------------------------------------------------------------------
@@ -106,10 +117,14 @@ class TestFileIdValidation:
 
 
 class TestRun:
+    @pytest.mark.parametrize(
+        "defaults", [{}, {START_CHAR_FIELD: None, NUM_CHARS_FIELD: None}]
+    )
     @patch.object(FileReaderTool, "_load_file")
     def test_returns_full_content_by_default(
         self,
         mock_load_user_file: MagicMock,
+        defaults: dict[str, JsonValue],
     ) -> None:
         uid = uuid4()
         content = "Hello, world!"
@@ -119,7 +134,7 @@ class TestRun:
         resp = tool.run(
             invocation=ToolInvocation(
                 call_id="test",
-                arguments={FILE_ID_FIELD: str(uid)},
+                arguments={FILE_ID_FIELD: str(uid), **defaults},
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
             ),
@@ -133,10 +148,14 @@ class TestRun:
         assert resp.details.end_char == len(content)
         assert resp.details.preview_start == content
 
+    @pytest.mark.parametrize("start,length,expected", [(4, 6, "efghij"), (0, 0, "a")])
     @patch.object(FileReaderTool, "_load_file")
     def test_respects_start_char_and_num_chars(
         self,
         mock_load_user_file: MagicMock,
+        start: int,
+        length: int,
+        expected: str,
     ) -> None:
         uid = uuid4()
         content = "abcdefghijklmnop"
@@ -148,8 +167,8 @@ class TestRun:
                 call_id="test",
                 arguments={
                     FILE_ID_FIELD: str(uid),
-                    START_CHAR_FIELD: 4,
-                    NUM_CHARS_FIELD: 6,
+                    START_CHAR_FIELD: start,
+                    NUM_CHARS_FIELD: length,
                 },
                 cancellation=CancellationSignal(),
                 update=lambda _progress: None,
@@ -157,7 +176,10 @@ class TestRun:
             context=ToolContext(),
         )
         assert isinstance(resp, ToolResult)
-        assert "efghij" in resp.text
+        assert isinstance(resp.details, FileReadResult)
+        assert resp.details.start_char == start
+        assert resp.details.end_char == start + len(expected)
+        assert resp.details.preview_start == expected
 
     @patch.object(FileReaderTool, "_load_file")
     def test_clamps_num_chars_to_max(

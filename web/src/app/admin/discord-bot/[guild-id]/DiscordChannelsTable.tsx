@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { useTranslations } from "next-intl";
 import {
   Table,
@@ -12,7 +13,6 @@ import {
 import { InputSwitch, Text } from "@opal/components";
 import { InputSingleSelect } from "@opal/components";
 import { EmptyMessageCard } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import {
   DiscordChannelConfig,
   DiscordChannelType,

@@ -18,7 +18,19 @@
 
 .opal-input {
   /* `--interactive-duration` (150ms) felt too laggy, so we're using 100ms instead. */
-  @apply flex flex-row items-center justify-between h-fit p-1.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  @apply flex flex-row items-center justify-between gap-0.5 rounded-08 relative w-full transition-all duration-100 ease-(--interactive-easing);
+  /* 36px with the border, like a button. The 1px border takes 1px of the
+     6px padding, so the 24px title line sits 6px inside the outer edge. */
+  height: var(--spacing-block-36);
+  padding: calc(0.375rem - 1px);
+}
+
+/* InputContainer grows: rows or chips raise it from the 36px single line,
+   and its parts align to the top. */
+.opal-input[data-grows] {
+  @apply items-start;
+  height: auto;
+  min-height: var(--spacing-block-36);
 }
 
 .opal-input[data-variant="primary"] {
@@ -71,6 +83,35 @@
 
 .opal-input[data-variant="readOnly"] {
   @apply bg-transparent border rounded-08;
+}
+
+/* The input's title line: 2px padding and a 4px gap around the leading icon
+   (20px) and the text (20px), one 24px row. Trailing controls sit outside
+   it, 2px apart (the root's gap). The height is fixed so a 22px tag in it
+   does not grow the input. */
+.opal-input-row {
+  @apply flex flex-1 min-w-0 h-6 items-center gap-1 p-0.5;
+}
+
+/* A title line that wraps (chip rows) grows from 24px, aligned to the top. */
+.opal-input-row[data-grows] {
+  @apply h-auto items-start;
+}
+
+/* The text box is the 20px line; its 2px inline padding matches Text's. */
+.opal-input-row > .opal-input-field {
+  @apply h-5 min-w-0 px-0.5 py-0;
+}
+
+/* The leading icon's wrapper only carries the colour hook: the 20px icon
+   container is the box. */
+.opal-input-leading-icon {
+  display: contents;
+}
+
+/* The search icon reads a step lighter than a chosen option's icon. */
+.opal-input-leading-icon[data-muted] .opal-icon-container {
+  @apply text-text-02;
 }
 
 /* ---------------------------------------------------------------------------

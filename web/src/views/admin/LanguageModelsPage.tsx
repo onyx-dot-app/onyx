@@ -1,6 +1,7 @@
 "use client";
 
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
+import { useLabelBadge } from "@/lib/badges/components";
 import { useState, useMemo, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
@@ -18,6 +19,7 @@ import {
   InputHorizontal,
   toast,
   useErrorToast,
+  Section,
 } from "@opal/layouts";
 import {
   Button,
@@ -33,7 +35,6 @@ import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
 import { SettingsLayouts } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import { getProvider } from "@/lib/languageModels/utils";
 import {
   refreshLlmProviderCaches,
@@ -56,7 +57,6 @@ import { SimpleModelSelector } from "@/lib/languageModels/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useCreateModal } from "@opal/components";
 import { LLMProviderName, LLMProviderView } from "@/lib/languageModels/types";
-import { Section } from "@/layouts/general-layouts";
 import { markdown } from "@opal/utils";
 import { usePHFeatureFlag, PHFeatureFlag } from "@/lib/analytics/hooks";
 import CostOverridesPanel from "@/views/admin/CostOverridesPanel";
@@ -103,14 +103,18 @@ function ExistingProviderCard({
   isLastProvider,
 }: ExistingProviderCardProps) {
   const t = useTranslations("admin.languageModels");
+  const defaultBadge = useLabelBadge("default");
   const { mutate } = useSWRConfig();
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const deleteModal = useCreateModal();
   // The listing holds one page of models and the edit modal needs them all,
   // so a provider with more is loaded whole before the modal opens.
   const isPaged = provider.next_model_configuration_offset != null;
   const { llmProvider: fetchedProvider, error: fullProviderError } =
-    useAdminLanguageModel(isOpen && isPaged ? provider.id : null);
+    useAdminLanguageModel(
+      providerModal.isPresent && isPaged ? provider.id : null
+    );
   const fullProvider = isPaged ? fetchedProvider : provider;
   useEffect(() => {
     if (!fullProviderError) return;
@@ -149,11 +153,13 @@ function ExistingProviderCard({
 
   return (
     <>
-      {isOpen && fullProvider && (
-        <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
-      )}
+      <providerModal.Provider>
+        {fullProvider && (
+          <Modal existingLlmProvider={fullProvider} onOpenChange={setIsOpen} />
+        )}
+      </providerModal.Provider>
 
-      {deleteModal.isOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={markdown(t("deleteModal.title", { provider: displayName }))}
@@ -191,7 +197,7 @@ function ExistingProviderCard({
             )}
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
       <Hoverable.Root
         group="ExistingProviderCard"
@@ -208,19 +214,14 @@ function ExistingProviderCard({
           onClick={() => setIsOpen(true)}
         >
           <ContentAction
+            font="main-ui-action"
             icon={icon}
             title={displayName}
             description={companyName}
             titleMaxLines={1}
             descriptionMaxLines={1}
-            sizePreset="main-ui"
-            variant="section"
             padding={2}
-            tag={
-              isDefault
-                ? { title: t("providerCard.defaultTag.label"), color: "blue" }
-                : undefined
-            }
+            badge={isDefault ? defaultBadge : undefined}
             rightChildren={
               <div className="flex flex-row">
                 <Hoverable.Item
@@ -273,7 +274,8 @@ function NewProviderCard({
   isFirstProvider,
 }: NewProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const providerEntry = getProvider(providerName);
   const { icon, Modal } = providerEntry;
   const { productName, companyName } = useProviderNames()(providerEntry);
@@ -293,13 +295,12 @@ function NewProviderCard({
       onClick={() => setIsOpen(true)}
     >
       <ContentAction
+        font="main-ui-action"
         icon={icon}
         title={productName}
         description={companyName}
         titleMaxLines={1}
         descriptionMaxLines={1}
-        sizePreset="main-ui"
-        variant="section"
         padding={2}
         rightChildren={
           <Button
@@ -318,9 +319,9 @@ function NewProviderCard({
           </Button>
         }
       />
-      {isOpen && (
+      <providerModal.Provider>
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
-      )}
+      </providerModal.Provider>
     </SelectCard>
   );
 }
@@ -337,16 +338,17 @@ function NewCustomProviderCard({
   isFirstProvider,
 }: NewCustomProviderCardProps) {
   const t = useTranslations("admin.languageModels");
-  const [isOpen, setIsOpen] = useState(false);
+  const providerModal = useCreateModal();
+  const setIsOpen = providerModal.toggle;
   const providerEntry = getProvider("custom");
   const { icon, Modal } = providerEntry;
   const { productName, companyName } = useProviderNames()(providerEntry);
 
   return (
     <>
-      {isOpen && (
+      <providerModal.Provider>
         <Modal shouldMarkAsDefault={isFirstProvider} onOpenChange={setIsOpen} />
-      )}
+      </providerModal.Provider>
 
       <SelectCard
         state="empty"
@@ -355,13 +357,12 @@ function NewCustomProviderCard({
         onClick={() => setIsOpen(true)}
       >
         <ContentAction
+          font="main-ui-action"
           icon={icon}
           title={productName}
           description={companyName}
           titleMaxLines={1}
           descriptionMaxLines={1}
-          sizePreset="main-ui"
-          variant="section"
           padding={2}
           rightChildren={
             <Button
@@ -842,16 +843,15 @@ export default function LanguageModelsPage() {
         {/* ── Available Providers (only when providers exist) ── */}
         {hasProviders && (
           <>
-            <GeneralLayouts.Section
+            <Section
               gap={3}
               height="fit"
               alignItems="stretch"
               justifyContent="start"
             >
               <Content
+                font="main-content-emphasis"
                 title={t("availableProviders.title")}
-                sizePreset="main-content"
-                variant="section"
               />
 
               <div className="flex flex-col gap-2">
@@ -864,7 +864,7 @@ export default function LanguageModelsPage() {
                   />
                 ))}
               </div>
-            </GeneralLayouts.Section>
+            </Section>
 
             <Divider paddingParallel={0} paddingPerpendicular={0} />
           </>
@@ -882,7 +882,7 @@ export default function LanguageModelsPage() {
         <Disabled disabled={isConfigurationDisabled}>
           <div className="flex flex-col gap-8">
             {providerGroups.map((group) => (
-              <GeneralLayouts.Section
+              <Section
                 key={group.id}
                 gap={3}
                 height="fit"
@@ -891,10 +891,9 @@ export default function LanguageModelsPage() {
               >
                 {group.emphasis ? (
                   <Content
+                    font="main-content-emphasis"
                     title={group.title}
                     description={group.description}
-                    sizePreset="main-content"
-                    variant="section"
                   />
                 ) : (
                   <Text font="main-ui-action" color="text-03">
@@ -914,7 +913,7 @@ export default function LanguageModelsPage() {
                     <NewCustomProviderCard isFirstProvider={isFirstProvider} />
                   )}
                 </CardGrid>
-              </GeneralLayouts.Section>
+              </Section>
             ))}
           </div>
         </Disabled>
