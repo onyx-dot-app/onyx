@@ -310,8 +310,12 @@ class ListingShard(BaseModel):
     # kept at that time. A split on a later page starts there.
     frontier_ms: int | None = None
     frontier_ids: list[str] = []
-    # False when a page had a file older than the frontier, or when too many
-    # files share the frontier time. A later page then cannot split.
+    # True when more files share the frontier time than the shard keeps ids
+    # for. A page that starts at that time cannot split. A page that starts
+    # later can, because it needs no ids.
+    frontier_overflow: bool = False
+    # False when a page had a file older than the frontier. A later page
+    # then cannot split.
     in_order: bool = True
     # Ids at the start of the range that an earlier shard already listed.
     skip_ids: list[str] = []

@@ -91,7 +91,7 @@ MIN_SHARD_MS = 1000
 # Do not split past this many open shards. It bounds the checkpoint.
 MAX_OPEN_SHARDS = 2 * ADAPTIVE_MAX_WORKERS
 # Ids a shard keeps at its newest modifiedTime. Past this, the shard does not
-# split on a later page. It bounds the checkpoint.
+# split on a page that starts at that time. It bounds the checkpoint.
 MAX_FRONTIER_IDS = 2000
 # One call lists for about this long, or this many files, and then drains.
 CALL_BUDGET_SECONDS = 60.0
@@ -258,11 +258,15 @@ def _move_frontier(shard: ListingShard, files: list[GoogleDriveFileType]) -> Non
     if shard.frontier_ms is None or page_max > shard.frontier_ms:
         shard.frontier_ms = page_max
         shard.frontier_ids = []
+        shard.frontier_overflow = False
+    if shard.frontier_overflow:
+        return
     shard.frontier_ids.extend(
         file_id for ms, file_id in listed if ms == shard.frontier_ms
     )
     if len(shard.frontier_ids) > MAX_FRONTIER_IDS:
-        shard.in_order = False
+        # A bulk upload can give thousands of files one modifiedTime.
+        shard.frontier_overflow = True
         shard.frontier_ids = []
 
 
@@ -273,6 +277,9 @@ class _SplitRefusal(Enum):
     DENSITY = "density"
     # The open shard cap leaves no room. A later page can try again.
     SHARD_CAP = "shard_cap"
+    # The page starts at a time that more files share than the shard keeps
+    # ids for. A later page that starts after that time can split.
+    FRONTIER_OVERFLOW = "frontier_overflow"
 
 
 class ParallelDriveLister:
@@ -527,8 +534,12 @@ class ParallelDriveLister:
             children = self._try_split(shard, files)
             if isinstance(children, list):
                 return [self._page_task(child_id) for child_id in children]
-            # A shard refused only for lack of room tries again next page.
-            keep_can_split = children is _SplitRefusal.SHARD_CAP
+            # A shard refused for lack of room, or at a crowded time, tries
+            # again next page.
+            keep_can_split = children in (
+                _SplitRefusal.SHARD_CAP,
+                _SplitRefusal.FRONTIER_OVERFLOW,
+            )
 
         if shard.skip_ids:
             # The shard this range came from already listed these files.
@@ -704,6 +715,8 @@ class ParallelDriveLister:
                 or boundary < shard.frontier_ms
             ):
                 return _SplitRefusal.DENSITY
+            if boundary == shard.frontier_ms and shard.frontier_overflow:
+                return _SplitRefusal.FRONTIER_OVERFLOW
             skip_ids = shard.frontier_ids if boundary == shard.frontier_ms else []
             shard = shard.model_copy(update={"t0": max(shard.t0, boundary)})
         if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
