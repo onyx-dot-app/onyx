@@ -323,10 +323,7 @@ function handleStopPacket(state: ProcessorState, packet: Packet): void {
 
   // Nothing follows Stop, so the latest text is the answer, even when its
   // step also called a tool.
-  const latestDisplayKey = Array.from(state.displayGroupKeys)
-    .map((key) => ({ key, ...parseToolKey(key) }))
-    .sort((a, b) => b.turn_index - a.turn_index || b.tab_index - a.tab_index)
-    .at(0)?.key;
+  const latestDisplayKey = Array.from(state.displayGroupKeys).at(-1);
   if (
     latestDisplayKey !== undefined &&
     !state.groupedPacketsMap
