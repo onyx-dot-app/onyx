@@ -74,15 +74,17 @@ logger = setup_logger()
 
 # The largest page files.list serves.
 LISTING_PAGE_SIZE = 1000
-# Pages a shard should hold after a split. A shard's last page is seldom
-# full, so small shards add calls. 24 keeps that cost near 2%.
-LEAF_TARGET_PAGES = 24
+# The split thresholds count files, not pages: Drive serves about 460 lean
+# files a page, but only about 100 with permission fields.
+# Files a shard should hold after a split. A shard's last page is seldom
+# full, so small shards add calls. About 22 lean pages keep that cost near 2%.
+LEAF_TARGET_FILES = 10_000
 # A split drops one page. Split only when the range should hold this many
-# pages, so the dropped page costs little.
-MIN_PAGES_TO_SPLIT = 2 * LEAF_TARGET_PAGES
-# A partition reads its page of newest files, one more call, only when its
-# first page shows it could hold this many pages.
-MIN_PAGES_TO_PROBE = LEAF_TARGET_PAGES
+# files, so the dropped page costs little.
+MIN_FILES_TO_SPLIT = 2 * LEAF_TARGET_FILES
+# A partition reads its page of newest files, one more call, only when a
+# page shows it could hold this many files.
+MIN_FILES_TO_PROBE = LEAF_TARGET_FILES
 # Most sub-ranges one split makes.
 SPLIT_MAX_WAYS = 64
 # Drive keeps modifiedTime to the millisecond. A range this narrow lists
@@ -179,36 +181,41 @@ def _modified_ms(file: GoogleDriveFileType) -> int | None:
         return None
 
 
-def _expected_pages(
+def page_density(times: list[int]) -> float:
+    """Files per millisecond over the time span of one page."""
+    return len(times) / max(max(times) - min(times), 1)
+
+
+def _expected_files(
     shard: ListingShard,
     page_times: list[int],
     newest_ms: int,
-    newest_page_span_ms: int | None,
+    newest_density: float | None,
 ) -> tuple[float, int, int]:
-    """How many pages the shard's range should hold, with the bounds of the
+    """How many files the shard's range should hold, with the bounds of the
     part of the range that has files.
 
-    ``page_times`` are the modified times on the shard's first page. With
-    ordered pages they are the oldest files of the range, so their span gives
-    the density at the old end. ``newest_page_span_ms`` is the span of the
+    ``page_times`` are the modified times on the page the shard just read.
+    With ordered pages they are the oldest files of the range, so they give
+    the density at the old end. ``newest_density`` is the density of the
     page of newest files, when it was read."""
     page_min = max(min(page_times), shard.t0)
     page_max = min(max(page_times), shard.t1 - 1)
     data_end = min(max(newest_ms, page_max) + 1, shard.t1)
-    pages_per_ms = 1 / max(page_max - page_min, 1)
-    if newest_page_span_ms is not None:
-        pages_per_ms = (pages_per_ms + 1 / max(newest_page_span_ms, 1)) / 2
-    return (data_end - page_min) * pages_per_ms, page_min, data_end
+    files_per_ms = page_density(page_times)
+    if newest_density is not None:
+        files_per_ms = (files_per_ms + newest_density) / 2
+    return (data_end - page_min) * files_per_ms, page_min, data_end
 
 
 def plan_split(
     shard: ListingShard,
     page_times: list[int],
     newest_ms: int,
-    newest_page_span_ms: int | None = None,
+    newest_density: float | None = None,
 ) -> list[tuple[int, int]]:
-    """The sub-ranges to split ``shard`` into after its first page, or an
-    empty list when the shard should keep the page and list on.
+    """The sub-ranges to split ``shard`` into after a page, or an empty list
+    when the shard should keep the page and list on.
 
     The cuts spread over the part of the range that has files, from the
     page's oldest file to ``newest_ms``. The first and last sub-ranges reach
@@ -217,15 +224,15 @@ def plan_split(
     page."""
     if len(page_times) < 2:
         return []
-    expected_pages, page_min, data_end = _expected_pages(
-        shard, page_times, newest_ms, newest_page_span_ms
+    expected_files, page_min, data_end = _expected_files(
+        shard, page_times, newest_ms, newest_density
     )
     data_width = data_end - page_min
-    if expected_pages < MIN_PAGES_TO_SPLIT:
+    if expected_files < MIN_FILES_TO_SPLIT:
         return []
     ways = min(
         SPLIT_MAX_WAYS,
-        math.ceil(expected_pages / LEAF_TARGET_PAGES),
+        math.ceil(expected_files / LEAF_TARGET_FILES),
         data_width // MIN_SHARD_MS,
     )
     if ways < 2:
@@ -725,15 +732,15 @@ class ParallelDriveLister:
             if len(self._state.shards) >= MAX_OPEN_SHARDS:
                 return _SplitRefusal.SHARD_CAP
         newest_ms = shard.newest_ms
-        newest_page_span_ms: int | None = None
+        newest_density: float | None = None
         if newest_ms is None:
             # The first shard of a partition. The window end stands in for
             # the newest file, which overstates the range.
-            could_hold, _, _ = _expected_pages(shard, page_times, shard.t1 - 1, None)
-            if could_hold < MIN_PAGES_TO_PROBE:
+            could_hold, _, _ = _expected_files(shard, page_times, shard.t1 - 1, None)
+            if could_hold < MIN_FILES_TO_PROBE:
                 return _SplitRefusal.DENSITY
-            newest_ms, newest_page_span_ms = self._read_newest_page(shard)
-        ranges = plan_split(shard, page_times, newest_ms, newest_page_span_ms)
+            newest_ms, newest_density = self._read_newest_page(shard)
+        ranges = plan_split(shard, page_times, newest_ms, newest_density)
         if not ranges:
             return _SplitRefusal.DENSITY
         with self._lock:
@@ -767,11 +774,11 @@ class ParallelDriveLister:
         )
         return children
 
-    def _read_newest_page(self, shard: ListingShard) -> tuple[int, int | None]:
+    def _read_newest_page(self, shard: ListingShard) -> tuple[int, float | None]:
         """The modifiedTime of the newest file in the shard's range, and the
-        time span of the page of newest files (None when the page is not
-        full). They only steer a split, so a wrong answer loses no file. A
-        list call costs the same at any page size."""
+        density of the page of newest files (None when the page is not full).
+        They only steer a split, so a wrong answer loses no file. A list call
+        costs the same at any page size."""
         times: list[int] = []
         full_page = False
         for item in self._ops.list_files(
@@ -791,8 +798,8 @@ class ParallelDriveLister:
                 times.append(modified)
         if not times:
             return shard.t1 - 1, None
-        span = max(times) - min(times) if full_page and len(times) > 1 else None
-        return max(times), span
+        density = page_density(times) if full_page and len(times) > 1 else None
+        return max(times), density
 
     # --- Failure --------------------------------------------------------------
 

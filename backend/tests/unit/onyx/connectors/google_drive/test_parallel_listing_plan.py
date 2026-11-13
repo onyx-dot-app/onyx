@@ -49,9 +49,9 @@ def test_a_dense_range_splits_into_ranges_that_cover_the_shard() -> None:
     assert ranges[-1][0] < newest
 
 
-def test_a_range_of_few_pages_does_not_split() -> None:
+def test_a_range_of_few_files_does_not_split() -> None:
     shard = _shard(0, 1000 * _DAY)
-    # The page spans a tenth of the files' range: about 10 pages.
+    # Two files over a tenth of the files' range: about 20 files.
     page = [500 * _DAY, 510 * _DAY]
 
     assert plan_split(shard, page, 600 * _DAY) == []
@@ -68,11 +68,12 @@ def test_pages_in_no_order_do_not_split() -> None:
 
 def test_a_dense_new_end_raises_the_estimate() -> None:
     shard = _shard(0, 1000 * _DAY)
-    # 20 pages by the old end alone, which is under the split threshold.
+    # 40 files by the old end alone, which is under the split threshold.
     page = [0, 50 * _DAY]
 
     assert plan_split(shard, page, 1000 * _DAY - 1) == []
-    ranges = plan_split(shard, page, 1000 * _DAY - 1, newest_page_span_ms=_DAY)
+    # The page of newest files holds 1000 files in one day.
+    ranges = plan_split(shard, page, 1000 * _DAY - 1, newest_density=1000 / _DAY)
     assert len(ranges) > 1
     _assert_covers(ranges, shard.t0, shard.t1)
 
@@ -89,7 +90,7 @@ def test_a_wrong_newest_time_still_covers_the_shard() -> None:
 
 
 @pytest.mark.parametrize("page", [[], [5]])
-def test_a_page_with_no_span_does_not_split(page: list[int]) -> None:
+def test_a_page_with_one_file_does_not_split(page: list[int]) -> None:
     assert plan_split(_shard(0, 1000 * _DAY), page, 900 * _DAY) == []
 
 
