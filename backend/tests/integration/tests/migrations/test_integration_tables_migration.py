@@ -22,11 +22,14 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import User
+from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
+    create_skill_plugin__no_commit,
+    legacy_skill_version_content,
+    publish_plugin__no_commit,
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
@@ -837,6 +840,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         )
         # The default agent leaves out a turned-off tool; a custom agent keeps it.
         assert custom["disabled"].installation_policy is None
+        # Its only other agent is its owner's own, so it stays private.
+        assert custom["disabled"].marketplace_kind == "user_uploads"
         assert (
             _settings(
                 conn, "persona__plugin", "persona_id", 0, custom["disabled"].plugin_id
@@ -969,11 +974,12 @@ def test_share_publish_and_delete_a_home_plugin(engine: Engine, seeded: Seeded) 
             )
 
 
-def test_user_delete_removes_private_integrations(
+def test_user_delete_keeps_private_integrations_for_their_people(
     engine: Engine, seeded: Seeded
 ) -> None:
-    """Private integrations of a user go with the user. They do not block the
-    delete as private skills do."""
+    """A user delete moves each private integration of the user to the
+    Organization library as Not available, with its shares. It does not block
+    the delete as a private skill does."""
     _migrate("upgrade", "head")
     with Session(engine) as db_session:
         owner = db_session.get(User, seeded.owner)
@@ -982,18 +988,59 @@ def test_user_delete_removes_private_integrations(
         db_session.commit()
 
     with engine.connect() as conn:
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM integration WHERE legacy_tool_id = :t"),
-                {"t": seeded.custom_private},
-            ).scalar_one()
-            == 0
+        for tool_id in (seeded.custom_private, seeded.custom_disabled):
+            plugin = conn.execute(
+                text(
+                    "SELECT p.marketplace_id, p.installation_policy, "
+                    "p.published_version_id = p.current_version_id AS published, "
+                    "p.author_user_id FROM integration i "
+                    "JOIN plugin p ON p.id = i.plugin_id WHERE i.legacy_tool_id = :t"
+                ),
+                {"t": tool_id},
+            ).one()
+            assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+            assert plugin.installation_policy == "NOT_AVAILABLE"
+            assert plugin.published and plugin.author_user_id is None
+
+
+def test_publishing_a_skill_named_like_an_integration(
+    engine: Engine, seeded: Seeded
+) -> None:
+    """A home plugin holds no skill, so a skill with its name still publishes.
+    Only the plugin label takes a free name."""
+    _migrate("upgrade", "head")
+    with engine.connect() as conn:
+        integration_name = conn.execute(
+            text(
+                "SELECT p.name FROM integration i JOIN plugin p ON p.id = i.plugin_id "
+                "WHERE i.legacy_tool_id = :t"
+            ),
+            {"t": seeded.custom_shared},
+        ).scalar_one()
+    skill_id = uuid4()
+    with Session(engine) as db_session:
+        skill = Skill(
+            id=skill_id,
+            name=integration_name,
+            description="",
+            bundle_file_id=f"u1-{skill_id.hex}",
+            bundle_sha256="0" * 64,
+            author_user_id=seeded.other,
         )
-        # A published integration stays.
-        assert (
-            conn.execute(
-                text("SELECT count(*) FROM integration WHERE legacy_tool_id = :t"),
-                {"t": seeded.custom_shared},
-            ).scalar_one()
-            == 1
+        db_session.add(skill)
+        db_session.flush()
+        create_skill_plugin__no_commit(
+            skill, legacy_skill_version_content(skill), None, db_session
         )
+        publish_plugin__no_commit(skill_id, "raise", db_session)
+        db_session.commit()
+
+    with engine.begin() as conn:
+        plugin = conn.execute(
+            text("SELECT name, marketplace_id FROM plugin WHERE id = :id"),
+            {"id": skill_id},
+        ).one()
+        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+        assert plugin.name == f"{integration_name}-2"
+        conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": skill_id})
+        conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": skill_id})

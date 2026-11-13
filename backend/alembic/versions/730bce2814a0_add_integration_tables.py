@@ -479,6 +479,8 @@ _CREATE_SOURCES = f"""
                 JOIN persona p ON p.id = pt.persona_id
                 WHERE pt.tool_id = t.id
                   AND NOT p.deleted
+                  -- The default agent leaves out a tool the admin turned off.
+                  AND NOT (p.id = 0 AND NOT t.enabled)
                   AND (
                       p.user_id IS DISTINCT FROM t.user_id
                       OR p.is_public

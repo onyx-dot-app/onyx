@@ -375,10 +375,13 @@ The library preview of an external-app skill calls the same renderer
     except the home plugin of an integration (`integration.plugin_id`,
     migration `730bce2814a0`): its version has no bundle and no
     `plugin_skill` row, and no skill row has its id. A join from `plugin` to
-    `plugin_skill` or `skill` must be an outer join or filter on purpose.
-    No foreign key checks the version pointers (`current_version_id`,
-    `published_version_id`, `pending_version_id`); write them only through
-    `db/plugin.py`, which sets them to a version of the same plugin.
+    `plugin_skill` or `skill` must be an outer join or filter on purpose. A
+    name held by a home plugin does not block a skill publish or transfer:
+    the skill's plugin label takes a free name
+    (`db/plugin.py:_move_plugin__no_commit`). No foreign key checks the
+    version pointers (`current_version_id`, `published_version_id`,
+    `pending_version_id`); write them only through `db/plugin.py`, which sets
+    them to a version of the same plugin.
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
@@ -396,9 +399,10 @@ The library preview of an external-app skill calls the same renderer
     runtime names and descriptions come from the frontmatter of the version
     the user runs. A custom skill with no plugin is hidden from everyone but
     an admin; an admin write makes its plugin from the legacy rows first
-    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete removes the
-    user's private integrations, then is refused while the user's "My
-    uploads" holds a plugin (`db/users.py:delete_user_from_db__no_commit`);
+    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete moves the
+    user's private integrations to the Organization library as NOT_AVAILABLE
+    (`db/plugin.py:release_private_integrations__no_commit`), then is refused
+    while the user's "My uploads" holds a plugin (`db/users.py:delete_user_from_db__no_commit`);
     published plugins stay with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
     skill rows once, before these reads, to fix rows that older code left
     stale; it copies `backfill_plugins_from_skills` instead of importing it.
