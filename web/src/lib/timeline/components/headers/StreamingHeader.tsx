@@ -60,13 +60,15 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           // The timer is plain text beside the button: a button label
           // animates its changes, so each tick would flash.
           <>
-            <Text
-              font="secondary-body"
-              color="text-03"
-              wordWrap="whitespace-nowrap"
-            >
-              {formatDurationSeconds(elapsedSeconds)}
-            </Text>
+            <div className="px-(--padding-text-4)">
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
+                {formatDurationSeconds(elapsedSeconds)}
+              </Text>
+            </div>
             <Button
               prominence="tertiary"
               size="md"
