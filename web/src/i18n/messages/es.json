@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Servicio de asistencia de Atlassian"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4249,6 +4252,28 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar el conector de Jira Service Management",
+          "subtext": "Indexa los tickets de un proyecto de Jira Service Management.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL del sitio",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "Clave del proyecto",
+              "description": "La clave del proyecto de Jira Service Management (servicio de asistencia) que se va a indexar, p. ej. 'SD'."
+            },
+            "include_internal_comments": {
+              "label": "Incluir comentarios internos",
+              "description": "Indexa también los comentarios internos (solo para agentes). Está desactivado de forma predeterminada: solo se indexan los comentarios visibles para el cliente."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista negra de correos de comentarios",
+              "description": "Los comentarios de estos correos no se indexan. Útil para ignorar bots."
             }
           }
         },

@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ee.onyx.external_permissions.jira.doc_sync import jira_doc_sync
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.sensitive import make_mock_sensitive_value
@@ -20,6 +21,7 @@ def mock_jira_cc_pair(
 ) -> MagicMock:
     mock_cc_pair = MagicMock(spec=ConnectorCredentialPair)
     mock_cc_pair.connector = MagicMock()
+    mock_cc_pair.connector.source = DocumentSource.JIRA
     mock_cc_pair.credential.credential_json = make_mock_sensitive_value(
         {
             "jira_user_email": user_email,

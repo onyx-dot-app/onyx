@@ -1,0 +1,96 @@
+---
+title: "Jira Service Management"
+description: "Access service desk tickets and requests from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the tickets of one service desk project.
+Jira Service Management tickets are Jira issues, so the connector uses the Jira API to find them
+and the Service Desk API to read request details.
+
+Onyx checks the project for new and changed tickets on the connector's refresh schedule. The default is every **30** minutes.
+
+For every ticket, this connector pulls:
+
+- Summary and description
+- Customer-visible comments. Agent-only (internal) comments stay out of the index unless you turn on **Include internal comments**
+- Service desk request details: request type, service desk, request status, and organizations, as metadata
+- SLA outcomes (within goal or breached) as metadata and searchable text
+- Common Jira fields: priority, status, resolution, labels, dates, issue type, reporter, and assignee
+
+The connector can index only the content that its Atlassian account can access.
+An API token does not give its owner additional permissions.
+
+| Content     | Notes                                                                                                     |
+| ----------- | --------------------------------------------------------------------------------------------------------- |
+| Tickets     | One Jira Service Management project, set by its project key, such as `SD`.                                |
+| Comments    | Customer-visible comments by default. Enable **Include internal comments** to also index agent-only notes. |
+| Permissions | Optional. **Sync with Jira Service Management** mirrors the project's Jira permissions. It is a paid feature: the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted. |
+
+The connector supports Jira Service Management Cloud and Jira Service Management Data Center.
+
+## Setting up
+
+### Authorization
+
+The connector signs in with the same Atlassian account as the [Jira connector](/admins/connectors/official/jira):
+an account email and an API token for Cloud, or a personal access token alone for Data Center.
+Create the API token from the connector account. Follow Atlassian's
+[API token instructions](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+
+Give the connector account access to the service desk project in Jira, for example through the project's
+permission scheme or a project role. For **Sync with Jira Service Management**, the account also needs
+the same Jira permissions as the [Jira connector](/admins/connectors/official/jira#jira-cloud-setup).
+
+If you create a Cloud token with scopes, grant `read:jira-work` for indexing, and enable
+**Scoped API Token** when you configure the connector in Onyx.
+
+### Configure the connector
+
+<Steps>
+  <Step title="Provide credentials">
+    Go to **Admin Panel → Connectors** and select **Jira Service Management**. Select **New Jira Service Management Account**.
+    For Cloud, enter the connector account's email address and API token. For Data Center,
+    leave the email field empty and enter the personal access token. Select **Create**.
+  </Step>
+
+  <Step title="Configure the source">
+    Enter the site in **Site URL**. For Cloud, the URL is usually `https://your-domain.atlassian.net`.
+    Enable **Scoped API Token** if you created a Cloud token with scopes.
+    Enter the service desk project's key in **Project Key**, such as `SD`.
+
+    Onyx checks the project key when you create the connector. It reports an error when no service desk
+    serves the project, which means the key is wrong or the project is not a Jira Service Management project.
+  </Step>
+
+  <Step title="Choose comment handling">
+    Leave **Include internal comments** off to index only customer-visible comments.
+    To exclude comments from specified accounts, add their email addresses to **Comment Email Blacklist**.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization**, **Specific Groups**, or
+    **Sync with Jira Service Management**. **Sync with Jira Service Management** mirrors the project's
+    Jira permissions.
+
+    **Specific Groups** and **Sync with Jira Service Management** need the Business or Enterprise tier on
+    Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. It is enabled when the required checks pass.
+  </Step>
+</Steps>
+
+### Indexed metadata
+
+In addition to the [Jira connector's metadata](/admins/connectors/official/jira#indexed-metadata):
+
+```
+- Request Type
+- Service Desk
+- Request Status
+- Organizations
+- SLA (within goal or breached, per metric)
+```

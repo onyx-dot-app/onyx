@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "مكتب خدمة Atlassian"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4249,6 +4252,28 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "إعداد موصل Jira Service Management",
+          "subtext": "فهرسة تذاكر مشروع واحد من Jira Service Management.",
+          "fields": {
+            "jira_base_url": {
+              "label": "رابط الموقع",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع Jira Service Management (مكتب الخدمة) المطلوب فهرسته، مثل 'SD'."
+            },
+            "include_internal_comments": {
+              "label": "تضمين التعليقات الداخلية",
+              "description": "يفهرس أيضًا التعليقات الداخلية (للوكلاء فقط). معطّل افتراضيًا: تُفهرس فقط التعليقات المرئية للعميل."
+            },
+            "comment_email_blacklist": {
+              "label": "القائمة السوداء لعناوين البريد في التعليقات",
+              "description": "لا تُفهرس التعليقات الصادرة من هذه العناوين. مفيد لتجاهل البوتات."
             }
           }
         },
