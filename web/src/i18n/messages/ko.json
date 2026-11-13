@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jsm": {
+          "description": "Jira Service Management 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jsm": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "Jira Service Management 프로젝트의 고객 요청을 색인합니다.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://domein.atlassian.net",
+              "description": "Jira Service Management 인스턴스의 사이트 URL입니다 (예: https://domein.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "서비스 데스크 ID",
+              "description": "색인할 특정 서비스 데스크의 숫자 ID입니다. 서비스 데스크 API(GET /rest/servicedeskapi/servicedesk) 응답에서 확인할 수 있습니다 (예: \"id\": \"10\"). 고객 포탄 URL의 포탄 ID가 서비스 데스크 ID와 일치하지 않을 수 있습니다. 비워 둤으면 자격 증명이 접근할 수 있는 모든 서비스 데스크를 색인합니다."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "색인할 요청을 필터링하는 사용자 지정 JQL 쿼리입니다.\n\n중요: 커넥터의 로직과 충돌하무로 JQL 쿼리에 시간 기반 필터를 포함하지 마세요. 또한 ORDER BY 절도 포함하지 마세요.\n\n구\bb38에 대한 자세한 내용은 Atlassian의 [JQL 문서](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)를 참조하세요."
             }
           }
         },

@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jsm": {
+          "description": "Solicitudes de Jira Service Management"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jsm": {
+          "description": "Configurar conector de Jira Service Management",
+          "subtext": "Indexa las solicitudes de tus proyectos de Jira Service Management.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "URL base",
+              "placeholder": "https://tu-dominio.atlassian.net",
+              "description": "La URL base de tu instancia de Jira Service Management (p. ej., https://tu-dominio.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "ID del service desk",
+              "description": "El ID numérico de un service desk específico a indexar. Lo encuentras en la respuesta de la API de service desks (GET /rest/servicedeskapi/servicedesk), p. ej. \"id\": \"10\". El ID del portal en la URL del portal de clientes no siempre es el ID del service desk. Déjalo en blanco para indexar todos los service desks accesibles con la credencial."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Una consulta JQL personalizada para filtrar qué solicitudes se indexan.\n\nIMPORTANTE: No incluyas filtros basados en tiempo en la consulta JQL porque entrarán en conflicto con la lógica del conector. Tampoco incluyas cláusulas ORDER BY.\n\nConsulta la [documentación de JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) de Atlassian para más detalles de sintaxis."
             }
           }
         },

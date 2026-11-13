@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jsm": {
+          "description": "Jira Service Management のリクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jsm": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "Jira Service Management プロジェクトのカスタマーリクエストをインデックスします。",
+          "fields": {
+            "jsm_base_url": {
+              "label": "ベース URL",
+              "placeholder": "https://domein-mei.atlassian.net",
+              "description": "Jira Service Management インスタンスのベース URL(例: https://domein-mei.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "サービスデスク ID",
+              "description": "インデックスする特定のサービスデスクの数値 ID。サービスデスク API(GET /rest/servicedeskapi/servicedesk)のレスポンスで確認できます(例: \"id\": \"10\")。カスタマーポータル URL のポータル ID がサービスデスク ID と一致するとは限りません。空白のままにすると、資格情報がアクセスできるすべてのサービスデスクをインデックスします。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "インデックスするリクエストを絞り込むカスタム JQL クエリ。\n\n重要: コネクターのロジックと競合するため、JQL クエリに時間ベースのフィルターを含めないでください。また、ORDER BY 句も含めないでください。\n\n構文の詳細は、Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)を参照してください。"
             }
           }
         },

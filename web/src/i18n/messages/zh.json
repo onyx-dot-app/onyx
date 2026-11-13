@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jsm": {
+          "description": "Jira Service Management 请求"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jsm": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "索引您的 Jira Service Management 项目的客户请求。",
+          "fields": {
+            "jsm_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://nide-yuming.atlassian.net",
+              "description": "您的 Jira Service Management 实例的站点 URL（例如 https://nide-yuming.atlassian.net）"
+            },
+            "service_desk_id": {
+              "label": "服务台 ID",
+              "description": "要索引的特定服务台的数字 ID。可在服务台 API（GET /rest/servicedeskapi/servicedesk）的响应中找到，例如 \"id\": \"10\"。客户门户 URL 中的门户 ID 不一定就是服务台 ID。留空则索引凭据可访问的所有服务台。"
+            },
+            "jql_query": {
+              "label": "JQL 查询",
+              "description": "用于筛选要索引的请求的自定义 JQL 查询。\n\n重要提示：请勿在 JQL 查询中包含任何基于时间的过滤条件，否则会与连接器的逻辑冲突。此外，请勿包含 ORDER BY 子句。\n\n有关语法的更多详情，请参阅 Atlassian 的 [JQL 文档](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)。"
             }
           }
         },

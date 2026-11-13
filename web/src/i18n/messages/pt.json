@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Rastreador de issues da Atlassian"
         },
+        "jsm": {
+          "description": "Solicitações do Jira Service Management"
+        },
         "productboard": {
           "description": "Gestão de produto"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "Lista de bloqueio de e-mails de comentários",
               "description": "Em geral é útil para ignorar determinados bots. Adicione os e-mails dos usuários cujos comentários NÃO devem ser indexados."
+            }
+          }
+        },
+        "jsm": {
+          "description": "Configurar conector do Jira Service Management",
+          "subtext": "Indexe as solicitações dos seus projetos do Jira Service Management.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "URL base",
+              "placeholder": "https://seu-dominio.atlassian.net",
+              "description": "A URL base da sua instância do Jira Service Management (por exemplo, https://seu-dominio.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "ID do service desk",
+              "description": "O ID numérico de um service desk específico a ser indexado. Encontre-o na resposta da API de service desks (GET /rest/servicedeskapi/servicedesk), por exemplo \"id\": \"10\". O ID do portal na URL do portal do cliente nem sempre é o ID do service desk. Deixe em branco para indexar todos os service desks que a credencial pode acessar."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Uma consulta JQL personalizada para filtrar quais solicitações são indexadas.\n\nIMPORTANTE: Não inclua filtros baseados em tempo na consulta JQL, pois isso entrará em conflito com a lógica do conector. Além disso, não inclua cláusulas ORDER BY.\n\nConsulte a [documentação de JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) da Atlassian para mais detalhes de sintaxe."
             }
           }
         },

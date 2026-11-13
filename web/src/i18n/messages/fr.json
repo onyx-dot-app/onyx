@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jsm": {
+          "description": "Demandes Jira Service Management"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
               "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jsm": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Indexez les demandes clients de vos projets Jira Service Management.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "URL de base",
+              "placeholder": "https://votre-domaine.atlassian.net",
+              "description": "L'URL de base de votre instance Jira Service Management (par ex. https://votre-domaine.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "ID du service desk",
+              "description": "L'ID numérique d'un service desk précis à indexer. Vous le trouverez dans la réponse de l'API service desk (GET /rest/servicedeskapi/servicedesk), par ex. « id » : « 10 ». L'ID du portail dans l'URL du portail client n'est pas toujours l'ID du service desk. Laissez vide pour indexer tous les service desks accessibles avec ces identifiants."
+            },
+            "jql_query": {
+              "label": "Requête JQL",
+              "description": "Une requête JQL personnalisée pour filtrer les demandes indexées.\n\nIMPORTANT : n'incluez aucun filtre temporel dans la requête JQL car cela entrerait en conflit avec la logique du connecteur. N'incluez pas non plus de clauses ORDER BY.\n\nPour la syntaxe, consultez la [documentation JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) d'Atlassian."
             }
           }
         },

@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jsm": {
+          "description": "طلبات Jira Service Management"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jsm": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "فهرِس طلبات العملاء في مشاريع Jira Service Management الخاصة بك.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "عنوان URL الأساسي",
+              "placeholder": "https://nitaquk.atlassian.net",
+              "description": "عنوان URL الأساسي لمثيل Jira Service Management الخاص بك (مثل https://nitaquk.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "معرّف مكتب الخدمة",
+              "description": "المعرّف الرقمي لمكتب خدمة معيّن للفهرسة. ستجده في استجابة واجهة برمجة مكاتب الخدمة (GET /rest/servicedeskapi/servicedesk)، مثل \"id\": \"10\". معرّف البوابة في عنوان URL الخاص ببوابة العملاء ليس دائمًا معرّف مكتب الخدمة. اتركه فارغًا لفهرسة كل مكاتب الخدمة التي يمكن للبيانات الاعتماد الوصول إليها."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية الطلبات التي يتم فهرستها.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصياغة."
             }
           }
         },

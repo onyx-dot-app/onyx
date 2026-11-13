@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jsm": {
+          "description": "Jira Service Management Anfragen"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4249,6 +4252,25 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jsm": {
+          "description": "Jira Service Management-Konnektor konfigurieren",
+          "subtext": "Indexieren Sie die Kundenanfragen Ihrer Jira Service Management-Projekte.",
+          "fields": {
+            "jsm_base_url": {
+              "label": "Basis-URL",
+              "placeholder": "https://ihre-domain.atlassian.net",
+              "description": "Die Basis-URL Ihrer Jira Service Management-Instanz (z. B. https://ihre-domain.atlassian.net)"
+            },
+            "service_desk_id": {
+              "label": "Service-Desk-ID",
+              "description": "Die numerische ID eines bestimmten Service Desks, das indexiert werden soll. Sie finden sie in der Antwort der Service-Desk-API (GET /rest/servicedeskapi/servicedesk), z. B. „id“: “10“. Die Portal-ID in der URL des Kundenportals ist nicht immer die Service-Desk-ID. Leer lassen, um jeden Service Desk zu indexieren, auf den die Anmeldeinformationen Zugriff haben."
+            },
+            "jql_query": {
+              "label": "JQL-Abfrage",
+              "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern der indexierten Anfragen.\n\nWICHTIG: Fügen Sie keine zeitbasierten Filter in die JQL-Abfrage ein, da diese mit der Logik des Konnektors kollidieren. Fügen Sie außerdem keine ORDER BY-Klauseln ein.\n\nSyntaxdetails finden Sie in der [JQL-Dokumentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) von Atlassian."
             }
           }
         },
