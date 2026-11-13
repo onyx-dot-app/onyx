@@ -9,7 +9,12 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
 import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
-import { SearchDocument, ResolvedCitation } from "./types/api-types";
+import {
+  Packet,
+  SearchDocument,
+  ResolvedCitation,
+  ToolApprovalRequest,
+} from "./types/api-types";
 import {
   resolveConfig,
   resolveAuthToken,
@@ -17,10 +22,29 @@ import {
 } from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
-import { ApiService } from "./services/api-service";
-import { processPacket } from "./services/stream-parser";
+import { ApiError, ApiService } from "./services/api-service";
+import {
+  APPROVAL_PENDING_ERROR_CODE,
+  ApprovalDecision,
+  ApprovalEntry,
+  ApprovalStatus,
+  approvalDeadline,
+  approvalRecord,
+  approvalStatus,
+  argumentRows,
+  decidedStatus,
+  findPendingApproval,
+  isResponseStopped,
+  readOutcome,
+} from "./services/approvals";
+import { MessageIDs, processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
+
+const ICON_LOADER = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>`;
+const ICON_CHECK = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5.5 8l2 2 3-4"/></svg>`;
+const ICON_X = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M12 4L4 12M4 4l8 8"/></svg>`;
+const ICON_CLOCK = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="8" r="6.5"/><path d="M8 4.5V8l2.5 1.5"/></svg>`;
 
 @customElement("onyx-chat-widget")
 export class OnyxChatWidget extends LitElement {
@@ -55,6 +79,11 @@ export class OnyxChatWidget extends LitElement {
   @state() private streamingStatus = ""; // e.g., "Searching the web...", "Generating response..."
   @state() private error?: string;
   @state() private inputValue = "";
+  // Approval ids whose decision request is in flight or failed
+  @state() private submittingApprovals = new Set<string>();
+  @state() private failedApprovals = new Set<string>();
+  // Decisions from this widget, by approval id, until the stream resolves them
+  @state() private localApprovalStatuses = new Map<string, ApprovalStatus>();
 
   private config!: WidgetConfig;
   private apiService!: ApiService;
@@ -160,6 +189,11 @@ export class OnyxChatWidget extends LitElement {
       if (!stored) return;
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
+      // A response saved while it ran, e.g. one waiting for a decision,
+      // shows again if it still runs.
+      if (stored.messages.some((message) => message.isStreaming)) {
+        await this.resumeStream(stored.sessionId);
+      }
     })();
   }
 
@@ -234,6 +268,9 @@ export class OnyxChatWidget extends LitElement {
     this.isStreaming = false;
     this.isLoading = false;
     this.streamingStatus = "";
+    this.submittingApprovals = new Set();
+    this.failedApprovals = new Set();
+    this.localApprovalStatuses = new Map();
     this.documentMap.clear();
     this.citationMap.clear();
     clearSession();
@@ -380,9 +417,86 @@ export class OnyxChatWidget extends LitElement {
     }
   }
 
+  /** The request that still waits for this user, if any. */
+  private get pendingApproval(): ApprovalEntry | null {
+    return findPendingApproval(
+      this.messages,
+      this.isStreaming,
+      this.localApprovalStatuses
+    );
+  }
+
+  /** Brings a waiting card into view and focuses its first decision. */
+  private pointAtApproval(approvalId: string) {
+    const card = this.shadowRoot?.querySelector<HTMLElement>(
+      `[data-approval-id="${CSS.escape(approvalId)}"]`
+    );
+    if (!card) return;
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    card.scrollIntoView({
+      behavior: reduceMotion ? "auto" : "smooth",
+      block: "center",
+    });
+    card.querySelector<HTMLButtonElement>(".approval-button")?.focus({
+      preventScroll: true,
+    });
+  }
+
+  private async decideApproval(
+    request: ToolApprovalRequest,
+    decision: ApprovalDecision
+  ) {
+    const id = request.approval_id;
+    if (this.submittingApprovals.has(id)) return;
+    this.submittingApprovals = new Set(this.submittingApprovals).add(id);
+    const failed = new Set(this.failedApprovals);
+    failed.delete(id);
+    this.failedApprovals = failed;
+    let status: ApprovalStatus | null = null;
+    try {
+      const result = await this.apiService.submitApprovalDecision(
+        id,
+        decision
+      );
+      // 404 or 409: the request no longer waits for a decision.
+      status = result === "closed" ? "closed" : decidedStatus(result);
+    } catch (err) {
+      console.error("Failed to submit approval decision:", err);
+      this.failedApprovals = new Set(this.failedApprovals).add(id);
+    } finally {
+      const submitting = new Set(this.submittingApprovals);
+      submitting.delete(id);
+      this.submittingApprovals = submitting;
+    }
+    if (status === null) return;
+    // The decided status shows at once; the resolution packet confirms it.
+    this.localApprovalStatuses = new Map(this.localApprovalStatuses).set(
+      id,
+      status
+    );
+    // The focused button is gone, so focus moves on.
+    if (!this.isConnected) return;
+    await this.updateComplete;
+    const next = this.pendingApproval;
+    if (next) {
+      this.pointAtApproval(next.request.approval_id);
+    } else {
+      this.shadowRoot?.querySelector<HTMLInputElement>(".input")?.focus();
+    }
+  }
+
   private async sendMessage() {
     const message = this.inputValue.trim();
-    if (!message || this.isLoading || this.isStreaming) return;
+    if (!message || this.isLoading) return;
+    // The draft stays; the run waits for the user's decision first.
+    const pending = this.pendingApproval;
+    if (pending) {
+      this.pointAtApproval(pending.request.approval_id);
+      return;
+    }
+    if (this.isStreaming) return;
 
     const controller = new AbortController();
     this.abortController = controller;
@@ -390,6 +504,8 @@ export class OnyxChatWidget extends LitElement {
       this.abortController === controller && !controller.signal.aborted;
     let sentSessionId: string | undefined;
     let acknowledged = false;
+    // Set when the server reports a waiting request this widget does not show.
+    let reattach = false;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: "user",
@@ -442,129 +558,39 @@ export class OnyxChatWidget extends LitElement {
           ? parentMessage.id
           : null;
 
-      // Stream response
       sentSessionId = this.chatSessionId;
-      let currentMessage: ChatMessage | null = null;
-      let assistantMessageId: number | null = null;
-
-      for await (const packet of this.apiService.streamMessage({
-        message,
-        chatSessionId: this.chatSessionId,
-        parentMessageId,
-        signal: controller.signal,
-        includeCitations: this.config.includeCitations,
-      })) {
-        if (!stillOurs()) return;
-        const result = processPacket(packet, currentMessage);
-
-        // Capture message IDs from backend and update local messages
-        if (result.messageIds) {
+      await this.followStream(
+        this.apiService.streamMessage({
+          message,
+          chatSessionId: this.chatSessionId,
+          parentMessageId,
+          signal: controller.signal,
+          includeCitations: this.config.includeCitations,
+        }),
+        sentSessionId,
+        identity,
+        stillOurs,
+        ({ userMessageId }) => {
           acknowledged = true;
-          // Update user message ID if we got one
-          if (result.messageIds.userMessageId !== null) {
-            const userMsgIndex = this.messages.findIndex(
-              (m) => m.id === userMessage.id
-            );
-            if (userMsgIndex >= 0) {
-              // Create new array to trigger reactivity
-              const updatedMessage = {
-                ...this.messages[userMsgIndex],
-                id: result.messageIds.userMessageId,
-              };
-              this.messages = [
-                ...this.messages.slice(0, userMsgIndex),
-                updatedMessage,
-                ...this.messages.slice(userMsgIndex + 1),
-              ];
-            }
-          }
-          // Store assistant message ID to apply when message is created
-          assistantMessageId = result.messageIds.assistantMessageId;
-        }
-
-        // Update status if provided
-        if (result.status !== undefined) {
-          this.streamingStatus = result.status;
-        }
-
-        // Accumulate document metadata for citation resolution
-        if (result.documents) {
-          for (const doc of result.documents) {
-            this.documentMap.set(doc.document_id, doc);
-          }
-        }
-
-        // Accumulate citation mappings for the current message
-        if (result.citation) {
-          this.citationMap.set(
-            result.citation.citation_number,
-            result.citation.document_id
+          if (userMessageId === null) return;
+          // Create new array to trigger reactivity
+          this.messages = this.messages.map((m) =>
+            m.id === userMessage.id ? { ...m, id: userMessageId } : m
           );
         }
-
-        if (result.message) {
-          // Reset per-message citation state when a new message starts
-          if (
-            result.message.isStreaming &&
-            result.message.content === "" &&
-            currentMessage === null
-          ) {
-            this.citationMap.clear();
-          }
-
-          currentMessage = result.message;
-
-          // Apply the backend message ID if we have it and message doesn't have a numeric ID yet
-          if (
-            assistantMessageId !== null &&
-            typeof currentMessage.id !== "number"
-          ) {
-            currentMessage.id = assistantMessageId;
-          }
-
-          // When message is complete, resolve citations and attach to message
-          if (!currentMessage.isStreaming && this.citationMap.size > 0) {
-            const resolved: ResolvedCitation[] = [];
-            for (const [citNum, docId] of this.citationMap) {
-              const doc = this.documentMap.get(docId);
-              resolved.push({
-                citation_number: citNum,
-                document_id: docId,
-                semantic_identifier: doc?.semantic_identifier,
-                link: doc?.link ?? undefined,
-              });
-            }
-            resolved.sort((a, b) => a.citation_number - b.citation_number);
-            currentMessage = { ...currentMessage, citations: resolved };
-          }
-
-          // Update or add message
-          const existingIndex = this.messages.findIndex(
-            (m) => m.id === currentMessage?.id
-          );
-          if (existingIndex >= 0) {
-            this.messages = [
-              ...this.messages.slice(0, existingIndex),
-              currentMessage,
-              ...this.messages.slice(existingIndex + 1),
-            ];
-          } else {
-            this.messages = [...this.messages, currentMessage];
-          }
-
-          // Clear streaming state and persist when message is complete
-          if (!currentMessage.isStreaming) {
-            this.streamingStatus = "";
-            saveSession(this.chatSessionId, this.messages, identity);
-          }
-        }
-      }
+      );
     } catch (err: unknown) {
       if (!stillOurs()) return;
       console.error("Failed to send message:", err);
       if (!(err instanceof Error && err.name === "AbortError")) {
-        this.error =
-          err instanceof Error ? err.message : "Failed to send message";
+        reattach =
+          err instanceof ApiError &&
+          err.errorCode === APPROVAL_PENDING_ERROR_CODE;
+        this.error = reattach
+          ? "This chat waits for your decision on a tool request. Your message was not sent."
+          : err instanceof Error
+            ? err.message
+            : "Failed to send message";
         if (!acknowledged) {
           this.messages = this.messages.filter(
             (item) => item.id !== userMessage.id
@@ -573,7 +599,8 @@ export class OnyxChatWidget extends LitElement {
         }
       }
     } finally {
-      if (stillOurs() && sentSessionId) {
+      // A waiting response keeps the session busy until the user decides.
+      if (stillOurs() && sentSessionId && !reattach) {
         try {
           await this.apiService.waitForSessionIdle(
             sentSessionId,
@@ -601,6 +628,173 @@ export class OnyxChatWidget extends LitElement {
         this.isLoading = false;
         this.streamingStatus = "";
         this.abortController = undefined;
+      }
+    }
+    if (reattach && sentSessionId && this.abortController === undefined) {
+      await this.resumeStream(sentSessionId);
+    }
+  }
+
+  /**
+   * Shows the session's running response again, so a request that waits for a
+   * decision can be decided after a reload or a blocked send.
+   */
+  private async resumeStream(sessionId: string) {
+    if (this.abortController) return;
+    const controller = new AbortController();
+    this.abortController = controller;
+    const stillOurs = () =>
+      this.abortController === controller && !controller.signal.aborted;
+    this.isStreaming = true;
+    try {
+      const identity = await this.currentIdentity();
+      if (!stillOurs()) return;
+      await this.followStream(
+        this.apiService.resumeStream(sessionId, controller.signal),
+        sessionId,
+        identity,
+        stillOurs,
+        () => {}
+      );
+      // The response ended, possibly before this page saw its end (a 404
+      // when it finished while the page was closed). Its last saved state
+      // stays, and the next load does not resume it again.
+      if (stillOurs() && this.messages.some((message) => message.isStreaming)) {
+        this.messages = this.messages.map((message) =>
+          message.isStreaming ? { ...message, isStreaming: false } : message
+        );
+        saveSession(sessionId, this.messages, identity);
+      }
+    } catch (err: unknown) {
+      if (stillOurs() && !(err instanceof Error && err.name === "AbortError")) {
+        console.error("Failed to resume the response:", err);
+        this.error =
+          err instanceof Error ? err.message : "Failed to resume the response";
+      }
+    } finally {
+      if (this.abortController === controller) {
+        this.isStreaming = false;
+        this.streamingStatus = "";
+        this.abortController = undefined;
+      }
+    }
+  }
+
+  /** Applies a response stream to the transcript and persists it. */
+  private async followStream(
+    packets: AsyncGenerator<Packet, void, unknown>,
+    sessionId: string,
+    identity: string,
+    stillOurs: () => boolean,
+    onMessageIds: (ids: MessageIDs) => void
+  ) {
+    let currentMessage: ChatMessage | null = null;
+    let assistantMessageId: number | null = null;
+
+    for await (const packet of packets) {
+      if (!stillOurs()) return;
+      const result = processPacket(packet, currentMessage);
+
+      // Capture message IDs from backend
+      if (result.messageIds) {
+        onMessageIds(result.messageIds);
+        // Store assistant message ID to apply when message is created
+        assistantMessageId = result.messageIds.assistantMessageId;
+      }
+
+      // Update status if provided
+      if (result.status !== undefined) {
+        this.streamingStatus = result.status;
+      }
+
+      // Accumulate document metadata for citation resolution
+      if (result.documents) {
+        for (const doc of result.documents) {
+          this.documentMap.set(doc.document_id, doc);
+        }
+      }
+
+      // Accumulate citation mappings for the current message
+      if (result.citation) {
+        this.citationMap.set(
+          result.citation.citation_number,
+          result.citation.document_id
+        );
+      }
+
+      // The server outcome replaces this widget's decision.
+      if (
+        "type" in packet.obj &&
+        packet.obj.type === "tool_approval_resolved" &&
+        readOutcome(packet.obj.outcome) !== null &&
+        this.localApprovalStatuses.has(packet.obj.approval_id)
+      ) {
+        const statuses = new Map(this.localApprovalStatuses);
+        statuses.delete(packet.obj.approval_id);
+        this.localApprovalStatuses = statuses;
+      }
+
+      if (result.message) {
+        // Reset per-message citation state when a new message starts
+        if (
+          result.message.isStreaming &&
+          result.message.content === "" &&
+          currentMessage === null
+        ) {
+          this.citationMap.clear();
+        }
+
+        currentMessage = result.message;
+
+        // Apply the backend message ID if we have it and message doesn't have a numeric ID yet
+        if (
+          assistantMessageId !== null &&
+          typeof currentMessage.id !== "number"
+        ) {
+          currentMessage.id = assistantMessageId;
+        }
+
+        // When message is complete, resolve citations and attach to message
+        if (!currentMessage.isStreaming && this.citationMap.size > 0) {
+          const resolved: ResolvedCitation[] = [];
+          for (const [citNum, docId] of this.citationMap) {
+            const doc = this.documentMap.get(docId);
+            resolved.push({
+              citation_number: citNum,
+              document_id: docId,
+              semantic_identifier: doc?.semantic_identifier,
+              link: doc?.link ?? undefined,
+            });
+          }
+          resolved.sort((a, b) => a.citation_number - b.citation_number);
+          currentMessage = { ...currentMessage, citations: resolved };
+        }
+
+        // Update or add message
+        const existingIndex = this.messages.findIndex(
+          (m) => m.id === currentMessage?.id
+        );
+        if (existingIndex >= 0) {
+          this.messages = [
+            ...this.messages.slice(0, existingIndex),
+            currentMessage,
+            ...this.messages.slice(existingIndex + 1),
+          ];
+        } else {
+          this.messages = [...this.messages, currentMessage];
+        }
+
+        // Clear streaming state when message is complete. Persist then, and
+        // when a request waits, so a reload can show it again.
+        if (!currentMessage.isStreaming) {
+          this.streamingStatus = "";
+        }
+        if (
+          !currentMessage.isStreaming ||
+          ("type" in packet.obj && packet.obj.type === "tool_approval_request")
+        ) {
+          saveSession(sessionId, this.messages, identity);
+        }
       }
     }
   }
@@ -727,8 +921,11 @@ export class OnyxChatWidget extends LitElement {
       (m) => m.role === "assistant" && m.isStreaming && m.content.length > 0
     );
     // Show ellipsis only when: streaming AND (has status text OR no content yet)
+    // AND no card waits for the user
     const showEllipsis =
-      this.isStreaming && (this.streamingStatus || !hasStreamingContent);
+      this.isStreaming &&
+      !this.pendingApproval &&
+      (this.streamingStatus || !hasStreamingContent);
 
     return html`
       <div class="disclaimer">
@@ -739,16 +936,32 @@ export class OnyxChatWidget extends LitElement {
         ${this.messages.map(
           (msg) => html`
             <div class="message ${msg.role}">
-              <div class="message-bubble">
-                ${
-                  msg.role === "assistant"
-                    ? html`${this.renderMarkdown(
-                        msg.content,
-                        msg.citations
-                      )}${this.renderCitations(msg.citations)}`
-                    : msg.content
-                }
-              </div>
+              ${
+                msg.role === "assistant" &&
+                !msg.content &&
+                msg.approvals?.length
+                  ? ""
+                  : html`<div class="message-bubble">
+                      ${
+                        msg.role === "assistant"
+                          ? html`${this.renderMarkdown(
+                              msg.content,
+                              msg.citations
+                            )}${this.renderCitations(msg.citations)}`
+                          : msg.content
+                      }
+                    </div>`
+              }
+              ${(msg.approvals ?? []).map((entry) =>
+                this.renderApproval(
+                  entry,
+                  approvalStatus(
+                    entry,
+                    this.localApprovalStatuses.get(entry.request.approval_id),
+                    isResponseStopped(msg, this.isStreaming)
+                  )
+                )
+              )}
             </div>
           `
         )}
@@ -782,9 +995,138 @@ export class OnyxChatWidget extends LitElement {
     `;
   }
 
+  /** A waiting request shows its arguments and decisions; a decided one, one line. */
+  private renderApproval(entry: ApprovalEntry, status: ApprovalStatus) {
+    const { request } = entry;
+    const name = request.display_name || request.tool_name;
+    const record = approvalRecord(status, name);
+    const title = `Approval requested: ${name}`;
+    const submitting = this.submittingApprovals.has(request.approval_id);
+    const deadline = approvalDeadline(request.expires_at);
+    const rows = argumentRows(request.arguments);
+
+    return html`
+      <div class="approval" data-approval-id=${request.approval_id}>
+        <p class="sr-only" role="status">${record ?? title}</p>
+        ${
+          record !== null
+            ? html`<div class="approval-record" aria-hidden="true">
+                ${
+                  status === "approved" || status === "approvedForSession"
+                    ? ICON_CHECK
+                    : status === "rejected" || status === "disabled"
+                      ? ICON_X
+                      : ICON_CLOCK
+                }
+                <span>${record}</span>
+              </div>`
+            : html`<div class="approval-card">
+                <div class="approval-header">
+                  <span class="approval-spinner" aria-hidden="true"
+                    >${ICON_LOADER}</span
+                  >
+                  <span class="approval-title">${title}</span>
+                  ${
+                    deadline
+                      ? html`<span class="approval-deadline">${deadline}</span>`
+                      : ""
+                  }
+                </div>
+                <div class="approval-body">
+                  ${
+                    rows.length === 0
+                      ? html`<p class="approval-empty">No payload.</p>`
+                      : html`<dl class="approval-args">
+                          ${rows.map(
+                            (row) => html`
+                              <dt title=${row.key}>${row.key}</dt>
+                              <dd class=${row.mono ? "mono" : ""}>
+                                ${
+                                  row.preview === null
+                                    ? html`<span class="arg-value"
+                                        >${row.text}</span
+                                      >`
+                                    : html`<span class="arg-value arg-preview"
+                                          >${row.preview}</span
+                                        ><span class="arg-value arg-full"
+                                          >${row.text}</span
+                                        ><button
+                                          class="arg-toggle"
+                                          aria-expanded="false"
+                                          @click=${this.toggleArgument}
+                                        >
+                                          <span class="arg-more">Show more</span
+                                          ><span class="arg-less">Show less</span>
+                                        </button>`
+                                }
+                              </dd>
+                            `
+                          )}
+                        </dl>`
+                  }
+                  ${
+                    this.failedApprovals.has(request.approval_id)
+                      ? html`<p class="approval-error" role="alert">
+                          Could not submit your decision. Try again.
+                        </p>`
+                      : ""
+                  }
+                </div>
+                <div class="approval-actions">
+                  <button
+                    class="approval-button primary"
+                    ?disabled=${submitting}
+                    @click=${() =>
+                      this.decideApproval(request, "approve_once")}
+                  >
+                    Approve once
+                  </button>
+                  <button
+                    class="approval-button"
+                    ?disabled=${submitting}
+                    title="Approve now and run this tool without asking again for the rest of this chat"
+                    @click=${() =>
+                      this.decideApproval(request, "approve_session")}
+                  >
+                    Approve for this chat
+                  </button>
+                  <button
+                    class="approval-button"
+                    ?disabled=${submitting}
+                    @click=${() => this.decideApproval(request, "reject")}
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>`
+        }
+      </div>
+    `;
+  }
+
+  /** Expands or collapses a long argument value. */
+  private toggleArgument(e: Event): void {
+    const button = e.currentTarget as HTMLElement;
+    const expanded = button.closest("dd")?.classList.toggle("expanded");
+    button.setAttribute("aria-expanded", String(Boolean(expanded)));
+  }
+
+  /** Shown under the composer while a request waits for the user. */
+  private renderApprovalNotice() {
+    return this.pendingApproval
+      ? html`<div class="approval-notice">
+          Approve or reject the tool request above to continue. Your message
+          stays here.
+        </div>`
+      : "";
+  }
+
   private renderInput() {
+    const pending = this.pendingApproval !== null;
+    const inputDisabled = this.isLoading || (this.isStreaming && !pending);
     return html`
       <div class="input-wrapper">
+        ${this.renderApprovalNotice()}
         <div class="input-container">
           <input
             class="input"
@@ -793,14 +1135,12 @@ export class OnyxChatWidget extends LitElement {
             @input=${this.handleInput}
             @keydown=${this.handleKeyDown}
             placeholder="Type your message..."
-            ?disabled=${this.isLoading || this.isStreaming}
+            ?disabled=${inputDisabled}
           />
           <button
             class="send-button"
             @click=${this.sendMessage}
-            ?disabled=${
-              !this.inputValue.trim() || this.isLoading || this.isStreaming
-            }
+            ?disabled=${!this.inputValue.trim() || inputDisabled}
             title="Send message"
           >
             <svg

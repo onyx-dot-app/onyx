@@ -4,6 +4,7 @@
 
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
+import { readOutcome } from "@/services/approvals";
 
 export interface ParsedMessage {
   message: ChatMessage;
@@ -54,7 +55,7 @@ export function processPacket(
 
   switch (obj.type) {
     case "message_start":
-      // Start of a new assistant response
+      // Start of a new assistant response; keeps approvals that came first
       return {
         message: {
           id: `msg-${Date.now()}`,
@@ -62,6 +63,7 @@ export function processPacket(
           content: "",
           timestamp: Date.now(),
           isStreaming: true,
+          approvals: currentMessage?.approvals,
         },
         status: "", // Clear status when response starts
       };
@@ -192,6 +194,44 @@ export function processPacket(
         message: currentMessage,
         status: "Generating report...",
       };
+
+    case "tool_approval_request": {
+      // The run pauses until the user decides; a tool call can come first
+      const base: ChatMessage = currentMessage ?? {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: "",
+        timestamp: Date.now(),
+        isStreaming: true,
+      };
+      const others = (base.approvals ?? []).filter(
+        (entry) => entry.request.approval_id !== obj.approval_id
+      );
+      return {
+        message: {
+          ...base,
+          approvals: [...others, { request: obj, outcome: null }],
+        },
+        status: "",
+      };
+    }
+
+    case "tool_approval_resolved": {
+      const outcome = readOutcome(obj.outcome);
+      if (!currentMessage?.approvals || outcome === null) {
+        return { message: currentMessage };
+      }
+      return {
+        message: {
+          ...currentMessage,
+          approvals: currentMessage.approvals.map((entry) =>
+            entry.request.approval_id === obj.approval_id
+              ? { ...entry, outcome }
+              : entry
+          ),
+        },
+      };
+    }
 
     case "stop":
     case "overall_stop":
