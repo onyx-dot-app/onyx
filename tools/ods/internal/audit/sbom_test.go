@@ -11,7 +11,7 @@ import (
 )
 
 func TestSupplementalInventoryUsesSharedImageReport(t *testing.T) {
-	directory := t.TempDir()
+	directory := fakeBinDir(t)
 	docker := `#!/bin/sh
 case "$1" in
  create) test "$CREATE_FAILURE" != true || exit 1; echo fixture-container;;
@@ -47,7 +47,6 @@ esac
 	t.Setenv("BASE_IMAGE_REGISTRY", "")
 	t.Setenv("SSL_CERT_FILE", "")
 	t.Setenv("EXPECTED_SCANNER", "docker.io/"+grypeImage)
-	t.Setenv("PATH", directory+string(os.PathListSeparator)+os.Getenv("PATH"))
 	t.Setenv("SBOM_FIXTURE", write("sbom.json", `{"bomFormat":"CycloneDX","specVersion":"1.5","version":1,"components":[{"type":"application","name":"example","version":"1.0.0","cpe":"cpe:2.3:a:vendor:example:1.0.0:*:*:*:*:*:*:*"}]}`))
 	t.Setenv("GRYPE_FIXTURE", write("grype.json", `{"matches":[{"vulnerability":{"id":"CVE-TEST","severity":"Critical","description":"test finding","fix":{"versions":["1.0.1"]}},"relatedVulnerabilities":[{"id":"GHSA-alias"}],"artifact":{"name":"example","version":"1.0.0","type":"binary"}}]}`))
 	original := scanOSImage
