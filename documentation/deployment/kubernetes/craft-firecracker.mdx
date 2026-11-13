@@ -170,6 +170,9 @@ mount it at the data directory before the host agent starts.
       "$(cat sandbox-node-registration.txt)" > craft-fc-secrets.yaml
     ```
 
+    {/* depends: chart PR (preflight scratchHostPath defaults to dataDir) */}
+    The preflight check tests the file system and free disk of `craft.hostAgent.dataDir`.
+
     The chart copies the registration value into the host agent namespace. To keep the value in your own Secret instead,
     see [Use your own Secrets](#use-your-own-secrets).
   </Step>
