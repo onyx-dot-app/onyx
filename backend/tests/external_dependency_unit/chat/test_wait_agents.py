@@ -524,32 +524,6 @@ def test_a_wait_in_the_spawning_step_waits_for_those_agents(
 
 
 @pytest.mark.usefixtures("idle_turn_work")
-def test_an_unawaited_result_wakes_the_root_while_the_wait_stays_open(
-    chat: ChatSession,
-    owner: User,
-    db_session: Session,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    workers = Workers(("alpha", "beta", "gamma"), wait_for=("alpha", "gamma"))
-    _start(chat, owner, workers, monkeypatch)
-    beta = _finish(db_session, chat, workers, "beta")
-    _settled(db_session, chat.id, 2)
-    [interim] = _follow_ups(db_session, chat.id)
-    assert interim.message == "Answer with beta"
-    assert _accepted_results(db_session, interim) == [beta.id]
-    # The wait outlives the interim answer: alpha's result waits for gamma.
-    alpha = _finish(db_session, chat, workers, "alpha")
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-    assert len(_follow_ups(db_session, chat.id)) == 1
-    gamma = _finish(db_session, chat, workers, "gamma")
-    _settled(db_session, chat.id, 3)
-    follow_ups = _follow_ups(db_session, chat.id)
-    assert len(follow_ups) == 2
-    assert _accepted_results(db_session, follow_ups[1]) == sorted([alpha.id, gamma.id])
-    assert read_chat_inbox(db_session, chat.id).next_turn is None
-
-
-@pytest.mark.usefixtures("idle_turn_work")
 def test_an_unawaited_follow_up_leaves_awaited_results_for_the_wait(
     chat: ChatSession,
     owner: User,
@@ -557,7 +531,8 @@ def test_an_unawaited_follow_up_leaves_awaited_results_for_the_wait(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Alpha finishes, then unawaited beta wakes the root while gamma runs.
-    That follow-up reads only beta; alpha waits for gamma's follow-up."""
+    That follow-up reads only beta, and the wait outlives it: alpha waits for
+    gamma's follow-up."""
     workers = Workers(("alpha", "beta", "gamma"), wait_for=("alpha", "gamma"))
     _start(chat, owner, workers, monkeypatch)
     alpha = _finish(db_session, chat, workers, "alpha")
@@ -567,11 +542,13 @@ def test_an_unawaited_follow_up_leaves_awaited_results_for_the_wait(
     [interim] = _follow_ups(db_session, chat.id)
     assert interim.message == "Answer with beta"
     assert _accepted_results(db_session, interim) == [beta.id]
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
     gamma = _finish(db_session, chat, workers, "gamma")
     _settled(db_session, chat.id, 3)
     follow_ups = _follow_ups(db_session, chat.id)
     assert len(follow_ups) == 2
     assert _accepted_results(db_session, follow_ups[1]) == sorted([alpha.id, gamma.id])
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
 
 
 @pytest.mark.usefixtures("idle_turn_work")

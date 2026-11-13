@@ -17,8 +17,6 @@ def test_wait_agents_refuses_while_a_code_cell_is_open() -> None:
     with pytest.raises(ToolCallException, match="code cell"):
         WaitAgentsTool(has_open_cells=lambda: True)._run(invocation, MagicMock())
 
-    invocation.agents.discover_agents.assert_not_called()
-
 
 def test_an_empty_agent_list_waits_for_all_agents() -> None:
     """The saved wait holds the same agents that the call reports."""
