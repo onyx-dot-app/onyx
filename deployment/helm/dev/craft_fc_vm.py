@@ -10,8 +10,9 @@
 The commands run `craft_fc_pod_helper.py` in an api-server pod with
 `kubectl exec`, so they need no Telepresence: the pod has the agent mTLS
 files, Postgres, Redis and the network path. The cluster comes from the
-profile file (`CRAFT_DEV_PROFILE`); kubectl always gets its context
-explicitly. The commands act only on the sandbox of your user
+profile file (`--profile`, else `CRAFT_DEV_PROFILE`, else the onyx-internal
+checkout next to this repo); kubectl always gets its context explicitly.
+The commands act only on the sandbox of your user
 (`--user`, else `CRAFT_DEV_USER`, else the profile's `user.email`).
 """
 
@@ -30,9 +31,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import remote
+from remote import RemoteProfile
+
 ROOT = Path(__file__).resolve().parents[3]
 HELPER = Path(__file__).with_name("craft_fc_pod_helper.py")
-PROFILE_ENV = "CRAFT_DEV_PROFILE"
 USER_ENV = "CRAFT_DEV_USER"
 RESULT_PREFIX = "@@craft-fc "
 # Reads the helper source, then runs it on the rest of stdin.
@@ -76,42 +79,8 @@ class Target:
 # Profile
 
 
-def default_profile_path(root: Path) -> Path:
-    """onyx-internal next to the main checkout, also from a worktree."""
-    base = root
-    try:
-        common = subprocess.run(
-            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-            check=True,
-        ).stdout.strip()
-        base = Path(common).parent
-    except (OSError, subprocess.SubprocessError):
-        pass
-    return base.parent / "onyx-internal/dev/craft-dev.yaml"
-
-
-def _section(data: dict[str, Any], key: str) -> dict[str, Any]:
-    value = data.get(key) or {}
-    if not isinstance(value, dict):
-        raise CommandError(f"profile key {key!r} must be a mapping")
-    return value
-
-
-def _opt(section: dict[str, Any], key: str) -> str | None:
-    value = section.get(key)
-    if value is None:
-        return None
-    if not isinstance(value, str) or not value or value.startswith("<"):
-        raise CommandError(f"profile key {key!r} must be a non-placeholder string")
-    return value
-
-
 def target_from(
-    profile: dict[str, Any] | None,
+    profile: RemoteProfile,
     *,
     context: str | None,
     user: str | None,
@@ -120,54 +89,32 @@ def target_from(
 ) -> Target:
     """Flags win over the environment, the environment over the profile.
     A context outside the profile's allowed list is refused."""
-    data = profile or {}
-    kube = _section(data, "kube")
-    namespaces = _section(data, "namespaces")
-    agent = _section(data, "agent")
-    profile_context = _opt(kube, "context")
-    allowed = kube.get("allowed_contexts") or (
-        [profile_context] if profile_context else []
-    )
-    chosen = context or profile_context
-    if not chosen:
-        raise CommandError(
-            f"no kube context: set {PROFILE_ENV} to the dev profile or pass --context"
-        )
-    if profile is not None and chosen not in allowed:
-        raise CommandError(f"context {chosen!r} is not in the profile; refusing it")
-    email = user or env.get(USER_ENV) or _opt(_section(data, "user"), "email")
+    try:
+        chosen = remote.select_context(profile, context or env.get(remote.CONTEXT_ENV))
+    except ValueError as e:
+        raise CommandError(str(e)) from e
+    email = user or env.get(USER_ENV) or profile.user_email
     if not email or "@" not in email:
         raise CommandError(
             f"no user: pass --user, set {USER_ENV}, or set user.email in the profile"
         )
-    defaults = Target(context=chosen, user=email)
     return Target(
         context=chosen,
         user=email.strip().lower(),
-        kubeconfig=_opt(kube, "kubeconfig"),
-        namespace=_opt(namespaces, "app") or defaults.namespace,
-        agent_namespace=_opt(namespaces, "agent") or defaults.agent_namespace,
-        agent_selector=_opt(agent, "selector") or defaults.agent_selector,
-        api_deployment=_opt(_section(data, "api"), "deployment")
-        or defaults.api_deployment,
+        kubeconfig=str(profile.kubeconfig) if profile.kubeconfig else None,
+        namespace=profile.namespace,
+        agent_namespace=profile.agent_namespace,
+        agent_selector=profile.agent_selector,
         tenant_id=tenant_id,
     )
 
 
-def load_profile(path: str | None) -> dict[str, Any] | None:
-    """The profile mapping; None when no profile file exists and none was named."""
-    named = path or os.environ.get(PROFILE_ENV)
-    file = Path(named).expanduser() if named else default_profile_path(ROOT)
-    if not file.is_file():
-        if named:
-            raise CommandError(f"no profile at {file}")
-        return None
-    import yaml
-
-    data = yaml.safe_load(file.read_text())
-    if not isinstance(data, dict):
-        raise CommandError(f"profile {file} must be a YAML mapping")
-    return data
+def load_profile(path: str | None) -> RemoteProfile:
+    """The profile from --profile, else $CRAFT_DEV_PROFILE, else onyx-internal."""
+    try:
+        return remote.load_profile(ROOT, Path(path) if path else None)
+    except (ValueError, OSError) as e:
+        raise CommandError(str(e)) from e
 
 
 # Bundles
@@ -529,8 +476,8 @@ def parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    p.add_argument("--profile", help=f"profile file (default: ${PROFILE_ENV})")
-    p.add_argument("--context", help="kube context; must be in the profile")
+    p.add_argument("--profile", help=f"profile file (default: ${remote.PROFILE_ENV})")
+    p.add_argument("--context", help=f"kube context; must be in the profile (default: ${remote.CONTEXT_ENV})")
     p.add_argument("--user", help=f"your Onyx login email (default: ${USER_ENV})")
     p.add_argument("--tenant", help="tenant ID (default: looked up from the email)")
     p.add_argument("--verbose", action="store_true", help="show pod helper output")

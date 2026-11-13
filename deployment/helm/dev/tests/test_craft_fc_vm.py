@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
+sys.path.insert(0, str(Path(__file__).parents[1]))
+import remote  # noqa: E402
+
 SPEC = importlib.util.spec_from_file_location(
     "craft_fc_vm", Path(__file__).parents[1] / "craft_fc_vm.py"
 )
@@ -24,11 +27,14 @@ if SPEC is None or SPEC.loader is None:
 vm = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(vm)
 
-PROFILE: dict[str, Any] = {
-    "kube": {"context": "dev-ctx", "allowed_contexts": ["dev-ctx", "dev-alias"]},
-    "namespaces": {"app": "app-ns", "agent": "agent-ns"},
-    "user": {"email": "Profile@Example.com"},
-}
+PROFILE = remote.parse_profile(
+    {
+        "kube": {"context": "dev-ctx", "allowed_contexts": ["dev-ctx", "dev-alias"]},
+        "namespaces": {"app": "app-ns", "agent": "agent-ns"},
+        "aws": {"region": "us-west-2", "eks_cluster": "dev"},
+        "user": {"email": "Profile@Example.com"},
+    }
+)
 
 
 def write_tree(root: Path, files: dict[str, bytes]) -> None:
@@ -140,19 +146,28 @@ class TargetTest(unittest.TestCase):
         )
 
     def test_refuses_context_outside_profile(self) -> None:
-        with self.assertRaisesRegex(vm.CommandError, "not in the profile"):
+        with self.assertRaisesRegex(vm.CommandError, "not in the craft-dev profile"):
             vm.target_from(PROFILE, context="prod", user=None, tenant_id=None, env={})
 
-    def test_needs_context_and_user(self) -> None:
-        with self.assertRaisesRegex(vm.CommandError, "no kube context"):
-            vm.target_from(None, context=None, user="a@b.c", tenant_id=None, env={})
-        with self.assertRaisesRegex(vm.CommandError, "no user"):
-            vm.target_from(None, context="ctx", user=None, tenant_id=None, env={})
+    def test_context_from_env(self) -> None:
+        env = {remote.CONTEXT_ENV: "dev-alias"}
+        t = vm.target_from(PROFILE, context=None, user=None, tenant_id=None, env=env)
+        self.assertEqual(t.context, "dev-alias")
 
-    def test_refuses_placeholder(self) -> None:
-        profile = {"kube": {"context": "<cluster arn>"}}
-        with self.assertRaisesRegex(vm.CommandError, "placeholder"):
-            vm.target_from(profile, context=None, user="a@b.c", tenant_id=None, env={})
+    def test_needs_user(self) -> None:
+        profile = remote.parse_profile(
+            {
+                "kube": {"context": "ctx"},
+                "namespaces": {"agent": "agent-ns"},
+                "aws": {"region": "us-west-2", "eks_cluster": "dev"},
+            }
+        )
+        with self.assertRaisesRegex(vm.CommandError, "no user"):
+            vm.target_from(profile, context=None, user=None, tenant_id=None, env={})
+
+    def test_load_profile_reports_missing_file(self) -> None:
+        with self.assertRaisesRegex(vm.CommandError, "No craft-dev profile"):
+            vm.load_profile("/nonexistent/craft-dev.yaml")
 
     def test_helper_argv_pins_context(self) -> None:
         t = vm.Target(context="ctx", user="a@b.c", kubeconfig="/k")
@@ -200,6 +215,15 @@ class HelperProtocolTest(unittest.TestCase):
             vm.single([{"t": "error", "code": "NO_VM", "message": "none"}])
 
 
+CTX_PROFILE = remote.parse_profile(
+    {
+        "kube": {"context": "ctx"},
+        "namespaces": {"agent": "agent-ns"},
+        "aws": {"region": "us-west-2", "eks_cluster": "dev"},
+    }
+)
+
+
 class CommandTest(unittest.TestCase):
     target = vm.Target(context="ctx", user="me@example.com")
 
@@ -220,7 +244,7 @@ class CommandTest(unittest.TestCase):
         out, err = io.StringIO(), io.StringIO()
         with (
             patch.object(vm, "run_helper", fake),
-            patch.object(vm, "load_profile", lambda _p: None),
+            patch.object(vm, "load_profile", lambda _p: CTX_PROFILE),
             contextlib.redirect_stdout(out),
             contextlib.redirect_stderr(err),
         ):
