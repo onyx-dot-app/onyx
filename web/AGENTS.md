@@ -20,7 +20,9 @@ Never import from `web/src/components/`. It is legacy and being deleted. The one
 - Buttons: `Button` from `@opal/components`. No raw `<button>`.
 - Inputs: Opal or refresh-components. No raw `<input>`, `<textarea>`, or `<select>`.
 - Text: `Text` from `@opal/components` with `font` and `color` props. No naked text nodes. For
-  text that shows a tooltip when cut, set `maxLines` and `overflowTooltip`.
+  text that shows a tooltip when cut, set `maxLines` and `overflowTooltip`. Text that stands on its
+  own (its own line, or alone in a wrapper) sets `as="p"`. Keep the default `span` only for text
+  that runs inline with other text.
 - Icons: only `@opal/icons`. Never `lucide-react` or `react-icons`. If an icon is missing, import
   it from Figma with the Figma MCP tool and add it to `lib/opal/src/icons/`.
 - Hover-reveal: `Hoverable` from `@opal/core`. If you must hand-write it, add `no-hover:opacity-100`

@@ -62,6 +62,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           <>
             <div className="px-(--padding-text-4)">
               <Text
+                as="p"
                 font="secondary-body"
                 color="text-03"
                 wordWrap="whitespace-nowrap"
