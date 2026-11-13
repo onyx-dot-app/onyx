@@ -1,5 +1,6 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.migration_lock import schema_migration_lock
+from onyx.db.engine.migration_deferred_checks import run_queued_deferred_checks
 from onyx.db.engine.migration_search_path import pin_search_path_per_transaction
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
@@ -18,17 +19,12 @@ from sqlalchemy import text
 from sqlalchemy.engine.url import make_url
 from sqlalchemy.engine.base import Connection
 import os
-from typing import Any
-from collections.abc import Collection
-from collections.abc import Mapping
 from itertools import chain
 import asyncio
 import logging
 from logging.config import fileConfig
 
 from alembic import context
-from alembic.runtime.migration import MigrationContext
-from alembic.runtime.migration import MigrationInfo
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.ext.asyncio import create_async_engine
 from onyx.configs.constants import SSL_CERT_FILE
@@ -249,35 +245,6 @@ def get_schema_options() -> tuple[
         schemas,
         shard,
     )
-
-
-def run_queued_deferred_checks(
-    ctx: MigrationContext,
-    step: MigrationInfo,  # noqa: ARG001
-    heads: Collection[Any],  # noqa: ARG001
-    run_args: Mapping[str, Any],  # noqa: ARG001
-) -> None:
-    """Every revision runs in one transaction. A revision that writes rows under
-    a deferred constraint queues checks until commit, and a later ALTER TABLE on
-    that table fails with "pending trigger events". Run the checks after each
-    revision, then restore the deferred default."""
-    connection = ctx.connection
-    if ctx.as_sql or connection is None:
-        return
-    connection.exec_driver_sql("SET CONSTRAINTS ALL IMMEDIATE")
-    names = (
-        connection.execute(
-            text(
-                "SELECT format('%I.%I', n.nspname, c.conname) FROM pg_constraint c "
-                "JOIN pg_namespace n ON n.oid = c.connamespace "
-                "WHERE c.condeferred AND n.nspname = current_schema()"
-            )
-        )
-        .scalars()
-        .all()
-    )
-    if names:
-        connection.exec_driver_sql(f"SET CONSTRAINTS {', '.join(names)} DEFERRED")
 
 
 def do_run_migrations(
@@ -509,6 +476,7 @@ def run_migrations_offline() -> None:
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
                 dialect_opts={"paramstyle": "named"},
+                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():
@@ -534,6 +502,7 @@ def run_migrations_offline() -> None:
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
                 dialect_opts={"paramstyle": "named"},
+                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():
