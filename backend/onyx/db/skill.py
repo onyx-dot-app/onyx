@@ -57,7 +57,6 @@ from sqlalchemy.sql.elements import KeyedColumnElement
 from onyx.auth.permissions import has_global_permission, has_permission
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
-    MarketplaceKind,
     Permission,
     PermissionAuthority,
     PluginInstallationPolicy,
@@ -90,6 +89,7 @@ from onyx.db.plugin import (
     PluginAccessChange,
     PluginAccessMode,
     PluginGroupGrant,
+    PluginGroupSetting,
     PluginUserGrant,
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
@@ -109,17 +109,14 @@ from onyx.db.plugin_access import (
     load_user_plugin_states,
     order_skill_names,
     plugin_editable_by_user,
+    plugin_in_managed_scope,
+    plugin_required_for_anyone,
     visible_plugin_ids,
-)
-from onyx.db.scoped_permissions import (
-    scoped_group_ids_subquery,
-    within_managed_scope_clause,
 )
 from onyx.db.utils import (
     UNSET,
     UnsetType,
     is_fk_violation,
-    is_set,
     is_unique_violation,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -164,6 +161,8 @@ class SkillUserState:
     enabled: bool
     can_toggle: bool
     external_app_dependency: SkillExternalAppDependencyState | None
+    # The install setting for this user is REQUIRED (company or group).
+    required: bool = False
 
 
 def _is_shared_with_user(
@@ -217,28 +216,6 @@ def _plugin_of_skill_matches(build: _PluginClause[bool]) -> ColumnElement[bool]:
     )
 
 
-def _is_group_shared_only_within_managed_scope(user: User) -> ColumnElement[bool]:
-    """A scoped manager may edit a skill only when every group it is shared with
-    is one they manage, and it isn't published org-wide. Delegates to the shared
-    read-side helper so this can't drift from the write-side GATE 2. Only group
-    rows with a permission count."""
-    return within_managed_scope_clause(
-        resource_id_col=Skill.id,
-        junction_resource_col=Plugin__UserGroup.plugin_id,
-        junction_group_col=Plugin__UserGroup.user_group_id,
-        non_public_clause=and_(
-            Skill.built_in_skill_id.is_(None),
-            ~_plugin_of_skill_matches(
-                lambda _plugin, marketplace: (
-                    marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
-                )
-            ),
-        ),
-        managed_subq=scoped_group_ids_subquery(user),
-        junction_live_clause=Plugin__UserGroup.permission.is_not(None),
-    )
-
-
 def skill_visible_to_user(user: User) -> ColumnElement[bool]:
     """Custom skills follow the plugin rule (``onyx.db.plugin_access``).
     Built-in skills have no plugin and keep their own rows."""
@@ -265,7 +242,14 @@ def _is_editable_by_user(user: User) -> ColumnElement[bool]:
         lambda plugin, _marketplace: plugin_editable_by_user(plugin, user.id)
     )
     if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED:
-        editable = or_(editable, _is_group_shared_only_within_managed_scope(user))
+        editable = or_(
+            editable,
+            _plugin_of_skill_matches(
+                lambda plugin, marketplace: plugin_in_managed_scope(
+                    plugin, marketplace, user
+                )
+            ),
+        )
     return editable
 
 
@@ -798,6 +782,8 @@ def skill_user_states(
             and state.installation_policy != PluginInstallationPolicy.REQUIRED
             and (enabled or not waits_for_app(external_app_dependencies.get(skill_id))),
             external_app_dependency=external_app_dependencies.get(skill_id),
+            required=state is not None
+            and state.installation_policy == PluginInstallationPolicy.REQUIRED,
         )
     return states
 
@@ -1051,14 +1037,16 @@ def persist_skill_validity(
 class SkillSharingChange:
     """A partial update to a skill's access, as the skills API sends it. None
     shares leave that kind unchanged; set_public_permission marks
-    public_permission as supplied. ``installation_policy``: UNSET keeps it, and
-    None or AVAILABLE means "use the marketplace default"."""
+    public_permission as supplied. ``installation_policy``: UNSET keeps it,
+    None means "use the marketplace default", and a value sets that value."""
 
     public_permission: SkillSharePermission | None = None
     set_public_permission: bool = False
-    installation_policy: SkillInstallationPolicy | None | UnsetType = UNSET
+    installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     user_shares: Mapping[UUID, SkillSharePermission] | None = None
     group_shares: Mapping[int, SkillSharePermission] | None = None
+    # Group install settings with no change to the share. None removes one.
+    group_settings: Mapping[int, PluginInstallationPolicy | None] | None = None
 
 
 SkillBulkAction = Literal["enable", "disable", "delete"]
@@ -1104,17 +1092,20 @@ def _plugin_access_change(
 ) -> PluginAccessChange:
     """The plugin change for a skills API change. Organization access is
     checked per skill (``_publish_requested``); VIEWER publishes."""
-    policy = change.installation_policy
     return PluginAccessChange(
         user_grants=_user_grants(change.user_shares),
         group_grants=_group_grants(change.group_shares),
+        group_settings=(
+            tuple(
+                PluginGroupSetting(group_id=group_id, installation_policy=policy)
+                for group_id, policy in change.group_settings.items()
+            )
+            if change.group_settings is not None
+            else None
+        ),
         publish=change.set_public_permission
         and change.public_permission == SkillSharePermission.VIEWER,
-        company_installation_policy=(
-            plugin_installation_policy(policy) if policy is not None else None
-        )
-        if is_set(policy)
-        else UNSET,
+        company_installation_policy=change.installation_policy,
         mode=mode,
         on_name_clash=on_name_clash,
     )
@@ -1291,26 +1282,41 @@ def bulk_share_skills__no_commit(
     )
 
 
+def may_delete_skill(*, published: bool, required_for_anyone: bool, user: User) -> bool:
+    """A user who can edit a skill deletes it, except a published skill or one
+    REQUIRED for anyone, which needs organization-wide MANAGE_PLUGINS. The
+    delete route and ``SkillResponse.can_delete`` use this one rule."""
+    return not (published or required_for_anyone) or has_global_permission(
+        user, Permission.MANAGE_PLUGINS
+    )
+
+
 def delete_skill_for_user__no_commit(
     skill: Skill, user: User, db_session: Session
 ) -> tuple[set[UUID], list[str]]:
     """Delete a skill the user may edit. Only a user with organization-wide
     MANAGE_PLUGINS can delete a published skill. Returns the affected users and
     the bundle file ids for caller cleanup."""
-    if skill.public_permission is not None and not has_global_permission(
-        user, Permission.MANAGE_PLUGINS
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "This skill is published to the organization. Only an admin can delete it.",
+    published = skill.public_permission is not None
+    required_for_anyone = bool(
+        db_session.scalar(
+            select(
+                exists().where(
+                    Plugin.id == skill.id,
+                    Marketplace.id == Plugin.marketplace_id,
+                    plugin_required_for_anyone(Plugin, Marketplace),
+                )
+            )
         )
-    if (
-        skill.installation_policy == SkillInstallationPolicy.REQUIRED
-        and not has_global_permission(user, Permission.MANAGE_PLUGINS)
+    )
+    if not may_delete_skill(
+        published=published, required_for_anyone=required_for_anyone, user=user
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide skill manager can delete a required skill.",
+            "This skill is published to the organization. Only an admin can delete it."
+            if published
+            else "Only an organization-wide skill manager can delete a required skill.",
         )
     affected = affected_user_ids_for_skill(skill, db_session)
     return affected, delete_skill(skill, db_session)

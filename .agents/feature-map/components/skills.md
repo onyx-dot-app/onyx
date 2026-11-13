@@ -25,10 +25,24 @@
   shares with users or groups as viewer or editor, publishes to the
   organization, or transfers ownership.
 - **Admins** set the installation policy of a custom skill: available (the user
-  opts in), installed by default (on until the user opts out), or required (on,
-  and the user cannot turn it off). This needs organization-wide
-  `MANAGE_PLUGINS`, which only admins hold today; a group manager cannot. Only
-  the same permission deletes a required skill.
+  opts in), installed by default (on until the user opts out), required (on,
+  and the user cannot turn it off), or not available (hidden). This needs
+  organization-wide `MANAGE_PLUGINS`, which only admins hold today. A group
+  setting (`SkillShareRequest.group_settings`, also on a group with no share)
+  replaces the Organization setting for that group's members. It also needs
+  organization-wide `MANAGE_PLUGINS`; a group manager cannot set one. Only
+  organization-wide `MANAGE_PLUGINS` deletes a skill that is required for anyone
+  (`db/plugin_access.py:plugin_required_for_anyone`: a REQUIRED company setting,
+  or a REQUIRED group setting for a group member who can see the plugin). The
+  delete route and `SkillResponse.can_delete` share one rule
+  (`db/skill.py:may_delete_skill`); the UI shows Delete from `can_delete`.
+  `required_for_user` (the setting for the caller is REQUIRED, from the company
+  or a group) shows the Required badge.
+- **Admin skill policies** on Admin Panel → Craft → Preferences: Skill
+  Publishing ([[#publishing-review]]), **Default Access** (the Organization
+  library default for published skills with no own setting: Available,
+  Installed by default or Not available; never Required) and **Sharing** (off:
+  only organization-wide managers add user or group shares).
 - **Bulk management.** Craft's Skills library and **Admin Panel → Skills**
   support selection of custom skills, bulk access and installation changes,
   personal enable/disable, and confirmed deletion. Admins see all manageable
@@ -55,8 +69,10 @@ When it fails:
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
   list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
-- Turning on a skill whose name another enabled skill uses returns a name
-  conflict. The client can retry with `replace_conflict` to switch skills.
+- Turning on a skill whose name another enabled skill the user can see uses
+  returns a name conflict. The client can retry with `replace_conflict` to
+  switch skills. The kept choice of a skill the user can no longer see neither
+  blocks the switch nor changes.
 - When two enabled skills still share a name, for example after a share or a
   publish, the sandbox gets one of them by the name order. The other shows as
   off. The push does not fail.
@@ -195,10 +211,14 @@ The library preview of an external-app skill calls the same renderer
    `affected_user_ids_for_plugins`); edits use `plugin_editable_by_user`. There is no organization-wide edit: a legacy
    organization `EDITOR` row gives view access only. A `plugin__user_group`
    row with no permission holds only a group install setting and grants
-   nothing. The
+   nothing. Only such a row can be `NOT_AVAILABLE`: a row with a share and
+   `NOT_AVAILABLE` is refused (400, "Remove the group's share first"). The
    author and a direct share get at least available, also past a group
    `NOT_AVAILABLE`. Built-in skills have no plugin and keep their skill
-   rows.
+   rows. A scoped manager edits a private skill only when every group share is
+   in their groups and every user share goes to a member of those groups. One
+   SQL predicate, `db/plugin_access.py:plugin_in_managed_scope`, decides it for
+   the edit check and the response permission.
 4. `enablement-not-preference-row` **Never infer enablement from a preference
    row.** Use `db/plugin_access.py:load_user_plugin_states`. It reads
    `user_plugin_preference` and the install setting that applies to the user
@@ -207,13 +227,21 @@ The library preview of an external-app skill calls the same renderer
    least available for the author or with a share). Disable writes `enabled=False`; it does
    not delete the row. A required policy overrides an opt-out without deleting
    it, so the opt-out returns when the policy goes back to default.
-5. `name-uniqueness-in-db` **Name uniqueness is in the database.** The partial
-   unique index `uq_user_skill_preference_name` allows one enabled choice per
-   user and name. `uq_skill_automatic_name` allows one default or required
-   skill per name in the tenant. Every write that enables a preference first
-   takes `db/skill.py:_lock_user_skill_preferences`, a `FOR NO KEY UPDATE`
-   lock on the user row. The lock orders concurrent enables of one name, so
-   the second one gets `SKILL_NAME_CONFLICT`, not an `IntegrityError`. The
+5. `name-uniqueness-in-db` **Only plugin.name is unique, per marketplace.**
+   `uq_plugin_marketplace_name`: a new plugin with a used name takes the next
+   free name (`db/plugin.py:free_plugin_name`); a concurrent create that takes
+   it first fails and the user tries again. Publish and transfer
+   refuse a clash with `CONFLICT`. Skill names repeat across plugins; never
+   compare one with `plugin.name`. The legacy index
+   `uq_skill_automatic_name` allows one default or required skill row per
+   name, so the dual write stores `AVAILABLE` for `NOT_AVAILABLE` and for no
+   setting. The legacy `uq_user_skill_preference_name` allows one enabled
+   legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
+   skips a legacy row it refuses, because reads use `user_plugin_preference`.
+   A toggle conflicts only with skills the user can see. Every write that
+   enables a preference first takes `db/skill.py:_lock_user_skill_preferences`,
+   a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
+   enables of one name, so the second one gets `SKILL_NAME_CONFLICT`. The
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
    so sharing writes that reference the user still run. A new preference
    writer, such as an auto-enable, must take the same lock.
@@ -271,8 +299,10 @@ The library preview of an external-app skill calls the same renderer
 12. `sharing-single-entry` **Every share, publish and install setting change
     goes through `db/plugin.py:apply_plugin_access_change__no_commit`.** It
     takes a set of plugin ids, a `PluginAccessChange` (user and group grants,
-    `publish`, a three-state company install setting, and a mode: replace or
-    add-only) and the actor. A skill has no access of its own: the skills API
+    group settings with no share change (`PluginGroupSetting`: creates a
+    setting-only row; None removes the setting and deletes a row with no
+    permission), `publish`, a three-state company install setting, and a mode:
+    replace or add-only) and the actor. A skill has no access of its own: the skills API
     passes the plugin with the skill's id. The function locks the legacy skill
     rows, then the plugins, in id order; checks the rules once for the set;
     writes each plugin and its legacy rows in a savepoint, so one failure rolls
@@ -280,7 +310,8 @@ The library preview of an external-app skill calls the same renderer
     before and after. The routes then commit and push once. The skills layer
     calls it through `db/skill.py:share_skill__no_commit` (share route, editor
     create, patch visibility, imports with access settings) and
-    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares).
+    `db/skill.py:bulk_share_skills__no_commit` (bulk, add-only shares, no
+    group settings).
     `db/skill.py:replace_skill_shares`, `set_skill_installation_policy`,
     `set_skill_public_permission` and `transfer_skill_ownership` are thin
     callers with no actor, so they skip the permission checks. Do not write
@@ -289,12 +320,28 @@ The library preview of an external-app skill calls the same renderer
     Rules: a company install setting needs organization-wide `MANAGE_PLUGINS`
     (`has_global_permission`; never `has_permission`, which accepts a scoped
     grant). In `SkillShareRequest`, a missing `installation_policy` changes
-    nothing, and null or AVAILABLE means the marketplace default. A group
+    nothing, null means the marketplace default, and a value (AVAILABLE too)
+    is the skill's own setting. A newly linked app skill gets an explicit
+    AVAILABLE (`db/plugin.py:make_plugins_available_by_default__no_commit`),
+    so a stricter Default access does not hide it. A group
     keeps its install setting when the change does not set one, also when its
-    share is removed (the row stays with no permission). A group install
-    setting needs `MANAGE_PLUGINS` for that group on a private plugin and
-    global `MANAGE_PLUGINS` on a published one; it is then refused until group
-    settings ship. EDIT on a skill is not enough to change its groups: any
+    share is removed (the row stays with no permission). Group settings come
+    only from `group_settings` and need global `MANAGE_PLUGINS` (else 403); a
+    group manager cannot set one. A group row with a share cannot be
+    `NOT_AVAILABLE`. With `Settings.plugin_sharing`
+    off, only global `MANAGE_PLUGINS` adds a share or changes its level
+    (`db/plugin.py:check_sharing_allowed`); removing one stays allowed. A
+    transfer keeps the old owner as an editor, so it is refused too
+    (`server/features/skill/api.py:transfer_current_user_skill_ownership`). A
+    group membership change (group API, SCIM) pushes to the users who joined
+    or left in the background (`skills/push.py:enqueue_skill_push`, task
+    `push_skills_to_users` on the `sandbox` queue), so a large sync does not
+    wait for the pushes. Other routes push in the request, after their commit
+    (`skills/push.py:push_skills_and_commit`). The Organization library
+    default is written by
+    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
+    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
     Without it, an owner could push a skill into any group manager's scope.
@@ -492,6 +539,11 @@ The library preview of an external-app skill calls the same renderer
     `created_at`, and the admin approves or denies from a view of the version
     preview. The web hook `usePublishAction` mirrors the setting for the
     share dialog and the Versions tab.
+    The **Skill Publishing** card on Admin Panel → Craft → Preferences
+    (`web/src/views/admin/CraftPreferencesPage/SkillPublishingCard.tsx`) also
+    holds **Default Access**, saved with
+    `PUT /skills/organization-library/default-access`, and **Sharing**, saved
+    as `plugin_sharing`.
 
 ---
 
@@ -529,8 +581,6 @@ The library preview of an external-app skill calls the same renderer
   drops every failure ([[#push-holds-row-locks]]), so the change commits
   anyway. If that commit fails, the sandboxes hold files that the database
   does not.
-- **Membership changes do not push.** A user added to a group that a skill is
-  shared with gets it at the next push, session start or reload.
 
 ---
 

@@ -5201,10 +5201,20 @@
           "description": "管理者だけがスキルを組織に公開できます。"
         },
         "saveSuccess": {
-          "message": "公開設定を保存しました。"
+          "message": "設定を保存しました。"
         },
         "saveError": {
-          "message": "公開設定を保存できませんでした。"
+          "message": "設定を保存できませんでした。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "独自の設定がない公開済みスキルすべてに適用されます。後から公開されるスキルも含みます。",
+          "loadFailed": "デフォルトのアクセスを読み込めませんでした。",
+          "retry": "再試行"
+        },
+        "sharing": {
+          "title": "共有",
+          "description": "メンバーはスキルをユーザーやグループと共有できます。スキル管理者は常に共有できます。"
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "インストール",
-          "available": "インストール可能",
-          "default": "デフォルトでインストール",
-          "required": "必須",
-          "availableDescription": "ユーザーはいつでもインストールまたはアンインストールできます。",
-          "defaultDescription": "自動でインストールされます。ユーザーはいつでも無効化またはアンインストールできます。",
-          "requiredDescription": "自動でインストールされます。ユーザーは無効化またはアンインストールできません。",
           "description": "アクセス権を持つ全員に対するスキルのインストール方法を選択します。"
         },
         "description": "このスキルを使用できるユーザーとインストール方法を選択します。",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "公開はオフになっています",
           "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
+        },
+        "sharingOff": {
+          "title": "共有はオフです",
+          "description": "管理者がユーザーやグループとの共有をオフにしました。このスキルの共有はスキル管理者に依頼してください。"
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · 初回公開",
         "update": "v{number} · v{published} からの更新"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "必須",
+        "description": "インストール済みで常にオンです。メンバーはオフにできません。"
+      },
+      "DEFAULT": {
+        "label": "既定でインストール",
+        "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
+      },
+      "AVAILABLE": {
+        "label": "インストール可能",
+        "description": "メンバーが見つけて、必要に応じてオンにします。"
+      },
+      "NOT_AVAILABLE": {
+        "label": "利用不可",
+        "description": "非表示です。メンバーは見つけることもオンにすることもできません。"
+      },
+      "inherit": {
+        "label": "{scope, select, group {組織の設定} other {デフォルトのアクセス}}",
+        "labelWithPolicy": "{scope, select, group {組織の設定（{policy}）} other {デフォルトのアクセス（{policy}）}}",
+        "description": "{scope, select, group {グループ設定はありません。グループは組織の設定を使用します。} other {独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。}}"
       }
     }
   },

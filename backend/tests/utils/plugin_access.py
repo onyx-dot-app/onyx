@@ -68,12 +68,18 @@ def plugin_access_mismatches(
             continue
         if plugin.author_user_id != skill.author_user_id:
             problems.append(f"{skill_id}: author differs")
+        # The legacy column has no NOT_AVAILABLE and no "no own setting"; it
+        # holds AVAILABLE for an explicit AVAILABLE, NOT_AVAILABLE or none.
         expected_policy = (
             None
             if skill.installation_policy == "AVAILABLE"
             else skill.installation_policy
         )
-        if plugin.installation_policy != expected_policy:
+        if plugin.installation_policy not in (
+            (expected_policy, "AVAILABLE", "NOT_AVAILABLE")
+            if expected_policy is None
+            else (expected_policy,)
+        ):
             problems.append(
                 f"{skill_id}: install setting {plugin.installation_policy} "
                 f"!= {expected_policy}"

@@ -5201,10 +5201,20 @@
           "description": "Somente administradores publicam habilidades na organização."
         },
         "saveSuccess": {
-          "message": "Configuração de publicação salva."
+          "message": "Configuração salva."
         },
         "saveError": {
-          "message": "Não foi possível salvar a configuração de publicação."
+          "message": "Falha ao salvar a configuração."
+        },
+        "defaultAccess": {
+          "title": "Acesso padrão",
+          "description": "Aplica-se a cada skill publicado sem configuração própria, incluindo os publicados depois.",
+          "loadFailed": "Não foi possível carregar o acesso padrão.",
+          "retry": "Tentar novamente"
+        },
+        "sharing": {
+          "title": "Compartilhamento",
+          "description": "Os membros podem compartilhar skills com pessoas e grupos. Os gerenciadores de skills sempre podem compartilhar."
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "Instalação",
-          "available": "Disponível para instalar",
-          "default": "Instalado por padrão",
-          "required": "Obrigatório",
-          "availableDescription": "Os usuários podem instalar ou desinstalar a qualquer momento.",
-          "defaultDescription": "Instalado automaticamente. Os usuários podem desativar ou desinstalar a qualquer momento.",
-          "requiredDescription": "Instalado automaticamente. Os usuários não podem desativar nem desinstalar.",
           "description": "Escolha como esta habilidade é instalada para quem tem acesso."
         },
         "description": "Escolha quem pode usar esta habilidade e como ela é instalada.",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "A publicação está desativada",
           "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar esta habilidade."
+        },
+        "sharingOff": {
+          "title": "O compartilhamento está desativado",
+          "description": "Um administrador desativou o compartilhamento com pessoas e grupos. Peça a um gerenciador de skills para compartilhar este skill."
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · Primeira publicação",
         "update": "v{number} · Atualização da v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obrigatório",
+        "description": "Instalado e sempre ativo. Os membros não podem desativá-lo."
+      },
+      "DEFAULT": {
+        "label": "Instalado por padrão",
+        "description": "Instalado para cada membro. Os membros podem desativá-lo."
+      },
+      "AVAILABLE": {
+        "label": "Disponível para instalar",
+        "description": "Os membros o encontram e o ativam se quiserem."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Não disponível",
+        "description": "Oculto. Os membros não podem encontrá-lo nem ativá-lo."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Configuração da organização} other {Acesso padrão}}",
+        "labelWithPolicy": "{scope, select, group {Configuração da organização ({policy})} other {Acesso padrão ({policy})}}",
+        "description": "{scope, select, group {Sem configuração de grupo. O grupo usa a configuração da organização.} other {Sem configuração própria. A skill usa o acesso padrão, também depois que um administrador o altera.}}"
       }
     }
   },

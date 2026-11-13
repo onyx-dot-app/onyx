@@ -5201,10 +5201,20 @@
           "description": "Seuls les administrateurs publient des compétences pour l'organisation."
         },
         "saveSuccess": {
-          "message": "Paramètre de publication enregistré."
+          "message": "Paramètre enregistré."
         },
         "saveError": {
-          "message": "Impossible d'enregistrer le paramètre de publication."
+          "message": "Échec de l'enregistrement du paramètre."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "S'applique à chaque skill publié sans réglage propre, y compris ceux publiés plus tard.",
+          "loadFailed": "Impossible de charger l'accès par défaut.",
+          "retry": "Réessayer"
+        },
+        "sharing": {
+          "title": "Partage",
+          "description": "Les membres peuvent partager des skills avec des personnes et des groupes. Les gestionnaires de skills peuvent toujours partager."
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Disponible à l’installation",
-          "default": "Installé par défaut",
-          "required": "Obligatoire",
-          "availableDescription": "Les utilisateurs peuvent installer ou désinstaller à tout moment.",
-          "defaultDescription": "Installé automatiquement. Les utilisateurs peuvent désactiver ou désinstaller à tout moment.",
-          "requiredDescription": "Installé automatiquement. Les utilisateurs ne peuvent ni désactiver ni désinstaller.",
           "description": "Choisissez comment cette compétence est installée pour les personnes ayant accès."
         },
         "description": "Choisissez qui peut utiliser cette compétence et comment elle est installée.",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "La publication est désactivée",
           "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        },
+        "sharingOff": {
+          "title": "Le partage est désactivé",
+          "description": "Un administrateur a désactivé le partage avec des personnes et des groupes. Demandez à un gestionnaire de skills de partager ce skill."
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · Première publication",
         "update": "v{number} · Mise à jour depuis v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatoire",
+        "description": "Installé et toujours actif. Les membres ne peuvent pas le désactiver."
+      },
+      "DEFAULT": {
+        "label": "Installé par défaut",
+        "description": "Installé pour chaque membre. Les membres peuvent le désactiver."
+      },
+      "AVAILABLE": {
+        "label": "Disponible à l’installation",
+        "description": "Les membres le trouvent et l'activent s'ils le souhaitent."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Non disponible",
+        "description": "Masqué. Les membres ne peuvent ni le trouver ni l'activer."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Paramètre de l'organisation} other {Accès par défaut}}",
+        "labelWithPolicy": "{scope, select, group {Paramètre de l'organisation ({policy})} other {Accès par défaut ({policy})}}",
+        "description": "{scope, select, group {Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.} other {Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur.}}"
       }
     }
   },

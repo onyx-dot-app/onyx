@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -17,9 +18,12 @@ from onyx.db.models import Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
-from onyx.db.plugin_access import PluginAccess, load_plugin_access
-from onyx.db.scoped_permissions import fetch_managed_group_ids
-from onyx.db.skill import SkillUserState, skill_user_states
+from onyx.db.plugin_access import (
+    PluginAccess,
+    load_plugin_access,
+    plugin_ids_in_managed_scope,
+)
+from onyx.db.skill import SkillUserState, may_delete_skill, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
@@ -61,11 +65,12 @@ def user_permission_for_skill(
     access: PluginAccess | None,
     user: User,
     user_group_ids: set[int],
-    managed_user_group_ids: set[int] | None = None,
+    in_managed_scope: bool = False,
 ) -> SkillAccessLevel | None:
     """Read-side mirror of ``_is_editable_by_user``; the two must agree or the UI
     offers actions the write path rejects. ``access`` holds the plugin grants of
-    a custom skill. There is no organization-wide edit."""
+    a custom skill; ``in_managed_scope`` is ``plugin_in_managed_scope`` for a
+    group manager. There is no organization-wide edit."""
     if not skill.is_custom:
         return SkillAccessLevel.VIEWER
     if access is None:
@@ -88,23 +93,26 @@ def user_permission_for_skill(
         for share in access.group_shares
         if share.group_id in user_group_ids
     }
-    group_share_ids = {share.group_id for share in access.group_shares}
-    # Same rule as within_managed_scope_clause: non-public, in >=1 managed group,
-    # and no group outside the manager's scope.
-    is_manager_managed = (
-        not access.published
-        and bool(group_share_ids)
-        and bool(managed_user_group_ids)
-        and group_share_ids <= (managed_user_group_ids or set())
-    )
-
-    if SkillSharePermission.EDITOR in share_permissions or is_manager_managed:
+    if SkillSharePermission.EDITOR in share_permissions or in_managed_scope:
         return SkillAccessLevel.EDITOR
 
     if access.published or share_permissions:
         return SkillAccessLevel.VIEWER
 
     return None
+
+
+def _managed_scope(
+    user: User, skill_ids: Iterable[UUID], db_session: Session
+) -> set[UUID]:
+    """The skills among ``skill_ids`` in a group manager's managed scope.
+    Empty for other users."""
+    if (
+        has_permission(user, Permission.MANAGE_PLUGINS)
+        is not PermissionAuthority.SCOPED
+    ):
+        return set()
+    return plugin_ids_in_managed_scope(skill_ids, user, db_session)
 
 
 def skill_response_for_user(
@@ -114,7 +122,7 @@ def skill_response_for_user(
     *,
     state: SkillUserState | None = None,
     user_group_ids: set[int] | None = None,
-    managed_user_group_ids: set[int] | None = None,
+    managed_scope_ids: set[UUID] | None = None,
     include_share_details: bool = False,
     plugin_access: dict[UUID, PluginAccess] | None = None,
     shown_version_id: UUID | None = None,
@@ -138,28 +146,28 @@ def skill_response_for_user(
 
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    if (
-        managed_user_group_ids is None
-        and has_permission(user, Permission.MANAGE_PLUGINS)
-        is PermissionAuthority.SCOPED
-    ):
-        managed_user_group_ids = fetch_managed_group_ids(user, db_session)
+    if managed_scope_ids is None:
+        managed_scope_ids = _managed_scope(user, [skill.id], db_session)
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = plugin_access.get(skill.id)
     if shown_version_id is None and access is not None:
         shown_version_id = access.current_version_id
+    user_permission = user_permission_for_skill(
+        skill, access, user, user_group_ids, skill.id in managed_scope_ids
+    )
     return SkillResponse.from_custom(
         skill,
         access,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
-        user_permission=user_permission_for_skill(
-            skill,
-            access,
-            user,
-            user_group_ids,
-            managed_user_group_ids,
+        required_for_user=state.required,
+        user_permission=user_permission,
+        can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
+        and may_delete_skill(
+            published=access is not None and access.published,
+            required_for_anyone=access is not None and access.required_for_anyone,
+            user=user,
         ),
         include_share_details=include_share_details,
         external_app=_dependency_response(state.external_app_dependency),
@@ -175,10 +183,8 @@ def skills_list_response_for_user(
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    managed_user_group_ids = (
-        fetch_managed_group_ids(user, db_session)
-        if has_permission(user, Permission.MANAGE_PLUGINS) is PermissionAuthority.SCOPED
-        else set()
+    managed_scope_ids = _managed_scope(
+        user, (skill.id for skill in rows if skill.is_custom), db_session
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
     plugin_access = load_plugin_access(
@@ -202,7 +208,7 @@ def skills_list_response_for_user(
             db_session,
             state=states[skill.id],
             user_group_ids=user_group_ids,
-            managed_user_group_ids=managed_user_group_ids,
+            managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
         )
         (customs if skill.is_custom else builtins).append(response)

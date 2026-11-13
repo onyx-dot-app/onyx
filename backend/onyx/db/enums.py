@@ -1039,7 +1039,7 @@ class PluginPublishingPolicy(str, PyEnum):
 
 class PluginInstallationPolicy(str, PyEnum):
     """Install setting of a plugin, a group override or a marketplace default.
-    Writes refuse NOT_AVAILABLE until group install settings ship."""
+    A marketplace default cannot be REQUIRED."""
 
     REQUIRED = "REQUIRED"
     DEFAULT = "DEFAULT"

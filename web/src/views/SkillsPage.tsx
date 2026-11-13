@@ -695,20 +695,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                         title: bulkCopy("delete"),
                                         danger: true,
                                         disabled:
-                                          !canManageSelected ||
-                                          (!isAdmin &&
-                                            selectedItems.some(
-                                              (item) =>
-                                                item.skill
-                                                  .installation_policy ===
-                                                "REQUIRED"
-                                            )) ||
-                                          (!canManageOrgSkills &&
-                                            selectedItems.some(
-                                              (item) =>
-                                                item.skill.public_permission !==
-                                                null
-                                            )),
+                                          selectedItems.length === 0 ||
+                                          selectedItems.some(
+                                            (item) => !item.skill.can_delete
+                                          ),
                                         onSelect: () => {
                                           setBulkDeleteTargets(selectedItems);
                                           bulkDeleteModal.toggle(true);
