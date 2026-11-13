@@ -26,7 +26,9 @@ import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
 import {
-  detectSlashTrigger,
+  CRAFT_PICKER_TRIGGER,
+  detectPickerTrigger,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryPromptPrefix,
   toPickerSections,
@@ -105,9 +107,14 @@ export default function ScheduleTaskForm({
     slashIndex: number;
   }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
 
+  const skillPickerSections = useMemo(
+    () => filterPickerSections(pickerSections, skillPicker.query),
+    [pickerSections, skillPicker.query]
+  );
+
   const evaluateSkillPicker = useCallback((value: string, cursor: number) => {
     const textBefore = value.slice(0, cursor);
-    const trigger = detectSlashTrigger(textBefore);
+    const trigger = detectPickerTrigger(textBefore, CRAFT_PICKER_TRIGGER);
     if (!trigger) {
       setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
       return;
@@ -118,7 +125,7 @@ export default function ScheduleTaskForm({
       open: true,
       anchorRect,
       query: trigger.query,
-      slashIndex: trigger.slashIndex,
+      slashIndex: trigger.triggerIndex,
     });
   }, []);
 
@@ -362,9 +369,10 @@ export default function ScheduleTaskForm({
               open={skillPicker.open}
               anchorRect={skillPicker.anchorRect}
               query={skillPicker.query}
-              sections={pickerSections}
+              sections={skillPickerSections}
               onSelect={handleSkillPickerSelect}
               onClose={closeSkillPicker}
+              trigger={CRAFT_PICKER_TRIGGER}
             />
             {shownPromptError && (
               <Text font="secondary-body" color="status-error-05">

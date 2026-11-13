@@ -40,6 +40,7 @@ import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
+import type { ComposedMessage } from "@/lib/chat/types";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -61,12 +62,13 @@ interface UseChatSessionControllerProps {
 
   // Actions
   refreshChatSessions: () => void;
-  onSubmit: (params: {
-    message: string;
-    currentMessageFiles: ProjectFile[];
-    deepResearch: boolean;
-    isSeededChat?: boolean;
-  }) => Promise<void>;
+  onSubmit: (
+    params: ComposedMessage & {
+      currentMessageFiles: ProjectFile[];
+      deepResearch: boolean;
+      isSeededChat?: boolean;
+    }
+  ) => Promise<void>;
 }
 
 export type SessionFetchError = {
@@ -183,6 +185,7 @@ export default function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
+            mentions: [],
             currentMessageFiles: [],
             deepResearch: false,
           });
@@ -387,13 +390,14 @@ export default function useChatSessionController({
       ) {
         submitOnLoadPerformed.current = true;
 
-        const seededMessage = newMessageHistory[0]?.message;
-        if (!seededMessage) {
+        const seeded = newMessageHistory[0];
+        if (!seeded?.message) {
           return;
         }
 
         await onSubmit({
-          message: seededMessage,
+          message: seeded.message,
+          mentions: seeded.mentions ?? [],
           isSeededChat: true,
           currentMessageFiles: [],
           deepResearch: false,

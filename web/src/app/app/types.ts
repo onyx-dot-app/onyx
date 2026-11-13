@@ -6,6 +6,7 @@ import {
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { ChatToolSelection } from "@/lib/tools/types";
+import type { Mention, RecordedMention } from "@/lib/chat/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -169,6 +170,8 @@ export interface Message {
   researchType?: ResearchType;
   query?: string | null;
   files: FileDescriptor[];
+  // What the user tagged in a question; the server's recorded mentions once known.
+  mentions?: Mention[];
   toolCall: ToolCallMetadata | null;
   // for rebuilding the message tree - these now use nodeId
   parentNodeId: number | null;
@@ -265,6 +268,8 @@ export interface BackendMessage {
   chat_session_id: string;
   citations: CitationMap | null;
   files: FileDescriptor[];
+  // Absent from older servers.
+  mentions?: RecordedMention[];
   tool_call: ToolCallFinalResult | null;
   current_feedback: string | null;
   // Duration in seconds for processing this message (agent messages only)
@@ -287,6 +292,8 @@ export interface BackendMessage {
 export interface MessageResponseIDInfo {
   user_message_id: number | null;
   reserved_assistant_message_id: number; // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
+  // Absent from older servers.
+  mentions?: RecordedMention[];
 }
 
 export interface ModelResponseSlot {
@@ -297,6 +304,7 @@ export interface ModelResponseSlot {
 export interface MultiModelMessageResponseIDInfo {
   user_message_id: number | null;
   responses: ModelResponseSlot[];
+  mentions?: RecordedMention[];
 }
 
 export interface UserKnowledgeFilePacket {

@@ -31,6 +31,8 @@ import { refreshChatSession } from "@/lib/chat/settleChatSession";
 import type {
   ChatSessionQueue,
   ChatSessionStatus,
+  ComposedMessage,
+  Mention,
   PendingChatMessage,
 } from "@/lib/chat/types";
 import {
@@ -186,7 +188,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       busy,
       hasActiveSubagents,
       needsResponseSelection,
-      submit: async (message, delivery, turn) =>
+      submit: async ({ message, mentions }, delivery, turn) =>
         (await request(async (key) => {
           const session = sessionId
             ? useChatSessionStore.getState().sessions.get(sessionId)
@@ -206,6 +208,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
                     .targetResponseId,
                   deep_research: turn.deepResearch,
                   llm_override: turn.llmOverride,
+                  mentions,
                 }),
               }
             );
@@ -355,7 +358,9 @@ export function useSendChatMessageFromURL({
       query === null ? null : window.location.pathname;
     setQueuedQueryState(query);
   }, []);
-  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<ComposedMessage | null>(
+    null
+  );
 
   // Arriving with the parameters already on the URL.
   //
@@ -461,7 +466,13 @@ export function useSendChatMessageFromURL({
     params.delete(SEARCH_PARAM_NAMES.SEND_ON_LOAD);
     navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
 
-    if (message) setPendingMessage(message);
+    if (message)
+      setPendingMessage({
+        message,
+        mentions: namesIn(SEARCH_PARAM_NAMES.SKILLS).map(
+          (name): Mention => ({ type: "skill", name })
+        ),
+      });
   }, [
     queuedQuery,
     sourcesLoading,
@@ -481,6 +492,10 @@ export function useSendChatMessageFromURL({
   useEffect(() => {
     if (pendingMessage === null) return;
     setPendingMessage(null);
-    onSubmit({ message: pendingMessage, currentMessageFiles, deepResearch });
+    onSubmit({
+      ...pendingMessage,
+      currentMessageFiles,
+      deepResearch,
+    });
   }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
 }

@@ -198,8 +198,10 @@ Live and saved rendering emit accepted human inputs as `user_message` packets
 before the model step that consumed them. This preserves their display order.
 Human input needs no invoking tool call or source response. Main Chat accepts
 text without attachments or request headers. A queued or interrupting message
-keeps its Deep Research choice (`chat_input.deep_research`) and the model the
-picker showed (`chat_input.llm_override`). The human queue belongs to the
+keeps its Deep Research choice (`chat_input.deep_research`), the model the
+picker showed (`chat_input.llm_override`) and what the user tagged with `@`
+(`chat_input.mentions`); its turn resolves the mentions when it accepts the
+message ([[skills]]). The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
@@ -330,7 +332,10 @@ Tool results there keep their details as the saved type, documents included
 mode store work in later turns.
 The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
-answers before appending its text-file messages and question. A small response
+answers before appending its text-file and mentioned-skill messages and then
+its question. A usage-only question row keeps its mentions, so the branch
+names the SKILL.md messages by id and the temporary list keeps the text that
+the turn first saw. A small response
 index keeps run IDs, output IDs and each response’s checkpoint.
 Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
@@ -421,8 +426,12 @@ Community downgrade clears it ([[billing]]).
    decision.** `db/chat_response.py:save_chat_turn` blanks text and reasoning,
    clears citations and skips sources and tool calls when `persist_content` is
    false, and `save_response_content` keeps only `response_status`. Error text
-   becomes a generic message. Token counts and `request_params` are kept on
-   purpose for usage metering. `db/chat.py:update_chat_session` drops a title
+   becomes a generic message. A question keeps its `mentions` record (for a
+   skill, its name and version id) in a content-free session: a mention
+   identifies a record, not conversation content, and the branch needs them
+   to select the question's SKILL.md messages
+   (`chat/process_message.py:prepare_chat_turn`).
+   Token counts and `request_params` are kept on purpose for usage metering. `db/chat.py:update_chat_session` drops a title
    with no error. Every runtime writer (`_ResponseWriter`, child reservation,
    `db/chat_checkpoint.py:publish_checkpoint__no_commit`) refuses a
    content-free session. A new column stays empty for `USAGE_ONLY` only if you

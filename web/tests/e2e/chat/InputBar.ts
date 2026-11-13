@@ -32,6 +32,7 @@ export class InputBar {
   readonly pendingMessageHint: Locator;
   readonly subagentActivity: Locator;
   readonly stopSubagentsButton: Locator;
+  readonly skillPicker: Locator;
 
   readonly tile: Locator;
   readonly tileRemoveButton: Locator;
@@ -57,6 +58,8 @@ export class InputBar {
     this.pendingMessageHint = this.container.getByTestId(
       "pending-message-hint"
     );
+
+    this.skillPicker = page.getByTestId("skill-picker-popover");
 
     this.tile = page.locator("[data-rich-tile]");
     this.tileRemoveButton = page.locator("[data-rich-tile-remove]");
@@ -232,6 +235,26 @@ export class InputBar {
 
   async clickSend(): Promise<void> {
     await this.sendButton.click();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Skill picker
+  // ---------------------------------------------------------------------------
+
+  skillPickerRow(name: string): Locator {
+    return this.skillPicker.getByTestId(`skill-picker-row-${name}`);
+  }
+
+  /** Picks `name` by clicking its row, or with Enter on the highlighted row,
+   * which must be `name`. */
+  async pickSkill(name: string, via: "click" | "Enter"): Promise<void> {
+    if (via === "click") {
+      await this.skillPickerRow(name).click();
+    } else {
+      await expect(this.skillPickerRow(name)).toBeVisible();
+      await this.page.keyboard.press("Enter");
+    }
+    await expect(this.skillPicker).toBeHidden();
   }
 
   // ---------------------------------------------------------------------------

@@ -227,13 +227,14 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    both first ([[multi-tenancy#threads-copy-context]],
    [[observability#root-trace-required]]).
 5. `run-input-protected` **Pass the whole current input in one `start` call.**
-   The question and its attachment text go in `start(messages=...)`.
+   The question and its attachment and mentioned-skill text go in
+   `start(messages=...)`, with the question last.
    Chat supplies request-only context through prompt assembly, outside compacted history.
    Compaction and truncation keep the input group until the
    model's first step in the run answers it, and input that cannot fit fails the
    run with `agents/compaction.py:ContextLimitError` instead of losing an
-   attachment. Later steps can summarize or cut the attachment text; only the
-   latest user message stays verbatim. Text put in the agent's history can be
+   attachment. Later steps can summarize or cut the attachment and skill text;
+   only the latest user message, the question, stays verbatim. Text put in the agent's history can be
    summarized away at any step. Chat splits the
    two in `chat/process_message.py:prepare_chat_turn` (`input_messages`).
 6. `stable-message-ids` **Message IDs must be stable across reloads.** A

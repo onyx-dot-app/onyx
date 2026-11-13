@@ -19,7 +19,8 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
+import { useProjectsContext } from "@/lib/projects/providers";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -284,12 +285,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
-  const restoreInputBar = useCallback(
-    (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message, files);
-    },
-    []
-  );
+  const restoreInputBar = useCallback((unsent: UnsentMessage) => {
+    chatInputBarRef.current?.restore(unsent);
+  }, []);
 
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
@@ -331,8 +329,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
-    async (submittedMessage: string) => {
-      if (!submittedMessage.trim()) return;
+    async (composed: ComposedMessage) => {
+      if (!composed.message.trim()) return;
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
@@ -345,9 +343,10 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
         ? multiModel.selectedModels
         : undefined;
 
-      if (hasMessages) {
+      // Search cannot use mentions, so a message with mentions routes to chat.
+      if (hasMessages || composed.mentions.length > 0) {
         onSubmit({
-          message: submittedMessage,
+          ...composed,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
@@ -360,6 +359,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       const onChat = (chatMessage: string) => {
         onSubmit({
           message: chatMessage,
+          mentions: [],
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
@@ -370,7 +370,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets phase to "searching"/"search-results" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(submittedMessage, onChat);
+      await submitQuery(composed.message, onChat);
     },
     [
       hasMessages,
@@ -398,6 +398,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
     onSubmit({
       message: lastUserMsg.message,
+      mentions: lastUserMsg.mentions ?? [],
       currentMessageFiles: currentMessageFiles,
       deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,

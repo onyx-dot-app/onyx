@@ -116,28 +116,34 @@ export function toPickerSections(
   return { skills, apps, mcpServers: mcp };
 }
 
-export interface SlashTrigger {
-  slashIndex: number;
+export interface PickerTrigger {
+  triggerIndex: number;
   query: string;
 }
 
-// Trigger rules: "/" must be at start-of-text or after whitespace; the query
-// (chars between "/" and the cursor) must not contain whitespace.
-export function detectSlashTrigger(
-  textBeforeCursor: string
-): SlashTrigger | null {
-  const slashIndex = textBeforeCursor.lastIndexOf("/");
-  if (slashIndex === -1) return null;
+/** Opens Craft's picker; a picked skill becomes a `/slug` prompt prefix. */
+export const CRAFT_PICKER_TRIGGER = "/";
 
-  if (slashIndex > 0) {
-    const prev = textBeforeCursor[slashIndex - 1] ?? "";
-    if (!/\s/.test(prev)) return null;
-  }
+/** Whether a token starts at `index`: at the start of `text` or after
+ * whitespace. Picker triggers and skill mentions both follow this rule. */
+export function startsToken(text: string, index: number): boolean {
+  return index === 0 || /\s/.test(text.charAt(index - 1));
+}
 
-  const query = textBeforeCursor.slice(slashIndex + 1);
+// The trigger must start a token; the query (chars between the trigger and the
+// cursor) must not contain whitespace.
+export function detectPickerTrigger(
+  textBeforeCursor: string,
+  trigger: string
+): PickerTrigger | null {
+  const triggerIndex = textBeforeCursor.lastIndexOf(trigger);
+  if (triggerIndex === -1 || !startsToken(textBeforeCursor, triggerIndex))
+    return null;
+
+  const query = textBeforeCursor.slice(triggerIndex + 1);
   if (/\s/.test(query)) return null;
 
-  return { slashIndex, query };
+  return { triggerIndex, query };
 }
 
 function matchesQuery(entry: PickerEntry, query: string): boolean {
@@ -171,7 +177,7 @@ export function pickerEntryKey(entry: PickerEntry): string {
 export function pickerEntryPromptPrefix(entry: PickerEntry): string {
   switch (entry.kind) {
     case "skill":
-      return `/${entry.slug}`;
+      return `${CRAFT_PICKER_TRIGGER}${entry.slug}`;
     case "app":
       return `[Use external app ${JSON.stringify(entry.name)} (ID: ${entry.externalAppId})]`;
     case "mcp":

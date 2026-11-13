@@ -692,6 +692,39 @@ describe("with a scripted fetch", () => {
     }
   );
 
+  // A queued or interrupting turn starts on the server; this browser loads
+  // its saved question, then follows the running response.
+  test("refresh shows the skills a turn from the queue mentioned", async () => {
+    const raw: BackendMessage[] = [
+      savedMessage(1, "user", "Question"),
+      savedMessage(2, "assistant", "Answer"),
+      {
+        ...savedMessage(3, "user", "@code-review the diff"),
+        mentions: [
+          { type: "skill", name: "code-review", version_id: "v-code-review" },
+        ],
+      },
+      savedMessage(4, "assistant", ""),
+    ];
+    useChatSessionStore.getState().updateSessionData("session", {
+      messageTree: processRawChatHistory(raw.slice(0, 2), [[]]),
+    });
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("get-chat-session"))
+        return Response.json(savedSession(raw, 4));
+      // Leave replay pending; this test covers the tree written before it.
+      return new Promise<Response>(() => {});
+    });
+    await refreshChatSession("session", "Check again");
+    const question = useChatSessionStore
+      .getState()
+      .sessions.get("session")
+      ?.messageTree.get(3);
+    expect(question?.mentions).toEqual([
+      { type: "skill", name: "code-review", version_id: "v-code-review" },
+    ]);
+  });
+
   test("refresh replaces loaded history when the latest page belongs to a disconnected branch", async () => {
     const previous = savedSession(
       [

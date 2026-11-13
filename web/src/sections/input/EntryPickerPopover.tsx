@@ -12,7 +12,6 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { LineItemButton, Popover, Text } from "@opal/components";
 import {
-  filterPickerSections,
   flattenSections,
   pickerEntryKey,
   type PickerEntry,
@@ -24,10 +23,14 @@ import type { IconFunctionComponent } from "@opal/types";
 interface EntryPickerPopoverProps {
   open: boolean;
   anchorRect: DOMRect | null;
+  /** The typed query; a change highlights the first row again. */
   query: string;
+  /** The entries to show, already filtered by the caller. */
   sections: PickerSections;
   onSelect: (entry: PickerEntry) => void;
   onClose: () => void;
+  /** The character that opened the picker; skill rows show it before the name. */
+  trigger: string;
 }
 
 function EntryPickerPopover({
@@ -37,16 +40,13 @@ function EntryPickerPopover({
   sections,
   onSelect,
   onClose,
+  trigger,
 }: EntryPickerPopoverProps) {
   const t = useTranslations("chat.input");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  const filtered = useMemo(
-    () => filterPickerSections(sections, query),
-    [sections, query]
-  );
-  const flatEntries = useMemo(() => flattenSections(filtered), [filtered]);
+  const flatEntries = useMemo(() => flattenSections(sections), [sections]);
 
   useEffect(() => {
     setSelectedIndex(0);
@@ -74,6 +74,8 @@ function EntryPickerPopover({
     if (!open) return;
 
     function handleKeyDown(e: KeyboardEvent) {
+      // An IME uses these keys to compose text.
+      if (e.isComposing) return;
       if (e.key === "ArrowDown") {
         e.preventDefault();
         e.stopPropagation();
@@ -143,11 +145,12 @@ function EntryPickerPopover({
       >
         <Popover.Menu scrollContainerRef={scrollContainerRef}>
           {buildMenuChildren({
-            filtered,
+            sections,
             flatEntries,
             selectedIndex,
             onSelect,
             onHover: setSelectedIndex,
+            trigger,
             emptyMessage: t("entryPickerPopover.empty.text"),
             groupLabels: {
               skills: t("entryPickerPopover.skillsGroup.label"),
@@ -163,11 +166,12 @@ function EntryPickerPopover({
 }
 
 interface BuildMenuChildrenArgs {
-  filtered: PickerSections;
+  sections: PickerSections;
   flatEntries: PickerEntry[];
   selectedIndex: number;
   onSelect: (entry: PickerEntry) => void;
   onHover: (idx: number) => void;
+  trigger: string;
   /** Translated copy: this helper is not a component, so it cannot call `t`. */
   emptyMessage: string;
   groupLabels: { skills: string; apps: string; mcpServers: string };
@@ -175,11 +179,12 @@ interface BuildMenuChildrenArgs {
 
 // `Popover.Menu` renders a literal `null` between children as a divider.
 function buildMenuChildren({
-  filtered,
+  sections,
   flatEntries,
   selectedIndex,
   onSelect,
   onHover,
+  trigger,
   emptyMessage,
   groupLabels,
 }: BuildMenuChildrenArgs): ReactNode[] {
@@ -196,12 +201,12 @@ function buildMenuChildren({
   // Groups must stay in `flattenSections` order — keyboard nav indexes into that
   // flat list, so a running index is what keeps the two aligned.
   const groups: { key: string; label: string; entries: PickerEntry[] }[] = [
-    { key: "skills", label: groupLabels.skills, entries: filtered.skills },
-    { key: "apps", label: groupLabels.apps, entries: filtered.apps },
+    { key: "skills", label: groupLabels.skills, entries: sections.skills },
+    { key: "apps", label: groupLabels.apps, entries: sections.apps },
     {
       key: "mcpServers",
       label: groupLabels.mcpServers,
-      entries: filtered.mcpServers,
+      entries: sections.mcpServers,
     },
   ];
 
@@ -216,7 +221,6 @@ function buildMenuChildren({
     );
     for (const entry of group.entries) {
       const rowProps = {
-        key: pickerEntryKey(entry),
         selected: idx === selectedIndex,
         onHover: () => onHover(idx),
         onPick: () => onSelect(entry),
@@ -225,12 +229,15 @@ function buildMenuChildren({
       children.push(
         entry.kind === "skill" ? (
           <SkillRow
+            key={pickerEntryKey(entry)}
             {...rowProps}
+            title={`${trigger}${entry.slug}`}
             slug={entry.slug}
             description={entry.description}
           />
         ) : (
           <ConnectableRow
+            key={pickerEntryKey(entry)}
             {...rowProps}
             logo={pickerEntryIcon(entry)}
             name={entry.name}
@@ -261,6 +268,7 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 interface SkillRowProps {
+  title: string;
   slug: string;
   description: string;
   selected: boolean;
@@ -270,6 +278,7 @@ interface SkillRowProps {
 }
 
 function SkillRow({
+  title,
   slug,
   description,
   selected,
@@ -282,7 +291,7 @@ function SkillRow({
       <LineItemButton
         font="main-ui-action"
         presentational
-        title={`/${slug}`}
+        title={title}
         titleMaxLines={1}
         state={selected ? "selected" : "empty"}
         selectVariant="select-heavy"
