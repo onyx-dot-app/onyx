@@ -98,19 +98,26 @@ def test_delete_user_purges_the_harness_sandbox(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    purged: list[list[UUID]] = []
+    purged: list[dict[UUID, list[UUID]]] = []
     monkeypatch.setattr(
         users_module, "purge_harness_sandboxes_in_background", purged.append
     )
     user = make_user(db_session, standard_account=True)
     try:
         sandbox = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING)
+        session_row = BuildSession(
+            id=uuid4(),
+            user_id=user.id,
+            name="harness-purge",
+            status=BuildSessionStatus.ACTIVE,
+        )
+        db_session.add(session_row)
         db_session.commit()
-        sandbox_id = sandbox.id
+        sandbox_id, session_id = sandbox.id, session_row.id
 
         delete_user_from_db(user, db_session)
 
-        assert purged == [[sandbox_id]]
+        assert purged == [{sandbox_id: [session_id]}]
     finally:
         db_session.rollback()
         if db_session.get(User, user.id) is not None:

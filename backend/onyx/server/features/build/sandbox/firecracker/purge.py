@@ -45,8 +45,10 @@ def purge_harness_session(sandbox_id: UUID, session_id: UUID) -> None:
         )
 
 
-def purge_harness_sandboxes(sandbox_ids: list[UUID]) -> None:
-    if not HARNESS_PURGE_ENABLED or not sandbox_ids:
+def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
+    """`targets`: sandbox ID -> session IDs to purge with it (older saves
+    that the saved-session index may not name)."""
+    if not HARNESS_PURGE_ENABLED or not targets:
         return
     tenant_id = get_current_tenant_id()
     try:
@@ -58,21 +60,23 @@ def purge_harness_sandboxes(sandbox_ids: list[UUID]) -> None:
     except Exception:
         logger.exception("sandbox_fc_sandbox_purge_failed: no harness sandbox")
         return
-    for sandbox_id in sandbox_ids:
+    for sandbox_id, session_ids in targets.items():
         try:
-            sandbox.purge_sandbox(tenant_id=tenant_id, sandbox_id=sandbox_id)
+            sandbox.purge_sandbox(
+                tenant_id=tenant_id, sandbox_id=sandbox_id, session_ids=session_ids
+            )
         except Exception:
             logger.exception("sandbox_fc_sandbox_purge_failed sandbox=%s", sandbox_id)
 
 
-def purge_harness_sandboxes_in_background(sandbox_ids: list[UUID]) -> None:
+def purge_harness_sandboxes_in_background(targets: dict[UUID, list[UUID]]) -> None:
     """For sync callers that may run on an event loop: a purge can wait a
     minute for the sandbox lock and the VM stop."""
-    if not HARNESS_PURGE_ENABLED or not sandbox_ids:
+    if not HARNESS_PURGE_ENABLED or not targets:
         return
     start_thread_with_context(
         target=purge_harness_sandboxes,
         name="fc-sandbox-purge",
         daemon=True,
-        args=(sandbox_ids,),
+        args=(targets,),
     )

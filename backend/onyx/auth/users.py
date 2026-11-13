@@ -169,8 +169,8 @@ from onyx.redis.redis_pool import (
     retrieve_ws_token_data,
 )
 from onyx.server.features.build.db.sandbox import (
+    get_sandbox_purge_targets,
     get_user_sandbox_blob_paths,
-    get_user_sandbox_ids,
 )
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,
@@ -626,15 +626,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         sandbox_blob_paths = await self.user_db.session.run_sync(
             partial(get_user_sandbox_blob_paths, user_id=user.id)
         )
-        sandbox_ids = await self.user_db.session.run_sync(
-            partial(get_user_sandbox_ids, user_id=user.id)
+        purge_targets = await self.user_db.session.run_sync(
+            partial(get_sandbox_purge_targets, user_id=user.id)
         )
         await self.user_db.session.run_sync(
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
         await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
-        await asyncio.to_thread(purge_harness_sandboxes, sandbox_ids)
+        await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)
 
     @asynccontextmanager

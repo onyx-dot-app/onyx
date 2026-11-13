@@ -315,13 +315,7 @@ def save_session(
     # A purge marks first and then reads the records, so either it finds
     # this commit or this check finds its mark.
     if is_purged(cache, sandbox_id, session_id):
-        # The purge may have read this commit and dropped the previous save's
-        # record already: delete both archives.
-        delete_session_save_if(cache, session_id, save)
-        remove_id(cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
-        for file_id in {save.file_id, previous.file_id if previous else None}:
-            if file_id is not None:
-                _delete_archive(store, file_id, session_id)
+        _drop_purged_save(cache, store, sandbox_id, session_id, save, previous)
         raise SessionPurgedError(f"session {session_id} was deleted during a save")
     if previous is not None and previous.file_id not in (None, save.file_id):
         _delete_archive(store, previous.file_id, session_id)
@@ -329,6 +323,38 @@ def save_session(
         "sandbox_fc_session_saved session=%s bytes=%d", session_id, save.size_bytes
     )
     return save
+
+
+def _drop_purged_save(
+    cache: CacheBackend,
+    store: SessionArchiveStore,
+    sandbox_id: UUID,
+    session_id: UUID,
+    save: SessionSave,
+    previous: SessionSave | None,
+) -> None:
+    """Delete the archives of a save that committed after a purge began.
+    The purge may have read this commit and dropped the previous save's
+    record already, so both archives go. A failed delete keeps a record and
+    the index entry of that archive, so a later purge can try again."""
+    kept: SessionSave | None = None
+    for candidate in (previous, save):
+        if candidate is None or candidate.file_id is None:
+            continue
+        try:
+            store.delete(candidate.file_id)
+        except Exception:
+            logger.warning(
+                "sandbox_fc_archive_delete_failed session=%s",
+                session_id,
+                exc_info=True,
+            )
+            kept = candidate
+    if kept is None:
+        delete_session_save_if(cache, session_id, save)
+        remove_id(cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
+    elif kept is not save:
+        set_session_save(cache, session_id, kept)
 
 
 def _discard_capture(agent: HostAgentClient, capture_id: str) -> None:

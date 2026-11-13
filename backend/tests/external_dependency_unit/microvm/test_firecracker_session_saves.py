@@ -48,6 +48,7 @@ from onyx.server.features.build.sandbox.firecracker import (
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
     FirecrackerHarnessSandbox,
 )
+from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
 from onyx.server.features.build.sandbox.firecracker.session_saves import (
     BackgroundIdleStop,
     SessionArchiveStore,
@@ -1017,3 +1018,51 @@ def test_a_draining_node_saves_and_stops_a_vm_that_is_not_idle(
         set_node_draining(shared_cache, placed.node_id, False)
     # The next use restores the session (on any node that is not draining).
     assert sandbox.read_file(ref, "src/a.py", max_bytes=10) == b"a"
+
+
+@pytest.mark.usefixtures("node")
+def test_purges_reach_records_and_saves_that_the_indexes_miss(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    store: FakeArchiveStore,
+    ref: HarnessSandboxRef,
+    other_ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    sandbox.write_file(other_ref, "src/b.py", b"b")
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    # An exec record of a stopped VM instance.
+    harness_state.put_exec_session(
+        tenant_cache,
+        ref.sandbox_id,
+        ExecSessionRecord(
+            exec_session_id="e1",
+            chat_session_id=str(ref.session_id),
+            execution_id="x1",
+            attempt=1,
+            generation=1,
+            last_used=time.time(),
+        ),
+    )
+    sandbox.purge_session(
+        tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, "e1") is None
+
+    # A save from before the saved-session index.
+    other = harness_state.get_session_save(tenant_cache, other_ref.session_id)
+    assert other is not None and other.file_id is not None
+    harness_state.remove_id(
+        tenant_cache,
+        harness_state.SAVED_SESSIONS_PREFIX,
+        ref.sandbox_id,
+        str(other_ref.session_id),
+    )
+    sandbox.purge_sandbox(
+        tenant_id=TENANT_ID,
+        sandbox_id=ref.sandbox_id,
+        session_ids=[other_ref.session_id],
+    )
+    assert other.file_id in store.deleted
+    assert harness_state.get_session_save(tenant_cache, other_ref.session_id) is None

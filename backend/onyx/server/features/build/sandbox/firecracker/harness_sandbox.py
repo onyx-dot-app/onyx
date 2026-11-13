@@ -823,12 +823,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, session_id=session_id)
         errors: list[Exception] = []
+        placed: PlacedVm | None = None
         try:
             placed = self._placed_if_running(tenant_cache, sandbox_id)
             if placed is not None:
-                self._cancel_session_commands(
-                    tenant_cache, placed, sandbox_id, session_id
-                )
                 # The VM-wide path: a session-relative call cannot delete
                 # the session directory itself.
                 sandbox_daemon(self._client_factory, placed).delete_file(
@@ -836,6 +834,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 )
         except Exception as e:
             # The directory goes with the VM at its next stop.
+            errors.append(e)
+        try:
+            self._drop_session_commands(tenant_cache, placed, sandbox_id, session_id)
+        except Exception as e:
             errors.append(e)
         try:
             forget_session_on_instances(tenant_cache, sandbox_id, session_id)
@@ -853,34 +855,44 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             "sandbox_fc_session_purged sandbox=%s session=%s", sandbox_id, session_id
         )
 
-    def _cancel_session_commands(
+    def _drop_session_commands(
         self,
         tenant_cache: CacheBackend,
-        placed: PlacedVm,
+        placed: PlacedVm | None,
         sandbox_id: UUID,
         session_id: UUID,
     ) -> None:
-        daemon = sandbox_daemon(self._client_factory, placed)
+        """Remove the session's exec records; cancel its commands on the
+        running VM, if any."""
         table = ExecSessionTable.model_validate_json(
             tenant_cache.get(EXEC_SESSIONS_PREFIX + str(sandbox_id)) or b"{}"
         )
         for record in table.sessions.values():
             if record.chat_session_id != str(session_id):
                 continue
-            if (record.attempt, record.generation) == (
+            if placed is not None and (record.attempt, record.generation) == (
                 placed.vm.attempt,
                 placed.vm.generation,
             ):
                 try:
-                    daemon.cancel(record.execution_id)
+                    sandbox_daemon(self._client_factory, placed).cancel(
+                        record.execution_id
+                    )
                 except (HostAgentError, SandboxDaemonError):
                     # The command stops with the VM at the latest.
                     pass
             remove_exec_session(tenant_cache, sandbox_id, record.exec_session_id)
 
-    def purge_sandbox(self, *, tenant_id: str, sandbox_id: UUID) -> None:
+    def purge_sandbox(
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        session_ids: list[UUID] | None = None,
+    ) -> None:
         """Stop the sandbox's VM (the agent deletes its disk) and delete
-        every save, artifact and record of the sandbox."""
+        every save, artifact and record of the sandbox. `session_ids` adds
+        sessions that the saved-session index may not name."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, sandbox_id=sandbox_id)
         # A stop that saves the sandbox now gives way to the purge.
@@ -895,6 +907,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             tenant_cache.get(SESSION_INSTANCES_PREFIX + str(sandbox_id)) or b"{}"
         )
         sessions = set(get_ids(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id))
+        sessions |= {str(s) for s in session_ids or []}
         with tenant_scope(tenant_id):
             for session_id in sorted(sessions | set(instances.sessions)):
                 try:
