@@ -314,25 +314,6 @@ def _stored_policies(
     return dict(rows.tuples().all())
 
 
-def _policy_mcp_servers(
-    db_session: Session,
-    user: User,
-    server_ids: set[int],
-    *,
-    admin: bool,
-    craft_only: bool,
-) -> list[MCPServer]:
-    if admin:
-        return list(
-            db_session.scalars(select(MCPServer).where(MCPServer.id.in_(server_ids)))
-        )
-    if craft_only:
-        return get_craft_enabled_mcp_servers(
-            db_session, user, server_ids=server_ids, include_personal_disabled=True
-        )
-    return get_mcp_servers_accessible_to_user(user, db_session, server_ids=server_ids)
-
-
 def list_action_policies(
     db_session: Session,
     user: User,
@@ -368,12 +349,14 @@ def list_action_policies(
         external_query = external_query.where(ExternalApp.enabled.is_(True))
     external_apps = {app.id: app for app in db_session.scalars(external_query)}
     server_ids = {app.mcp_server_id for app in apps if app.mcp_server_id is not None}
-    servers = _policy_mcp_servers(
-        db_session,
-        user,
-        server_ids,
-        admin=admin,
-        craft_only=task_id is not None or not single_app,
+    servers = (
+        list(db_session.scalars(select(MCPServer).where(MCPServer.id.in_(server_ids))))
+        if admin
+        else get_craft_enabled_mcp_servers(
+            db_session, user, server_ids=server_ids, include_personal_disabled=True
+        )
+        if task_id is not None or not single_app
+        else get_mcp_servers_accessible_to_user(user, db_session, server_ids=server_ids)
     )
     mcp_servers = {server.id: server for server in servers if server.id in server_ids}
     tools_by_server: dict[int, dict[str, Tool]] = {}
