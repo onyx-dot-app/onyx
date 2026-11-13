@@ -4,12 +4,13 @@ Every partition (a shared drive, a user's My Drive, the files shared with a
 user) lists in one adaptive pool. One task lists one page. A partition with
 many pages splits into shards by ``modifiedTime`` range.
 
-**Probe and split.** A shard lists its first page. If there is a next page,
-the page shows how dense the range is. When the range holds many pages, the
-shard drops that page and splits its range into sub-ranges by query. A shard
-that keeps its first page lists to its end. No step depends on the order of
-the pages: the ranges are query filters, so shards do not overlap and do not
-miss a file. The order only makes the density estimate good.
+**Probe and split.** A shard lists a page. If there is a next page, the page
+and the pages the shard kept before show how dense the range is. When the
+range holds many files, the shard drops that page and splits the rest of its
+range into sub-ranges by query. Each page checks again, so a page that makes
+the range look sparse does not stop a later split. No step depends on the
+order of the pages: the ranges are query filters, so shards do not overlap and
+do not miss a file. The order only makes the density estimate good.
 
 **Checkpoint.** ``DriveListingState`` holds the open shards. One lock guards
 each page step: it emits the page's files, adds the dedup claims, and moves,
@@ -186,6 +187,15 @@ def page_density(times: list[int]) -> float:
     return len(times) / max(max(times) - min(times), 1)
 
 
+def history_density(shard: ListingShard) -> float | None:
+    """Files per millisecond over the pages the shard kept, or None before
+    it kept a page. One page can fall between two bulk uploads and look
+    sparse. The pages kept so far cover many uploads."""
+    if shard.kept_since_ms is None or shard.frontier_ms is None:
+        return None
+    return shard.kept_files / max(shard.frontier_ms - shard.kept_since_ms, 1)
+
+
 def _expected_files(
     shard: ListingShard,
     page_times: list[int],
@@ -198,13 +208,17 @@ def _expected_files(
     ``page_times`` are the modified times on the page the shard just read.
     With ordered pages they are the oldest files of the range, so they give
     the density at the old end. ``newest_density`` is the density of the
-    page of newest files, when it was read."""
+    page of newest files, when it was read. The estimate takes the larger of
+    that and the density of the pages the shard kept."""
     page_min = max(min(page_times), shard.t0)
     page_max = min(max(page_times), shard.t1 - 1)
     data_end = min(max(newest_ms, page_max) + 1, shard.t1)
     files_per_ms = page_density(page_times)
     if newest_density is not None:
         files_per_ms = (files_per_ms + newest_density) / 2
+    kept = history_density(shard)
+    if kept is not None:
+        files_per_ms = max(files_per_ms, kept)
     return (data_end - page_min) * files_per_ms, page_min, data_end
 
 
@@ -262,6 +276,9 @@ def _move_frontier(shard: ListingShard, files: list[GoogleDriveFileType]) -> Non
         shard.in_order = False
         shard.frontier_ids = []
         return
+    if shard.kept_since_ms is None:
+        shard.kept_since_ms = page_min
+    shard.kept_files += len(listed)
     if shard.frontier_ms is None or page_max > shard.frontier_ms:
         shard.frontier_ms = page_max
         shard.frontier_ids = []
@@ -280,8 +297,10 @@ def _move_frontier(shard: ListingShard, files: list[GoogleDriveFileType]) -> Non
 class _SplitRefusal(Enum):
     """Why a shard keeps its page instead of splitting."""
 
-    # The range holds too few pages to split.
+    # The range holds too few files to split. A later page checks again.
     DENSITY = "density"
+    # The pages came out of modifiedTime order. The shard lists to its end.
+    OUT_OF_ORDER = "out_of_order"
     # The open shard cap leaves no room. A later page can try again.
     SHARD_CAP = "shard_cap"
     # The page starts at a time that more files share than the shard keeps
@@ -536,17 +555,10 @@ class ParallelDriveLister:
     def _list_one_page(self, shard: ListingShard) -> list[AdaptiveTask]:
         files, next_token = self._fetch_page(shard)
 
-        keep_can_split = False
-        if next_token is not None and shard.can_split:
+        if next_token is not None:
             children = self._try_split(shard, files)
             if isinstance(children, list):
                 return [self._page_task(child_id) for child_id in children]
-            # A shard refused for lack of room, or at a crowded time, tries
-            # again next page.
-            keep_can_split = children in (
-                _SplitRefusal.SHARD_CAP,
-                _SplitRefusal.FRONTIER_OVERFLOW,
-            )
 
         if shard.skip_ids:
             # The shard this range came from already listed these files.
@@ -576,7 +588,6 @@ class ParallelDriveLister:
                 del self._state.shards[shard.id]
                 return []
             live.page_token = next_token
-            live.can_split = keep_can_split
             _move_frontier(live, files)
         return [self._page_task(shard.id)]
 
@@ -721,7 +732,7 @@ class ParallelDriveLister:
                 or shard.frontier_ms is None
                 or boundary < shard.frontier_ms
             ):
-                return _SplitRefusal.DENSITY
+                return _SplitRefusal.OUT_OF_ORDER
             if boundary == shard.frontier_ms and shard.frontier_overflow:
                 return _SplitRefusal.FRONTIER_OVERFLOW
             skip_ids = shard.frontier_ids if boundary == shard.frontier_ms else []
@@ -740,6 +751,11 @@ class ParallelDriveLister:
             if could_hold < MIN_FILES_TO_PROBE:
                 return _SplitRefusal.DENSITY
             newest_ms, newest_density = self._read_newest_page(shard)
+            with self._lock:
+                live = self._state.shards.get(shard.id)
+                if live is not None:
+                    # A later page of this shard needs no second probe.
+                    live.newest_ms = newest_ms
         ranges = plan_split(shard, page_times, newest_ms, newest_density)
         if not ranges:
             return _SplitRefusal.DENSITY
