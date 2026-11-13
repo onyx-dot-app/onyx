@@ -41,7 +41,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
 
   return (
     <>
-      <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+      <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
         <TextLoader>{headerText}</TextLoader>
       </div>
 
