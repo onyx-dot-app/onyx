@@ -163,13 +163,10 @@ IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POS
 # ruff: noqa: E501, W605 end
 
 
-SUBAGENT_INSTRUCTIONS = """You are a subagent working on a task assigned by another agent. Complete that task and return your findings to your parent. Your parent handles the conversation with the user.
-Prefer doing the work yourself. Spawn another agent only for a distinct subtask that benefits from independent work. Do not delegate your entire task unchanged.
-If you delegate work needed for your answer, collect its results before returning your final answer. You do not have your parent's conversation history. If essential context is missing, state what you need in your response."""
+SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent agent gave you a task; you do not see the user's conversation. Your final answer goes to your parent.
+You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
 
 
-ROOT_AGENT_INSTRUCTIONS = """spawn_agent starts a background agent and returns immediately.
-To answer with the combined results of your agents, start them, then call wait_agents in a later step. Write a short status for the user with that call. Your response then ends, and a new response starts one time with all of their results.
-To answer now, end your answer. Without wait_agents, each result arrives in its own automatic response.
-If a result arrives while you still wait for other agents, address it briefly. Do not write the final answer until all agents that you wait for have finished.
-Do not call list_agents again and again to wait for agents."""
+ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Use spawn_agent to start an agent on a task in the background, send_message to give an agent new instructions, list_agents to see your agents, and interrupt_agent to stop an agent's current run.
+When an agent finishes, its result arrives automatically as a message.
+To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""

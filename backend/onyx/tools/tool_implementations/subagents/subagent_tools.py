@@ -56,9 +56,8 @@ class SpawnAgentTool(_SubagentTool):
     name = SPAWN_AGENT_TOOL_NAME
     display_name = "Start agent"
     description = (
-        "Start a background agent with this chat's tools. Returns immediately. Its "
-        "result arrives at your next step, or starts a new response if you have "
-        "finished. It cannot see this conversation, so give complete instructions."
+        "Start an agent on a task in the background. It does not see this "
+        "conversation, so give complete instructions. Its result arrives as a message."
     )
     input_model = SpawnAgentInput
 
@@ -98,10 +97,7 @@ class SpawnAgentTool(_SubagentTool):
 class ListAgentsTool(_SubagentTool):
     name = "list_agents"
     display_name = "List agents"
-    description = (
-        "List agents: path, agent_id, parent, status. [you] marks you. By default, "
-        "lists running agents and agents started since the user's last message."
-    )
+    description = "List agents with their path, agent_id, parent and status."
     input_model = ListAgentsInput
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -152,9 +148,8 @@ class SendMessageTool(_SubagentTool):
     name = SEND_MESSAGE_TOOL_NAME
     display_name = "Send agent message"
     description = (
-        "Message another agent. A running agent reads it at its next step; an idle "
-        "agent starts a new run. queue: run after normal completion. Results go to the "
-        "recipient's spawner, as for spawn_agent. A message never starts a root run."
+        "Send a message to an agent. A running agent reads it at its next step; an "
+        "idle agent starts a new run with it."
     )
     input_model = AgentMessageInput
 
@@ -180,11 +175,7 @@ class SendMessageTool(_SubagentTool):
 class InterruptAgentTool(_SubagentTool):
     name = "interrupt_agent"
     display_name = "Interrupt agent"
-    description = (
-        "Cancel an agent's current run, including its tool calls and foreground work. "
-        "Agents it started in the background keep running. No result is reported. "
-        "Not yourself or the root."
-    )
+    description = "Stop an agent's current run. No result is reported."
     input_model = SubagentSelection
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
@@ -203,10 +194,8 @@ class WaitAgentsTool(_SubagentTool):
     name = WAIT_AGENTS_TOOL_NAME
     display_name = "Wait for agents"
     description = (
-        "End your response and wait for agents that you started; call it alone, "
-        "after spawn_agent returns. Without agent_ids, waits for all of them. When "
-        "all of them finish, a new response starts once with their results. Do not "
-        "call list_agents to wait."
+        "Wait for agents that you started and end your response. When they finish, a "
+        "new response starts with all of their results."
     )
     input_model = WaitAgentsInput
 
