@@ -3345,9 +3345,9 @@ urllib3==2.8.0 \
     #   sentry-sdk
     #   trafilatura
     #   types-requests
-urwid==2.6.16 \
-    --hash=sha256:93ad239939e44c385e64aa00027878b9e5c486d59e855ec8ab5b1e1adcdb32a2 \
-    --hash=sha256:de14896c6df9eb759ed1fd93e0384a5279e51e0dde8f621e4083f7a8368c0797
+urwid==4.0.7 \
+    --hash=sha256:b85618b42f48ce3028405002743238c511185439cb356c3c68190c44cde4778a \
+    --hash=sha256:c31aff787741428028b20bac3b0774fbe4f10de00ae00fe07722244d09462248
     # via mitmproxy
 uuid-utils==0.14.0 \
     --hash=sha256:00ac3c6edfdaff7e1eed041f4800ae09a3361287be780d7610a90fdcde9befdc \
