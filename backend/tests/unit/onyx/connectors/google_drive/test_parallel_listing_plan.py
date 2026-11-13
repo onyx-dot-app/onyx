@@ -78,6 +78,23 @@ def test_a_dense_new_end_raises_the_estimate() -> None:
     _assert_covers(ranges, shard.t0, shard.t1)
 
 
+def test_the_pages_a_shard_kept_raise_a_sparse_page_estimate() -> None:
+    """Bulk uploads 2 s apart: a page between two uploads looks sparse. The
+    pages the shard kept show the true density."""
+    shard = _shard(0, 1000 * _DAY)
+    # 10 files over 2 s, and 60 s of range left: 300 files.
+    page = [10_000 + i * 200 for i in range(10)]
+    assert plan_split(shard, page, 70_000) == []
+
+    # The shard kept 30,000 files over the 10 s before the page.
+    shard.kept_since_ms = 0
+    shard.frontier_ms = 10_000
+    shard.kept_files = 30_000
+    ranges = plan_split(shard, page, 70_000)
+    assert len(ranges) > 1
+    _assert_covers(ranges, shard.t0, shard.t1)
+
+
 def test_a_wrong_newest_time_still_covers_the_shard() -> None:
     shard = _shard(10 * _DAY, 1000 * _DAY)
     page = [500 * _DAY + i for i in range(1000)]

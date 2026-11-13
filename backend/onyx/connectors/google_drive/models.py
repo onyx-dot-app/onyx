@@ -299,8 +299,6 @@ class ListingShard(BaseModel):
     t1: int
     # The page to list next. None for the first page.
     page_token: str | None = None
-    # True until the shard keeps a page. Only then can it split.
-    can_split: bool = True
     # The newest modifiedTime in the partition, when it was read. It only
     # steers where a split puts its cuts. A wrong value loses no file.
     newest_ms: int | None = None
@@ -317,6 +315,10 @@ class ListingShard(BaseModel):
     # False when a page had a file older than the frontier. A later page
     # then cannot split.
     in_order: bool = True
+    # Files on the pages this shard kept, and the oldest modifiedTime among
+    # them. With the frontier they give the density of the range so far.
+    kept_files: int = 0
+    kept_since_ms: int | None = None
     # Ids at the start of the range that an earlier shard already listed.
     skip_ids: list[str] = []
     # Lists only the files of this owner. Set on a shared-with-user shard
