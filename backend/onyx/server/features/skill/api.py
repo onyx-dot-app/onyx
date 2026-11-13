@@ -23,7 +23,9 @@ from onyx.db.external_app import (
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
     get_plugin_current_version_id,
+    get_plugin_version,
     get_stored_version_content,
+    list_plugin_versions,
     lock_skill_plugin__no_commit,
 )
 from onyx.db.skill import (
@@ -72,6 +74,9 @@ from onyx.server.features.skill.models import (
     SkillResponse,
     SkillShareRequest,
     SkillsList,
+    SkillVersionPreviewResponse,
+    SkillVersionResponse,
+    SkillVersionRestoreRequest,
     TransferSkillOwnershipRequest,
 )
 from onyx.server.features.skill.response_helpers import (
@@ -698,6 +703,97 @@ def inspect_custom_skill_bundle_upload(
         description=document.metadata.description,
         instructions_markdown=contents.instructions_markdown,
         files=contents.files,
+    )
+
+
+def _lock_editable_skill(skill_id: UUID, user: User, db_session: Session) -> Skill:
+    """The skill row, locked, when the user may edit it. 404 otherwise."""
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return skill
+
+
+@user_router.get("/custom/{skill_id}/versions")
+def list_custom_skill_versions(
+    skill_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[SkillVersionResponse]:
+    """Every version, newest first."""
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    return [
+        SkillVersionResponse(
+            id=version.id,
+            version_number=version.version_number,
+            created_at=version.created_at,
+            created_by_email=version.created_by_email,
+            is_current=is_current,
+            review_status="published" if is_published else "draft",
+        )
+        for version, is_current, is_published in list_plugin_versions(
+            skill.id, db_session
+        )
+    ]
+
+
+@user_router.get("/custom/{skill_id}/versions/{version_id}")
+def preview_custom_skill_version(
+    skill_id: UUID,
+    version_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillVersionPreviewResponse:
+    skill = fetch_skill(
+        skill_id,
+        policy=SkillManagementPolicy.EDIT,
+        user=user,
+        db_session=db_session,
+    )
+    if skill is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    get_plugin_version(skill.id, version_id, db_session)
+    stored = get_stored_version_content(version_id, db_session)
+    return SkillVersionPreviewResponse(
+        description=stored.description or "",
+        instructions_markdown=read_version_contents(
+            version_id, db_session
+        ).instructions_markdown,
+    )
+
+
+@user_router.post("/custom/{skill_id}/versions/{version_id}/restore")
+def restore_custom_skill_version(
+    skill_id: UUID,
+    version_id: UUID,
+    request: SkillVersionRestoreRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SkillEditableDetailResponse:
+    """Copy an old version's files into a new version. Content equal to the
+    current version adds no version."""
+    skill = _lock_editable_skill(skill_id, user, db_session)
+    get_plugin_version(skill.id, version_id, db_session)
+    stored = get_stored_version_content(version_id, db_session)
+    return _replace_skill_bundle_from_editor(
+        skill,
+        read_skill_bundle_blob(stored.bundle_file_id, stored.name or str(version_id)),
+        request.base_version_id,
+        user,
+        db_session,
     )
 
 
