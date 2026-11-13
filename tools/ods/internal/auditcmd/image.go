@@ -14,6 +14,7 @@ type AuditImageOptions struct {
 	FailOn    string
 	IgnoreURL string
 	Strict    bool
+	SBOMs     []string
 }
 
 // newAuditImageCommand creates the `ods audit image` subcommand.
@@ -52,6 +53,8 @@ how it gates deploys.`,
 	cmd.Flags().StringVar(&opts.IgnoreURL, "ignore-url", audit.DefaultIgnoreURL, "S3 URL of the advisory allowlist")
 	cmd.Flags().BoolVar(&opts.Strict, "strict", false, "Fail when the scan extracts no packages from the image")
 
+	cmd.Flags().StringSliceVar(&opts.SBOMs, "sbom", nil, "Required supplemental SBOM paths inside the image (scanned with Grype)")
+
 	return cmd
 }
 
@@ -63,6 +66,7 @@ func runAuditImage(ref string, opts *AuditImageOptions, stdout, stderr io.Writer
 
 	result, err := audit.RunImage(audit.ImageOptions{
 		Image:     ref,
+		SBOMs:     opts.SBOMs,
 		Format:    opts.Format,
 		FailOn:    failOn,
 		IgnoreURL: opts.IgnoreURL,
