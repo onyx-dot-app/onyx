@@ -87,6 +87,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_ids,
     get_session_save,
     has_marks,
+    is_sandbox_purged,
     last_attempt,
     mark_purged,
     mark_session_on_instance,
@@ -795,13 +796,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 },
             )
         # A session delete keeps artifacts; a sandbox purge deletes them.
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         try:
-            add_id(
-                get_cache_backend(tenant_id=ref.tenant_id),
-                ARTIFACTS_PREFIX,
-                ref.sandbox_id,
-                file_id,
-            )
+            add_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
         except Exception:
             # The file is saved; only a later sandbox purge misses it.
             logger.warning(
@@ -810,6 +807,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 file_id,
                 exc_info=True,
             )
+        # A sandbox purge that read the index before this publish ended.
+        if is_sandbox_purged(tenant_cache, ref.sandbox_id):
+            with tenant_scope(ref.tenant_id):
+                get_default_file_store().delete_file(file_id, error_on_missing=False)
+            remove_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
+            raise HarnessSandboxError("The sandbox was deleted.")
         return file_id
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
@@ -826,6 +829,14 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         placed: PlacedVm | None = None
         try:
             placed = self._placed_if_running(tenant_cache, sandbox_id)
+        except Exception as e:
+            errors.append(e)
+        try:
+            # Before the directory delete: a command can write it again.
+            self._drop_session_commands(tenant_cache, placed, sandbox_id, session_id)
+        except Exception as e:
+            errors.append(e)
+        try:
             if placed is not None:
                 # The VM-wide path: a session-relative call cannot delete
                 # the session directory itself.
@@ -834,10 +845,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 )
         except Exception as e:
             # The directory goes with the VM at its next stop.
-            errors.append(e)
-        try:
-            self._drop_session_commands(tenant_cache, placed, sandbox_id, session_id)
-        except Exception as e:
             errors.append(e)
         try:
             forget_session_on_instances(tenant_cache, sandbox_id, session_id)

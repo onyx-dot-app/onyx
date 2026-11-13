@@ -84,9 +84,11 @@ async def leave_organization(
             )
 
         db_session.commit()
-        remove_user_from_invited_users(user_email.user_email)
-        remove_all_users_from_tenant(tenant_id)
-        await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+        try:
+            remove_user_from_invited_users(user_email.user_email)
+            remove_all_users_from_tenant(tenant_id)
+        finally:
+            await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         return
 
     db_session.expunge(user_to_delete)

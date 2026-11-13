@@ -310,13 +310,15 @@ def save_session(
             }
         )
     set_session_save(cache, session_id, save)
-    if save.file_id is not None:
-        add_id(cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
-    # A purge marks first and then reads the records, so either it finds
-    # this commit or this check finds its mark.
-    if is_purged(cache, sandbox_id, session_id):
-        _drop_purged_save(cache, store, sandbox_id, session_id, save, previous)
-        raise SessionPurgedError(f"session {session_id} was deleted during a save")
+    try:
+        if save.file_id is not None:
+            add_id(cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
+    finally:
+        # A purge marks first and then reads the records, so either it finds
+        # this commit or this check finds its mark.
+        if is_purged(cache, sandbox_id, session_id):
+            _drop_purged_save(cache, store, sandbox_id, session_id, save, previous)
+            raise SessionPurgedError(f"session {session_id} was deleted during a save")
     if previous is not None and previous.file_id not in (None, save.file_id):
         _delete_archive(store, previous.file_id, session_id)
     logger.info(

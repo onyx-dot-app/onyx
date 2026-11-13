@@ -269,6 +269,10 @@ def mark_purged(
         cache.set(PURGED_SESSION_PREFIX + str(session_id), "1", ex=PURGE_MARK_SECONDS)
 
 
+def is_sandbox_purged(cache: CacheBackend, sandbox_id: UUID) -> bool:
+    return cache.get(PURGED_SANDBOX_PREFIX + str(sandbox_id)) is not None
+
+
 def is_purged(cache: CacheBackend, sandbox_id: UUID, session_id: UUID) -> bool:
     return (
         cache.get(PURGED_SANDBOX_PREFIX + str(sandbox_id)) is not None

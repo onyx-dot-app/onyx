@@ -1066,3 +1066,35 @@ def test_purges_reach_records_and_saves_that_the_indexes_miss(
     )
     assert other.file_id in store.deleted
     assert harness_state.get_session_save(tenant_cache, other_ref.session_id) is None
+
+
+@pytest.mark.usefixtures("db_session", "initialize_file_store", "node")
+def test_an_artifact_published_during_a_sandbox_purge_is_deleted(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    ref: HarnessSandboxRef,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "out/report.txt", b"report")
+    indexed: list[str] = []
+    real_add_id = harness_state.add_id
+
+    def add_id_then_purge(
+        cache: CacheBackend, prefix: str, sandbox_id: UUID, item: str
+    ) -> None:
+        real_add_id(cache, prefix, sandbox_id, item)
+        indexed.append(item)
+        # The purge read the artifact index before this publish ended.
+        harness_state.mark_purged(tenant_cache, sandbox_id=ref.sandbox_id)
+
+    monkeypatch.setattr(harness_sandbox, "add_id", add_id_then_purge)
+    with pytest.raises(HarnessSandboxError):
+        sandbox.publish_artifact(ref, "out/report.txt")
+    assert indexed and not _has_artifact(indexed[0])
+    assert (
+        harness_state.get_ids(
+            tenant_cache, harness_state.ARTIFACTS_PREFIX, ref.sandbox_id
+        )
+        == []
+    )
