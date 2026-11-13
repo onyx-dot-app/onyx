@@ -40,7 +40,7 @@ PROFILE: dict[str, Any] = {
     "aws": {
         "region": "region-1",
         "eks_cluster": "cluster-1",
-        "account_id": 1234,
+        "account_id": "1234",
         "profile": "sso",
     },
     "namespaces": {"app": "onyx", "sandbox": "sandboxes", "agent": "agents"},
@@ -106,6 +106,7 @@ class ProfileTests(unittest.TestCase):
             {**PROFILE, "aws": {"region": "r"}},
             {**PROFILE, "namespaces": {"app": "onyx"}},
             {**PROFILE, "local_env": {"A": ["list"]}},
+            {**PROFILE, "aws": {**PROFILE["aws"], "account_id": 1234}},
             "not a mapping",
         ):
             with self.subTest(broken=broken), self.assertRaises(ValueError):
@@ -155,7 +156,17 @@ class RemoteClusterTests(unittest.TestCase):
         with patch.object(
             RemoteCluster, "command", return_value="https://api.example.test/"
         ):
-            cluster.verify_server()
+            self.assertEqual(cluster.verify_server(), "https://api.example.test/")
+        unpinned = RemoteCluster.from_profile(
+            Path.cwd(), parse_profile({**PROFILE, "kube": {"context": "ctx-a"}})
+        )
+        with patch.object(RemoteCluster, "command", return_value="https://any.test"):
+            self.assertEqual(unpinned.verify_server(), "https://any.test")
+        with (
+            patch.object(RemoteCluster, "command", return_value=""),
+            self.assertRaisesRegex(ValueError, "another API server"),
+        ):
+            unpinned.verify_server()
         with (
             patch.object(RemoteCluster, "command", return_value="https://other.test"),
             self.assertRaisesRegex(ValueError, "another API server"),
@@ -183,7 +194,8 @@ class RemoteClusterTests(unittest.TestCase):
             }
             with patch.dict(os.environ, {}, clear=True):
                 env = self.cluster(root).local_environment(
-                    profile_env={"LOG_LEVEL": "DEBUG"}, settings=deployed
+                    profile_env={"LOG_LEVEL": "DEBUG", "SANDBOX_RUNTIME": "pod"},
+                    settings=deployed,
                 )
         self.assertEqual(env["POSTGRES_HOST"], "db.example.test")
         self.assertEqual(env["WEB_DOMAIN"], "http://localhost:3000")
@@ -258,6 +270,26 @@ class SecretFileTests(unittest.TestCase):
             secret_files(cluster, {"KEY": "/etc/agent/client.key"}, spec) as resolved,
         ):
             self.assertEqual(Path(resolved["KEY"]).read_bytes(), b"key")
+
+    def test_nested_secret_mounts_resolve_to_the_deepest_mount(self) -> None:
+        cluster = RemoteCluster.from_profile(Path.cwd(), parse_profile(PROFILE))
+        spec = workload()
+        pod = spec["spec"]["template"]["spec"]
+        pod["containers"][0]["volumeMounts"].append(
+            {"name": "inner", "mountPath": "/etc/agent/tls"}
+        )
+        pod["volumes"].append({"name": "inner", "secret": {"secretName": "inner"}})
+
+        def kube(*args: str, **_: object) -> str:
+            name = args[2]
+            return secret_json({"ca.crt": name.encode()})
+
+        with (
+            patch.object(RemoteCluster, "kube", side_effect=kube),
+            contextlib.redirect_stderr(io.StringIO()),
+            secret_files(cluster, {"CA": "/etc/agent/tls/ca.crt"}, spec) as resolved,
+        ):
+            self.assertEqual(Path(resolved["CA"]).read_bytes(), b"inner")
 
     def test_unsafe_secret_paths_are_refused(self) -> None:
         mount = SecretMount("v", "s", "/etc/v", None, (("k", "../escape"),), False)
@@ -334,6 +366,32 @@ class TelepresenceAndNetworkTests(unittest.TestCase):
         self.assertFalse(egress_allowed("198.51.100.1", ["203.0.113.7/32"]))
 
 
+class DoctorTests(unittest.TestCase):
+    def test_every_failure_prints_one_fix_line(self) -> None:
+        output = io.StringIO()
+        report = remote.Report()
+        with contextlib.redirect_stdout(output):
+            report(True, "ok", "unused")
+            report(None, "warn", "hint")
+            report(False, "bad", "do this")
+        self.assertEqual(report.failures, 1)
+        self.assertEqual(
+            output.getvalue().splitlines(),
+            ["PASS: ok", "WARN: warn", "  fix: hint", "FAIL: bad", "  fix: do this"],
+        )
+
+    def test_doctor_refuses_an_unlisted_context_before_any_command(self) -> None:
+        output = io.StringIO()
+        with (
+            patch.object(remote, "load_profile", return_value=parse_profile(PROFILE)),
+            patch.object(remote.subprocess, "run") as run,
+            contextlib.redirect_stdout(output),
+        ):
+            self.assertEqual(remote.doctor(Path.cwd(), None, "prod-cluster"), 1)
+        run.assert_not_called()
+        self.assertIn("allowed_contexts", output.getvalue())
+
+
 class LauncherTests(unittest.TestCase):
     def test_celery_is_refused_before_any_cluster_access(self) -> None:
         with (
@@ -352,7 +410,9 @@ class LauncherTests(unittest.TestCase):
         with (
             patch.object(sys, "argv", ["launch.py", "--target", remote.TARGET, "api"]),
             patch.object(remote, "load_profile", return_value=parse_profile(PROFILE)),
-            patch.object(RemoteCluster, "verify_server"),
+            patch.object(
+                RemoteCluster, "verify_server", return_value="https://api.example.test"
+            ),
             patch.object(remote, "telepresence_status", return_value={}),
             patch.object(RemoteCluster, "api_workload") as api_workload,
             patch.object(launch, "run_api") as run_api,
@@ -374,7 +434,9 @@ class LauncherTests(unittest.TestCase):
         with (
             patch.object(sys, "argv", ["launch.py", "--target", remote.TARGET, "api"]),
             patch.object(remote, "load_profile", return_value=parse_profile(PROFILE)),
-            patch.object(RemoteCluster, "verify_server"),
+            patch.object(
+                RemoteCluster, "verify_server", return_value="https://api.example.test"
+            ),
             patch.object(remote, "require_telepresence"),
             patch.object(RemoteCluster, "api_workload", return_value=workload()),
             patch.object(RemoteCluster, "local_environment", return_value={}),

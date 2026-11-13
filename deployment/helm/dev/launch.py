@@ -23,8 +23,7 @@ def remote_environment(args: argparse.Namespace) -> Iterator[dict[str, str]]:
     cluster = remote.RemoteCluster.from_profile(
         ROOT, profile, args.context or os.environ.get(remote.CONTEXT_ENV)
     )
-    cluster.verify_server()
-    remote.require_telepresence(cluster)
+    remote.require_telepresence(cluster, cluster.verify_server())
     workload = cluster.api_workload()
     env = cluster.local_environment(
         args.env_file, profile_env=profile.local_env, frontend_url=frontend_url()

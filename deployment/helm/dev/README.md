@@ -244,11 +244,11 @@ In VS Code, use the **Craft dev (remote cluster)** compound and the
 `craft-dev-api` does these steps:
 
 1. Refuses a context that is not in the profile and an API server that differs from `kube.server`.
-2. Refuses to start when Telepresence is not connected to the profile context and namespace.
+2. Refuses to start when Telepresence is not connected to the same context, API server, and namespace.
 3. Resolves the deployed api-server env, like the kind flow. Then it applies `local_env`,
    sets `SENTRY_DSN` to empty and `WEB_DOMAIN` to `CRAFT_FRONTEND_URL` (default
    `http://localhost:3000`), and applies `.vscode/.env.craft-dev`. The deployed
-   `SANDBOX_BACKEND`, `SANDBOX_NAMESPACE`, and `SANDBOX_RUNTIME` always stay.
+   `SANDBOX_BACKEND`, `SANDBOX_NAMESPACE`, and `SANDBOX_RUNTIME` always stay. No override changes them.
 4. Copies each Secret volume of the api-server container (for example the host agent
    client certificate) to a mode-0700 temporary directory. Env values that point into
    the mount point at the copies. The launcher deletes the directory when the API stops.

@@ -30,6 +30,7 @@ CONTEXT_ENV = "CRAFT_DEV_CONTEXT"
 DEFAULT_API_PORT = 8080
 DEFAULT_FRONTEND_URL = "http://localhost:3000"
 # Deployed settings that a local process against a shared cluster must not use.
+SANDBOX_PINS = ("SANDBOX_BACKEND", "SANDBOX_NAMESPACE", "SANDBOX_RUNTIME")
 LOCAL_OVERRIDES = {"SENTRY_DSN": "", "PYTHONUNBUFFERED": "1"}
 AGENT_PROBE = """import json, sys
 from onyx.microvm.agent_client import MtlsHostAgentClientFactory
@@ -118,6 +119,8 @@ def parse_profile(data: object) -> RemoteProfile:
     if not isinstance(port, int) or not 0 < port < 65536:
         raise ValueError("Profile key agent.port must be a TCP port")
     account = aws.get("account_id")
+    if account is not None and not (isinstance(account, str) and account.isdigit()):
+        raise ValueError("Profile key aws.account_id must be a quoted string of digits")
     return RemoteProfile(
         name=_text(data, "name", "profile", TARGET),
         context=context,
@@ -137,7 +140,7 @@ def parse_profile(data: object) -> RemoteProfile:
         aws_region=_text(aws, "region", "aws"),
         eks_cluster=_text(aws, "eks_cluster", "aws"),
         aws_profile=_optional_text(aws, "profile", "aws"),
-        aws_account_id=None if account is None else str(account),
+        aws_account_id=account,
         user_email=_optional_text(user, "email", "user"),
         telepresence_min_version=parse_version(
             str(telepresence.get("min_version", "2.27.4"))
@@ -226,16 +229,14 @@ class RemoteCluster(Cluster):
         pins = {"K8S_CONTEXT": self.kube_context}
         if self.kubeconfig:
             pins["KUBECONFIG"] = str(self.kubeconfig)
-        for key in ("SANDBOX_BACKEND", "SANDBOX_NAMESPACE", "SANDBOX_RUNTIME"):
+        for key in SANDBOX_PINS:
             if settings.get(key):
                 pins[key] = settings[key]
         pins.setdefault("SANDBOX_NAMESPACE", self.sandbox_namespace)
         return pins
 
-    def verify_server(self) -> None:
-        """Refuse a context whose API server differs from the profile."""
-        if not self.server:
-            return
+    def verify_server(self) -> str:
+        """Return the context's API server; refuse one that differs from the profile."""
         actual = self.command(
             *self.kubectl,
             "config",
@@ -244,10 +245,13 @@ class RemoteCluster(Cluster):
             "-o",
             "jsonpath={.clusters[0].cluster.server}",
         )
-        if actual.rstrip("/") != self.server.rstrip("/"):
+        if not actual or (
+            self.server and actual.rstrip("/") != self.server.rstrip("/")
+        ):
             raise ValueError(
                 f"Context {self.kube_context!r} points at another API server; refusing to use it"
             )
+        return actual
 
     def local_environment(
         self,
@@ -265,7 +269,10 @@ class RemoteCluster(Cluster):
             **LOCAL_OVERRIDES,
             "WEB_DOMAIN": frontend_url.rstrip("/"),
         }
-        return self.environment(env_file, settings=merged)
+        env = self.environment(env_file, settings=merged)
+        # Overrides never change the deployed sandbox backend.
+        env.update({k: deployed[k] for k in SANDBOX_PINS if deployed.get(k)})
+        return env
 
 
 @dataclass(frozen=True)
@@ -357,7 +364,9 @@ def secret_files(
     tmp = Path(tempfile.mkdtemp(prefix="craft-dev-"))
     os.chmod(tmp, 0o700)
     try:
-        for index, mount in enumerate(mounts):
+        # Deepest mount first, so nested mounts win like in the pod.
+        ordered = sorted(mounts, key=lambda m: len(m.mount_path), reverse=True)
+        for index, mount in enumerate(ordered):
             raw = cluster.kube(
                 "get", "secret", mount.secret, "--ignore-not-found", "-o", "json"
             )
@@ -382,7 +391,8 @@ def secret_files(
                 file=sys.stderr,
                 flush=True,
             )
-        if stale := pod_paths(result, other):
+        local = {k for k, v in result.items() if v.startswith(str(tmp))}
+        if stale := [k for k in pod_paths(result, other) if k not in local]:
             print(
                 f"warning: these values point into pod-only mounts: {', '.join(stale)}",
                 file=sys.stderr,
@@ -439,6 +449,10 @@ def db_revisions(env: dict[str, str]) -> set[str]:
         dbname=env.get("POSTGRES_DB") or "postgres",
         sslmode=env.get("POSTGRES_SSLMODE") or "prefer",
         sslrootcert=env.get("POSTGRES_SSLROOTCERT") or None,
+        sslcert=env.get("POSTGRES_SSLCERT") or None,
+        sslkey=env.get("POSTGRES_SSLKEY") or None,
+        sslpassword=env.get("POSTGRES_SSLKEY_PASSWORD") or None,
+        options=f"-csearch_path={env.get('POSTGRES_DEFAULT_SCHEMA') or 'public'}",
         connect_timeout=10,
     )
     try:
@@ -486,7 +500,7 @@ RECONNECT_HINT = "if connect hangs or the root daemon stops: telepresence quit -
 
 
 def telepresence_problem(
-    status: dict[str, Any], context: str, namespace: str, server: str | None
+    status: dict[str, Any], context: str, namespace: str, server: str
 ) -> str | None:
     """Describe why the Telepresence connection does not fit the profile."""
     user = status.get("user_daemon", {})
@@ -496,7 +510,7 @@ def telepresence_problem(
         return "the Telepresence root daemon is not running"
     if user.get("kubernetes_context") != context:
         return "Telepresence is connected to another context"
-    if server and user.get("kubernetes_server", "").rstrip("/") != server.rstrip("/"):
+    if user.get("kubernetes_server", "").rstrip("/") != server.rstrip("/"):
         return "Telepresence is connected to another API server"
     if user.get("namespace") != namespace:
         return f"Telepresence is connected to namespace {user.get('namespace')!r}, not {namespace!r}"
@@ -507,12 +521,9 @@ def telepresence_status(cluster: Cluster) -> dict[str, Any]:
     return json.loads(cluster.command("telepresence", "status", "--output", "json"))
 
 
-def require_telepresence(cluster: RemoteCluster) -> None:
+def require_telepresence(cluster: RemoteCluster, server: str) -> None:
     problem = telepresence_problem(
-        telepresence_status(cluster),
-        cluster.kube_context,
-        cluster.namespace,
-        cluster.server,
+        telepresence_status(cluster), cluster.kube_context, cluster.namespace, server
     )
     if problem:
         raise ValueError(f"{problem}; {connect_hint(cluster)}")
@@ -666,7 +677,7 @@ def aws_checks(root: Path, profile: RemoteProfile, report: Report) -> None:
 
 def kube_checks(
     root: Path, profile: RemoteProfile, cluster: RemoteCluster, report: Report
-) -> bool:
+) -> str | None:
     """Context pin and read access to the namespaces the launcher uses."""
     update = (
         f"aws eks update-kubeconfig --name {profile.eks_cluster} --region {profile.aws_region}"
@@ -675,14 +686,15 @@ def kube_checks(
         + (f" --profile {profile.aws_profile}" if profile.aws_profile else "")
     )
     try:
-        cluster.verify_server()
-        pinned = True
+        server: str | None = cluster.verify_server()
     except (ValueError, subprocess.SubprocessError, OSError):
-        pinned = False
+        server = None
     if not report(
-        pinned, f"Kube context {cluster.kube_context} matches the profile", update
+        server is not None,
+        f"Kube context {cluster.kube_context} matches the profile",
+        update,
     ):
-        return False
+        return None
     access = True
     for verb, resource, namespace in (
         ("get", "deployments", profile.namespace),
@@ -705,11 +717,15 @@ def kube_checks(
             f"Kube access: {verb} {resource} in {namespace}",
             "connect the VPN, then check your SSO role" if result is None else update,
         )
-    return access
+    return server if access else None
 
 
 def telepresence_checks(
-    root: Path, profile: RemoteProfile, cluster: RemoteCluster, report: Report
+    root: Path,
+    profile: RemoteProfile,
+    cluster: RemoteCluster,
+    server: str,
+    report: Report,
 ) -> bool:
     """Client version, connection to the profile context, and manager version."""
     if not shutil.which("telepresence"):
@@ -732,7 +748,7 @@ def telepresence_checks(
     except json.JSONDecodeError:
         status = {}
     problem = telepresence_problem(
-        status, cluster.kube_context, cluster.namespace, cluster.server
+        status, cluster.kube_context, cluster.namespace, server
     )
     connected = report(
         problem is None,
@@ -740,9 +756,13 @@ def telepresence_checks(
         connect_hint(cluster) + "; " + RECONNECT_HINT,
     )
     manager = status.get("traffic_manager", {}).get("version", "")
-    if connected and version is not None and manager:
+    try:
+        manager_version: tuple[int, ...] | None = parse_version(manager)
+    except ValueError:
+        manager_version = None
+    if connected and version is not None and manager_version is not None:
         report(
-            parse_version(manager)[:2] == version[:2] or None,
+            manager_version[:2] == version[:2] or None,
             f"Traffic manager {manager}",
             "install the client version that matches the traffic manager",
         )
@@ -757,8 +777,8 @@ def agent_and_head_checks(
     report: Report,
 ) -> None:
     """NodeInfo over mTLS to each host agent, then the Alembic head match."""
-    pods = json.loads(
-        cluster.kube(
+    try:
+        listing = cluster.kube(
             "get",
             "pods",
             "-l",
@@ -767,7 +787,9 @@ def agent_and_head_checks(
             "json",
             namespace=profile.agent_namespace,
         )
-    )["items"]
+        pods = json.loads(listing)["items"]
+    except (OSError, ValueError, subprocess.SubprocessError):
+        pods = []
     ips = [p["status"]["podIP"] for p in pods if p.get("status", {}).get("podIP")]
     if not ips:
         report(
@@ -814,12 +836,20 @@ def doctor(root: Path, profile_path: Path | None, context: str | None) -> int:
     report = Report()
     try:
         profile = load_profile(root, profile_path)
-        cluster = RemoteCluster.from_profile(root, profile, context)
     except (ValueError, OSError) as exc:
         report(
             False,
             f"{TARGET} profile: {exc}",
             f"set {PROFILE_ENV} to the profile file from onyx-internal",
+        )
+        return finish(report)
+    try:
+        cluster = RemoteCluster.from_profile(root, profile, context)
+    except ValueError as exc:
+        report(
+            False,
+            str(exc),
+            f"use a context from kube.allowed_contexts, or unset {CONTEXT_ENV}",
         )
         return finish(report)
     report(True, f"{TARGET} profile: context {cluster.kube_context}")
@@ -829,9 +859,10 @@ def doctor(root: Path, profile_path: Path | None, context: str | None) -> int:
     if not tools["aws"] or not tools["kubectl"]:
         return finish(report)
     aws_checks(root, profile, report)
-    if not kube_checks(root, profile, cluster, report):
+    server = kube_checks(root, profile, cluster, report)
+    if server is None:
         return finish(report)
-    connected = telepresence_checks(root, profile, cluster, report)
+    connected = telepresence_checks(root, profile, cluster, server, report)
     try:
         workload = cluster.api_workload()
         env = cluster.local_environment(profile_env=profile.local_env)
@@ -842,7 +873,7 @@ def doctor(root: Path, profile_path: Path | None, context: str | None) -> int:
             "check the api Deployment and its Secrets in the profile namespace",
         )
         return finish(report)
-    report(True, f"Deployed api settings resolve ({len(env)} values)")
+    report(True, "Deployed api settings resolve")
     if not connected:
         report(
             None, "Skipped the agent and database checks; connect Telepresence first"
