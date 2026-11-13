@@ -172,7 +172,7 @@ class _RequestReadCheck(_JsmCheck):
             gateway.get_request_comments(issue_key=issue_key, fast=True)
             gateway.get_request_slas(issue_key=issue_key, fast=True)
         except JiraApiError as e:
-            if getattr(e, "status_code", None) == 404 or "404" in str(e):
+            if e.status_code == 404:
                 advisories.append(
                     CheckAdvisory(
                         message=(

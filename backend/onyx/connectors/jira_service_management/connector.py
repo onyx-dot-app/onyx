@@ -114,6 +114,14 @@ class JiraServiceManagementConnector(JiraConnector):
                 issue_key=issue_key
             )
         except JiraApiError as e:
+            if not self.include_internal_comments:
+                logger.warning(
+                    "Could not fetch service desk comments for %s (%s); omitting "
+                    "comments because include_internal_comments is disabled.",
+                    issue_key,
+                    e,
+                )
+                return []
             logger.warning(
                 "Could not fetch service desk comments for %s (%s); falling back "
                 "to the issue's embedded comments.",

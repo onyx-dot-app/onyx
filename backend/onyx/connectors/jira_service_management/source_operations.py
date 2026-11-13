@@ -52,6 +52,8 @@ _INDEXING_MAX_RETRIES = 3
 # The servicedesk comment listing pages by start/limit.
 _COMMENT_PAGE_SIZE = 100
 _MAX_COMMENT_PAGES = 1000
+_SLA_PAGE_SIZE = 100
+_MAX_SLA_PAGES = 100
 
 
 def _build_client(credentials: dict[str, Any], api_url: str, *, fast: bool) -> JIRA:
@@ -278,12 +280,25 @@ class JiraServiceManagementSourceOperations(SourceOperations):
     )
     def get_request_slas(self, *, issue_key: str, fast: bool = False) -> list[JsmSla]:
         """The SLA metrics of a request (``request/{issueIdOrKey}/sla``)."""
-        payload: Any = self._servicedesk_get(
-            f"request/{issue_key}/sla", fast=fast
-        )
-        values: Any = payload.get("values", []) if isinstance(payload, dict) else []
-        if not isinstance(values, list):
-            return []
-        return [
-            JsmSla.from_raw(value) for value in values if isinstance(value, dict)
-        ]
+        slas: list[JsmSla] = []
+        start = 0
+        for _ in range(_MAX_SLA_PAGES):
+            payload: Any = self._servicedesk_get(
+                f"request/{issue_key}/sla",
+                params={"start": start, "limit": _SLA_PAGE_SIZE},
+                fast=fast,
+            )
+            if not isinstance(payload, dict):
+                break
+            values: Any = payload.get("values", [])
+            if not isinstance(values, list) or not values:
+                break
+            slas.extend(
+                JsmSla.from_raw(value)
+                for value in values
+                if isinstance(value, dict)
+            )
+            start += len(values)
+            if payload.get("isLastPage", len(values) < _SLA_PAGE_SIZE):
+                break
+        return slas
