@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "サービスデスクのリクエスト"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "除外チャンネル",
         "includeBotMessages": "ボットのメッセージを含む",
         "jiraProjectUrl": "JiraプロジェクトURL",
+        "serviceDeskProject": "サービスデスク プロジェクト",
         "multipleRepos": "複数のリポジトリ",
         "pageId": "ページID",
         "realm": "レルム",
@@ -4249,6 +4253,47 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management コネクタを設定",
+          "subtext": "サービスデスクのリクエストをインデックスします。1 つのプロジェクト、JQL クエリ、またはアカウントが読めるすべてのサービスデスクを選びます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべてのサービスデスク"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが読めるすべてのサービスデスクをインデックスします",
+              "description": "Onyx は、選択したアカウントが読めるすべての Jira Service Management プロジェクトのリクエストをインデックスします。範囲を狭めるには別のタブを選びます。"
+            },
+            "project_key": {
+              "label": "プロジェクト キー",
+              "description": "1 つの Jira Service Management プロジェクトのキー（例: IT）。",
+              "required": "プロジェクトキーは空白にできません。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "サービスデスクのリクエストを選ぶ JQL クエリです。\n\n時間フィルタと ORDER BY 句は追加しないでください。Onyx が更新期間を追加します。コネクタはクエリをサービスデスク プロジェクトに限定します。\n\n構文は Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)を参照してください。",
+              "required": "JQLクエリは空白にできません。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメントのメール除外リスト",
+              "description": "コメントをインデックスしないメールアドレスです。ボットのコメントを除くときに使います。"
             }
           }
         },

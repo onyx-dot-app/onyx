@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Rastreador de issues da Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Solicitações de service desk"
+        },
         "productboard": {
           "description": "Gestão de produto"
         },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "Canais excluídos",
         "includeBotMessages": "Incluir mensagens de bots",
         "jiraProjectUrl": "URL do projeto Jira",
+        "serviceDeskProject": "Projeto de service desk",
         "multipleRepos": "vários repositórios",
         "pageId": "ID da página",
         "realm": "Realm",
@@ -4249,6 +4253,47 @@
             "comment_email_blacklist": {
               "label": "Lista de bloqueio de e-mails de comentários",
               "description": "Em geral é útil para ignorar determinados bots. Adicione os e-mails dos usuários cujos comentários NÃO devem ser indexados."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Configurar o conector do Jira Service Management",
+          "subtext": "Indexe solicitações de service desk. Escolha um projeto, uma consulta JQL ou cada service desk que a conta pode ler.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL do site",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Todos os service desks"
+                },
+                "project": {
+                  "label": "Projeto"
+                },
+                "jql": {
+                  "label": "Consulta JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexa cada service desk que a conta pode ler",
+              "description": "O Onyx indexa as solicitações de cada projeto do Jira Service Management que a conta selecionada pode ler. Para indexar menos, escolha outra aba."
+            },
+            "project_key": {
+              "label": "Chave do projeto",
+              "description": "A chave de um projeto do Jira Service Management (por exemplo, IT).",
+              "required": "A chave do projeto não pode ficar em branco."
+            },
+            "jql_query": {
+              "label": "Consulta JQL",
+              "description": "Uma consulta JQL que seleciona solicitações de service desk.\n\nNão adicione filtros de tempo nem uma cláusula ORDER BY. O Onyx adiciona a própria janela de atualização. O conector também limita a consulta a projetos de service desk.\n\nVeja a [documentação de JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) da Atlassian para a sintaxe.",
+              "required": "A consulta JQL não pode ficar em branco."
+            },
+            "comment_email_blacklist": {
+              "label": "Lista de exclusão de e-mails de comentários",
+              "description": "Endereços de e-mail cujos comentários ficam fora do índice. Use a lista para omitir comentários de bots."
             }
           }
         },

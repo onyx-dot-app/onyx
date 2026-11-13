@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "서비스 데스크 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "제외된 채널",
         "includeBotMessages": "봇 메시지 포함",
         "jiraProjectUrl": "Jira 프로젝트 URL",
+        "serviceDeskProject": "서비스 데스크 프로젝트",
         "multipleRepos": "여러 리포지토리",
         "pageId": "페이지 ID",
         "realm": "렐름",
@@ -4249,6 +4253,47 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "서비스 데스크 요청을 인덱싱합니다. 프로젝트 하나, JQL 쿼리, 또는 계정이 읽을 수 있는 모든 서비스 데스크를 선택합니다.",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "모든 서비스 데스크"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "jql": {
+                  "label": "JQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "계정이 읽을 수 있는 모든 서비스 데스크를 인덱싱합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 Jira Service Management 프로젝트의 요청을 인덱싱합니다. 더 적게 인덱싱하려면 다른 탭을 선택합니다."
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "Jira Service Management 프로젝트 하나의 키입니다(예: IT).",
+              "required": "프로젝트 키는 비워 둘 수 없습니다."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "서비스 데스크 요청을 선택하는 JQL 쿼리입니다.\n\n시간 필터나 ORDER BY 절을 추가하지 마십시오. Onyx가 업데이트 구간을 추가합니다. 커넥터는 쿼리를 서비스 데스크 프로젝트로 제한합니다.\n\n구문은 Atlassian의 [JQL 문서](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/)를 참조하십시오.",
+              "required": "JQL 쿼리는 비워 둘 수 없습니다."
+            },
+            "comment_email_blacklist": {
+              "label": "댓글 이메일 제외 목록",
+              "description": "댓글을 인덱스에서 제외할 이메일 주소입니다. 봇 댓글을 건너뛸 때 사용합니다."
             }
           }
         },

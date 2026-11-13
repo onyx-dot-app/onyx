@@ -1,0 +1,75 @@
+---
+title: "Jira Service Management"
+description: "Access service desk requests from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes service desk requests. Each request becomes one document.
+The document holds the description, the comments, and the service desk fields below.
+
+Onyx checks Jira for new and changed requests on the connector's refresh schedule. The default is every **30** minutes.
+
+| Content | Notes |
+| --- | --- |
+| Requests | Summary, description, and comments. An internal comment is labeled internal. |
+| Service desk fields | Request type, customer status, organizations, request participants, and SLA state. |
+| Scope | One service desk project, a JQL query, or every service desk project the account can read. |
+| Permissions | Permission sync is not available. Everyone who can see the connector's documents in Onyx can see every indexed request. |
+
+The connector supports Jira Service Management Cloud and Jira Service Management Data Center.
+A JQL query cannot contain `ORDER BY` or a time filter. Onyx adds the update window itself.
+The connector also limits every query to service desk projects.
+
+The connector indexes only the requests its account can read. An API token does not add Jira permissions.
+Permission sync is not available for this connector.
+
+## Setting up
+
+### Authorization
+
+Use a dedicated Jira account for the connector. On Cloud, the account needs an API token and the account email.
+On Data Center, the account needs a personal access token. Leave the email empty.
+
+<Steps>
+  <Step title="Create the token">
+    For Cloud, open [Atlassian API tokens](https://id.atlassian.com/manage-profile/security/api-tokens)
+    while signed in as the connector account and create a token.
+
+    For Data Center, open the account profile, open **Personal Access Tokens**, and create a token.
+  </Step>
+
+  <Step title="Grant read access">
+    Give the account **Browse Projects** on every service desk project you want to index.
+    The account also needs access to each issue security level and each restricted comment you want in the index.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Add the connector">
+    In Onyx, open **Admin**, then **Add Connector**, and select **Jira Service Management**.
+  </Step>
+
+  <Step title="Enter the site">
+    Set **Site URL** to the Jira site, for example `https://your-domain.atlassian.net`.
+    Select **Scoped token** only when the token is a scoped Atlassian API token.
+  </Step>
+
+  <Step title="Connect the account">
+    For Cloud, enter the account email and the API token. For Data Center,
+    enter the personal access token and leave the email empty.
+  </Step>
+
+  <Step title="Choose the scope">
+    **All Service Desks** indexes every service desk project the account can read. **Project** indexes one project key,
+    for example `IT`. The project must be a service desk project. Onyx rejects a blank project key.
+    **JQL Query** indexes the requests that match the query. Onyx rejects a blank query.
+    Do not add `ORDER BY` or a time filter.
+  </Step>
+
+  <Step title="Skip bot comments">
+    Under **Comment Email Blacklist**, add the email of each bot whose comments you do not want in the index.
+  </Step>
+</Steps>

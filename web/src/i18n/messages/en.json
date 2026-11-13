@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian issue tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Service desk requests"
+        },
         "productboard": {
           "description": "Product management"
         },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "Excluded Channels",
         "includeBotMessages": "Include Bot Messages",
         "jiraProjectUrl": "Jira Project URL",
+        "serviceDeskProject": "Service Desk Project",
         "multipleRepos": "multiple repos",
         "pageId": "Page ID",
         "realm": "Realm",
@@ -4249,6 +4253,47 @@
             "comment_email_blacklist": {
               "label": "Comment Email Blacklist",
               "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Index service desk requests. Choose one project, a JQL query, or every service desk the account can read.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "All Service Desks"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes every service desk the account can read",
+              "description": "Onyx indexes requests in every Jira Service Management project that the selected account can read. To index fewer, choose another tab."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of one Jira Service Management project (e.g. IT).",
+              "required": "Project key cannot be blank."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A JQL query that selects service desk requests.\n\nDo not add time filters or an ORDER BY clause. Onyx adds its own update window. The connector also limits the query to service desk projects.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) for syntax.",
+              "required": "JQL query cannot be blank."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "Email addresses whose comments are left out of the index. Use this to skip bot comments."
             }
           }
         },

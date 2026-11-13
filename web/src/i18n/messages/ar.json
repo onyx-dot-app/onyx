@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "طلبات مكتب الخدمة"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "القنوات المستبعدة",
         "includeBotMessages": "تضمين رسائل الروبوتات",
         "jiraProjectUrl": "عنوان URL لمشروع Jira",
+        "serviceDeskProject": "مشروع مكتب الخدمة",
         "multipleRepos": "مستودعات متعددة",
         "pageId": "معرّف الصفحة",
         "realm": "النطاق",
@@ -4249,6 +4253,47 @@
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",
               "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "تكوين موصل Jira Service Management",
+          "subtext": "فهرس طلبات مكتب الخدمة. اختر مشروعًا واحدًا أو استعلام JQL أو كل مكتب خدمة يستطيع الحساب قراءته.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان الموقع",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل مكاتب الخدمة"
+                },
+                "project": {
+                  "label": "المشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "يفهرس كل مكتب خدمة يستطيع الحساب قراءته",
+              "description": "يفهرس Onyx الطلبات في كل مشروع Jira Service Management يستطيع الحساب المحدد قراءته. لتضييق النطاق، اختر علامة تبويب أخرى."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع واحد في Jira Service Management (مثل IT).",
+              "required": "لا يمكن أن يكون مفتاح المشروع فارغًا."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL يختار طلبات مكتب الخدمة.\n\nلا تضف عوامل تصفية زمنية أو عبارة ORDER BY. يضيف Onyx نافذة التحديث الخاصة به. ويحصر الموصل الاستعلام في مشاريع مكتب الخدمة.\n\nراجع [وثائق JQL](https://support.atlassian.com/jira-service-management-cloud/docs/use-advanced-search-with-jira-query-language-jql/) من Atlassian للصيغة.",
+              "required": "لا يمكن أن يكون استعلام JQL فارغًا."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة استبعاد بريد التعليقات",
+              "description": "عناوين البريد التي تُستبعد تعليقاتها من الفهرس. استخدمها لتخطي تعليقات الروبوتات."
             }
           }
         },
