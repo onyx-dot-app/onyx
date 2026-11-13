@@ -4275,3 +4275,27 @@ def test_a_run_that_continues_a_later_turn_belongs_to_that_turn(
     sender_row = db_session.get(ChatMessage, int(sender.run_id))
     assert sender_row is not None
     assert root_response_id(db_session, sender_row) == first_turn.id
+
+
+def test_a_result_stopped_by_the_user_does_not_wake_its_reader(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Report", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    stopped = db_session.get(ChatMessage, int(child.run_id))
+    assert stopped is not None
+    stopped.response_status = RunStatus.CANCELLED
+    stopped.response_failure = RunFailure(
+        kind=RunFailureKind.STOPPED_BY_USER, message="Stopped by the user"
+    )
+    db_session.commit()
+
+    [result] = read_run_inputs(
+        db_session, str(conversation.id), str(response.id), [response.id], [response.id]
+    )[1]
+    assert result.failure is not None
+    assert not result.wakes_recipient

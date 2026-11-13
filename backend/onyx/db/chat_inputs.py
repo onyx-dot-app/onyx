@@ -881,14 +881,19 @@ def read_run_inputs(
     if result_branch is not None:
         reads = or_(reads, _results_on_branch(result_branch))
     rows = session.execute(
-        select(ChatInput, ChatMessage.chat_session_id, ChatMessage.response_status)
+        select(
+            ChatInput,
+            ChatMessage.chat_session_id,
+            ChatMessage.response_status,
+            ChatMessage.response_failure,
+        )
         .outerjoin(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
         .where(ChatInput.recipient_session_id == UUID(agent_id), reads)
         .order_by(ChatInput.id)
     ).all()
     messages: list[UserMessage] = []
     results: list[AgentResultState] = []
-    for row, source_agent_id, status in rows:
+    for row, source_agent_id, status, failure in rows:
         if row.source == InputSource.AGENT_RESULT:
             if (
                 row.source_response_id is None
@@ -904,6 +909,7 @@ def read_run_inputs(
                     response_id=row.source_response_id,
                     root_response_id=row.root_response_id,
                     status=status,
+                    failure=failure,
                 )
             )
             continue
