@@ -447,7 +447,8 @@ The library preview of an external-app skill calls the same renderer
     another skill gets 404. `review_status` is derived from the plugin
     pointers: `published`, `pending` or `draft`. Restore needs
     `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
-    editor save path, so equal files add no version.
+    editor save path, so equal files add no version. UI:
+    `web/src/sections/modals/skills/SkillVersionsTab.tsx`.
 23. `publishing-review` **The Publishing setting governs every publish by
     authors.** Only the author or global `MANAGE_PLUGINS` publishes
     (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions

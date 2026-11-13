@@ -17392,7 +17392,43 @@
       },
       "tabs": {
         "details": "Detalles",
-        "sharing": "Compartir"
+        "sharing": "Compartir",
+        "versions": "Versiones"
+      },
+      "versions": {
+        "tableLabel": "Versiones de la habilidad",
+        "columns": {
+          "version": "Versión",
+          "madeBy": "Creada por",
+          "date": "Fecha"
+        },
+        "versionLabel": "Versión {number}",
+        "currentBadge": "Actual",
+        "unknownAuthor": "Desconocido",
+        "previewRow": {
+          "ariaLabel": "Vista previa de la versión {number}"
+        },
+        "restore": {
+          "label": "Restaurar",
+          "ariaLabel": "Restaurar la versión {number}",
+          "successToast": "Se restauró la versión {number} como versión {newNumber}.",
+          "unchangedToast": "La versión {number} tiene los mismos archivos que la versión actual.",
+          "failedToast": "No se pudo restaurar esta versión.",
+          "unsavedChanges": {
+            "title": "Guarda primero tus cambios",
+            "description": "Guarda o descarta los cambios del editor antes de restaurar una versión."
+          }
+        },
+        "loadError": {
+          "title": "No se pudieron cargar las versiones",
+          "description": "Inténtalo de nuevo más tarde."
+        },
+        "preview": {
+          "back": "Todas las versiones",
+          "loadError": {
+            "title": "No se pudo cargar esta versión"
+          }
+        }
       }
     },
     "page": {

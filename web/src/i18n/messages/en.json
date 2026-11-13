@@ -17392,7 +17392,43 @@
       },
       "tabs": {
         "details": "Details",
-        "sharing": "Sharing"
+        "sharing": "Sharing",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Skill versions",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Made by",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Current",
+        "unknownAuthor": "Unknown",
+        "previewRow": {
+          "ariaLabel": "Preview version {number}"
+        },
+        "restore": {
+          "label": "Restore",
+          "ariaLabel": "Restore version {number}",
+          "successToast": "Restored version {number} as version {newNumber}.",
+          "unchangedToast": "Version {number} has the same files as the current version.",
+          "failedToast": "Couldn't restore this version.",
+          "unsavedChanges": {
+            "title": "Save your changes first",
+            "description": "Save or discard the changes in the editor before you restore a version."
+          }
+        },
+        "loadError": {
+          "title": "Couldn't load versions",
+          "description": "Try again later."
+        },
+        "preview": {
+          "back": "All versions",
+          "loadError": {
+            "title": "Couldn't load this version"
+          }
+        }
       }
     },
     "page": {

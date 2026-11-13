@@ -17392,7 +17392,43 @@
       },
       "tabs": {
         "details": "详情",
-        "sharing": "共享"
+        "sharing": "共享",
+        "versions": "版本"
+      },
+      "versions": {
+        "tableLabel": "技能版本",
+        "columns": {
+          "version": "版本",
+          "madeBy": "创建者",
+          "date": "日期"
+        },
+        "versionLabel": "版本 {number}",
+        "currentBadge": "当前",
+        "unknownAuthor": "未知",
+        "previewRow": {
+          "ariaLabel": "预览版本 {number}"
+        },
+        "restore": {
+          "label": "恢复",
+          "ariaLabel": "恢复版本 {number}",
+          "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
+          "unchangedToast": "版本 {number} 的文件与当前版本相同。",
+          "failedToast": "无法恢复此版本。",
+          "unsavedChanges": {
+            "title": "请先保存更改",
+            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
+          }
+        },
+        "loadError": {
+          "title": "无法加载版本",
+          "description": "请稍后重试。"
+        },
+        "preview": {
+          "back": "所有版本",
+          "loadError": {
+            "title": "无法加载此版本"
+          }
+        }
       }
     },
     "page": {

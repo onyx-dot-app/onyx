@@ -17392,7 +17392,43 @@
       },
       "tabs": {
         "details": "세부 정보",
-        "sharing": "공유"
+        "sharing": "공유",
+        "versions": "버전"
+      },
+      "versions": {
+        "tableLabel": "스킬 버전",
+        "columns": {
+          "version": "버전",
+          "madeBy": "만든 사람",
+          "date": "날짜"
+        },
+        "versionLabel": "버전 {number}",
+        "currentBadge": "현재",
+        "unknownAuthor": "알 수 없음",
+        "previewRow": {
+          "ariaLabel": "버전 {number} 미리 보기"
+        },
+        "restore": {
+          "label": "복원",
+          "ariaLabel": "버전 {number} 복원",
+          "successToast": "버전 {number}을(를) 버전 {newNumber}(으)로 복원했습니다.",
+          "unchangedToast": "버전 {number}의 파일이 현재 버전과 같습니다.",
+          "failedToast": "이 버전을 복원할 수 없습니다.",
+          "unsavedChanges": {
+            "title": "먼저 변경 사항을 저장하세요",
+            "description": "버전을 복원하기 전에 편집기의 변경 사항을 저장하거나 삭제하세요."
+          }
+        },
+        "loadError": {
+          "title": "버전을 불러올 수 없습니다",
+          "description": "나중에 다시 시도하세요."
+        },
+        "preview": {
+          "back": "모든 버전",
+          "loadError": {
+            "title": "이 버전을 불러올 수 없습니다"
+          }
+        }
       }
     },
     "page": {
