@@ -459,7 +459,6 @@ const AgentMessage = React.memo(function AgentMessage({
 
             {/* Row 2: Display content + MessageToolbar */}
             <div
-              data-agent-answer
               className={cn(
                 "overflow-x-visible focus:outline-hidden select-text cursor-text",
                 !fullWidthChat && "px-3"
