@@ -43,7 +43,7 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JiraSourceOperations, str, bool, DocumentSource],
+            [JiraSourceOperations, str, bool],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -55,5 +55,4 @@ def get_project_permissions(
         source_operations,
         jira_project,
         add_prefix,
-        source,
     )

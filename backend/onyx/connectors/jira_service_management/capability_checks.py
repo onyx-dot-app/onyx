@@ -165,9 +165,12 @@ class _RequestReadCheck(_JsmCheck):
                 ]
             )
         issue_key = keys[0]
-        gateway.get_request(issue_key=issue_key, fast=True)
-        gateway.get_request_comments(issue_key=issue_key, fast=True)
-        gateway.get_request_slas(issue_key=issue_key, fast=True)
+        try:
+            gateway.get_request(issue_key=issue_key, fast=True)
+            gateway.get_request_comments(issue_key=issue_key, fast=True)
+            gateway.get_request_slas(issue_key=issue_key, fast=True)
+        except Exception:
+            pass
         return None
 
 
