@@ -1,0 +1,89 @@
+---
+title: "Firecracker Sizing and Images"
+description: "Size KVM nodes for Craft Firecracker sandboxes and mirror the images to a private registry"
+icon: "ruler"
+---
+
+This page helps you size the nodes for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker)
+and pull its images from a private registry.
+
+## microVM size
+
+Each microVM has 2 vCPUs, 4096 MiB of memory, and a 1 GiB working disk that grows as the session writes files.
+The host agent sets these sizes when it builds the node template.
+
+The host agent admits a new microVM only when the node has enough memory:
+
+```text
+available memory >= memory of the microVMs that are starting + 4096 MiB + 2048 MiB reserve
+```
+
+A starting microVM counts at its full 4096 MiB. A running microVM counts only at the memory that it uses:
+idle guests give free memory back to the node.
+So memory limits how many microVMs start at the same time more than how many run.
+
+Kubelet does not count microVM memory. Do not run other workloads on KVM nodes.
+
+## Measured limits
+
+Onyx measured these numbers on Amazon EKS with `m8i.4xlarge` nodes (16 vCPUs, 64 GiB, nested virtualization)
+and a gp3 root volume with 6000 IOPS and 500 MiB/s:
+
+| Limit | Value | Cause |
+| --- | --- | --- |
+| Running microVMs per node | 64. The chart default `craft.hostAgent.maxVms` is 60. | Nested virtualization. Above 64 microVMs, running microVMs fail. |
+| microVM starts at the same time, per node | 14 | The memory admission rule above |
+| Sustained start rate, per node | 3 to 3.5 microVMs per second | Disk reads: each start reads about 110 MB |
+| Time to a ready microVM | 0.9 seconds (median) at 2 starts per second | |
+| HTTPS calls through one sandbox proxy pod | About 46 per second at the default 1 CPU limit | Proxy CPU |
+
+Use these numbers as a start. Watch the host agent dashboard and add nodes before the alerts fire.
+
+### Plan the nodes
+
+| Platform | Start with | Notes |
+| --- | --- | --- |
+| Amazon EKS, nested | `m8i.4xlarge`, gp3 200 GiB with 6000 IOPS and 500 MiB/s | Keep `maxVms: 60`. A faster disk raises the start rate. |
+| Amazon EKS, bare metal | An Intel `.metal` type | Raise `maxVms` or set `0`. Memory and disk limit the node. |
+| Google GKE | `n2-standard-8`, 200 GB boot disk | Onyx has not measured density on GKE. Keep `maxVms: 60`. |
+| Azure AKS | `Standard_D8ds_v5`, 200 GB OS disk | Onyx has not measured density on AKS. Keep `maxVms: 60`. |
+| Bare metal | Intel hosts with fast local NVMe for the data directory | Raise `maxVms` or set `0`. |
+
+Size the sandbox proxy on the egress call rate, not on the number of sandboxes. Add proxy replicas,
+or raise its CPU limit under `sandboxProxy.resources`, when its pods reach their CPU limit.
+
+Keep at least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free.
+
+Keep at least one spare KVM node in each zone. A node failure stops every microVM on the node.
+
+## Mirror the images
+
+Clusters without access to Docker Hub must pull the images from a private registry.
+
+{/* depends: chart PR (tags derived from global.version) and release image tags (images published on each release) */}
+
+| Image | Tag | Notes |
+| --- | --- | --- |
+| `onyxdotapp/craft-fc-host-agent` | `<onyx version>`, for example `v5.2.0` | Includes Firecracker, the jailer, and the guest kernel |
+| `onyxdotapp/craft-fc-artifacts` | `rootfs-<onyx version>`, for example `rootfs-v5.2.0` | The root drive. About 4 GiB. |
+| The Onyx images | `<onyx version>` | Backend, web server, model server, and the pod sandbox image. See [Kubernetes](/deployment/local/kubernetes). |
+
+Copy each image with its digest, for example with `crane copy` or `skopeo copy --all`. Then set the repositories:
+
+```yaml
+craft:
+  hostAgent:
+    image:
+      repository: registry.example.com/onyxdotapp/craft-fc-host-agent
+    rootfs:
+      image:
+        repository: registry.example.com/onyxdotapp/craft-fc-artifacts
+    imagePullSecrets:
+      - name: regcred
+```
+
+The pull Secret must exist in the host agent namespace. The release `imagePullSecrets` do not apply there,
+because Secrets belong to one namespace.
+
+The init container copies the root drive to each node once for each version.
+Plan for about 4 GiB of registry traffic for each KVM node on each upgrade.

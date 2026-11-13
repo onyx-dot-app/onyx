@@ -5,7 +5,8 @@ icon: "hammer"
 ---
 
 Craft runs generated code in isolated sandboxes and sends sandbox network traffic through an egress proxy.
-Self-hosted deployments can run these sandboxes in Kubernetes or Docker.
+Self-hosted deployments can run these sandboxes in Kubernetes or Docker. On Kubernetes nodes with KVM,
+Craft can also run sandboxes as Firecracker microVMs.
 
 <CardGroup cols={2}>
   <Card title="Kubernetes" icon="dharmachakra" href="/deployment/local/craft_kubernetes">
@@ -14,6 +15,10 @@ Self-hosted deployments can run these sandboxes in Kubernetes or Docker.
 
   <Card title="Docker Compose" icon="docker" href="/deployment/local/craft_docker_compose">
     Run sandbox containers and the proxy on a trusted single Docker host.
+  </Card>
+
+  <Card title="Firecracker" icon="microchip" href="/deployment/kubernetes/craft-firecracker">
+    Add Firecracker microVM sandboxes to a Kubernetes deployment on Intel KVM nodes.
   </Card>
 </CardGroup>
 

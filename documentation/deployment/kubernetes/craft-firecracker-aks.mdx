@@ -1,0 +1,152 @@
+---
+title: "Firecracker on Azure AKS"
+description: "Prepare AKS node pools for Craft Firecracker sandboxes"
+icon: "microsoft"
+---
+
+This guide prepares Azure Kubernetes Service (AKS) for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+Use the Onyx Terraform modules, or prepare the node pools of your own AKS cluster. After the nodes are ready,
+configure Helm as the overview page shows.
+
+## Node requirements on AKS
+
+| Item | Allowed | Not allowed |
+| --- | --- | --- |
+| VM size | Intel D or E series, v5 to v7, for example `Standard_D8ds_v5` or `Standard_D8ds_v7` | Sizes with `a` (AMD) or `p` (Arm) in the name, v4 and older |
+| OS | `Ubuntu2404` | |
+| Pool | A normal node pool | Pod Sandboxing (Kata) pools. Their pods get no `/dev/kvm`. |
+| Network | A network policy engine, for example Azure Network Policy Manager, Calico, or Cilium | |
+
+Ubuntu 24.04 node images set `vm.max_map_count` to `1048576`, so no sysctl change is necessary.
+
+The Ubuntu root file system is ext4 without reflink. {/* depends: loop store */}
+The host agent makes its XFS loop file in the data directory, so you do not need a data disk.
+Size the OS disk for the loop file: 200 GB or more.
+
+## Option 1: Onyx Terraform modules
+
+The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deployment/cloud/azure) for the full module.
+
+<Steps>
+  <Step title="Set the sandbox pool variables">
+    {/* depends: terraform module tag (tf-azure) with craft_sandbox_runtime */}
+
+    ```hcl main.tf
+    module "onyx" {
+      source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/azure/onyx?ref=<tag>"
+      # ... your existing settings
+
+      enable_sandbox_node_pool  = true
+      craft_sandbox_runtime     = "firecracker"
+      sandbox_node_vm_size      = "Standard_D8ds_v5"
+      sandbox_node_disk_size_gb = 200
+    }
+    ```
+
+    With `craft_sandbox_runtime = "firecracker"`,
+    the `aks` module sets the sandbox pool OS to `Ubuntu2404` and adds the label `onyx.app/kvm=true` and the taint
+    `onyx.app/kvm=true:NoSchedule`. The module refuses a blocked VM size.
+    `Ubuntu2404` needs the `azurerm` provider 4.67 or later.
+  </Step>
+
+  <Step title="Add the pod sandbox pool">
+    {/* depends: terraform PR (#17786) */} Add the pod sandbox pool variables to the module block.
+    The pool needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`:
+
+    ```hcl
+    enable_craft_pod_sandbox_node_pool = true
+    craft_pod_sandbox_node_vm_size     = "Standard_D4ds_v5" # default
+    craft_pod_sandbox_node_min_count   = 1                  # default
+    craft_pod_sandbox_node_max_count   = 2                  # default
+    ```
+
+    The module adds the pool `sandboxpod` with the OS disk `sandbox_node_disk_size_gb`,
+    the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`, and no KVM label or taint.
+    The chart default `sandboxPod` values select this pool, so you need no chart change for it.
+  </Step>
+
+  <Step title="Apply">
+    ```bash
+    terraform init -upgrade
+    terraform plan
+    terraform apply
+    ```
+
+    On an existing cluster, a change to `craft_sandbox_runtime` changes the pool OS. AKS replaces the sandbox nodes,
+    and every sandbox on them stops. On an existing cluster, deploy the chart with Firecracker before you apply,
+    as [Add Firecracker to an existing
+    installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
+    Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Option 2: Your own AKS cluster
+
+<Steps>
+  <Step title="Make the Firecracker node pool">
+    ```bash
+    az aks nodepool add \
+      --resource-group <resource-group> --cluster-name <cluster> \
+      --name craftfc \
+      --node-vm-size Standard_D8ds_v5 \
+      --os-sku Ubuntu2404 \
+      --node-osdisk-size 200 \
+      --labels onyx.app/workload=sandbox onyx.app/kvm=true \
+      --node-taints workload=sandbox:NoSchedule,onyx.app/kvm=true:NoSchedule \
+      --node-count 1
+    ```
+  </Step>
+
+  <Step title="Make the pod sandbox node pool">
+    ```bash
+    az aks nodepool add \
+      --resource-group <resource-group> --cluster-name <cluster> \
+      --name craftpod \
+      --node-vm-size Standard_D4ds_v5 \
+      --labels onyx.app/workload=sandbox \
+      --node-taints workload=sandbox:NoSchedule \
+      --node-count 1
+    ```
+  </Step>
+
+  <Step title="Allow Azure Blob presigned URLs">
+    Follow [Azure Blob Storage file store](#azure-blob-storage-file-store).
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Azure Blob Storage file store
+
+{/* depends: Azure presign */} The host agent uploads and downloads session files with presigned Azure Blob URLs (SAS).
+With AKS Workload Identity and no account key, the API server signs user delegation SAS URLs with its managed identity.
+The identity needs a role with `generateUserDelegationKey` on the storage account,
+for example **Storage Blob Data Contributor**. The Onyx `aks` module grants this role to the workload identity.
+
+Set the file store values in your Helm values:
+
+```yaml
+configMap:
+  FILE_STORE_BACKEND: "azure"
+  AZURE_STORAGE_ACCOUNT_NAME: "<storage account>"
+  AZURE_FILE_STORE_CONTAINER_NAME: "<container>"
+minio:
+  enabled: false
+```
+
+KVM nodes must reach the storage account over HTTPS. If the storage account allows only private endpoints,
+the KVM node subnet must reach that endpoint.
+
+## Azure security findings
+
+Microsoft Defender for Containers can report findings when the host agent starts.
+The host agent is a privileged DaemonSet with `hostPID` and a `hostPath` mount, by design.
+Scope a suppression rule to your cluster and the host agent namespace (`onyx-sandbox-runtime` by default).

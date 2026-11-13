@@ -22,6 +22,11 @@ when the sandbox backend is not `kubernetes`, or when sandbox push authenticatio
   create a labeled and tainted sandbox node group when you set `enable_craft = true`.
 </Tip>
 
+<Note>
+  To run sandboxes as Firecracker microVMs on nodes with KVM, complete this page first,
+  then follow [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+</Note>
+
 ## Prepare sandbox nodes
 
 By default, sandbox pods select nodes with this label:

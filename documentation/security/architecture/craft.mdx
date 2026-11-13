@@ -73,11 +73,59 @@ they are not user-facing version history.
 | Backend | Isolation boundary |
 | --- | --- |
 | **Kubernetes** | A sandbox pod in a dedicated namespace, with scoped RBAC, an in-pod firewall, and NetworkPolicies. |
+| **Kubernetes with Firecracker** | A Firecracker microVM on KVM with its own guest kernel, no network card, and one controlled path for egress. See [Firecracker isolation](#firecracker-isolation). |
 | **Docker Compose** | A sandbox container on a dedicated bridge, with an in-container firewall and no connection to the default Compose network. |
 
 The Docker backend requires read-write Docker socket access from the API server and background worker.
 This access is effectively root access to the host. For this reason,
 Docker Compose is intended for small deployments on a trusted host.
+
+## Firecracker isolation
+
+With the [Firecracker runtime](/deployment/kubernetes/craft-firecracker), each sandbox is a Firecracker microVM.
+The microVM does not share a kernel with other sandboxes, with the node, or with Onyx services.
+
+| Layer | Control |
+| --- | --- |
+| **Hardware virtualization** | The guest kernel runs in its own virtual machine on KVM. |
+| **Minimal virtual hardware** | Firecracker gives the microVM block devices, a vsock socket, and a serial console. The microVM has no network card and no instance metadata service. |
+| **Firecracker process** | Firecracker runs with its default seccomp filters. The Firecracker jailer runs each microVM process as its own unprivileged user, in a chroot and its own PID namespace. |
+| **Resource limits** | Each microVM runs in its own systemd scope with a memory limit and a CPU limit. |
+| **Clean starts** | Each microVM starts from a node template. The host agent checks the SHA-256 hashes of the template files before each start. |
+| **Commands in the guest** | Agent commands run as an unprivileged user (UID 1000) in the guest. Skills and User Library files are on a drive that the microVM cannot write. |
+
+### Network and identity
+
+The microVM cannot open a network connection. Its only way out is a vsock socket to the host agent on its node.
+The host agent forwards the traffic to the sandbox proxy, which applies the same destination policies, approvals,
+and credential injection as for pod sandboxes. Credentials stay in the proxy.
+
+The host agent removes any proxy credentials that the microVM sends.
+It then adds a token that it signs with a per-node Ed25519 key. The token names the sandbox, is valid for 60 seconds,
+and can be used one time. The proxy checks the signature, and checks that the sandbox runs on that node.
+The signing key never enters the microVM, and the host agent makes a new key at each start.
+A node registers its key with a shared registration value.
+
+### Control plane access
+
+Only the API server, the heavy worker, and the Scheduled Task worker can call the host agent.
+The calls use mutual TLS 1.3 with a separate client CA, and a NetworkPolicy allows only these pods.
+Each microVM has its own random key for its command service, new for each start.
+The host agent writes an audit line for each call. The line has no request body and no key.
+
+### Data on the node
+
+- A microVM working disk is deleted when the microVM stops.
+- Session files go to the file store through presigned URLs, each for one object and one method. The nodes have no
+  storage credentials.
+- Onyx does not save microVM memory of user sessions. Session saves contain files only.
+
+### The host agent is privileged
+
+The host agent runs as a privileged DaemonSet with `hostPID`, `/dev/kvm`, and a `hostPath` data directory,
+in its own namespace with Pod Security `privileged`. User sandboxes never run in that namespace.
+Container security tools (Amazon GuardDuty, Microsoft Defender for Containers, Google Security Command Center)
+can report findings for this DaemonSet. Scope suppressions to the host agent namespace only.
 
 ## Network egress
 
@@ -210,6 +258,7 @@ The preview runs in a sandboxed iframe, with scripts, forms, and user-initiated 
 | Generated content includes sensitive company data | Document permissions protect retrieval, but users remain responsible for generated files and shared web apps. |
 | Prompts and context leave Onyx | Review the data handling terms and configuration of each model provider and external App. |
 | Docker socket compromise affects the host | Use Kubernetes for broader deployments and restrict Docker Compose to trusted, controlled hosts. |
+| A compromised Firecracker host agent affects its node | Keep KVM nodes for microVMs only, keep the host agent namespace for the host agent only, and protect the mutual TLS certificates and the registration value. |
 
 <CardGroup cols={2}>
   <Card title="Deploying Craft" icon="server" href="/deployment/local/craft">

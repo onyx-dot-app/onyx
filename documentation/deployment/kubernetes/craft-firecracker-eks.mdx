@@ -1,0 +1,170 @@
+---
+title: "Firecracker on Amazon EKS"
+description: "Prepare EKS node groups for Craft Firecracker sandboxes"
+icon: "aws"
+---
+
+This guide prepares Amazon EKS for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+Use the Onyx Terraform modules, or prepare the node groups of your own EKS cluster. After the nodes are ready,
+configure Helm as the overview page shows.
+
+## Node requirements on AWS
+
+| Item | Allowed | Not allowed |
+| --- | --- | --- |
+| Nested virtualization | Intel `c8i`, `m8i`, `r8i`, and their `-flex` types | `m7i` and older Intel types, Graviton (`g`), AMD (`a`) |
+| Bare metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal` types, `a1.metal`, `mac*.metal` |
+| AMI | Amazon Linux 2023 (`AL2023_x86_64_STANDARD`) with kernel 6.18 | Other AMIs are not tested |
+| Capacity | On-demand | Spot |
+| Root volume | gp3. Onyx tests 6000 IOPS and 500 MiB/s for the KVM nodes. | |
+
+The Amazon Linux 2023 root file system is XFS with reflink. The host agent uses it directly,
+so you do not need a data disk.
+
+## Option 1: Onyx Terraform modules
+
+The `aws/onyx` module makes the Firecracker node group and an optional pod sandbox node group.
+See [Terraform](/deployment/local/terraform) for the full module.
+
+<Steps>
+  <Step title="Set the sandbox node group variables">
+    {/* depends: terraform module tag. Replace <tag> with the first tf/ tag that has craft_sandbox_runtime. */}
+
+    ```hcl main.tf
+    module "onyx" {
+      source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=<tag>"
+      # ... your existing settings
+
+      enable_craft                       = true
+      craft_sandbox_runtime              = "firecracker"
+      craft_sandbox_node_instance_types  = ["m8i.4xlarge"]
+      craft_sandbox_node_disk_size_gb    = 200
+      craft_sandbox_node_disk_iops       = 6000
+      craft_sandbox_node_disk_throughput = 500
+
+      enable_craft_pod_sandbox_node_group   = true
+      craft_pod_sandbox_node_instance_types = ["m8i.xlarge"]
+      craft_pod_sandbox_node_min_size       = 1
+      craft_pod_sandbox_node_max_size       = 2
+    }
+    ```
+
+    With `craft_sandbox_runtime = "firecracker"`, the module:
+
+    - turns on nested virtualization in the launch template (non-metal types only);
+    - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+    - sets `vm.max_map_count` to `1048576` with a cloud-init script before nodeadm;
+    - keeps the group on-demand and keeps IMDSv2 with hop limit 1.
+
+    The module refuses a blocked instance type, and a group that mixes `.metal` and nested virtualization types.
+  </Step>
+
+  <Step title="Apply">
+    ```bash
+    terraform init -upgrade
+    terraform plan
+    terraform apply
+    ```
+
+    On an existing cluster, a change to `craft_sandbox_runtime` makes a new launch template version.
+    EKS then replaces the sandbox nodes, and every sandbox on them stops.
+    See [Existing EKS clusters](#existing-eks-clusters) for the safe order.
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Option 2: Your own EKS cluster
+
+Prepare two managed node groups with the settings below. Use your own tooling, for example Terraform, `eksctl`,
+or the AWS console.
+
+<Steps>
+  <Step title="Make the Firecracker node group">
+    - Instance type: an allowed type from the table above. Use one instance family in the group.
+    - AMI: Amazon Linux 2023 x86_64 standard.
+    - Capacity: on-demand.
+    - Launch template, for non-metal types: CPU options with nested virtualization enabled. In Terraform
+    (AWS provider 6.59 or later), this is `cpu_options { nested_virtualization = "enabled" }` on `aws_launch_template`.
+    - Root volume: gp3, 200 GiB or more, 6000 IOPS, 500 MiB/s.
+    - Labels: `onyx.app/workload=sandbox` and `onyx.app/kvm=true`.
+    - Taints: `workload=sandbox:NoSchedule` and `onyx.app/kvm=true:NoSchedule`.
+    - Instance metadata: IMDSv2 required, hop limit 1.
+  </Step>
+
+  <Step title="Set vm.max_map_count">
+    Amazon Linux 2023 sets `vm.max_map_count` to `524288`. Add this shell script to the launch template user data,
+    as a MIME part that runs before nodeadm:
+
+    ```bash
+    #!/bin/bash
+    set -euo pipefail
+    echo "vm.max_map_count = 1048576" > /etc/sysctl.d/99-onyx-firecracker.conf
+    sysctl -w vm.max_map_count=1048576
+    ```
+  </Step>
+
+  <Step title="Make the pod sandbox node group">
+    - Instance type: for example `m8i.xlarge`. One pod sandbox requests about 1.1 vCPU, 2.3 GiB of memory,
+    and 5.5 GiB of ephemeral storage.
+    - Label: `onyx.app/workload=sandbox`. Taint: `workload=sandbox:NoSchedule`.
+    - No `onyx.app/kvm` label or taint.
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Existing EKS clusters
+
+On a cluster that already runs pod sandboxes, do the steps in this order:
+
+<Steps>
+  <Step title="Deploy the chart with Firecracker">
+    Upgrade Onyx with the Firecracker values.
+    The host agent must tolerate the `onyx.app/kvm` taint before the taint exists. Until a node has the KVM label,
+    the host agent DaemonSet has no pods.
+  </Step>
+
+  <Step title="Set the Terraform variables">
+    Set `craft_sandbox_runtime = "firecracker"` and `enable_craft_pod_sandbox_node_group = true`,
+    with the instance types from [Option 1](#option-1-onyx-terraform-modules).
+    The module accepts the pod sandbox node group only with the Firecracker runtime, so set both in the same change.
+  </Step>
+
+  <Step title="Apply the pod sandbox node group first">
+    Apply only the new node group. Wait until the prepuller pod runs on its node:
+
+    ```bash
+    terraform apply \
+      -target='module.onyx.module.eks.module.eks.module.eks_managed_node_group["sandbox_pod"]'
+    kubectl -n onyx-sandboxes get pods -o wide -l app.kubernetes.io/component=sandbox-image-prepuller
+    ```
+  </Step>
+
+  <Step title="Apply the Firecracker node group">
+    Run `terraform apply` without a target. EKS replaces the sandbox nodes with nodes that have nested virtualization,
+    the KVM label, and the KVM taint. Plan this step for a quiet time: the pod sandboxes on the old nodes stop.
+  </Step>
+
+  <Step title="Check the KVM nodes">
+    ```bash
+    kubectl get nodes -l onyx.app/kvm=true -o wide
+    kubectl -n onyx-sandboxes get pods -o wide --field-selector spec.nodeName=<kvm-node>
+    ```
+
+    The second command must show no pod sandbox and no prepuller pod. Delete a prepuller pod that remains there.
+  </Step>
+</Steps>
+
+## AWS security findings
+
+Amazon GuardDuty EKS protection can report findings when the host agent starts.
+The host agent is a privileged DaemonSet with `hostPID` and a `hostPath` mount, by design. To suppress these findings,
+add a GuardDuty suppression rule scoped to your cluster name and the host agent namespace (`onyx-sandbox-runtime` by
+default). Scope the rule to the finding types that you see. Do not suppress them for other namespaces.

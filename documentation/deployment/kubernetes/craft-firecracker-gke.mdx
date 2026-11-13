@@ -1,0 +1,170 @@
+---
+title: "Firecracker on Google GKE"
+description: "Prepare GKE Standard node pools for Craft Firecracker sandboxes"
+icon: "google"
+---
+
+This guide prepares Google Kubernetes Engine (GKE) for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+Use the Onyx Terraform modules, or prepare the node pools of your own GKE cluster. After the nodes are ready,
+configure Helm as the overview page shows.
+
+## Node requirements on GKE
+
+| Item | Allowed | Not allowed |
+| --- | --- | --- |
+| Cluster | GKE Standard | GKE Autopilot. It blocks privileged pods and nested virtualization. |
+| Machine type | Intel `n2` and `c3`. The Onyx module default is `n2-standard-8`. | AMD (`n2d`, `c2d`, `c3d`, `t2d`), Arm (`t2a`), `e2` |
+| Node image | `COS_CONTAINERD` | |
+| Pool | A pool with nested virtualization | gVisor (GKE Sandbox) pools. A gVisor pod gets no `/dev/kvm`. |
+| Network | Dataplane V2, which enforces NetworkPolicy | |
+
+The COS root file system is ext4 without reflink. {/* depends: loop store */}
+The host agent makes its XFS loop file in the data directory, so you do not need a data disk.
+Keep a boot disk of 200 GB or more for the loop file.
+
+## Option 1: Onyx Terraform modules
+
+The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/deployment/cloud/gcp) for the full module.
+
+<Steps>
+  <Step title="Set the sandbox pool variables">
+    {/* depends: terraform module tag (tf-gcp) with craft_sandbox_runtime */}
+
+    ```hcl main.tf
+    module "onyx" {
+      source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/gcp/onyx?ref=<tag>"
+      # ... your existing settings
+
+      enable_sandbox_node_pool = true
+      craft_sandbox_runtime    = "firecracker"
+    }
+    ```
+
+    With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+
+    - turns on nested virtualization for the sandbox pool;
+    - sets `vm.max_map_count` to `1048576` (COS uses `65530`);
+    - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+    - keeps Shielded VM secure boot on;
+    - makes a Google service account for the Onyx workloads, so that the API server can sign
+    Cloud Storage URLs. See [Signed Cloud Storage URLs](#signed-cloud-storage-urls).
+
+    The module refuses a blocked machine type, and gVisor with Firecracker on the same pool.
+  </Step>
+
+  <Step title="Add the pod sandbox pool">
+    {/* depends: terraform PR (#17786) */} Add `enable_craft_pod_sandbox_node_pool = true` to the module block.
+    It needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+    The module then adds the pool `sandboxpod` (`n2-standard-4`, 1 to 2 nodes, boot disk `sandbox_node_disk_size_gb`).
+    The pool has the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`,
+    and no KVM label or taint. The chart default `sandboxPod` values select this pool,
+    so you need no chart change for it.
+
+    A tainted pool starts with 0 nodes.
+    The cluster autoscaler adds a node when the first pod sandbox or the image prepuller needs one.
+    The `gcp/onyx` module uses the default size for this pool.
+  </Step>
+
+  <Step title="Apply">
+    ```bash
+    terraform init -upgrade
+    terraform plan
+    terraform apply
+    ```
+
+    GCP turns on nested virtualization only when it creates a pool. On an existing cluster,
+    a change to `craft_sandbox_runtime` replaces the sandbox pool, and every sandbox on it stops.
+    On an existing cluster, deploy the chart with Firecracker before you apply,
+    as [Add Firecracker to an existing
+    installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
+    Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Option 2: Your own GKE cluster
+
+<Steps>
+  <Step title="Make the Firecracker node pool">
+    Nested virtualization can be set only when you create a pool:
+
+    ```bash
+    gcloud container node-pools create craft-fc \
+      --cluster=<cluster> --location=<region> \
+      --machine-type=n2-standard-8 \
+      --image-type=COS_CONTAINERD \
+      --disk-size=200 \
+      --enable-nested-virtualization \
+      --system-config-from-file=craft-fc-sysctl.yaml \
+      --node-labels=onyx.app/workload=sandbox,onyx.app/kvm=true \
+      --node-taints=workload=sandbox:NoSchedule,onyx.app/kvm=true:NoSchedule \
+      --num-nodes=1
+    ```
+
+    ```yaml craft-fc-sysctl.yaml
+    linuxConfig:
+      sysctl:
+        vm.max_map_count: "1048576"
+    ```
+  </Step>
+
+  <Step title="Make the pod sandbox node pool">
+    ```bash
+    gcloud container node-pools create craft-pod-sandbox \
+      --cluster=<cluster> --location=<region> \
+      --machine-type=n2-standard-4 \
+      --node-labels=onyx.app/workload=sandbox \
+      --node-taints=workload=sandbox:NoSchedule \
+      --num-nodes=1
+    ```
+  </Step>
+
+  <Step title="Allow signed Cloud Storage URLs">
+    Follow [Signed Cloud Storage URLs](#signed-cloud-storage-urls).
+  </Step>
+
+  <Step title="Configure Helm">
+    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Signed Cloud Storage URLs
+
+The host agent uploads and downloads session files with signed Cloud Storage URLs. Without a key file,
+the API server signs URLs through the IAM `signBlob` API. That API needs a Google service account:
+a direct Workload Identity principal has none.
+
+With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+
+- makes the Google service account `<cluster name>-workload`;
+- maps the Kubernetes service account `onyx-workload-access` to it, with the `iam.gke.io/gcp-service-account`
+  annotation and `roles/iam.workloadIdentityUser`;
+- grants the account `roles/iam.serviceAccountTokenCreator` on itself.
+
+The `workload_google_service_account_email` output names the account. The file store bucket grant moves to this account.
+Grants that you gave to the old `principal://` member on other resources do not move.
+Grant them again to the new member.
+
+If the chart makes the Kubernetes service account (`create_workload_service_account = false` on the `gke` module),
+add the annotation in your Helm values:
+
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: <workload_google_service_account_email>
+```
+
+On your own cluster, make the same setup:
+a Google service account with `roles/iam.serviceAccountTokenCreator` on itself and write access to the file store
+bucket, mapped to the Onyx Kubernetes service account.
+
+## Google Cloud security findings
+
+Security Command Center can report findings when the host agent starts.
+The host agent is a privileged DaemonSet with `hostPID` and a `hostPath` mount, by design.
+Scope a mute rule to your cluster and the host agent namespace (`onyx-sandbox-runtime` by default).
