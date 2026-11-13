@@ -56,6 +56,7 @@ def list_with_resume(
     include_permissions: bool = False,
     after_call: Callable[["_Listing"], None] | None = None,
     retry_failed_calls: bool = False,
+    start: float = 0,
 ) -> _Listing:
     """Runs the listing to its end, one call at a time.
 
@@ -71,7 +72,7 @@ def list_with_resume(
         if listing.calls > _MAX_CALLS:
             raise AssertionError("The listing did not finish")
         generator = connector.retrieve_slim_docs_from_checkpoint(
-            0, end, checkpoint, include_permissions
+            start, end, checkpoint, include_permissions
         )
         items: list[SlimDocument | HierarchyNode | ConnectorFailure] = []
         try:

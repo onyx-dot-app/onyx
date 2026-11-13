@@ -538,3 +538,76 @@ def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
         f"{len(missing)} of {len(shared_by_victim)} files that the failed owner "
         "shared were not listed"
     )
+
+
+def _modified_ms(mock_drive: MockDrive, file_id: str) -> int:
+    """The modifiedTime as Drive serves it: cut to the millisecond."""
+    file = mock_drive.client.get(f"/_mock/corpus/files/{file_id}").json()["file"]
+    stamp = datetime.fromisoformat(file["modified_time"])
+    return int(stamp.timestamp()) * 1000 + stamp.microsecond // 1000
+
+
+@pytest.mark.usefixtures("small_pages")
+def test_a_sparse_page_does_not_stop_later_splits(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bulk uploads 2 s apart. The first page holds the end of one burst and
+    the start of the next, so its time span makes the range look sparse. A
+    later page inside a burst shows the true density, and the shard must
+    split then."""
+    own_mock_drive.set_corpus(
+        {
+            "num_users": 2,
+            "num_groups": 1,
+            "num_shared_drives": 1,
+            "files_per_shared_drive": 3000,
+            "files_per_user": 0,
+            "folders_per_container": 2,
+            "shortcut_fraction": 0,
+        }
+    )
+    # Small bursts first: a page of the oldest files then crosses a gap.
+    touched: set[str] = set()
+    for count in (6, 6, 150, 150, 150, 150, 150, 150):
+        touched.update(
+            own_mock_drive.client.post(
+                "/_mock/corpus/touch", json={"count": count}
+            ).json()["file_ids"]
+        )
+        time.sleep(2.0)
+    # A later burst can move a file of an earlier one, so read the times now.
+    times = {file_id: _modified_ms(own_mock_drive, file_id) for file_id in touched}
+    per_burst: dict[int, int] = {}
+    for ms in times.values():
+        per_burst[ms] = per_burst.get(ms, 0) + 1
+    bursts = sorted(per_burst)
+    window_start_ms = next(ms for ms in bursts[:-1] if per_burst[ms] < _PAGE_SIZE)
+    expected = {file_id for file_id, ms in times.items() if ms >= window_start_ms}
+
+    drive_splits = 0
+    try_split = parallel_listing.ParallelDriveLister._try_split
+
+    def recording_try_split(
+        self: parallel_listing.ParallelDriveLister,
+        shard: ListingShard,
+        files: list[GoogleDriveFileType],
+    ) -> object:
+        nonlocal drive_splits
+        result = try_split(self, shard, files)
+        if (
+            isinstance(result, list)
+            and result
+            and shard.partition.kind is ListingPartitionKind.SHARED_DRIVE
+        ):
+            drive_splits += 1
+        return result
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_try_split", recording_try_split
+    )
+    listing = list_with_resume(
+        own_mock_drive.build_connector(), start=window_start_ms / 1000
+    )
+
+    _assert_full_corpus(listing, expected)
+    assert drive_splits > 0, "the shard never split after its sparse first page"
