@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian Service Desk"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4249,6 +4252,28 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira-Service-Management-Connector konfigurieren",
+          "subtext": "Tickets eines Jira-Service-Management-Projekts indexieren.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site-URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "Projektschlüssel",
+              "description": "Der Schlüssel des zu indexierenden Jira-Service-Management-Projekts (Service Desk), z. B. 'SD'."
+            },
+            "include_internal_comments": {
+              "label": "Interne Kommentare einbeziehen",
+              "description": "Auch interne (nur für Agenten sichtbare) Kommentare indexieren. Standardmäßig aus: Nur kundensichtbare Kommentare werden indexiert."
+            },
+            "comment_email_blacklist": {
+              "label": "E-Mail-Blacklist für Kommentare",
+              "description": "Kommentare dieser E-Mail-Adressen werden nicht indexiert. Nützlich, um Bots auszuschließen."
             }
           }
         },
