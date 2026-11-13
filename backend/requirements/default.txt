@@ -2304,9 +2304,9 @@ py-key-value-aio==0.4.4 \
 pyairtable==3.0.1 \
     --hash=sha256:07295d82be1adfd3c00e21c640e7c79d0819846daf0549bc982736cc07e85d8e \
     --hash=sha256:7012a2403ba333db9d76d93453ade8762b3d12818d11cde670fa6cb697f42daf
-pyasn1==0.6.4 \
-    --hash=sha256:9c447d8431c947fe4c8febc4ed9e760bc29011a5b01e5c74b67025bd9fb8ce81 \
-    --hash=sha256:deda9277cfd454080ec40b207fb6df82206a3a2688735233cdcd8d3d565f088b
+pyasn1==0.6.5 \
+    --hash=sha256:4017b0fce125096b8573b39c989fdb1a4b19cf761e683398184550fea0e66587 \
+    --hash=sha256:6b11616a6bcf3a40e635f082bb232fa57b5e0dd7f517bd7ddd69ec3794508a47
     # via
     #   ldap3
     #   pyasn1-modules
