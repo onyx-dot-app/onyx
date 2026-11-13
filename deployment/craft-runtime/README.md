@@ -29,7 +29,7 @@ Environment variables override those values.
 Use `--set runtime.secret=id=build_ca_bundle,src=/path/to/ca-bundle.crt` for a custom build CA.
 The shared sandbox `install-browser.sh` installs Chrome and writes its vulnerability inventory.
 It uses the same Chrome pin as the sandbox image, so `update-sandbox-browser.yml` updates both.
-The runtime workflows reuse `audit-sandbox-browser.sh` to check that browser before publishing.
+The runtime workflows audit that browser's inventory through ODS before publishing.
 
 Python dependencies have a separate hash-checked lock.
 Refresh it with:
