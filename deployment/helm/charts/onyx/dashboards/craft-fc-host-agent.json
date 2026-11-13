@@ -543,7 +543,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum(increase(craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"}[1h])) or vector(0)",
+          "expr": "round(sum(increase(craft_fc_host_agent_admissions_total{namespace=~\"$namespace\", node=~\"$node\", result=\"refused\"}[1h]))) or vector(0)",
           "refId": "A"
         }
       ]
@@ -1311,7 +1311,7 @@
       "type": "timeseries",
       "id": 23,
       "title": "Relay error ratio",
-      "description": "Failed connections / all VM connections. A connection counts once as accepted or over_cap; an accepted one can also count as upstream_failed.",
+      "description": "Failed connections / all VM connections. A connection counts once as accepted or over_cap; an accepted one can also count as upstream_failed. Capped at 100%: rate() of a new upstream_failed series can extrapolate above it.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1364,7 +1364,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"over_cap|upstream_failed\"}[$__rate_interval])) / sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"accepted|over_cap\"}[$__rate_interval]))",
+          "expr": "clamp_max(sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"over_cap|upstream_failed\"}[$__rate_interval])) / sum by (node) (rate(craft_fc_host_agent_relay_connections_total{namespace=~\"$namespace\", node=~\"$node\", result=~\"accepted|over_cap\"}[$__rate_interval])), 1)",
           "legendFormat": "{{node}}",
           "refId": "A"
         }
