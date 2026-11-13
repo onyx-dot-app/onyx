@@ -18,6 +18,8 @@ export interface StreamingHeaderProps {
   streamingStartTime?: number;
   // Backend `pre_answer_processing_seconds`; freezes the timer once it arrives.
   toolProcessingDuration?: number;
+  // The run waits for the user's approval; the timer does not count it.
+  awaitingApproval?: boolean;
 }
 
 export const StreamingHeader = memo(function StreamingHeader({
@@ -28,11 +30,13 @@ export const StreamingHeader = memo(function StreamingHeader({
   onToggle,
   streamingStartTime,
   toolProcessingDuration,
+  awaitingApproval = false,
 }: StreamingHeaderProps) {
   const elapsedSeconds = useStreamingDuration(
     toolProcessingDuration === undefined,
     streamingStartTime,
     toolProcessingDuration,
+    awaitingApproval,
   );
   const showElapsedTime =
     isExpanded && streamingStartTime !== undefined && elapsedSeconds > 0;

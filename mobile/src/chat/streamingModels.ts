@@ -68,6 +68,10 @@ export enum PacketType {
 
   CODE_MODE_START = "code_mode_start",
   CODE_MODE_DELTA = "code_mode_delta",
+
+  // A tool call waits for the user's decision; they never name a timeline step.
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -377,6 +381,33 @@ export type SearchToolObj =
   | SectionEnd
   | PacketError;
 
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // ISO 8601; shown to the user, never used to close the request
+  expires_at: string;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
+  // "disabled": an approval found the tool disabled, so the call did not run.
+  outcome:
+    | "approved"
+    | "approved_for_chat"
+    | "rejected"
+    | "expired"
+    | "disabled"
+    | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
+
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
   | ImageGenerationToolDelta
@@ -458,6 +489,7 @@ export type ObjTypes =
   | CodingAgentObj
   | CodeModeStart
   | CodeModeDelta
+  | ToolApprovalObj
   | PacketError;
 
 export interface Placement {

@@ -39,6 +39,11 @@ import {
   PacketType,
   buildUserCancelledStopPacket,
 } from "@/chat/streamingModels";
+import {
+  APPROVAL_PENDING_ERROR_CODE,
+  findPendingToolApprovalId,
+  useToolApprovalUi,
+} from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 import { toast } from "@/hooks/useToast";
@@ -46,6 +51,12 @@ import { toast } from "@/hooks/useToast";
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
 const AUTO_NAME_DELAY_MS = 200;
 const STOP_ACK_TIMEOUT_MS = 10_000;
+
+// While a request waits for a decision the user may draft but not send; the draft stays.
+function showPendingApproval(): void {
+  useToolApprovalUi.getState().nudge();
+  toast.warning("Approve or reject the pending tool calls first.");
+}
 
 interface AutoNameContext {
   serverUrl: string | null;
@@ -115,6 +126,7 @@ async function runChatStream(
   let accepted = false;
   // Set when the server answered without saving the turn.
   let rejection: string | null = null;
+  let approvalPending = false;
 
   // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
   // stream rather than the session-create round trip that can precede it.
@@ -224,6 +236,7 @@ async function runChatStream(
         error.status !== 408
       ) {
         rejection = message;
+        approvalPending = error.code === APPROVAL_PENDING_ERROR_CODE;
       } else {
         store.getState().patchNode(sessionId, agentNodeId, {
           type: "error",
@@ -242,7 +255,8 @@ async function runChatStream(
   if (rejection !== null) {
     // The turn does not belong in the tree; the composer still holds its text.
     store.getState().updateSessionTree(sessionId, treeBeforeSend);
-    toast.error(rejection);
+    if (approvalPending) showPendingApproval();
+    else toast.error(rejection);
   }
   store.getState().updateChatState(sessionId, "settling");
   try {
@@ -350,6 +364,15 @@ export function useChatController(
       if (!text) return;
       const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
+      if (
+        sessionId != null &&
+        findPendingToolApprovalId(
+          useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
+        ) !== null
+      ) {
+        showPendingApproval();
+        return;
+      }
       submittingRef.current = true;
       try {
         const isNewSession = sessionId == null;

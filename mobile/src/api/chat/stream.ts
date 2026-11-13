@@ -45,6 +45,8 @@ export class StreamHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    // Backend `error_code`, e.g. APPROVAL_PENDING.
+    readonly code: string | null = null,
   ) {
     super(message);
     this.name = "StreamHttpError";
@@ -79,13 +81,18 @@ export function isHeartbeat(event: unknown): boolean {
 
 async function raiseForStatus(response: ExpoResponse): Promise<never> {
   let detail = `Request failed with status ${response.status}`;
+  let code: string | null = null;
   try {
-    const parsed = JSON.parse(await response.text()) as { detail?: string };
+    const parsed = JSON.parse(await response.text()) as {
+      detail?: unknown;
+      error_code?: unknown;
+    };
     if (typeof parsed.detail === "string") detail = parsed.detail;
+    if (typeof parsed.error_code === "string") code = parsed.error_code;
   } catch {
     // non-JSON body — keep the status message
   }
-  throw new StreamHttpError(detail, response.status);
+  throw new StreamHttpError(detail, response.status, code);
 }
 
 // resume keeps heartbeats as quiet-phase liveness ticks (to re-check focus/abort); send drops them
