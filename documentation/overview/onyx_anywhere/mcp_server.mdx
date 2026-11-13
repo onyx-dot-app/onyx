@@ -142,16 +142,48 @@ Choose either user or project configuration for Onyx to avoid competing definiti
 
 ### Claude Desktop
 
-Use a remote custom connector:
+Add Onyx as a remote custom connector. Claude Desktop and claude.ai show the same connector screens.
 
-1. Open **Customize > Connectors**.
-2. Select **+ Add > Add custom connector**.
-3. Name it **Onyx** and enter `https://onyx.example.com/mcp/` with your domain.
-4. Continue through authentication settings.
-   Choose sign-in. Claude can identify itself with its published Client ID Metadata Document or register dynamically.
-   Onyx supports both.
-5. Add the connector and complete Onyx sign-in when prompted.
-6. Enable Onyx through the conversation's **+ > Connectors** menu and send the [test prompt](#test-the-connection).
+<Steps>
+  <Step title="Open Add custom connector">
+    Open **Customize** and select the **Connectors** tab. Select **+ Add > Add custom connector**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_add_custom_connector.webp" alt="Claude Customize page on the Connectors tab with the Add menu open and Add custom connector shown."/>
+  </Step>
+
+  <Step title="Enter the Onyx MCP URL">
+    Name the connector **Onyx** and enter your Onyx MCP URL, such as `https://onyx.example.com/mcp/`.
+    Select **Continue**. Claude checks the server and looks up its sign-in settings.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_connector_url.webp" alt="Add custom connector dialog with the name Onyx and an Onyx MCP server URL, and the Continue button."/>
+
+    If Claude shows that a connector with this URL already exists in your organization, do not add it again.
+    Close the dialog and continue with the **Sign in to Onyx** step.
+  </Step>
+
+  <Step title="Keep the detected sign-in settings">
+    Under **Authentication**, keep **Sign in now**. Under **OAuth client**, keep **Use Claude's published identity**.
+    Claude marks both options **Detected**. Onyx also supports **Register automatically**.
+    Leave **Request headers** empty, then scroll down and select **Add**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_auth_settings.webp" alt="Add custom connector authentication settings with Sign in now and Use Claude's published identity selected and marked Detected." />
+  </Step>
+
+  <Step title="Sign in to Onyx">
+    Complete the Onyx sign-in and select **Allow access** on the [Onyx consent page](#sign-in-and-approve-access).
+    If Claude does not open the sign-in, open **Customize > Connectors > Yours** and select **Connect** for Onyx.
+    When the connection is complete, the **Status** column shows a check mark for Onyx.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_connectors_yours.webp" alt="Claude Connectors list on the Yours tab with the custom Onyx connector authorized as Individual and a check mark in Status."/>
+  </Step>
+
+  <Step title="Turn on Onyx in a conversation">
+    In the message box, select **+ > Connectors** and turn on the Onyx connector.
+    Then send the [test prompt](#test-the-connection).
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/claude_enable_in_chat.webp" alt="Claude message box with the + menu open on Connectors and the Onyx connector toggle turned on."/>
+  </Step>
+</Steps>
 
 For a managed organization, an owner adds Onyx under **Organization settings > Connectors**.
 Members then select **Connect** for Onyx in their own connector list and approve access with their own account.
@@ -166,25 +198,81 @@ See [Anthropic's custom connector
 guide](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp)
 for current availability and network requirements.
 
+### ChatGPT on the web
+
+Add Onyx to ChatGPT on the web as a custom MCP server. ChatGPT on the web does not read your local Codex configuration,
+so a server that you add in the ChatGPT desktop app or Codex does not show here.
+Your ChatGPT workspace must allow custom MCP servers.
+See [OpenAI's MCP guide](https://learn.chatgpt.com/docs/extend/mcp) for plan and workspace availability.
+
+<Steps>
+  <Step title="Open Add custom MCP server">
+    Open **Customize > Plugins**. Select **Add > Add custom MCP server**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_add_custom_mcp.webp" alt="ChatGPT Plugins page with the Add menu open and Add custom MCP server shown."/>
+  </Step>
+
+  <Step title="Enter the Onyx MCP URL">
+    Enter **Onyx** as the **Name**. Under **Connection**, keep **Server URL** and enter your Onyx MCP URL,
+    such as `https://onyx.example.com/mcp/`. Keep **OAuth** as the **Authentication**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_server_form.webp" alt="Add custom MCP server form with the name Onyx, an Onyx MCP server URL, OAuth authentication, and the I understand and want to continue checkbox selected."/>
+  </Step>
+
+  <Step title="Select Dynamic Client Registration">
+    Open **Advanced OAuth settings**. Set **Registration method** to **Dynamic Client Registration (DCR)**.
+    Under **Default scopes**, keep **read:search** selected.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_oauth_dcr.webp" alt="ChatGPT OAuth advanced settings with Registration method set to Dynamic Client Registration and read:search selected under Default scopes."/>
+
+    ChatGPT selects **Client Identifier Metadata Document (CIMD)** by default.
+    Onyx 5.1 and earlier reject the ChatGPT CIMD client with the error `Client ID
+    'https://chatgpt.com/oauth/client.json' not found`. DCR works on all versions that have the MCP server.
+  </Step>
+
+  <Step title="Create the plugin and sign in">
+    Select **I understand and want to continue**, then select **Create as a plugin**. In the **Connect Onyx** dialog,
+    select **Continue to Onyx**.
+    Sign in to Onyx and select **Allow access** on the [Onyx consent page](#sign-in-and-approve-access).
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_connect_onyx.webp" alt="ChatGPT Connect Onyx dialog with the Continue to Onyx button."/>
+
+    ChatGPT then shows Onyx under **Installed** on the **Plugins** page.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_plugin_page.webp" alt="ChatGPT plugin page for Onyx with the Settings and Try in chat buttons."/>
+  </Step>
+
+  <Step title="Use Onyx in a chat">
+    On the Onyx plugin page, select **Try in chat**. ChatGPT opens a new chat with **@Onyx** in the message box.
+    In other chats, type `@Onyx` before your question. Send the [test prompt](#test-the-connection).
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_prompt.webp" alt="ChatGPT message box with @Onyx followed by a request to search for the onboarding guide."/>
+  </Step>
+</Steps>
+
+To remove the connection, open **Settings > Plugins**, select Onyx, and select **Delete app**.
+Then [disconnect ChatGPT in Onyx](#manage-connected-apps) to revoke its tokens.
+
 ### ChatGPT desktop
 
-1. Open **Settings > MCP servers** and select **Add server**.
-2. Name it **Onyx** and choose **Streamable HTTP**.
-3. Enter `https://onyx.example.com/mcp/` with your domain.
-4. Save, then select **Restart**.
-5. Select **Authenticate** for Onyx and complete the browser sign-in and approval.
-6. Enter `/mcp` in the composer to inspect connected servers, then send the [test prompt](#test-the-connection).
+<Steps>
+  <Step title="Add the server">
+    Open **Settings > MCP servers** and select **Add server**. Name it **Onyx** and choose **Streamable HTTP**.
+    Enter your Onyx MCP URL, such as `https://onyx.example.com/mcp/`.
+  </Step>
+
+  <Step title="Restart and sign in">
+    Save, then select **Restart**. Select **Authenticate** for Onyx and complete the browser sign-in and approval.
+  </Step>
+
+  <Step title="Check the connection">
+    Enter `/mcp` in the composer to inspect connected servers, then send the [test prompt](#test-the-connection).
+  </Step>
+</Steps>
 
 If you already configured Onyx with Codex on the same host, check the server list before adding it again.
 These clients share `~/.codex/config.toml`. See [OpenAI's MCP guide](https://learn.chatgpt.com/docs/extend/mcp)
 for the current desktop controls.
-
-#### ChatGPT on the web
-
-ChatGPT web uses hosted MCP tools through plugins. It does not read your local Codex configuration.
-Adding Onyx in the desktop app therefore does not configure it on the web.
-Consult [OpenAI's MCP guide](https://learn.chatgpt.com/docs/extend/mcp)
-for the web connection model and your workspace's plugin availability.
 
 ## Sign in and approve access
 
@@ -488,6 +576,7 @@ named filters are resolved on the search call and return an error when they cann
 | Access is denied or returns `403` | Check current permissions, workspace membership, and `read:search` scope. Signing in again cannot restore a permission your account no longer has. |
 | A request returns `402` | Ask your administrator to check billing or license restrictions. |
 | A request returns `503` | A required service is unavailable. Retry later and ask your administrator to check service health if it persists. |
+| ChatGPT sign-in returns `Client ID 'https://chatgpt.com/oauth/client.json' not found` | Your Onyx version rejects the ChatGPT CIMD client. Create the plugin again with **Registration method** set to **Dynamic Client Registration (DCR)**, as shown in [ChatGPT on the web](#chatgpt-on-the-web). |
 | Sign-in returns `503` | Onyx could not fetch the client's Client ID Metadata Document, or an authorization dependency was unavailable. Retry. If it persists, ask your administrator to check that the client's metadata URL is public. |
 | An expected document is missing | Confirm that you can find it in Onyx, that it is indexed, and that your filters match its source, document set, and update time. |
 | A named filter fails | Use the suggested or available names. Keep the filter if the search must stay within that scope. |
