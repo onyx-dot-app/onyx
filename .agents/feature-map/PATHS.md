@@ -270,7 +270,7 @@ covers new files that match it.
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
-| `web/src/app/app/plugins/` | plugins, chat-frontend |
+| `web/src/app/app/plugins/`, `web/src/views/PluginsPage/` | plugins, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
 | `web/src/views/SettingsPage.tsx` | chat-preferences |

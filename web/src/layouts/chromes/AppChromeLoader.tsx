@@ -5,6 +5,7 @@ import { usePathname } from "@opal/navigation";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import AgentsCatalogLoading from "@/views/AgentsCatalogPage/loading";
 import AgentEditorLoading from "@/views/AgentEditorPage/loading";
+import PluginsLoading from "@/views/PluginsPage/loading";
 
 /**
  * The loading screen of the URL's page: `AppChrome`'s `PendingRoute` loader,
@@ -18,6 +19,7 @@ export function AppChromeLoader() {
   const pathname = usePathname();
   if (pathname === "/app/agents") return <AgentsCatalogLoading />;
   if (pathname.startsWith("/app/agents/")) return <AgentEditorLoading />;
+  if (pathname === "/app/plugins") return <PluginsLoading />;
   if (
     position.isChat() ||
     position.isNewSession() ||
