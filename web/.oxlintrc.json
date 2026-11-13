@@ -453,7 +453,6 @@
         "src/app/craft/components/TurnOutputCards.tsx",
         "src/app/craft/components/UserLibraryModal.tsx",
         "src/app/craft/components/approvals/ApprovalCard.tsx",
-        "src/app/craft/components/approvals/PayloadView.tsx",
         "src/app/craft/components/approvals/SessionApprovalsRegion.tsx",
         "src/app/craft/components/output-panel/BrowserTab.tsx",
         "src/app/craft/components/output-panel/DirectoryTree.tsx",

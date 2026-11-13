@@ -2,11 +2,6 @@ import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 export type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
 
-export type ApprovalSubmitDecision =
-  | "approve_once"
-  | "approve_session"
-  | "reject";
-
 // Mirrors backend `ActionMatch`.
 export interface ApprovalAction {
   action_type: string;

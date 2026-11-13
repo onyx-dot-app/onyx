@@ -74,13 +74,11 @@ describe("Approval history", () => {
           ).toHaveLength(2),
         { timeout: 2000 }
       );
-      expect(
-        screen.getByText(
-          decision === "APPROVED"
-            ? "Approved"
-            : "Request rejected. This request did not run."
-        )
-      ).toBeInTheDocument();
+      expect(screen.getByRole("status")).toHaveTextContent(
+        decision === "APPROVED"
+          ? "Approved: Send message in Slack"
+          : "Not approved: Send message in Slack"
+      );
       fetchMock.mockRestore();
     }
   );
