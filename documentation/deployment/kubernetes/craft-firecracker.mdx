@@ -414,6 +414,9 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
     - `auth.sandboxNodeRegistration.enabled` is not `true`, or it has no value and no existing Secret.
     - `sandboxPod.tolerations` tolerates the `onyx.app/kvm` taint.
     - `craft.hostAgent.namespace` is the release namespace or the sandbox namespace.
+    - {/* depends: chart PR */} `global.version` is `latest`, `edge`, or `beta`. Use a pinned Onyx release tag.
+    - `craft.hostAgent.rootfs.image.tag` is set without `configMap.SANDBOX_FC_TEMPLATE`.
+    - Only one of `craft.hostAgent.tls.existingSecret` and `craft.hostAgent.client.existingSecret` is set.
   </Accordion>
 
   <Accordion title="No host agent pod on a KVM node">
