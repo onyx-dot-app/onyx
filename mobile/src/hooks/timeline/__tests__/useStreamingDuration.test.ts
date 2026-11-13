@@ -88,4 +88,23 @@ describe("useStreamingDuration", () => {
     rerender({ s: Date.now() + 500, streaming: false });
     expect(result.current).toBe(0);
   });
+
+  it("does not count the time a run waits for the user", () => {
+    const start = Date.now();
+    const { result, rerender } = renderHook(
+      ({ paused }: { paused: boolean }) =>
+        useStreamingDuration(true, start, undefined, paused),
+      { initialProps: { paused: false } },
+    );
+    act(() => jest.advanceTimersByTime(2000));
+    expect(result.current).toBe(2);
+
+    rerender({ paused: true });
+    act(() => jest.advanceTimersByTime(10_000));
+    expect(result.current).toBe(2);
+
+    rerender({ paused: false });
+    act(() => jest.advanceTimersByTime(1000));
+    expect(result.current).toBe(3);
+  });
 });

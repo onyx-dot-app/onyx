@@ -20,6 +20,7 @@ import {
 } from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
+import { useToolApprovalUi } from "@/chat/toolApprovals";
 import { useChatController } from "@/hooks/useChatController";
 import { toast } from "@/hooks/useToast";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -43,9 +44,11 @@ jest.mock("@/api/chat/stream", () => ({
     "error" in event && typeof event.error === "string",
   StreamHttpError: class StreamHttpError extends Error {
     status: number;
-    constructor(message: string, status: number) {
+    code: string | null;
+    constructor(message: string, status: number, code: string | null = null) {
       super(message);
       this.status = status;
+      this.code = code;
     }
   },
 }));
@@ -57,7 +60,7 @@ jest.mock("@/api/chat/sessions", () => ({
   stopChatSession: jest.fn(),
 }));
 jest.mock("@/hooks/useToast", () => ({
-  toast: { info: jest.fn(), error: jest.fn() },
+  toast: { info: jest.fn(), error: jest.fn(), warning: jest.fn() },
 }));
 
 const streamMock = streamChatMessage as unknown as Mock<
@@ -136,6 +139,68 @@ describe("useChatController", () => {
       currentSessionId: null,
       sessions: new Map(),
     });
+    useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
+  });
+
+  it("blocks a send while a tool approval waits and keeps the draft", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      scripted([
+        idInfo,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_REQUEST,
+            approval_id: "a1",
+            tool_call_id: "c1",
+            tool_name: "lookup",
+            display_name: "Lookup",
+            arguments: {},
+            expires_at: "2099-01-01T00:00:00Z",
+          },
+        } as StreamEvent,
+      ]),
+    );
+    const onAccepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    await act(async () => {
+      await result.current.submit("Follow-up", [], onAccepted);
+    });
+
+    expect(streamMock).toHaveBeenCalledTimes(1);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first.",
+    );
+    expect(useToolApprovalUi.getState().nudgeSeq).toBe(1);
+  });
+
+  it("points at the waiting approval when the server refuses a send", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
+      })(),
+    );
+    const onAccepted = jest.fn();
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+
+    await act(async () => {
+      await result.current.submit("Question", [], onAccepted);
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(result.current.messages).toEqual([]);
+    expect(onAccepted).not.toHaveBeenCalled();
+    expect(toast.error).not.toHaveBeenCalled();
+    expect(toast.warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first.",
+    );
   });
 
   it("streams tokens into the assistant node and assigns message ids", async () => {

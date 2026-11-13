@@ -59,6 +59,8 @@ export interface AgentTimelineProps {
   streamingStartTime?: number;
   // A code mode program works between tool calls; it has no step.
   codeModeWorking?: boolean;
+  // A tool call waits for the user's decision; the timer does not count the wait.
+  awaitingApproval?: boolean;
 }
 
 function TimelineContainer({
@@ -99,7 +101,8 @@ function areAgentTimelinePropsEqual(
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.streamingStartTime === next.streamingStartTime &&
-    prev.codeModeWorking === next.codeModeWorking
+    prev.codeModeWorking === next.codeModeWorking &&
+    prev.awaitingApproval === next.awaitingApproval
   );
 }
 
@@ -117,11 +120,13 @@ export const AgentTimeline = memo(function AgentTimeline({
   toolProcessingDuration,
   streamingStartTime,
   codeModeWorking = false,
+  awaitingApproval = false,
 }: AgentTimelineProps) {
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
     codeModeWorking,
+    awaitingApproval,
   );
 
   const {
@@ -289,6 +294,7 @@ export const AgentTimeline = memo(function AgentTimeline({
         onToggle={handleToggle}
         streamingStartTime={streamingStartTime}
         toolProcessingDuration={toolProcessingDuration}
+        awaitingApproval={awaitingApproval}
       />
     );
   } else if (uiState === TimelineUIState.STOPPED) {
