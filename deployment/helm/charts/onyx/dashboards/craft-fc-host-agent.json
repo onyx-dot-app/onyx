@@ -1593,8 +1593,8 @@
     {
       "type": "timeseries",
       "id": 28,
-      "title": "BuildTemplate calls by code",
-      "description": "Only BuildTemplate API calls. The start-up build has no metric: read the agent log (\"template ready\" or \"template build at start-up failed\").",
+      "title": "BuildTemplate calls since agent start",
+      "description": "BuildTemplate calls by gRPC code since the agent started. Calls are rare (an operator rebuilds a template), so the panel shows the counter, not a rate.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -1647,7 +1647,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node, code) (increase(craft_fc_host_agent_rpc_requests_total{namespace=~\"$namespace\", node=~\"$node\", method=\"BuildTemplate\"}[$__rate_interval]))",
+          "expr": "max by (node, code) (craft_fc_host_agent_rpc_requests_total{namespace=~\"$namespace\", node=~\"$node\", method=\"BuildTemplate\"})",
           "legendFormat": "{{node}} {{code}}",
           "refId": "A"
         }
