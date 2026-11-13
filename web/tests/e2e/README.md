@@ -122,6 +122,9 @@ holds the provider response without mocking the chat API or using fixed sleeps.
 Set `heartbeat_while_paused: true` to keep emitting whitespace while the answer
 is held. This tests cancellation during streaming; leave it off to test a blocked read.
 
+To fail a turn after some streamed text, set `error_after_text` on a scripted reply.
+The stream sends the reply text, then ends with that provider error.
+
 `chat/stream_recovery.spec.ts` covers real chat streaming, saved history, reloads,
 network loss, and stopping. Keep packet fixtures in rendering tests: they test
 presentation, but do not verify the SDK, stream buffer, or saved history.

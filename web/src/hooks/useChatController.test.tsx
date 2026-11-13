@@ -2,12 +2,20 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatController from "@/hooks/useChatController";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { createChatSession, sendMessage } from "@/app/app/services/lib";
+import {
+  createChatSession,
+  processRawChatHistory,
+  sendMessage,
+} from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
-import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
+import {
+  fetchSettledChatSession,
+  waitForChatResponseEnd,
+} from "@/lib/chat/sessionReadiness";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import type { Message } from "@/app/app/types";
 
 jest.mock("next/navigation", () => {
   const actual = jest.requireActual("next/navigation");
@@ -600,4 +608,213 @@ test("a send after a failed turn continues after the failed response", async () 
     ["assistant", 14],
   ]);
   expect(chain[2]!.parentNodeId).toBe(chain[1]!.nodeId);
+});
+
+function renderChatController(restoreInputBar = jest.fn()) {
+  return renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar,
+    })
+  );
+}
+
+// A setup failure, such as a rejected query hook, ends the stream with no IDs.
+async function* rejectedSend() {
+  yield {
+    error: "Rejected before save",
+    error_code: "BAD_REQUEST",
+    is_retryable: false,
+    stack_trace: "",
+    details: {},
+  };
+}
+
+test.each(["send", "regenerate"] as const)(
+  "a %s the server rejects before saving leaves the tree as it was",
+  async (kind) => {
+    jest.spyOn(console, "log").mockImplementation(() => {});
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "session",
+    });
+    useChatSessionStore
+      .getState()
+      .createSession("session", { incognito: true });
+    jest
+      .mocked(sendMessage)
+      .mockImplementationOnce(async function* () {
+        yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+        yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+      })
+      .mockImplementationOnce(rejectedSend)
+      .mockImplementationOnce(async function* () {
+        yield { user_message_id: 13, reserved_assistant_message_id: 14 };
+        yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+      });
+    const restoreInputBar = jest.fn();
+    const { result } = renderChatController(restoreInputBar);
+    const session = () =>
+      useChatSessionStore.getState().sessions.get("session")!;
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Question",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    const treeBefore = session().messageTree;
+    const [question] = getLatestMessageChain(treeBefore);
+
+    await act(async () =>
+      result.current.onSubmit(
+        kind === "send"
+          ? {
+              message: "Rejected question",
+              currentMessageFiles: [],
+              deepResearch: false,
+            }
+          : {
+              message: "Question",
+              currentMessageFiles: [],
+              deepResearch: false,
+              messageIdToResend: 11,
+              regenerationRequest: { messageId: 12, parentMessage: question! },
+            }
+      )
+    );
+    expect(session().messageTree).toEqual(treeBefore);
+    expect(session().uncaughtError).toMatchObject({
+      error: "Rejected before save",
+      errorCode: "BAD_REQUEST",
+      isRetryable: false,
+    });
+    if (kind === "send") {
+      expect(restoreInputBar).toHaveBeenCalledWith("Rejected question", []);
+    } else {
+      expect(restoreInputBar).not.toHaveBeenCalled();
+    }
+
+    await act(async () =>
+      result.current.onSubmit({
+        message: "Next",
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ message: "Next", parentMessageId: 12 })
+    );
+    expect(session().uncaughtError).toBeNull();
+    expect(
+      getLatestMessageChain(session().messageTree).map(
+        (message) => message.messageId
+      )
+    ).toEqual([11, 12, 13, 14]);
+  }
+);
+
+test("saved history keeps a failed turn and drops a rejected send", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const savedQuestion: Message = {
+    nodeId: 11,
+    messageId: 11,
+    message: "Question",
+    type: "user",
+    files: [],
+    toolCall: null,
+    parentNodeId: null,
+    childrenNodeIds: [12],
+    latestChildNodeId: 12,
+    packets: [],
+  };
+  const savedFailure: Message = {
+    nodeId: 12,
+    messageId: 12,
+    message: "Partial answer",
+    type: "error",
+    errorMessage: "Provider failed",
+    responseStatus: "error",
+    files: [],
+    toolCall: null,
+    parentNodeId: 11,
+    childrenNodeIds: [],
+    latestChildNodeId: null,
+    packets: [],
+  };
+  // Every history load returns the saved failed turn.
+  jest.mocked(processRawChatHistory).mockImplementation(
+    () =>
+      new Map([
+        [11, savedQuestion],
+        [12, savedFailure],
+      ])
+  );
+  jest
+    .mocked(sendMessage)
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+      yield {
+        placement: { turn_index: 0 },
+        obj: { type: "message_delta", content: "Partial answer" },
+      };
+      yield {
+        error: "Provider failed",
+        error_code: "API_ERROR",
+        is_retryable: true,
+        stack_trace: "",
+        details: {},
+      };
+    })
+    .mockImplementationOnce(rejectedSend)
+    .mockImplementationOnce(async function* () {
+      yield { user_message_id: 13, reserved_assistant_message_id: 14 };
+      yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+    });
+  const { result } = renderChatController();
+  const chain = () =>
+    getLatestMessageChain(
+      useChatSessionStore.getState().sessions.get("session")!.messageTree
+    ).map((message) => [message.type, message.messageId]);
+  for (const message of ["Question", "Rejected question"]) {
+    await act(async () =>
+      result.current.onSubmit({
+        message,
+        currentMessageFiles: [],
+        deepResearch: false,
+      })
+    );
+  }
+  expect(fetchSettledChatSession).toHaveBeenCalledTimes(2);
+  expect(chain()).toEqual([
+    ["user", 11],
+    ["error", 12],
+  ]);
+  expect(
+    useChatSessionStore.getState().sessions.get("session")?.uncaughtError?.error
+  ).toBe("Rejected before save");
+
+  await act(async () =>
+    result.current.onSubmit({
+      message: "try again",
+      currentMessageFiles: [],
+      deepResearch: false,
+    })
+  );
+  expect(sendMessage).toHaveBeenLastCalledWith(
+    expect.objectContaining({ message: "try again", parentMessageId: 12 })
+  );
+  jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
 });

@@ -57,7 +57,7 @@ export async function stopChatSession(
         serverTurn || typeof streamId === "number"
           ? "streaming"
           : "unconfirmed",
-      uncaughtError: errorMessage,
+      uncaughtError: { error: errorMessage },
     });
     throw error;
   }

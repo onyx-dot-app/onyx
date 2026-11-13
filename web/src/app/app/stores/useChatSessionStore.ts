@@ -15,6 +15,15 @@ import {
 import { useMemo } from "react";
 import type { ChatToolSelection } from "@/lib/tools/types";
 
+/** An error that belongs to the session, not to a saved message. */
+export interface SessionError {
+  error: string;
+  errorCode?: string;
+  isRetryable?: boolean;
+  details?: Record<string, any>;
+  stackTrace?: string | null;
+}
+
 interface ChatSessionData {
   sessionId: string;
   messageTree: MessageTreeState;
@@ -38,7 +47,7 @@ interface ChatSessionData {
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
   isLoadingOlderMessages: boolean;
-  uncaughtError: string | null;
+  uncaughtError: SessionError | null;
   loadingError: string | null;
   isReady: boolean;
 
@@ -149,7 +158,7 @@ interface ChatSessionStore {
 
   // Actions - Session-specific State (previously global)
   setIsFetchingChatMessages: (sessionId: string, fetching: boolean) => void;
-  setUncaughtError: (sessionId: string, error: string | null) => void;
+  setUncaughtError: (sessionId: string, error: SessionError | null) => void;
   setLoadingError: (sessionId: string, error: string | null) => void;
   setIsReady: (sessionId: string, ready: boolean) => void;
 
@@ -492,7 +501,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { isFetchingChatMessages });
   },
 
-  setUncaughtError: (sessionId: string, uncaughtError: string | null) => {
+  setUncaughtError: (sessionId: string, uncaughtError: SessionError | null) => {
     get().updateSessionData(sessionId, { uncaughtError });
   },
 

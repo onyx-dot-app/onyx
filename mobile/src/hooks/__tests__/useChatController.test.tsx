@@ -13,7 +13,11 @@ import {
   renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
-import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
+import {
+  streamChatMessage,
+  StreamHttpError,
+  type StreamEvent,
+} from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
@@ -37,6 +41,13 @@ jest.mock("@/api/chat/stream", () => ({
     "user_message_id" in event,
   isStreamError: (event: { error?: unknown }) =>
     "error" in event && typeof event.error === "string",
+  StreamHttpError: class StreamHttpError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
@@ -233,6 +244,7 @@ describe("useChatController", () => {
     useChatSessionStore.getState().ensureSession("s1");
     streamMock.mockReturnValue(
       scripted([
+        idInfo,
         startPacket("Partial "),
         streamError("The model exploded.", "RATE_LIMIT"),
       ]),
@@ -251,20 +263,70 @@ describe("useChatController", () => {
     expect(messages[1]!.errorCode).toBe("RATE_LIMIT");
   });
 
-  it("surfaces a bare backend error that arrives before any content", async () => {
-    useChatSessionStore.getState().ensureSession("s1");
-    streamMock.mockReturnValue(scripted([streamError("Boom.")]));
+  it.each(["error packet", "HTTP 400"] as const)(
+    "drops a send the server rejects before saving (%s)",
+    async (kind) => {
+      let now = Date.now();
+      const clock = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => (now += 10));
+      useChatSessionStore.getState().ensureSession("s1");
+      streamMock
+        .mockReturnValueOnce(scripted([idInfo, startPacket("Hi"), endPacket()]))
+        .mockReturnValueOnce(
+          kind === "error packet"
+            ? scripted([streamError("Rejected.")])
+            : (async function* (): AsyncGenerator<StreamEvent> {
+                throw new StreamHttpError("Rejected.", 400);
+              })(),
+        )
+        .mockReturnValueOnce(
+          scripted([
+            { user_message_id: 12, reserved_assistant_message_id: 13 },
+            endPacket(),
+          ] as StreamEvent[]),
+        );
+      const onAccepted = jest.fn();
 
-    const { result } = renderHook(() => useChatController("s1"), { wrapper });
-    await act(async () => {
-      await result.current.submit("hi");
-    });
+      const { result } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("Question");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      const treeBefore = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      await act(async () => {
+        await result.current.submit("Rejected question", [], onAccepted);
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    await waitFor(() => expect(result.current.chatState).toBe("input"));
-    const messages = result.current.messages;
-    expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
-    expect(messages[1]!.message).toBe("Boom.");
-  });
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+      ).toEqual(treeBefore);
+      expect(toast.error).toHaveBeenCalledWith("Rejected.");
+      // The composer keeps the draft until the server accepts a send.
+      expect(onAccepted).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.submit("Next");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      expect(
+        (
+          streamMock.mock.calls[2]![0] as unknown as {
+            parent_message_id: number | null;
+          }
+        ).parent_message_id,
+      ).toBe(11);
+      expect(result.current.messages.map((m) => m.messageId)).toEqual([
+        10, 11, 12, 13,
+      ]);
+      clock.mockRestore();
+    },
+  );
 
   it("continues the conversation after a failed turn", async () => {
     // Node ids come from the clock; keep the two turns' ids distinct.

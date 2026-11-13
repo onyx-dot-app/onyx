@@ -37,7 +37,10 @@ After an answer ends, Send stays disabled until the server confirms that the
 session is idle. A send that the server does not accept keeps its draft.
 
 On failure: a stream error shows in the message. The next message continues
-after the failed answer, as on web. A failed token refresh signs
+after the failed answer, as on web. A send that the server rejects before it
+sends message IDs (an error packet, or an HTTP status below 500 other than
+408) leaves no turn: the tree returns to its state before the send, a toast
+shows the error, and the composer keeps the draft. A failed token refresh signs
 the user out only when the server rejects the token. A network failure keeps
 the session. When the user switches instance, the app never shows data or
 uses a token from the previous instance.

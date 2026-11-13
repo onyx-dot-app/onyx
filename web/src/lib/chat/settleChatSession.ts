@@ -169,7 +169,9 @@ export function refreshChatSession(
         regenerationState: null,
         streamingStartTime: busy ? Date.now() : undefined,
         uncaughtError:
-          current.uncaughtError === errorMessage ? null : current.uncaughtError,
+          current.uncaughtError?.error === errorMessage
+            ? null
+            : current.uncaughtError,
       });
       if (busy)
         void followChatSession({
@@ -184,7 +186,7 @@ export function refreshChatSession(
       console.error("Could not refresh the chat session", { sessionId, error });
       useChatSessionStore.getState().updateSessionData(sessionId, {
         chatState: "unconfirmed",
-        uncaughtError: errorMessage,
+        uncaughtError: { error: errorMessage },
       });
     }
   })().finally(() => refreshingSessions.delete(sessionId));
@@ -289,7 +291,7 @@ export async function settleChatSession({
       }
     }
     const store = useChatSessionStore.getState();
-    if (store.sessions.get(sessionId)?.uncaughtError === errorMessage) {
+    if (store.sessions.get(sessionId)?.uncaughtError?.error === errorMessage) {
       store.setUncaughtError(sessionId, null);
     }
     store.updateSessionData(sessionId, {
@@ -304,7 +306,7 @@ export async function settleChatSession({
     console.error("Could not confirm chat completion", error);
     const store = useChatSessionStore.getState();
     store.updateChatState(sessionId, "unconfirmed");
-    store.setUncaughtError(sessionId, errorMessage);
+    store.setUncaughtError(sessionId, { error: errorMessage });
   }
 }
 
