@@ -10,18 +10,19 @@ const gib = uint64(1) << 30
 
 func TestAutoSize(t *testing.T) {
 	for _, tc := range []struct {
-		free, want uint64
-		fail       bool
+		free, total, want uint64
+		fail              bool
 	}{
-		{free: 100 * gib, want: 80 * gib},
-		{free: 25 * gib, want: 20 * gib},
-		{free: 24 * gib, fail: true},
-		{free: 10000 * gib, want: MaxBytes},
-		{free: 100*gib + 12345, want: 80 * gib},
+		{free: 180 * gib, total: 200 * gib, want: 140 * gib},
+		{free: 50 * gib, total: 100 * gib, want: 30 * gib},
+		{free: 39 * gib, total: 100 * gib, fail: true},
+		{free: 15 * gib, total: 50 * gib, fail: true},
+		{free: 10000 * gib, total: 11000 * gib, want: MaxBytes},
+		{free: 100*gib + 12345, total: 100 * gib, want: 80 * gib},
 	} {
-		got, err := AutoSize(tc.free)
+		got, err := AutoSize(tc.free, tc.total)
 		if tc.fail != (err != nil) || got != tc.want {
-			t.Errorf("AutoSize(%d GiB) = %d, %v; want %d, fail %v", tc.free>>30, got, err, tc.want, tc.fail)
+			t.Errorf("AutoSize(%d, %d GiB) = %d, %v; want %d, fail %v", tc.free>>30, tc.total>>30, got, err, tc.want, tc.fail)
 		}
 		if err == nil && got%(1<<20) != 0 {
 			t.Errorf("AutoSize(%d) = %d is not MiB-aligned", tc.free, got)
@@ -30,16 +31,20 @@ func TestAutoSize(t *testing.T) {
 }
 
 func TestImageSize(t *testing.T) {
-	if got, err := imageSize(50, 100*gib); err != nil || got != 50*gib {
+	if got, err := imageSize(50, 100*gib, 200*gib); err != nil || got != 50*gib {
 		t.Errorf("explicit size: %d %v", got, err)
 	}
-	if _, err := imageSize(10, 100*gib); err == nil {
+	if _, err := imageSize(10, 100*gib, 200*gib); err == nil {
 		t.Error("a size below the floor was accepted")
 	}
-	if _, err := imageSize(200, 100*gib); err == nil {
+	if _, err := imageSize(200, 100*gib, 200*gib); err == nil {
 		t.Error("a size above the free space was accepted")
 	}
-	if got, err := imageSize(0, 100*gib); err != nil || got != 80*gib {
+	// 2^34 + 20 GiB must not wrap to 20 GiB.
+	if _, err := imageSize(1<<34+20, 100*gib, 200*gib); err == nil {
+		t.Error("an overflowing size was accepted")
+	}
+	if got, err := imageSize(0, 100*gib, 200*gib); err != nil || got != 60*gib {
 		t.Errorf("auto size: %d %v", got, err)
 	}
 }

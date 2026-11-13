@@ -344,15 +344,18 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   reflink (ext4 roots on GKE COS and AKS Ubuntu), the agent makes a sparse image
   `<data-dir>/.craft-fc-store.img` with `mkfs.xfs -m reflink=1`, attaches it to a loop device (direct
   I/O, auto-clear) and mounts it at the data dir, in the host mount namespace and in its own one (the
-  default hostPath propagation does not show a later host mount in the container). The mount uses
-  `discard`, so deleted files give their blocks back to the node disk. All paths (journal, templates,
-  jail) stay the same. After an agent restart the mount is still there. After a node reboot the agent
-  attaches and mounts the same image again; it never formats an existing image. A root drive that the
-  init container put in `--rootfs-dir` on the node disk before the mount is copied into the store
-  (the node copy stays, so the init container finds it current after a reboot).
-  - Size of a new image: `--loop-store-gib` (or `$CRAFT_FC_LOOP_STORE_GIB`); 0 (default) is 80% of
-    the free space, 20 GiB to 4 TiB. The image is sparse: keep the rest of the node disk for images
-    and logs. An existing image keeps its size.
+  default hostPath propagation does not show a later host mount in the container). All paths
+  (journal, templates, jail) stay the same. After an agent restart the mount is still there (if the
+  host lost it, the agent mounts it again). After a node reboot the agent attaches and mounts the same
+  image again; it never formats an existing image. A root drive that the init container put in
+  `--rootfs-dir` on the node disk is copied into the store through a private mount before the data
+  dir mount (the node copy stays, so the init container finds it current after a reboot).
+  - Size of a new image: `--loop-store-gib` (or `$CRAFT_FC_LOOP_STORE_GIB`); 0 (default) is the free
+    space less 1/5 of the disk, 20 GiB to 4 TiB. An existing image keeps its size.
+  - The image is sparse. At start and every hour the agent trims the store (FITRIM), so deleted files give their
+    blocks back to the node disk. The free space for `--min-free-disk-gib` and the capture spool is
+    the smaller of the store's free space and the node disk's free space above 10% of its size (the
+    kubelet hard eviction threshold).
   - Needs `/dev/loop-control` (loop driver), XFS in the node kernel, `mount` on the host, and
     `mkfs.xfs` (xfsprogs) in the agent image. Without one of them the agent does not start and names
     the missing part.

@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
@@ -21,8 +23,9 @@ import (
 const (
 	sysBlock    = "/sys/block"
 	loopControl = "/dev/loop-control"
-	// discard gives the blocks of deleted files back to the sparse image.
-	mountData = "discard"
+	mountOpts   = "noatime"
+	// FITRIM, _IOWR('X', 121, struct fstrim_range).
+	fitrim = 0xc0185879
 )
 
 // Ensure makes sure that DataDir supports reflink copies, in this mount
@@ -33,10 +36,14 @@ const (
 func Ensure(o Options) (*Store, error) {
 	err := scratch.ProbeReflink(o.DataDir)
 	if err == nil {
-		if err := checkHostView(o); err != nil {
-			return nil, err
+		s := mounted(o)
+		if s != nil {
+			// The host lost the mount (for example a manual umount): mount it again.
+			if err := mountHost(o, s.Device, s.DevNumber); err != nil {
+				return nil, fmt.Errorf("loop store %s on %s: %w", s.Image, s.Device, err)
+			}
 		}
-		return mounted(o.DataDir), nil
+		return s, checkHostView(o)
 	}
 	if !errors.Is(err, scratch.ErrNoReflink) {
 		return nil, err
@@ -44,15 +51,6 @@ func Ensure(o Options) (*Store, error) {
 	if o.Mode == Off {
 		return nil, fmt.Errorf("%w; mount an XFS file system with reflink (mkfs.xfs -m reflink=1) at %s, or use --loop-store=auto", err, o.DataDir)
 	}
-	// The data dir before the mount: the image and a root drive that the
-	// init container put there stay reachable through this descriptor.
-	lower, err := unix.Open(o.DataDir, unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = unix.Close(lower) }()
-	lowerRoot := fmt.Sprintf("/proc/self/fd/%d", lower)
-
 	s := &Store{Image: filepath.Join(o.DataDir, ImageName)}
 	if _, err := os.Stat(s.Image); errors.Is(err, fs.ErrNotExist) {
 		if err := makeImage(o, s.Image); err != nil {
@@ -62,43 +60,81 @@ func Ensure(o Options) (*Store, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	st, err := os.Stat(s.Image)
-	if err != nil {
+	var st unix.Stat_t
+	if err := unix.Stat(s.Image, &st); err != nil {
 		return nil, err
 	}
-	s.SizeBytes = st.Size()
+	s.SizeBytes = st.Size
+	s.NodeDir = nodeDir(o, st.Dev)
 	dev, rdev, release, err := attach(s.Image)
 	if err != nil {
 		return nil, fmt.Errorf("loop store %s: %w", s.Image, err)
 	}
 	defer release()
-	s.Device = dev
-	if err := mountBoth(o, dev, rdev); err != nil {
+	s.Device, s.DevNumber = dev, rdev
+	// Before the store hides the node file system at the data dir.
+	if rel := rootfsRel(o.DataDir, o.RootfsDir); rel != "" {
+		if err := copyRootfs(o, dev, rel); err != nil {
+			return nil, fmt.Errorf("copy the root drive into the loop store: %w", err)
+		}
+	}
+	if err := mountHost(o, dev, rdev); err != nil {
+		return nil, fmt.Errorf("loop store %s on %s: %w", s.Image, dev, err)
+	}
+	if err := mountOwn(o.DataDir, dev, rdev); err != nil {
 		return nil, fmt.Errorf("loop store %s on %s: %w", s.Image, dev, err)
 	}
 	if err := scratch.ProbeReflink(o.DataDir); err != nil {
 		return nil, fmt.Errorf("loop store %s mounted at %s: %w", s.Image, o.DataDir, err)
 	}
-	if err := checkHostView(o); err != nil {
-		return nil, err
-	}
-	if rel := rootfsRel(o.DataDir, o.RootfsDir); rel != "" {
-		t0 := time.Now()
-		copied, err := syncRootfs(lowerRoot, o.DataDir, rel)
-		if err != nil {
-			return nil, fmt.Errorf("copy the root drive into the loop store: %w", err)
-		}
-		if copied && o.Log != nil {
-			o.Log.Info("copied the root drive into the loop store", "dir", o.RootfsDir, "ms", time.Since(t0).Milliseconds())
-		}
-	}
-	return s, nil
+	return s, checkHostView(o)
 }
 
-// mounted describes the loop store that is already mounted at dataDir (for
+// copyRootfs copies the root drive that the init container put in the data
+// dir on the node file system into the store, through a private mount. A
+// crash leaves no data dir mount, so the next start copies again.
+func copyRootfs(o Options, dev, rel string) error {
+	tmp, err := os.MkdirTemp("", "craft-fc-store-")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = os.Remove(tmp) }()
+	if err := unix.Mount(dev, tmp, "xfs", unix.MS_NOATIME, ""); err != nil {
+		return fmt.Errorf("mount: %w (the node kernel needs XFS)", err)
+	}
+	defer func() { _ = unix.Unmount(tmp, 0) }()
+	t0 := time.Now()
+	copied, err := syncRootfs(o.DataDir, tmp, rel)
+	if err != nil {
+		return err
+	}
+	if copied && o.Log != nil {
+		o.Log.Info("copied the root drive into the loop store", "dir", o.RootfsDir, "ms", time.Since(t0).Milliseconds())
+	}
+	return nil
+}
+
+// nodeDir is a path to the parent of the data dir on the image's file
+// system (device imageDev), or "". In a container only the data dir is
+// mounted, so it looks at the host view first.
+func nodeDir(o Options, imageDev uint64) string {
+	parent := filepath.Dir(filepath.Clean(o.DataDir))
+	paths := []string{parent}
+	if otherHostNS(o) {
+		paths = []string{"/proc/1/root" + parent, parent}
+	}
+	for _, p := range paths {
+		if d, err := statDev(p); err == nil && d == imageDev {
+			return p
+		}
+	}
+	return ""
+}
+
+// mounted describes the loop store that is already mounted at the data dir (for
 // example after an agent restart), or returns nil for another file system.
-func mounted(dataDir string) *Store {
-	d, err := statDev(dataDir)
+func mounted(o Options) *Store {
+	d, err := statDev(o.DataDir)
 	if err != nil {
 		return nil
 	}
@@ -107,13 +143,25 @@ func mounted(dataDir string) *Store {
 	if err != nil {
 		return nil
 	}
-	image := strings.TrimSpace(string(raw))
-	if filepath.Base(image) != ImageName {
+	// The kernel path is relative to the root of the process that
+	// attached it, which can be an old container.
+	if filepath.Base(strings.TrimSpace(string(raw))) != ImageName {
 		return nil
 	}
-	s := &Store{Image: image}
-	if name, err := os.Readlink(sys); err == nil {
-		s.Device = "/dev/" + filepath.Base(name)
+	name, err := os.Readlink(sys)
+	if err != nil {
+		return nil
+	}
+	dev, rdev, err := deviceNode(filepath.Base(name))
+	if err != nil || rdev != d {
+		return nil
+	}
+	s := &Store{Image: filepath.Join(o.DataDir, ImageName), Device: dev, DevNumber: rdev}
+	if f, err := os.Open(dev); err == nil {
+		if info, err := unix.IoctlLoopGetStatus64(int(f.Fd())); err == nil {
+			s.NodeDir = nodeDir(o, info.Device)
+		}
+		_ = f.Close()
 	}
 	if raw, err := os.ReadFile(filepath.Join(sys, "size")); err == nil {
 		if sectors, err := strconv.ParseInt(strings.TrimSpace(string(raw)), 10, 64); err == nil {
@@ -121,6 +169,21 @@ func mounted(dataDir string) *Store {
 		}
 	}
 	return s
+}
+
+// Trim gives the blocks of deleted files in the store back to the node disk
+// (the image is sparse). Online discard would slow every delete.
+func Trim(dir string) (uint64, error) {
+	f, err := os.Open(dir)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = f.Close() }()
+	r := struct{ Start, Len, MinLen uint64 }{Len: math.MaxUint64}
+	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, f.Fd(), fitrim, uintptr(unsafe.Pointer(&r))); errno != 0 {
+		return 0, errno
+	}
+	return r.Len, nil
 }
 
 // makeImage makes a sparse XFS image: first as <image>.new, then one rename,
@@ -134,7 +197,7 @@ func makeImage(o Options, image string) error {
 	if err := unix.Statfs(o.DataDir, &sfs); err != nil {
 		return err
 	}
-	size, err := imageSize(o.SizeGiB, sfs.Bavail*uint64(sfs.Bsize))
+	size, err := imageSize(o.SizeGiB, sfs.Bavail*uint64(sfs.Bsize), sfs.Blocks*uint64(sfs.Bsize))
 	if err != nil {
 		return err
 	}
@@ -153,8 +216,9 @@ func makeImage(o Options, image string) error {
 	if err := f.Close(); err != nil {
 		return err
 	}
-	// -K: no discard of the new (sparse) file.
-	if out, err := exec.Command(mkfs, "-q", "-K", "-m", "reflink=1", "-L", "craft-fc", tmp).CombinedOutput(); err != nil {
+	// -K: no discard of the new (sparse) file. -s size=4096: the image still
+	// mounts if the loop device takes the 4 KiB sectors of the node disk.
+	if out, err := exec.Command(mkfs, "-q", "-K", "-s", "size=4096", "-m", "reflink=1", "-L", "craft-fc", tmp).CombinedOutput(); err != nil {
 		_ = os.Remove(tmp)
 		return fmt.Errorf("mkfs.xfs: %w: %s", err, strings.TrimSpace(string(out)))
 	}
@@ -318,32 +382,39 @@ func statDev(path string) (uint64, error) {
 	return st.Dev, nil
 }
 
-// mountBoth mounts dev at the data dir in the host mount namespace (where
-// the VMs run) and in this one, where it is not there yet. With the default
-// hostPath mount propagation (None), the agent container does not see a host
-// mount made after its start, so it mounts the device itself too.
-func mountBoth(o Options, dev string, rdev uint64) error {
-	if otherHostNS(o) {
-		hd, err := statDev("/proc/1/root" + o.DataDir)
-		if err != nil {
-			return err
-		}
-		if hd != rdev {
-			out, err := exec.Command("nsenter", "-t", "1", "-m", "--",
-				"mount", "-t", "xfs", "-o", "noatime,"+mountData, dev, o.DataDir).CombinedOutput()
-			if err != nil {
-				return fmt.Errorf("mount in the host mount namespace: %w: %s", err, strings.TrimSpace(string(out)))
-			}
-		}
+// mountHost mounts dev at the data dir in the host mount namespace, where
+// the VMs run, if it is not there.
+func mountHost(o Options, dev string, rdev uint64) error {
+	if !otherHostNS(o) {
+		return nil
 	}
-	d, err := statDev(o.DataDir)
+	hd, err := statDev("/proc/1/root" + o.DataDir)
+	if err != nil {
+		return err
+	}
+	if hd == rdev {
+		return nil
+	}
+	out, err := exec.Command("nsenter", "-t", "1", "-m", "--",
+		"mount", "-t", "xfs", "-o", mountOpts, dev, o.DataDir).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("mount in the host mount namespace: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// mountOwn mounts dev at the data dir in this mount namespace if it is not
+// there. With the default hostPath propagation (None), the agent container
+// does not see a host mount made after its start.
+func mountOwn(dataDir, dev string, rdev uint64) error {
+	d, err := statDev(dataDir)
 	if err != nil {
 		return err
 	}
 	if d == rdev {
 		return nil
 	}
-	if err := unix.Mount(dev, o.DataDir, "xfs", unix.MS_NOATIME, mountData); err != nil {
+	if err := unix.Mount(dev, dataDir, "xfs", unix.MS_NOATIME, ""); err != nil {
 		return fmt.Errorf("mount: %w (the node kernel needs XFS)", err)
 	}
 	return nil

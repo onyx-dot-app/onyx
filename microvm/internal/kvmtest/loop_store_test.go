@@ -90,20 +90,12 @@ func TestLoopStoreKVM(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Minute)
 	defer cancel()
 
+	// killVMs kills every VM scope, as a node reboot does. The tests of this
+	// package run one at a time, so all fcvm scopes are this test's.
 	killVMs := func() {
-		for _, p := range listProcs("/proc") {
-			if root, _ := os.Readlink(fmt.Sprintf("/proc/%d/root", p)); strings.HasPrefix(root, e.DataDir+"/") {
-				_ = unix.Kill(p, unix.SIGKILL)
-			}
-		}
-		for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(50 * time.Millisecond) {
-			left := 0
-			for _, p := range listProcs("/proc") {
-				if root, _ := os.Readlink(fmt.Sprintf("/proc/%d/root", p)); strings.HasPrefix(root, e.DataDir+"/") {
-					left++
-				}
-			}
-			if left == 0 {
+		_ = exec.Command("systemctl", "kill", "--signal=KILL", "fcvm-*.scope").Run()
+		for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(100 * time.Millisecond) {
+			if out, _ := exec.Command("pgrep", "-x", "firecracker").Output(); len(strings.TrimSpace(string(out))) == 0 {
 				return
 			}
 		}
@@ -112,7 +104,8 @@ func TestLoopStoreKVM(t *testing.T) {
 	// namespace (the loop store), like a node reboot.
 	unmountStore := func() error {
 		for range 4 {
-			if fsMagic(t, e.DataDir) != xfsMagic {
+			var st unix.Statfs_t
+			if err := unix.Statfs(e.DataDir, &st); err != nil || st.Type != xfsMagic {
 				return nil
 			}
 			if out, err := exec.Command("umount", e.DataDir).CombinedOutput(); err != nil {
@@ -178,6 +171,10 @@ func TestLoopStoreKVM(t *testing.T) {
 	t.Logf("first start: %d ms; %s", time.Since(t0).Milliseconds(), line)
 	if !strings.Contains(line, `"created":true`) {
 		t.Fatalf("first start did not make the image: %s", line)
+	}
+	// The free space check also sees the ext4 file system under the store.
+	if strings.Contains(line, `"node_dir":""`) {
+		t.Errorf("the agent does not see the node file system: %s", line)
 	}
 	// The host (the VMs' mount namespace) sees XFS with reflink.
 	if fsMagic(t, e.DataDir) != xfsMagic {
@@ -290,20 +287,8 @@ func TestLoopStoreKVM(t *testing.T) {
 	if _, err := c.Stop(ctx, &pb.StopRequest{SandboxId: id, Attempt: 1, Generation: r.GetVm().GetGeneration()}); err != nil {
 		t.Fatalf("stop after reboot: %v", err)
 	}
+	if logs := containerLogs("ls3"); !strings.Contains(logs, "loop store trimmed") {
+		t.Errorf("no trim at start; logs:\n%s", logs)
+	}
 	t.Logf("after reboot: same image mounted again, template %s kept, new VM ran", e.Template)
-}
-
-func listProcs(dir string) []int {
-	ents, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	var out []int
-	for _, e := range ents {
-		var p int
-		if _, err := fmt.Sscanf(e.Name(), "%d", &p); err == nil && fmt.Sprint(p) == e.Name() {
-			out = append(out, p)
-		}
-	}
-	return out
 }

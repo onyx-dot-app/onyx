@@ -294,7 +294,7 @@ The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
 needs reflink copies. On XFS with reflink (for example the AL2023 root on
 EKS, or an XFS data disk) the agent uses it directly. On other file systems
 (the ext4 roots of GKE COS and AKS Ubuntu) the agent makes a sparse XFS image
-`<dataDir>/.craft-fc-store.img` (80% of the free disk space, at least 20 GiB)
+`<dataDir>/.craft-fc-store.img` (the free disk space less 1/5 of the disk, at least 20 GiB)
 and mounts it at the data dir on a loop device. To set the image size, add
 `--loop-store-gib=<GiB>` to `craft.hostAgent.extraArgs`. To refuse a data dir
 without reflink, add `--loop-store=off`. The preflight above checks

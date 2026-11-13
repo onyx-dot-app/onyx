@@ -32,9 +32,10 @@ const (
 	MinBytes uint64 = 20 * uint64(scratch.GiB)
 	// MaxBytes is the largest store that the automatic size makes.
 	MaxBytes uint64 = 4096 * uint64(scratch.GiB)
-	// autoPercent of the free space is the automatic size. The rest stays
-	// for the node (images, logs), because the image is sparse.
-	autoPercent = 80
+	// The automatic size keeps 1/nodeShare of the node disk free when the
+	// sparse image is full: above the kubelet nodefs eviction threshold
+	// (10% by default), for images and logs.
+	nodeShare = 5
 )
 
 // Mode says whether the agent may make a store.
@@ -53,7 +54,7 @@ func ParseMode(s string) (Mode, error) {
 	case Auto, Off:
 		return Mode(s), nil
 	}
-	return "", fmt.Errorf("--loop-store %q must be auto or off", s)
+	return "", fmt.Errorf("loop store mode %q must be auto or off", s)
 }
 
 // Options configure Ensure.
@@ -79,33 +80,39 @@ type Store struct {
 	SizeBytes int64
 	// Created is true when this start made the image.
 	Created bool
+	// NodeDir is a directory on the node file system that holds the image,
+	// for free space checks, or "" if the agent cannot see one.
+	NodeDir   string
+	DevNumber uint64
 }
 
-// AutoSize is the size of a new image for free bytes on the node file
-// system: 80% of it, at most MaxBytes, rounded down to 1 MiB. It fails
-// below MinBytes.
-func AutoSize(free uint64) (uint64, error) {
-	size := min(free/100*autoPercent, MaxBytes) &^ (1<<20 - 1)
+// AutoSize is the size of a new image for the free and total bytes of the
+// node file system: the free space less 1/5 of the disk, at most MaxBytes,
+// rounded down to 1 MiB. It fails below MinBytes.
+func AutoSize(free, total uint64) (uint64, error) {
+	var size uint64
+	if keep := total / nodeShare; free > keep {
+		size = min(free-keep, MaxBytes) &^ (1<<20 - 1)
+	}
 	if size < MinBytes {
-		return 0, fmt.Errorf("%d GiB free; the loop store needs at least %d GiB (%d%% of the free space)",
-			free>>30, MinBytes>>30, autoPercent)
+		return 0, fmt.Errorf("%d GiB free of %d GiB; the loop store needs at least %d GiB and leaves 1/%d of the disk free",
+			free>>30, total>>30, MinBytes>>30, nodeShare)
 	}
 	return size, nil
 }
 
-// imageSize is the size of a new image: SizeGiB if set, else AutoSize.
-func imageSize(sizeGiB, free uint64) (uint64, error) {
+// imageSize is the size of a new image: sizeGiB if set, else AutoSize.
+func imageSize(sizeGiB, free, total uint64) (uint64, error) {
 	if sizeGiB == 0 {
-		return AutoSize(free)
+		return AutoSize(free, total)
 	}
-	want := sizeGiB << 30
-	if want < MinBytes {
-		return 0, fmt.Errorf("--loop-store-gib %d is less than %d", sizeGiB, MinBytes>>30)
-	}
-	if want > free {
+	if sizeGiB > free>>30 {
 		return 0, fmt.Errorf("--loop-store-gib %d is more than the %d GiB free", sizeGiB, free>>30)
 	}
-	return want, nil
+	if want := sizeGiB << 30; want >= MinBytes {
+		return want, nil
+	}
+	return 0, fmt.Errorf("--loop-store-gib %d is less than %d", sizeGiB, MinBytes>>30)
 }
 
 // parseDevNumber parses a sysfs "dev" file ("7:3\n").
@@ -130,8 +137,8 @@ const (
 	rootfsManifest = "manifest.json"
 )
 
-// syncRootfs copies the root drive in lowerRoot/rel (the data dir before the
-// mount) to upperRoot/rel (the store) if the store has no copy of that
+// syncRootfs copies the root drive in lowerRoot/rel (the data dir on the node
+// file system) to upperRoot/rel (the store) if the store has no copy of that
 // build (same manifest.json). The lower copy stays, so the init container
 // sees it as current after a node reboot. It reports whether it copied.
 func syncRootfs(lowerRoot, upperRoot, rel string) (bool, error) {
