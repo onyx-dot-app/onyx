@@ -436,14 +436,16 @@ system pool and skip this.
 ## Craft sandboxes on Firecracker
 
 `craft_sandbox_runtime = "firecracker"` prepares the sandbox nodes for Craft
-Firecracker microVMs, which need `/dev/kvm`. It does not change how Craft runs
-sandboxes: Craft still runs pods until its Firecracker backend ships. Set it on
-the composition:
+Firecracker microVMs, which need `/dev/kvm`. The chart value
+`craft.sandboxRuntime: firecracker` then runs the Firecracker host agent on
+these nodes. Opencode sessions still run as pods, so add a pod sandbox pool
+too. Set both on the composition:
 
 ```hcl
-enable_sandbox_node_pool = true
-craft_sandbox_runtime    = "firecracker"
-sandbox_node_vm_size     = "Standard_D8ds_v5"
+enable_sandbox_node_pool           = true
+craft_sandbox_runtime              = "firecracker"
+sandbox_node_vm_size               = "Standard_D8ds_v5"
+enable_craft_pod_sandbox_node_pool = true
 ```
 
 With `"firecracker"`, the `aks` module:
@@ -453,13 +455,28 @@ With `"firecracker"`, the `aks` module:
 
 Kubelet does not count microVM memory, so only the Firecracker host agent and
 the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
-sandbox image prepuller do not run on the sandbox pool. To keep pod sandboxes,
-add a pool in `node_pools` with the label `onyx.app/workload=sandbox` and the
-taint `workload=sandbox:NoSchedule` only.
+sandbox image prepuller do not run on the sandbox pool. They run on the pod
+sandbox pool:
+
+```hcl
+enable_craft_pod_sandbox_node_pool = true
+craft_pod_sandbox_node_vm_size     = "Standard_D4ds_v5" # default
+craft_pod_sandbox_node_min_count   = 1                  # default
+craft_pod_sandbox_node_max_count   = 2                  # default
+```
+
+The `aks` module names this pool `sandboxpod`. It has the label
+`onyx.app/workload=sandbox` and the taint `workload=sandbox:NoSchedule`, but no
+`onyx.app/kvm` label or taint. It keeps the AKS default `Ubuntu` image. These
+match the chart's `sandboxPod` defaults, so you set no extra values. The OS
+disk is `sandbox_node_disk_size_gb`. One pod sandbox requests about 1.1 vCPU,
+2.3 GiB of memory and 5.5 GiB of ephemeral storage. The flag needs
+`enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
 
 The default, `"pod"`, keeps the AKS default `Ubuntu` image. A change to
 `craft_sandbox_runtime` changes the pool OS, so AKS replaces the sandbox nodes
-(through the pool's temporary rotation name).
+(through the pool's temporary rotation name). Pod sandboxes on the old nodes
+stop when AKS drains them, and new pod sandboxes go to the pod sandbox pool.
 
 `Ubuntu2404` needs `azurerm` 4.67 or later. The `aks` and `onyx` modules
 require `>= 4.67, < 5.0`; run `terraform init -upgrade` if your lock file pins
