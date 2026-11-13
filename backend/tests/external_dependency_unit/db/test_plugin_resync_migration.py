@@ -529,3 +529,57 @@ def test_resync_fixes_access_drift_from_old_code(
     with _migration_ops(db_session):
         resync.upgrade()
     assert _plugin_rows(db_session, ids) == before
+
+
+def test_rerun_keeps_drafts_and_publishes_old_code_edits(
+    migration_session: Session,
+) -> None:
+    """A downgrade below the re-sync and an upgrade run it again over rows
+    that new code wrote. A draft stays unpublished; an edit that old code made
+    during the rollback is published, as in phase 1."""
+    db_session = migration_session
+    backfill = _load(_BACKFILL)
+    resync = _load(_RESYNC)
+    owner = make_user(db_session)
+    tag = uuid4().hex[:6]
+    drafted = _add_skill(
+        db_session, name=f"drafted-{tag}", minutes=0, author=owner, public=True
+    )
+    db_session.flush()
+    with _migration_ops(db_session):
+        backfill.backfill_plugins_from_skills()
+        resync.upgrade()
+    published_v1 = _plugin(db_session, drafted.id).published_version_id
+
+    replace_skill_bundle(
+        skill=drafted,
+        ingested=IngestedBundle(
+            canonical_name=drafted.name,
+            bundle_file_id=f"bundle-draft-{tag}",
+            bundle_sha256="a" * 64,
+            description="written by new code",
+            content=_content(drafted.name, f"bundle-draft-{tag}"),
+        ),
+        base_version_id=None,
+        user=owner,
+        skip_if_unchanged=False,
+        db_session=db_session,
+    )
+    draft = _plugin(db_session, drafted.id)
+    assert draft.current_version_id != published_v1
+    assert draft.published_version_id == published_v1
+
+    with _migration_ops(db_session):
+        resync.upgrade()
+    rerun = _plugin(db_session, drafted.id)
+    assert rerun.current_version_id == draft.current_version_id
+    assert rerun.published_version_id == published_v1
+
+    old_code_bundle = f"bundle-old-{tag}"
+    drafted.bundle_file_id = old_code_bundle
+    db_session.flush()
+    with _migration_ops(db_session):
+        resync.upgrade()
+    edited = _plugin(db_session, drafted.id)
+    assert edited.current_version_id == _resync_version_id(drafted.id, old_code_bundle)
+    assert edited.published_version_id == edited.current_version_id
