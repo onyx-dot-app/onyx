@@ -374,6 +374,15 @@ class _DroppedDispatches:
     def __init__(self) -> None:
         self.dropping = Event()
         self.dropped = 0
+        # A run's release callback runs after its owner key is gone.
+        self.callbacks = 0
+
+    def keep_next[T](self, finish: Callable[[], T]) -> T:
+        """Finish a run and wait until its release callback has run."""
+        before = self.callbacks
+        result = finish()
+        _wait_until(lambda: self.callbacks > before, "the release is dispatched")
+        return result
 
     def drop_next[T](self, finish: Callable[[], T]) -> T:
         before = self.dropped
@@ -391,10 +400,13 @@ def _drop_dispatches(monkeypatch: pytest.MonkeyPatch) -> _DroppedDispatches:
     dispatch = execution.ChatTurnExecution._dispatch_after_release
 
     def dispatch_unless_dropped(self: execution.ChatTurnExecution) -> None:
-        if dropped.dropping.is_set():
-            dropped.dropped += 1
-            return
-        dispatch(self)
+        try:
+            if dropped.dropping.is_set():
+                dropped.dropped += 1
+                return
+            dispatch(self)
+        finally:
+            dropped.callbacks += 1
 
     monkeypatch.setattr(
         execution.ChatTurnExecution, "_dispatch_after_release", dispatch_unless_dropped
@@ -569,7 +581,7 @@ def test_a_user_turn_reads_awaited_results_whose_wake_never_fired(
     _settled(db_session, chat.id, 2)
     assert _root_answers(db_session, chat.id)[-1].message == "Answer with nothing"
     # The wait is still open after that turn: alpha's result waits for beta.
-    alpha = _finish(db_session, chat, workers, "alpha")
+    alpha = dropped.keep_next(lambda: _finish(db_session, chat, workers, "alpha"))
     assert read_chat_inbox(db_session, chat.id).next_turn is None
     beta = dropped.drop_next(lambda: _finish(db_session, chat, workers, "beta"))
     # The wait is ready, but its wake was lost.
