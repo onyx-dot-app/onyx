@@ -172,7 +172,7 @@ jobs:
       - name: Scan the Go module with govulncheck
         working-directory: ${{ env.AGENT_DIR }}
         run: |
-          if ! go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...; then
+          if ! go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...; then
             echo "::warning::govulncheck reports vulnerabilities in ${AGENT_DIR}. See the step log."
           fi
 
