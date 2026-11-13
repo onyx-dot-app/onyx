@@ -35,7 +35,10 @@ export interface TimelineTokens {
  * - first: smaller spacer used for the first step.
  * - none: no spacer (use when connector is drawn outside layout flow).
  */
-/** The header icon size in px, for icon components that take a number. */
+/**
+ * The header icon size in px (`--spacing-block-24`), for icon components that
+ * take a number.
+ */
 export const TIMELINE_HEADER_ICON_PX = 24;
 
 export type TimelineTopSpacerVariant = "default" | "first" | "none";
@@ -44,11 +47,11 @@ export type TimelineTopSpacerVariant = "default" | "first" | "none";
  * Default sizing for the timeline layout. Override in TimelineRoot if needed.
  */
 export const timelineTokenDefaults: TimelineTokens = {
-  railWidth: "2.25rem",
-  headerRowHeight: "2.25rem",
-  headerIconSize: `${TIMELINE_HEADER_ICON_PX / 16}rem`,
-  headerIconPadding: "0.125rem",
-  headerSurfacePadding: "0.25rem",
+  railWidth: "var(--spacing-block-36)",
+  headerRowHeight: "var(--spacing-block-36)",
+  headerIconSize: "var(--spacing-block-24)",
+  headerIconPadding: "var(--padding-icon-2)",
+  headerSurfacePadding: "var(--spacing-inline-4)",
   stepHeaderHeight: "2rem",
   topConnectorHeight: "0.5rem",
   firstTopSpacerHeight: "0.25rem",
@@ -58,8 +61,8 @@ export const timelineTokenDefaults: TimelineTokens = {
   stepHeaderRightSectionWidth: "2.125rem",
   headerPaddingLeft: "0.5rem",
   headerPaddingRight: "0.25rem",
-  headerTextPaddingX: "0.375rem",
-  headerTextPaddingY: "0.125rem",
+  headerTextPaddingX: "0.5rem",
+  headerTextPaddingY: "var(--padding-text-4)",
   stepTopPadding: "0.25rem",
   agentMessagePaddingLeft: "0.12rem",
   timelineCommonTextPadding: "0.12rem",
