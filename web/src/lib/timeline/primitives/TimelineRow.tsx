@@ -1,5 +1,8 @@
 import React from "react";
-import { TimelineIconColumn, TimelineRailVariant } from "./TimelineIconColumn";
+import {
+  TimelineIconColumn,
+  TimelineRailVariant,
+} from "@/lib/timeline/primitives/TimelineIconColumn";
 
 /**
  * TimelineRowRailVariant controls how the left column is rendered.

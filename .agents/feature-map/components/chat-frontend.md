@@ -269,7 +269,12 @@ The header names a step's activity from its own first packet; nested packets
 do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
 so pacing still knows restored steps. The expanded timeline renders one list
 keyed by step (a parallel group by its first step), not by position, because a
-cell's new call can move later steps into another turn group. Concurrent calls of one program show as
+cell's new call can move later steps into another turn group. The rail
+primitives, `StepContainer` and that list (`TimelineSteps`) live in
+`web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
+`web/src/app/app/message/messageComponents/timeline/transformers.ts:groupStepsByTurn`
+groups through
+`web/src/lib/timeline/entries.ts:groupTimelineEntries`. Concurrent calls of one program show as
 sequential steps, not parallel tabs: on replay the backend emits each call's
 packets one after another, and the saved calls have no start or end order, so
 the client cannot tell which calls overlapped. Mobile mirrors these transforms

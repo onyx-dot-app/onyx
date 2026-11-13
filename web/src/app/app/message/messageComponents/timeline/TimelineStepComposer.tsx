@@ -1,6 +1,7 @@
 import React, { FunctionComponent } from "react";
+import { useTranslations } from "next-intl";
 import { IconProps } from "@opal/types";
-import { StepContainer } from "./StepContainer";
+import { StepContainer } from "@/lib/timeline/StepContainer";
 import {
   TimelineRendererOutput,
   TimelineRendererResult,
@@ -35,6 +36,7 @@ export function TimelineStepComposer({
   collapsible = true,
   getCollapsedIcon,
 }: TimelineStepComposerProps) {
+  const t = useTranslations("chat.messages.timeline");
   return (
     <>
       {results.map((result, index) =>
@@ -47,6 +49,11 @@ export function TimelineStepComposer({
             header={result.status}
             isExpanded={result.isExpanded}
             onToggle={result.onToggle}
+            toggleLabel={t(
+              result.isExpanded
+                ? "collapseButton.ariaLabel"
+                : "expandButton.ariaLabel"
+            )}
             collapsible={
               collapsible && (!isSingleStep || !!result.alwaysCollapsible)
             }

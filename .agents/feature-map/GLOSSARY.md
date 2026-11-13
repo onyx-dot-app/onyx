@@ -173,6 +173,7 @@ mobile code checks for it. See [[streaming-protocol]].
 
 | Term | Meaning |
 |---|---|
+| Timeline entry | One item on the shared timeline rail (`web/src/lib/timeline/types.ts:TimelineEntry`): a chat packet group or a Craft tool call or thinking block. It is not a step or a section. See [[chat-frontend]] and [[craft-frontend]]. |
 | Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 6; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
 | Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one `execute_code` or `wait_code` call on a cell: it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
 | Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |

@@ -1,10 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import type { ReactNode } from "react";
-import { cn } from "@opal/utils";
-import { Collapsible, Text } from "@opal/components";
-import { SvgBubbleText, SvgChevronDown } from "@opal/icons";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 // MinimalMarkdown's default `p` goes through MemoizedParagraph which forces
@@ -79,77 +75,24 @@ const THINKING_MARKDOWN_OVERRIDES = {
   blockquote: thinkingBlockquote,
 };
 
-interface ThinkingCardProps {
+interface ThinkingMarkdownProps {
   content: string;
   isStreaming: boolean;
-  defaultOpen?: boolean;
 }
 
-function ThinkingActivityIcon({ isStreaming }: { isStreaming: boolean }) {
-  if (!isStreaming) {
-    return <SvgBubbleText className="size-4 shrink-0 stroke-text-03" />;
-  }
-
-  return (
-    <span
-      aria-hidden
-      className="relative flex size-4 shrink-0 items-center justify-center"
-    >
-      <span className="absolute size-3 rounded-full bg-status-info-03 opacity-35 motion-safe:animate-ping motion-reduce:hidden" />
-      <span className="size-1.5 rounded-full bg-status-info-05" />
-    </span>
-  );
-}
-
-export default function ThinkingCard({
+/** The agent's reasoning text, as the body of a timeline thinking step. */
+export default function ThinkingMarkdown({
   content,
   isStreaming,
-  defaultOpen = false,
-}: ThinkingCardProps) {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-
-  if (!content) return null;
-
+}: ThinkingMarkdownProps) {
   return (
-    <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
-      <Collapsible.Trigger asChild>
-        <button
-          className={cn(
-            "group w-full text-left px-3 py-1.5 rounded-md transition-colors duration-200",
-            "hover:bg-background-tint-02 motion-reduce:transition-none"
-          )}
-        >
-          <div className="flex items-center gap-2 min-w-0 w-full">
-            <ThinkingActivityIcon isStreaming={isStreaming} />
-            <Text
-              font="main-ui-muted"
-              color="text-04"
-              wordWrap="whitespace-nowrap"
-            >
-              {isStreaming ? "Thinking..." : "Thinking"}
-            </Text>
-            <SvgChevronDown
-              className={cn(
-                "size-4 stroke-text-03 transition-all duration-150 shrink-0 ml-auto motion-reduce:transition-none",
-                "group-hover:stroke-text-05",
-                !isOpen && "-rotate-90"
-              )}
-            />
-          </div>
-        </button>
-      </Collapsible.Trigger>
-      <Collapsible.Content>
-        <div className="px-3 pb-2 pt-0">
-          <div className="py-1 max-h-48 overflow-y-auto">
-            <MinimalMarkdown
-              content={normalizeThinking(content)}
-              className="text-text-03 prose-sm"
-              streaming={isStreaming}
-              components={THINKING_MARKDOWN_OVERRIDES}
-            />
-          </div>
-        </div>
-      </Collapsible.Content>
-    </Collapsible.Root>
+    <div className="py-1 max-h-48 overflow-y-auto">
+      <MinimalMarkdown
+        content={normalizeThinking(content)}
+        className="text-text-03 prose-sm"
+        streaming={isStreaming}
+        components={THINKING_MARKDOWN_OVERRIDES}
+      />
+    </div>
   );
 }

@@ -31,8 +31,8 @@ import { ParallelStreamingHeader } from "@/app/app/message/messageComponents/tim
 import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
-import { TimelineRoot } from "@/app/app/message/messageComponents/timeline/primitives/TimelineRoot";
-import { TimelineHeaderRow } from "@/app/app/message/messageComponents/timeline/primitives/TimelineHeaderRow";
+import { TimelineRoot } from "@/lib/timeline/primitives/TimelineRoot";
+import { TimelineHeaderRow } from "@/lib/timeline/primitives/TimelineHeaderRow";
 
 // =============================================================================
 // Private Wrapper Components

@@ -6,21 +6,18 @@ import { cn } from "@opal/utils";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
-import { AnimatePresence, motion } from "motion/react";
 import { FoldableLogo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
 import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
-import ThinkingCard from "@/app/craft/components/ThinkingCard";
+import CraftTimeline from "@/app/craft/components/CraftTimeline";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
-import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
@@ -29,20 +26,8 @@ import {
   BuildMessage,
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
-import {
-  StreamItem,
-  ToolCallState,
-  TodoListState,
-} from "@/app/craft/types/displayTypes";
-
-/**
- * A render unit: a run of consecutive non-task tool calls (the "Working" block),
- * or a single non-tool item. Task calls become their own one-tool block so they
- * render as standalone, non-collapsible rows.
- */
-type RenderBlock =
-  | { kind: "tools"; tools: ToolCallState[] }
-  | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
+import { StreamItem, TodoListState } from "@/app/craft/types/displayTypes";
+import { buildCraftTranscript } from "@/app/craft/utils/timelineEntries";
 
 interface BuildMessageListProps {
   sessionId: string | null;
@@ -75,7 +60,7 @@ interface BuildMessageListProps {
  * BuildMessageList - Displays the conversation history with FIFO rendering.
  *
  * Per-turn structure after filtering:
- *   [Working block | single tool card], [last thinking?], [final text]
+ *   [timeline rail of tool calls and thinking], [inline items], [final text]
  * The in-progress turn additionally pins the latest TodoListCard to the top
  * (sticky) and keeps a flashing cursor visible until the turn settles.
  */
@@ -154,7 +139,7 @@ export default function BuildMessageList({
     // Filtering rules that apply first:
     // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
     //   or rendered inline at its original position).
-    // - Thinking remains as a collapsed transcript row so users have a durable
+    // - Thinking remains as a collapsed timeline step so users have a durable
     //   signal that the model spent time reasoning without opening by default.
     let latestTodoIdx = -1;
     rawItems.forEach((it, idx) => {
@@ -182,50 +167,27 @@ export default function BuildMessageList({
           ).todoList
         : null;
 
-    // Group the flat items into render blocks: consecutive non-task tool calls
-    // merge into one "Working" block; task calls and non-tool items each stand
-    // alone.
-    const blocks: RenderBlock[] = [];
-    for (const it of items) {
-      if (it.type !== "tool_call") {
-        blocks.push({ kind: "item", item: it });
-        continue;
-      }
-      const tool = it.toolCall;
-      const last = blocks[blocks.length - 1];
-      if (
-        tool.kind !== "task" &&
-        last?.kind === "tools" &&
-        last.tools[0]!.kind !== "task"
-      ) {
-        last.tools.push(tool);
-      } else {
-        blocks.push({ kind: "tools", tools: [tool] });
-      }
-    }
+    // Tool calls and thinking go on the timeline rail; every other item
+    // renders inline between rail blocks.
+    const blocks = buildCraftTranscript(items);
 
     const nodes = blocks.map((block, idx) => {
-      if (block.kind === "tools") {
-        const { tools } = block;
-        // A single tool (incl. every task) is a plain, non-collapsible card.
-        if (tools.length === 1) {
-          return <CraftToolCard key={tools[0]!.id} toolCall={tools[0]!} />;
-        }
-        // The group folds closed once an assistant message follows it.
+      if (block.kind === "steps") {
+        // The block folds closed once an assistant message follows it.
         const followedByMessage = blocks
           .slice(idx + 1)
           .some((b) => b.kind === "item" && b.item.type === "text");
         return (
-          <CraftToolGroup
-            key={`group-${tools[0]!.id}`}
-            toolCalls={tools}
+          <CraftTimeline
+            key={block.id}
+            entries={block.entries}
             autoCollapse={followedByMessage}
           />
         );
       }
 
-      // Inline item — small top margin when it follows a tool block.
-      const topMargin = blocks[idx - 1]?.kind === "tools" ? "mt-3" : "";
+      // Inline item — small top margin when it follows a rail block.
+      const topMargin = blocks[idx - 1]?.kind === "steps" ? "mt-3" : "";
       const { item } = block;
       switch (item.type) {
         case "text":
@@ -238,26 +200,6 @@ export default function BuildMessageList({
                 onFileOpen={onFileOpen}
               />
             </div>
-          );
-        case "thinking":
-          return (
-            <motion.div
-              key={item.id}
-              className={cn(topMargin)}
-              initial={
-                opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
-              }
-              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the message list, transform cannot
-              animate={{ opacity: 1, y: 0, height: "auto" }}
-              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height/marginTop collapse must reflow the message list, transform cannot
-              exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <ThinkingCard
-                content={item.content}
-                isStreaming={item.isStreaming}
-              />
-            </motion.div>
           );
         case "todo_list":
           return (
@@ -513,11 +455,7 @@ export default function BuildMessageList({
                   />
                 </div>
               )}
-              {hasStreamItems && (
-                <AnimatePresence initial={false}>
-                  {streamRender?.nodes}
-                </AnimatePresence>
-              )}
+              {hasStreamItems && streamRender?.nodes}
               {showStreamCursor && (
                 <div className="h-9 flex items-center">
                   <BlinkingBar />
