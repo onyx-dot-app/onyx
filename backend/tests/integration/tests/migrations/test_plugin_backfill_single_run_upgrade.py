@@ -66,7 +66,9 @@ def skill_id(engine: Engine) -> Generator[UUID, None, None]:
         )
     yield skill_id
     with engine.begin() as conn:
-        conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": skill_id})
+        # A failed upgrade rolls back the plugin table.
+        if conn.execute(text("SELECT to_regclass('plugin')")).scalar_one():
+            conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": skill_id})
         conn.execute(text("DELETE FROM skill WHERE id = :id"), {"id": skill_id})
 
 
