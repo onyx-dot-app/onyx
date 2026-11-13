@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from onyx.agents.models import MessageDelivery
 
@@ -60,3 +60,8 @@ class WaitAgentsInput(BaseModel):
         default=None,
         description="Agents to wait for, from list_agents. Omit to wait for all.",
     )
+
+    @field_validator("agent_ids")
+    @classmethod
+    def _empty_means_all(cls, agent_ids: list[str] | None) -> list[str] | None:
+        return agent_ids or None

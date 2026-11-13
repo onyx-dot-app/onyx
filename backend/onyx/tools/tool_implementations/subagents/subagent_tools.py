@@ -216,8 +216,7 @@ class WaitAgentsTool(_SubagentTool):
             for agent in control.discover_agents()
             if agent.parent_id == control.agent_id
         }
-        # An empty list waits for all agents, as an omitted one does.
-        agent_ids = request.agent_ids or None
+        agent_ids = request.agent_ids
         unknown = [agent_id for agent_id in agent_ids or [] if agent_id not in children]
         if unknown:
             raise ToolCallException(
@@ -238,9 +237,8 @@ class WaitAgentsTool(_SubagentTool):
             content=f"Waiting for {len(running)} "
             f"{'agent' if len(running) == 1 else 'agents'}: {', '.join(running)}."
             if running
-            else "Wait recorded, but none of these agents is running yet. Agents "
-            "that start in this turn, from spawns or queued messages, are part of "
-            "the wait. Finished results arrive before your next step.",
+            else "Wait recorded, but none of these agents is running, so your "
+            "response continues and their results arrive before your next step.",
             details=AgentWaitDetails(agent_ids=agent_ids),
             terminate=bool(running),
         )

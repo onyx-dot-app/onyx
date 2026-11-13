@@ -176,7 +176,8 @@ class AgentInfo(BaseModel):
     status: RunStatus | None = None
     # Why the latest run failed or was stopped, when it records a reason.
     failure_kind: RunFailureKind | None = None
-    # Whether the latest run started in the application's current user turn.
+    # Whether the latest run started in the application's current user turn;
+    # chat computes it from the branch when it loads agent metadata.
     current_turn: bool = False
 
     @property
