@@ -3,7 +3,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
-import { Button } from "@opal/components";
+import { Button, Text } from "@opal/components";
 import { TextLoader } from "@opal/loaders";
 import { useStreamingDuration } from "@/lib/timeline/useStreamingDuration";
 import { formatDurationSeconds } from "@opal/time";
@@ -57,16 +57,25 @@ export const StreamingHeader = React.memo(function StreamingHeader({
             {buttonTitle}
           </Button>
         ) : showElapsedTime ? (
-          <Button
-            prominence="tertiary"
-            size="md"
-            onClick={onToggle}
-            rightIcon={SvgFold}
-            aria-label={t("collapseButton.ariaLabel")}
-            aria-expanded={true}
-          >
-            {formatDurationSeconds(elapsedSeconds)}
-          </Button>
+          // The timer is plain text beside the button: a button label
+          // animates its changes, so each tick would flash.
+          <>
+            <Text
+              font="main-ui-muted"
+              color="text-03"
+              wordWrap="whitespace-nowrap"
+            >
+              {formatDurationSeconds(elapsedSeconds)}
+            </Text>
+            <Button
+              prominence="tertiary"
+              size="md"
+              onClick={onToggle}
+              icon={SvgFold}
+              aria-label={t("collapseButton.ariaLabel")}
+              aria-expanded={true}
+            />
+          </>
         ) : (
           <Button
             prominence="tertiary"
