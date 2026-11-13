@@ -49,9 +49,15 @@ def _assert_user_delegation_sas(url: str) -> None:
 
 
 @pytest.fixture
+def file_ids() -> list[str]:
+    return []
+
+
+@pytest.fixture
 def file_store(
     db_session: Session,  # noqa: ARG001
     tenant_context: None,  # noqa: ARG001
+    file_ids: list[str],
 ) -> Generator[AzureBlobBackedFileStore, None, None]:
     assert ACCOUNT_NAME is not None
     store = AzureBlobBackedFileStore(
@@ -63,13 +69,15 @@ def file_store(
 
     yield store
 
+    for file_id in file_ids:
+        store.delete_file(file_id, error_on_missing=False)
     container = store._get_blob_service_client().get_container_client(CONTAINER_NAME)
     for blob in container.list_blobs(name_starts_with=f"{store._azure_prefix}/"):
         container.delete_blob(blob.name)
 
 
 def test_an_upload_and_a_download_round_trip_without_an_account_key(
-    file_store: AzureBlobBackedFileStore,
+    file_store: AzureBlobBackedFileStore, file_ids: list[str]
 ) -> None:
     upload = file_store.presign_upload(
         display_name="snapshot.tar",
@@ -82,9 +90,9 @@ def test_an_upload_and_a_download_round_trip_without_an_account_key(
 
     put = _send(upload.request, CONTENT)
     assert put.status_code == 201, put.text
-    file_id = file_store.finalize_presigned_upload(upload.pending_upload_id)
+    file_ids.append(file_store.finalize_presigned_upload(upload.pending_upload_id))
 
-    download = file_store.presign_download(file_id)
+    download = file_store.presign_download(file_ids[0])
     _assert_user_delegation_sas(download.url)
     get = _send(download)
     assert get.status_code == 200, get.text
@@ -92,22 +100,22 @@ def test_an_upload_and_a_download_round_trip_without_an_account_key(
 
     # Create permission only: the same URL cannot replace the blob.
     assert _send(upload.request, CONTENT[:-1] + b"!").status_code >= 400
-    assert file_store.read_file(file_id).read() == CONTENT
-    file_store.delete_file(file_id)
+    assert file_store.read_file(file_ids[0]).read() == CONTENT
 
 
 def test_a_download_url_for_a_saved_file_reads_it(
-    file_store: AzureBlobBackedFileStore,
+    file_store: AzureBlobBackedFileStore, file_ids: list[str]
 ) -> None:
-    file_id = file_store.save_file(
-        content=BytesIO(CONTENT),
-        display_name="snapshot.tar",
-        file_origin=FileOrigin.OTHER,
-        file_type="application/x-tar",
+    file_ids.append(
+        file_store.save_file(
+            content=BytesIO(CONTENT),
+            display_name="snapshot.tar",
+            file_origin=FileOrigin.OTHER,
+            file_type="application/x-tar",
+        )
     )
 
-    response = _send(file_store.presign_download(file_id))
+    response = _send(file_store.presign_download(file_ids[0]))
 
     assert response.status_code == 200, response.text
     assert response.content == CONTENT
-    file_store.delete_file(file_id)

@@ -23,9 +23,11 @@ CONTAINER = "onyx-files"
 BLOB = "onyx-files/public/snapshot.tar"
 
 
-def _delegation_key() -> UserDelegationKey:
+def _delegation_key(
+    signed_oid: str = "00000000-0000-0000-0000-000000000001",
+) -> UserDelegationKey:
     key = UserDelegationKey()
-    key.signed_oid = "00000000-0000-0000-0000-000000000001"
+    key.signed_oid = signed_oid
     key.signed_tid = "00000000-0000-0000-0000-000000000002"
     key.signed_start = "2026-01-01T00:00:00Z"
     key.signed_expiry = "2026-01-01T01:00:00Z"
@@ -73,14 +75,20 @@ def test_workload_identity_signs_a_user_delegation_sas_and_reuses_the_key() -> N
 
 def test_a_key_near_its_expiry_is_replaced() -> None:
     client = _client()
+    second_oid = "00000000-0000-0000-0000-000000000003"
+    client.get_user_delegation_key.side_effect = [
+        _delegation_key(),
+        _delegation_key(signed_oid=second_oid),
+    ]
     store = _store(client, account_name=ACCOUNT_NAME)
     store._sign_download(CONTAINER, BLOB, 300)
 
     # Less time left than the longest URL lifetime.
     store._user_delegation_key_expiry = datetime.now(UTC) + timedelta(minutes=10)
-    store._sign_download(CONTAINER, BLOB, 300)
+    download = store._sign_download(CONTAINER, BLOB, 300)
 
     assert client.get_user_delegation_key.call_count == 2
+    assert _query(download.url)["skoid"] == [second_oid]
 
 
 def test_a_missing_role_means_presign_is_not_supported() -> None:
