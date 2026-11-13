@@ -56,6 +56,7 @@ class RemoteProfile:
     aws_profile: str | None = None
     aws_account_id: str | None = None
     user_email: str | None = None
+    agent_container: str = "host-agent"
     telepresence_min_version: tuple[int, ...] = (2, 27, 4)
     local_env: dict[str, str] = field(default_factory=dict)
 
@@ -137,6 +138,7 @@ def parse_profile(data: object) -> RemoteProfile:
             "app.kubernetes.io/component=craft-fc-host-agent",
         ),
         agent_port=port,
+        agent_container=_text(agent, "container", "agent", "host-agent"),
         aws_region=_text(aws, "region", "aws"),
         eks_cluster=_text(aws, "eks_cluster", "aws"),
         aws_profile=_optional_text(aws, "profile", "aws"),

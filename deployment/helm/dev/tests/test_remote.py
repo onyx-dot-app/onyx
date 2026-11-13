@@ -99,6 +99,24 @@ class ProfileTests(unittest.TestCase):
         self.assertEqual(profile.user_email, "dev@example.test")
         self.assertEqual(profile.local_env, {"LOG_LEVEL": "DEBUG", "ENABLE_X": "true"})
 
+    def test_shared_profile_without_personal_keys_parses(self) -> None:
+        profile = parse_profile(
+            {
+                "name": "craft-dev",
+                "kube": {"context": "alias", "allowed_contexts": ["alias", "arn"]},
+                "aws": {"profile": "sso", "region": "r", "eks_cluster": "c"},
+                "namespaces": {"app": "onyx", "sandbox": "s", "agent": "a"},
+                "agent": {"selector": "x=y", "port": 7443},
+                "telepresence": {"min_version": "2.33.0"},
+                "local_env": {},
+            }
+        )
+        self.assertIsNone(profile.kubeconfig)
+        self.assertIsNone(profile.user_email)
+        self.assertEqual(profile.agent_container, "host-agent")
+        custom = parse_profile({**PROFILE, "agent": {"container": "agent"}})
+        self.assertEqual(custom.agent_container, "agent")
+
     def test_profile_rejects_placeholders_and_unlisted_contexts(self) -> None:
         for broken in (
             {**PROFILE, "kube": {"context": "<context>"}},
