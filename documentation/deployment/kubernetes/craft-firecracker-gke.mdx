@@ -141,7 +141,7 @@ a direct Workload Identity principal has none.
 
 With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
 
-- makes the Google service account `<cluster name>-workload`;
+- makes a Google service account (`<cluster name>-workload`, shortened with a hash for long cluster names);
 - maps the Kubernetes service account `onyx-workload-access` to it, with the `iam.gke.io/gcp-service-account`
   annotation and `roles/iam.workloadIdentityUser`;
 - grants the account `roles/iam.serviceAccountTokenCreator` on itself.
@@ -150,7 +150,7 @@ The `workload_google_service_account_email` output names the account. The file s
 Grants that you gave to the old `principal://` member on other resources do not move.
 Grant them again to the new member.
 
-If the chart makes the Kubernetes service account (`create_workload_service_account = false` on the `gke` module),
+If the chart makes the Kubernetes service account (the `gke` module input `create_workload_service_account = false`),
 add the annotation in your Helm values:
 
 ```yaml

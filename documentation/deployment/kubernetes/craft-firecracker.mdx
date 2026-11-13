@@ -76,7 +76,7 @@ For the isolation design, see [Firecracker isolation](/security/architecture/cra
 | File store | S3, an S3-compatible store with an HTTPS endpoint, Google Cloud Storage, or Azure Blob Storage. KVM nodes must reach it over HTTPS. With `FILE_STORE_BACKEND=postgres` or the object store that the chart bundles, Craft cannot save sessions. |
 | Network | A CNI that enforces Kubernetes NetworkPolicy. |
 
-{/* depends: Azure presign */} On Azure Blob Storage, the API server signs URLs with its workload identity.
+{/* depends: azure presign PR (#17784) */} On Azure Blob Storage, the API server signs URLs with its workload identity.
 See the [AKS guide](/deployment/kubernetes/craft-firecracker-aks).
 
 ### Node pools
@@ -295,12 +295,12 @@ the host agent accepts every client certificate that its CA signed.
   <Step title="Check the host agent">
     ```bash
     kubectl -n onyx-sandbox-runtime rollout status ds/onyx-craft-fc-host-agent --timeout=10m
-    kubectl -n onyx-sandbox-runtime logs ds/onyx-craft-fc-host-agent \
+    kubectl -n onyx-sandbox-runtime logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 \
       | grep -E 'host agent ready|template ready|node signing key regist|"level":"ERROR"'
     ```
 
     Each agent must log `template ready` and `node signing key registered`.
-    The DaemonSet name is `<release>-craft-fc-host-agent`.
+    The DaemonSet name is `<fullname>-craft-fc-host-agent` (`onyx-craft-fc-host-agent` for the release `onyx`).
   </Step>
 
   <Step title="Check the registration on the API server">
@@ -316,7 +316,7 @@ the host agent accepts every client certificate that its CA signed.
     start a session and send a prompt that creates a file. Then confirm that a host agent started a microVM:
 
     ```bash
-    kubectl -n onyx-sandbox-runtime logs ds/onyx-craft-fc-host-agent --since=10m \
+    kubectl -n onyx-sandbox-runtime logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 --since=10m \
       | grep '"method":"Create"'
     ```
 

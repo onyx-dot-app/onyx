@@ -88,10 +88,10 @@ The microVM does not share a kernel with other sandboxes, with the node, or with
 | Layer | Control |
 | --- | --- |
 | **Hardware virtualization** | The guest kernel runs in its own virtual machine on KVM. |
-| **Minimal virtual hardware** | Firecracker gives the microVM block devices, a vsock socket, and a serial console. The microVM has no network card and no instance metadata service. |
+| **Minimal virtual hardware** | Firecracker gives the microVM block devices, a vsock socket, a memory balloon, and a serial console. The microVM has no network card and no instance metadata service. |
 | **Firecracker process** | Firecracker runs with its default seccomp filters. The Firecracker jailer runs each microVM process as its own unprivileged user, in a chroot and its own PID namespace. |
 | **Resource limits** | Each microVM runs in its own systemd scope with a memory limit and a CPU limit. |
-| **Clean starts** | Each microVM starts from a node template. The host agent checks the SHA-256 hashes of the template files before each start. |
+| **Clean starts** | Each microVM starts from a node template. The host agent checks the template files against their SHA-256 hashes and stops a start if a file changed. |
 | **Commands in the guest** | Agent commands run as an unprivileged user (UID 1000) in the guest. Skills and User Library files are on a drive that the microVM cannot write. |
 
 ### Network and identity

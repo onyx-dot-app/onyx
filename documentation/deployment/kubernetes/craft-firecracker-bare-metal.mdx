@@ -51,8 +51,8 @@ It never erases a disk.
     sudo ./craft-fc-node-prep.sh apply
     ```
 
-    `apply` loads `kvm_intel` and keeps it in `/etc/modules-load.d/onyx-craft-fc.conf`.
-    It sets `vm.max_map_count=1048576` and keeps it in `/etc/sysctl.d/99-onyx-firecracker.conf`.
+    `apply` loads `kvm_intel` and `loop` and keeps them in `/etc/modules-load.d/onyx-craft-fc.conf`.
+    It sets `vm.max_map_count=1048576` and keeps it in `/etc/sysctl.d/99-zz-onyx-firecracker.conf`.
     It makes the data directory, then runs `check` again. It cannot turn on VT-x or cgroup v2:
     change the BIOS or the boot settings for these.
   </Step>
@@ -65,7 +65,7 @@ It never erases a disk.
     sudo ./craft-fc-node-prep.sh apply --xfs-device /dev/nvme1n1
     ```
 
-    The script refuses a disk that has a file system other than XFS.
+    The script refuses a disk that has a file system other than XFS, and a data directory that is not empty.
   </Step>
 
   <Step title="Label and taint the nodes">
@@ -97,6 +97,8 @@ configMap:
   S3_FILE_STORE_BUCKET_NAME: "onyx-file-store"
 minio:
   enabled: false
+objectStore:
+  enabled: false
 ```
 
 If the endpoint uses a private CA, the KVM nodes and the Onyx pods must trust it.
@@ -123,7 +125,8 @@ Then follow [Verify the deployment](/deployment/kubernetes/craft-firecracker#ver
 Onyx has not tested OpenShift. These are the differences that the security model of OpenShift causes:
 
 - OpenShift uses Security Context Constraints instead of Pod Security labels. Grant the `privileged` SCC to the host
-  agent service account, `<release>-craft-fc-host-agent` in the host agent namespace:
+  agent service account,
+  `<fullname>-craft-fc-host-agent` in the host agent namespace (`onyx-craft-fc-host-agent` for the release `onyx`):
 
   ```bash
   oc adm policy add-scc-to-user privileged -z onyx-craft-fc-host-agent -n onyx-sandbox-runtime

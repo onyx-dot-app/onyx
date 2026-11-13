@@ -13,7 +13,7 @@ The examples use the default names. Change them to match your install:
 CTX=<kube context>                # always pass --context
 NS=onyx-sandbox-runtime           # craft.hostAgent.namespace
 REL=onyx                          # release namespace
-DS=onyx-craft-fc-host-agent       # <release>-craft-fc-host-agent
+DS=onyx-craft-fc-host-agent       # <fullname>-craft-fc-host-agent
 K="--context $CTX"
 pod_on() { kubectl $K -n $NS get pod -l app.kubernetes.io/component=craft-fc-host-agent \
   --field-selector spec.nodeName="$1" -o name; }
@@ -75,7 +75,7 @@ The host agent, the root drive, and the template name follow the Onyx version. A
     The host agent removes an unused template after 6 hours.
 
     ```bash
-    kubectl $K -n $NS logs ds/$DS | grep -E 'template (ready|build)'
+    kubectl $K -n $NS logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 | grep -E 'template (ready|build)'
     ```
   </Step>
 </Steps>
@@ -110,7 +110,7 @@ Stop them after their sessions are saved.
   </Step>
 
   <Step title="Remove the node">
-    Wait until `agent NodeInfo` shows `drain.state` `DRAINED`. Then remove or repair the node.
+    Wait until `agent NodeInfo` shows `drain.state` `DRAIN_STATE_DRAINED`. Then remove or repair the node.
   </Step>
 </Steps>
 

@@ -126,24 +126,51 @@ The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deploym
 
 ## Azure Blob Storage file store
 
-{/* depends: Azure presign */} The host agent uploads and downloads session files with presigned Azure Blob URLs (SAS).
-With AKS Workload Identity and no account key, the API server signs user delegation SAS URLs with its managed identity.
-The identity needs a role with `generateUserDelegationKey` on the storage account,
-for example **Storage Blob Data Contributor**. The Onyx `aks` module grants this role to the workload identity.
+{/* depends: azure presign PR (#17784) */}
+The host agent uploads and downloads session files with presigned Azure Blob URLs (SAS).
+The API server signs user delegation SAS URLs with its workload identity. Do not set an account key:
+shared key access can stay off.
 
-Set the file store values in your Helm values:
+<Steps>
+  <Step title="Set the file store values">
+    ```yaml
+    configMap:
+      FILE_STORE_BACKEND: "azure"
+      AZURE_STORAGE_ACCOUNT_NAME: "<storage account>"   # or AZURE_STORAGE_ACCOUNT_URL
+      AZURE_FILE_STORE_CONTAINER_NAME: "<container>"
+    minio:
+      enabled: false
+    objectStore:
+      enabled: false
+    ```
+  </Step>
 
-```yaml
-configMap:
-  FILE_STORE_BACKEND: "azure"
-  AZURE_STORAGE_ACCOUNT_NAME: "<storage account>"
-  AZURE_FILE_STORE_CONTAINER_NAME: "<container>"
-minio:
-  enabled: false
-```
+  <Step title="Set up the workload identity">
+    The Onyx `azure/onyx` module does this step for you. On your own cluster:
 
-KVM nodes must reach the storage account over HTTPS. If the storage account allows only private endpoints,
-the KVM node subnet must reach that endpoint.
+    - Make a user-assigned managed identity and federate it to the Onyx service account
+    (default `onyx-workload-access` in the namespace `onyx`).
+    - Set `serviceAccount.create: false` and `serviceAccount.name` to that service account in your Helm values.
+    - Add the pod label `azure.workload.identity/use: "true"` to the API server and to each Celery worker,
+    under their `podLabels` values.
+  </Step>
+
+  <Step title="Grant the storage role">
+    Grant the identity **Storage Blob Data Contributor** at the storage account scope.
+    A role at the container scope does not allow user delegation SAS. **Storage Blob Delegator** is not necessary.
+  </Step>
+
+  <Step title="Open the network path">
+    KVM nodes must reach `https://<storage account>.blob.core.windows.net`. If the storage account has network rules,
+    allow the AKS node subnet.
+  </Step>
+</Steps>
+
+A presigned URL is valid for 15 minutes at most. One session save on Azure is 5000 MiB at most.
+
+If the API server logs `An Azure user delegation SAS needs a role with generateUserDelegationKey`,
+the identity has no role, or the role is at the container scope.
+A new role assignment can take a few minutes to start working.
 
 ## Azure security findings
 

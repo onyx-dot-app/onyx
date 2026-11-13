@@ -13,7 +13,8 @@ set -euo pipefail
 DATA_DIR=/var/lib/craft-fc
 MIN_MAX_MAP_COUNT=1048576
 MIN_FREE_DISK_GIB=50
-SYSCTL_FILE=/etc/sysctl.d/99-onyx-firecracker.conf
+# zz sorts after 99-sysctl.conf, so a lower value in /etc/sysctl.conf does not win.
+SYSCTL_FILE=/etc/sysctl.d/99-zz-onyx-firecracker.conf
 MODULES_FILE=/etc/modules-load.d/onyx-craft-fc.conf
 
 fails=0
@@ -173,22 +174,27 @@ cmd_check() {
 	echo "RESULT: PASS ($warns warnings)"
 }
 
-apply_kvm() {
-	if [ -e /dev/kvm ]; then
-		return
+apply_modules() {
+	local modules=()
+	[ -e /dev/loop-control ] || modules+=(loop)
+	if [ ! -e /dev/kvm ]; then
+		if grep -qw vmx /proc/cpuinfo; then
+			modules+=(kvm_intel)
+		else
+			echo "SKIP  kvm: no vmx CPU flag, so kvm_intel cannot load. Turn on VT-x in the BIOS, or nested virtualization for this VM."
+		fi
 	fi
-	if ! grep -qw vmx /proc/cpuinfo; then
-		echo "SKIP  kvm: no vmx CPU flag, so kvm_intel cannot load. Turn on VT-x in the BIOS, or nested virtualization for this VM."
-		return
-	fi
-	run modprobe kvm_intel
-	echo kvm_intel | write_file "$MODULES_FILE"
+	[ ${#modules[@]} -gt 0 ] || return 0
+	run modprobe -a "${modules[@]}"
+	printf '%s\n' kvm_intel loop | write_file "$MODULES_FILE"
 }
 
 apply_sysctl() {
 	local value
 	value=$(cat /proc/sys/vm/max_map_count)
-	if [ "$value" -ge "$MIN_MAX_MAP_COUNT" ] && [ -f "$SYSCTL_FILE" ]; then
+	if [ "$value" -ge "$MIN_MAX_MAP_COUNT" ]; then
+		# Keep a higher value; only make it survive a reboot.
+		[ -f "$SYSCTL_FILE" ] || echo "vm.max_map_count = $value" | write_file "$SYSCTL_FILE"
 		return
 	fi
 	echo "vm.max_map_count = $MIN_MAX_MAP_COUNT" | write_file "$SYSCTL_FILE"
@@ -203,6 +209,9 @@ apply_xfs_device() {
 		[ "$(findmnt -n -o TARGET -S "$dev")" = "$DATA_DIR" ] || die "$dev is mounted somewhere else"
 		return
 	fi
+	if [ -n "$(find "$DATA_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+		die "$DATA_DIR is not empty. A mount would hide its files. Drain the node, stop the host agent and empty $DATA_DIR first."
+	fi
 	current=$(blkid -o value -s TYPE "$dev" 2>/dev/null || true)
 	if [ -z "$current" ]; then
 		run mkfs.xfs -m reflink=1 "$dev"
@@ -215,8 +224,9 @@ apply_xfs_device() {
 	fi
 	uuid=$(blkid -o value -s UUID "$dev")
 	if ! grep -q "UUID=$uuid" /etc/fstab; then
-		echo "UUID=$uuid $DATA_DIR xfs defaults,nofail 0 2" | write_file_append /etc/fstab
+		echo "UUID=$uuid $DATA_DIR xfs defaults 0 2" | write_file_append /etc/fstab
 	fi
+	command -v systemctl >/dev/null && run systemctl daemon-reload
 	run mount "$DATA_DIR"
 }
 
@@ -232,7 +242,7 @@ cmd_apply() {
 	if [ "$dry_run" -eq 0 ] && [ "$(id -u)" -ne 0 ]; then
 		die "apply needs root"
 	fi
-	apply_kvm
+	apply_modules
 	apply_sysctl
 	run mkdir -p "$DATA_DIR"
 	if [ -n "$xfs_device" ]; then
