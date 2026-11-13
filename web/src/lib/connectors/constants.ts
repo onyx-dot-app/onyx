@@ -31,6 +31,7 @@ import {
   SvgGmail,
   SvgGong,
   SvgGoogleCloud,
+  SvgGoogleChat,
   SvgGoogleDrive,
   SvgGoogleSites,
   SvgGuru,
@@ -94,6 +95,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Slack]: "sources.slack.description",
   [ValidSources.GoogleDrive]: "sources.googleDrive.description",
   [ValidSources.Gmail]: "sources.gmail.description",
+  [ValidSources.GoogleChat]: "sources.googleChat.description",
   [ValidSources.Bookstack]: "sources.bookstack.description",
   [ValidSources.Outline]: "sources.outline.description",
   [ValidSources.Confluence]: "sources.confluence.description",
@@ -448,6 +450,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     displayName: "Gmail",
     category: SourceCategory.Messaging,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/gmail/overview`,
+  },
+  google_chat: {
+    icon: SvgGoogleChat,
+    displayName: "Google Chat",
+    category: SourceCategory.Messaging,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/google_chat`,
   },
   drupal_wiki: {
     icon: SvgDrupal,

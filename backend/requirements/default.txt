@@ -973,9 +973,9 @@ google-api-core==2.28.1 \
     #   google-cloud-core
     #   google-cloud-resource-manager
     #   google-cloud-storage
-google-api-python-client==2.86.0 \
-    --hash=sha256:0f320190ab9d5bd2fdb0cb894e8e53bb5e17d4888ee8dc4d26ba65ce378409e2 \
-    --hash=sha256:3ca4e93821f4e9ac29b91ab0d9df168b42c8ad0fb8bff65b8c2ccb2d462b0464
+google-api-python-client==2.201.0 \
+    --hash=sha256:2d9bf1ba3f12eee8ed3d0f1791ce0605d163432f496baa72d3677faa2cf097d6 \
+    --hash=sha256:d5691982abd7287f53cb0b0e0c6a9984d4103cf864ea0a88cb6e4347bbaf70de
 google-auth==2.57.0 \
     --hash=sha256:180dafe015cfb62193bea26b677500fab5b9fd51a1e825ebf3ad9b182047ae59 \
     --hash=sha256:9b4f96d6a1feb5f7201231f47cfb3de08d8f176f8a61f9e461555116e95a8789
@@ -991,9 +991,9 @@ google-auth==2.57.0 \
     #   google-cloud-storage
     #   google-genai
     #   kubernetes
-google-auth-httplib2==0.1.0 \
-    --hash=sha256:31e49c36c6b5643b57e82617cb3e021e3e1d2df9da63af67252c02fa9c1f4a10 \
-    --hash=sha256:a07c39fd632becacd3f07718dfd6021bf396978f03ad3ce4321d060015cc30ac
+google-auth-httplib2==0.4.4 \
+    --hash=sha256:b931de392c20cfaa351cd789274922bd8cdc001e0e9e96de31b39d71347f8e16 \
+    --hash=sha256:bbe5d7b2401bb3a4017f4720e1e91bd273ab9a2bb60b84e65edbc0de127852da
     # via google-api-python-client
 google-auth-oauthlib==1.4.0 \
     --hash=sha256:18b5e28880eb8eba9065c436becdc0ee8e4b59117a73a510679c82f70cd363d2 \
@@ -3021,7 +3021,6 @@ six==1.17.0 \
     # via
     #   asana
     #   dropbox
-    #   google-auth-httplib2
     #   hubspot-api-client
     #   kubernetes
     #   markdownify

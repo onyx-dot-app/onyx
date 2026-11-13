@@ -15,6 +15,7 @@ export enum ValidSources {
   Slack = "slack",
   GoogleDrive = "google_drive",
   Gmail = "gmail",
+  GoogleChat = "google_chat",
   Bookstack = "bookstack",
   Outline = "outline",
   Confluence = "confluence",

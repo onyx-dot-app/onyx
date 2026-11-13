@@ -107,7 +107,7 @@ covers new files that match it.
 | `backend/onyx/server/documents/connector_edit.py`, `backend/onyx/server/documents/connector_edit_models.py`, `backend/onyx/db/connector_edit_requests.py`, `backend/onyx/db/backfill_models.py` | connectors |
 | `backend/onyx/connectors/confluence/` | confluence |
 | `backend/onyx/connectors/slack/` | slack |
-| `backend/onyx/connectors/google_drive/`, `backend/onyx/connectors/google_utils/` | google-drive |
+| `backend/onyx/connectors/google_chat/`, `backend/onyx/connectors/google_drive/`, `backend/onyx/connectors/google_utils/` | google-drive |
 | `backend/onyx/connectors/microsoft_utils/`, `backend/onyx/connectors/sharepoint/`, `backend/onyx/connectors/onedrive/` | microsoft-graph |
 | `backend/onyx/connectors/outlook/` | outlook |
 | `backend/onyx/connectors/teams/` | teams |
