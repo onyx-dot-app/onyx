@@ -8,7 +8,7 @@ import { getLanguageHint } from "@/lib/timeline/craft/components/tool-cards/help
 import ToolCardSurface, {
   ToolCardSection,
   MONO_STYLE,
-} from "@/lib/timeline/craft/components/tool-cards/ToolCardSurface";
+} from "@/lib/timeline/components/bodies/ToolCardSurface";
 import type { ToolCardBodyProps } from "@/lib/timeline/craft/components/tool-cards/interfaces";
 
 /**
