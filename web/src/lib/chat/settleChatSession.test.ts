@@ -348,7 +348,7 @@ describe("with stubbed server checks", () => {
       };
       useChatSessionStore.getState().updateSessionData("session", {
         chatState: "unconfirmed",
-        uncaughtError: failed.errorMessage,
+        uncaughtError: { error: failed.errorMessage ?? "" },
         messageTree: new Map([[-2, failed]]),
       });
       jest
@@ -415,7 +415,7 @@ describe("with stubbed server checks", () => {
           useChatSessionStore.getState().sessions.get("session")
         ).toMatchObject({
           chatState: "unconfirmed",
-          uncaughtError: errorMessage,
+          uncaughtError: { error: errorMessage },
           messageTree: tree,
         });
         expect(processRawChatHistory).not.toHaveBeenCalled();

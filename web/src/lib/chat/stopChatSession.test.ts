@@ -203,7 +203,7 @@ test("a failed Stop can be sent again before the reader finishes", async () => {
   );
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "streaming",
-    uncaughtError: errorMessage,
+    uncaughtError: { error: errorMessage },
   });
   const retry = stopChatSession("session", errorMessage);
   await Promise.resolve();

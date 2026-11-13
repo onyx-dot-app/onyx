@@ -79,6 +79,8 @@ export interface MockLlmRequestConditions {
 export interface MockLlmReply {
   pause_after_first_chunk?: string;
   heartbeat_while_paused?: boolean;
+  /** End the stream with this provider error after the reply text. */
+  error_after_text?: string;
   reasoning?: string;
   text?: string;
   tool_calls?: MockLlmToolCall[];

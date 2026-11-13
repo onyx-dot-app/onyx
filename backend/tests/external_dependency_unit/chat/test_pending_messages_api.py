@@ -20,6 +20,7 @@ from onyx.agents.models import (
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
+    RunFailure,
     RunFailureKind,
     RunStatus,
     agent_result_message_id,
@@ -28,7 +29,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
-from onyx.chat.models import PendingChatMessage, ResponseOwner
+from onyx.chat.models import CreateChatSessionID, PendingChatMessage, ResponseOwner
 from onyx.chat.presentation import replay_response
 from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
@@ -41,7 +42,7 @@ from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamBufferWriter
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.context.search.models import BaseFilters
-from onyx.db.chat import reserve_chat_response_ids
+from onyx.db.chat import delete_chat_session, reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     consume_inputs__no_commit,
@@ -79,7 +80,11 @@ from onyx.llm.models import (
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    ChatSessionCreationRequest,
+    MessageResponseIDInfo,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.streaming_models import (
     CodeModeStart,
     StreamingError,
@@ -951,13 +956,14 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
 
     with monkeypatch.context() as failing_files:
         failing_files.setattr("onyx.chat.process_message.load_chat_files", fail)
-        for _packet in handle_stream_message_objects(
-            new_msg_req=SendMessageRequest(
-                message="Initial question", chat_session_id=chat.id
-            ),
-            user=owner,
-        ):
-            pass
+        packets = list(
+            handle_stream_message_objects(
+                new_msg_req=SendMessageRequest(
+                    message="Initial question", chat_session_id=chat.id
+                ),
+                user=owner,
+            )
+        )
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.expire_all()
     [failed] = db_session.scalars(
@@ -967,6 +973,13 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert failed.response_status == RunStatus.ERROR
+    # The client learns the saved turn's IDs before its error.
+    ids, error = packets
+    assert ids == MessageResponseIDInfo(
+        user_message_id=failed.parent_message_id,
+        reserved_assistant_message_id=failed.id,
+    )
+    assert isinstance(error, StreamingError)
 
     sent_now = client.post(path, json={"message": "Try again", "delivery": "interrupt"})
     assert sent_now.status_code == 200, sent_now.text
@@ -980,6 +993,241 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
         )
     ).all()
     assert sorted(questions) == ["Initial question", "Try again"]
+
+
+def test_a_send_that_creates_its_session_names_it_when_preparation_fails(
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("File store unavailable")
+
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    packets = list(
+        handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(
+                message="Question", chat_session_info=ChatSessionCreationRequest()
+            ),
+            user=owner,
+        )
+    )
+    assert chat_turn_work.wait_idle(timeout=30)
+    created = packets[0]
+    assert isinstance(created, CreateChatSessionID) and not created.incognito
+    try:
+        _, ids, error = packets
+        assert isinstance(ids, MessageResponseIDInfo)
+        assert isinstance(error, StreamingError)
+        saved = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
+        assert saved is not None
+        assert saved.chat_session_id == created.chat_session_id
+        assert saved.response_status == RunStatus.ERROR
+    finally:
+        delete_chat_session(
+            owner.id, created.chat_session_id, db_session, hard_delete=True
+        )
+
+
+@pytest.mark.parametrize("failure", ["preparation", "start"])
+def test_a_failure_before_the_stream_names_only_a_turn_with_saved_content(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """A content-free question has no saved text, so its failure has no IDs."""
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("Unavailable")
+
+    if failure == "preparation":
+        chat.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+        db_session.commit()
+        monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    else:
+        monkeypatch.setattr("onyx.chat.process_message.start_chat_turn", fail)
+    packets = list(
+        handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(message="Question", chat_session_id=chat.id),
+            user=owner,
+        )
+    )
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert isinstance(packets[-1], StreamingError)
+    assert [type(packet) for packet in packets[:-1]] == (
+        [] if failure == "preparation" else [MessageResponseIDInfo]
+    )
+    db_session.expire_all()
+    [answer] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).all()
+    assert answer.response_status == RunStatus.ERROR
+
+
+def test_a_non_streaming_send_that_fails_after_saving_raises_its_error(
+    chat: ChatSession,
+    owner: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("File store unavailable")
+
+    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    with pytest.raises(OnyxError):
+        run_chat_turn(
+            new_msg_req=SendMessageRequest(message="Question", chat_session_id=chat.id),
+            user=owner,
+        )
+    assert chat_turn_work.wait_idle(timeout=30)
+
+
+def test_a_send_after_a_failed_turn_continues_the_conversation(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A send whose parent is a failed response keeps the failed turn in history.
+
+    The model sees the question and the partial output, and the first step
+    reads an agent result that the failed turn left unread.
+    """
+    requests: list[GenerationRequest] = []
+
+    class FailingFirstModel(QueueTestLLM):
+        @override
+        def stream(
+            self, request: GenerationRequest, context: GenerationContext | None = None
+        ) -> Generator[GenerationEvent, None, None]:
+            requests.append(request)
+            if len(requests) == 1:
+                yield GenerationStartEvent()
+                yield TextDeltaEvent(content_index=0, text="Partial answer")
+                raise RuntimeError("Provider failed")
+            yield from super().stream(request, context)
+
+    model = FailingFirstModel(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="Recovered answer")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    for _packet in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Original question", chat_session_id=chat.id
+        ),
+        user=owner,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    [failed] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).all()
+    assert failed.response_status == RunStatus.ERROR
+    worker = ChatSession(
+        id=uuid4(),
+        user_id=owner.id,
+        persona_id=DEFAULT_PERSONA_ID,
+        spawned_by_message_id=failed.id,
+        agent_name="worker",
+    )
+    db_session.add(worker)
+    db_session.flush()
+    worker_response = ChatMessage(
+        chat_session_id=worker.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=RunStatus.ERROR,
+        response_failure=RunFailure(
+            kind=RunFailureKind.EXECUTION, message="Worker stopped early"
+        ),
+    )
+    db_session.add(worker_response)
+    db_session.flush()
+    result_id = agent_result_message_id(str(worker_response.id))
+    db_session.add(
+        ChatInput(
+            recipient_session_id=chat.id,
+            message_id=result_id,
+            source=InputSource.AGENT_RESULT,
+            source_response_id=worker_response.id,
+            root_response_id=failed.id,
+            content="",
+        )
+    )
+    db_session.commit()
+
+    for _packet in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Try again",
+            chat_session_id=chat.id,
+            parent_message_id=failed.id,
+        ),
+        user=owner,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+
+    assert len(requests) == 2
+    history = [
+        (type(message).__name__, message.text)
+        for message in requests[1].messages
+        if isinstance(message, UserMessage | AssistantMessage)
+    ]
+    assert history[:3] == [
+        ("UserMessage", "Original question"),
+        ("AssistantMessage", "Partial answer"),
+        ("UserMessage", "Try again"),
+    ]
+    [(kind, result_text)] = history[3:]
+    assert kind == "UserMessage"
+    assert result_text.startswith("Background agent result")
+    assert "Worker stopped early" in result_text
+    db_session.expire_all()
+    question = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == failed.id)
+    )
+    assert question is not None and question.message == "Try again"
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == question.id)
+    )
+    assert answer is not None and answer.response_status == RunStatus.COMPLETE
+    assert (
+        db_session.scalar(select(ChatInput.id).where(ChatInput.message_id == result_id))
+        is None
+    )
 
 
 # Each failure point follows the response reservation in turn preparation.

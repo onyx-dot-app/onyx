@@ -53,6 +53,8 @@ class Reply(BaseModel):
     # Hold the stream after its first text chunk until the test releases this gate.
     pause_after_first_chunk: str | None = None
     heartbeat_while_paused: bool = False
+    # End the stream with this provider error after the text, as a failed call.
+    error_after_text: str | None = None
 
 
 class Conversation(BaseModel):

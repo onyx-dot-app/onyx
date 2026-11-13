@@ -131,7 +131,7 @@ test("failed readiness keeps sends blocked with reload instructions", async () =
     ).toBe("unconfirmed")
   );
   expect(
-    useChatSessionStore.getState().sessions.get("session")?.uncaughtError
+    useChatSessionStore.getState().sessions.get("session")?.uncaughtError?.error
   ).toMatch(/Reload/);
   expect(fetchSettledChatSession).not.toHaveBeenCalled();
 });

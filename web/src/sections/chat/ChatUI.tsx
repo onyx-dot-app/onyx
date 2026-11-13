@@ -405,11 +405,17 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {(error || loadError) && (
+          {error && (
+            <div className={cn("p-4 w-full self-center", msgWidth)}>
+              {/* A session error has no saved question to resend. */}
+              <ErrorBanner {...error} />
+            </div>
+          )}
+          {!error && loadError && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>
               <ErrorBanner
                 resubmit={chatState === "input" ? onResubmit : undefined}
-                error={error || loadError || ""}
+                error={loadError}
               />
             </div>
           )}

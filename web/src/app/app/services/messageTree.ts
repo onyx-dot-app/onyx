@@ -318,44 +318,6 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   return chain;
 }
 
-export function getLastSuccessfulMessageId(
-  messages: MessageTreeState,
-  chain?: Message[]
-): number | null {
-  const messageChain = chain || getLatestMessageChain(messages);
-  for (let i = messageChain.length - 1; i >= 0; i--) {
-    const message = messageChain[i];
-    if (!message) {
-      console.error(`Message ${i} not found in the message chain.`);
-      continue;
-    }
-
-    // don't include failed / not-completed messages
-    if (message.type !== "error" && message.messageId !== undefined) {
-      return message.messageId ?? null;
-    }
-  }
-
-  // If the chain starts with an error or is empty, check for system message
-  const systemMessage = messages.get(SYSTEM_NODE_ID);
-  if (systemMessage) {
-    // Check if the system message itself is considered "successful" (it usually is)
-    // Or if it has a successful child
-    const childNodeId = systemMessage.latestChildNodeId;
-    if (childNodeId !== null && childNodeId !== undefined) {
-      const firstRealMessage = messages.get(childNodeId);
-      if (firstRealMessage && firstRealMessage.type !== "error") {
-        return firstRealMessage.messageId ?? null;
-      }
-    }
-    // If no successful child, return the system message ID itself as the root?
-    // This matches the class behavior implicitly returning the root ID if nothing else works.
-    return systemMessage.messageId ?? null;
-  }
-
-  return null; // No successful message found
-}
-
 interface BuildEmptyMessageParams {
   messageType: "user" | "assistant";
   parentNodeId: number;

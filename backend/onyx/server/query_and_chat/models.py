@@ -53,6 +53,20 @@ class MultiModelMessageResponseIDInfo(BaseModel):
     responses: list[ModelResponseSlot]
 
 
+def response_id_info(
+    user_message_id: int | None, responses: list[ModelResponseSlot]
+) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
+    """The packet that names a turn's saved question and reserved responses."""
+    if len(responses) > 1:
+        return MultiModelMessageResponseIDInfo(
+            user_message_id=user_message_id, responses=responses
+        )
+    return MessageResponseIDInfo(
+        user_message_id=user_message_id,
+        reserved_assistant_message_id=responses[0].message_id,
+    )
+
+
 class SourceTag(Tag):
     source: DocumentSource
 

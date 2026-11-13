@@ -19,6 +19,7 @@ import {
   isStreamError,
   SendMessageBody,
   streamChatMessage,
+  StreamHttpError,
 } from "@/api/chat/stream";
 import { waitForSessionIdle } from "@/chat/sessionReadiness";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
@@ -27,8 +28,8 @@ import { processRawChatHistory } from "@/chat/chatHistory";
 import { ChatState, FileDescriptor } from "@/chat/interfaces";
 import {
   buildImmediateMessages,
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
+  MessageTreeState,
   SYSTEM_MESSAGE_ID,
   SYSTEM_NODE_ID,
   upsertMessages,
@@ -95,6 +96,7 @@ async function stopAcknowledgedStream(
 
 async function runChatStream(
   sessionId: string,
+  treeBeforeSend: MessageTreeState,
   userNodeId: number,
   agentNodeId: number,
   body: SendMessageBody,
@@ -110,6 +112,9 @@ async function runChatStream(
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let sawStreaming = false;
   let hadError = false;
+  let accepted = false;
+  // Set when the server answered without saving the turn.
+  let rejection: string | null = null;
 
   // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
   // stream rather than the session-create round trip that can precede it.
@@ -147,6 +152,7 @@ async function runChatStream(
     for await (const event of streamChatMessage(body, signal)) {
       if (signal.aborted || !stillOurs()) break;
       if (isMessageIdInfo(event)) {
+        accepted = true;
         onAccepted?.();
         onAccepted = undefined;
         if (event.user_message_id != null) {
@@ -178,11 +184,17 @@ async function runChatStream(
           errorCode: event.error_code ?? null,
           error: event.error,
         });
-        pending = [];
         if (flushTimer) {
           clearTimeout(flushTimer);
           flushTimer = null;
         }
+        if (!accepted) {
+          pending = [];
+          rejection = event.error;
+          break;
+        }
+        // Keep the partial answer that arrived before the error.
+        flush();
         store.getState().patchNode(sessionId, agentNodeId, {
           type: "error",
           message: event.error,
@@ -205,10 +217,19 @@ async function runChatStream(
       hadError = true;
       const message =
         error instanceof Error ? error.message : "Something went wrong.";
-      store.getState().patchNode(sessionId, agentNodeId, {
-        type: "error",
-        message,
-      });
+      if (
+        !accepted &&
+        error instanceof StreamHttpError &&
+        error.status < 500 &&
+        error.status !== 408
+      ) {
+        rejection = message;
+      } else {
+        store.getState().patchNode(sessionId, agentNodeId, {
+          type: "error",
+          message,
+        });
+      }
     }
   } finally {
     if (flushTimer) clearTimeout(flushTimer);
@@ -218,6 +239,11 @@ async function runChatStream(
     }
   }
   if (!stillOurs()) return;
+  if (rejection !== null) {
+    // The turn does not belong in the tree; the composer still holds its text.
+    store.getState().updateSessionTree(sessionId, treeBeforeSend);
+    toast.error(rejection);
+  }
   store.getState().updateChatState(sessionId, "settling");
   try {
     const idle = await waitForSessionIdle(sessionId, stillOurs, () => {
@@ -370,13 +396,19 @@ export function useChatController(
         const tree =
           useChatSessionStore.getState().sessions.get(activeId)?.messageTree ??
           new Map();
-        const chain = getLatestMessageChain(tree);
-        const lastNode = chain[chain.length - 1];
-        const parentNodeId = lastNode ? lastNode.nodeId : SYSTEM_NODE_ID;
+        // A failed turn the server saved stays in the conversation, so the
+        // next message continues after it. A turn the server rejected before
+        // saving has no row to continue from.
+        const parent = getLatestMessageChain(tree).findLast(
+          (message) => message.messageId !== undefined,
+        );
+        const parentNodeId = parent?.nodeId ?? SYSTEM_NODE_ID;
         // -3 (synthetic root) → null; null = first message.
-        const lastSuccessful = getLastSuccessfulMessageId(tree);
         const parentMessageId =
-          lastSuccessful === SYSTEM_MESSAGE_ID ? null : lastSuccessful;
+          parent?.messageId === undefined ||
+          parent.messageId === SYSTEM_MESSAGE_ID
+            ? null
+            : parent.messageId;
 
         const { initialUserNode, initialAgentNode } = buildImmediateMessages(
           parentNodeId,
@@ -424,6 +456,7 @@ export function useChatController(
 
         void runChatStream(
           activeId,
+          tree,
           initialUserNode.nodeId,
           initialAgentNode.nodeId,
           body,
