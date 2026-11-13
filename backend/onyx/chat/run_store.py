@@ -67,7 +67,6 @@ from onyx.db.chat_inputs import (
     enqueue_message,
     fail_inbox_start__no_commit,
     fail_response_start__no_commit,
-    has_pending_sends,
     lock_agent,
     read_chat_inbox,
     read_run_inputs,
@@ -109,8 +108,10 @@ OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
 INPUT_POLL_SECONDS = 1.0
-MAX_AGENT_COMPLETIONS_PER_STEP = 8
 MAX_RUNNING_AGENTS = 10
+# A step reads at most this many finished results; a run reads the rest in its
+# next steps before it answers.
+MAX_AGENT_COMPLETIONS_PER_STEP = 8
 RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
 # Start failures that a later poll retries; other failures end the inbox work.
 _RETRYABLE_START_ERRORS = (
@@ -277,8 +278,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         control_cache: CacheBackend | None = None,
         on_child_released: Callable[[], None] | None = None,
         tool_ids: Mapping[str, int | None] | None = None,
+        answers_agent_results: bool = False,
     ) -> None:
         self.tenant_id = tenant_id
+        # The root response answers unread agent results under a hidden
+        # AGENT_RESULTS question, as a released wait's follow-up does.
+        self._answers_agent_results = answers_agent_results
+        # Runs whose last read left results for a later step.
+        self._capped_runs: set[str] = set()
         # Saved child tool calls link to these tool rows by name.
         self._tool_ids = dict(tool_ids or {})
         self.chat_session_id = chat_session_id
@@ -479,12 +486,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 run.id,
                 self._root_branch(run),
                 self._input_branch.message_ids,
+                follow_up=self._is_follow_up(run),
             )
-        # Each step reads a bounded number of results; the rest stay unread and
-        # wake the agent's next run.
-        completed = [
+        finished = [
             result.response_id for result in results if result.status.is_terminal
-        ][:MAX_AGENT_COMPLETIONS_PER_STEP]
+        ]
+        completed = finished[:MAX_AGENT_COMPLETIONS_PER_STEP]
+        with self._lock:
+            if len(finished) > len(completed):
+                self._capped_runs.add(run.id)
+            else:
+                self._capped_runs.discard(run.id)
         if not completed:
             return messages
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -519,11 +531,30 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 return True
 
     def has_unread_inputs(self, run: Run) -> bool:
-        # A send that arrives after this check starts the recipient's next run.
+        """Sends keep a run going; results keep it going only to finish a batch.
+
+        A released wait's follow-up reads every result before it answers, and a
+        run whose last read hit the per-step cap reads the rest. Other results
+        start the recipient's next run, so an answer the user saw stays saved.
+        """
+        with self._lock:
+            capped = run.id in self._capped_runs
+        follow_up = self._is_follow_up(run)
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            return has_pending_sends(
-                session, run.agent_id, int(run.id), self._root_branch(run)
+            messages, results = read_run_inputs(
+                session,
+                run.agent_id,
+                run.id,
+                self._root_branch(run),
+                self._input_branch.message_ids,
+                follow_up=follow_up,
             )
+        return bool(messages) or (
+            (follow_up or capped) and any(result.wakes_recipient for result in results)
+        )
+
+    def _is_follow_up(self, run: Run) -> bool:
+        return self._answers_agent_results and run.agent_id == str(self.chat_session_id)
 
     def _read_inbox(self) -> ChatInbox | None:
         """Read the inbox; None when this store's response left the selected branch."""

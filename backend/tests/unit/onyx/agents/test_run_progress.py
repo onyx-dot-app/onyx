@@ -244,3 +244,33 @@ def test_final_answer_on_the_last_step_ignores_unread_input() -> None:
     snapshot = run.snapshot()
     assert snapshot.status == RunStatus.COMPLETE
     assert snapshot.answer_step_index == 0
+
+
+def test_a_terminating_step_leaves_unread_input_for_the_next_run() -> None:
+    requests: list[GenerationRequest] = []
+    finish = AgentTool(
+        definition=ToolDefinition(name="finish", description="", parameters={}),
+        execute=lambda _: ToolResult(content="Waiting", terminate=True),
+    )
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(
+            content=[ToolCall(id="finish", name="finish", arguments={})]
+        )
+
+    agent = Agent(
+        FakeModelClient(generate),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[finish],
+    )
+    coordinator = AgentCoordinator(ownership=FakeRunOwnership(has_unread_inputs=True))
+    run = agent.start(
+        messages=[UserMessage(content="Question")], max_steps=3, coordinator=coordinator
+    )
+
+    run.result(timeout=10)
+    assert run.snapshot().status == RunStatus.COMPLETE
+    assert len(requests) == 1

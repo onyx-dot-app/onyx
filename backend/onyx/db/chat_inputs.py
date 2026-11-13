@@ -3,11 +3,12 @@
 A row is pending until a step or a new run consumes it; consuming deletes it.
 """
 
-from collections.abc import Collection, Iterable
+from collections.abc import Callable, Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, delete, func, or_, select
-from sqlalchemy.orm import Session, selectinload
+from sqlalchemy import Select, and_, delete, func, or_, select, type_coerce
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.agents.models import (
@@ -24,6 +25,7 @@ from onyx.agents.models import (
 from onyx.chat.models import (
     AgentInboxWork,
     AgentResultState,
+    AgentWait,
     ChatBranch,
     ChatInbox,
     PendingChatMessage,
@@ -61,6 +63,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import UserMessage
 from onyx.llm.override_models import LLMOverride
+from onyx.tools.tool_implementations.subagents.models import AgentWaitDetails
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -122,14 +125,61 @@ def wakes_for_results(
     results: Iterable[AgentResultState],
     *,
     queue_paused: bool,
+    waits: Callable[[], Collection[AgentWait]] | None = None,
 ) -> bool:
-    """Whether unread finished results start an idle recipient's next run."""
-    return (
-        latest_status is not None
-        and latest_status.is_terminal
-        and latest_status != RunStatus.ERROR
-        and not queue_paused
-        and any(result.wakes_recipient for result in results)
+    """Whether unread finished results start an idle recipient's next run.
+
+    A finished result that no wait holds starts it. A wait holds its results
+    until none of its runs is active and no message that dispatch would start
+    is queued for its agents; a result starts the run once every wait that
+    holds it is released. `waits` is read only when a result could wake.
+    """
+    if (
+        latest_status is None
+        or not latest_status.is_terminal
+        or latest_status == RunStatus.ERROR
+        or queue_paused
+    ):
+        return False
+    results = list(results)
+    if not any(result.wakes_recipient for result in results):
+        return False
+    if waits is None:
+        return True
+    open_waits = waits()
+    return any(
+        result.wakes_recipient and not _held_by_open_wait(result, results, open_waits)
+        for result in results
+    )
+
+
+def _held_by_open_wait(
+    result: AgentResultState,
+    results: Collection[AgentResultState],
+    waits: Collection[AgentWait],
+) -> bool:
+    return any(
+        wait.holds(result.agent_id, result.root_response_id)
+        and (
+            wait.queued
+            or any(
+                other.is_active and wait.holds(other.agent_id, other.root_response_id)
+                for other in results
+            )
+        )
+        for wait in waits
+    )
+
+
+def _dispatch_would_start(
+    delivery: MessageDelivery | None,
+    target_response_id: int | None,
+    latest: ChatMessage | None,
+) -> bool:
+    """Whether dispatch would start a pending agent message's run now."""
+    status = latest.response_status if latest else None
+    return can_start_input(
+        delivery, target_response_id, status, queue_paused=agent_queue_paused(status)
     )
 
 
@@ -334,8 +384,9 @@ def next_queued_turn(
 ) -> QueuedChatTurn | None:
     """Read the next root turn on the selected branch from `get_selected_branch`.
 
-    `results` are the branch's unread child results; those for the root wake it.
-    Acceptance rechecks the turn under the session lock.
+    `results` are the branch's unread child results; those for the root wake it,
+    subject to the root's waits. Acceptance rechecks the turn under the session
+    lock.
     """
     if selected is None and len(branch.message_ids) > 1:
         # Only the root message, or a response, can precede the next question.
@@ -366,10 +417,14 @@ def next_queued_turn(
             parent_response_id=parent_response_id,
             message=_pending_human_message(row),
         )
+    root_results = [
+        result for result in results if result.recipient_id == chat_session_id
+    ]
     if wakes_for_results(
         status,
-        (result for result in results if result.recipient_id == chat_session_id),
+        root_results,
         queue_paused=paused,
+        waits=lambda: agent_waits(session, chat_session_id, branch),
     ):
         return QueuedChatTurn(parent_response_id=parent_response_id, message=None)
     return None
@@ -418,13 +473,7 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
         latest = latest_by_agent.get(agent_id)
         if agent_id in {work.agent_id for work in inbox.child_work}:
             continue
-        latest_status = latest.response_status if latest else None
-        if not can_start_input(
-            row.delivery,
-            row.target_response_id,
-            latest_status,
-            queue_paused=agent_queue_paused(latest_status),
-        ):
+        if not _dispatch_would_start(row.delivery, row.target_response_id, latest):
             if (
                 latest is not None
                 and latest.response_status is not None
@@ -530,7 +579,9 @@ def agent_result_states(
     query = (
         select(
             ChatInput.recipient_session_id.label("recipient_id"),
+            ChatMessage.chat_session_id.label("agent_id"),
             ChatMessage.id.label("response_id"),
+            ChatInput.root_response_id.label("root_response_id"),
             ChatMessage.response_status.label("status"),
             ChatMessage.response_failure.label("failure"),
         )
@@ -544,6 +595,80 @@ def agent_result_states(
         AgentResultState.model_validate(row)
         for row in session.execute(query).mappings()
     ]
+
+
+def agent_waits(
+    session: Session, chat_session_id: UUID, branch: ChatBranch
+) -> list[AgentWait]:
+    """The root's `wait_agents` calls on the branch that can hold unread results.
+
+    Calls before the oldest unread result's root response hold nothing, so
+    they are skipped.
+    """
+    oldest_result_root = (
+        select(func.min(ChatInput.root_response_id))
+        .where(
+            ChatInput.recipient_session_id == chat_session_id,
+            _results_on_branch(branch.message_ids),
+        )
+        .scalar_subquery()
+    )
+    calls = session.execute(
+        select(ToolCall.parent_chat_message_id, ToolCall.result).where(
+            ToolCall.chat_session_id == chat_session_id,
+            ToolCall.parent_chat_message_id.in_(branch.message_ids),
+            ToolCall.parent_chat_message_id >= oldest_result_root,
+            type_coerce(ToolCall.result, JSONB)["details"]["type"].astext
+            == AgentWaitDetails.model_fields["type"].default,
+        )
+    ).all()
+    if not calls:
+        return []
+    # Messages to the root's agents; those that dispatch would start hold a wait.
+    spawner = aliased(ChatMessage)
+    messages = session.execute(
+        select(
+            ChatInput.recipient_session_id,
+            ChatInput.root_response_id,
+            ChatInput.delivery,
+            ChatInput.target_response_id,
+        )
+        .join(ChatSession, ChatSession.id == ChatInput.recipient_session_id)
+        .join(spawner, spawner.id == ChatSession.spawned_by_message_id)
+        .where(
+            ChatInput.source == InputSource.AGENT,
+            ChatInput.root_response_id.in_(branch.message_ids),
+            spawner.chat_session_id == chat_session_id,
+        )
+    ).all()
+    latest = latest_agent_responses(
+        session, branch, {str(recipient) for recipient, *_ in messages}
+    )
+    starting = [
+        (recipient, root_id)
+        for recipient, root_id, delivery, target_id in messages
+        if _dispatch_would_start(delivery, target_id, latest.get(str(recipient)))
+    ]
+    waits: list[AgentWait] = []
+    for response_id, result in calls:
+        if (
+            response_id is None
+            or result is None
+            or not isinstance(result.details, AgentWaitDetails)
+        ):
+            continue
+        wait = AgentWait(
+            response_id=response_id,
+            agent_ids=frozenset(UUID(agent_id) for agent_id in result.details.agent_ids)
+            if result.details.agent_ids is not None
+            else None,
+            queued=False,
+        )
+        wait.queued = any(
+            wait.holds(recipient, root_id) for recipient, root_id in starting
+        )
+        waits.append(wait)
+    return waits
 
 
 def active_agent_response_ids(
@@ -739,32 +864,48 @@ def read_run_inputs(
     run_id: str,
     root_branch: Collection[int] | None,
     result_branch: Collection[int] | None,
+    *,
+    follow_up: bool = False,
 ) -> tuple[list[UserMessage], list[AgentResultState]]:
     """Read messages sent to a run and, with `result_branch`, its unread child results.
 
     One query reads both. Results are returned as states; the caller reads the
-    output of finished ones.
+    output of finished ones. A root `follow_up` that answers unread results
+    leaves results that an open wait holds for the wait's own follow-up.
     """
     reads = _sends(int(run_id), root_branch)
     if result_branch is not None:
         reads = or_(reads, _results_on_branch(result_branch))
     rows = session.execute(
-        select(ChatInput, ChatMessage.response_status)
+        select(
+            ChatInput,
+            ChatMessage.chat_session_id,
+            ChatMessage.response_status,
+            ChatMessage.response_failure,
+        )
         .outerjoin(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
         .where(ChatInput.recipient_session_id == UUID(agent_id), reads)
         .order_by(ChatInput.id)
     ).all()
     messages: list[UserMessage] = []
     results: list[AgentResultState] = []
-    for row, status in rows:
+    for row, source_agent_id, status, failure in rows:
         if row.source == InputSource.AGENT_RESULT:
-            if row.source_response_id is None or status is None:
+            if (
+                row.source_response_id is None
+                or row.root_response_id is None
+                or source_agent_id is None
+                or status is None
+            ):
                 raise ValueError("Agent result has no source response")
             results.append(
                 AgentResultState(
                     recipient_id=row.recipient_session_id,
+                    agent_id=source_agent_id,
                     response_id=row.source_response_id,
+                    root_response_id=row.root_response_id,
                     status=status,
+                    failure=failure,
                 )
             )
             continue
@@ -780,6 +921,17 @@ def read_run_inputs(
                 ),
             )
         )
+    if follow_up and root_branch is not None and results:
+        waits = agent_waits(
+            session,
+            UUID(agent_id),
+            ChatBranch(chat_session_id=UUID(agent_id), message_ids=list(root_branch)),
+        )
+        results = [
+            result
+            for result in results
+            if not _held_by_open_wait(result, results, waits)
+        ]
     return messages, results
 
 
@@ -818,26 +970,6 @@ def consume_inputs__no_commit(
         .returning(ChatInput.message_id)
     ).all()
     return set(consumed) == pending_ids
-
-
-def has_pending_sends(
-    session: Session,
-    agent_id: str,
-    run_id: int,
-    root_branch: Collection[int] | None,
-) -> bool:
-    """Read unreceived steering; a send that misses its run starts the next one."""
-    return (
-        session.scalar(
-            select(ChatInput.id)
-            .where(
-                ChatInput.recipient_session_id == UUID(agent_id),
-                _sends(run_id, root_branch),
-            )
-            .limit(1)
-        )
-        is not None
-    )
 
 
 def _invocation_ids(invocation: ToolCall | None) -> tuple[str, str, str]:

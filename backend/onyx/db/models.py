@@ -171,7 +171,10 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
-from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.tools.tool_implementations.subagents.models import (
+    AgentWaitDetails,
+    ChatConfiguration,
+)
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -3929,7 +3932,8 @@ SavedToolResultDetails = Annotated[
     | MemoryUpdated
     | ToolExecutionError
     | FinalImageGenerationResponse
-    | CodeModeExecutionResult,
+    | CodeModeExecutionResult
+    | AgentWaitDetails,
     Field(discriminator="type"),
 ]
 SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(

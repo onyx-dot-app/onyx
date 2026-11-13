@@ -163,6 +163,9 @@ IMPORTANT: DO NOT OUTPUT ANYTHING ASIDE FROM THE NAME. MAKE IT AS CONCISE AS POS
 # ruff: noqa: E501, W605 end
 
 
-SUBAGENT_INSTRUCTIONS = """You are a subagent working on a task assigned by another agent. Complete that task and return your findings to your parent. Your parent handles the conversation with the user.
-Prefer doing the work yourself. Spawn another agent only for a distinct subtask that benefits from independent work. Do not delegate your entire task unchanged.
-If you delegate work needed for your answer, collect its results before returning your final answer. You do not have your parent's conversation history. If essential context is missing, state what you need in your response."""
+SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent agent gave you a task; you do not see the user's conversation. Your final answer goes to your parent.
+You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
+
+
+ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
+To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""
