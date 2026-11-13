@@ -1,0 +1,20 @@
+name: "Cancel superseded runs"
+description: >-
+  Cancels this workflow's in-flight pull_request runs for the same head branch
+  that are older (lower run id) than this run. The newest run always survives,
+  which is the run GitHub shows for the PR's checks. Built-in concurrency
+  cancels in the order runs reach the group, which can drop the newest of two
+  runs created in the same second (a stack push fires one event for the head
+  push and one for the base push).
+runs:
+  using: "composite"
+  steps:
+    - name: Cancel superseded runs
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+        HEAD_REF: ${{ github.head_ref }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+      run: bash "${GITHUB_ACTION_PATH}/cancel-superseded-runs.sh"
