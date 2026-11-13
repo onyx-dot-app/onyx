@@ -193,7 +193,7 @@ for one object and one method. The default TTL is 5 minutes and the maximum is
   file ID and returns a PUT request and a pending upload ID. It writes no
   `file_record` row. The pending upload is kept in the cache backend.
 - Uploads are at most 5 GiB (`FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES`), the largest
-  single S3 PUT.
+  single S3 PUT. Azure allows at most 5000 MiB, the largest single Put Blob.
 - `presign_download` checks no user. Authorize the caller before you hand out
   the URL.
 - `finalize_presigned_upload(pending_upload_id)` checks the size and SHA-256 of

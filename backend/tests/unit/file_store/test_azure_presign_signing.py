@@ -14,6 +14,7 @@ import pytest
 from azure.core.exceptions import HttpResponseError
 from azure.storage.blob import UserDelegationKey
 
+from onyx.configs.constants import FileOrigin
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import PresignedUrlsNotSupportedError
 
@@ -122,3 +123,16 @@ def test_a_connection_string_without_a_key_cannot_sign() -> None:
     with pytest.raises(PresignedUrlsNotSupportedError):
         store._sign_download(CONTAINER, BLOB, 300)
     client.get_user_delegation_key.assert_not_called()
+
+
+def test_an_upload_larger_than_one_put_blob_is_refused() -> None:
+    store = _store(_client(), account_name=ACCOUNT_NAME)
+
+    with pytest.raises(ValueError, match="5242880000 bytes"):
+        store.presign_upload(
+            display_name="snapshot.tar",
+            file_origin=FileOrigin.OTHER,
+            file_type="application/x-tar",
+            size=5000 * 1024 * 1024 + 1,
+            sha256="0" * 64,
+        )

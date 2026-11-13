@@ -18,7 +18,10 @@ if TYPE_CHECKING:
         UserDelegationKey,
     )
 
-from onyx.configs.app_configs import FILE_STORE_PRESIGN_MAX_TTL_SECONDS
+from onyx.configs.app_configs import (
+    FILE_STORE_PRESIGN_MAX_TTL_SECONDS,
+    FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES,
+)
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import (
     get_session_with_current_tenant,
@@ -62,6 +65,11 @@ class AzureBlobBackedFileStore(PresignableFileStore):
 
     The container name maps to the generic `bucket_name` column of `file_record`.
     """
+
+    # One Put Blob takes at most 5000 MiB, less than the 5 GiB default.
+    _presign_max_upload_bytes = min(
+        FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES, 5000 * 1024 * 1024
+    )
 
     def __init__(
         self,
