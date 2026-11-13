@@ -34,7 +34,6 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from enum import IntEnum
-from typing import cast
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -538,7 +537,7 @@ def _shared_at(pairs: Subquery) -> ColumnElement[datetime]:
 
 
 def load_user_plugin_states(
-    users: Iterable[UUID] | ColumnElement[bool],
+    user_ids: Iterable[UUID],
     db_session: Session,
     plugin_ids: Iterable[UUID] | None = None,
     *,
@@ -546,16 +545,11 @@ def load_user_plugin_states(
 ) -> list[UserPluginState]:
     """The state of each plugin each user can see (only those of
     ``plugin_ids``, when given), in one query, then one query for app
-    connections. ``users`` is a list of ids or a filter on the user table.
-    ``runnable_only`` keeps only the plugins that can run."""
-    user_filter: ColumnElement[bool]
-    if isinstance(users, ColumnElement):
-        user_filter = cast(ColumnElement[bool], users)
-    else:
-        user_ids = sorted(set(users))
-        if not user_ids:
-            return []
-        user_filter = User.__table__.c.id.in_(user_ids)
+    connections. ``runnable_only`` keeps only the plugins that can run."""
+    users = sorted(set(user_ids))
+    if not users:
+        return []
+    user_filter = User.__table__.c.id.in_(users)
     plugins = sorted(set(plugin_ids)) if plugin_ids is not None else None
     if plugins is not None and not plugins:
         return []
