@@ -1,0 +1,241 @@
+---
+title: "Website Widget"
+description: "Embed Onyx AI chat on any website"
+icon: "window"
+---
+
+## Overview
+
+Bring Onyx to your website with an embeddable chat widget. The widget is a standard web component,
+so it works with any website or framework.
+
+Your visitors can chat with an Onyx Agent without leaving your page.
+
+## Features
+
+- **Lightweight** - ~100-150kb gzipped bundle
+- **Fully Customizable** - Colors, branding, and styling to match your site
+- **Responsive** - Desktop popup, mobile fullscreen
+- **Shadow DOM Isolation** - No style conflicts with your existing CSS
+- **Real-time Streaming** - Server-sent events (SSE) for fast responses
+- **Session Persistence** - Conversations survive page reloads
+- **Two Display Modes** - Floating launcher or inline embed
+- **Source Citations** - Optional citation badges linking to source documents
+- **Two Authentication Modes** - A shared API key, or each visitor's own identity token
+
+## Quick Start
+
+Add these few lines to your website:
+
+```html
+<!-- Load the widget -->
+<script type="module" src="https://cdn.onyx.app/widget/1.1/dist/onyx-widget.js"></script>
+
+<!-- Configure and display -->
+<onyx-chat-widget
+  backend-url="https://cloud.onyx.app/api"
+  api-key="your_api_key_here"
+  mode="launcher"
+>
+</onyx-chat-widget>
+```
+
+<Warning>
+  **Always use a limited-scope API key for the widget.** The API key is visible in client-side code,
+  so it should have restricted permissions and rate limits. Never use admin or full-access keys.
+</Warning>
+
+<Info>
+  The widget is available on all editions.
+  Create the API key in **Admin Panel > Service Accounts** (`/admin/service-accounts`).
+</Info>
+
+## Display Modes
+
+### Launcher Mode (Default)
+
+<video src="/assets/overview/onyx_anywhere/widget_popup.mov" alt="Onyx Widget Chat Popup" autoPlay />
+
+A floating button appears in the bottom-right corner.
+
+- **Desktop**: 400x600px popup above the button
+- **Mobile**: Full-screen overlay
+
+```html
+<onyx-chat-widget mode="launcher"></onyx-chat-widget>
+```
+
+### Inline Mode
+
+<video src="/assets/overview/onyx_anywhere/widget_inline.mov" alt="Onyx Widget Inline Mode" autoPlay />
+
+The widget embeds directly in your page layout.
+
+```html
+<div style="width: 400px; height: 600px;">
+  <onyx-chat-widget mode="inline"></onyx-chat-widget>
+</div>
+```
+
+<Tip>
+  The widget fills its container in inline mode. Give the container an explicit height;
+  otherwise the panel grows with the conversation.
+</Tip>
+
+Before the first message, inline mode shows a compact input bar.
+Add `start-expanded` to show the full chat panel from the start:
+
+```html
+<div style="height: 600px;">
+  <onyx-chat-widget mode="inline" start-expanded></onyx-chat-widget>
+</div>
+```
+
+## Configuration Options
+
+### Required Attributes
+
+| Attribute     | Type   | Description                          |
+| ------------- | ------ | ------------------------------------ |
+| `backend-url` | string | Your Onyx API URL, such as `https://onyx.example.com/api` |
+| `api-key`     | string | API key for authentication. Omit it when you use a `tokenProvider` (see [Authentication](#authentication)) |
+
+### Optional Attributes
+
+| Attribute          | Type   | Default       | Description                              |
+| ------------------ | ------ | ------------- | ---------------------------------------- |
+| `agent-id`         | number | `undefined`   | Specific agent/persona to use            |
+| `agent-name`       | string | `"Assistant"` | Display name in header                   |
+| `logo`             | string | Onyx logo     | URL to custom logo image                 |
+| `primary-color`    | string | `#1c1c1c`     | Primary brand color (buttons, accents)   |
+| `background-color` | string | `#e9e9e9`     | Widget background color                  |
+| `text-color`       | string | `#000000bf`   | Text color (75% opacity black)           |
+| `mode`             | string | `"launcher"`  | Display mode: `"launcher"` or `"inline"` |
+| `include-citations`| boolean| `false`       | Show citation badges linking to source documents |
+| `start-expanded`   | boolean| `false`       | Inline mode: show the full chat panel before the first message |
+
+<Note>
+  `include-citations` and `start-expanded` are boolean flags. Their presence alone means `true`.
+  `include-citations="false"` still turns citations **on**. Omit the attribute to turn it off.
+</Note>
+
+<Warning>
+  **Citations and private documents:** When `include-citations` is enabled,
+  the widget will cite any documents accessible to the configured agent or API key.
+  If the agent has access to private or internal documents,
+  citation links may point to resources that end users cannot view. Scope the agent's document access appropriately,
+  or disable citations for public-facing deployments with sensitive sources.
+</Warning>
+
+### Configuration Examples
+
+**Basic Setup:**
+
+```html
+<onyx-chat-widget
+  backend-url="https://cloud.onyx.app/api"
+  api-key="on_abc123">
+</onyx-chat-widget>
+```
+
+**Full Customization:**
+
+```html
+<onyx-chat-widget
+  backend-url="https://cloud.onyx.app/api"
+  api-key="on_abc123"
+  agent-id="42"
+  agent-name="Support Bot"
+  logo="https://yoursite.com/logo.png"
+  primary-color="#FF6B35"
+  background-color="#FFFFFF"
+  text-color="#1A1A1A"
+  mode="launcher"
+  include-citations
+>
+</onyx-chat-widget>
+```
+
+## Customization
+
+### Styling
+
+The widget uses CSS custom properties for theming.
+
+**Default Colors:**
+
+| CSS Variable            | Default     | Description              |
+| ----------------------- | ----------- | ------------------------ |
+| `--onyx-primary`        | `#1c1c1c`   | Buttons, accents         |
+| `--onyx-primary-hover`  | `#000000`   | Hover state              |
+| `--onyx-background`     | `#e9e9e9`   | Widget background        |
+| `--onyx-text`           | `#000000bf` | Text (75% opacity)       |
+| `--onyx-text-light`     | `#ffffff`   | White text on dark       |
+| `--onyx-border`         | `#00000033` | Borders (20% opacity)    |
+
+**Override via attributes:**
+
+```html
+<onyx-chat-widget
+  primary-color="#FF6B35"
+  background-color="#FFFFFF"
+  text-color="#1A1A1A"
+>
+</onyx-chat-widget>
+```
+
+## Authentication
+
+The widget sends a credential with every request. It gets that credential in one of two ways.
+
+### API key
+
+Set the `api-key` attribute. Every visitor uses the same key, so all conversations run as one Onyx service account.
+
+### Visitor identity token (JWT passthrough)
+
+Assign a `tokenProvider` function and leave `api-key` off. The widget calls it before every request,
+so your page controls expiry and refresh. Each visitor acts as their own Onyx user,
+and their document permissions apply.
+Use this when your page already signs the visitor in with the same identity provider as Onyx.
+
+```html
+<onyx-chat-widget id="onyx-widget" backend-url="https://onyx.example.com/api">
+</onyx-chat-widget>
+
+<script type="module">
+  const widget = document.getElementById("onyx-widget");
+  widget.tokenProvider = async () => {
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: ["api://onyx/.default"],
+    });
+    return result.accessToken;
+  };
+</script>
+```
+
+`tokenProvider` is a JavaScript property, not an HTML attribute. When both are present, `tokenProvider` wins.
+
+<Note>
+  JWT passthrough is for self-hosted, single-tenant deployments only.
+  Your administrator must configure Onyx to accept the tokens.
+  See the [Website Widget Deployment Guide](/deployment/configuration/website_widget).
+</Note>
+
+## How it works
+
+The widget talks directly to your Onyx server. It creates a chat session, sends each message,
+and streams the answer back in real time. Answers render with full Markdown support.
+
+## Browser Support
+
+- Chrome/Edge 90+ (Chromium)
+- Firefox 90+
+- Safari 15+
+- Mobile Safari (iOS 15+)
+- Mobile Chrome (Android)
+
+## Deployment
+
+For detailed deployment instructions, including self-hosted setup and API key security best practices,
+see the [Website Widget Deployment Guide](/deployment/configuration/website_widget).

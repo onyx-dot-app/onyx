@@ -1,0 +1,298 @@
+---
+title: "Security Hardening"
+description: "Image pinning, credentials, security contexts, service accounts, and network policies for Onyx on Kubernetes"
+icon: "user-lock"
+---
+
+## Pin the Onyx version
+
+The chart default is `global.version: "latest"`. Set it to a release tag:
+
+```yaml values.yaml
+global:
+  version: "v5.0.0"  # Use the release that you tested
+```
+
+A floating `latest` tag is risky:
+
+- A new pod can pull a newer image than the pods that already run. This occurs on scale-up, node drain, or reschedule.
+- The API server runs database migrations when it starts. One new pod can change the schema under older pods.
+- A Helm rollback does not revert the database schema.
+
+With a pinned tag, an upgrade occurs only when you change `global.version`. For release notes,
+see the [Changelog](/changelog).
+
+## Credentials
+
+Every section under `auth` accepts `existingSecret`. The chart then reads from your Secret and does not create one.
+
+| Section | Keys in the Secret | Notes |
+| --- | --- | --- |
+| `auth.postgresql` | `username`, `password` | The default password is `postgres`. Replace it. |
+| `auth.redis` | `redis_password` | The default password is `password`. Replace it. |
+| `auth.objectstorage` | `s3_aws_access_key_id`, `s3_aws_secret_access_key` | The object store uses this pair as its admin keys. |
+| `auth.opensearch` | `opensearch_admin_username`, `opensearch_admin_password` | |
+| `auth.userauth` | `user_auth_secret` | Signs password-reset tokens and login state. Onyx does not start without it. |
+| `auth.metricsAuth` | `metrics_auth_token` | Protects `/metrics` on the API and MCP servers. |
+| `auth.smtp` | `smtp_pass` | Off by default. |
+
+<Warning>
+  Set the bundled service passwords before the first install.
+  The bundled OpenSearch reads its admin password only when it first starts, so a later change does not rotate it.
+</Warning>
+
+Create a Secret, then point the chart at it:
+
+```bash
+kubectl -n onyx create secret generic onyx-postgres \
+  --from-literal=username=onyx \
+  --from-literal=password="$(openssl rand -hex 24)"
+```
+
+```yaml values.yaml
+auth:
+  postgresql:
+    existingSecret: "onyx-postgres"
+```
+
+### External Secrets Operator
+
+If you use [External Secrets Operator](https://external-secrets.io/), the chart can create one `ExternalSecret`.
+You must install the operator and a `SecretStore` or `ClusterSecretStore` first.
+
+```yaml values.yaml
+externalSecret:
+  enabled: true
+  refPath: "onyx/app-secrets"  # Secret name in your secret manager
+  secretName: "onyx-app-secrets"
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: ClusterSecretStore
+
+# Also inject every key of the Secret as an environment variable in backend pods.
+# Use this for secrets that you would otherwise put in configMap.
+extraEnvFromSecret: "onyx-app-secrets"
+
+auth:
+  postgresql:
+    existingSecret: "onyx-app-secrets"
+  redis:
+    existingSecret: "onyx-app-secrets"
+  # Point each other auth section at the same Secret.
+```
+
+The upstream secret must contain every key that the `auth.*.secretKeys` maps expect.
+
+## Security contexts
+
+| Component | Pod key | Container key | Default user |
+| --- | --- | --- | --- |
+| API server | `api.podSecurityContext` | `api.securityContext` | Root (image default) |
+| Celery workers and beat | `celery_shared.podSecurityContext` | `celery_shared.securityContext` | Root (`runAsUser: 0`) |
+| Web server | `webserver.podSecurityContext` | `webserver.securityContext` | `node` (image default) |
+| Model servers | `inferenceCapability.podSecurityContext`, `indexCapability.podSecurityContext` | `inferenceCapability.securityContext`, `indexCapability.securityContext` | UID 1001, non-root |
+| Slack and Discord bots | `slackbot.podSecurityContext`, `discordbot.podSecurityContext` | `slackbot.securityContext`, `discordbot.securityContext` | Root (image default) |
+| MCP server | `mcpServer.podSecurityContext` | `mcpServer.securityContext` | Root (image default) |
+
+These settings do not change the user, so they apply with the default root user:
+
+```yaml values.yaml
+api:
+  podSecurityContext:
+    seccompProfile:
+      type: RuntimeDefault
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: ["ALL"]
+```
+
+Apply the same settings to the other components in the table.
+
+### Run as non-root
+
+The backend image (`onyx-backend`) contains an `onyx` user with UID 1001, but the image does not select it.
+Without an override, the API server, Celery workers, bots, and MCP server run as root.
+
+To run as non-root, set the user in the pod and container security contexts:
+
+```yaml values.yaml
+api:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+
+celery_shared:
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 1001
+    runAsGroup: 1001
+    fsGroup: 1001
+  securityContext:
+    runAsUser: 1001  # Replaces the default runAsUser: 0
+```
+
+<Warning>
+  Non-root is not the chart default. Test it before you enforce it:
+
+  - `customCACerts` and `api.runUpdateCaCertificates` need root in the API server and Celery workers.
+  - Volumes that you add must be writable by UID 1001.
+</Warning>
+
+## Service accounts
+
+Onyx pods use the `default` ServiceAccount of the namespace. To change this, set `serviceAccount.create` to `true`,
+or set `serviceAccount.name`.
+
+- With [Craft](/deployment/local/craft_kubernetes), the API server and the Scheduled Task worker use their
+  ServiceAccount token to manage sandbox pods. Keep `serviceAccount.automount: true`.
+- Without Craft, Onyx pods do not call the Kubernetes API. You can create a dedicated ServiceAccount without a token:
+
+```yaml values.yaml
+# Only when Craft is off
+serviceAccount:
+  create: true
+  automount: false
+```
+
+Code Interpreter has its own ServiceAccount. It needs its token to create executor pods.
+
+## Other defaults to keep
+
+- `/metrics` returns `401` until you set `auth.metricsAuth`. Do not set `configMap.DISABLE_METRICS_AUTH` on a
+  network that users can reach.
+- The API docs (`/docs`, `/openapi.json`) are off. Do not set `configMap.ENABLE_PUBLIC_DOCS` unless you need them.
+
+## Network policies
+
+The chart does not create NetworkPolicies for Onyx pods. It creates policies only for sandboxes:
+
+- Code Interpreter executor pods get a policy that denies all egress.
+- Craft sandbox pods can reach only DNS and the sandbox proxy.
+
+The example below applies default deny to the Onyx namespace and then allows the traffic that Onyx needs.
+
+<Warning>
+  This is an example, not a tested policy. Change it for your cluster before you apply it:
+
+  - Your CNI must enforce NetworkPolicies.
+  - Change namespace names, the ingress controller namespace, and the Kubernetes API address.
+  - If you use external services, allow their ports (for example, `5432` and `6379`).
+  - The example does not cover Craft. Craft needs more rules.
+</Warning>
+
+Each allow policy excludes Code Interpreter executor pods with the `component` selector. NetworkPolicies add together,
+so an allow rule that selects executor pods gives user code network access.
+
+```yaml onyx-network-policies.yaml
+# 1. Deny all traffic by default.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: onyx
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# 2. Allow traffic between Onyx pods in the namespace, and DNS.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-namespace-and-dns
+  namespace: onyx
+spec:
+  podSelector:
+    matchExpressions:
+      - key: component
+        operator: NotIn
+        values: [executor, session]
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - podSelector: {}
+  egress:
+    - to:
+        - podSelector: {}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+# 3. Allow the ingress controller to reach NGINX, the web server, and the API server.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-controller
+  namespace: onyx
+spec:
+  podSelector:
+    matchExpressions:
+      - key: component
+        operator: NotIn
+        values: [executor, session]
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+---
+# 4. Allow HTTPS to the internet for LLM providers, connectors, and web search.
+#    Block the cloud metadata address.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-https-egress
+  namespace: onyx
+spec:
+  podSelector:
+    matchExpressions:
+      - key: component
+        operator: NotIn
+        values: [executor, session]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except: [169.254.169.254/32]
+      ports:
+        - { protocol: TCP, port: 443 }
+---
+# 5. Allow Code Interpreter to reach the Kubernetes API to create executor pods.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-code-interpreter-kube-api
+  namespace: onyx
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: code-interpreter
+    matchExpressions:
+      - key: component
+        operator: NotIn
+        values: [executor, session]
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.0.0.1/32  # Your Kubernetes API server address
+      ports:
+        - { protocol: TCP, port: 443 }
+```
+
+To find the Kubernetes API address, run `kubectl get endpoints kubernetes -n default`. Some clusters use port `6443`.
+
+Policy 3 assumes an ingress controller in the `ingress-nginx` namespace. The bundled NGINX (`nginx.enabled` is `true`)
+runs in the Onyx namespace and receives traffic from the load balancer. In that case,
+change policy 3 to allow the load balancer or node addresses.
