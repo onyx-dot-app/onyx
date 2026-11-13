@@ -1072,6 +1072,14 @@ def test_a_failure_before_the_stream_names_only_a_turn_with_saved_content(
     assert [type(packet) for packet in packets[:-1]] == (
         [] if failure == "preparation" else [MessageResponseIDInfo]
     )
+    db_session.expire_all()
+    [answer] = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == chat.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).all()
+    assert answer.response_status == RunStatus.ERROR
 
 
 def test_a_non_streaming_send_that_fails_after_saving_raises_its_error(

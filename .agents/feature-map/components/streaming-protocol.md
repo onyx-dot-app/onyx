@@ -106,8 +106,10 @@ and reserved its responses gets their ID lines first
 `CreateChatSessionID` when the request created its session, then the
 message IDs, then the `StreamingError`. The same holds when
 `start_chat_turn` fails before it returns its reader. A usage-only incognito
-question saves no text, so its failure has no ID lines. So ID lines mean a saved turn, and no ID lines mean a
-rejected send. A non-streaming caller still gets the error as an HTTP status.
+question saves no text, so its failure has no ID lines. ID lines mean a saved turn. A stream that ends with an
+error and no ID lines means a rejected send. If the connection fails before
+the client reads the ID lines, the client cannot know whether the turn was
+saved. A non-streaming caller still gets the error as an HTTP status.
 
 **`Placement`.** `turn_index` is the rendering block. `tab_index` separates
 parallel tool calls in one block. `sub_turn_index` is set for packets from a

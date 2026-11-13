@@ -984,6 +984,12 @@ def _stream_chat_turn(
             logger.exception("Chat request failed")
         streaming_error = chat_error(error, setup.responses[0].llm if setup else None)
         if stream is None and saved_turn_packets:
+            if setup is not None:
+                # Preparation records its own failure; a failed start does not.
+                with get_session_with_current_tenant() as db_session:
+                    for response in setup.responses:
+                        fail_response_start__no_commit(db_session, response.message_id)
+                    db_session.commit()
             # The saved question and its error answer belong to the client's chat.
             yield from saved_turn_packets
             if response_future is not None and not response_future.done():
