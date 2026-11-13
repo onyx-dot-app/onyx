@@ -372,6 +372,9 @@ The library preview of an external-app skill calls the same renderer
     `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
     and its neighbours), and fills them from each custom skill. Built-in
     skills get no plugin. A plugin and the legacy skill row share one id.
+    No foreign key checks the version pointers (`current_version_id`,
+    `published_version_id`, `pending_version_id`); write them only through
+    `db/plugin.py`, which sets them to a version of the same plugin.
     Public and author-less skills go to the Organization library, published.
     Other skills go to the author's "My uploads". A duplicate name in one
     marketplace gets the first free `-N` suffix on `plugin.name` only
