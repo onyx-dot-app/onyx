@@ -235,7 +235,7 @@ export function MemberPluginDetailContent({
   const craftCopy = useTranslations("craft.apps.page");
   const [preview, setPreview] = useState<Skill | null>(null);
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
-  // MCP approvals apply to chat and Craft; external apps exist only in Craft.
+  // Personal MCP settings do not need Craft, but apply only in Craft.
   const supportsApprovals =
     plugin.kind === "external-app"
       ? craftEnabled
