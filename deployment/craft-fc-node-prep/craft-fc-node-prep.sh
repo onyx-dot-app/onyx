@@ -59,6 +59,7 @@ write_file() {
 		echo "DRY   write $path: $content"
 	else
 		echo "RUN   write $path"
+		mkdir -p "$(dirname "$path")"
 		printf '%s\n' "$content" >"$path"
 	fi
 }
@@ -184,9 +185,13 @@ apply_modules() {
 			echo "SKIP  kvm: no vmx CPU flag, so kvm_intel cannot load. Turn on VT-x in the BIOS, or nested virtualization for this VM."
 		fi
 	fi
-	[ ${#modules[@]} -gt 0 ] || return 0
-	run modprobe -a "${modules[@]}"
-	printf '%s\n' kvm_intel loop | write_file "$MODULES_FILE"
+	if [ ${#modules[@]} -gt 0 ]; then
+		run modprobe -a "${modules[@]}"
+	fi
+	# Load both at boot, also when they are loaded now.
+	if [ "$(cat "$MODULES_FILE" 2>/dev/null)" != "$(printf '%s\n' kvm_intel loop)" ]; then
+		printf '%s\n' kvm_intel loop | write_file "$MODULES_FILE"
+	fi
 }
 
 apply_sysctl() {
@@ -223,7 +228,16 @@ apply_xfs_device() {
 		return
 	fi
 	uuid=$(blkid -o value -s UUID "$dev")
-	if ! grep -q "UUID=$uuid" /etc/fstab; then
+	local fs_target fs_source
+	fs_target=$(awk -v u="UUID=$uuid" '$1 == u {print $2; exit}' /etc/fstab)
+	fs_source=$(awk -v d="$DATA_DIR" '$1 !~ /^#/ && $2 == d {print $1; exit}' /etc/fstab)
+	if [ -n "$fs_target" ] && [ "$fs_target" != "$DATA_DIR" ]; then
+		die "/etc/fstab already mounts $dev (UUID=$uuid) at $fs_target. Fix /etc/fstab first."
+	fi
+	if [ -n "$fs_source" ] && [ "$fs_source" != "UUID=$uuid" ]; then
+		die "/etc/fstab already mounts $fs_source at $DATA_DIR. Fix /etc/fstab first."
+	fi
+	if [ -z "$fs_target" ]; then
 		echo "UUID=$uuid $DATA_DIR xfs defaults 0 2" | write_file_append /etc/fstab
 	fi
 	command -v systemctl >/dev/null && run systemctl daemon-reload

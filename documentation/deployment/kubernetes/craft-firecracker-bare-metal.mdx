@@ -84,11 +84,12 @@ It never erases a disk.
 
 ## Configure the file store
 
-{/* depends: bundled object store over HTTP.
-Remove this section if the chart allows the in-cluster HTTP endpoint for the host agent. */}
-The host agent accepts only HTTPS presigned URLs.
-The object store that the Onyx chart bundles serves HTTP inside the cluster, so session saves fail with it.
-Use an S3-compatible store with an HTTPS endpoint that KVM nodes reach, and set the S3 file store values:
+{/* depends: chart PR (--transfer-allow-http with the bundled object store) */}
+The object store that the Onyx chart bundles works as it is. Its traffic stays inside the cluster, so it uses HTTP,
+and the chart lets the host agent accept HTTP presigned URLs for it.
+
+An external store must use HTTPS: the host agent refuses plain HTTP URLs for it.
+To use an external S3-compatible store that KVM nodes reach, set the S3 file store values:
 
 ```yaml
 configMap:

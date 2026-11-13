@@ -61,7 +61,7 @@ For the isolation design, see [Firecracker isolation](/security/architecture/cra
   AMD and Arm nodes are not supported.
 </Note>
 
-{/* depends: bundled object store over HTTP (File store row) */}
+{/* depends: chart PR (--transfer-allow-http with the bundled object store; File store row) */}
 
 | Item | Requirement |
 | --- | --- |
@@ -73,7 +73,7 @@ For the isolation design, see [Firecracker isolation](/security/architecture/cra
 | Data directory | `craft.hostAgent.dataDir` (default `/var/lib/craft-fc`) on the node. See [Data directory](#data-directory). |
 | Disk | At least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free. |
 | Capacity | On-demand nodes. A spot reclaim stops every microVM on the node. |
-| File store | S3, an S3-compatible store with an HTTPS endpoint, Google Cloud Storage, or Azure Blob Storage. KVM nodes must reach it over HTTPS. With `FILE_STORE_BACKEND=postgres` or the object store that the chart bundles, Craft cannot save sessions. |
+| File store | The object store that the chart bundles, S3, an S3-compatible store, Google Cloud Storage, or Azure Blob Storage. KVM nodes must reach it. An external store must use HTTPS. With `FILE_STORE_BACKEND=postgres`, Craft cannot save sessions. |
 | Network | A CNI that enforces Kubernetes NetworkPolicy. |
 
 {/* depends: azure presign PR (#17784) */} On Azure Blob Storage, the API server signs URLs with its workload identity.
@@ -436,7 +436,7 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
   </Accordion>
 
   <Accordion title="Session files are not saved">
-    The file store must support presigned URLs, and KVM nodes must reach it over HTTPS.
+    The file store must support presigned URLs, and KVM nodes must reach it. An external store must use HTTPS.
     `FILE_STORE_BACKEND=postgres` does not support presigned URLs.
     See
     [CraftFcSessionTransferFailures](/deployment/kubernetes/craft-firecracker-operations#craftfcsessiontransferfailures).

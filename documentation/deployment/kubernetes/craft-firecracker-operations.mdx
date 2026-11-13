@@ -145,6 +145,8 @@ For your own certificates (`existingSecret`):
 
   <Step title="Remove the old CA">
     After all clients use the new certificate, remove the old CA from `ca.crt` of both Secrets.
+    Then restart the API server, the heavy worker, and the Scheduled Task worker again. Until this restart,
+    the clients still trust the old CA.
   </Step>
 </Steps>
 
@@ -179,7 +181,7 @@ The registration value lets host agents register their node signing keys. Change
 | A microVM disk | The node data directory | `agent Stop` removes the microVM directory, its disk, and its egress identity. A record without user data stays for 24 hours. |
 | Session file transfers | The node data directory | The host agent deletes a transfer file after a successful upload, after 15 minutes, and at each start. |
 | Saved session files | The file store | The API server owns them. The host agent has no storage credentials. {/* depends: delete hooks. Describe what deletes saved sessions when a user or session is deleted. */} |
-| All data of a node | The node data directory | Drain the node, then delete the node. microVM data is only on the node disk. |
+| All data of a node | The node data directory | Drain the node and remove it from the cluster. Then erase `craft.hostAgent.dataDir` on the host, or destroy the node disk. Deleting the Kubernetes node object alone does not erase the disk. |
 
 ## Monitoring
 
@@ -393,7 +395,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
 **Fix.**
 
 - `TRANSFER_FAILED` on all nodes: check the file store (bucket, endpoint, URL expiry) and the egress from the nodes to it.
-  The URL must use HTTPS.
+  An external store must use HTTPS.
 - `ARCHIVE_MISMATCH` or `CAPTURE_NOT_FOUND`: the API server repeats the save. Look for a version mismatch between the API
   server and the host agent.
 - `CAPTURE_TOO_LARGE`: the session is too large for the limit.
