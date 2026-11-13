@@ -201,6 +201,10 @@ def _sse(
                     raise TimeoutError("mock LLM stream gate was not released")
                 # Whitespace reaches adapters that discard empty transport heartbeats.
                 yield _delta(model, {"content": " "})
+    if reply.error_after_text is not None:
+        error = {"message": reply.error_after_text, "type": "server_error"}
+        yield f"data: {json.dumps({'error': error})}\n\n"
+        return
     for index, call in enumerate(reply.tool_calls):
         function = {"name": call.name, "arguments": ""}
         opening = {"index": index, "id": call.id, "type": "function"}

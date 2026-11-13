@@ -80,6 +80,20 @@
   it. In a multi-model turn, only the failed panel shows the error. In a
   single-model send, a usage limit shows a banner with the reset time and no
   retry ([[rate-and-usage-limits]]).
+- **After a failed answer**, the next message continues the conversation
+  after it. The model sees the question and the saved partial answer. While
+  the failed answer is the latest message, its banner offers **Regenerate**.
+  It sends a new copy of the question as a sibling branch, and the failed turn
+  moves to the hidden branch. After a later message, the banner has no
+  **Regenerate**.
+- **When the server rejects a send before it saves the question** (an HTTP
+  error, a usage limit or a setup error, with no message IDs), nothing of the
+  turn stays in the chat. The tree returns to its state before the send, the
+  text goes back to the input bar, and the error shows below the chat with no
+  **Regenerate**. A rejected regeneration keeps the earlier answer. A network
+  failure without IDs can still have reached the server, so its turn stays in
+  the tree. The next message follows the last saved message, so that turn
+  becomes a hidden branch until saved history replaces it.
 - **A developer who runs the web server in development** reaches the backend
   at `/api` on the web origin, streams included. A production web server
   answers that route with a 404 and a message that nginx must serve `/api`
@@ -179,6 +193,15 @@ latest page preserves loaded history that connects to that page. Incognito
 recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
+Unless it edits, regenerates or makes an implicit multi-model pick, `onSubmit`
+puts a new message after the last chain node that has a `messageId`, a saved
+failed response included, and sends that ID as `parent_message_id`. The local
+parent and the server parent are the same node. When the server answers
+without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
+`null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
+send's nodes and restores the links of their parent. The error goes to the
+session's `uncaughtError`, a `SessionError` with the error code and details,
+after settlement.
 An automatic follow-up response has a hidden `agent_results` question node as
 its parent. `ChatUI` and the shared chat view render that node with
 `web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
@@ -470,9 +493,10 @@ up its own branding.
 8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
    follow-up to an unpicked multi-model turn picks the most visible answer,
    applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
-   waits for that PUT before dispatch. If it fails, the send fails and only
-   the preference is cleared, so a retry runs the PUT again; a newer explicit
-   pick is kept. A Stop while it waits is a before-dispatch abort.
+   waits for that PUT before dispatch. If it fails, the send fails: only the
+   preference is cleared, so a retry runs the PUT again; a newer explicit
+   pick is kept. The send's nodes go away and its text returns to the input
+   bar. A Stop while it waits is a before-dispatch abort.
 9. `usage-limit-is-packet` **A 429 usage limit is a packet, not a throw.**
    `app/app/services/lib.tsx:sendMessage` turns it into a `StreamingError` with
    `is_retryable: false` and no `model_index`, so in a single-model send the

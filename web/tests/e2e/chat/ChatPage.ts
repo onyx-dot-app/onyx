@@ -32,6 +32,7 @@ export class ChatPage {
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  readonly errorBanners: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -61,6 +62,7 @@ export class ChatPage {
       name: "Scroll to bottom",
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
+    this.errorBanners = page.getByTestId("chat-error-banner");
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -220,6 +222,27 @@ export class ChatPage {
         )
         .toBe(true);
     }
+  }
+
+  /**
+   * Checks a failed answer at message row `row`: it keeps its partial text and
+   * shows an error banner, with Regenerate only while it is the latest answer.
+   */
+  async expectFailedAnswer(
+    row: number,
+    partialText: string,
+    canRegenerate: boolean
+  ): Promise<void> {
+    const failedRow = this.messageRows.nth(row);
+    await expect(failedRow).toContainText(partialText);
+    await expect(failedRow.getByTestId("chat-error-banner")).toBeVisible();
+    await expect(
+      failedRow.getByRole("button", { name: "Regenerate", exact: true })
+    ).toHaveCount(canRegenerate ? 1 : 0);
+  }
+
+  async expectRowText(row: number, text: string): Promise<void> {
+    await expect(this.messageRows.nth(row)).toContainText(text);
   }
 
   async expectAnswerAbsent(text: string): Promise<void> {

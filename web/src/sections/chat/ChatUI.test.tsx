@@ -245,7 +245,7 @@ test("an earlier response error remains visible after another question", () => {
 test("a session-load failure is visible alongside an existing response error", () => {
   useChatSessionStore
     .getState()
-    .setUncaughtError("session", "Could not load this session");
+    .setUncaughtError("session", { error: "Could not load this session" });
   render(<ChatUI {...props} />);
   expect(screen.getByText("Provider declined the request")).toBeInTheDocument();
   expect(screen.getByText("Could not load this session")).toBeInTheDocument();
@@ -320,7 +320,7 @@ test("a failed response keeps partial text and ends search activity", async () =
 test("readiness errors do not offer regeneration before input is available", () => {
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "unconfirmed",
-    uncaughtError: "Could not confirm readiness",
+    uncaughtError: { error: "Could not confirm readiness" },
   });
   render(<ChatUI {...props} />);
   expect(
