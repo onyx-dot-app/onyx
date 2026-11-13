@@ -109,8 +109,10 @@ OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
 INPUT_POLL_SECONDS = 1.0
-MAX_AGENT_COMPLETIONS_PER_STEP = 8
 MAX_RUNNING_AGENTS = 10
+# A wait can hold every agent that a branch runs at once, so one step reads all
+# of their results.
+MAX_AGENT_COMPLETIONS_PER_STEP = MAX_RUNNING_AGENTS
 RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
 # Start failures that a later poll retries; other failures end the inbox work.
 _RETRYABLE_START_ERRORS = (

@@ -142,24 +142,33 @@ def wakes_for_results(
     ):
         return False
     results = list(results)
-    for result in results:
-        if not result.wakes_recipient:
-            continue
-        holding = [
-            wait
-            for wait in waits
-            if wait.holds(result.agent_id, result.root_response_id)
-        ]
-        if all(
-            not wait.queued
-            and not any(
+    return any(
+        result.wakes_recipient and not _held_by_open_wait(result, results, waits)
+        for result in results
+    )
+
+
+def _held_by_open_wait(
+    result: AgentResultState,
+    results: Collection[AgentResultState],
+    waits: Collection[AgentWait],
+) -> bool:
+    """Whether a wait that holds the result is still open.
+
+    A wait is open while one of its runs is active or a message that dispatch
+    would start is queued for one of its agents.
+    """
+    return any(
+        wait.holds(result.agent_id, result.root_response_id)
+        and (
+            wait.queued
+            or any(
                 other.is_active and wait.holds(other.agent_id, other.root_response_id)
                 for other in results
             )
-            for wait in holding
-        ):
-            return True
-    return False
+        )
+        for wait in waits
+    )
 
 
 def get_human_input_session(
@@ -910,6 +919,24 @@ def read_run_inputs(
                 ),
             )
         )
+    if root_branch is not None and results:
+        response = session.get(ChatMessage, int(run_id))
+        question = response.parent_message if response is not None else None
+        # An automatic follow-up leaves results that an open wait holds unread,
+        # so the wait's follow-up reads them together. A user's turn reads all.
+        if question is not None and question.message_type == MessageType.AGENT_RESULTS:
+            waits = agent_waits(
+                session,
+                UUID(agent_id),
+                ChatBranch(
+                    chat_session_id=UUID(agent_id), message_ids=list(root_branch)
+                ),
+            )
+            results = [
+                result
+                for result in results
+                if not _held_by_open_wait(result, results, waits)
+            ]
     return messages, results
 
 

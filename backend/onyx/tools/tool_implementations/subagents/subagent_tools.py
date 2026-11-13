@@ -216,9 +216,9 @@ class WaitAgentsTool(_SubagentTool):
             for agent in control.discover_agents()
             if agent.parent_id == control.agent_id
         }
-        unknown = [
-            agent_id for agent_id in request.agent_ids or [] if agent_id not in children
-        ]
+        # An empty list waits for all agents, as an omitted one does.
+        agent_ids = request.agent_ids or None
+        unknown = [agent_id for agent_id in agent_ids or [] if agent_id not in children]
         if unknown:
             raise ToolCallException(
                 "Agents to wait for are not the caller's agents.",
@@ -227,7 +227,7 @@ class WaitAgentsTool(_SubagentTool):
             )
         running = sorted(
             children[agent_id].path
-            for agent_id in request.agent_ids or children
+            for agent_id in agent_ids or children
             if (status := children[agent_id].status) is not None
             and not status.is_terminal
         )
@@ -241,6 +241,6 @@ class WaitAgentsTool(_SubagentTool):
             else "Wait recorded, but none of these agents is running yet. Agents "
             "that start in this turn, from spawns or queued messages, are part of "
             "the wait. Finished results arrive before your next step.",
-            details=AgentWaitDetails(agent_ids=request.agent_ids),
+            details=AgentWaitDetails(agent_ids=agent_ids),
             terminate=bool(running),
         )

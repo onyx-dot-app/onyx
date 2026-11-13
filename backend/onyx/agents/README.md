@@ -694,7 +694,7 @@ Messages sent while a turn runs wait in the inbox; a queued message starts a lat
 Chat agent tools start background children. The root response can finish while they run;
 the turn's control worker keeps their leases until they release. Only callers that deliver follow-up responses,
 for a client that shows them (`SendMessageRequest.accepts_follow_ups`, set by the web chat), offer agent tools,
-and only in single-model turns: results follow one answer. Each step reads at most `MAX_AGENT_COMPLETIONS_PER_STEP` finished results;
+and only in single-model turns: results follow one answer. Each step reads at most `MAX_AGENT_COMPLETIONS_PER_STEP` finished results, as many as a branch runs at once;
 the rest stay unread and wake the agent's next run. Loaded agents are evicted least recently used first; only idle ones leave memory.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
