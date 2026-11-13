@@ -12892,11 +12892,6 @@
           "text": "图片生成已停止"
         }
       },
-      "markdownTable": {
-        "copyButton": {
-          "label": "复制表格"
-        }
-      },
       "memoizedLink": {
         "questionFallback": {
           "label": "问题"

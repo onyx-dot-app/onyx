@@ -12892,11 +12892,6 @@
           "text": "Se detuvo la generación de imágenes"
         }
       },
-      "markdownTable": {
-        "copyButton": {
-          "label": "Copiar tabla"
-        }
-      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Pregunta"
