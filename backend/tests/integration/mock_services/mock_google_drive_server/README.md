@@ -35,6 +35,30 @@ It does not do these things:
 - It has no writes, uploads, Changes API or revisions.
 - The `size` of an uploaded file is the target text size, not the exact byte count.
 
+Known differences from live Drive:
+
+- **Page fill.** The mock fills each `files.list` page to `pageSize`. Live Drive returns fewer
+  files than asked (see below).
+- **Latency.** The mock waits a base time with uniform jitter. Live latency has a long tail.
+- **Rate limit bodies.** The 429 and `Retry-After` shapes come from Google's documentation. We
+  did not see them live yet.
+- **Folder sharing.** A share on a folder does not pass to its children.
+
+## Verified against live Drive
+
+We checked these on the onyx.app Workspace on 2026-11-12 and 2026-11-13:
+
+- `files.list` pages with `orderBy=modifiedTime` come back in `modifiedTime` order
+  (2,375 of 2,375 pages).
+- `modifiedTime` bounds in `q` honor milliseconds.
+- A bulk upload stores one whole-second `modifiedTime` for each file. One burst had 3,125 files at
+  `07:58:00.000`, and more bursts followed about 2 seconds apart.
+- A lean listing page (no permission fields) holds about 460 files when 1,000 are asked. The
+  mock fills the page to 1,000.
+- A page with permission fields holds about 100 files.
+- External accounts (`gmail.com`) own a large set of files that is shared with several domain
+  users. Each user gets the same set.
+
 ## Run it
 
 Run one worker. The corpus, quotas and stats live in the process.
@@ -53,6 +77,43 @@ docker run -p 9650:9650 mock-google-drive
 
 Set the startup settings with `MOCK_GDRIVE_CONFIG` (a JSON object) or `MOCK_GDRIVE_CONFIG_FILE`
 (a JSON file). See `mock_gdrive/settings.py` for every setting.
+
+## Corpus shapes
+
+These corpus settings are off by default. They add files after the default corpus, from a
+separate random stream, so the rest of the corpus does not change. The same seed gives the same
+files.
+
+| Setting | Meaning |
+| --- | --- |
+| `external_shares.owners` | External accounts `ext1@<owner_domain>` ... that own files. They are not users: the directory does not list them, and the token endpoint refuses to impersonate them (`invalid_grant`), as Google does. |
+| `external_shares.owner_domain` | Domain of the external accounts. Default `gmail.com`. |
+| `external_shares.files` | Files owned by the external accounts, spread over them. |
+| `external_shares.recipients` | The first N non-admin users. Each one gets a reader share on every external file. |
+| `bulk_uploads[].count` | Files in each burst. Every file in a burst has one whole-second `modifiedTime`. |
+| `bulk_uploads[].bursts`, `spacing_seconds` | Number of bursts, and the seconds between them. |
+| `bulk_uploads[].start` | Time of the first burst. Default `2025-06-01T07:58:00Z`. |
+| `bulk_uploads[].container`, `index` | `my_drive` of user `index` (0 is the admin), `shared_drive` `index`, or `external` account `index` (shared with the `external_shares` recipients). |
+| `folder_trees[].container`, `index` | `my_drive` of user `index` or `shared_drive` `index`. |
+| `folder_trees[].depth`, `branching` | Folder levels under the tree's root folder, and subfolders of each folder. |
+| `folder_trees[].files_per_folder` | Files in each folder of the tree. |
+| `folder_trees[].deepest_folder_files` | More files in the first folder of the last level: a large folder deep in the tree. |
+
+For example:
+
+```bash
+curl -X POST localhost:9650/_mock/corpus -H 'content-type: application/json' -d '{
+  "external_shares": {"owners": 2, "files": 500, "recipients": 3},
+  "bulk_uploads": [{"count": 3125, "bursts": 3, "spacing_seconds": 2, "container": "external"}],
+  "folder_trees": [{"container": "shared_drive", "depth": 5, "deepest_folder_files": 2000}]
+}'
+```
+
+`POST /_mock/corpus` merges the body into the current corpus settings. A nested object, such as
+`mime_weights`, merges key by key: set a weight to 0 to remove a type.
+
+The corpus summary lists `external_owner_emails`, `external_recipient_emails` and
+`folder_tree_root_ids`.
 
 ## Measure connector throughput
 
@@ -135,6 +196,8 @@ curl -X PATCH localhost:9650/_mock/config -H 'content-type: application/json' \
 | `POST /_mock/corpus` | Generate a new corpus from corpus settings; resets the stats |
 | `GET /_mock/corpus/summary?include_ids=true` | Counts, users, shared drives and the ids of every content file |
 | `GET /_mock/corpus/files/{id}` | One file as stored, with the users who can read it |
+| `GET /_mock/corpus/folders/{id}/content-ids` | The content files under a folder at any depth: what a folder target must index |
+| `GET /_mock/corpus/users/{email}/content-ids?scope=` | The content files a user lists: `all_drives` (what `corpora=allDrives` returns), `owned` or `shared_with_me`. What an OAuth connector of that user must index |
 | `POST /_mock/corpus/touch` | Mark files as modified now, for incremental runs |
 | `GET /_mock/service-account-key` | A service account key for the mock |
-| `GET /_mock/oauth-credentials?email=` | An OAuth token for one user |
+| `GET /_mock/oauth-credentials?email=` | An OAuth token for one domain user (404 for anyone else). Upload it as an OAuth credential with that user as the primary admin |

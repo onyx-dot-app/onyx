@@ -21,6 +21,7 @@ from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
     GOOGLE_API_TOKEN_URI,
     GOOGLE_SCOPES,
+    GOOGLE_TOKEN_URI,
     GoogleOAuthAuthenticationMethod,
 )
 from onyx.utils.logger import setup_logger
@@ -98,6 +99,10 @@ def get_google_oauth_creds(
         return creds
 
     if creds.expired and creds.refresh_token:
+        if GOOGLE_API_TOKEN_URI != GOOGLE_TOKEN_URI:
+            # from_authorized_user_info always sets Google's token endpoint.
+            # The copy drops the expiry, so make it only before a refresh.
+            creds = creds.with_token_uri(GOOGLE_API_TOKEN_URI)
         try:
             with _token_request():
                 creds.refresh(Request())

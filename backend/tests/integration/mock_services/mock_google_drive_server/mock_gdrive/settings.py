@@ -8,6 +8,7 @@ generates a new corpus.
 
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -29,6 +30,53 @@ UPLOADED_MIMES = frozenset({PDF_MIME, DOCX_MIME, PPTX_MIME, TEXT_MIME, MARKDOWN_
 CONTENT_MIMES = GOOGLE_NATIVE_MIMES | UPLOADED_MIMES
 
 SCOPE_PREFIX = "https://www.googleapis.com/auth/"
+
+
+class ExternalShareSettings(BaseModel):
+    """Files owned by accounts outside the domain. Each recipient gets the same
+    set, as when a set of external files is shared with several domain users.
+    The token endpoint refuses to impersonate the owners."""
+
+    # Accounts ext1@<owner_domain> ... extN@<owner_domain>.
+    owners: int = Field(default=2, ge=1)
+    owner_domain: str = "gmail.com"
+    files: int = Field(default=50, ge=0)
+    # The first `recipients` non-admin domain users.
+    recipients: int = Field(default=3, ge=1)
+
+
+class BulkUploadSettings(BaseModel):
+    """Bursts of files that share one whole-second modifiedTime, as a bulk
+    upload gives."""
+
+    # Files in each burst.
+    count: int = Field(ge=1)
+    bursts: int = Field(default=1, ge=1)
+    # Seconds between the bursts.
+    spacing_seconds: int = Field(default=2, ge=1)
+    start: datetime = datetime(2025, 6, 1, 7, 58, tzinfo=timezone.utc)
+    # "my_drive": the My Drive of user `index` (0 is the admin).
+    # "shared_drive": shared drive `index`.
+    # "external": owned by external account `index` and shared with the
+    # external_shares recipients.
+    container: Literal["my_drive", "shared_drive", "external"] = "my_drive"
+    index: int = Field(default=0, ge=0)
+
+
+class FolderTreeSettings(BaseModel):
+    """A folder tree for folder targets (shared_folder_urls). The corpus
+    summary lists its root folder in `folder_tree_root_ids`."""
+
+    container: Literal["my_drive", "shared_drive"] = "my_drive"
+    # A user index (0 is the admin) or a shared drive index.
+    index: int = Field(default=0, ge=0)
+    # Folder levels under the tree's root folder.
+    depth: int = Field(default=3, ge=0)
+    # Subfolders of each folder above the last level.
+    branching: int = Field(default=2, ge=1)
+    files_per_folder: int = Field(default=3, ge=0)
+    # Extra files in the first folder of the last level.
+    deepest_folder_files: int = Field(default=0, ge=0)
 
 
 class CorpusSettings(BaseModel):
@@ -66,6 +114,10 @@ class CorpusSettings(BaseModel):
     # Content sizes follow a log-normal spread around this mean.
     avg_content_bytes: int = Field(default=6_000, ge=200)
     max_content_bytes: int = Field(default=200_000, ge=200)
+    # Off by default, so the default corpus does not change.
+    external_shares: ExternalShareSettings | None = None
+    bulk_uploads: list[BulkUploadSettings] = Field(default_factory=list)
+    folder_trees: list[FolderTreeSettings] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _check_mime_weights(self) -> "CorpusSettings":
@@ -74,6 +126,30 @@ class CorpusSettings(BaseModel):
             raise ValueError(f"Unsupported mime types in mime_weights: {unknown}")
         if sum(self.mime_weights.values()) <= 0:
             raise ValueError("mime_weights must have a positive weight")
+        return self
+
+    @model_validator(mode="after")
+    def _check_containers(self) -> "CorpusSettings":
+        external = self.external_shares
+        if external is not None and external.recipients > max(self.num_users - 1, 1):
+            raise ValueError("external_shares.recipients is more than the users")
+        targets: list[BulkUploadSettings | FolderTreeSettings] = [
+            *self.bulk_uploads,
+            *self.folder_trees,
+        ]
+        for target in targets:
+            if target.container == "my_drive":
+                limit = self.num_users
+            elif target.container == "shared_drive":
+                limit = self.num_shared_drives
+            elif external is None:
+                raise ValueError("An external bulk upload needs external_shares")
+            else:
+                limit = external.owners
+            if target.index >= limit:
+                raise ValueError(
+                    f"No {target.container} with index {target.index} in the corpus"
+                )
         return self
 
 

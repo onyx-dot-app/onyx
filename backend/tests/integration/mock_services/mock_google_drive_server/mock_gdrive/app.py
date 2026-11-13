@@ -12,7 +12,7 @@ import asyncio
 import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import parse_qsl
 
 from fastapi import FastAPI, Request, Response
@@ -161,6 +161,44 @@ async def describe_file(request: Request, file_id: str) -> Response:
     )
 
 
+@app.get("/_mock/corpus/folders/{folder_id}/content-ids")
+async def folder_content_ids(request: Request, folder_id: str) -> Response:
+    """The content files under a folder at any depth: what a folder target
+    must index."""
+    corpus = _server(request).api.corpus
+    folder = corpus.files.get(folder_id)
+    if folder is None or not folder.is_folder:
+        return JSONResponse({"detail": "No such folder"}, status_code=404)
+    return JSONResponse({"file_ids": corpus.subtree_content_ids(folder_id)})
+
+
+@app.get("/_mock/corpus/users/{email}/content-ids")
+async def user_content_ids(
+    request: Request,
+    email: str,
+    scope: Literal["all_drives", "owned", "shared_with_me"] = "all_drives",
+) -> Response:
+    """The content files a user lists: "all_drives" is what corpora=allDrives
+    returns, "owned" and "shared_with_me" split the user corpus by owner.
+    These are what an OAuth connector of that user must index."""
+    corpus = _server(request).api.corpus
+    if email not in corpus.users:
+        return JSONResponse({"detail": "No such user"}, status_code=404)
+    if scope == "all_drives":
+        return JSONResponse({"file_ids": corpus.all_drives_content_ids(email)})
+    mine = corpus.user_corpus[email]
+    owned = scope == "owned"
+    return JSONResponse(
+        {
+            "file_ids": [
+                f.id
+                for f in corpus.content_files()
+                if f.id in mine and (f.owner == email) == owned
+            ]
+        }
+    )
+
+
 @app.post("/_mock/corpus/touch")
 async def touch_files(request: Request, body: TouchRequest) -> dict[str, list[str]]:
     """Marks random content files as modified now, for incremental runs."""
@@ -178,8 +216,11 @@ async def service_account_key(request: Request) -> dict[str, str]:
 
 
 @app.get("/_mock/oauth-credentials")
-async def get_oauth_credentials(request: Request, email: str) -> dict[str, Any]:
-    return oauth_credentials(email, _token_uri(request))
+async def get_oauth_credentials(request: Request, email: str) -> Response:
+    """An OAuth token of one domain user. External accounts get none."""
+    if email not in _server(request).api.corpus.users:
+        return JSONResponse({"detail": "No such user"}, status_code=404)
+    return JSONResponse(oauth_credentials(email, _token_uri(request)))
 
 
 @app.post("/token")

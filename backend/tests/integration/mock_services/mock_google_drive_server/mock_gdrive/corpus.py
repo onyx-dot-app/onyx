@@ -23,7 +23,9 @@ from .settings import (
     PPTX_MIME,
     SHORTCUT_MIME,
     TEXT_MIME,
+    BulkUploadSettings,
     CorpusSettings,
+    FolderTreeSettings,
 )
 
 PermissionType = Literal["user", "group", "domain", "anyone"]
@@ -133,6 +135,12 @@ class Corpus:
         self.groups_of_user: dict[str, set[str]] = {}
         self.drives: dict[str, MockDrive] = {}
         self.drive_member_emails: dict[str, set[str]] = {}
+        # Accounts outside the domain that own files shared into it. They are
+        # not users: the directory does not list them and the token endpoint
+        # does not impersonate them.
+        self.external_users: dict[str, MockUser] = {}
+        self.external_recipients: list[str] = []
+        self.folder_tree_root_ids: list[str] = []
         self.files: dict[str, MockFile] = {}
         self.children: dict[str, list[str]] = {}
         self.drive_files: dict[str, list[str]] = {}
@@ -149,6 +157,10 @@ class Corpus:
 
     def content_files(self) -> Iterator[MockFile]:
         return (f for f in self.files.values() if f.is_content)
+
+    def account(self, email: str) -> MockUser | None:
+        """A domain user or an external account."""
+        return self.users.get(email) or self.external_users.get(email)
 
     def principals_of(self, email: str) -> set[str]:
         return {email} | self.groups_of_user.get(email, set())
@@ -195,6 +207,29 @@ class Corpus:
         if file.drive_id is not None:
             return False
         return file.owner == email or self.has_direct_role(email, file, {"writer"})
+
+    def all_drives_content_ids(self, email: str) -> list[str]:
+        """Content files in the user corpus or a member shared drive."""
+        mine = self.user_corpus.get(email, set())
+        drives = set(self.member_drive_ids(email))
+        return [
+            f.id for f in self.content_files() if f.id in mine or f.drive_id in drives
+        ]
+
+    def subtree_content_ids(self, folder_id: str) -> list[str]:
+        """The content files under a folder, at any depth."""
+        found: list[str] = []
+        pending = [folder_id]
+        seen = {folder_id}
+        while pending:
+            for child_id in self.children.get(pending.pop(), []):
+                child = self.files[child_id]
+                if child.is_content:
+                    found.append(child_id)
+                elif child.is_folder and child_id not in seen:
+                    seen.add(child_id)
+                    pending.append(child_id)
+        return found
 
     def touch(self, count: int, rng: random.Random) -> list[str]:
         """Marks `count` random content files as modified now."""
@@ -268,6 +303,13 @@ class Corpus:
             )
 
         self._generate_shortcuts()
+        # A separate random stream, so these settings do not change the rest.
+        extra_rng = random.Random(f"{s.seed}:extra")
+        self._generate_external_shares(extra_rng)
+        for bulk in s.bulk_uploads:
+            self._generate_bulk_upload(bulk, extra_rng)
+        for tree in s.folder_trees:
+            self._generate_folder_tree(tree, extra_rng)
         self._index_user_corpus()
 
     def _generate_drive(self, k: int, non_admins: list[str]) -> None:
@@ -411,14 +453,203 @@ class Corpus:
                 )
             )
 
+    def _generate_external_shares(self, rng: random.Random) -> None:
+        external = self.settings.external_shares
+        if external is None:
+            return
+        non_admins = list(self.users)[1:] or list(self.users)
+        self.external_recipients = non_admins[: external.recipients]
+        for i in range(external.owners):
+            email = f"ext{i + 1}@{external.owner_domain}"
+            root_id = _make_id("0A", self.settings.seed, "external-root", i, 17)
+            self.external_users[email] = MockUser(
+                id=stable_digits(f"user:{email}", 21),
+                email=email,
+                given_name=f"External{i + 1}",
+                family_name="Owner",
+                is_admin=False,
+                root_folder_id=root_id,
+                permission_id=stable_digits(email),
+            )
+            self._add(
+                MockFile(
+                    id=root_id,
+                    name="My Drive",
+                    mime_type=FOLDER_MIME,
+                    parents=[],
+                    drive_id=None,
+                    owner=email,
+                    created_time=_CORPUS_START,
+                    modified_time=_CORPUS_START,
+                    permissions=[self._user_permission(email, "owner")],
+                    content_bytes=0,
+                    is_root=True,
+                )
+            )
+        owners = list(self.external_users)
+        for n in range(external.files):
+            created, modified = self._times(rng)
+            self._add_content_file(
+                rng,
+                n,
+                parent=self.external_users[owners[n % len(owners)]].root_folder_id,
+                drive_id=None,
+                owner=owners[n % len(owners)],
+                created=created,
+                modified=modified,
+            )
+
+    def _external_share_permissions(self) -> list[MockPermission]:
+        return [self._user_permission(e, "reader") for e in self.external_recipients]
+
+    def _container(self, kind: str, index: int) -> tuple[str, str | None, str | None]:
+        """(root folder id, shared drive id, owner) of a container."""
+        if kind == "shared_drive":
+            drive_id = list(self.drives)[index]
+            return drive_id, drive_id, None
+        if kind == "external":
+            account = list(self.external_users.values())[index]
+            return account.root_folder_id, None, account.email
+        user = list(self.users.values())[index]
+        return user.root_folder_id, None, user.email
+
+    def _generate_bulk_upload(
+        self, bulk: BulkUploadSettings, rng: random.Random
+    ) -> None:
+        root_id, drive_id, owner = self._container(bulk.container, bulk.index)
+        start = bulk.start.replace(microsecond=0)
+        for burst in range(bulk.bursts):
+            # Google stores a bulk upload's modifiedTime in whole seconds.
+            at = start + timedelta(seconds=burst * bulk.spacing_seconds)
+            for n in range(bulk.count):
+                self._add_content_file(
+                    rng,
+                    n,
+                    parent=root_id,
+                    drive_id=drive_id,
+                    owner=owner,
+                    created=at,
+                    modified=at,
+                )
+
+    def _generate_folder_tree(
+        self, tree: FolderTreeSettings, rng: random.Random
+    ) -> None:
+        container_root, drive_id, owner = self._container(tree.container, tree.index)
+        tree_root = self._add_folder(
+            rng,
+            f"Folder Tree {len(self.folder_tree_root_ids) + 1}",
+            container_root,
+            drive_id,
+            owner,
+        )
+        self.folder_tree_root_ids.append(tree_root)
+        level = [tree_root]
+        for depth in range(tree.depth + 1):
+            for folder_id in level:
+                for n in range(tree.files_per_folder):
+                    self._add_tree_file(rng, n, folder_id, drive_id, owner)
+            if depth == tree.depth:
+                break
+            level = [
+                self._add_folder(
+                    rng, f"Level {depth + 1}.{b + 1}", parent, drive_id, owner
+                )
+                for parent in level
+                for b in range(tree.branching)
+            ]
+        for n in range(tree.deepest_folder_files):
+            self._add_tree_file(
+                rng, tree.files_per_folder + n, level[0], drive_id, owner
+            )
+
+    def _add_tree_file(
+        self,
+        rng: random.Random,
+        n: int,
+        parent: str,
+        drive_id: str | None,
+        owner: str | None,
+    ) -> None:
+        created, modified = self._times(rng)
+        self._add_content_file(
+            rng,
+            n,
+            parent=parent,
+            drive_id=drive_id,
+            owner=owner,
+            created=created,
+            modified=modified,
+        )
+
+    def _add_folder(
+        self,
+        rng: random.Random,
+        name: str,
+        parent: str,
+        drive_id: str | None,
+        owner: str | None,
+    ) -> str:
+        created, modified = self._times(rng)
+        folder = MockFile(
+            id=self._next_file_id(),
+            name=name,
+            mime_type=FOLDER_MIME,
+            parents=[parent],
+            drive_id=drive_id,
+            owner=owner,
+            created_time=created,
+            modified_time=modified,
+            permissions=self._owner_permissions(owner),
+            content_bytes=0,
+        )
+        self._add(folder)
+        return folder.id
+
+    def _add_content_file(
+        self,
+        rng: random.Random,
+        n: int,
+        *,
+        parent: str,
+        drive_id: str | None,
+        owner: str | None,
+        created: datetime,
+        modified: datetime,
+    ) -> None:
+        s = self.settings
+        mimes = list(s.mime_weights)
+        mime = rng.choices(mimes, [s.mime_weights[m] for m in mimes])[0]
+        words = " ".join(w.capitalize() for w in rng.sample(_NAME_WORDS, 2))
+        permissions = self._owner_permissions(owner)
+        if owner in self.external_users:
+            permissions.extend(self._external_share_permissions())
+        self._add(
+            MockFile(
+                id=self._next_file_id(),
+                name=f"{words} {n + 1}{_EXTENSIONS.get(mime, '')}",
+                mime_type=mime,
+                parents=[parent],
+                drive_id=drive_id,
+                owner=owner,
+                created_time=created,
+                modified_time=modified,
+                permissions=permissions,
+                content_bytes=self._content_size(rng),
+            )
+        )
+
     def _index_user_corpus(self) -> None:
         for file in self.files.values():
             if file.is_root:
                 continue
-            if file.owner is not None:
+            if file.owner in self.user_corpus:
                 self.user_corpus[file.owner].add(file.id)
             for permission in file.permissions:
-                if permission.type == "user" and permission.email_address:
+                if (
+                    permission.type == "user"
+                    and permission.email_address in self.user_corpus
+                ):
                     self.user_corpus[permission.email_address].add(file.id)
                 elif permission.type == "group" and permission.email_address:
                     group = self.groups[permission.email_address]
@@ -436,15 +667,16 @@ class Corpus:
         self._file_count += 1
         return _make_id("1", self.settings.seed, "file", self._file_count, 32)
 
-    def _times(self) -> tuple[datetime, datetime]:
-        created = _CORPUS_START + _CORPUS_SPAN * self._rng.random()
-        modified = created + _MAX_EDIT_SPAN * self._rng.random()
+    def _times(self, rng: random.Random | None = None) -> tuple[datetime, datetime]:
+        rng = rng or self._rng
+        created = _CORPUS_START + _CORPUS_SPAN * rng.random()
+        modified = created + _MAX_EDIT_SPAN * rng.random()
         return created, modified
 
-    def _content_size(self) -> int:
+    def _content_size(self, rng: random.Random | None = None) -> int:
         sigma = 0.8
         mu = math.log(self.settings.avg_content_bytes) - sigma * sigma / 2
-        size = int(self._rng.lognormvariate(mu, sigma))
+        size = int((rng or self._rng).lognormvariate(mu, sigma))
         return max(200, min(size, self.settings.max_content_bytes))
 
     def _owner_permissions(self, owner: str | None) -> list[MockPermission]:
@@ -517,4 +749,7 @@ class Corpus:
             "google_native_files": sum(
                 n for m, n in by_mime.items() if m in GOOGLE_NATIVE_MIMES
             ),
+            "external_owner_emails": list(self.external_users),
+            "external_recipient_emails": self.external_recipients,
+            "folder_tree_root_ids": self.folder_tree_root_ids,
         }

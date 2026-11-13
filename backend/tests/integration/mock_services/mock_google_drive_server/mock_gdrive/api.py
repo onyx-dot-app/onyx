@@ -355,7 +355,7 @@ class MockGoogleApi:
         }
         if permission.email_address:
             resource["emailAddress"] = permission.email_address
-            user = self.corpus.users.get(permission.email_address)
+            user = self.corpus.account(permission.email_address)
             group = self.corpus.groups.get(permission.email_address)
             resource["displayName"] = (
                 user.full_name if user else (group.name if group else "")
@@ -412,8 +412,8 @@ class MockGoogleApi:
             resource["parents"] = parents
         if file.drive_id is not None:
             resource["driveId"] = file.drive_id
-        if file.owner is not None:
-            owner = corpus.users[file.owner]
+        owner = corpus.account(file.owner) if file.owner is not None else None
+        if owner is not None:
             resource["owners"] = [
                 {
                     "kind": "drive#user",
