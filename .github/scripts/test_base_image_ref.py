@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).with_name("base-image-ref.sh")
 
 
 def resolve_image(
-    component: str, browser_status: int, gate: bool
+    component: str, browser_status: int
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -26,11 +26,8 @@ def resolve_image(
         docker = root / "docker"
         docker.write_text('#!/bin/sh\n[ "$1" = build ] || exit 99\n')
         docker.chmod(0o755)
-        arguments = ["bash", str(scripts / SCRIPT.name), component]
-        if not gate:
-            arguments.append("--report")
         return subprocess.run(
-            arguments,
+            ["bash", str(scripts / SCRIPT.name), component],
             cwd=root,
             env={**os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}"},
             capture_output=True,
@@ -140,9 +137,6 @@ class ImageResolverTests(unittest.TestCase):
                 resolver = scripts / SCRIPT.name
                 shutil.copyfile(SCRIPT, resolver)
                 resolver.chmod(0o755)
-                (scripts / "audit-sandbox-browser.sh").write_text(
-                    f'echo "browser audit ran" >&2\nexit {browser_status}\n'
-                )
                 for name, body in {
                     "docker": '[ "$1" = build ] || exit 99',
                     "ods-audit": f'echo \'{{"version":"2.1.0","runs":[]}}\'; case "$*" in *onyx-sandbox*) echo "sandbox audit ran" >&2; exit {browser_status};; esac',
@@ -213,13 +207,13 @@ class ImageResolverTests(unittest.TestCase):
         )
 
     def test_resolver_only_resolves_the_image(self) -> None:
-        result = resolve_image("sandbox", 1, gate=True)
+        result = resolve_image("sandbox", 1)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "onyx-sandbox-os:audit")
         self.assertNotIn("browser audit ran", result.stderr)
 
     def test_unknown_component_keeps_its_distinct_exit_status(self) -> None:
-        result = resolve_image("unknown", 0, gate=True)
+        result = resolve_image("unknown", 0)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertNotIn("browser audit ran", result.stderr)
 
