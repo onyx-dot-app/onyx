@@ -21,7 +21,6 @@ import type {
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { AppActionPoliciesView } from "@/lib/plugins/types";
-import { saveAppActionPolicies } from "@/app/craft/services/apiServices";
 import { SkillPreviewContent } from "@/sections/modals/SkillPreviewModal";
 import PolicyEditor from "@/sections/actions/PolicyEditor";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
@@ -47,6 +46,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
+  saveMemberActionPolicies,
   saveMemberMCPPreferences,
   saveMemberOpenAPIPreferences,
   disconnectMemberPlugin,
@@ -235,14 +235,14 @@ export function MemberPluginDetailContent({
   const craftCopy = useTranslations("craft.apps.page");
   const [preview, setPreview] = useState<Skill | null>(null);
   const [action, setAction] = useState<DetailAction>({ kind: "details" });
+  // Personal MCP settings do not need Craft, but apply only in Craft.
+  const supportsApprovals =
+    plugin.kind === "external-app"
+      ? craftEnabled
+      : plugin.kind === "mcp" &&
+        plugin.server.users_can_manage_policies === true;
   const [tab, setTab] = useState<string>(
-    initialTab === "approvals" &&
-      craftEnabled &&
-      plugin.kind !== "openapi" &&
-      (plugin.kind === "external-app" ||
-        plugin.server.available_in_craft === true)
-      ? "approvals"
-      : "connection"
+    initialTab === "approvals" && supportsApprovals ? "approvals" : "connection"
   );
   const approvalCopy = useTranslations("craft.actionPolicies");
   const openingId = useId();
@@ -255,11 +255,6 @@ export function MemberPluginDetailContent({
   const [policies, setPolicies] = useState<Record<string, ActionPolicy>>({});
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const supportsApprovals =
-    craftEnabled &&
-    plugin.kind !== "openapi" &&
-    (plugin.kind === "external-app" ||
-      plugin.server.available_in_craft === true);
   const showApprovals =
     supportsApprovals && plugin.connection.kind === "connected";
   const activeTab = tab === "approvals" && !showApprovals ? "connection" : tab;
@@ -387,9 +382,10 @@ export function MemberPluginDetailContent({
         }
         setInitialPreferences(preferences);
       }
-      if (policiesDirty && policyApp) {
-        await saveAppActionPolicies(
-          policyApp.gated_app_id,
+      if (policiesDirty && policyTarget) {
+        await saveMemberActionPolicies(
+          policyTarget.kind,
+          policyTarget.id,
           policies,
           approvalCopy("saveError")
         );
