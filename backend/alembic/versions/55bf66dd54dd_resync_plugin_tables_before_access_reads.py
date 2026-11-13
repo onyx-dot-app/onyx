@@ -492,6 +492,12 @@ def resync_plugins_from_skills() -> None:
 
 def upgrade() -> None:
     resync_plugins_from_skills()
+    # The writes above queue deferred FK checks until commit. Every revision
+    # runs in one transaction, and ALTER TABLE refuses a table with queued
+    # checks, so run them now and restore the deferred default. ALL, because
+    # 414dfccc5e24 drops these constraints.
+    op.execute("SET CONSTRAINTS ALL IMMEDIATE")
+    op.execute("SET CONSTRAINTS ALL DEFERRED")
 
 
 def downgrade() -> None:

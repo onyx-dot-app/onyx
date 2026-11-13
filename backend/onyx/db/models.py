@@ -3636,12 +3636,11 @@ class ChatMessage(Base):
         PydanticType(RunFailure, sanitize_strings=True), nullable=True
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-        index=True,
+        Integer, nullable=True, index=True
     )
     invoking_tool_call: Mapped["ToolCall | None"] = relationship(
-        "ToolCall", foreign_keys=[invoking_tool_call_id]
+        "ToolCall",
+        primaryjoin="foreign(ChatMessage.invoking_tool_call_id) == ToolCall.id",
     )
     response_items: Mapped[list["ChatResponseItem"]] = relationship(
         "ChatResponseItem",
@@ -5704,8 +5703,6 @@ class Plugin(Base):
         Enum(PluginInstallationPolicy, native_enum=False),
         nullable=True,
     )
-    # The pointers are deferred composite FKs to a version of this plugin, so
-    # one transaction inserts a plugin and its first version.
     current_version_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False
     )
@@ -5733,30 +5730,6 @@ class Plugin(Base):
         CheckConstraint(
             "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
             name="ck_private_plugin_has_owner",
-        ),
-        ForeignKeyConstraint(
-            ["current_version_id", "id"],
-            ["plugin_version.id", "plugin_version.plugin_id"],
-            name="fk_plugin_current_version",
-            use_alter=True,
-            deferrable=True,
-            initially="DEFERRED",
-        ),
-        ForeignKeyConstraint(
-            ["published_version_id", "id"],
-            ["plugin_version.id", "plugin_version.plugin_id"],
-            name="fk_plugin_published_version",
-            use_alter=True,
-            deferrable=True,
-            initially="DEFERRED",
-        ),
-        ForeignKeyConstraint(
-            ["pending_version_id", "id"],
-            ["plugin_version.id", "plugin_version.plugin_id"],
-            name="fk_plugin_pending_version",
-            use_alter=True,
-            deferrable=True,
-            initially="DEFERRED",
         ),
     )
 

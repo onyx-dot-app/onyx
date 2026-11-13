@@ -1,7 +1,7 @@
 """A deploy runs every pending revision in one transaction. The plugin backfills
 (cdec9dd9ca3d, 55bf66dd54dd) write rows under deferred FKs, and a later
-revision alters the plugin table. env.py runs the queued checks after each
-revision, or that ALTER fails on every instance with a custom skill."""
+revision alters the plugin table. 55bf66dd54dd runs the queued checks, or that
+ALTER fails on every instance with a custom skill."""
 
 from collections.abc import Generator
 from uuid import UUID, uuid4
@@ -19,9 +19,9 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-# Two and one revisions before the plugin tables, so the per-revision checks run
-# before the plugin FKs exist. After them, so only the re-sync writes rows.
-START_REVISIONS = ("c0de5e7a91b2", "fdaeeca238a1", "cdec9dd9ca3d")
+# Before the plugin tables, so both backfills write rows. After them, so only
+# the re-sync writes rows.
+START_REVISIONS = ("fdaeeca238a1", "cdec9dd9ca3d")
 
 
 @pytest.fixture(params=START_REVISIONS)

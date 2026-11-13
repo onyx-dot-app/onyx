@@ -1,6 +1,5 @@
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.migration_lock import schema_migration_lock
-from onyx.db.engine.migration_deferred_checks import run_queued_deferred_checks
 from onyx.db.engine.migration_search_path import pin_search_path_per_transaction
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.configs.app_configs import USE_IAM_AUTH
@@ -265,7 +264,6 @@ def do_run_migrations(
         compare_type=True,
         compare_server_default=True,
         script_location=config.get_main_option("script_location"),
-        on_version_apply=run_queued_deferred_checks,
     )
 
     # Migrations may call into code that reads CURRENT_TENANT_ID_CONTEXTVAR
@@ -476,7 +474,6 @@ def run_migrations_offline() -> None:
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
                 dialect_opts={"paramstyle": "named"},
-                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():
@@ -502,7 +499,6 @@ def run_migrations_offline() -> None:
                 include_schemas=True,
                 script_location=config.get_main_option("script_location"),
                 dialect_opts={"paramstyle": "named"},
-                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():
@@ -545,7 +541,6 @@ def run_migrations_online() -> None:
                 compare_type=True,
                 compare_server_default=True,
                 script_location=config.get_main_option("script_location"),
-                on_version_apply=run_queued_deferred_checks,
             )
 
             with context.begin_transaction():

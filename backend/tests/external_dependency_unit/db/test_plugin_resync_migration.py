@@ -318,8 +318,6 @@ def test_resync_fixes_version_drift_from_old_code(
 
     with _migration_ops(migration_session):
         resync.upgrade()
-    migration_session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
-    migration_session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
     # A skill old code made gets a plugin; a deleted skill loses its plugin.
     fresh_plugin = _plugin(migration_session, fresh.id)
@@ -513,8 +511,6 @@ def test_resync_fixes_access_drift_from_old_code(
 
     with _migration_ops(db_session):
         resync.upgrade()
-    db_session.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
-    db_session.execute(text("SET CONSTRAINTS ALL DEFERRED"))
 
     assert plugin_access_mismatches(db_session, ids) == []
     assert _plugin(db_session, gone.id) is None
