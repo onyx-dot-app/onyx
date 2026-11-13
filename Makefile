@@ -1,4 +1,4 @@
-.PHONY: craft-connect craft-intercept craft-ready craft-ready-infra craft-api craft-up craft-down craft-pause craft-resume craft-doctor craft-disk craft-clean craft-migrate craft-migration-status craft-sandbox-image craft-backend-image craft-refresh-images craft-check-images
+.PHONY: craft-connect craft-intercept craft-ready craft-ready-infra craft-api craft-up craft-down craft-pause craft-resume craft-doctor craft-disk craft-clean craft-migrate craft-migration-status craft-sandbox-image craft-backend-image craft-refresh-images craft-check-images craft-dev-api craft-dev-web craft-dev-doctor
 
 CLUSTER_NAME ?= onyx-dev
 NAMESPACE ?= onyx
@@ -60,3 +60,15 @@ craft-ready:
 
 craft-api: craft-intercept
 	.venv/bin/python deployment/helm/dev/launch.py --cluster-name $(CLUSTER_NAME) --namespace $(NAMESPACE) api
+
+# Local API and web against the shared remote cluster in $CRAFT_DEV_PROFILE.
+CRAFT_DEV = .venv/bin/python deployment/helm/dev/launch.py --target craft-dev
+
+craft-dev-doctor:
+	.venv/bin/python deployment/helm/dev/dev.py --target craft-dev doctor
+
+craft-dev-api:
+	$(CRAFT_DEV) api
+
+craft-dev-web:
+	$(CRAFT_DEV) web

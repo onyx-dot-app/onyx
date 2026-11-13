@@ -345,6 +345,19 @@
       "problemMatcher": []
     },
     {
+      "label": "craft-dev: doctor",
+      "detail": "Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head against the remote cluster in CRAFT_DEV_PROFILE. Changes nothing.",
+      "type": "process",
+      "command": "make",
+      "args": [
+        "craft-dev-doctor"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
       "label": "craft: disk usage",
       "type": "process",
       "command": "make",

@@ -66,6 +66,16 @@ After starting the API and web server, run `make craft-ready` to verify the API 
 The VS Code compound also starts this check. Readiness failure is not a successful startup.
 A connection alone does not start the local API or create its intercept.
 
+## Remote Firecracker cluster
+
+For Firecracker sandboxes, run the local API against the shared remote cluster:
+`make craft-dev-doctor`, then `make craft-dev-api` and `make craft-dev-web`.
+The profile file in `CRAFT_DEV_PROFILE` holds the cluster facts; never hard-code them.
+The user runs `telepresence connect` in a real terminal (sudo). Do not start local Celery
+workers or migrations against the shared cluster; the launcher refuses both.
+If the Alembic head differs, do not bypass the check. Read the
+"Remote Firecracker cluster" section of the README.
+
 ## Choose the smallest refresh
 
 | Change or task | Command |
