@@ -381,15 +381,26 @@ _MOVE_PLUGINS_TO_TARGET_MARKETPLACE = f"""
 """
 
 # Published means: in the Organization library. Phase 1 runs the newest
-# version there, so the published pointer is the current one.
+# version there, so old code that publishes or edits a skill moves the
+# published pointer to the current version. A re-run after a downgrade must
+# not publish a draft that new code saved, so the pointer moves only when old
+# code published the skill (no pointer) or edited it (the current version is
+# the changed-bundle version above).
+_PUBLISHED_VERSION = f"""
+    CASE
+        WHEN p.marketplace_id <> '{ORGANIZATION_LIBRARY_ID}'::uuid THEN NULL
+        WHEN p.published_version_id IS NULL
+            OR p.current_version_id = {_CHANGED_BUNDLE_VERSION_ID}
+            THEN p.current_version_id
+        ELSE p.published_version_id
+    END
+"""
+
 _SYNC_OWNER_POLICY_AND_PUBLISHED = f"""
     UPDATE plugin p
     SET author_user_id = s.author_user_id,
         installation_policy = NULLIF(s.installation_policy, 'AVAILABLE'),
-        published_version_id = CASE
-            WHEN p.marketplace_id = '{ORGANIZATION_LIBRARY_ID}'::uuid
-                THEN p.current_version_id
-        END
+        published_version_id = {_PUBLISHED_VERSION}
     FROM skill s
     WHERE s.id = p.id
       AND s.built_in_skill_id IS NULL
@@ -397,10 +408,7 @@ _SYNC_OWNER_POLICY_AND_PUBLISHED = f"""
           p.author_user_id IS DISTINCT FROM s.author_user_id
           OR p.installation_policy
               IS DISTINCT FROM NULLIF(s.installation_policy, 'AVAILABLE')
-          OR p.published_version_id IS DISTINCT FROM CASE
-              WHEN p.marketplace_id = '{ORGANIZATION_LIBRARY_ID}'::uuid
-                  THEN p.current_version_id
-          END
+          OR p.published_version_id IS DISTINCT FROM {_PUBLISHED_VERSION}
       )
 """
 
