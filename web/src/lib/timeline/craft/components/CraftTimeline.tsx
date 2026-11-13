@@ -2,17 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import {
-  SvgCircle,
-  SvgCheckAll,
-  SvgCheckCircle,
-  SvgLoader,
-  SvgStopCircle,
-} from "@opal/icons";
+import { SvgCircle, SvgCheckCircle, SvgStopCircle } from "@opal/icons";
+import { FoldableLogo } from "@/lib/app/components";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
 import { TimelineSteps } from "@/lib/timeline/components/TimelineSteps";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { TimelineHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import { RunHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
 import { StreamingHeader } from "@/lib/timeline/components/headers/StreamingHeader";
 import { CompletedHeader } from "@/lib/timeline/components/headers/CompletedHeader";
 import { StoppedHeader } from "@/lib/timeline/components/headers/StoppedHeader";
@@ -126,16 +121,19 @@ interface CraftTimelineProps {
   entries: CraftTimelineEntry[];
   /** Fold the run closed once an assistant message follows it. */
   autoCollapse?: boolean;
+  /** Only a response's first run shows the agent's logo, as in chat. */
+  showAgentAvatar?: boolean;
 }
 
 /**
  * CraftTimeline renders one run of a Craft turn's tool calls and thinking on
- * the shared timeline rail. A run with more than one entry gets the shared
- * run header, which folds it, and a Done or Stopped row when expanded.
+ * the shared timeline rail, under the shared run header. A run with more
+ * than one entry folds, and shows a Done or Stopped row when expanded.
  */
 export default function CraftTimeline({
   entries,
   autoCollapse = false,
+  showAgentAvatar = false,
 }: CraftTimelineProps) {
   const t = useTranslations("craft.toolCards.group");
   const tTimeline = useTranslations("chat.messages.timeline");
@@ -175,42 +173,39 @@ export default function CraftTimeline({
 
   return (
     <TimelineRoot>
-      {foldable && (
-        <TimelineHeaderRow
-          left={
-            isRunning ? (
-              <SvgLoader className="size-4 stroke-status-info-05 animate-spin" />
-            ) : (
-              <SvgCheckAll className="size-4 stroke-text-03" />
-            )
-          }
-        >
-          {isRunning ? (
-            <StreamingHeader
-              headerText={t("working.label")}
-              collapsible
-              isExpanded={isOpen}
-              onToggle={toggle}
-              streamingStartTime={startedAt}
-            />
-          ) : isStopped ? (
-            <StoppedHeader
-              totalSteps={entries.length}
-              collapsible
-              isExpanded={isOpen}
-              onToggle={toggle}
-            />
-          ) : (
-            <CompletedHeader
-              totalSteps={entries.length}
-              collapsible
-              isExpanded={isOpen}
-              onToggle={toggle}
-              processingDurationSeconds={durationSeconds}
-            />
-          )}
-        </TimelineHeaderRow>
-      )}
+      <RunHeaderRow
+        left={
+          showAgentAvatar ? <FoldableLogo onyxBranded folded size={24} /> : null
+        }
+        interactive={foldable}
+        tinted={isRunning || isOpen}
+        roundedBottom={!isOpen}
+      >
+        {isRunning ? (
+          <StreamingHeader
+            headerText={t("working.label")}
+            collapsible={foldable}
+            isExpanded={isOpen}
+            onToggle={toggle}
+            streamingStartTime={startedAt}
+          />
+        ) : isStopped ? (
+          <StoppedHeader
+            totalSteps={entries.length}
+            collapsible={foldable}
+            isExpanded={isOpen}
+            onToggle={toggle}
+          />
+        ) : (
+          <CompletedHeader
+            totalSteps={entries.length}
+            collapsible={foldable}
+            isExpanded={isOpen}
+            onToggle={toggle}
+            processingDurationSeconds={durationSeconds}
+          />
+        )}
+      </RunHeaderRow>
       {isOpen && (
         <TimelineSteps
           groups={groups}

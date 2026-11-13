@@ -13,6 +13,8 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import TextChunk from "@/app/craft/components/TextChunk";
 import CraftTimeline from "@/lib/timeline/craft/components/CraftTimeline";
+import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
+import { TimelineHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
@@ -203,6 +205,14 @@ export default function BuildMessageList({
     );
   };
 
+  // The logo on a header row of its own, for a response that does not start
+  // with a run.
+  const renderLogoHeader = (key: string) => (
+    <TimelineRoot key={key}>
+      <TimelineHeaderRow left={<FoldableLogo onyxBranded folded size={24} />} />
+    </TimelineRoot>
+  );
+
   /**
    * Renders the in-progress turn from the timeline reducer: runs of thinking
    * and tool calls go on the rail, messages and notices render between them,
@@ -211,7 +221,7 @@ export default function BuildMessageList({
   const renderTimeline = (
     state: TimelineState,
     opts: { isCurrentStream: boolean }
-  ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
+  ): { nodes: React.ReactNode[]; isEmpty: boolean } => {
     type Block =
       | { kind: "steps"; id: string; entries: CraftTimelineEntry[] }
       | { kind: "item"; entry: AcpTimelineEntry };
@@ -227,6 +237,11 @@ export default function BuildMessageList({
       }
     }
 
+    const todo = planToTodoList(state.plan, opts.isCurrentStream);
+    // As in chat, the first run's header carries the logo. Anything else
+    // first gets a header row of its own.
+    const logoOnRun = blocks[0]?.kind === "steps" && !todo;
+
     const nodes = blocks.map((block, idx) => {
       if (block.kind === "steps") {
         // The block folds closed once an assistant message follows it.
@@ -238,11 +253,12 @@ export default function BuildMessageList({
             key={block.id}
             entries={block.entries}
             autoCollapse={followedByMessage}
+            showAgentAvatar={logoOnRun && idx === 0}
           />
         );
       }
 
-      const topMargin = blocks[idx - 1]?.kind === "steps" ? "mt-3" : "";
+      const topMargin = cn(blocks[idx - 1]?.kind === "steps" && "mt-3", "px-3");
       const { entry } = block;
       switch (entry.payload.kind) {
         case "message":
@@ -289,8 +305,18 @@ export default function BuildMessageList({
     });
 
     return {
-      nodes,
-      pinnedTodo: planToTodoList(state.plan, opts.isCurrentStream),
+      nodes: [
+        ...(logoOnRun ? [] : [renderLogoHeader("agent-header")]),
+        ...(todo
+          ? [
+              <div key="plan">
+                <TodoListCard todoList={todo} defaultOpen={todo.isOpen} />
+              </div>,
+            ]
+          : []),
+        ...nodes,
+      ],
+      isEmpty: blocks.length === 0 && !todo,
     };
   };
 
@@ -319,9 +345,7 @@ export default function BuildMessageList({
       ? renderTimeline(savedTimeline, { isCurrentStream: false })
       : null;
     const visibleSavedRender =
-      savedRender && (savedRender.pinnedTodo || savedRender.nodes.length > 0)
-        ? savedRender
-        : null;
+      savedRender && !savedRender.isEmpty ? savedRender : null;
 
     return (
       <div
@@ -331,54 +355,46 @@ export default function BuildMessageList({
         aria-busy={finalizing}
       >
         <Hoverable.Root group="craftAgentMessage" width="full">
-          <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
-            <div className="relative">
-              <div className="h-9 flex items-center">
-                <FoldableLogo onyxBranded folded size={24} />
-              </div>
-              {message.content.trim() && (
-                <div className="absolute start-0 top-[max(2.25rem,calc(100%-1.75rem))]">
-                  <Hoverable.Item
-                    group="craftAgentMessage"
-                    variant="appear-on-hover"
-                  >
-                    <CopyButton
-                      getCopyText={() =>
-                        convertMarkdownTablesToTsv(message.content)
-                      }
-                      prominence="tertiary"
-                      size="sm"
-                      data-testid="CraftAgentMessage/copy-button"
-                    />
-                  </Hoverable.Item>
+          <div className="flex flex-col gap-2 min-w-0">
+            {visibleSavedRender ? (
+              visibleSavedRender.nodes
+            ) : (
+              <>
+                {renderLogoHeader("agent-header")}
+                <div className="px-3">
+                  <TextChunk
+                    sessionId={sessionId}
+                    content={message.content}
+                    onFileOpen={onFileOpen}
+                  />
                 </div>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 min-w-0">
-              {visibleSavedRender ? (
-                <>
-                  {visibleSavedRender.pinnedTodo && (
-                    <div>
-                      <TodoListCard
-                        todoList={visibleSavedRender.pinnedTodo}
-                        defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
-                      />
-                    </div>
-                  )}
-                  {visibleSavedRender.nodes}
-                </>
-              ) : (
-                <TextChunk
-                  sessionId={sessionId}
-                  content={message.content}
-                  onFileOpen={onFileOpen}
-                />
-              )}
-              {finalizing && <BlinkingBar />}
-            </div>
+              </>
+            )}
+            {finalizing && (
+              <div className="px-3">
+                <BlinkingBar />
+              </div>
+            )}
+            {message.content.trim() && (
+              <div className="px-3">
+                <Hoverable.Item
+                  group="craftAgentMessage"
+                  variant="appear-on-hover"
+                >
+                  <CopyButton
+                    getCopyText={() =>
+                      convertMarkdownTablesToTsv(message.content)
+                    }
+                    prominence="tertiary"
+                    size="sm"
+                    data-testid="CraftAgentMessage/copy-button"
+                  />
+                </Hoverable.Item>
+              </div>
+            )}
           </div>
         </Hoverable.Root>
-        <div className="flex min-w-0 flex-col gap-2 ps-9">
+        <div className="flex min-w-0 flex-col gap-2 px-3">
           {outputs &&
             onOutputOpen &&
             onTurnOutputsOpen &&
@@ -439,11 +455,9 @@ export default function BuildMessageList({
                   onOutputOpen &&
                   onTurnOutputsOpen &&
                   turnIndex !== undefined && (
-                    <div className="flex items-start gap-3 py-4">
-                      <div className="flex h-9 shrink-0 items-center">
-                        <FoldableLogo onyxBranded folded size={24} />
-                      </div>
-                      <div className="min-w-0 flex-1">
+                    <div className="flex flex-col gap-2 py-4">
+                      {renderLogoHeader("agent-header")}
+                      <div className="min-w-0 px-3">
                         <TurnOutputCards
                           outputs={outputs}
                           onOpen={onOutputOpen}
@@ -471,30 +485,19 @@ export default function BuildMessageList({
 
         {showStreamingArea && (
           <div
-            className="flex items-start gap-3 py-4"
+            className="flex flex-col gap-2 py-4"
             data-testid="craft-assistant-message"
             aria-busy={isStreaming}
           >
-            <div className="shrink-0 mt-2">
-              <FoldableLogo onyxBranded folded size={24} />
-            </div>
-            <div className="flex-1 flex flex-col gap-2 min-w-0">
-              {streamRender?.pinnedTodo && (
-                <div>
-                  <TodoListCard
-                    todoList={streamRender.pinnedTodo}
-                    defaultOpen={streamRender.pinnedTodo.isOpen}
-                  />
-                </div>
-              )}
-              {hasStreamItems && streamRender?.nodes}
-              {showStreamCursor && (
-                <div className="h-9 flex items-center">
-                  <BlinkingBar />
-                </div>
-              )}
-              {trailingAssistantSlot}
-            </div>
+            {streamRender
+              ? streamRender.nodes
+              : renderLogoHeader("agent-header")}
+            {showStreamCursor && (
+              <div className="h-9 flex items-center px-3">
+                <BlinkingBar />
+              </div>
+            )}
+            {trailingAssistantSlot}
           </div>
         )}
       </div>

@@ -7,7 +7,6 @@ import {
   RenderType,
 } from "@/app/app/message/messageComponents/types";
 import { TurnGroup } from "./transformers";
-import { cn } from "@opal/utils";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { TextLoader } from "@opal/loaders";
 import { useTimelineExpansion } from "@/lib/timeline/chat/hooks/useTimelineExpansion";
@@ -30,7 +29,10 @@ import { useStreamingStartTime } from "@/app/app/stores/useChatSessionStore";
 import { ExpandedTimelineContent } from "./ExpandedTimelineContent";
 import { CollapsedStreamingContent } from "./CollapsedStreamingContent";
 import { TimelineRoot } from "@/lib/timeline/components/primitives/TimelineRoot";
-import { TimelineHeaderRow } from "@/lib/timeline/components/primitives/TimelineHeaderRow";
+import {
+  RunHeaderRow,
+  TimelineHeaderRow,
+} from "@/lib/timeline/components/primitives/TimelineHeaderRow";
 
 // =============================================================================
 // Private Wrapper Components
@@ -166,10 +168,11 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     [lastStep]
   );
 
-  const { isExpanded, handleToggle } = useTimelineExpansion(
-    stopPacketSeen,
-    hasDisplayContent
-  );
+  const expansion = useTimelineExpansion(stopPacketSeen, hasDisplayContent);
+  // A single step stays on the rail, as in Craft; only longer runs fold.
+  const isExpanded = expansion.isExpanded || isSingleStep;
+  const canFold = collapsible && !isSingleStep;
+  const handleToggle = expansion.handleToggle;
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
@@ -219,7 +222,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   });
 
   const headerIsInteractive = useMemo(() => {
-    if (!collapsible || isMemoryOnly) {
+    if (!canFold || isMemoryOnly) {
       return false;
     }
 
@@ -228,7 +231,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     }
 
     return totalSteps > 0;
-  }, [collapsible, isMemoryOnly, uiState, stoppedStepsCount, totalSteps]);
+  }, [canFold, isMemoryOnly, uiState, stoppedStepsCount, totalSteps]);
 
   // Determine render type override for collapsed streaming view
   const collapsedRenderTypeOverride = useMemo(() => {
@@ -245,7 +248,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         return (
           <StreamingHeader
             headerText={headerText}
-            collapsible={collapsible}
+            collapsible={canFold}
             buttonTitle={buttonTitle}
             isExpanded={isExpanded}
             onToggle={handleToggle}
@@ -258,7 +261,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         return (
           <StoppedHeader
             totalSteps={stoppedStepsCount}
-            collapsible={collapsible}
+            collapsible={canFold}
             isExpanded={isExpanded}
             onToggle={handleToggle}
           />
@@ -269,7 +272,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
         return (
           <CompletedHeader
             totalSteps={totalSteps}
-            collapsible={collapsible}
+            collapsible={canFold}
             isExpanded={isExpanded}
             onToggle={handleToggle}
             processingDurationSeconds={
@@ -289,7 +292,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     }
   }, [
     uiState,
-    collapsible,
+    canFold,
     isExpanded,
     handleToggle,
     headerText,
@@ -333,22 +336,19 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   }
 
   return (
-    <TimelineContainer
-      agent={chatState.agent}
-      showAgentAvatar={showAgentAvatar}
-      headerContent={
-        <div
-          className={cn(
-            "flex flex-1 min-w-0 h-full items-center justify-between p-1 rounded-t-12 transition-colors duration-300",
-            headerIsInteractive && "hover:bg-background-tint-00",
-            showTintedBackground && "bg-background-tint-00",
-            showRoundedBottom && "rounded-b-12"
-          )}
-        >
-          {renderHeader()}
-        </div>
-      }
-    >
+    <TimelineRoot>
+      <RunHeaderRow
+        left={
+          showAgentAvatar ? (
+            <AgentAvatar agent={chatState.agent} size={24} />
+          ) : null
+        }
+        interactive={headerIsInteractive}
+        tinted={showTintedBackground}
+        roundedBottom={showRoundedBottom}
+      >
+        {renderHeader()}
+      </RunHeaderRow>
       {/* Collapsed streaming view - single step compact mode */}
       {showCollapsedCompact && lastStep && (
         <CollapsedStreamingContent
@@ -369,13 +369,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopReason={stopReason}
             isSingleStep={isSingleStep}
             userStopped={userStopped}
-            showDoneStep={showDoneStep}
-            showStoppedStep={showStoppedStep}
-            hasDoneIndicator={hasDoneIndicator}
+            // As in Craft, a single step has no Done row.
+            showDoneStep={showDoneStep && !isSingleStep}
+            showStoppedStep={showStoppedStep && !isSingleStep}
+            hasDoneIndicator={hasDoneIndicator && !isSingleStep}
           />
         </div>
       )}
-    </TimelineContainer>
+    </TimelineRoot>
   );
 }, areAgentTimelinePropsEqual);
 
