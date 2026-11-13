@@ -1,0 +1,40 @@
+---
+title: "OpenSearch Document Index Migration"
+description: "How Onyx moved its document index from Vespa to OpenSearch, and what to do before you upgrade"
+icon: "arrow-right-arrow-left"
+---
+
+## Overview
+
+Onyx v5 uses OpenSearch as its only document index. Vespa is no longer part of Onyx.
+The migration does not apply to Onyx Cloud, where it finished in April 2026.
+
+## Upgrade Path
+
+The migration from Vespa ran automatically in Onyx v3. Vespa was removed in v4.
+
+| Your current version | What to do |
+|---|---|
+| v4 or later | Nothing. Your documents are already in OpenSearch. |
+| v3 | Confirm the migration is complete, then upgrade. |
+| Earlier than v3 | Upgrade to the latest v3 release first. Let the migration finish, then upgrade to v5. |
+
+<Warning>
+  If you upgrade from a version earlier than v3 directly to v4 or v5, Onyx cannot read the documents in Vespa.
+  You must re-index every connector to search your documents again.
+</Warning>
+
+## Confirm the Migration on v3
+
+On v3, Onyx migrated existing documents from Vespa to OpenSearch in the background. The task saved its progress,
+so Onyx did not need to run continuously for it to finish.
+
+In the v3 Admin Panel, open **Document Index Migration** to check the status. When the migration shows complete,
+switch retrieval to OpenSearch on the same page and confirm that search works. Then upgrade to v5.
+
+## Missing Documents After the Migration
+
+The migration was best-effort. A small number of documents could not be migrated,
+in particular documents indexed by old versions of Onyx with weaker content rules.
+
+If a document does not appear in search after you upgrade, re-index its connector from **Admin Panel → Connectors**.

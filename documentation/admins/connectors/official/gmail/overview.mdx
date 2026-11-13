@@ -1,0 +1,39 @@
+---
+title: "Gmail Overview"
+description: "Overview of the Gmail connector"
+---
+
+## How it works
+
+The Gmail connector indexes the email threads in the mailboxes of your Google Workspace.
+Each thread becomes one document that links to the thread in Gmail.
+Onyx indexes the plain-text part of each message and keeps the subject, sender, recipients, date,
+and labels as metadata. It skips the **Spam** and **Trash** labels.
+
+With a Google Workspace account, Onyx lists every user in the domain and indexes each mailbox.
+With a personal Google account, or with an account that has no Workspace admin role, Onyx indexes that one mailbox.
+
+Onyx checks Gmail for new and changed threads every 30 minutes by default.
+You can change **Refresh Every** on the connector.
+
+On the Business and Enterprise plans and on Onyx Cloud, set **Document Access** to **Sync with Gmail**.
+Each user then sees only the threads from their own mailbox.
+
+## Setting up
+
+You authenticate the connector in one of two ways:
+
+- **OAuth**: sign in with one Google account. Follow the [OAuth guide](./oauth). This works without a Google Workspace.
+- **Service Account**: use a Google service account with domain-wide delegation. Follow the
+  [Service Account guide](./service_account). A Google Workspace is required.
+
+<Note>
+  You can set up more than one Gmail connector on a single Onyx instance, each with its own account.
+  This lets you index multiple Google Workspaces from one Onyx deployment.
+</Note>
+
+<Note>
+  A Google account created in Onyx is listed on both the Gmail and the Google Drive connector forms,
+  so one account can back both connectors.
+  See [Using one account for Gmail and Google Drive](./oauth#using-one-account-for-gmail-and-google-drive).
+</Note>

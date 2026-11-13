@@ -1,0 +1,163 @@
+---
+title: "Triggers"
+description: "Watch pages for changes or run on a schedule, and get notified when something matters"
+icon: "bolt"
+---
+
+A wiki changes constantly, but most changes don't matter to most people. A **trigger** lets you say, in plain English,
+what you care about — then delivers a written summary when it happens.
+
+Triggers are private to you. Yours and their destinations are scoped to your account,
+so nobody else sees or inherits them.
+
+## Two kinds of trigger
+
+Open **Triggers** in the left sidebar and you'll see both, as tabs:
+
+| Kind | Fires | Use it for |
+| --- | --- | --- |
+| **Run on Wiki Updates** | the moment a watched page is edited | "tell me when this changes" |
+| **Recurring Schedule** | on a cron schedule you set | "check every Monday whether this is still true" |
+
+The distinction is *when the check happens*, not what it can ask.
+A scheduled trigger sees both a **snapshot of the current state** and a **diff of what changed since its last run** — so
+its condition can be about state ("still marked blocked") or about change ("a new doc landed here").
+
+<Note>
+  A trigger's kind is fixed at creation. If you need the other one, create a new trigger.
+</Note>
+
+## Create a trigger
+
+<Steps>
+  <Step title="Open the panel">
+    From **Triggers** in the sidebar, click **Add Trigger**.
+
+    You can also start from a page or folder:
+    open the **Automations** rail from the pinned header and click the footer **+**.
+    That pre-fills the watch scope to that page or folder and locks it.
+  </Step>
+
+  <Step title="Choose what to watch">
+    Under **Watch**, add pages, folders, or the whole wiki.
+    A page can be narrowed to a line range if you only care about one section.
+
+    Pick paths from the picker rather than typing them — free-typed paths can't be committed.
+    You need read access to everything you watch, and a whole-wiki scope subsumes any other scopes on the same trigger.
+  </Step>
+
+  <Step title="Write the condition (If)">
+    Plain English. The trigger fires only when this is satisfied:
+
+    - *"the on-call runbook still lists no secondary responder"* — a state condition
+    - *"a new document was added under this folder since the last check"* — a change condition
+    - *"the project status changed from green to red"* — a change condition
+  </Step>
+
+  <Step title="Write the message (Then Send)">
+    Describe what the notification should say, not the literal text.
+    What gets delivered is the model's summary grounded in the actual content that changed — for example,
+    *"Summarize what changed in this folder since the last check."*
+  </Step>
+
+  <Step title="Pick a destination (To)">
+    Choose where it goes (see below).
+    Use **Add More Actions** to send different messages to different places from the same trigger.
+  </Step>
+</Steps>
+
+**Create** stays disabled until Watch, If, and Then Send are filled in, and every action has its recipient.
+
+## Destinations
+
+| Destination | What happens |
+| --- | --- |
+| **Notification in Activity Center** | Recorded in the wiki's Activity Center |
+| **Slack** | Posts to a channel or DMs you through the Agent Wiki bot |
+| **Email** | Sends to recipients you manage under **Settings → Connectors** |
+| **Webhook** | Posts to a URL you supply |
+| **Onyx Craft** | Hands the fire to Craft, so a trigger can kick off downstream work |
+
+Every fire is recorded in the Activity Center regardless of destination — so if Slack is muted or delivery hiccups,
+you can still see what fired and when.
+
+## Scheduling
+
+Pick a **Frequency** preset: every 15 or 30 minutes, hourly, every 6 hours, daily, weekly, or monthly.
+Daily and below also need a **time of day**; weekly adds a day of the week, monthly a day of the month.
+
+Two more fields matter:
+
+- **Timezone** — the schedule runs in this zone, and daylight saving is handled for you. Use a real IANA name such as
+  `America/New_York`.
+- **Do not fire before** *(optional)* — an anchor that delays the first run, for a trigger that shouldn't start until
+  next quarter. Leave it empty to start at the next scheduled tick.
+
+A plain-English summary of the schedule shows as you build it (*"Daily at 09:00 (America/New_York)"*).
+Under **Advanced**,
+you can write a raw 5-field cron expression instead — `*/15 * * * *` — which switches the frequency to Custom.
+
+Due triggers are evaluated every minute, so a scheduled trigger runs at its next cron tick with minute-level resolution.
+
+### The "since last check" window
+
+For scheduled triggers, the change diff covers the window since the previous run — roughly a day for a daily schedule,
+an hour for an hourly one. Worth knowing:
+
+- **Renames and moves are followed.** A watched page that moved mid-window shows up as a change to that page, not as a
+  deleted file plus a brand-new one.
+- **The first run** looks back one interval, so it behaves like every run after it.
+- **After downtime**, the lookback is capped at 14 days — a long-idle trigger can't pull months of history into one
+  check.
+- **A quiet window** reads as "no changes in this window", so a pure change condition simply doesn't fire.
+
+## Sending to Slack
+
+An admin has to save Slack app credentials first ([Notifications](/agent-wiki/admin/notifications)). After that:
+
+<Steps>
+  <Step title="Connect Slack">
+    Go to **Settings → Connectors**. The Slack card shows **Connect**,
+    or your connected workspace with **Mute** and **Disconnect**.
+  </Step>
+
+  <Step title="Point a trigger at it">
+    In **Then Send**, choose **Slack**, then pick a channel or **DM me** in **To**.
+    Channels come from those your connected Slack account can post to.
+  </Step>
+</Steps>
+
+**Mute** pauses Slack delivery without disconnecting — fires are still recorded.
+
+<Accordion title="Using an incoming webhook instead">
+  Webhook destinations still work and don't need the Slack app.
+  Create an **incoming webhook** in Slack (**api.slack.com/apps → Create New App → From scratch → Incoming Webhooks**),
+  choose the channel, and copy the URL. For a private channel, `/invite` the app there first.
+
+  Add it in the wiki as a Slack destination using **Webhook**. A few consequences:
+
+  - **One channel per webhook**, fixed when you create it — mint another webhook for another channel.
+  - **Inbound only.** A webhook can post but can't read anything, so a leak has a small blast radius.
+  - **Stored encrypted**, and only ever shown back as a masked hint. There's no edit — to rotate, delete the
+  destination and add a new one.
+
+  Test one before attaching a trigger:
+
+  ```bash
+  export SLACK_WEBHOOK_URL='…'   # the URL Slack gave you
+
+  curl -X POST -H 'Content-type: application/json' \
+    --data '{"text":"hello from agent wiki"}' \
+    "$SLACK_WEBHOOK_URL"
+  ```
+
+  A `ok` response and the line appearing in the channel means the webhook works.
+</Accordion>
+
+## Good to know
+
+- **State versus change.** Both are available on every scheduled run, so phrase the condition for the one you want.
+  "Is X true right now?" and "did X change?" produce very different triggers.
+- **Monthly skips short months.** A day-31 schedule skips February rather than rolling over to the 1st.
+- **Activity Center timestamps** use the wiki's configured timezone, falling back to your browser's.
+- **Slack formatting.** Markdown bullets render as bullets, and links don't unfurl into preview cards.
