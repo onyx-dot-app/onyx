@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access.",
         "title": "Craft isn't available on this deployment"
+      },
+      "publishing": {
+        "title": "Skill Publishing",
+        "open": {
+          "label": "Open",
+          "description": "Skill authors publish to the organization at once."
+        },
+        "requiresReview": {
+          "label": "Requires review",
+          "description": "An admin approves each publish and each publish update."
+        },
+        "off": {
+          "label": "Off",
+          "description": "Only admins publish skills to the organization."
+        },
+        "saveSuccess": {
+          "message": "Publishing setting saved."
+        },
+        "saveError": {
+          "message": "Couldn't save the Publishing setting."
+        }
       }
     },
     "credentials": {
@@ -17388,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "Publishing cannot be undone",
-          "description": "After you save, everyone in the organization can use this skill. You cannot make it private again. Only an admin can delete it."
+          "description": "After you save, everyone in the organization can use this skill. You cannot make it private again. Only an admin can delete it.",
+          "reviewDescription": "The skill stays private until an admin approves the request. After approval, you cannot make it private again."
+        },
+        "reviewRequestedToast": {
+          "message": "Your publish request went to an admin for review."
+        },
+        "publishOff": {
+          "title": "Publishing is turned off",
+          "description": "An admin turned off publishing to the organization. Ask an admin to publish this skill."
         }
       },
       "placeholders": {
@@ -17441,6 +17470,7 @@
           "label": "Publish update",
           "successToast": "Published version {number} to the organization.",
           "failedToast": "Couldn't publish this update.",
+          "sentForReviewToast": "Version {number} went to an admin for review.",
           "offNotice": "Publishing is turned off. Ask an admin to publish this update."
         }
       }
@@ -17601,6 +17631,34 @@
       "publishWarning": {
         "title": "Publishing cannot be undone",
         "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
+      }
+    },
+    "reviewRequests": {
+      "title": "Publish Requests",
+      "description": "Approve or deny requests to publish skills to the organization.",
+      "columns": {
+        "skill": "Skill",
+        "version": "Version",
+        "author": "Author",
+        "saved": "Saved"
+      },
+      "unnamedSkill": "Unnamed skill",
+      "review": {
+        "label": "Review",
+        "ariaLabel": "Review {name}"
+      },
+      "approve": {
+        "label": "Approve"
+      },
+      "deny": {
+        "label": "Deny"
+      },
+      "approvedToast": "Published version {number} of {name}.",
+      "deniedToast": "Denied version {number} of {name}.",
+      "failedToast": "Couldn't update this request.",
+      "version": {
+        "firstPublish": "v{number} · First publish",
+        "update": "v{number} · Update from v{published}"
       }
     }
   },

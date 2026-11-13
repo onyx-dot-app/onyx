@@ -114,6 +114,18 @@ export interface SkillVersionPreview {
   instructions_markdown: string;
 }
 
+export interface SkillReviewRequest {
+  skill_id: string;
+  name: string | null;
+  version_id: string;
+  version_number: number;
+  /** Null for a first publish. */
+  published_version_number: number | null;
+  author_email: string | null;
+  /** When the version was saved. */
+  version_created_at: string;
+}
+
 export interface SkillBundleFile {
   path: string;
   size: number;

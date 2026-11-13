@@ -7,6 +7,7 @@ import {
   uniqueSkillName,
 } from "@tests/e2e/utils/skills";
 import { SkillsLibraryPage } from "@tests/e2e/pages/SkillsLibraryPage";
+import { AdminSkillsPage } from "@tests/e2e/pages/AdminSkillsPage";
 
 async function authorPage(
   browser: Browser,
@@ -18,7 +19,7 @@ async function authorPage(
   return page;
 }
 
-// The test changes the organization-wide Publishing setting, so it runs alone.
+// Both tests change the organization-wide Publishing setting, so they run alone.
 test.describe("skill publishing", () => {
   test.beforeEach(async ({ page }) => {
     const settings = await (await page.request.get("/api/settings")).json();
@@ -71,6 +72,59 @@ test.describe("skill publishing", () => {
       );
       await skills.closeDialog();
       await skills.expectCardUnpublishedChanges(name, false);
+    } finally {
+      await author.context().close();
+    }
+  });
+
+  test("@exclusive an admin approves a publish update under Requires review", async ({
+    browser,
+    page: adminPage,
+  }, testInfo) => {
+    await setPublishing(adminPage.request, "REQUIRES_REVIEW");
+    const author = await authorPage(browser, testInfo.workerIndex);
+    try {
+      const name = uniqueSkillName("publish-review");
+      const created = await createSkill(
+        author.request,
+        name,
+        "First version.",
+        {
+          publish: true,
+        }
+      );
+      const saved = await editSkillInstructions(
+        author.request,
+        created.id,
+        "Second version."
+      );
+
+      const skills = new SkillsLibraryPage(author);
+      await skills.goto();
+      await skills.openSkill(name);
+      await skills.openVersionsTab();
+      await skills.publishUpdate();
+      await skills.expectToast(
+        `Version ${saved.current_version_number} went to an admin for review.`
+      );
+      await skills.expectVersionStatus(
+        saved.current_version_number,
+        "Pending review"
+      );
+
+      const adminSkills = new AdminSkillsPage(adminPage);
+      await adminSkills.goto();
+      await adminSkills.expectRequest(
+        name,
+        `v${saved.current_version_number} · Update from v${created.current_version_number}`
+      );
+      await adminSkills.openReview(name);
+      await adminSkills.expectReviewContent("Second version.");
+      await adminSkills.approveInReview();
+      await adminSkills.expectToast(
+        `Published version ${saved.current_version_number} of ${name}.`
+      );
+      await adminSkills.expectNoRequest(name);
     } finally {
       await author.context().close();
     }

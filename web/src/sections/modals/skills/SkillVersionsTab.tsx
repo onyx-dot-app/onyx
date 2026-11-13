@@ -123,6 +123,14 @@ export default function SkillVersionsTab({
             number: currentVersion.version_number,
           })
         );
+      } else if (
+        published.pending_version_number === currentVersion.version_number
+      ) {
+        toast.info(
+          t("publishUpdate.sentForReviewToast", {
+            number: currentVersion.version_number,
+          })
+        );
       }
       onChanged();
       await refreshVersions();

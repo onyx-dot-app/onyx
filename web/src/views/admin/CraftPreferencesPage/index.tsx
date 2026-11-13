@@ -22,7 +22,6 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
-import { toSettings } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
 import useUnsavedChangesGuard from "@/hooks/useUnsavedChangesGuard";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
@@ -35,6 +34,7 @@ import {
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
+import SkillPublishingCard from "@/views/admin/CraftPreferencesPage/SkillPublishingCard";
 
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
@@ -89,7 +89,6 @@ export default function CraftPreferencesPage() {
     setIsSaving(true);
     try {
       await updateAdminSettings({
-        ...toSettings(settings),
         craft_instructions: instructions.trim() || null,
       });
       await mutate(SWR_KEYS.settings);
@@ -311,6 +310,8 @@ export default function CraftPreferencesPage() {
             </InputVertical>
           </Section>
         </Card>
+
+        <SkillPublishingCard />
 
         <Collapsible
           defaultOpen={false}

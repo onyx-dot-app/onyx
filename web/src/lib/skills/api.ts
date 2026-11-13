@@ -316,6 +316,18 @@ export async function publishSkill(
   return handle<CustomSkill>(res);
 }
 
+export async function reviewSkillVersion(
+  skillId: string,
+  versionId: string,
+  decision: "approve" | "deny"
+): Promise<CustomSkill> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/${decision}`,
+    { method: "POST" }
+  );
+  return handle<CustomSkill>(res);
+}
+
 export async function deleteUserSkill(skillId: string): Promise<void> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "DELETE",
