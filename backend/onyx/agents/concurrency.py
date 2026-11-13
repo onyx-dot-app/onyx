@@ -146,7 +146,7 @@ class EventDispatcher:
                     with current._lock:
                         if current is delivery and current._closing:
                             return
-                        if not current._closing and not current.failed.is_set():
+                        if current._accepts_events:
                             current.tracker.started()
                             channels.append(current)
                             has_listeners |= bool(current._listeners)
@@ -308,6 +308,27 @@ class EventDelivery:
 
     def publish(self, event: AgentEvent) -> None:
         self.dispatcher.publish(self, event)
+
+    @property
+    def _accepts_events(self) -> bool:
+        """Whether `publish` delivers events to this delivery's listeners, from
+        it or from a descendant. The caller holds `_lock`."""
+        return not self._closing and not self.failed.is_set()
+
+    @property
+    def has_listeners(self) -> bool:
+        """Whether `publish` delivers this delivery's events to a listener: one
+        of this delivery, or of an ancestor that it forwards foreground child
+        events to."""
+        current: EventDelivery | None = self
+        while current is not None:
+            with current._lock:
+                if current is self and current._closing:
+                    return False
+                if current._accepts_events and current._listeners:
+                    return True
+            current = current._parent
+        return False
 
     @property
     def is_dispatch_thread(self) -> bool:

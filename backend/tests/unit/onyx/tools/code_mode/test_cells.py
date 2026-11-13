@@ -369,7 +369,7 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     assert refused.content == BUSY_MESSAGE
     first.finish()
     # The ended cell's driver gives its place back.
-    until(lambda: cells_module._running_cells.acquire("unknown"))
+    until(lambda: cells_module._running_cells.acquire())
     cells_module._running_cells.release("unknown", 0.0)
     assert _details(Response().run("1\n")).status == "completed"
 
@@ -875,9 +875,7 @@ def test_a_cell_rejected_as_busy_leaves_the_dropped_writes_note_to_the_next(
     crashed = Response(history=response.recorded)
     with monkeypatch.context() as patched:
         # Every running-cell slot is taken.
-        patched.setattr(
-            cells_module._running_cells, "acquire", lambda _tenant_id: False
-        )
+        patched.setattr(cells_module._running_cells, "acquire", lambda: False)
         refused = crashed.run("1\n")
     assert refused.content == BUSY_MESSAGE
     accepted = crashed.run("2\n")

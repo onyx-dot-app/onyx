@@ -892,6 +892,7 @@ class CheckpointToolAnswer(BaseModel):
     request_id: str
     decision: InputDecision
     result: dict[str, JsonValue] | None = None
+    standing: bool = False
 
 
 class CheckpointBinding(BaseModel):

@@ -147,6 +147,7 @@ class CheckpointSerializer:
             result=self._decode_tool_result(encoded.result)
             if encoded.result is not None
             else None,
+            standing=encoded.standing,
         )
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:

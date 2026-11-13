@@ -37,10 +37,11 @@ from onyx.agents.runtime import (
 from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
+    PendingToolInput,
     SpawnResult,
 )
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.models import Message, UserMessage
+from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -101,6 +102,26 @@ class RunOwnership(Protocol):
 
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
         """Store a message for an agent; delivery belongs to the application."""
+        ...
+
+
+class ToolApprovals(Protocol):
+    """Open the requests of calls that wait for the user's approval.
+
+    Answers reach the run through `Run.submit`. The requests of a run end with
+    it, when the run store releases it.
+    """
+
+    def request_approval(
+        self, run: Run, call: ToolCall
+    ) -> PendingToolInput | ToolResult | None:
+        """A request to wait for, a result for a call that cannot wait, or None
+        when a standing grant approves the call."""
+        ...
+
+    def withdraw_approval(self, request_id: str) -> None:
+        """A call that a tool makes for the model stopped waiting for this
+        request without an answer, for example because its program ended."""
         ...
 
 
@@ -165,6 +186,7 @@ class AgentCoordinator:
         directory: AgentDirectory | None = None,
         store: RunStore | None = None,
         ownership: RunOwnership | None = None,
+        approvals: ToolApprovals | None = None,
     ) -> None:
         self._state = _CoordinatorState()
         self._view_id = uuid4()
@@ -174,6 +196,8 @@ class AgentCoordinator:
         self._directory = directory
         self._store = store
         self.ownership = ownership
+        # Without it, calls that require approval return an error result.
+        self.approvals = approvals
 
     def view(
         self,
@@ -182,6 +206,7 @@ class AgentCoordinator:
         visible_run_ids: Sequence[str] = (),
         store: RunStore | None = None,
         ownership: RunOwnership | None = None,
+        approvals: ToolApprovals | None = None,
     ) -> "AgentCoordinator":
         """Share execution state; inherit each dependency unless its replacement is supplied."""
         self.check_open()
@@ -189,6 +214,7 @@ class AgentCoordinator:
             directory=directory if directory is not None else self._directory,
             store=store if store is not None else self._store,
             ownership=ownership if ownership is not None else self.ownership,
+            approvals=approvals if approvals is not None else self.approvals,
         )
         view._state = self._state
         with self._state.lock:

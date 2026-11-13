@@ -1,4 +1,5 @@
 import inspect
+import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from functools import wraps
@@ -99,3 +100,37 @@ def log_generator_function_time(func_name: str | None = None) -> Callable[[FG], 
         return cast(FG, wrapped_func)
 
     return decorator
+
+
+class PausableClock:
+    """Monotonic time that stands still while paused.
+
+    Bounds and durations that waiting for a person must not use up read it.
+    A wait on `deadline - now()` that times out during a pause rechecks and
+    waits again, so it ends after the active time the bound allows.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._paused_seconds = 0.0
+        self._paused_since: float | None = None
+
+    def now(self) -> float:
+        """Monotonic seconds less the time spent paused."""
+        return time.monotonic() - self.paused_seconds
+
+    @property
+    def paused_seconds(self) -> float:
+        with self._lock:
+            since = self._paused_since
+            return self._paused_seconds + (
+                0.0 if since is None else time.monotonic() - since
+            )
+
+    def set_paused(self, paused: bool) -> None:
+        with self._lock:
+            if paused and self._paused_since is None:
+                self._paused_since = time.monotonic()
+            elif not paused and self._paused_since is not None:
+                self._paused_seconds += time.monotonic() - self._paused_since
+                self._paused_since = None

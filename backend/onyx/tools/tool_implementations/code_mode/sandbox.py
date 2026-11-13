@@ -59,6 +59,7 @@ from onyx.tools.tool_implementations.code_mode.store import json_value
 from onyx.tools.tool_implementations.utils import truncate_output, truncation_marker
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import call_later, start_thread_future
+from onyx.utils.timing import PausableClock
 
 logger = setup_logger()
 
@@ -728,6 +729,7 @@ class _Run:
         cancellation: CancellationSignal,
         on_print: Callable[[str], None],
         on_yield: Callable[[], None],
+        clock: PausableClock,
     ) -> None:
         self.limits = limits
         self.function_names = frozenset(function_names)
@@ -765,6 +767,9 @@ class _Run:
         # The clock starts when the first worker is checked out, so time spent
         # queueing for a worker does not count.
         self.started: float | None = None
+        # The end of the lifetime on `clock`, which stands still while the
+        # caller pauses it, for example while a call waits for the user.
+        self.clock = clock
         self.deadline = math.inf
         # When the program ended; its calls that still run hold their threads.
         self.ended: float | None = None
@@ -784,12 +789,12 @@ class _Run:
     def start_clock(self) -> None:
         if self.started is None:
             self.started = time.monotonic()
-            self.deadline = self.started + self.limits.lifetime_seconds
+            self.deadline = self.clock.now() + self.limits.lifetime_seconds
 
     def abort_reason(self) -> "_Aborted | None":
         if self.cancellation.cancelled:
             return _Aborted("cancelled", "The execution was cancelled.")
-        if time.monotonic() >= self.deadline:
+        if self.clock.now() >= self.deadline:
             return _Aborted(
                 "timed_out",
                 f"TimeoutError: the program did not finish within "
@@ -980,7 +985,9 @@ class _Run:
                     (self.sleeps[i] for i in pending if i in self.sleeps),
                     default=math.inf,
                 )
-                timeout = min(wakeup, batch_end, self.deadline) - now
+                timeout = min(
+                    wakeup - now, batch_end - now, self.deadline - self.clock.now()
+                )
                 self.wake.wait(None if math.isinf(timeout) else max(0.0, timeout))
 
     def settled(self, call_ids: list[int]) -> dict[int, ExternalSettledResult]:
@@ -1057,11 +1064,12 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
 
     The driver checks the run only between snapshots, so a busy loop would
     otherwise ignore Stop and the wall clock until the compute limit. A timer runs
-    only when the deadline can fall within the segment's compute limit. The pool
-    replaces a killed worker.
+    only when the deadline can fall within the segment's compute limit, and
+    rechecks the run's clock when it fires. The pool replaces a killed worker.
     """
     lock = threading.Lock()
     computing = pid
+    cancel_timer: Callable[[], None] | None = None
 
     def kill() -> None:
         nonlocal computing
@@ -1071,21 +1079,30 @@ def _watched(run: _Run, pid: int | None) -> Iterator[None]:
                 metrics.count_worker_lost("killed")
                 computing = None
 
-    remaining = run.deadline - time.monotonic()
-    cancel_timer = (
-        call_later(max(0.0, remaining), kill)
-        if remaining < run.limits.max_cpu_seconds
-        else None
-    )
+    def kill_at_deadline() -> None:
+        nonlocal cancel_timer
+        # The clock stands still while the run's calls wait.
+        remaining = run.deadline - run.clock.now()
+        if remaining <= 0:
+            kill()
+            return
+        with lock:
+            if computing is not None:
+                cancel_timer = call_later(remaining, kill_at_deadline)
+
+    remaining = run.deadline - run.clock.now()
+    if remaining < run.limits.max_cpu_seconds:
+        cancel_timer = call_later(max(0.0, remaining), kill_at_deadline)
     try:
         with run.cancellation.on_cancel(kill):
             yield
     finally:
-        if cancel_timer is not None:
-            cancel_timer()
-        # Under the lock, so the worker is never killed after it is returned.
+        # Under the lock, so the worker is never killed after it is returned,
+        # and no timer starts after this one is cancelled.
         with lock:
             computing = None
+            if cancel_timer is not None:
+                cancel_timer()
 
 
 def _start(
@@ -1297,6 +1314,7 @@ def execute_program(
     limits: SandboxLimits,
     on_print: Callable[[str], None],
     on_yield: Callable[[], None],
+    clock: PausableClock,
     pool: Callable[[], Monty] = sandbox_pool,
 ) -> SandboxResult:
     """Run one program in a fresh interpreter. Raises the handler's BaseException.
@@ -1304,7 +1322,7 @@ def execute_program(
     `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
     `on_print` receives the printed text and `on_yield` each yield_control() call,
-    both on the driver thread. Nothing carries over from earlier programs; plain
+    both on the driver thread. The program's lifetime runs on `clock`. Nothing carries over from earlier programs; plain
     functions such as load() give a program outside state.
     The program waits at each await on unfinished tool calls or sleeps, and at
     each synchronous sleep. It keeps its worker while it waits, until another
@@ -1323,6 +1341,7 @@ def execute_program(
         cancellation=cancellation,
         on_print=on_print,
         on_yield=on_yield,
+        clock=clock,
     )
 
     def bounded(text: str | None, label: str) -> str | None:
