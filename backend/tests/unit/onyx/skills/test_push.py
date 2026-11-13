@@ -14,6 +14,7 @@ from onyx.db.models import Skill, User
 from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
+from onyx.skills.push import AssembledSkills
 
 
 def _bundle(name: str, *, wrapper: str | None = None) -> bytes:
@@ -211,28 +212,6 @@ def test_assemble_resolves_skill_dir_only_in_root_skill_md(
     assert files["canonical-name/scripts/x.py"] == b"print('${CLAUDE_SKILL_DIR}')\n"
 
 
-def test_assemble_resolves_skill_dirs_in_name_order(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    # Every server must drop the same Skills when expansions exceed a limit.
-    file_store = MagicMock(spec=FileStore)
-    file_store.read_file.side_effect = [
-        io.BytesIO(_bundle(name)) for name in ("zeta", "alpha", "mid")
-    ]
-    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
-    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
-    resolve = MagicMock()
-    monkeypatch.setattr(push, "_resolve_skill_dirs", resolve)
-
-    push._assemble_fileset(
-        [_skill(name=name, is_valid=True) for name in ("zeta", "alpha", "mid")],
-        cast(User, SimpleNamespace()),
-        MagicMock(spec=Session),
-    )
-
-    assert resolve.call_args.args[1] == ["alpha", "mid", "zeta"]
-
-
 def test_assemble_hydrates_when_validity_persistence_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -258,36 +237,33 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
 ) -> None:
     valid_skill = _skill(is_valid=True)
     invalid_skill = _skill(name="invalid-skill", is_valid=False)
-    user = cast(User, SimpleNamespace())
+    user = cast(User, SimpleNamespace(id=uuid4()))
     db_session = MagicMock(spec=Session)
     list_runtime_skills = MagicMock(return_value=[valid_skill, invalid_skill])
-    assemble_fileset = MagicMock(
-        return_value=({"canonical-name/SKILL.md": b"content"}, set()),
+    assemble_skills = MagicMock(
+        return_value=AssembledSkills(
+            files={"canonical-name/SKILL.md": b"content"}, omissions=()
+        )
     )
     monkeypatch.setattr(
         push,
         "list_runtime_skills_for_user",
         list_runtime_skills,
     )
-    monkeypatch.setattr(
-        push,
-        "_assemble",
-        assemble_fileset,
-    )
+    monkeypatch.setattr(push, "_assemble_skills", assemble_skills)
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
     monkeypatch.setattr(push, "build_connectable_apps_list", lambda _apps: "apps")
 
-    apps_section, files = push.build_user_skills_payload(user, db_session)
+    payload = push.build_user_skills_payload(user, db_session)
 
-    assert apps_section == "apps"
-    assert files == {"canonical-name/SKILL.md": b"content"}
+    assert payload.connectable_apps_section == "apps"
+    assert payload.files == {"canonical-name/SKILL.md": b"content"}
+    assert payload.omissions == ()
     list_runtime_skills.assert_called_once_with(
         user=user, db_session=db_session, left_out=set()
     )
-    assemble_fileset.assert_called_once_with(
-        [valid_skill, invalid_skill],
-        user,
-        db_session,
+    assemble_skills.assert_called_once_with(
+        [valid_skill, invalid_skill], user, db_session
     )
 
 
@@ -311,8 +287,6 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
     validity_updates: list[push.SkillValidityUpdate] = []
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", validity_updates.extend)
-    replacement = MagicMock(wraps=push.resolve_skill_dir_placeholder)
-    monkeypatch.setattr(push, "resolve_skill_dir_placeholder", replacement)
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1_100, raising=False)
     oversized = _skill()
     healthy = _skill(name="healthy", is_valid=True)
@@ -323,7 +297,6 @@ def test_assemble_skips_oversized_expansion_and_keeps_other_skills(
 
     assert set(files) == {"healthy/SKILL.md", "healthy/scripts/run.py"}
     assert files["healthy/scripts/run.py"] == b"print('hello')\n"
-    replacement.assert_not_called()
     assert len(validity_updates) == 1
     assert validity_updates[0].skill_id == oversized.skill.id
     assert validity_updates[0].bundle_file_id == "bundle-id"
@@ -389,6 +362,48 @@ def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
     )
 
     assert set(files) == {"b-healthy/SKILL.md", "b-healthy/scripts/run.py"}
+
+
+@pytest.mark.parametrize("fits", [True, False])
+def test_resolved_instructions_count_against_the_sandbox_total(
+    monkeypatch: pytest.MonkeyPatch, fits: bool
+) -> None:
+    """The total counts SKILL.md after ``${CLAUDE_SKILL_DIR}`` resolution, so
+    the push never passes the transport cap; a later skill that fits loads."""
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w") as bundle_zip:
+        bundle_zip.writestr(
+            "SKILL.md", "---\nname: grows\ndescription: d\n---\n${CLAUDE_SKILL_DIR}\n"
+        )
+    growing = output.getvalue()
+    small = io.BytesIO()
+    with zipfile.ZipFile(small, "w") as bundle_zip:
+        bundle_zip.writestr("SKILL.md", "---\nname: small\ndescription: d\n---\n")
+    file_store = MagicMock(spec=FileStore)
+    file_store.read_file.side_effect = [
+        io.BytesIO(growing),
+        io.BytesIO(small.getvalue()),
+    ]
+    monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
+    monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
+    with zipfile.ZipFile(io.BytesIO(growing)) as bundle_zip:
+        raw = bundle_zip.getinfo("SKILL.md").file_size
+    resolved = raw + len("/workspace/managed/skills/grows") - len("${CLAUDE_SKILL_DIR}")
+    monkeypatch.setattr(push, "SKILL_RUNTIME_MAX_BYTES", resolved if fits else raw)
+
+    assembled = push._assemble_skills(
+        [_skill(name="grows", is_valid=True), _skill(name="small", is_valid=True)],
+        cast(User, SimpleNamespace()),
+        MagicMock(spec=Session),
+    )
+
+    if fits:
+        assert set(assembled.files) == {"grows/SKILL.md"}
+        assert assembled.omissions[0].name == "small"
+    else:
+        assert set(assembled.files) == {"small/SKILL.md"}
+        assert [omission.name for omission in assembled.omissions] == ["grows"]
+        assert assembled.omissions[0].bytes == resolved
 
 
 def test_push_and_commit_keeps_the_callers_change_when_the_commit_fails(

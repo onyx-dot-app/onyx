@@ -63,6 +63,7 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     record_managed_content_hashes__no_commit,
     refresh_mcp_config_hashes_for_users,
 )
+from onyx.skills.models import SandboxSkillsState
 from onyx.skills.push import compute_skill_runtime_hash
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
@@ -81,7 +82,12 @@ def _hydrate_managed_content_for_test(
     payload = ManagedContentPayload(
         connectable_apps_section=connectable_apps_section,
         skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        skills_state=SandboxSkillsState(
+            skills_hash=compute_skill_runtime_hash(
+                skills_files, connectable_apps_section
+            ),
+            omissions=(),
+        ),
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),

@@ -553,7 +553,7 @@ def test_two_skills_with_one_name_do_not_stop_the_push(
     monkeypatch.setattr(push, "get_default_file_store", lambda: file_store)
     monkeypatch.setattr(push, "persist_skill_validity", MagicMock())
 
-    _apps, files = push.build_user_skills_payload(user, db_session)
+    files = push.build_user_skills_payload(user, db_session).files
 
     assert f"{name}/SKILL.md" in files
     read_ids = {call.args[0] for call in file_store.read_file.call_args_list}
@@ -598,7 +598,7 @@ def test_name_winners_that_fail_validation_give_the_name_to_the_next_skill(
 
     monkeypatch.setattr(push, "persist_skill_validity", persist)
 
-    _apps, files = push.build_user_skills_payload(user, db_session)
+    files = push.build_user_skills_payload(user, db_session).files
 
     assert f"{name}/SKILL.md" in files
     read_ids = [call.args[0] for call in file_store.read_file.call_args_list]
