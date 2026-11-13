@@ -42,6 +42,7 @@ IDLE_TIMEOUT_SECONDS = 60
 def stub(
     stub_sandbox_manager: StubSandboxManager, monkeypatch: pytest.MonkeyPatch
 ) -> StubSandboxManager:
+    monkeypatch.setattr(tasks_module, "ENABLE_CRAFT", True)
     monkeypatch.setattr(
         tasks_module, "get_sandbox_manager", lambda: stub_sandbox_manager
     )

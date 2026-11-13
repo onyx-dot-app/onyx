@@ -17,7 +17,10 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
-from onyx.server.features.build.configs import SANDBOX_IDLE_TIMEOUT_SECONDS
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    SANDBOX_IDLE_TIMEOUT_SECONDS,
+)
 from onyx.server.features.build.db.sandbox import (
     get_latest_snapshot_for_session,
     get_running_sandboxes,
@@ -92,6 +95,9 @@ def reconcile_sandbox_runtimes_task(
     In single-tenant deployments, runtimes labelled with another tenant belong
     to another deployment and are retained.
     """
+    if not ENABLE_CRAFT:
+        return
+
     deadline = time.monotonic() + TIMEOUT_SECONDS
     sandbox_manager = get_sandbox_manager()
     # Resources created before tenant labels appear only in a tenant's own

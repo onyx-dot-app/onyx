@@ -157,7 +157,8 @@ port of the user, so a restored session can get a different port
 - `cleanup_idle_sandboxes_task` runs the sweep for each tenant from the
   per-tenant fanout. It reaches rows whose runtime may be gone and lists no
   runtime resources.
-- `reconcile_sandbox_runtimes_task` is cluster-wide. It lists the tenants that
+- `reconcile_sandbox_runtimes_task` is cluster-wide. It runs every 15 minutes,
+  and is scheduled and runs only when `ENABLE_CRAFT=true`. It lists the tenants that
   own a live runtime resource
   (`backend/onyx/server/features/build/sandbox/base.py:SandboxManager.list_resource_tenant_ids`) and runs the
   sweep for each, including tenants the fanout skips, such as product-gated

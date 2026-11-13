@@ -20,7 +20,10 @@ from onyx.configs.constants import (
 from onyx.document_index.opensearch.constants import (
     RESOURCE_CHECK_INTERVAL_SECONDS,
 )
-from onyx.server.features.build.configs import SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS
+from onyx.server.features.build.configs import (
+    ENABLE_CRAFT,
+    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
+)
 from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
 from onyx.utils.variable_functionality import is_ee_available
 from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS, MULTI_TENANT
@@ -576,27 +579,26 @@ if not MULTI_TENANT:
         tasks_to_schedule.append(_self_hosted_template)
 
 
-# Cluster-wide in cloud, so it reaches every tenant that owns a live sandbox
-# runtime, including tenants the per-tenant fanout skips.
-_sandbox_reconcile_interval = timedelta(
-    seconds=SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS * 5
-)
-_sandbox_reconcile_task: dict[str, Any] = {
-    "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_reconcile-sandbox-runtimes"
-    if MULTI_TENANT
-    else "reconcile-sandbox-runtimes",
-    "task": OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES,
-    "schedule": _sandbox_reconcile_interval,
-    "options": {
-        "queue": OnyxCeleryQueues.SANDBOX,
-        "priority": OnyxCeleryPriority.LOW,
-        "expires": int(_sandbox_reconcile_interval.total_seconds()),
-    },
-}
-if MULTI_TENANT:
-    beat_cloud_tasks.append(_sandbox_reconcile_task)
-else:
-    tasks_to_schedule.append(_sandbox_reconcile_task)
+if ENABLE_CRAFT:
+    # Cluster-wide in cloud, so it reaches every tenant that owns a live sandbox
+    # runtime, including tenants the per-tenant fanout skips.
+    _sandbox_reconcile_interval = timedelta(minutes=15)
+    _sandbox_reconcile_task: dict[str, Any] = {
+        "name": f"{ONYX_CLOUD_CELERY_TASK_PREFIX}_reconcile-sandbox-runtimes"
+        if MULTI_TENANT
+        else "reconcile-sandbox-runtimes",
+        "task": OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES,
+        "schedule": _sandbox_reconcile_interval,
+        "options": {
+            "queue": OnyxCeleryQueues.SANDBOX,
+            "priority": OnyxCeleryPriority.LOW,
+            "expires": int(_sandbox_reconcile_interval.total_seconds()),
+        },
+    }
+    if MULTI_TENANT:
+        beat_cloud_tasks.append(_sandbox_reconcile_task)
+    else:
+        tasks_to_schedule.append(_sandbox_reconcile_task)
 
 
 if not DISABLE_VECTOR_DB:

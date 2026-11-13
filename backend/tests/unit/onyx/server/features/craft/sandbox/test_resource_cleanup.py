@@ -27,6 +27,9 @@ from onyx.server.features.build.timeouts import (
 
 @pytest.fixture
 def collector(monkeypatch: pytest.MonkeyPatch) -> tuple[MagicMock, MagicMock]:
+    from onyx.background.celery.tasks.build import tasks
+
+    monkeypatch.setattr(tasks, "ENABLE_CRAFT", True)
     manager = MagicMock(spec=SandboxManager)
     manager.workspace_storage_identity.return_value = "workspace-v1"
     cache = MagicMock()
