@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, type MutableRefObject } from "react";
 import { act, render, waitFor } from "@tests/setup/test-utils";
 import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
@@ -8,10 +8,15 @@ import type { ChatState } from "@/app/app/types";
 const ANCHOR_NODE_ID = 2;
 
 /** A scrolled chat whose latest user message sits near the end of the history. */
-function Chat() {
+function Chat({
+  spacerHeightRef,
+  showSpacer = true,
+}: {
+  spacerHeightRef: MutableRefObject<number>;
+  showSpacer?: boolean;
+}) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const spacerHeightRef = useRef(0);
   return (
     <div
       ref={(element) => {
@@ -35,7 +40,7 @@ function Chat() {
                 element.getBoundingClientRect = () => ({ top: 900 }) as DOMRect;
             }}
           />
-          <DynamicBottomSpacer anchorNodeId={ANCHOR_NODE_ID} />
+          {showSpacer && <DynamicBottomSpacer anchorNodeId={ANCHOR_NODE_ID} />}
         </ScrollContainerProvider>
       </div>
     </div>
@@ -62,7 +67,7 @@ beforeEach(() => {
 test("a run the page resumes does not push the history up", async () => {
   // A reload of a chat whose answer is still streaming.
   setChatState("streaming");
-  const { container } = render(<Chat />);
+  const { container } = render(<Chat spacerHeightRef={{ current: 0 }} />);
 
   // Two frames: the effect and the spacer's own layout pass.
   await act(
@@ -76,10 +81,26 @@ test("a run the page resumes does not push the history up", async () => {
 });
 
 test("a message sent from the page pushes the history up", async () => {
-  const { container } = render(<Chat />);
+  const { container } = render(<Chat spacerHeightRef={{ current: 0 }} />);
 
   setChatState("loading");
   setChatState("streaming");
 
   await waitFor(() => expect(spacerHeight(container)).toBe("484px"));
+});
+
+test("removing the spacer clears the height the scroll container reads", async () => {
+  // A chat switch remounts the spacer while the scroll container stays.
+  const spacerHeightRef = { current: 0 };
+  const { container, rerender } = render(
+    <Chat spacerHeightRef={spacerHeightRef} />
+  );
+  setChatState("loading");
+  setChatState("streaming");
+  await waitFor(() => expect(spacerHeight(container)).toBe("484px"));
+  expect(spacerHeightRef.current).toBe(484);
+
+  rerender(<Chat spacerHeightRef={spacerHeightRef} showSpacer={false} />);
+
+  expect(spacerHeightRef.current).toBe(0);
 });

@@ -288,6 +288,15 @@ const DynamicBottomSpacer = React.memo(
       }
     }, [anchorNodeId, setHeight, stopObserving]);
 
+    // The scroll container outlives the spacer (a chat switch remounts only
+    // the spacer), so the shared height must not outlive the spacer's element.
+    useEffect(
+      () => () => {
+        spacerHeightRef.current = 0;
+      },
+      [spacerHeightRef]
+    );
+
     /**
      * Cleanup on unmount
      */

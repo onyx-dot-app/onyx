@@ -557,8 +557,8 @@ up its own branding.
     together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
     turn sent from the page, which passes through `loading`. A run the page
     resumes starts at `streaming` and gets no space. The scroll element is
-    keyed by session, so a chat switch remounts the spacer and clears its
-    state.
+    keyed by session, so a chat switch remounts the spacer. Its unmount clears
+    its state and the shared spacer height.
 
 ---
 
