@@ -61,7 +61,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
           // animates its changes, so each tick would flash.
           <>
             <Text
-              font="main-ui-muted"
+              font="secondary-body"
               color="text-03"
               wordWrap="whitespace-nowrap"
             >
