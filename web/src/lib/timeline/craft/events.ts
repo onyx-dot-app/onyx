@@ -285,6 +285,41 @@ export function craftPacketToEvents(raw: unknown): TimelineEvent[] {
         : [];
     case "error":
       return [{ type: "error", message: asString(raw.message) ?? "" }];
+    case "compaction":
+      return [
+        {
+          type: "ext",
+          notification: {
+            method: "_onyx/compaction",
+            params: { summary: asString(raw.summary) ?? null },
+          },
+        },
+      ];
+    case "connect_app_request": {
+      const requestId = asString(raw.request_id);
+      const externalAppId = raw.external_app_id;
+      if (
+        !requestId ||
+        typeof externalAppId !== "number" ||
+        !Number.isSafeInteger(externalAppId) ||
+        externalAppId <= 0
+      ) {
+        return [];
+      }
+      return [
+        {
+          type: "ext",
+          notification: {
+            method: "_onyx/connect_app_request",
+            params: {
+              requestId,
+              externalAppId,
+              reason: asString(raw.reason) ?? null,
+            },
+          },
+        },
+      ];
+    }
     default:
       return [];
   }

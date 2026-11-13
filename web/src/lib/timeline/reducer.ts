@@ -10,7 +10,7 @@ import type {
   AcpToolCallStatus,
   AcpToolKind,
 } from "@/lib/timeline/acp";
-import type { TimelineEvent } from "@/lib/timeline/events";
+import type { OnyxNotification, TimelineEvent } from "@/lib/timeline/events";
 import type { TimelineEntry, TimelineEntryStatus } from "@/lib/timeline/types";
 
 /** A tool call with every ACP field resolved. */
@@ -30,26 +30,36 @@ export type AcpTimelinePayload =
   /** Agent message content. Adjacent text chunks are joined. */
   | { kind: "message"; content: AcpContentBlock[] }
   | { kind: "thinking"; text: string }
-  | { kind: "tool"; toolCall: AcpToolCall };
+  | { kind: "tool"; toolCall: AcpToolCall }
+  /** An Onyx notice shown between steps. */
+  | { kind: "notice"; notice: TimelineNotice };
+
+/** Notices render inline, in arrival order, outside the steps. */
+export type TimelineNotice =
+  | { type: "compaction"; summary: string | null }
+  | {
+      type: "connect_app_request";
+      requestId: string;
+      externalAppId: number;
+      reason: string | null;
+    }
+  | { type: "error"; message: string };
 
 export type AcpTimelineEntry = TimelineEntry<AcpTimelinePayload>;
 
 export interface TimelineState {
-  /** Messages, thinking blocks and tool calls, in arrival order. */
+  /** Messages, thinking blocks, tool calls and notices, in arrival order. */
   entries: AcpTimelineEntry[];
   /** The latest plan. */
   plan: AcpPlanEntry[];
   /** Set when the turn ends. */
   stopReason: AcpStopReason | null;
-  /** Set when the turn fails. */
-  error: string | null;
 }
 
 export const INITIAL_TIMELINE_STATE: TimelineState = {
   entries: [],
   plan: [],
   stopReason: null,
-  error: null,
 };
 
 type ChunkKind = "message" | "thinking";
@@ -178,6 +188,7 @@ function chunkContent(entry: AcpTimelineEntry): AcpContentBlock[] {
     case "thinking":
       return [{ type: "text", text: entry.payload.text }];
     case "tool":
+    case "notice":
       return [];
   }
 }
@@ -250,6 +261,45 @@ function appendChunk(
   );
 }
 
+function noticeEntry(id: string, notice: TimelineNotice): AcpTimelineEntry {
+  return {
+    id,
+    status: notice.type === "error" ? "error" : "done",
+    groupId: null,
+    payload: { kind: "notice", notice },
+  };
+}
+
+/** Adds an extension notification as a notice. */
+function appendNotification(
+  entries: AcpTimelineEntry[],
+  notification: OnyxNotification
+): AcpTimelineEntry[] {
+  const settled = settleChunks(entries);
+  switch (notification.method) {
+    case "_onyx/compaction":
+      return [
+        ...settled,
+        noticeEntry(`compaction-${entries.length}`, {
+          type: "compaction",
+          summary: notification.params.summary,
+        }),
+      ];
+    case "_onyx/connect_app_request": {
+      // A request is shown once, even when the stream repeats it.
+      const id = `connect:${notification.params.requestId}`;
+      if (entries.some((entry) => entry.id === id)) return settled;
+      return [
+        ...settled,
+        noticeEntry(id, {
+          type: "connect_app_request",
+          ...notification.params,
+        }),
+      ];
+    }
+  }
+}
+
 /** Applies one event. Pure: returns a new state and never mutates `state`. */
 export function reduceTimeline(
   state: TimelineState,
@@ -265,8 +315,19 @@ export function reduceTimeline(
   if (event.type === "error") {
     return {
       ...state,
-      entries: settleChunks(state.entries),
-      error: event.message,
+      entries: [
+        ...settleChunks(state.entries),
+        noticeEntry(`error-${state.entries.length}`, {
+          type: "error",
+          message: event.message,
+        }),
+      ],
+    };
+  }
+  if (event.type === "ext") {
+    return {
+      ...state,
+      entries: appendNotification(state.entries, event.notification),
     };
   }
 
