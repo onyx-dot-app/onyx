@@ -6,7 +6,6 @@ import {
   ChatSessionSharedStatus,
   BackendChatSession,
   FeedbackType,
-  QueuedMessage,
 } from "@/app/app/types";
 import {
   getLatestMessageChain,
@@ -62,16 +61,6 @@ interface ChatSessionData {
 
   // Streaming duration tracking
   streamingStartTime?: number;
-
-  // Queued messages
-  queuedMessages: QueuedMessage[];
-  queuedMessagesPaused: boolean;
-
-  // True once the latest assistant message has fully rendered to the
-  // user (backend stream done AND smooth-streaming typewriter caught up).
-  // Gates queued-message dispatch so a follow-up isn't sent while the
-  // previous answer is still drawing on screen.
-  latestMessageRenderComplete: boolean;
 
   // True while the smooth-streaming typewriter is running its post-finish
   // adaptive drain. Auto-scroll pauses during this window so the page
@@ -168,17 +157,6 @@ interface ChatSessionStore {
   setStreamingStartTime: (sessionId: string, time: number | null) => void;
   getStreamingStartTime: (sessionId: string) => number | undefined;
 
-  // Actions - Queued Messages
-  enqueueMessage: (sessionId: string, message: string) => void;
-  removeQueuedMessage: (sessionId: string, index: number) => void;
-  enqueueCurrentMessage: (message: string) => void;
-  removeCurrentQueuedMessage: (index: number) => void;
-
-  // Actions - Render completion
-  setLatestMessageRenderComplete: (
-    sessionId: string,
-    complete: boolean
-  ) => void;
   setIsStreamDraining: (sessionId: string, draining: boolean) => void;
 
   // Actions - Abort Controllers
@@ -223,14 +201,9 @@ const createInitialSessionData = (
 
   lastAccessed: new Date(),
   isLoaded: false,
-  queuedMessages: [],
-  queuedMessagesPaused: false,
-  latestMessageRenderComplete: true,
   isStreamDraining: false,
   ...initialData,
 });
-
-let nextQueuedMessageId = 0;
 
 // Chats kept in memory per tab. Older idle ones are dropped; opening one
 // again fetches it from the server.
@@ -542,64 +515,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     return get().sessions.get(sessionId)?.streamingStartTime;
   },
 
-  // Queued Messages Actions
-  enqueueMessage: (sessionId: string, message: string) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session || session.queuedMessages.length >= 5) {
-        return state;
-      }
-      const updatedSession = {
-        ...session,
-        queuedMessages: [
-          ...session.queuedMessages,
-          { id: nextQueuedMessageId++, text: message },
-        ],
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  removeQueuedMessage: (sessionId: string, index: number) => {
-    set((state) => {
-      const session = state.sessions.get(sessionId);
-      if (!session) {
-        return state;
-      }
-      const updatedSession = {
-        ...session,
-        queuedMessages: session.queuedMessages.filter((_, i) => i !== index),
-      };
-      const newSessions = new Map(state.sessions);
-      newSessions.set(sessionId, updatedSession);
-      return { sessions: newSessions };
-    });
-  },
-
-  enqueueCurrentMessage: (message: string) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().enqueueMessage(currentSessionId, message);
-    }
-  },
-
-  removeCurrentQueuedMessage: (index: number) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().removeQueuedMessage(currentSessionId, index);
-    }
-  },
-
-  setLatestMessageRenderComplete: (sessionId: string, complete: boolean) => {
-    const session = get().sessions.get(sessionId);
-    if (!session || session.latestMessageRenderComplete === complete) return;
-    get().updateSessionData(sessionId, {
-      latestMessageRenderComplete: complete,
-    });
-  },
-
   setIsStreamDraining: (sessionId: string, draining: boolean) => {
     const session = get().sessions.get(sessionId);
     if (!session || session.isStreamDraining === draining) return;
@@ -676,7 +591,7 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       }
 
       // Only idle sessions are evicted: the open one, one that is streaming or
-      // otherwise busy, one with queued messages, and one that may be
+      // otherwise busy, and one that may be
       // incognito stay. An incognito chat cannot be rebuilt from the server,
       // so this tab holds its only copy; a session whose incognito state is
       // not known yet (a send can run before its load sets the flag) counts as
@@ -687,7 +602,6 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       const isEvictable = (sessionId: string, session: ChatSessionData) =>
         sessionId !== state.currentSessionId &&
         session.chatState === "input" &&
-        session.queuedMessages.length === 0 &&
         (session.incognito === false ||
           (session.incognito === undefined && session.messageTree.size === 0));
 
@@ -736,6 +650,34 @@ export const useCurrentChatState = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.chatState || "input";
+  });
+
+/**
+ * The reader has the server's stop packet for every response of the open
+ * chat's latest turn. Only rendering and settlement remain, so the turn cannot
+ * be stopped.
+ */
+export const useCurrentResponseStopped = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    if (!currentSession) return false;
+    const tree = currentSession.messageTree;
+    const latest = getLatestMessageChain(tree).at(-1);
+    if (!latest) return false;
+    // Each model of a multi-model turn is a sibling that ends with its own stop.
+    const turn =
+      latest.parentNodeId === null
+        ? [latest]
+        : (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
+            .map((nodeId) => tree.get(nodeId))
+            .filter((node): node is Message => node !== undefined);
+    return (
+      turn.length > 0 &&
+      turn.every((node) => node.packets.at(-1)?.obj.type === "stop")
+    );
   });
 
 export const useUncaughtError = () =>
@@ -842,25 +784,6 @@ export const useStreamingStartTime = () =>
       ? sessions.get(currentSessionId)
       : null;
     return currentSession?.streamingStartTime;
-  });
-
-const EMPTY_QUEUED_MESSAGES: QueuedMessage[] = [];
-export const useCurrentQueuedMessages = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.queuedMessages ?? EMPTY_QUEUED_MESSAGES;
-  });
-
-export const useCurrentLatestMessageRenderComplete = () =>
-  useChatSessionStore((state) => {
-    const { currentSessionId, sessions } = state;
-    const currentSession = currentSessionId
-      ? sessions.get(currentSessionId)
-      : null;
-    return currentSession?.latestMessageRenderComplete ?? true;
   });
 
 export const useCurrentIsStreamDraining = () =>

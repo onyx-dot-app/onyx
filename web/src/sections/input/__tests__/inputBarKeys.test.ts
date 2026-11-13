@@ -1,7 +1,9 @@
 import type { KeyboardEvent } from "react";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
-const event = {} as KeyboardEvent<HTMLDivElement>;
+const event = {
+  nativeEvent: { isComposing: false },
+} as KeyboardEvent<HTMLDivElement>;
 
 describe("handleInputNavKeys", () => {
   it("lets queue navigation consume the event first, skipping tile handling", () => {

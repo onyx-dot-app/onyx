@@ -8,7 +8,13 @@ from onyx.auth.users import get_display_email
 from onyx.background.task_utils import extract_task_id_from_query_history_report_name
 from onyx.configs.constants import MessageType, QAFeedbackType, SessionType
 from onyx.db.enums import TaskStatus
-from onyx.db.models import ChatMessage, ChatSession, FileRecord, TaskQueueState
+from onyx.db.models import (
+    AcceptedChatInput,
+    ChatMessage,
+    ChatSession,
+    FileRecord,
+    TaskQueueState,
+)
 
 
 class AbridgedSearchDoc(BaseModel):
@@ -27,6 +33,8 @@ class MessageSnapshot(BaseModel):
     feedback_type: QAFeedbackType | None
     feedback_text: str | None
     time_created: datetime
+    # Messages a response accepted while it ran, in model order.
+    accepted_inputs: list[AcceptedChatInput] = []
 
     @classmethod
     def build(cls, message: ChatMessage) -> "MessageSnapshot":
@@ -64,6 +72,13 @@ class MessageSnapshot(BaseModel):
             feedback_type=feedback_type,
             feedback_text=feedback_text,
             time_created=message.time_sent,
+            accepted_inputs=[
+                accepted
+                for item in sorted(
+                    message.response_items, key=lambda item: item.step_index
+                )
+                for accepted in item.inputs
+            ],
         )
 
 
@@ -157,6 +172,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
     # e.g. the first message pair in the chat_session is 1, the second is 2, etc.
     message_pair_num: int
     user_message: str
+    accepted_inputs: list[AcceptedChatInput]
     ai_response: str
     retrieved_documents: list[AbridgedSearchDoc]
     feedback_type: QAFeedbackType | None
@@ -184,6 +200,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
                 chat_session_id=chat_session_snapshot.id,
                 message_pair_num=ind + 1,
                 user_message=user_message.message,
+                accepted_inputs=ai_message.accepted_inputs,
                 ai_response=ai_message.message,
                 retrieved_documents=ai_message.documents,
                 feedback_type=ai_message.feedback_type,
@@ -201,6 +218,10 @@ class QuestionAnswerPairSnapshot(BaseModel):
             "chat_session_id": str(self.chat_session_id),
             "message_pair_num": str(self.message_pair_num),
             "user_message": self.user_message,
+            "accepted_inputs": "\n\n".join(
+                f"[{accepted.source.value}] {accepted.content}"
+                for accepted in self.accepted_inputs
+            ),
             "ai_response": self.ai_response,
             "retrieved_documents": "|".join(
                 [

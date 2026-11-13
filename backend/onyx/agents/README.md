@@ -540,6 +540,10 @@ An input accepted between steps belongs to the step that read it. It is stored i
 response is the only `chat_message`. History, replay, rendering, and exports must show the input at
 the step where the model read it, and acceptance happens exactly once, in that step's transaction.
 `.agents/feature-map/components/chat-persistence.md` gives the routing rule for each input.
+
+`chat_input` is the inbox of pending human messages. Consuming a row deletes it.
+A step deletes its rows in the transaction that saves the step, so each message is accepted once.
+Starting a new turn moves its queued text into the question tree in one transaction.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
@@ -597,7 +601,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
 Approval policies, question forms, and their HTTP endpoints are future product work.
-The SDK does not accept new user messages during a run. Steering remains future work.
+The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
 
@@ -635,7 +639,7 @@ The execution worker consumes model streams directly.
 Cancellation takes effect when a blocked provider read returns or times out; the run retains ownership until then.
 Total generation deadlines are checked between events. They do not interrupt a blocked synchronous read.
 Stop puts the input in “Stopping…” until execution, foreground child work, tools, and saves finish.
-Drafts remain editable; sending and queued follow-ups wait for the session to become idle.
+Messages sent while a turn runs wait in the inbox; a queued message starts a later turn when the session is idle.
 Current chat tools use foreground children. Background chat execution needs separate admission and control ownership.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
@@ -650,7 +654,7 @@ Stream-status refresh failures log and retry. Active session admission expires a
 Preparation renews its 120-second lease between stages. If one stage exceeds the lease, preparation fails at its next ownership check.
 Ownership is checked before accepting the user message, reserving responses, and publishing the stream.
 A process crash can block a new send until the last lease expires.
-Chat releases session admission after workers, saves, and delivery finish. Save-timeout warnings do not release admission.
+Chat releases session admission after workers and saves finish, before delivery finishes, so a client that sees the stream end can send at once. Save-timeout warnings do not release admission.
 Admission is claimed before loading history. Another tab or pod cannot start a turn while that claim remains active.
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
@@ -664,11 +668,11 @@ Its application interfaces provide access to saved data and execution ownership:
 | --- | --- |
 | `AgentDirectory` | Authorize agent lookup, restore saved agents, and read or cancel runs on the selected branch. |
 | `RunStore` | Save terminal output before dependent runs receive completion. |
-| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It reads the inputs sent to a run and accepts them with their step. |
+| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It owns the inbox: stored messages, step inputs and their acceptance. |
 
 Chat supplies `ChatRunStore` for both saving and ownership when durable checkpoints are enabled.
 Without checkpoints, `ChatResponsePersistence` supplies saving alone. Saved output can be available before worker cleanup finishes.
-`ChatRunStore` sends no inputs to runs: `receive_inputs` returns an empty list, `accept_inputs` accepts, and `has_unread_inputs` returns false.
+`ChatRunStore` reads human messages sent to a running response from `chat_input`. A step that accepts them deletes their rows when it saves.
 
 Within the SDK, `RunCoordination` tracks one parent's foreground children, consumed child failures, and cancellation links.
 Tools access child controls through their invocation. They do not construct this internal object.
@@ -702,7 +706,7 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
-There is no durable generic control ledger. The store does not accept approval answers or steering messages.
+There is no durable generic control ledger. The store does not accept approval answers. Human messages sent to a running response are stored in `chat_input`, as described above.
 SDK tests exercise pending requests and early answers directly. Future product adapters must persist decisions before acknowledging them.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.

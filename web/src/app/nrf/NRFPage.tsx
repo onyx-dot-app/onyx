@@ -306,7 +306,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  useChatSessionController({
+  const { queue } = useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
     firstMessage: undefined,
@@ -573,6 +573,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                queue={queue}
                 toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}

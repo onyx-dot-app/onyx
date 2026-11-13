@@ -7,13 +7,17 @@ import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
+import { useChatSessionQueue } from "@/lib/chat/hooks";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { Button } from "@opal/components";
 import {
   memberServer,
+  memberTool,
   storedMcpTool,
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
+import type { ChatState } from "@/app/app/types";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -21,8 +25,9 @@ jest.mock("@/lib/hooks", () => ({
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: null, isAdmin: false }),
 }));
+let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
-  useIncognito: () => ({ incognitoEnabled: false }),
+  useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
 }));
 jest.mock("@/providers/QueryControllerProvider", () => ({
   useQueryController: () => ({ state: { phase: "idle", appMode: "chat" } }),
@@ -102,14 +107,21 @@ const plugin: MemberPlugin = {
 function Composer({
   plugins,
   agentId = 0,
+  tools = agent.tools,
   inputBarRef,
+  chatState = "input",
+  disabled = false,
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
+  tools?: MinimalAgent["tools"];
   inputBarRef?: React.Ref<AppInputBarHandle>;
+  chatState?: ChatState;
+  disabled?: boolean;
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
+  const queue = useChatSessionQueue(false);
   return (
     <>
       <Button
@@ -124,7 +136,7 @@ function Composer({
       </output>
       <AppInputBar
         ref={inputBarRef}
-        activeAgent={{ ...agent, id: agentId }}
+        activeAgent={{ ...agent, id: agentId, tools }}
         memberPlugins={plugins}
         toolConfiguration={configuration}
         llmManager={llmManager}
@@ -133,8 +145,9 @@ function Composer({
         handleFileUpload={jest.fn()}
         deepResearchEnabled={false}
         toggleDeepResearch={jest.fn()}
-        chatState="input"
-        disabled={false}
+        chatState={chatState}
+        disabled={disabled}
+        queue={queue}
       />
     </>
   );
@@ -142,6 +155,7 @@ function Composer({
 
 beforeEach(() => {
   localStorage.clear();
+  mockIncognitoEnabled = false;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
 });
@@ -187,6 +201,22 @@ test("custom agents retain the preferred plugin pill without member metadata", a
   expect(
     screen.getByRole("button", { name: storedMcpTool.display_name })
   ).toBeVisible();
+});
+
+test("incognito greys out Deep Research and explains why", async () => {
+  mockIncognitoEnabled = true;
+  render(
+    <Composer
+      plugins={[]}
+      tools={[memberTool({ id: 1, in_code_tool_id: SEARCH_TOOL_ID })]}
+    />
+  );
+  const button = screen.getByRole("button", { name: "Deep Research" });
+  expect(button).toBeDisabled();
+  await setupUser().hover(button);
+  expect(await screen.findByRole("tooltip")).toHaveTextContent(
+    "Deep Research isn't available in incognito mode"
+  );
 });
 
 describe("restore after a failed send", () => {
@@ -239,3 +269,21 @@ describe("restore after a failed send", () => {
     expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
   });
 });
+
+test.each([
+  ["input", false, "true"],
+  ["streaming", false, "false"],
+  ["cancelling", false, "false"],
+  ["input", true, "false"],
+] as const)(
+  "the composer accepts a normal send only when idle and enabled (%s, disabled=%s)",
+  (chatState, disabled, accepts) => {
+    const { container } = render(
+      <Composer plugins={[]} chatState={chatState} disabled={disabled} />
+    );
+    expect(container.querySelector("#onyx-chat-input")).toHaveAttribute(
+      "data-accepts-send",
+      accepts
+    );
+  }
+);

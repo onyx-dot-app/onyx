@@ -20,14 +20,16 @@ from mcp.types import ImageContent, TextContent
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import InputMessageMetadata, InputSource, messages_from_steps
-from onyx.agents.runtime import Run
+from onyx.agents.models import (
+    MessageDelivery,
+    messages_from_steps,
+)
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import get_processing_stream_id
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
-from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import request_stop
+from onyx.db.chat_inputs import submit_human_message__no_commit
 from onyx.db.chat_response import read_response_steps
 from onyx.db.enums import (
     IncognitoRecordMode,
@@ -1225,45 +1227,32 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
         ]
     # The step whose tool is running when the input arrives, and the next one.
     running_step = len(steps) - 2
-    incoming = UserMessage(
-        id="steering",
-        content="Use the newer source",
-        metadata=InputMessageMetadata(source=InputSource.HUMAN),
-    )
-    arrived = threading.Event()
-    reads: list[int] = []
-
-    def receive_inputs(_store: ChatRunStore, run: Run) -> list[UserMessage]:
-        snapshot = run.snapshot()
-        step = snapshot.progress.step_index if snapshot.progress else 0
-        accepted = any(
-            message.id == incoming.id
-            for record in snapshot.steps
-            for message in record.input_messages
-        )
-        if not arrived.is_set() or accepted:
-            return []
-        reads.append(step)
-        return [incoming.model_copy()]
+    incoming = "Use the newer source"
 
     def arrive_while_the_tool_runs() -> None:
         def arrive() -> None:
             assert signals.slow_started.wait(30)
-            arrived.set()
+            # The user sends to the running response, which reads it later.
+            with Session(db_session.get_bind()) as session:
+                submit_human_message__no_commit(
+                    session,
+                    chat_session.id,
+                    message=incoming,
+                    delivery=MessageDelivery.SEND,
+                    target_response_id=None,
+                    turn_preparing=False,
+                )
+                session.commit()
             signals.slow_release.set()
 
         threading.Thread(target=arrive, daemon=True).start()
 
     llm = ChatLLM(steps, gates={running_step: arrive_while_the_tool_runs})
-    with patch.object(ChatRunStore, "receive_inputs", receive_inputs):
-        parts = send(
-            chat_session.id, user, llm, "Greet alpha slowly.", code_mode=code_mode
-        )
+    parts = send(chat_session.id, user, llm, "Greet alpha slowly.", code_mode=code_mode)
 
     assert final_answer(parts) == "Done."
     # The tool step completes before the input is read.
     assert "Slowly, alpha!" in last_tool_text(llm, "waited")
-    assert reads == [running_step + 1]
     if code_mode:
         assert [
             (cell.cell_id, cell.observation, cell.status)
@@ -1281,8 +1270,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
         .all()
     )
     assert [[saved.content for saved in item.inputs] for item in items] == [
-        ["Use the newer source"] if item.step_index == running_step + 1 else []
-        for item in items
+        [incoming] if item.step_index == running_step + 1 else [] for item in items
     ]
     history = messages_from_steps(read_response_steps(response))
     texts = [
@@ -1293,7 +1281,7 @@ def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
     [input_index] = [
         index
         for index, message in enumerate(history)
-        if isinstance(message, UserMessage) and message.text == incoming.text
+        if isinstance(message, UserMessage) and message.text == incoming
     ]
     [result_index] = [
         index

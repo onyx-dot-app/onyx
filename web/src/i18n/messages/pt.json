@@ -12490,6 +12490,21 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "A voz não está configurada. Configure nas configurações de administração."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter para enviar · Ctrl ou Command + Enter para enfileirar",
+          "multiModelHint": "Não é possível colocar mensagens na fila ao comparar modelos. Escolha um modelo para usar a fila.",
+          "attachmentsHint": "Envie os arquivos anexados após esta resposta terminar.",
+          "chooseResponseHint": "Escolha uma resposta antes de colocar uma mensagem na fila.",
+          "incognitoHint": "Aguarde a resposta terminar no chat anônimo.",
+          "sendHint": "Enviar na próxima etapa desta resposta",
+          "interruptHint": "Interromper o trabalho atual e enviar esta mensagem",
+          "sendLabel": "Enviar",
+          "queueLabel": "Fila",
+          "interruptKeyboardHint": "Enter para interromper · Ctrl ou Command + Enter para enfileirar",
+          "interruptLabel": "Interromper",
+          "waitHint": "Aguarde a resposta terminar.",
+          "ctrlKey": "Ctrl"
         }
       },
       "baseInputBar": {
@@ -12588,16 +12603,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Remover mensagem da fila"
+          "tooltip": "Remover mensagem da fila",
+          "ariaLabel": "Remover mensagem da fila: {message}"
         },
         "editHint": {
           "label": "editar ·"
         },
-        "item": {
-          "ariaLabel": "Alternar mensagem na fila"
-        },
         "removeHint": {
           "label": "remover"
+        },
+        "editButton": {
+          "tooltip": "Editar mensagem na fila",
+          "clearDraftTooltip": "Limpe seu rascunho para editar uma mensagem na fila",
+          "ariaLabel": "Editar mensagem na fila: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interromper o trabalho atual e enviar esta mensagem",
+          "ariaLabel": "Enviar agora: {message}"
+        },
+        "sendHint": {
+          "label": "enviar agora ·"
         }
       },
       "sharedAppInputBar": {
@@ -12607,6 +12632,13 @@
         "startSessionButton": {
           "label": "Iniciar nova sessão"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Não foi possível enviar a mensagem.",
+        "withdrawFailed": "Não foi possível remover a mensagem pendente.",
+        "loadFailed": "Não foi possível carregar as mensagens pendentes.",
+        "alreadyAccepted": "Esta mensagem já foi aceita e não está mais pendente.",
+        "interruptFailed": "Não foi possível enviar esta mensagem agora. Ela continua pendente."
       }
     },
     "mcpApiKey": {
@@ -16448,6 +16480,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Falha ao salvar preferências"
+      },
+      "sendBehavior": {
+        "title": "Comportamento de Envio Durante o Trabalho",
+        "description": "Escolha o que Enter e o botão de envio fazem durante uma resposta. Ctrl/Cmd+Enter sempre coloca uma mensagem na fila.",
+        "afterStep": "Após a etapa atual",
+        "interrupt": "Interromper o trabalho atual"
       }
     },
     "connectors": {

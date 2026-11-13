@@ -7,15 +7,19 @@ import {
   Placement,
 } from "@/app/app/services/streamingModels";
 
-interface AuthError {
+export interface AuthError {
+  turnIndex: number;
   toolName: string;
   toolId: number | null;
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  // Keyed on the packet array so re-renders between packet batches reuse
-  // the same result identity instead of rescanning.
-  return useMemo(() => computeAuthErrors(rawPackets), [rawPackets]);
+  // Streams append to the same array, so its length keys the result too.
+  const packetCount = rawPackets.length;
+  return useMemo(
+    () => computeAuthErrors(rawPackets.slice(0, packetCount)),
+    [rawPackets, packetCount]
+  );
 }
 
 // A tool call's start and delta packets share one placement.
@@ -29,7 +33,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
   const labels = new Map<string, string>();
   const errors: AuthError[] = [];
   // Labels can repeat across tools, so deduplicate on the tool ID or the
-  // qualified tool name.
+  // qualified tool name within each section.
   const seen = new Set<string>();
 
   for (const packet of rawPackets) {
@@ -38,6 +42,11 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
         callKey(packet.placement),
         (packet.obj as CustomToolStart).display_name
       );
+      continue;
+    }
+    // Each accepted user message starts a section with its own auth cards.
+    if (packet.obj.type === PacketType.USER_MESSAGE) {
+      seen.clear();
       continue;
     }
     if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
@@ -56,6 +65,7 @@ function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
     }
     seen.add(key);
     errors.push({
+      turnIndex: packet.placement.turn_index,
       toolName: labels.get(callKey(packet.placement)) ?? delta.tool_name,
       toolId: delta.tool_id ?? null,
     });

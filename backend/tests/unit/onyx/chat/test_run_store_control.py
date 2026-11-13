@@ -162,6 +162,6 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     clock.now = 10
     store.poll_control()
     assert checks == [store._stop_key(1), store._stop_key(2)]
-    assert renewals == [store._owner_key(1), store._owner_key(2)]
+    assert renewals == [run_store._owner_key(1), run_store._owner_key(2)]
     root.cancel.assert_not_called()
     child.cancel.assert_called_once()

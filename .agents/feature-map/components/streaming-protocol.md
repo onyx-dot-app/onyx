@@ -230,7 +230,9 @@ its background task end ([[#pure-asgi-middleware]]).
    a new block at tab 0. A call in a later model step always opens a new
    block. Calls under a parent tool always take a new
    `sub_turn_index`. Saved-session replay uses the same renderer, so a change
-   here changes reloads too.
+   here changes reloads too. An accepted human instruction gets a `user_message`
+   packet in its own section before the next model step. Its placement orders
+   the user bubble relative to assistant and tool output, both live and on replay.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
@@ -287,10 +289,22 @@ its background task end ([[#pure-asgi-middleware]]).
     buffer flush and `chat/chat_processing_checker.py:ChatTurnAdmission.release`
     finish. A streamed send in that window gets HTTP 200 with one
     `StreamingError` (`error_code` `CONFLICT`, not retryable) and no ID lines,
-    not an HTTP 409. Every client polls
+    not an HTTP 409. Clients poll
     `server/query_and_chat/chat_backend.py:get_chat_session_processing_status`
-    before it releases input or sends a queued message:
-    `web/src/lib/chat/sessionReadiness.ts:waitForChatSessionIdle`,
+    before releasing input. Web also follows `current_stream` when a queued
+    turn starts, through
+    `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
+    When the selected response is running with no owner, the endpoint
+    schedules dispatch, which saves that response as interrupted so the queue
+    can continue. `has_startable_input` is true when queued text can start a
+    turn now; a queue that Stop or a failure paused reports false. The
+    endpoint always reads the selected branch, and it reads inputs before
+    admission. A turn claims admission before it consumes
+    input, so a starting turn shows as startable input or as processing. Web
+    polls while `has_startable_input` is true, and checks `current_stream` and
+    `latest_response_id` (the newest response on the selected branch) to follow
+    queued turns, including turns that finish between polls.
+    Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and
     `widget/src/services/api-service.ts`. The CLI and widget stop with an error

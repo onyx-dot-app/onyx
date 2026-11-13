@@ -86,6 +86,12 @@ class InputMessageMetadata(BaseModel):
     content_metadata: SerializeAsAny[BaseModel] | None = None
 
 
+class MessageDelivery(str, Enum):
+    SEND = "send"
+    QUEUE = "queue"
+    INTERRUPT = "interrupt"
+
+
 class ContextBudget(BaseModel):
     input_limit: int = Field(gt=0)
     trigger: int = Field(gt=0)

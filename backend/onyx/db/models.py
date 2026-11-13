@@ -54,7 +54,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.models import ExecutionStatus, InputSource, RunFailure, RunStatus
+from onyx.agents.models import (
+    ExecutionStatus,
+    InputSource,
+    MessageDelivery,
+    RunFailure,
+    RunStatus,
+)
 from onyx.auth.schemas import UserRole
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
@@ -526,6 +532,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # Input preferences
     paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+    interrupt_on_send: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -3550,9 +3559,14 @@ class ChatSession(Base):
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
-    # The tools the user last selected; NULL means the agent's tools.
+    # The tools the user last selected. Turns the server starts use them; NULL
+    # means the agent's tools.
     tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
         PydanticType(ChatToolSelection), nullable=True
+    )
+    # When the user stopped the chat; queued turns wait until the next turn starts.
+    queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
@@ -3814,6 +3828,59 @@ class ChatResponseItem(Base):
         "ChatMessage",
         back_populates="response_items",
         foreign_keys=[chat_message_id],
+    )
+
+
+class ChatInput(Base):
+    """A pending message for a chat session; consuming it deletes the row.
+
+    A message is in exactly one place at any moment. A step that reads a
+    `send` moves it to `ChatResponseItem.inputs`; a turn that accepts any other
+    message moves it to a USER `ChatMessage`. The routing table is in
+    `.agents/feature-map/components/chat-persistence.md`.
+    """
+
+    __tablename__ = "chat_input"
+    __table_args__ = (
+        # IS TRUE: a NULL comparison makes CHECK pass, so require a true result.
+        CheckConstraint(
+            "(source = 'human' AND delivery IN ('send', 'queue', 'interrupt')) IS TRUE",
+            name="ck_chat_input_source",
+        ),
+        Index("ix_chat_input_recipient", "recipient_session_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[str] = mapped_column(String)
+    source: Mapped[InputSource] = mapped_column(
+        Enum(
+            InputSource,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
+    target_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    delivery: Mapped[MessageDelivery | None] = mapped_column(
+        Enum(
+            MessageDelivery,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    content: Mapped[str] = mapped_column(Text)
+    # A queued or interrupting human message starts its turn as Deep Research.
+    deep_research: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    # The model the composer showed when a queued or interrupting message was sent.
+    llm_override: Mapped[LLMOverride | None] = mapped_column(
+        PydanticType(LLMOverride), nullable=True
     )
 
 

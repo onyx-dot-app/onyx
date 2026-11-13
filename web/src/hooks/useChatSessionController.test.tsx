@@ -5,13 +5,15 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { BackendChatSession, Message } from "@/app/app/types";
 import {
   fetchSettledChatSession,
-  waitForChatSessionIdle,
+  waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
 import { deferred } from "@tests/setup/test-utils";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ChatSessionStatus } from "@/lib/chat/types";
 
 jest.mock("next-intl", () => ({
   ...jest.requireActual("next-intl"),
@@ -36,7 +38,7 @@ jest.mock("@/app/app/services/lib", () => ({
   resumeStream: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  waitForChatSessionIdle: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(),
 }));
 
@@ -72,10 +74,22 @@ function mountController() {
 beforeEach(() => {
   jest.mocked(processRawChatHistory).mockImplementation(() => new Map());
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
-  jest.spyOn(global, "fetch").mockResolvedValue({
-    ok: true,
-    json: async () => backendSession(true),
-  } as Response);
+  jest.spyOn(global, "fetch").mockImplementation(async (url) => {
+    const path = String(url);
+    const status: ChatSessionStatus = {
+      is_processing: true,
+      current_stream: null,
+      has_startable_input: false,
+      latest_response_id: null,
+    };
+    const body =
+      path === SWR_KEYS.pendingChatMessages("session")
+        ? []
+        : path === SWR_KEYS.chatSessionStatus("session")
+          ? status
+          : backendSession(true);
+    return new Response(JSON.stringify(body));
+  });
   jest.mocked(fetchSettledChatSession).mockResolvedValue(backendSession(false));
 });
 
@@ -85,18 +99,18 @@ afterEach(() => {
 });
 
 test("reloaded setup stays busy until execution and history are settled", async () => {
-  const idle = deferred<void>();
+  const idle = deferred<number | null>();
   const history = deferred<BackendChatSession>();
-  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
   mountController();
   await waitFor(() =>
-    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session")
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined)
   );
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("streaming");
-  await act(async () => idle.resolve());
+  await act(async () => idle.resolve(null));
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("streaming");
@@ -108,7 +122,7 @@ test("reloaded setup stays busy until execution and history are settled", async 
 
 test("failed readiness keeps sends blocked with reload instructions", async () => {
   jest.spyOn(console, "error").mockImplementation(() => {});
-  jest.mocked(waitForChatSessionIdle).mockRejectedValue(new Error("503"));
+  jest.mocked(waitForChatResponseEnd).mockRejectedValue(new Error("503"));
   mountController();
   await waitFor(() =>
     expect(
@@ -123,7 +137,7 @@ test("failed readiness keeps sends blocked with reload instructions", async () =
 
 test("a late history refresh cannot release a newer request", async () => {
   const history = deferred<BackendChatSession>();
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
   mountController();
   await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
@@ -170,9 +184,9 @@ test("a resumed save error survives a failed readiness check and retry", async (
     yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
   jest
-    .mocked(waitForChatSessionIdle)
+    .mocked(waitForChatResponseEnd)
     .mockRejectedValueOnce(new Error("503"))
-    .mockResolvedValue();
+    .mockResolvedValue(null);
   mountController();
   await waitFor(() =>
     expect(
@@ -195,7 +209,6 @@ test("a resumed save error survives a failed readiness check and retry", async (
   });
   const recovered = useChatSessionStore.getState().sessions.get("session")!;
   expect(recovered.chatState).toBe("input");
-  expect(recovered.queuedMessagesPaused).toBe(true);
   expect(recovered.messageTree.get(42)).toMatchObject({
     type: "error",
     errorMessage: "Response could not be saved",
@@ -237,7 +250,7 @@ test("a resumed stream keeps updating its session while another chat is selected
     yield { stream_id: 42, next_cursor: 1, replay_complete: true };
     await finish.promise;
   });
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   const mounted = mountController();
   await waitFor(() => expect(resumeStream).toHaveBeenCalled());
   mounted.unmount();
@@ -274,7 +287,7 @@ test("returning after a disconnected Stop releases a now-idle session", async ()
     ok: true,
     json: async () => backendSession(false),
   } as Response);
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   await waitFor(() =>
     expect(
@@ -321,14 +334,14 @@ test.each([false, true])(
       ok: true,
       json: async () => backendSession(busy),
     } as Response);
-    jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
     mountController();
     await waitFor(() =>
       expect(
         useChatSessionStore.getState().sessions.get("session")?.chatState
       ).toBe("input")
     );
-    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
     expect(
       useChatSessionStore.getState().sessions.get("session")?.messageTree
@@ -349,7 +362,7 @@ test.each([
 ])(
   "incognito recovery preserves local content (busy: $busy, aborted: $aborted)",
   async ({ busy, aborted }) => {
-    const idle = deferred<void>();
+    const idle = deferred<number | null>();
     const question: Message = {
       nodeId: -101,
       messageId: 1,
@@ -395,15 +408,15 @@ test.each([
         [2, { ...answer, nodeId: 2, parentNodeId: 1, message: "" }],
       ])
     );
-    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     mountController();
     await waitFor(() =>
-      expect(waitForChatSessionIdle).toHaveBeenCalledWith("session")
+      expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined)
     );
     expect(
       useChatSessionStore.getState().sessions.get("session")?.messageTree
     ).toEqual(localMessages);
-    await act(async () => idle.resolve());
+    await act(async () => idle.resolve(null));
     const recovered = useChatSessionStore.getState().sessions.get("session")!;
     expect(recovered.chatState).toBe("input");
     expect(recovered.messageTree.size).toBe(2);
@@ -420,7 +433,7 @@ test.each([
       ],
       packetCount: 1,
     });
-    expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
   }
 );
 
@@ -539,7 +552,7 @@ test.each([
       yield { stream_id: 42, next_cursor: 2, replay_complete: true };
       await finish.promise;
     });
-    jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
     const mounted = mountController();
     try {
       await waitFor(() =>
@@ -624,7 +637,7 @@ test("recovery replay does not mutate retained local messages", async () => {
     };
     yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   try {
     await waitFor(() => expect(resumeStream).toHaveBeenCalled());
@@ -637,7 +650,7 @@ test("recovery replay does not mutate retained local messages", async () => {
 });
 
 test("Stop targets a reloaded multi-model stream without replay", async () => {
-  const idle = deferred<void>();
+  const idle = deferred<number | null>();
   const question: Message = {
     nodeId: 41,
     messageId: 41,
@@ -671,14 +684,14 @@ test("Stop targets a reloaded multi-model stream without replay", async () => {
       current_stream: { stream_id: question.nodeId },
     }),
   } as Response);
-  jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+  jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   mountController();
-  await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+  await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
   expect(resumeStream).not.toHaveBeenCalled();
   const stopping = stopChatSession("session", "Check failed");
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=41",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );
@@ -686,7 +699,7 @@ test("Stop targets a reloaded multi-model stream without replay", async () => {
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");
   await act(async () => {
-    idle.resolve();
+    idle.resolve(null);
     await stopping;
   });
   expect(
@@ -728,17 +741,17 @@ test("Stop targets the replay response and waits for its incognito tail", async 
     };
     yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   await waitFor(() => expect(resumeStream).toHaveBeenCalled());
   const stopping = stopChatSession("session", "Check failed");
   await waitFor(() =>
     expect(global.fetch).toHaveBeenCalledWith(
-      "/api/chat/stop-chat-session/session?stream_id=42",
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     )
   );
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("cancelling");
@@ -775,10 +788,10 @@ test("reopening with an aborted owner waits for its reader before recovery", asy
     ok: true,
     json: async () => backendSession(false),
   } as Response);
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   await waitFor(() => expect(processRawChatHistory).toHaveBeenCalled());
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("unconfirmed");
@@ -839,7 +852,7 @@ test("an earlier Stop cannot release input while a replacement replay has unread
     };
     yield { stream_id: 42, next_cursor: 1, replay_complete: true };
   });
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   mountController();
   try {
     await waitFor(() => expect(resumeStream).toHaveBeenCalled());
@@ -847,7 +860,7 @@ test("an earlier Stop cannot release input while a replacement replay has unread
       oldReader.resolve();
       await stopping;
     });
-    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("cancelling");
@@ -896,7 +909,7 @@ test("restoration commits content with its cursor and retries only the retained 
     }),
   } as Response);
   jest
-    .mocked(waitForChatSessionIdle)
+    .mocked(waitForChatResponseEnd)
     .mockRejectedValueOnce(new Error("Offline"));
   jest.mocked(resumeStream).mockImplementationOnce(async function* () {
     yield {
@@ -948,7 +961,7 @@ test("restoration commits content with its cursor and retries only the retained 
     firstMount.unmount();
     boundary.resolve();
   }
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   jest.mocked(resumeStream).mockImplementationOnce(async function* () {
     yield {
       placement: { turn_index: 0, tab_index: 0 },
@@ -986,7 +999,7 @@ test.each([false, true])(
   "interrupted initial restoration retains its acknowledged prefix (network error: %s)",
   async (networkError) => {
     jest.spyOn(console, "error").mockImplementation(() => {});
-    const idle = deferred<void>();
+    const idle = deferred<number | null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
@@ -1008,7 +1021,7 @@ test.each([false, true])(
         current_stream: { stream_id: 42 },
       }),
     } as Response);
-    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     jest.mocked(resumeStream).mockImplementationOnce(async function* () {
       yield {
         placement: { turn_index: 0 },
@@ -1028,7 +1041,7 @@ test.each([false, true])(
     });
     const view = mountController();
     try {
-      await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+      await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
       const retained = useChatSessionStore
         .getState()
         .sessions.get("session")!
@@ -1043,7 +1056,7 @@ test.each([false, true])(
       expect(retained.packets.map((packet) => packet.obj)).toEqual([
         { type: "message_delta", content: "Retained answer" },
       ]);
-      await act(async () => idle.resolve());
+      await act(async () => idle.resolve(null));
       const settled = useChatSessionStore.getState().sessions.get("session")!;
       expect(settled.chatState).toBe("input");
       expect(
@@ -1053,7 +1066,7 @@ test.each([false, true])(
         { type: "stop" },
       ]);
     } finally {
-      await act(async () => idle.resolve());
+      await act(async () => idle.resolve(null));
       view.unmount();
     }
   }
@@ -1062,7 +1075,7 @@ test.each([false, true])(
 test.each([false, true])(
   "incognito failures close existing display content only after confirmed idle (content: %s)",
   async (hasContent) => {
-    const idle = deferred<void>();
+    const idle = deferred<number | null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
@@ -1084,7 +1097,7 @@ test.each([false, true])(
         current_stream: { stream_id: 42 },
       }),
     } as Response);
-    jest.mocked(waitForChatSessionIdle).mockReturnValue(idle.promise);
+    jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     jest.mocked(resumeStream).mockImplementationOnce(async function* () {
       if (hasContent)
         yield {
@@ -1101,7 +1114,7 @@ test.each([false, true])(
     });
     const view = mountController();
     try {
-      await waitFor(() => expect(waitForChatSessionIdle).toHaveBeenCalled());
+      await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
       const before = useChatSessionStore.getState().sessions.get("session")!;
       expect(before.chatState).toBe("streaming");
       expect(
@@ -1109,7 +1122,7 @@ test.each([false, true])(
           .get(42)
           ?.packets.some((packet) => packet.obj.type === "stop")
       ).toBe(false);
-      await act(async () => idle.resolve());
+      await act(async () => idle.resolve(null));
       const after = useChatSessionStore.getState().sessions.get("session")!;
       expect(after.chatState).toBe("input");
       expect(after.messageTree.get(42)).toMatchObject({
@@ -1129,7 +1142,7 @@ test.each([false, true])(
         expect(after.messageTree.get(42)?.packets).toEqual([]);
       }
     } finally {
-      await act(async () => idle.resolve());
+      await act(async () => idle.resolve(null));
       view.unmount();
     }
   }

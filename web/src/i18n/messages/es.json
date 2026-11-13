@@ -12490,6 +12490,21 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "La voz no está configurada. Actívala en la configuración de administración."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter para enviar · Ctrl o Command + Enter para poner en cola",
+          "multiModelHint": "No se pueden poner mensajes en cola al comparar modelos. Elige un modelo para usar la cola.",
+          "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
+          "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
+          "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito.",
+          "sendHint": "Enviar en el siguiente paso de esta respuesta",
+          "interruptHint": "Interrumpir el trabajo actual y enviar este mensaje",
+          "sendLabel": "Enviar",
+          "queueLabel": "En cola",
+          "interruptKeyboardHint": "Enter para interrumpir · Ctrl o Command + Enter para poner en cola",
+          "interruptLabel": "Interrumpir",
+          "waitHint": "Espera a que termine la respuesta.",
+          "ctrlKey": "Ctrl"
         }
       },
       "baseInputBar": {
@@ -12588,16 +12603,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Quitar mensaje en cola"
+          "tooltip": "Quitar mensaje en cola",
+          "ariaLabel": "Quitar mensaje en cola: {message}"
         },
         "editHint": {
           "label": "editar ·"
         },
-        "item": {
-          "ariaLabel": "Alternar mensaje en cola"
-        },
         "removeHint": {
           "label": "quitar"
+        },
+        "editButton": {
+          "tooltip": "Editar mensaje en cola",
+          "clearDraftTooltip": "Borra tu borrador para editar un mensaje en cola",
+          "ariaLabel": "Editar mensaje en cola: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrumpir el trabajo actual y enviar este mensaje",
+          "ariaLabel": "Enviar ahora: {message}"
+        },
+        "sendHint": {
+          "label": "enviar ahora ·"
         }
       },
       "sharedAppInputBar": {
@@ -12607,6 +12632,13 @@
         "startSessionButton": {
           "label": "Iniciar nueva sesión"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "No se pudo enviar el mensaje.",
+        "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
+        "loadFailed": "No se pudieron cargar los mensajes pendientes.",
+        "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
+        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente."
       }
     },
     "mcpApiKey": {
@@ -16448,6 +16480,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "No se pudieron guardar las preferencias"
+      },
+      "sendBehavior": {
+        "title": "Comportamiento de Envío Durante el Trabajo",
+        "description": "Elige qué hacen Enter y el botón de envío durante una respuesta. Ctrl/Cmd+Enter siempre pone el mensaje en cola.",
+        "afterStep": "Después del paso actual",
+        "interrupt": "Interrumpir el trabajo actual"
       }
     },
     "connectors": {

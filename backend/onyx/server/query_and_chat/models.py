@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
 from onyx.db.enums import ChatSessionSharedStatus
@@ -189,6 +189,47 @@ class ChatMessageIdentifier(BaseModel):
     message_id: int
 
 
+class PendingChatMessageRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    message: str
+    delivery: MessageDelivery = Field(
+        description=(
+            "send adds input at the next step; queue waits for normal completion; "
+            "interrupt stops current work and starts a new turn."
+        )
+    )
+    target_response_id: int | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "The response that receives a send. Omit to use the current response."
+        ),
+    )
+    deep_research: bool = Field(
+        default=False,
+        description=(
+            "Start the message's turn as Deep Research when it is queued or "
+            "interrupts. A send into a running response ignores it."
+        ),
+    )
+    llm_override: LLMOverride | None = Field(
+        default=None,
+        description=(
+            "The model that a queued or interrupting message's turn uses. Omit it "
+            "to use the chat's saved model. A send into a running response "
+            "ignores it."
+        ),
+    )
+
+    @field_validator("message")
+    @classmethod
+    def require_message_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("A pending message must contain text")
+        return value
+
+
 class ChatRenameRequest(BaseModel):
     chat_session_id: UUID
     name: str | None = None
@@ -289,6 +330,11 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
+    # Queued input can start a turn now; a paused queue cannot.
+    has_startable_input: bool = False
+    # The newest response on the selected branch.
+    latest_response_id: int | None = None
+    current_stream: CurrentStreamInfo | None = None
 
 
 class ChatSessionDetailResponse(BaseModel):

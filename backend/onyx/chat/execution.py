@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Callable
 from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
@@ -46,7 +47,9 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_inputs import pause_chat_queue__no_commit
 from onyx.db.chat_subagents import load_chat_branch
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import User
 from onyx.deep_research.agent import DeepResearchAgent
@@ -100,6 +103,7 @@ def start_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
+    dispatch_pending_messages: Callable[[], None] | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -130,6 +134,7 @@ def start_chat_turn(
             response_future,
             stream_buffer,
             query_observation=query_observation,
+            dispatch_pending_messages=dispatch_pending_messages,
         )
         startup_error: Exception | None = None
         try:
@@ -198,11 +203,13 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
+        dispatch_pending_messages: Callable[[], None] | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
         self.delivery = ChatDelivery(stream_buffer, query_observation=query_observation)
         self._query_observation = query_observation
+        self._dispatch_pending_messages = dispatch_pending_messages
         self._stores: list[ChatRunStore] = []
         self.cancellation = CancellationSignal()
         self._response_future = response_future
@@ -214,6 +221,7 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._stopped_by_user = False
+        self._admission_released = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
         self._response_stops: dict[int, OverallStop] = {}
@@ -230,28 +238,27 @@ class ChatTurnExecution:
         if self._response_future is not None:
             self._response_future.set_exception(error)
 
-        def clear_status() -> None:
+        def clear_status_then_finish() -> None:
+            # The chat is released before its stream ends, so a client that sees
+            # the end can send again at once.
             try:
                 self._clear_processing_status()
             finally:
-                chat_turn_work.finished()
-
-        def delivery_finished(_future: Future[None]) -> None:
-            try:
-                start_thread_future(
-                    clear_status, name="chat-status-cleanup", daemon=False
-                )
-            except Exception:
-                logger.exception(
-                    "Rejected chat processing status cleanup could not start"
-                )
-                clear_status()
+                try:
+                    self.delivery.finish()
+                finally:
+                    self.delivery.finished.add_done_callback(
+                        lambda _future: chat_turn_work.finished()
+                    )
 
         # No control thread exists to observe cleanup for a rejected turn.
         try:
-            self.delivery.finish()
-        finally:
-            self.delivery.finished.add_done_callback(delivery_finished)
+            start_thread_future(
+                clear_status_then_finish, name="chat-status-cleanup", daemon=False
+            )
+        except Exception:
+            logger.exception("Rejected chat processing status cleanup could not start")
+            clear_status_then_finish()
 
     def _publish(self, packet: Packet) -> None:
         if not self.cancellation.cancelled:
@@ -329,8 +336,12 @@ class ChatTurnExecution:
                 logger.exception("Chat response polling failed; draining active work")
             with self._lock:
                 stores = tuple(self._stores)
-            if not self._response_workers and not any(
-                store.has_owned_work for store in stores
+            if (
+                not self._response_workers
+                and not any(store.has_owned_work for store in stores)
+                # Saves have drained; release the chat before the stream ends,
+                # so a client that sees the end can send again at once.
+                and (self._admission_released or self._clear_processing_status())
             ):
                 if not self.delivery.is_closing:
                     stop = self._turn_stop()
@@ -350,7 +361,7 @@ class ChatTurnExecution:
                                 )
                             )
                     self.delivery.finish()
-                if self.delivery.finished.done() and self._clear_processing_status():
+                if self.delivery.finished.done():
                     return
             self._completion_changed.wait(_CANCEL_POLL_INTERVAL_S)
 
@@ -404,12 +415,35 @@ class ChatTurnExecution:
             del self._response_workers[worker]
 
     def _clear_processing_status(self) -> bool:
+        def save_late_stop() -> None:
+            # A Stop of this turn, even after its answer finished, pauses the queue.
+            if not (
+                self._stopped_by_user
+                or is_stop_requested(
+                    self.setup.chat_session_id,
+                    self.setup.admission.cache,
+                    stream_id=self.setup.stream_id,
+                )
+            ):
+                return
+            self._stopped_by_user = True
+            with get_session_with_current_tenant() as session:
+                pause_chat_queue__no_commit(session, self.setup.chat_session_id)
+                session.commit()
+
         try:
-            self.setup.admission.release()
-            return True
+            self.setup.admission.release(settle=save_late_stop)
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return False
+        self._admission_released = True
+        if self._dispatch_pending_messages is not None:
+            # Start queued input once the chat is idle.
+            try:
+                self._dispatch_pending_messages()
+            except Exception:
+                logger.exception("Could not dispatch queued chat input")
+        return True
 
     def _run_response(
         self,
@@ -671,13 +705,16 @@ def create_chat_agent(
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
 
-        if setup.preferred_tool_id is not None and setup.preferred_tool_id not in {
+        preferred_tool_id = setup.preferred_tool_id
+        if preferred_tool_id is not None and preferred_tool_id not in {
             tool.id for tool in tools
         }:
-            raise OnyxError(
-                OnyxErrorCode.BAD_REQUEST,
-                f"Preferred tool {setup.preferred_tool_id} not found in tools",
-            )
+            if not setup.preferred_tool_saved:
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    f"Preferred tool {preferred_tool_id} not found in tools",
+                )
+            preferred_tool_id = None
 
         agent_id = str(setup.chat_session_id)
 
@@ -726,7 +763,7 @@ def create_chat_agent(
             user_memory_context=setup.user_memory_context,
             llm=llm,
             token_counter=get_llm_token_counter(llm),
-            preferred_tool_id=setup.preferred_tool_id,
+            preferred_tool_id=preferred_tool_id,
             user_identity=setup.user_identity,
             chat_files=setup.chat_files_for_tools,
             reasoning_effort=setup.reasoning_effort,

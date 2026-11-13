@@ -1291,15 +1291,15 @@ class TestRunModels:
             _wait_for_stop()
 
         setup = _make_setup(n_models=2)
-        setup.cache.exists.return_value = True
-        model_1_persisted = threading.Event()
+        failed_model_persisted = threading.Event()
+        setup.cache.exists.side_effect = lambda *_: failed_model_persisted.is_set()
 
         with (
             patch_execution(side_effect=fail_model_0),
             patch("onyx.chat.execution.construct_tools", return_value={}),
             patch(
                 "onyx.chat.history_store.save_chat_response_to_db",
-                side_effect=lambda *_, **__: model_1_persisted.set(),
+                side_effect=lambda *_, **__: failed_model_persisted.set(),
             ) as mock_handle,
             patch(
                 "onyx.chat.execution.get_llm_token_counter",
@@ -1307,7 +1307,7 @@ class TestRunModels:
             ),
         ):
             _collect_chat_turn(setup)
-            assert model_1_persisted.wait(timeout=5)
+            assert failed_model_persisted.wait(timeout=5)
             assert mock_handle.call_count == 2
 
         persisted = {
@@ -1459,6 +1459,7 @@ def _mock_settings() -> Generator[None, None, None]:
             return_value=[],
         ),
         patch("onyx.chat.execution.get_cache_backend"),
+        patch("onyx.chat.execution.get_session_with_current_tenant"),
         patch("onyx.chat.execution.ChatRunStore", side_effect=run_store),
     ):
         yield
@@ -2480,7 +2481,7 @@ def test_rejected_turn_finishes_when_cleanup_worker_cannot_start(
     with (
         patch("onyx.chat.execution.start_thread_future", side_effect=start_job),
         patch.object(
-            turn.setup.admission, "release", side_effect=released.set
+            turn.setup.admission, "release", side_effect=lambda **_: released.set()
         ) as release_admission,
         patch("onyx.chat.history_store.save_chat_response_to_db") as save,
     ):
@@ -2523,7 +2524,7 @@ def test_rejection_returns_while_processing_status_cleanup_is_blocked(
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
         ThreadPoolExecutor(max_workers=1) as executor,
     ):
@@ -2833,7 +2834,7 @@ def test_processing_marker_clears_after_inflight_refresh() -> None:
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
     ):
         control = start_thread_future(turn.run, name="test-chat-control")
@@ -2958,7 +2959,7 @@ def test_save_timeout_retains_processing_status_until_worker_drains(
         patch.object(
             turn.setup.admission,
             "release",
-            side_effect=lambda: processing_status(value=False),
+            side_effect=lambda **_: processing_status(value=False),
         ),
     ):
         _launch_turn(turn)
@@ -3185,7 +3186,7 @@ def test_stream_start_failure_releases_admission_once(construction_fails: bool) 
     setup = _make_setup()
 
     released = threading.Event()
-    setup.admission.release.side_effect = released.set
+    setup.admission.release.side_effect = lambda **_: released.set()
     constructor = (
         patch(
             "onyx.chat.execution.ChatTurnExecution", side_effect=RuntimeError("failed")
@@ -3483,6 +3484,7 @@ def test_a_run_that_ends_at_the_deadline_but_saves_past_the_backstop_stops_once(
 def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup = _make_setup(n_models=1)
     setup.preferred_tool_id = 1
+    setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:
             create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)

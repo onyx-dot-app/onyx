@@ -78,11 +78,11 @@ availability and the record mode; this component applies them.
 
 ```
 prepare_chat_turn                          chat/process_message.py
-  create_new_chat_message (user row)       commits at once; survives a failed answer
-  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, before reservation
+  create_new_chat_message (user row)       commits in one transaction with
   reserve_chat_response_ids                db/chat.py: assistant row(s), placeholder
-                                           text, response_status NULL, committed;
-                                           moves the parent's active pointer to it
+                                           text, response_status NULL; moves the
+                                           parent's active pointer to it
+  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, after reservation
 ChatRunStore (content-persisting only)     chat/run_store.py; each save commits alone
   register (run start)                     save_response_record__no_commit: RUNNING,
                                            no steps yet
@@ -161,9 +161,41 @@ the assistant's call order, not completion order. `tool_id`, `tab_index` and
 **Replay.** Neither path re-runs anything. A runtime response replays through
 `chat/presentation.py:replay_response`, which uses the same message and tool
 renderers as the live stream and reads typed results, not the tool catalog.
-`ChatResponseItem.inputs` is the typed list of messages that a step accepted
-before its generation, with their identity and source. Reconstructed history
-places them before that step's assistant message.
+`ChatInput` is the inbox of pending human messages. Each message is in exactly
+one place at any moment. The delivery and the reader decide its path:
+
+| Message | Path |
+| --- | --- |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction |
+| `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
+
+A step deletes the rows it accepts (`db/chat_inputs.py:consume_inputs__no_commit`)
+in the transaction that writes `ChatResponseItem.inputs`, the typed list of
+accepted messages, with their identity and source. Starting a new turn moves
+its queued text into the question tree in the same transaction.
+The runtime records an input only after its acceptance transaction commits.
+Live and saved rendering emit accepted human inputs as `user_message` packets
+before the model step that consumed them. This preserves their display order.
+Main Chat accepts text without attachments or request headers. A queued or
+interrupting message keeps its Deep Research choice (`chat_input.deep_research`)
+and the model the picker showed (`chat_input.llm_override`). The human queue belongs to the
+session: only a `send` row targets a response, and a `send` that its run never
+reads waits like queued input. Withdrawing pending text uses the
+same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
+to `interrupt` changes that same row and requests the turn's Stop.
+Acceptance rechecks delivery so input already read by a runner cannot bypass a
+concurrent promotion. `db/chat_inputs.py:next_queued_turn` reads the next root
+turn and `accept_queued_turn__no_commit` consumes it with the user-message
+insert under the session lock. A branch whose tip is a question, not a
+response, is not ready for a queued turn. Interrupts take priority and may start after
+any terminal response; ordinary queued turns wait while Stop paused the queue
+(`chat_session.queue_paused_at`) or the latest response failed
+(`db/chat_inputs.py:can_start_input`).
+Inbox writers lock the session before the response. The session lock
+uses `NO KEY UPDATE` so response and tool foreign-key checks can proceed.
+Pending text is limited to `db/chat_inputs.py:MAX_PENDING_MESSAGE_BYTES` per
+message. The source check uses `IS TRUE`, so a row with a NULL required field
+fails it.
 Search documents and `tool_id` come from the `ToolCall` rows and their search-doc
 links (`db/chat_response.py:read_response_replay_data`), not from the typed
 result: the saved `SearchDocsResponse` holds no documents. Only
@@ -280,13 +312,19 @@ Community downgrade clears it ([[billing]]).
    checkpoint row in the same transaction; a direct caller of `save_chat_turn`
    does not. Do not commit in the middle. The earlier saves
    (`save_response_record__no_commit`) commit on their own, and happen only at
-   run start (no steps), before each sub-agent starts (the root's steps so
-   far), and when a sub-agent run ends. A crashed root run keeps its steps only
-   up to its last sub-agent start, under a `RUNNING` status.
+   run start (no steps), when a step accepts pending human input
+   (`chat/run_store.py:ChatRunStore.accept_inputs` saves the steps so far plus
+   the accepting step, in the transaction that consumes the inbox rows), before
+   each sub-agent starts (the root's steps so far), and when a sub-agent run
+   ends. A crashed root run keeps its steps only up to the latest of these
+   saves, under a `RUNNING` status, so accepted input survives a crash and is
+   not delivered again.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
-   run reads it as a sub-agent. Nothing repairs a root response left
-   `RUNNING`; a reload replays it as is.
+   run reads it as a sub-agent. A root response left `RUNNING` is repaired
+   only in a conversation with an inbox row: dispatch saves it as `ERROR`
+   (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
+   Otherwise a reload replays it as is.
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup
