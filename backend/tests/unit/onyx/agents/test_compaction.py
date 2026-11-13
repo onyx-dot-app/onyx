@@ -26,6 +26,8 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunState,
     RunStatus,
@@ -966,6 +968,39 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     assert reloaded.state.messages[: len(history)] == history
 
 
+def test_truncation_preserves_the_user_task_before_a_received_input() -> None:
+    source: list[Message] = [
+        SystemMessage(id="system", content="Keep the system instructions."),
+        UserMessage(id="task", content=TASK),
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 1000)]
+        ),
+        UserMessage(
+            id="steering",
+            content="Focus on the newest findings",
+            metadata=InputMessageMetadata(source=InputSource.HUMAN),
+        ),
+    ]
+    expected = [source[0], source[1], source[3]]
+    input_limit = request_tokens(GenerationRequest(messages=expected))
+    checkpoint, request, size = _truncate_context(
+        CancellationSignal(),
+        source,
+        PreparedStep(),
+        token_counts={},
+        input_limit=input_limit,
+        original_size=request_tokens(GenerationRequest(messages=source)),
+        input_start=1,
+    )
+    assert [message.text for message in request.messages] == [
+        message.text for message in expected
+    ]
+    assert [message.text for message in request.messages] == [
+        message.text for message in working_messages(source, checkpoint, input_start=1)
+    ]
+    assert size == input_limit
+
+
 def test_truncation_validates_boundaries_once_across_candidates() -> None:
     history: list[Message] = [
         SystemMessage(id="system", content="Keep the system instructions."),
@@ -1294,3 +1329,30 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
     ends = [e for e in events if e.type == "message_end"]
     assert len(ends) == 1
     assert ends[0].message == state.steps[0].message
+
+
+@pytest.mark.parametrize("input_start", [None, 0])
+@pytest.mark.parametrize("covered_index", [1, 2, 3])
+def test_compaction_retains_the_user_task_instead_of_a_received_input(
+    input_start: int | None, covered_index: int
+) -> None:
+    messages: list[Message] = [
+        UserMessage(id="question", content="Compare the findings."),
+        AssistantMessage(id="first-answer", content=[TextContent(text="Working")]),
+        UserMessage(
+            id="steering",
+            content="Focus on the newest findings",
+            metadata=InputMessageMetadata(source=InputSource.HUMAN),
+        ),
+        AssistantMessage(id="second-answer", content=[TextContent(text="Comparison")]),
+    ]
+    covered_id = messages[covered_index].id
+    assert covered_id is not None
+    checkpoint = CompactionCheckpoint(
+        summary="Research progress", covered_through_message_id=covered_id
+    )
+    assert working_messages(messages, checkpoint, input_start=input_start) == [
+        SystemMessage(content="Conversation summary:\nResearch progress"),
+        messages[0],
+        *messages[covered_index + 1 :],
+    ]

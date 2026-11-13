@@ -23,6 +23,7 @@ from onyx.agents.compaction import (
     context_budget,
     count_tokens,
     history_boundaries,
+    messages_after_compaction,
     request_tokens,
     working_messages,
 )
@@ -55,6 +56,7 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     ExecutionRequest,
     ExecutionStatus,
+    InputMessageMetadata,
     PreparedStep,
     ReleaseFailed,
     RunAction,
@@ -106,7 +108,6 @@ from onyx.llm.models import (
     GenerationRequest,
     Message,
     NamedToolChoice,
-    SystemMessage,
     ToolCall,
     ToolChoiceOptions,
     ToolDefinition,
@@ -1509,6 +1510,10 @@ def _advance_loop(
             step = AgentStep(index=progress.step_index, limit=max_steps)
             prepare = run._prepare_step
             prepared = run._defaults
+            ownership = (
+                run.coordination.coordinator.ownership if run.coordination else None
+            )
+            received = ownership.receive_inputs(run) if ownership is not None else []
             if prepare is not None:
                 previous = (
                     _step_result(
@@ -1525,10 +1530,14 @@ def _advance_loop(
                     messages=run._state.messages,
                     step=step,
                     previous=previous,
+                    received_inputs=received,
                 ).model_copy(deep=True)
                 prepared = prepare(decision)
                 cancellation_signal.check()
-            _advance_step(run, llm, prepared, step)
+            if prepared.input_messages is None:
+                prepared = prepared.model_copy(update={"input_messages": received})
+            if not _advance_step(run, llm, prepared, step):
+                continue
         if progress.action == RunAction.TOOLS:
             if not _execute_tools(run):
                 return RunStatus.SUSPENDED
@@ -1576,7 +1585,13 @@ def _resolve_step_tools(
     return phase_tools, prepared
 
 
-def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -> None:
+def _advance_step(
+    run: Run,
+    llm: LLM,
+    prepared: PreparedStep,
+    step: AgentStep,
+) -> bool:
+    """Record the step and generate; return False when another owner took its input."""
     cancellation_signal = run.cancellation_signal
     phase_tools, prepared = _resolve_step_tools(run, prepared)
     allowed = prepared.allowed_tool_names
@@ -1597,7 +1612,32 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             or run._generation_context.stall_timeout_s,
         }
     )
-    source = [*run._history.messages, *run._state.input_messages, *run._state.messages]
+    # Compaction tells the task question from later input by this metadata.
+    if any(
+        not isinstance(message.metadata, InputMessageMetadata)
+        for message in prepared.input_messages or []
+    ):
+        raise ValueError("Between-step input needs InputMessageMetadata")
+    inputs = [
+        message.model_copy(
+            deep=True,
+            update={
+                "id": message.id or f"{run.id}:{step.index}:input:{index}",
+                # History keeps provenance only; content metadata served preparation.
+                "metadata": message.metadata.model_copy(
+                    update={"content_metadata": None}
+                ),
+            },
+        )
+        for index, message in enumerate(prepared.input_messages or [])
+        if isinstance(message.metadata, InputMessageMetadata)
+    ]
+    source = [
+        *run._history.messages,
+        *run._state.input_messages,
+        *run._state.messages,
+        *inputs,
+    ]
     call_ids = run._tool_call_ids
     if call_ids is None:
         call_ids = run._tool_call_ids = {
@@ -1608,20 +1648,25 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         }
     # Compaction can leave calls out of the request; new calls must not reuse them.
     reserved = frozenset(call_ids)
-    request = _compact_context(
-        run, llm, source, prepared, generation_context, tools=definitions
-    ).model_copy(update={"reserved_tool_call_ids": reserved})
-    execution_options = request.options.model_copy(deep=True)
+    request = (
+        _compact_context(
+            run, llm, source, prepared, generation_context, tools=definitions
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
+        if not inputs
+        else None
+    )
     message_id = f"{run._state.run_id}:{step.index}"
     started = MessageStartEvent(
         message_id=message_id,
         **run.event_context,
         step_index=step.index,
         metadata=prepared.output_metadata,
+        input_messages=inputs,
     )
     with run.execution_lock:
         cancellation_signal.check()
         recorded_step = StepRecord(
+            input_messages=inputs,
             message=AssistantMessage(
                 id=message_id,
                 metadata=prepared.output_metadata.model_copy(deep=True)
@@ -1630,9 +1675,22 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
             ),
             generation_status=ExecutionStatus.RUNNING,
         )
+        ownership = run.coordination.coordinator.ownership if run.coordination else None
+        if (
+            ownership is not None
+            and inputs
+            and not ownership.accept_inputs(run, recorded_step)
+        ):
+            return False
         run._state.steps.append(recorded_step)
         if run.event_delivery:
             run.event_delivery.publish(started)
+
+    if request is None:
+        request = _compact_context(
+            run, llm, source, prepared, generation_context, tools=definitions
+        ).model_copy(update={"reserved_tool_call_ids": reserved})
+    execution_options = request.options.model_copy(deep=True)
 
     timeout = generation_context.total_timeout_s
     deadline = time.monotonic() + min(
@@ -1734,6 +1792,7 @@ def _advance_step(run: Run, llm: LLM, prepared: PreparedStep, step: AgentStep) -
         run._progress.allowed_tool_names = allowed
         run._progress.action = RunAction.TOOLS
         run._state.revision += 1
+    return True
 
 
 def _compact_context(
@@ -1828,10 +1887,7 @@ def _truncate_context(
 ) -> tuple[CompactionCheckpoint, GenerationRequest, int]:
     """Find the first smaller request that fits after removing older turns."""
     boundaries = set(history_boundaries(source, input_start=input_start))
-    system_messages: list[Message] = []
     for index, message in enumerate(source):
-        if isinstance(message, SystemMessage):
-            system_messages.append(message)
         if not isinstance(message, UserMessage) or index not in boundaries:
             continue
         cutoff_message_id = source[index - 1].id
@@ -1842,9 +1898,8 @@ def _truncate_context(
             covered_through_message_id=cutoff_message_id,
         )
         cancellation_signal.check()
-        # Each cutoff starts a user turn, so the suffix retains the current task.
         candidate_request = prepared.generation_request(
-            [*system_messages, *source[index:]], tools=tools
+            messages_after_compaction(source, index, summary=""), tools=tools
         )
         cancellation_signal.check()
         candidate_size = request_tokens(candidate_request, token_counts)
@@ -1888,6 +1943,7 @@ def _execute_tools(run: Run) -> bool:
         *run._history.messages,
         *run._state.input_messages,
         *messages_from_steps(run._state.steps[: progress.step_index]),
+        *run._state.steps[progress.step_index].input_messages,
     ]
     batch = ToolBatch(
         run,
@@ -1935,9 +1991,14 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
+    ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
-        if not should_continue or progress.step_index + 1 >= progress.step_limit:
+        can_continue = progress.step_index + 1 < progress.step_limit
+        if not should_continue and can_continue and ownership is not None:
+            # Unread messages continue the run while steps remain.
+            should_continue = ownership.has_unread_inputs(run)
+        if not should_continue or not can_continue:
             progress.outcome = (
                 RunStatus.LIMIT if should_continue else RunStatus.COMPLETE
             )

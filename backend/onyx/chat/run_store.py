@@ -19,6 +19,7 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     RunState,
     RunStatus,
+    StepRecord,
 )
 from onyx.agents.runtime import Agent, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
@@ -216,6 +217,16 @@ class ChatRunStore(RunStore, RunOwnership):
 
     def discovery(self) -> list[AgentInfo]:
         return self._with_tenant(lambda: load_session_agent_metadata(self.response_id))
+
+    def receive_inputs(self, run: Run) -> list[UserMessage]:  # noqa: ARG002
+        """Chat sends no input to a running response."""
+        return []
+
+    def accept_inputs(self, run: Run, step: StepRecord) -> bool:  # noqa: ARG002
+        return True
+
+    def has_unread_inputs(self, run: Run) -> bool:  # noqa: ARG002
+        return False
 
     def read_run(self, run_id: str, parent_id: str) -> RunState | None:
         if not run_id.isdecimal():

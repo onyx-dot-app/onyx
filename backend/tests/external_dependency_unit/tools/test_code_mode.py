@@ -20,11 +20,15 @@ from mcp.types import ImageContent, TextContent
 from pydantic import BaseModel, JsonValue
 from sqlalchemy.orm import Session
 
+from onyx.agents.models import InputMessageMetadata, InputSource, messages_from_steps
+from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import get_processing_stream_id
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.stop_signal_checker import request_stop
+from onyx.db.chat_response import read_response_steps
 from onyx.db.enums import (
     IncognitoRecordMode,
     MCPAuthenticationPerformer,
@@ -32,15 +36,17 @@ from onyx.db.enums import (
     MCPTransport,
 )
 from onyx.db.mcp import create_mcp_server__no_commit
-from onyx.db.models import Persona, Tool, ToolCall, User
+from onyx.db.models import ChatMessage, ChatResponseItem, Persona, Tool, ToolCall, User
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
     ResponseFunctionCall,
 )
+from onyx.llm.models import AssistantMessage, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.chat_backend import get_chat_session
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
+    MessageResponseIDInfo,
 )
 from onyx.server.query_and_chat.streaming_models import (
     CodeModeDelta,
@@ -1178,3 +1184,122 @@ def test_a_program_receives_the_structured_result_of_an_mcp_tool(
         "Forecasted."
     )
     assert "dict Oslo 22" in last_tool_text(llm, "code")
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_input_sent_during_a_tool_step_is_read_at_the_next_step(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    mcp_server_url: str,
+    signals: ServerSignals,
+    code_mode: bool,
+) -> None:
+    """An input that arrives while a tool runs waits for the next step boundary.
+
+    In code mode it arrives while `wait_code` waits for a yielded program.
+    """
+    user = make_test_user("code_mode_step_input_user")
+    persona, namespace = _persona_with_mcp_tool(
+        db_session, user, mcp_server_url, tool_names=("slow",)
+    )
+    chat_session = create_chat_session_from_request(
+        chat_session_request=ChatSessionCreationRequest(persona_id=persona.id),
+        user=user,
+        db_session=db_session,
+    )
+    if code_mode:
+        steps = [
+            code_step(
+                "start",
+                "yield_control()\n"
+                f"reply = await {namespace}__slow(name='alpha')\n"
+                "print(reply['result'])\n",
+            ),
+            wait_step("waited", 1),
+            Delta(content="Done."),
+        ]
+    else:
+        steps = [
+            tool_step(f"{namespace}__slow", "waited", {"name": "alpha"}),
+            Delta(content="Done."),
+        ]
+    # The step whose tool is running when the input arrives, and the next one.
+    running_step = len(steps) - 2
+    incoming = UserMessage(
+        id="steering",
+        content="Use the newer source",
+        metadata=InputMessageMetadata(source=InputSource.HUMAN),
+    )
+    arrived = threading.Event()
+    reads: list[int] = []
+
+    def receive_inputs(_store: ChatRunStore, run: Run) -> list[UserMessage]:
+        snapshot = run.snapshot()
+        step = snapshot.progress.step_index if snapshot.progress else 0
+        accepted = any(
+            message.id == incoming.id
+            for record in snapshot.steps
+            for message in record.input_messages
+        )
+        if not arrived.is_set() or accepted:
+            return []
+        reads.append(step)
+        return [incoming.model_copy()]
+
+    def arrive_while_the_tool_runs() -> None:
+        def arrive() -> None:
+            assert signals.slow_started.wait(30)
+            arrived.set()
+            signals.slow_release.set()
+
+        threading.Thread(target=arrive, daemon=True).start()
+
+    llm = ChatLLM(steps, gates={running_step: arrive_while_the_tool_runs})
+    with patch.object(ChatRunStore, "receive_inputs", receive_inputs):
+        parts = send(
+            chat_session.id, user, llm, "Greet alpha slowly.", code_mode=code_mode
+        )
+
+    assert final_answer(parts) == "Done."
+    # The tool step completes before the input is read.
+    assert "Slowly, alpha!" in last_tool_text(llm, "waited")
+    assert reads == [running_step + 1]
+    if code_mode:
+        assert [
+            (cell.cell_id, cell.observation, cell.status)
+            for cell in saved_cells(db_session, chat_session.id)
+        ] == [(1, 0, "running"), (1, 1, "completed")]
+
+    [ids] = [part for part in parts if isinstance(part, MessageResponseIDInfo)]
+    db_session.expire_all()
+    response = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
+    assert response is not None
+    items = (
+        db_session.query(ChatResponseItem)
+        .filter(ChatResponseItem.chat_message_id == response.id)
+        .order_by(ChatResponseItem.step_index)
+        .all()
+    )
+    assert [[saved.content for saved in item.inputs] for item in items] == [
+        ["Use the newer source"] if item.step_index == running_step + 1 else []
+        for item in items
+    ]
+    history = messages_from_steps(read_response_steps(response))
+    texts = [
+        (type(message).__name__, message.text)
+        for message in history
+        if isinstance(message, (ToolResultMessage, UserMessage, AssistantMessage))
+    ]
+    [input_index] = [
+        index
+        for index, message in enumerate(history)
+        if isinstance(message, UserMessage) and message.text == incoming.text
+    ]
+    [result_index] = [
+        index
+        for index, message in enumerate(history)
+        if isinstance(message, ToolResultMessage) and message.tool_call_id == "waited"
+    ]
+    assert result_index < input_index, texts
+    assert isinstance(history[input_index + 1], AssistantMessage), texts
+    assert history[input_index + 1].text == "Done."

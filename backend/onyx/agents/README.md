@@ -152,6 +152,14 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
+`StepInput.received_inputs` contains submitted instructions that `RunOwnership.receive_inputs` read for this run.
+The runtime accepts them before the next model call, including when no preparation callback exists.
+A feature can return `PreparedStep.input_messages` to transform their content.
+Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
+Each input needs `InputMessageMetadata`; the runtime rejects untagged input, because compaction keeps the latest untagged user message as the task.
+`InputMessageMetadata.content_metadata` reaches preparation only; accepted history keeps the source and source run.
+Acceptance belongs to `RunOwnership.accept_inputs`; if it declines, the runtime prepares the step again.
+When the model gives no further tool calls, `RunOwnership.has_unread_inputs` decides whether unread input continues the run while steps remain.
 The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
@@ -405,13 +413,13 @@ Partial tool updates are transient. Saved history contains accepted tool results
 A `RunState` is available at any moment — mid-run, after failure, after cancellation.
 `run.snapshot()` returns an isolated record for that execution.
 It holds the run's input messages and recorded steps, including partial output.
-Each `StepRecord` contains an assistant `message`, its `generation_status`, and tool executions keyed by tool-call ID.
+Each `StepRecord` contains received `input_messages`, an assistant `message`, its `generation_status`, and tool executions keyed by tool-call ID.
 Each `ToolExecutionRecord` contains a status and an optional result. An unfinished tool can have no result.
 A call without an execution entry has not started.
 `ExecutionStatus` describes a generation or tool: running, complete, cancelled, or error.
 `RunStatus` also describes run-level outcomes such as suspension and the step limit.
 
-`RunState.messages` derives a flat view: each assistant message followed by available results in tool-call order.
+`RunState.messages` derives a flat view: each step's received inputs, assistant message, then available results in tool-call order.
 Changing this list does not add or remove recorded messages. Its message objects belong to the state.
 Use `run.snapshot()` to inspect an isolated copy while execution continues.
 `AgentStep` supplies the current index and limit to callbacks; `StepRecord` stores what happened during that step.
@@ -526,6 +534,12 @@ The runtime agent ID identifies this session.
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
 Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
 These items retain message identity, content, generation status, and provider metadata, including empty messages.
+Each item's `inputs` column keeps the messages its generation accepted, with their identity and source.
+An input accepted between steps belongs to the step that read it. It is stored in that step's
+`chat_response_item.inputs` and does not become a `chat_message` row; the surrounding assistant
+response is the only `chat_message`. History, replay, rendering, and exports must show the input at
+the step where the model read it, and acceptance happens exactly once, in that step's transaction.
+`.agents/feature-map/components/chat-persistence.md` gives the routing rule for each input.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
@@ -650,10 +664,11 @@ Its application interfaces provide access to saved data and execution ownership:
 | --- | --- |
 | `AgentDirectory` | Authorize agent lookup, restore saved agents, and read or cancel runs on the selected branch. |
 | `RunStore` | Save terminal output before dependent runs receive completion. |
-| `RunOwnership` | Reserve execution before starting work; release it after workers drain. |
+| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It reads the inputs sent to a run and accepts them with their step. |
 
 Chat supplies `ChatRunStore` for both saving and ownership when durable checkpoints are enabled.
 Without checkpoints, `ChatResponsePersistence` supplies saving alone. Saved output can be available before worker cleanup finishes.
+`ChatRunStore` sends no inputs to runs: `receive_inputs` returns an empty list, `accept_inputs` accepts, and `has_unread_inputs` returns false.
 
 Within the SDK, `RunCoordination` tracks one parent's foreground children, consumed child failures, and cancellation links.
 Tools access child controls through their invocation. They do not construct this internal object.

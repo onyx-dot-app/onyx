@@ -213,6 +213,7 @@ def _check_history_size(db_session: Session, response_ids: list[int]) -> None:
                     + func.coalesce(
                         func.octet_length(cast(ChatResponseItem.rendering, Text)), 0
                     )
+                    + func.octet_length(cast(ChatResponseItem.inputs, Text))
                 ),
                 0,
             )

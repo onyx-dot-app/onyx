@@ -15,6 +15,7 @@ from onyx.llm.models import (
     ToolCall,
     ToolCallDeltaEvent,
     ToolResult,
+    UserMessage,
 )
 
 
@@ -72,6 +73,8 @@ class _MessageEvent(_AgentEvent):
 class MessageStartEvent(_MessageEvent):
     type: Literal[AgentEventType.MESSAGE_START] = AgentEventType.MESSAGE_START
     metadata: SerializeAsAny[BaseModel] | None = None
+    # Accepted inputs precede this assistant message in conversation order.
+    input_messages: list[UserMessage] = Field(default_factory=list)
 
 
 class MessageUpdateEvent(_MessageEvent):
