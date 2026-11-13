@@ -98,7 +98,7 @@ def main() -> None:
             if port != remote.DEFAULT_API_PORT:
                 print(
                     f"Local API on port {port}. Start the web server with "
-                    f"CRAFT_API_PORT={port} make craft-dev-web",
+                    f"ods craft-dev web --port {port}",
                     flush=True,
                 )
             run_api(env, args.args, host="127.0.0.1", port=port)

@@ -514,7 +514,10 @@ def parser() -> argparse.ArgumentParser:
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
     p.add_argument("--profile", help=f"profile file (default: ${remote.PROFILE_ENV})")
-    p.add_argument("--context", help=f"kube context; must be in the profile (default: ${remote.CONTEXT_ENV})")
+    p.add_argument(
+        "--context",
+        help=f"kube context; must be in the profile (default: ${remote.CONTEXT_ENV})",
+    )
     p.add_argument("--user", help=f"your Onyx login email (default: ${USER_ENV})")
     p.add_argument("--tenant", help="tenant ID (default: looked up from the email)")
     p.add_argument("--verbose", action="store_true", help="show pod helper output")

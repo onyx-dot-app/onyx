@@ -346,11 +346,14 @@
     },
     {
       "label": "craft-dev: doctor",
-      "detail": "Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head against the remote cluster in CRAFT_DEV_PROFILE. Changes nothing.",
+      "detail": "Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head against the craft-dev profile cluster (the same check as ods craft-dev doctor). Changes nothing.",
       "type": "process",
-      "command": "make",
+      "command": "${workspaceFolder}/.venv/bin/python",
       "args": [
-        "craft-dev-doctor"
+        "deployment/helm/dev/dev.py",
+        "--target",
+        "craft-dev",
+        "doctor"
       ],
       "options": {
         "cwd": "${workspaceFolder}"

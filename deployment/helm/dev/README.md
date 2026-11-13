@@ -217,8 +217,9 @@ namespaces:
 agent:
   selector: app.kubernetes.io/component=craft-fc-host-agent
   port: 7443
+  container: host-agent                 # optional; the agent container for `logs`
 user:
-  email: <your Onyx login email>        # optional; for tools that find your VMs
+  email: <your Onyx login email>        # optional; else CRAFT_DEV_USER or --user
 telepresence:
   min_version: 2.27.4
 local_env: {}                           # optional; values for the local API only
@@ -230,18 +231,25 @@ host agent port. The profile owner installs both.
 
 ### Run
 
+Use the `ods craft-dev` commands. They run the Python launchers in this
+directory with `uv`. Until the next `onyx-devtools` release includes them, use
+`go -C tools/ods run . craft-dev ...` from the repository root instead of `ods craft-dev ...`.
+
 ```bash
-export CRAFT_DEV_PROFILE=<path to the profile>
-make craft-dev-doctor
+export CRAFT_DEV_PROFILE=<path to the profile>     # optional with the onyx-internal checkout
+ods craft-dev doctor
 telepresence connect --context <context> -n onyx   # in a real terminal; it asks for sudo once
-make craft-dev-api                                 # local API with hot reload
-make craft-dev-web                                 # in another terminal; next dev against the local API
+ods craft-dev api                                  # local API with hot reload
+ods craft-dev web                                  # in another terminal; next dev against the local API
 ```
+
+All commands accept `--profile` and `--context`. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in `kube.allowed_contexts`. `api` and `web` accept `--port` for the local API port.
 
 In VS Code, use the **Craft dev (remote cluster)** compound and the
 **craft-dev: doctor** task.
 
-`craft-dev-api` does these steps:
+`ods craft-dev api` does these steps:
 
 1. Refuses a context that is not in the profile and an API server that differs from `kube.server`.
 2. Refuses to start when Telepresence is not connected to the same context, API server, and namespace.
@@ -255,17 +263,39 @@ In VS Code, use the **Craft dev (remote cluster)** compound and the
 5. Compares the checkout Alembic head with the shared database. It refuses on a
    difference. It never runs migrations: redeploy the cluster to migrate.
 6. Runs Uvicorn on `127.0.0.1`. The port is `--port`, then `CRAFT_API_PORT`, then 8080
-   if it is free, else a free port. Start the web server with the same `CRAFT_API_PORT`.
+   if it is free, else a free port. Start the web server with the same port:
+   `ods craft-dev web --port <port>`.
 
 `.vscode/.env.craft-dev` holds personal overrides, for example a personal
 `SANDBOX_FC_TEMPLATE`. Keep it untracked.
 
-`craft-dev-doctor` checks the AWS SSO session and account, the IPv4 egress address
+`ods craft-dev doctor` checks the AWS SSO session and account, the IPv4 egress address
 against the EKS endpoint allowlist, IPv6 egress, the context pin, kube access, the
 Telepresence version and connection, NodeInfo over mTLS to each host agent, and the
 Alembic head. Each failure prints one fix line. It changes nothing.
 
 If `telepresence connect` hangs, run `telepresence quit -s`, then connect again.
+
+### Your VM
+
+These commands act only on the sandbox VM of your user: `--user`, else
+`CRAFT_DEV_USER`, else `user.email` in the profile. They run a helper in an
+api-server pod with `kubectl exec`, so they do not need Telepresence.
+
+```bash
+export CRAFT_DEV_USER=<your Onyx login email>
+ods craft-dev vms                                  # your VM, its node and state
+ods craft-dev skills push ./my-skills --wake       # put a directory on /mnt/skills
+ods craft-dev skills push ./data --mount spaces    # or on user-uploads or spaces
+ods craft-dev exec --wake -- ls -la /mnt/skills    # run a command as the sandbox user
+ods craft-dev logs --agent --tail 50               # guest and agent lines of your VM
+ods craft-dev logs -f                              # follow; -f does not take --tail
+ods craft-dev reset                                # save your sessions, then stop the VM
+```
+
+The managed mounts are `noexec`. Run a script through its interpreter, for example
+`python3 /mnt/skills/x.py`. `skills push` prints this hint for each script.
+`reset --force` stops the VM without a save.
 
 ## Test the workflow tools
 
