@@ -21,7 +21,7 @@ Code: `cmd/guest-daemon/` (main), `internal/guestd/` (API, Init, auth), `interna
 |---|---|
 | Binary | `/craft-fc/bin/guest-daemon` (static, `CGO_ENABLED=0`, read-only root) |
 | vsock port | **52** (the node agent's default `--daemon-port` for the gRPC pass-through; `Dial` always refuses it) |
-| User and env | root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands get that env, then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. |
+| User and env | The daemon runs as root (decision P2), with the env `craft-init` passes from `/craft-fc/etc/guest.env`. Commands run as `--command-user` (default `1000:1000`, the image's `sandbox` user, with its groups from `/etc/group`). Commands get the daemon env, then `HOME`, `USER` and `LOGNAME` of that user (from `/etc/passwd`, else `/home/onyx` and `sandbox`), then the command defaults (`NO_COLOR=1`, `TERM=dumb`, `PAGER=cat`, `GIT_PAGER=cat`, `GH_PAGER=cat`, `LANG` and `LC_ALL` `C.UTF-8`), then the Init env, then their own. |
 | Supervisor | `craft-init` (PID 1) starts the daemon and restarts it when it exits. The daemon is not PID 1. |
 | cgroup v2 | Mounted at `/sys/fs/cgroup` by init. The daemon mounts it if it is missing, and makes `/sys/fs/cgroup/guestd/`. |
 | Drives | Init runs `/craft-fc/lib/attach` (scratch on `/mnt/scratch`, overlays, read-only managed drives). It does nothing if init already attached them. |
@@ -45,7 +45,8 @@ empty turns the CA install off), `--ca-nssdb` (`/home/sandbox/.pki/nssdb`; empty
 (`/usr/bin/certutil`), the file flags (`--sessions-root`,
 `--read-link-roots`, `--max-file-bytes`, `--max-zip-bytes`, `--capture-dirs`, `--capture-exclude`,
 `--capture-max-stored-bytes`, `--capture-max-expanded-bytes`, `--capture-max-entries`,
-`--capture-zstd-level`, `--file-owner`; see Files), `--listen`
+`--capture-zstd-level`, `--file-owner`; see Files), `--command-user` (`1000:1000`; empty runs commands as
+root; a daemon that is not root refuses a command user), `--listen`
 (`unix:<path>` instead of vsock, for tests; mode 0600), `--log-level`. The daemon has no TCP listener:
 the API is plaintext with a bearer key, so it is served only on vsock, through the node agent. The
 container fallback (TCP with mTLS) is not in v1.
@@ -108,7 +109,7 @@ the new drive shows at once.
 
 Commands:
 
-- Each command runs as root in its own cgroup `/sys/fs/cgroup/guestd/<execution_id>` (started there with
+- Each command runs as `--command-user` (not root) in its own cgroup `/sys/fs/cgroup/guestd/<execution_id>` (started there with
   `clone3(CLONE_INTO_CGROUP)`), in a new session.
 - With a `session_id`, the working directory defaults to the session directory (made if missing), and a
   relative `cwd` is below it. Commands are not confined: any absolute `cwd` and any path in the VM work.
@@ -174,11 +175,18 @@ Session saves:
   ~2 GB/s against ~220 MB/s for `default`, and the T2 archive was not larger), and leaves out `--capture-exclude` names at any depth
   (`node_modules`, `.venv`, `venv`, `__pycache__`, `.next`, caches, ...) and every directory with
   `pyvenv.cfg`. Symlinks, special files and names that are not UTF-8 are skipped. The request can set its own roots and exclude
-  list. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of
+  list. A root is a directory or a regular file. Regular-file roots go in the archive under the
+  reserved directory `.onyx-top-level`, and the summary names `.onyx-top-level` as their root. A
+  daemon without this rule restores `.onyx-top-level` as a directory, so its restore does not fail.
+  A `.onyx-top-level` root takes the regular files directly in the session directory
+  `.onyx-top-level` (what such a daemon restored) into the archive in the same way. A name that is
+  also a top-level entry of the session is skipped: the top-level entry wins. The last message is the summary with the stream's SHA-256. Limits (A6): 1 GiB stored, 4 GiB of
   files, 500,000 entries (`--capture-max-*`); a request can only lower them.
 - `RestoreSession` takes a header (exact size, SHA-256, roots, limits), then the archive. It extracts
   into `.craft-restore-<random>` in the session directory, then checks size and SHA-256 of the whole
-  stream, then swaps each root that the archive has into place. It refuses (`ARCHIVE_INVALID`) absolute
+  stream, then swaps each root that the archive has into place. Each file in `.onyx-top-level` is a
+  root of its own: it replaces the top-level file or directory of that name. After the swap, restore
+  removes an empty `.onyx-top-level` directory from the session. It refuses (`ARCHIVE_INVALID`) absolute
   names, `..`, unclean names, names outside the roots, links, devices, FIFOs, sparse members and
   duplicate files, and stops at the limits (`LIMIT_EXCEEDED`), at a zstd window over 64 MiB and at a
   decoded stream larger than the files plus 16 KiB per member and 64 KiB after the tar end. Modes are

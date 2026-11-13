@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/klauspost/compress/zstd"
 )
@@ -74,7 +75,11 @@ func (s *Store) roots(names []string) ([]string, error) {
 	return names, nil
 }
 
-// Capture writes a tar + zstd archive of the session's capture roots to w.
+// Capture writes a tar + zstd archive of the session's capture roots (top-level
+// directories or regular files) to w. A regular-file root goes in the archive
+// as TopFilesRoot/<name>, and the summary names TopFilesRoot as its root.
+// A TopFilesRoot root takes the regular files of the session directory
+// TopFilesRoot (see recoverTopFiles) into the archive in the same way.
 // It returns an error, and the caller must drop what w got, if a limit is
 // reached or the session cannot be read.
 func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (CaptureSummary, error) {
@@ -115,20 +120,57 @@ func (s *Store) Capture(ctx context.Context, spec CaptureSpec, w io.Writer) (Cap
 	}
 	c := &capturer{ctx: ctx, root: root, tw: tar.NewWriter(zw), lim: lim, skip: setOf(exclude), sum: &sum,
 		buf: make([]byte, 1<<20)}
+	var topFiles []string
+	recoverTop := false
 	for _, r := range roots {
+		if r == TopFilesRoot {
+			// A daemon without TopFilesRoot restores it as a directory: its
+			// files go back under TopFilesRoot, so that they are not lost.
+			fi, err := root.Lstat(r)
+			switch {
+			case err == nil && fi.IsDir():
+				recoverTop = true
+			case err == nil || !errors.Is(err, fs.ErrNotExist):
+				sum.Skipped++
+			}
+			continue
+		}
 		fi, err := root.Lstat(r)
 		if errors.Is(err, fs.ErrNotExist) {
 			continue
 		}
-		if err != nil || !fi.IsDir() {
+		if err != nil {
 			sum.Skipped++
 			continue
 		}
-		if err := c.dir(r, fi, 0); err != nil {
+		switch {
+		case fi.IsDir():
+			if err := c.dir(r, fi, 0); err != nil {
+				_ = zw.Close()
+				return sum, err
+			}
+			sum.Roots = append(sum.Roots, r)
+		case fi.Mode().IsRegular():
+			topFiles = append(topFiles, r)
+		default:
+			sum.Skipped++
+		}
+	}
+	var recovered []string
+	if recoverTop {
+		if recovered, err = c.recoverTopFiles(); err != nil {
 			_ = zw.Close()
 			return sum, err
 		}
-		sum.Roots = append(sum.Roots, r)
+	}
+	if len(topFiles)+len(recovered) > 0 {
+		// Top-level files go under TopFilesRoot: a single-part file member
+		// fails the restore of older daemons.
+		if err := c.topFiles(topFiles, recovered); err != nil {
+			_ = zw.Close()
+			return sum, err
+		}
+		sum.Roots = append(sum.Roots, TopFilesRoot)
 	}
 	if err := c.tw.Close(); err != nil {
 		_ = zw.Close()
@@ -213,7 +255,7 @@ func (c *capturer) dir(rel string, fi fs.FileInfo, depth int) error {
 				return err
 			}
 		case TypeRegular:
-			if err := c.file(child); err != nil {
+			if err := c.file(child, child); err != nil {
 				return err
 			}
 		default:
@@ -223,7 +265,67 @@ func (c *capturer) dir(rel string, fi fs.FileInfo, depth int) error {
 	return nil
 }
 
-func (c *capturer) file(rel string) error {
+// recoverTopFiles returns the names of the regular files directly in the
+// session directory TopFilesRoot. It leaves out a name that is also a
+// top-level entry of the session (the top-level entry wins), and nested
+// directories and other entries.
+func (c *capturer) recoverTopFiles() ([]string, error) {
+	ents, err := readDir(c.root, TopFilesRoot, int(c.lim.Entries))
+	if errors.Is(err, errDirTooBig) {
+		return nil, err
+	}
+	if err != nil {
+		c.sum.Skipped++
+		return nil, nil
+	}
+	var names []string
+	for _, e := range ents {
+		name := e.Name()
+		if c.skip[name] || strings.HasPrefix(name, writePrefix) {
+			c.sum.Excluded++
+			continue
+		}
+		if !restorableName(name) || name == TopFilesRoot || strings.HasPrefix(name, ".craft-") ||
+			len(TopFilesRoot)+1+len(name) > maxPathBytes || !e.Type().IsRegular() {
+			c.sum.Skipped++
+			continue
+		}
+		if _, err := c.root.Lstat(name); !errors.Is(err, fs.ErrNotExist) {
+			c.sum.Skipped++
+			continue
+		}
+		names = append(names, name)
+	}
+	return names, nil
+}
+
+// topFiles writes the TopFilesRoot directory, the top-level files names and
+// the files recovered from the session directory TopFilesRoot.
+func (c *capturer) topFiles(names, recovered []string) error {
+	if err := c.entry(); err != nil {
+		return err
+	}
+	if err := c.tw.WriteHeader(&tar.Header{
+		Typeflag: tar.TypeDir, Name: TopFilesRoot + "/", Mode: 0o755, ModTime: time.Now(), Format: tar.FormatPAX,
+	}); err != nil {
+		return err
+	}
+	c.sum.Directories++
+	for _, n := range names {
+		if err := c.file(n, TopFilesRoot+"/"+n); err != nil {
+			return err
+		}
+	}
+	for _, n := range recovered {
+		if err := c.file(TopFilesRoot+"/"+n, TopFilesRoot+"/"+n); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// file writes the regular file rel of the session as the member name.
+func (c *capturer) file(rel, name string) error {
 	if err := c.ctx.Err(); err != nil {
 		return err
 	}
@@ -241,7 +343,7 @@ func (c *capturer) file(rel string) error {
 		return err
 	}
 	if err := c.tw.WriteHeader(&tar.Header{
-		Typeflag: tar.TypeReg, Name: rel, Size: size, Mode: int64(fi.Mode().Perm()), ModTime: fi.ModTime(), Format: tar.FormatPAX,
+		Typeflag: tar.TypeReg, Name: name, Size: size, Mode: int64(fi.Mode().Perm()), ModTime: fi.ModTime(), Format: tar.FormatPAX,
 	}); err != nil {
 		return err
 	}

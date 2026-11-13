@@ -286,6 +286,48 @@ export async function transferSkillOwnership(
   return handle<CustomSkill>(res);
 }
 
+export async function restoreSkillVersion(
+  skillId: string,
+  versionId: string,
+  baseVersionId: string
+): Promise<SkillEditableDetail> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/restore`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ base_version_id: baseVersionId }),
+    }
+  );
+  return handle<SkillEditableDetail>(res);
+}
+
+/** Publish the current version: a first publish, or a publish update. Under
+ * the Publishing setting this can make a review request instead. */
+export async function publishSkill(
+  skillId: string,
+  baseVersionId: string
+): Promise<CustomSkill> {
+  const res = await fetch(`/api/skills/custom/${skillId}/publish`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ base_version_id: baseVersionId }),
+  });
+  return handle<CustomSkill>(res);
+}
+
+export async function reviewSkillVersion(
+  skillId: string,
+  versionId: string,
+  decision: "approve" | "deny"
+): Promise<CustomSkill> {
+  const res = await fetch(
+    `/api/skills/custom/${skillId}/versions/${versionId}/${decision}`,
+    { method: "POST" }
+  );
+  return handle<CustomSkill>(res);
+}
+
 export async function deleteUserSkill(skillId: string): Promise<void> {
   const res = await fetch(`/api/skills/custom/${skillId}`, {
     method: "DELETE",

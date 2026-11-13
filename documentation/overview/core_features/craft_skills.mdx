@@ -170,14 +170,46 @@ Open a personal Skill to edit its name, description, or instructions. Under **Su
 - Upload content that includes `SKILL.md` to replace the current name, description, instructions, and files. Onyx asks
   you to confirm before replacing the existing Skill content.
 
-Changes are synchronized to people who can use the Skill. You can also disable the Skill without deleting it,
-change its sharing, transfer ownership, or delete it.
-Only an admin can delete a Skill that is published to the organization.
+Changes are synchronized to the people you shared the Skill with. For a Skill that is published to the organization,
+the rest of the organization keeps the published version until the author publishes the update.
+See [Publish an update](#publish-an-update). You can also disable the Skill without deleting it, change its sharing,
+transfer ownership, or delete it. Only an admin can delete a Skill that is published to the organization.
 This needs the organization-wide `manage:plugins` permission.
 
 If another person saves the Skill while you edit it, Onyx does not save your change.
 The editor shows **This skill changed since you opened it**. Select **Reload** to get the newest version,
 then make your change again. Reload discards your unsaved changes.
+
+### Version history
+
+Each save of a custom Skill makes a new version. To see earlier versions,
+open the Skill and select the **Versions** tab. The author, editors,
+and admins with the organization-wide `manage:plugins` permission can see this tab. Each row shows the version number,
+who made it, and when. A row can also show these badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Current** | The newest version. |
+| **Published** | The version that the organization uses. |
+| **Pending review** | The author asked to publish this version, and an admin must approve it. |
+
+- Select a row to preview the description and instructions of that version.
+- Select **Restore** to copy that version into a new version. The old versions stay in the list.
+  If the restored files are the same as the current files, Onyx makes no new version.
+- If the Skill editor has unsaved changes, save or discard them before you restore a version.
+- If another person saves the Skill while you restore a version, Onyx shows **This skill changed since you opened it**.
+  Select **Reload**, then try again.
+
+### Publish an update
+
+When you save a published Skill, the new version does not go to the organization at once.
+The Skill card shows **Unpublished changes**. To send the newest version to the organization,
+open the **Versions** tab and select **Publish update**.
+
+Only the author of the Skill and users with the organization-wide `manage:plugins` permission can publish an update.
+Your admin can require a review before a publish, or turn publishing off.
+If you save a newer version while a version waits for review,
+select **Publish update** to send the newer version for review in its place.
 
 ### Share a Skill
 

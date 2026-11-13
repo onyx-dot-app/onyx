@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft는 Onyx가 배포별로 사용 설정합니다. 접근하려면 Onyx 담당자에게 문의하세요.",
         "title": "이 배포에서는 Craft를 사용할 수 없습니다"
+      },
+      "publishing": {
+        "title": "스킬 게시",
+        "open": {
+          "label": "열림",
+          "description": "스킬 작성자가 조직에 바로 게시합니다."
+        },
+        "requiresReview": {
+          "label": "검토 필요",
+          "description": "관리자가 각 게시와 각 업데이트를 승인합니다."
+        },
+        "off": {
+          "label": "끄기",
+          "description": "관리자만 스킬을 조직에 게시합니다."
+        },
+        "saveSuccess": {
+          "message": "게시 설정을 저장했습니다."
+        },
+        "saveError": {
+          "message": "게시 설정을 저장할 수 없습니다."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12164,10 @@
         },
         "organization": {
           "label": "조직"
+        },
+        "unpublished": {
+          "label": "게시되지 않은 변경 사항",
+          "tooltip": "조직은 아직 버전 {number}을(를) 사용합니다."
         }
       },
       "toggle": {
@@ -17384,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "게시는 취소할 수 없습니다",
-          "description": "저장하면 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+          "description": "저장하면 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다.",
+          "reviewDescription": "관리자가 요청을 승인할 때까지 스킬은 비공개로 유지됩니다. 승인 후에는 다시 비공개로 만들 수 없습니다."
+        },
+        "reviewRequestedToast": {
+          "message": "게시 요청을 관리자에게 보냈습니다."
+        },
+        "publishOff": {
+          "title": "게시가 꺼져 있습니다",
+          "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 스킬 게시를 요청하세요."
         }
       },
       "placeholders": {
@@ -17392,7 +17425,54 @@
       },
       "tabs": {
         "details": "세부 정보",
-        "sharing": "공유"
+        "sharing": "공유",
+        "versions": "버전"
+      },
+      "versions": {
+        "tableLabel": "스킬 버전",
+        "columns": {
+          "version": "버전",
+          "madeBy": "만든 사람",
+          "date": "날짜"
+        },
+        "versionLabel": "버전 {number}",
+        "currentBadge": "현재",
+        "unknownAuthor": "알 수 없음",
+        "previewRow": {
+          "ariaLabel": "버전 {number} 미리 보기"
+        },
+        "restore": {
+          "label": "복원",
+          "ariaLabel": "버전 {number} 복원",
+          "successToast": "버전 {number}을(를) 버전 {newNumber}(으)로 복원했습니다.",
+          "unchangedToast": "버전 {number}의 파일이 현재 버전과 같습니다.",
+          "failedToast": "이 버전을 복원할 수 없습니다.",
+          "unsavedChanges": {
+            "title": "먼저 변경 사항을 저장하세요",
+            "description": "버전을 복원하기 전에 편집기의 변경 사항을 저장하거나 삭제하세요."
+          }
+        },
+        "loadError": {
+          "title": "버전을 불러올 수 없습니다",
+          "description": "나중에 다시 시도하세요."
+        },
+        "preview": {
+          "back": "모든 버전",
+          "loadError": {
+            "title": "이 버전을 불러올 수 없습니다"
+          }
+        },
+        "status": {
+          "pending": "검토 대기",
+          "published": "게시됨"
+        },
+        "publishUpdate": {
+          "label": "업데이트 게시",
+          "successToast": "버전 {number}을(를) 조직에 게시했습니다.",
+          "failedToast": "이 업데이트를 게시할 수 없습니다.",
+          "sentForReviewToast": "버전 {number}을(를) 관리자에게 검토 요청했습니다.",
+          "offNotice": "게시가 꺼져 있습니다. 관리자에게 이 업데이트 게시를 요청하세요."
+        }
       }
     },
     "page": {
@@ -17551,6 +17631,34 @@
       "publishWarning": {
         "title": "게시는 취소할 수 없습니다",
         "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+      }
+    },
+    "reviewRequests": {
+      "title": "게시 요청",
+      "description": "조직에 스킬을 게시하는 요청을 승인하거나 거부합니다.",
+      "columns": {
+        "skill": "스킬",
+        "version": "버전",
+        "author": "작성자",
+        "saved": "저장됨"
+      },
+      "unnamedSkill": "이름 없는 스킬",
+      "review": {
+        "label": "검토",
+        "ariaLabel": "{name} 검토"
+      },
+      "approve": {
+        "label": "승인"
+      },
+      "deny": {
+        "label": "거부"
+      },
+      "approvedToast": "{name}의 버전 {number}을(를) 게시했습니다.",
+      "deniedToast": "{name}의 버전 {number}을(를) 거부했습니다.",
+      "failedToast": "이 요청을 업데이트할 수 없습니다.",
+      "version": {
+        "firstPublish": "v{number} · 첫 게시",
+        "update": "v{number} · v{published}에서 업데이트"
       }
     }
   },

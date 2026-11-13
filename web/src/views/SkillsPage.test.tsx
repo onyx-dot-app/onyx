@@ -138,6 +138,19 @@ jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
     ) : null,
 }));
 
+let mockIsManager = false;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockIsManager,
+    isScopedManager: false,
+  }),
+}));
+
+jest.mock("@/sections/skills/SkillReviewRequests", () => ({
+  __esModule: true,
+  default: () => <div>Publish requests list</div>,
+}));
+
 jest.mock("@/sections/modals/SkillPreviewModal", () => ({
   __esModule: true,
   default: ({ open }: { open: boolean }) =>
@@ -169,6 +182,9 @@ function customSkill(id: string, name: string): CustomSkill {
     user_permission: "VIEWER",
     external_app: null,
     current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
   };
 }
 
@@ -194,6 +210,7 @@ describe("SkillsPage preference toggles", () => {
   }
 
   beforeEach(() => {
+    mockIsManager = false;
     skillsData = {
       builtins: [],
       customs: [
@@ -273,6 +290,17 @@ describe("SkillsPage preference toggles", () => {
     expect(
       screen.getByRole("button", { name: "Expand Built-in skills (1)" })
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows publish requests in the library to a non-admin skill manager", () => {
+    mockIsManager = true;
+    render(<SkillsPage />);
+    expect(screen.getByText("Publish requests list")).toBeInTheDocument();
+  });
+
+  it("hides publish requests from a user who does not manage skills", () => {
+    render(<SkillsPage />);
+    expect(screen.queryByText("Publish requests list")).not.toBeInTheDocument();
   });
 
   it("does not include built-in skills on the admin page", () => {

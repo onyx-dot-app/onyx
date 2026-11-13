@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft はデプロイごとに Onyx が有効にします。利用するには、Onyx の担当者にお問い合わせください。",
         "title": "このデプロイでは Craft を利用できません"
+      },
+      "publishing": {
+        "title": "スキルの公開",
+        "open": {
+          "label": "オープン",
+          "description": "スキルの作成者はすぐに組織に公開できます。"
+        },
+        "requiresReview": {
+          "label": "レビューが必要",
+          "description": "管理者が各公開と各更新を承認します。"
+        },
+        "off": {
+          "label": "オフ",
+          "description": "管理者だけがスキルを組織に公開できます。"
+        },
+        "saveSuccess": {
+          "message": "公開設定を保存しました。"
+        },
+        "saveError": {
+          "message": "公開設定を保存できませんでした。"
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12164,10 @@
         },
         "organization": {
           "label": "組織"
+        },
+        "unpublished": {
+          "label": "未公開の変更",
+          "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
       },
       "toggle": {
@@ -17384,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "公開は取り消せません",
-          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。"
+          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。",
+          "reviewDescription": "管理者がリクエストを承認するまで、スキルは非公開のままです。承認後は非公開に戻すことはできません。"
+        },
+        "reviewRequestedToast": {
+          "message": "公開リクエストを管理者のレビューに送信しました。"
+        },
+        "publishOff": {
+          "title": "公開はオフになっています",
+          "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
         }
       },
       "placeholders": {
@@ -17392,7 +17425,54 @@
       },
       "tabs": {
         "details": "詳細",
-        "sharing": "共有"
+        "sharing": "共有",
+        "versions": "バージョン"
+      },
+      "versions": {
+        "tableLabel": "スキルのバージョン",
+        "columns": {
+          "version": "バージョン",
+          "madeBy": "作成者",
+          "date": "日付"
+        },
+        "versionLabel": "バージョン {number}",
+        "currentBadge": "現在",
+        "unknownAuthor": "不明",
+        "previewRow": {
+          "ariaLabel": "バージョン {number} をプレビュー"
+        },
+        "restore": {
+          "label": "復元",
+          "ariaLabel": "バージョン {number} を復元",
+          "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
+          "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
+          "failedToast": "このバージョンを復元できませんでした。",
+          "unsavedChanges": {
+            "title": "先に変更を保存してください",
+            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
+          }
+        },
+        "loadError": {
+          "title": "バージョンを読み込めませんでした",
+          "description": "後でもう一度お試しください。"
+        },
+        "preview": {
+          "back": "すべてのバージョン",
+          "loadError": {
+            "title": "このバージョンを読み込めませんでした"
+          }
+        },
+        "status": {
+          "pending": "レビュー待ち",
+          "published": "公開済み"
+        },
+        "publishUpdate": {
+          "label": "更新を公開",
+          "successToast": "バージョン {number} を組織に公開しました。",
+          "failedToast": "この更新を公開できませんでした。",
+          "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
+          "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
+        }
       }
     },
     "page": {
@@ -17551,6 +17631,34 @@
       "publishWarning": {
         "title": "公開は取り消せません",
         "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
+      }
+    },
+    "reviewRequests": {
+      "title": "公開リクエスト",
+      "description": "組織へのスキル公開リクエストを承認または却下します。",
+      "columns": {
+        "skill": "スキル",
+        "version": "バージョン",
+        "author": "作成者",
+        "saved": "保存日時"
+      },
+      "unnamedSkill": "名前のないスキル",
+      "review": {
+        "label": "確認",
+        "ariaLabel": "{name} を確認"
+      },
+      "approve": {
+        "label": "承認"
+      },
+      "deny": {
+        "label": "却下"
+      },
+      "approvedToast": "{name} のバージョン {number} を公開しました。",
+      "deniedToast": "{name} のバージョン {number} を却下しました。",
+      "failedToast": "このリクエストを更新できませんでした。",
+      "version": {
+        "firstPublish": "v{number} · 初回公開",
+        "update": "v{number} · v{published} からの更新"
       }
     }
   },

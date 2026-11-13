@@ -130,7 +130,7 @@ class PluginVersionContent(BaseModel):
     is_valid: bool | None
     # Sorted by path. Covers every file in the bundle, SKILL.md included.
     # None for a version copied from a legacy skill row, whose bundle was not
-    # read; the repair task fills it.
+    # read.
     file_manifest: list[PluginFileEntry] | None
     unpacked_size_bytes: int | None
     file_count: int | None

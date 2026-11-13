@@ -62,6 +62,9 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
     SandboxDaemonErrorReason.EXECUTION_CAP_REACHED: grpc.StatusCode.RESOURCE_EXHAUSTED,
 }
 
+# The guest daemon's files.TopFilesRoot.
+TOP_FILES_ROOT = ".onyx-top-level"
+
 
 def _abort(
     context: grpc.ServicerContext,
@@ -173,6 +176,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.stop_delay_seconds = 0.0
         # Seconds each guest daemon Init waits before it runs.
         self.init_delay_seconds = 0.0
+        # Like grpc-go, the agent resets a stream with CANCELLED at its
+        # deadline; this many seconds early models a reset that wins the race.
+        self.stream_reset_lead_seconds: float | None = None
 
     def add_vm(
         self,
@@ -414,6 +420,23 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 for path, data in selected.items()
                 if not _skipped(path, exclude, skip_hidden=False)
             }
+            # Like the daemon: top-level files go under TOP_FILES_ROOT. Files
+            # directly in a TOP_FILES_ROOT directory stay there, unless a
+            # top-level entry has the same name.
+            top_names = {
+                p.split("/", 1)[0]
+                for (sid, session, p) in self.files
+                if sid == request.sandbox_id and session == request.session_id
+            }
+            members = {
+                p if "/" in p else f"{TOP_FILES_ROOT}/{p}": d
+                for p, d in members.items()
+                if not p.startswith(f"{TOP_FILES_ROOT}/")
+                or (
+                    p.count("/") == 1
+                    and p.removeprefix(f"{TOP_FILES_ROOT}/") not in top_names
+                )
+            }
             archive = _zip(members)
             capture_id = self.next_id("cap")
             self.captures[capture_id] = archive
@@ -495,7 +518,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 abort_with_reason(
                     context, HostAgentErrorReason.ARCHIVE_MISMATCH, "other archive"
                 )
-            members = _unzip(archive)
+            archived = _unzip(archive)
+            members = {
+                p.removeprefix(f"{TOP_FILES_ROOT}/"): d for p, d in archived.items()
+            }
             roots = {p.split("/", 1)[0] for p in members}
             for key in [
                 k
@@ -509,7 +535,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             return hostagent_pb2.RestoreSessionResponse(
                 files=len(members),
                 expanded_bytes=sum(len(d) for d in members.values()),
-                roots=sorted({p.split("/", 1)[0] for p in members}),
+                roots=sorted({p.split("/", 1)[0] for p in archived}),
             )
 
     def PutManagedImage(  # noqa: N802
@@ -871,6 +897,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         """Like the daemon: output as it comes, then the result. A client
         that goes away ends the stream, not the command."""
         offsets = [stdout_offset, stderr_offset]
+        reset_lead = self.agent.stream_reset_lead_seconds
         while True:
             with self.agent.lock:
                 while (
@@ -880,6 +907,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     and len(execution.stdout) <= offsets[0]
                     and len(execution.stderr) <= offsets[1]
                 ):
+                    if (
+                        reset_lead is not None
+                        and context.time_remaining() <= reset_lead
+                    ):
+                        context.abort(
+                            grpc.StatusCode.CANCELLED,
+                            "Received RST_STREAM with error code 8",
+                        )
                     self.agent.ended.wait(timeout=0.05)
                 if execution.vm_gone:
                     abort_with_reason(

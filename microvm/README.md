@@ -764,9 +764,10 @@ KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.tes
 KVM_RD_IMAGE=craft-fc-rootfs:dev KVM_RD_DIR=/opt/rd/work ./hostagent-kvm.test -test.v -test.run TestRootfsDeliveryKVM
 # Managed drive swap: same inputs; KVM_VMS running VMs, a reader in each VM holding files on the
 # managed drive, swaps of every VM, guest checks (content, old reader, noexec, no rw remount, no restart).
+# The checks need root commands: root drive built with --daemon-cmd "/craft-fc/bin/guest-daemon --command-user=".
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestManagedSwapKVM
 # Memory, admission and drain: same inputs, root drive built with
-# --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"; balloon on restores, reclaim on KVM_VMS
+# --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m --command-user="; balloon on restores, reclaim on KVM_VMS
 # idle VMs, scope limits and a guest memory hog, fill the node to CAPACITY_MEMORY, manual drain.
 KVM_TB_ROOTFS=/opt/tb/rootfs-out KVM_TB_CA=/opt/tb/ca/ca.crt ./hostagent-kvm.test -test.v -test.run TestMemAdmissionKVM
 # Files and session saves through the agent over mTLS: file calls through the pass-through,

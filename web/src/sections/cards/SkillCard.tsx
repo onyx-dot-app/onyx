@@ -29,6 +29,7 @@ import type {
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
+import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -175,6 +176,7 @@ export default function SkillCard({
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Card
+        data-testid="SkillCard"
         onClick={handleClick}
         className="group/SkillCard cursor-pointer"
         disabled={
@@ -364,6 +366,15 @@ export default function SkillCard({
             ) : dependency ? (
               <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
+            {canEdit && hasUnpublishedChanges(item.skill) && (
+              <Badge
+                title={t("skill.tags.unpublished.label")}
+                color="warning"
+                tooltip={t("skill.tags.unpublished.tooltip", {
+                  number: item.skill.published_version_number ?? 0,
+                })}
+              />
+            )}
             {item.source === "custom" && (
               <Badge
                 title={t(

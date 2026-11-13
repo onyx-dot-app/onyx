@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "يُفعَّل Craft لكل نشر بواسطة Onyx. تواصل مع ممثل Onyx الخاص بك للحصول على صلاحية الوصول.",
         "title": "Craft غير متاح في هذا النشر"
+      },
+      "publishing": {
+        "title": "نشر المهارات",
+        "open": {
+          "label": "مفتوح",
+          "description": "ينشر مؤلفو المهارات في المؤسسة فورًا."
+        },
+        "requiresReview": {
+          "label": "يتطلب مراجعة",
+          "description": "يوافق مسؤول على كل نشر وكل تحديث."
+        },
+        "off": {
+          "label": "متوقف",
+          "description": "المسؤولون فقط ينشرون المهارات في المؤسسة."
+        },
+        "saveSuccess": {
+          "message": "تم حفظ إعداد النشر."
+        },
+        "saveError": {
+          "message": "تعذّر حفظ إعداد النشر."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12164,10 @@
         },
         "organization": {
           "label": "المؤسسة"
+        },
+        "unpublished": {
+          "label": "تغييرات غير منشورة",
+          "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
       },
       "toggle": {
@@ -17384,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "لا يمكن التراجع عن النشر",
-          "description": "بعد الحفظ، يمكن لكل شخص في المؤسسة استخدام هذه المهارة. لا يمكنك جعلها خاصة مرة أخرى. يمكن للمسؤول فقط حذفها."
+          "description": "بعد الحفظ، يمكن لكل شخص في المؤسسة استخدام هذه المهارة. لا يمكنك جعلها خاصة مرة أخرى. يمكن للمسؤول فقط حذفها.",
+          "reviewDescription": "تبقى المهارة خاصة حتى يوافق مسؤول على الطلب. بعد الموافقة، لا يمكنك جعلها خاصة مرة أخرى."
+        },
+        "reviewRequestedToast": {
+          "message": "تم إرسال طلب النشر إلى مسؤول للمراجعة."
+        },
+        "publishOff": {
+          "title": "النشر متوقف",
+          "description": "أوقف مسؤول النشر إلى المؤسسة. اطلب من مسؤول نشر هذه المهارة."
         }
       },
       "placeholders": {
@@ -17392,7 +17425,54 @@
       },
       "tabs": {
         "details": "التفاصيل",
-        "sharing": "المشاركة"
+        "sharing": "المشاركة",
+        "versions": "الإصدارات"
+      },
+      "versions": {
+        "tableLabel": "إصدارات المهارة",
+        "columns": {
+          "version": "الإصدار",
+          "madeBy": "أنشأها",
+          "date": "التاريخ"
+        },
+        "versionLabel": "الإصدار {number}",
+        "currentBadge": "الحالي",
+        "unknownAuthor": "غير معروف",
+        "previewRow": {
+          "ariaLabel": "معاينة الإصدار {number}"
+        },
+        "restore": {
+          "label": "استعادة",
+          "ariaLabel": "استعادة الإصدار {number}",
+          "successToast": "تمت استعادة الإصدار {number} بصفته الإصدار {newNumber}.",
+          "unchangedToast": "الإصدار {number} له نفس ملفات الإصدار الحالي.",
+          "failedToast": "تعذّرت استعادة هذا الإصدار.",
+          "unsavedChanges": {
+            "title": "احفظ تغييراتك أولاً",
+            "description": "احفظ التغييرات في المحرر أو تجاهلها قبل استعادة إصدار."
+          }
+        },
+        "loadError": {
+          "title": "تعذّر تحميل الإصدارات",
+          "description": "حاول مرة أخرى لاحقًا."
+        },
+        "preview": {
+          "back": "كل الإصدارات",
+          "loadError": {
+            "title": "تعذّر تحميل هذا الإصدار"
+          }
+        },
+        "status": {
+          "pending": "بانتظار المراجعة",
+          "published": "منشور"
+        },
+        "publishUpdate": {
+          "label": "نشر التحديث",
+          "successToast": "تم نشر الإصدار {number} للمؤسسة.",
+          "failedToast": "تعذّر نشر هذا التحديث.",
+          "sentForReviewToast": "تم إرسال الإصدار {number} إلى مسؤول للمراجعة.",
+          "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
+        }
       }
     },
     "page": {
@@ -17551,6 +17631,34 @@
       "publishWarning": {
         "title": "لا يمكن التراجع عن النشر",
         "description": "بعد التطبيق، يمكن لكل شخص في المؤسسة استخدام المهارات المحددة. لا يمكن جعل المهارات المنشورة خاصة مرة أخرى. يمكن للمسؤول فقط حذفها."
+      }
+    },
+    "reviewRequests": {
+      "title": "طلبات النشر",
+      "description": "وافق على طلبات نشر المهارات في المؤسسة أو ارفضها.",
+      "columns": {
+        "skill": "المهارة",
+        "version": "الإصدار",
+        "author": "المؤلف",
+        "saved": "تاريخ الحفظ"
+      },
+      "unnamedSkill": "مهارة بلا اسم",
+      "review": {
+        "label": "مراجعة",
+        "ariaLabel": "مراجعة {name}"
+      },
+      "approve": {
+        "label": "موافقة"
+      },
+      "deny": {
+        "label": "رفض"
+      },
+      "approvedToast": "تم نشر الإصدار {number} من {name}.",
+      "deniedToast": "تم رفض الإصدار {number} من {name}.",
+      "failedToast": "تعذّر تحديث هذا الطلب.",
+      "version": {
+        "firstPublish": "v{number} · أول نشر",
+        "update": "v{number} · تحديث من v{published}"
       }
     }
   },

@@ -69,6 +69,11 @@ class SkillResponse(BaseModel):
     # The plugin version of a custom skill whose files this response shows.
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
+    current_version_number: int | None = None
+    # The version the organization runs. None while the skill is private.
+    published_version_number: int | None = None
+    # The version that waits for an admin's review, if any.
+    pending_version_number: int | None = None
 
     @classmethod
     def from_builtin(
@@ -165,6 +170,15 @@ class SkillResponse(BaseModel):
             user_permission=user_permission,
             external_app=external_app,
             current_version_id=current_version_id,
+            current_version_number=(
+                access.current_version_number if access is not None else None
+            ),
+            published_version_number=(
+                access.published_version_number if access is not None else None
+            ),
+            pending_version_number=(
+                access.pending_version_number if access is not None else None
+            ),
         )
 
 
@@ -225,6 +239,46 @@ class SkillPreviewResponse(BaseModel):
 class SkillEditableDetailResponse(SkillResponse):
     instructions_markdown: str
     files: list[SkillBundleFile]
+
+
+class SkillVersionResponse(BaseModel):
+    id: UUID
+    version_number: int
+    created_at: datetime.datetime
+    created_by_email: str | None
+    is_current: bool
+    review_status: Literal["draft", "pending", "published"]
+
+
+class SkillVersionPreviewResponse(BaseModel):
+    description: str
+    instructions_markdown: str
+
+
+class SkillVersionRestoreRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The current version the restore starts from. 409 when it is not current.
+    base_version_id: UUID
+
+
+class SkillPublishRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The current version the user saw. 409 when it is not current.
+    base_version_id: UUID | None = None
+
+
+class SkillReviewRequestResponse(BaseModel):
+    skill_id: UUID
+    name: str | None
+    version_id: UUID
+    version_number: int
+    # None for a first publish.
+    published_version_number: int | None
+    # The skill's author: only the author or a manager publishes.
+    author_email: str | None
+    version_created_at: datetime.datetime
 
 
 class SkillBundleInspectResponse(BaseModel):

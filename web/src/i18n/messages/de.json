@@ -5181,6 +5181,27 @@
       "unavailable": {
         "description": "Craft wird von Onyx pro Bereitstellung aktiviert. Wenden Sie sich an Ihren Onyx-Ansprechpartner, um Zugriff zu erhalten.",
         "title": "Craft ist in dieser Bereitstellung nicht verfügbar"
+      },
+      "publishing": {
+        "title": "Skill-Veröffentlichung",
+        "open": {
+          "label": "Offen",
+          "description": "Skill-Autoren veröffentlichen sofort für die Organisation."
+        },
+        "requiresReview": {
+          "label": "Prüfung erforderlich",
+          "description": "Ein Admin genehmigt jede Veröffentlichung und jedes Update."
+        },
+        "off": {
+          "label": "Aus",
+          "description": "Nur Admins veröffentlichen Skills für die Organisation."
+        },
+        "saveSuccess": {
+          "message": "Veröffentlichungseinstellung gespeichert."
+        },
+        "saveError": {
+          "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12164,10 @@
         },
         "organization": {
           "label": "Organisation"
+        },
+        "unpublished": {
+          "label": "Unveröffentlichte Änderungen",
+          "tooltip": "Die Organisation nutzt noch Version {number}."
         }
       },
       "toggle": {
@@ -17384,7 +17409,15 @@
         },
         "publishWarning": {
           "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
-          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen."
+          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen.",
+          "reviewDescription": "Der Skill bleibt privat, bis ein Admin die Anfrage genehmigt. Nach der Genehmigung können Sie ihn nicht wieder privat machen."
+        },
+        "reviewRequestedToast": {
+          "message": "Ihre Veröffentlichungsanfrage wurde einem Admin zur Prüfung gesendet."
+        },
+        "publishOff": {
+          "title": "Die Veröffentlichung ist deaktiviert",
+          "description": "Ein Admin hat die Veröffentlichung in der Organisation deaktiviert. Bitten Sie einen Admin, diesen Skill zu veröffentlichen."
         }
       },
       "placeholders": {
@@ -17392,7 +17425,54 @@
       },
       "tabs": {
         "details": "Details",
-        "sharing": "Freigabe"
+        "sharing": "Freigabe",
+        "versions": "Versionen"
+      },
+      "versions": {
+        "tableLabel": "Skill-Versionen",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Erstellt von",
+          "date": "Datum"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Aktuell",
+        "unknownAuthor": "Unbekannt",
+        "previewRow": {
+          "ariaLabel": "Vorschau von Version {number}"
+        },
+        "restore": {
+          "label": "Wiederherstellen",
+          "ariaLabel": "Version {number} wiederherstellen",
+          "successToast": "Version {number} als Version {newNumber} wiederhergestellt.",
+          "unchangedToast": "Version {number} hat dieselben Dateien wie die aktuelle Version.",
+          "failedToast": "Diese Version konnte nicht wiederhergestellt werden.",
+          "unsavedChanges": {
+            "title": "Speichern Sie zuerst Ihre Änderungen",
+            "description": "Speichern oder verwerfen Sie die Änderungen im Editor, bevor Sie eine Version wiederherstellen."
+          }
+        },
+        "loadError": {
+          "title": "Versionen konnten nicht geladen werden",
+          "description": "Versuchen Sie es später erneut."
+        },
+        "preview": {
+          "back": "Alle Versionen",
+          "loadError": {
+            "title": "Diese Version konnte nicht geladen werden"
+          }
+        },
+        "status": {
+          "pending": "Prüfung ausstehend",
+          "published": "Veröffentlicht"
+        },
+        "publishUpdate": {
+          "label": "Update veröffentlichen",
+          "successToast": "Version {number} für die Organisation veröffentlicht.",
+          "failedToast": "Dieses Update konnte nicht veröffentlicht werden.",
+          "sentForReviewToast": "Version {number} wurde einem Admin zur Prüfung gesendet.",
+          "offNotice": "Die Veröffentlichung ist deaktiviert. Bitten Sie einen Admin, dieses Update zu veröffentlichen."
+        }
       }
     },
     "page": {
@@ -17551,6 +17631,34 @@
       "publishWarning": {
         "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
         "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
+      }
+    },
+    "reviewRequests": {
+      "title": "Veröffentlichungsanfragen",
+      "description": "Genehmigen oder ablehnen Sie Anfragen, Skills für die Organisation zu veröffentlichen.",
+      "columns": {
+        "skill": "Skill",
+        "version": "Version",
+        "author": "Autor",
+        "saved": "Gespeichert"
+      },
+      "unnamedSkill": "Unbenannter Skill",
+      "review": {
+        "label": "Prüfen",
+        "ariaLabel": "{name} prüfen"
+      },
+      "approve": {
+        "label": "Genehmigen"
+      },
+      "deny": {
+        "label": "Ablehnen"
+      },
+      "approvedToast": "Version {number} von {name} veröffentlicht.",
+      "deniedToast": "Version {number} von {name} abgelehnt.",
+      "failedToast": "Diese Anfrage konnte nicht aktualisiert werden.",
+      "version": {
+        "firstPublish": "v{number} · Erste Veröffentlichung",
+        "update": "v{number} · Update von v{published}"
       }
     }
   },

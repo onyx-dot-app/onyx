@@ -17,8 +17,6 @@ from collections.abc import Iterator
 from io import BytesIO
 from uuid import UUID
 
-import grpc
-
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.constants import FileOrigin
@@ -617,7 +615,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 record.execution_id,
                 stdout_offset=offsets[OutputStream.STDOUT],
                 stderr_offset=offsets[OutputStream.STDERR],
-                timeout_seconds=max(until - time.monotonic(), 0.001),
+                window_seconds=max(until - time.monotonic(), 0.001),
             ):
                 text = ""
                 if isinstance(event, ExecOutput):
@@ -635,10 +633,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     result = event
                 if text:
                     yield ExecOutputDelta(text=text)
-        except HostAgentError as e:
-            # The yield time passed while the command runs.
-            if e.reached_agent or e.code is not grpc.StatusCode.DEADLINE_EXCEEDED:
-                raise
         except SandboxDaemonError as e:
             if e.reason is SandboxDaemonErrorReason.EXECUTION_NOT_FOUND:
                 remove_exec_session(

@@ -1,6 +1,7 @@
 // Command guest-daemon is the Sandboxd gRPC server inside each Craft
-// micro-VM. It listens on vsock and runs commands as root, each in its own
-// cgroup. It is not PID 1: the VM init starts it and restarts it.
+// micro-VM. It listens on vsock and runs as root. It runs commands as the
+// sandbox user (--command-user), each in its own cgroup. It is not PID 1: the
+// VM init starts it and restarts it.
 package main
 
 import (
@@ -68,6 +69,7 @@ func main() {
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
 	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root (the image's sandbox user); empty: they stay root's")
+	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
 	var ok bool
 	if ok, fc.ZstdLevel = zstd.EncoderLevelFromString(*zlevel); !ok {
@@ -80,6 +82,15 @@ func main() {
 		os.Exit(2)
 	}
 	fc.Owner = owner
+	ident, err := parseCommandUser(*cmdUser, lookupAccount)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "bad --command-user: %v\n", err)
+		os.Exit(2)
+	}
+	if ident != nil && os.Geteuid() != 0 {
+		fmt.Fprintf(os.Stderr, "--command-user=%s needs a root daemon; run as root or set --command-user=\n", *cmdUser)
+		os.Exit(2)
+	}
 	fc.ReadLinkRoots = splitList(*readLinks)
 	fc.CaptureRoots = splitList(*captureDirs)
 	fc.CaptureExclude = splitList(*captureExclude)
@@ -140,12 +151,27 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	if err := run(log, sys, managed, reclaimer, fstore, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
+	if err := run(log, sys, managed, reclaimer, fstore, ident, *port, *listen, *cgroupRoot, *stateFile, *growMounts, execs.Config{
 		DefaultDeadline: *defDeadline, MaxDeadline: *maxDeadline, OutputBytes: *outBytes, OutputBudget: *outBudget, MaxRunning: *maxRunning, MaxTracked: *maxTracked, Log: log,
 	}); err != nil {
 		log.Error("guest-daemon failed", "err", err)
 		os.Exit(1)
 	}
+}
+
+// baseEnv is the command env before Init: the defaults, the daemon's env
+// over them, then the command user's HOME, USER and LOGNAME.
+func baseEnv(environ []string, ident *commandIdentity) map[string]string {
+	base := maps.Clone(guestd.DefaultBaseEnv)
+	for _, kv := range environ {
+		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
+			base[k] = v
+		}
+	}
+	if ident != nil {
+		maps.Copy(base, ident.env)
+	}
+	return base
 }
 
 // splitList splits a comma-separated flag. An empty flag is an empty list.
@@ -159,7 +185,7 @@ func splitList(s string) []string {
 	return out
 }
 
-func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
+func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, reclaimer *guestd.Reclaimer, fstore *files.Store, ident *commandIdentity, port uint, listen, cgroupRoot, stateFile, growMounts string, ecfg execs.Config) error {
 	if cgroupRoot != "" {
 		if err := sysops.EnsureCgroup2(filepath.Dir(cgroupRoot)); err != nil {
 			return fmt.Errorf("mount cgroup2: %w", err)
@@ -173,6 +199,9 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 		log.Warn("no cgroup root: commands that call setsid escape Cancel and deadlines")
 		ecfg.Isolator = execs.ProcessGroups{}
 	}
+	if ident != nil {
+		ecfg.Credential = ident.cred
+	}
 	m, err := execs.NewManager(ecfg)
 	if err != nil {
 		return err
@@ -184,14 +213,8 @@ func run(log *slog.Logger, sys guestd.System, managed *guestd.ManagedConfig, rec
 			mounts = append(mounts, mp)
 		}
 	}
-	// Commands get the daemon's env (the image's guest.env: proxy and CA
-	// settings) over the defaults.
-	base := maps.Clone(guestd.DefaultBaseEnv)
-	for _, kv := range os.Environ() {
-		if k, v, ok := strings.Cut(kv, "="); ok && k != "" {
-			base[k] = v
-		}
-	}
+	// The image's guest.env (proxy and CA settings) comes in as the daemon's env.
+	base := baseEnv(os.Environ(), ident)
 	srv, err := guestd.NewServer(guestd.Config{
 		Version: version, GrowMounts: mounts, StateFile: stateFile, BaseEnv: base, Managed: managed,
 		Reclaimer: reclaimer, Files: fstore, Log: log,

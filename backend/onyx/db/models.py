@@ -5575,12 +5575,16 @@ class Plugin(Base):
         Enum(PluginInstallationPolicy, native_enum=False),
         nullable=True,
     )
-    # Both pointers are deferred composite FKs to a version of this plugin, so
+    # The pointers are deferred composite FKs to a version of this plugin, so
     # one transaction inserts a plugin and its first version.
     current_version_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False
     )
     published_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    # The version waiting for an admin's review, if any.
+    pending_version_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -5617,6 +5621,14 @@ class Plugin(Base):
             deferrable=True,
             initially="DEFERRED",
         ),
+        ForeignKeyConstraint(
+            ["pending_version_id", "id"],
+            ["plugin_version.id", "plugin_version.plugin_id"],
+            name="fk_plugin_pending_version",
+            use_alter=True,
+            deferrable=True,
+            initially="DEFERRED",
+        ),
     )
 
 
@@ -5638,7 +5650,8 @@ class PluginVersion(Base):
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # One {path, size, sha256} entry per file. NULL until the repair task runs.
+    # One {path, size, sha256} entry per file. NULL for a version copied from
+    # a legacy skill row.
     file_manifest: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True, deferred=True
     )

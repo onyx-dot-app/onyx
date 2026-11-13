@@ -212,5 +212,5 @@ def test_delete_skill_with_no_plugin_returns_its_bundle(
     skill = make_skill(db_session, with_plugin=False)
     bundle_file_id = skill.bundle_file_id
 
-    assert delete_skill(skill, db_session) == bundle_file_id
+    assert delete_skill(skill, db_session) == [bundle_file_id]
     assert db_session.get(Plugin, skill.id) is None

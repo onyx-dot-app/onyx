@@ -264,7 +264,11 @@ export default function SkillEditorPage({
             auto_enable: isCreatingForApp ? false : !createDisabled,
             external_app_id: externalAppId,
             sharing: creationSharing
-              ? serializeSkillSharing(creationSharing, isAdmin)
+              ? serializeSkillSharing(
+                  creationSharing,
+                  isAdmin,
+                  canManageOrgSkills
+                )
               : undefined,
           },
           pendingFilesUpload?.file
@@ -353,6 +357,11 @@ export default function SkillEditorPage({
   async function handleSharingSaved() {
     await refreshSkill();
     await refreshSkillList();
+  }
+
+  function handleVersionRestored(restored: SkillEditableDetail) {
+    void refreshSkill(restored, { revalidate: false });
+    syncEditableFields(restored);
   }
 
   async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
@@ -886,6 +895,8 @@ export default function SkillEditorPage({
           open={shareOpen}
           onClose={() => setShareOpen(false)}
           onSaved={handleSharingSaved}
+          onVersionRestored={handleVersionRestored}
+          restoreBlocked={isDirty}
         />
       ) : null}
 

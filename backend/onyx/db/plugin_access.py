@@ -278,6 +278,11 @@ class PluginAccess:
     published: bool
     installation_policy: PluginInstallationPolicy | None
     current_version_id: UUID
+    current_version_number: int
+    # None while the plugin is not published.
+    published_version_number: int | None
+    # The version waiting for review, if any.
+    pending_version_number: int | None
     version_user_runs: UUID
     # From the frontmatter of the version the user runs.
     name: str | None
@@ -297,6 +302,9 @@ def load_plugin_access(
     if not ids:
         return {}
     runs = version_user_runs(Plugin, user_id)
+    current: type[PluginVersion] = aliased(PluginVersion)
+    published: type[PluginVersion] = aliased(PluginVersion)
+    pending: type[PluginVersion] = aliased(PluginVersion)
     author = User.__table__.alias("author")
     user_email: KeyedColumnElement[str] = User.__table__.c.email
     plugin_rows = db_session.execute(
@@ -308,6 +316,9 @@ def load_plugin_access(
             Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
             Plugin.installation_policy,
             Plugin.current_version_id,
+            current.version_number,
+            published.version_number,
+            pending.version_number,
             runs,
             frontmatter_in_version("name", runs),
             func.coalesce(
@@ -316,6 +327,9 @@ def load_plugin_access(
             version_is_valid(runs),
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .join(current, current.id == Plugin.current_version_id)
+        .outerjoin(published, published.id == Plugin.published_version_id)
+        .outerjoin(pending, pending.id == Plugin.pending_version_id)
         .outerjoin(author, author.c.id == Plugin.author_user_id)
         .where(Plugin.id.in_(ids))
     ).all()
@@ -366,10 +380,13 @@ def load_plugin_access(
             published=bool(row[4]),
             installation_policy=row[5],
             current_version_id=row[6],
-            version_user_runs=row[7],
-            name=row[8],
-            description=row[9],
-            is_valid=row[10],
+            current_version_number=row[7],
+            published_version_number=row[8],
+            pending_version_number=row[9],
+            version_user_runs=row[10],
+            name=row[11],
+            description=row[12],
+            is_valid=row[13],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_shares=tuple(group_shares.get(row[0], ())),
         )

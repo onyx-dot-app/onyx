@@ -1,9 +1,8 @@
 """DB operations for plugins, their versions and marketplaces.
 
 A version never changes. Each change to a plugin's files adds a version and
-moves ``plugin.current_version_id``. In phase 1 a change to a plugin in the
-Organization library also moves ``published_version_id``, so an edit reaches
-the organization at once, as before plugins.
+moves ``plugin.current_version_id``. The organization keeps the version in
+``published_version_id`` until a publish update moves it.
 
 Access is on the plugin: shares, the install setting, the user choice and
 publishing. ``apply_plugin_access_change__no_commit`` is the one write path
@@ -38,6 +37,7 @@ from onyx.db.enums import (
     MarketplaceKind,
     Permission,
     PluginInstallationPolicy,
+    PluginPublishingPolicy,
     SkillInstallationPolicy,
     SkillSharePermission,
 )
@@ -66,6 +66,7 @@ from onyx.db.utils import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.settings.store import load_settings
 from onyx.skills.models import (
     PluginFileEntry,
     PluginSkillContent,
@@ -233,6 +234,17 @@ def _manifest_matches(
     return current.bundle_sha256 == content.bundle_sha256
 
 
+def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
+    """Refuse with PLUGIN_VERSION_STALE when ``base_version_id``, the version
+    an edit started from, is given and is not the current version."""
+    if base_version_id is not None and base_version_id != plugin.current_version_id:
+        raise OnyxError(
+            OnyxErrorCode.PLUGIN_VERSION_STALE,
+            "This skill changed since you opened it. Reload it to get the "
+            "newest version, then make your change again.",
+        )
+
+
 def add_plugin_version__no_commit(
     *,
     plugin: Plugin,
@@ -244,19 +256,14 @@ def add_plugin_version__no_commit(
     previous_manifest: Callable[[], list[PluginFileEntry]] | None = None,
 ) -> PluginVersion | None:
     """Add the next version of a plugin locked with ``lock_plugin`` and move its
-    pointers. Returns None, and writes nothing, when ``skip_if_unchanged`` is
-    set and the files equal the current version's files.
+    current_version_id. Returns None, and writes nothing, when
+    ``skip_if_unchanged`` is set and the files equal the current version's
+    files.
 
-    ``base_version_id`` is the version the edit started from. When given and
-    not the current version, the edit is refused with PLUGIN_VERSION_STALE.
+    ``base_version_id`` is checked with ``check_base_version``.
     ``previous_manifest`` supplies the current files when the current version
     has no file list yet."""
-    if base_version_id is not None and base_version_id != plugin.current_version_id:
-        raise OnyxError(
-            OnyxErrorCode.PLUGIN_VERSION_STALE,
-            "This skill changed since you opened it. Reload it to get the "
-            "newest version, then make your change again.",
-        )
+    check_base_version(plugin, base_version_id)
     current = db_session.get(PluginVersion, plugin.current_version_id)
     if current is None:
         raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin has no current version.")
@@ -297,26 +304,56 @@ def add_plugin_version__no_commit(
         db_session=db_session,
     )
     plugin.current_version_id = version.id
-    marketplace_kind = db_session.scalar(
-        select(Marketplace.kind).where(Marketplace.id == plugin.marketplace_id)
-    )
-    if marketplace_kind == MarketplaceKind.ORGANIZATION_LIBRARY:
-        plugin.published_version_id = version.id
     if is_skill_version(skill.path for skill in content.skills):
         plugin.description = content.skills[0].description
     db_session.flush()
     return version
 
 
+def list_plugin_versions(
+    plugin_id: UUID, db_session: Session
+) -> list[tuple[PluginVersion, bool, bool, bool]]:
+    """Every version of a plugin, newest first, with whether it is the
+    current, the published and the pending version."""
+    return [
+        (version, bool(is_current), bool(is_published), bool(is_pending))
+        for version, is_current, is_published, is_pending in db_session.execute(
+            select(
+                PluginVersion,
+                PluginVersion.id == Plugin.current_version_id,
+                PluginVersion.id == Plugin.published_version_id,
+                PluginVersion.id == Plugin.pending_version_id,
+            )
+            .join(Plugin, Plugin.id == PluginVersion.plugin_id)
+            .where(PluginVersion.plugin_id == plugin_id)
+            .order_by(PluginVersion.version_number.desc())
+        ).tuples()
+    ]
+
+
+def get_plugin_version(
+    plugin_id: UUID, version_id: UUID, db_session: Session
+) -> PluginVersion:
+    """One version of the plugin. A version of another plugin is not found."""
+    version = db_session.scalar(
+        select(PluginVersion).where(
+            PluginVersion.id == version_id, PluginVersion.plugin_id == plugin_id
+        )
+    )
+    if version is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
+    return version
+
+
 @dataclass(frozen=True)
 class StoredVersionContent:
     """What the database holds of one version's content. ``file_manifest`` and
-    ``skill_md`` are None for a version copied from a legacy skill row before
-    the repair task fills them."""
+    ``skill_md`` are None for a version copied from a legacy skill row."""
 
     bundle_file_id: str | None
-    # Name in the frontmatter of the skill at the bundle root.
+    # Name and description in the frontmatter of the skill at the bundle root.
     name: str | None
+    description: str | None
     file_manifest: list[PluginFileEntry] | None
     skill_md: str | None
 
@@ -328,6 +365,7 @@ def get_stored_version_content(
         select(
             PluginVersion.bundle_file_id,
             PluginSkill.frontmatter["name"].astext,
+            PluginSkill.frontmatter["description"].astext,
             PluginVersion.file_manifest,
             PluginSkill.skill_md,
         )
@@ -342,10 +380,11 @@ def get_stored_version_content(
     ).one_or_none()
     if row is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill version not found.")
-    bundle_file_id, name, manifest, skill_md = row
+    bundle_file_id, name, description, manifest, skill_md = row
     return StoredVersionContent(
         bundle_file_id=bundle_file_id,
         name=name,
+        description=description,
         file_manifest=(
             [PluginFileEntry.model_validate(entry) for entry in manifest]
             if manifest is not None
@@ -619,9 +658,10 @@ def publish_plugin__no_commit(
     on_name_clash: NameClashAction,
     db_session: Session,
 ) -> None:
-    """Publish a plugin to the organization: move it to the Organization library
-    and set published_version_id to current_version_id. Publishing is one-way.
-    A plugin that is already in the Organization library does not change.
+    """Publish a plugin to the organization: move it to the Organization library,
+    set published_version_id to current_version_id and clear the pending
+    request. Publishing is one-way. A plugin that is already in the
+    Organization library does not change.
 
     On a name clash in the Organization library, "raise" refuses with CONFLICT
     and "rename" takes the next free name (deploy-2)."""
@@ -642,6 +682,44 @@ def publish_plugin__no_commit(
         db_session=db_session,
     )
     plugin.published_version_id = plugin.current_version_id
+    plugin.pending_version_id = None
+    db_session.flush()
+
+
+def publish_or_request_review__no_commit(
+    plugin: Plugin,
+    skill: Skill | None,
+    version_id: UUID,
+    actor: User | None,
+    on_name_clash: NameClashAction,
+    db_session: Session,
+) -> None:
+    """Publish a version of a locked plugin, or make it the pending request
+    (replacing any older one) when the Publishing setting requires review for
+    ``actor``; OFF raises. The one place the setting applies. ``actor`` None
+    is a system or approved publish and always publishes. An organization-wide
+    plugin manager always publishes. A publish clears the pending request."""
+    if actor is not None and not has_global_permission(
+        actor, Permission.MANAGE_PLUGINS
+    ):
+        # A setting that cannot be read stops the publish.
+        policy = load_settings(raise_on_error=True).plugin_publishing
+        if policy == PluginPublishingPolicy.OFF:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                "Publishing to the organization is turned off. Ask an admin to "
+                "publish this skill.",
+            )
+        if policy == PluginPublishingPolicy.REQUIRES_REVIEW:
+            plugin.pending_version_id = version_id
+            db_session.flush()
+            return
+    if skill is not None and skill.public_permission is None:
+        skill.public_permission = SkillSharePermission.VIEWER
+        db_session.flush()
+    publish_plugin__no_commit(plugin.id, on_name_clash, db_session)
+    plugin.published_version_id = version_id
+    plugin.pending_version_id = None
     db_session.flush()
 
 
@@ -775,11 +853,13 @@ class PluginAccessChange:
     not change anything.
 
     ``company_installation_policy``: UNSET keeps it, None means "use the
-    marketplace default", and a value sets that value."""
+    marketplace default", and a value sets that value. ``on_name_clash``
+    applies when ``publish`` moves a plugin to the Organization library."""
 
     user_grants: tuple[PluginUserGrant, ...] | None = None
     group_grants: tuple[PluginGroupGrant, ...] | None = None
     publish: bool = False
+    on_name_clash: NameClashAction = "raise"
     company_installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     mode: PluginAccessMode = PluginAccessMode.REPLACE
 
@@ -1168,8 +1248,6 @@ def _apply_to_plugin__no_commit(
     plugin = locked.plugin
     skill = locked.skill
     if change.publish:
-        # Until the Publishing setting: the author or an organization-wide
-        # manager publishes.
         if (
             actor is not None
             and plugin.author_user_id != actor.id
@@ -1179,10 +1257,15 @@ def _apply_to_plugin__no_commit(
                 OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
                 "You do not have permission to change organization-wide skill access.",
             )
-        if skill is not None and skill.public_permission is None:
-            skill.public_permission = SkillSharePermission.VIEWER
-            db_session.flush()
-        publish_plugin__no_commit(plugin.id, "raise", db_session)
+        if plugin.published_version_id is None:
+            publish_or_request_review__no_commit(
+                plugin,
+                skill,
+                plugin.current_version_id,
+                actor,
+                change.on_name_clash,
+                db_session,
+            )
 
     if is_set(change.company_installation_policy):
         policy = change.company_installation_policy
