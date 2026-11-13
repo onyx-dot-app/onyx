@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Rastreador de issues da Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Central de serviços e solicitações de clientes da Atlassian"
+        },
         "productboard": {
           "description": "Gestão de produto"
         },

@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian 서비스 데스크 및 고객 요청"
+        },
         "productboard": {
           "description": "제품 관리"
         },
