@@ -102,7 +102,7 @@ check_for_pruning (beat, primary)          takes lock_beat; finds due pairs
                                            set fence; send generator task
 connector_pruning_generator_task (heavy)   slim listing of live IDs, diff against
                                            Postgres, send one cleanup task per
-                                           missing ID, record progress
+                                           batch of missing IDs, record progress
 monitor_ccpair_pruning_taskset             called by check_for_pruning per fence
                                            in ACTIVE_FENCES; clears the fence and
                                            SyncRecord when the taskset drains
