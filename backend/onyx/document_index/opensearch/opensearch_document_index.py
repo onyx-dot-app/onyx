@@ -686,6 +686,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return self._client.delete_by_query(query_body)
 
+    def delete_documents(self, document_ids: list[str]) -> int:
+        if not document_ids:
+            return 0
+        query_body = DocumentQuery.delete_from_document_ids_query(
+            document_ids=document_ids,
+            tenant_state=self._tenant_state,
+        )
+        return self._client.delete_by_query(query_body)
+
     def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
         """Gets the IDs of the documents that have at least one chunk in this index.
 
@@ -1413,6 +1422,12 @@ class OpenSearchIndexPair(DocumentIndex):
         total = self._primary.delete(document_id, chunk_count)
         if self._secondary is not None:
             total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def delete_documents(self, document_ids: list[str]) -> int:
+        total = self._primary.delete_documents(document_ids)
+        if self._secondary is not None:
+            total += self._secondary.delete_documents(document_ids)
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:

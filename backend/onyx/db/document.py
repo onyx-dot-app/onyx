@@ -857,31 +857,6 @@ def get_document_source_types(
     }
 
 
-def get_document_source_types_after_cc_pair_removal(
-    db_session: Session,
-    document_id: str,
-    connector_id: int,
-    credential_id: int,
-) -> tuple[DocumentSource, ...]:
-    sources = db_session.execute(
-        select(Connector.source)
-        .select_from(DocumentByConnectorCredentialPair)
-        .join(
-            Connector,
-            DocumentByConnectorCredentialPair.connector_id == Connector.id,
-        )
-        .where(
-            DocumentByConnectorCredentialPair.id == document_id,
-            ~and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-            ),
-        )
-        .distinct()
-    ).scalars()
-    return tuple(sorted(set(sources), key=lambda source: source.value))
-
-
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -906,6 +881,27 @@ def get_document_connector_counts(
         .group_by(DocumentByConnectorCredentialPair.id)
     )
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
+
+
+def get_document_ids_linked_to_other_cc_pairs(
+    db_session: Session,
+    document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+) -> set[str]:
+    """The given documents that some cc-pair other than this one still links."""
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.id.in_(document_ids),
+            ~and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            ),
+        )
+        .distinct()
+    )
+    return set(db_session.scalars(stmt))
 
 
 def get_document_counts_for_cc_pairs(
@@ -1741,6 +1737,21 @@ def mark_document_as_modified__no_commit(
     return modified_at
 
 
+def mark_documents_as_modified__no_commit(
+    document_ids: list[str],
+    db_session: Session,
+) -> datetime:
+    """Stamps one last_modified on every given document that exists and
+    returns it."""
+    modified_at = datetime.now(timezone.utc)
+    db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .values(last_modified=modified_at)
+    )
+    return modified_at
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
@@ -1771,6 +1782,20 @@ def mark_document_as_synced(
     db_session.commit()
 
 
+def mark_documents_as_synced__no_commit(
+    document_ids: list[str],
+    db_session: Session,
+    synced_as_of: datetime,
+) -> None:
+    """Batch form of mark_document_as_synced. ``synced_as_of`` is the
+    watermark captured when the synced state was read."""
+    db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .values(last_synced=synced_as_of, secondary_only_sync_pending=False)
+    )
+
+
 def mark_document_synced_secondary_pending(
     document_id: str,
     db_session: Session,
@@ -1791,25 +1816,6 @@ def mark_document_synced_secondary_pending(
     )
     doc.secondary_only_sync_pending = True
     db_session.commit()
-
-
-def delete_document_by_connector_credential_pair__no_commit(
-    db_session: Session,
-    document_id: str,
-    connector_credential_pair_identifier: (
-        ConnectorCredentialPairIdentifier | None
-    ) = None,
-) -> None:
-    """Deletes a single document by cc pair relationship entry.
-    Foreign key rows are left in place.
-    The implicit assumption is that the document itself still has other cc_pair
-    references and needs to continue existing.
-    """
-    delete_documents_by_connector_credential_pair__no_commit(
-        db_session=db_session,
-        document_ids=[document_id],
-        connector_credential_pair_identifier=connector_credential_pair_identifier,
-    )
 
 
 def delete_documents_by_connector_credential_pair__no_commit(
@@ -2135,12 +2141,44 @@ def get_document(
     return doc
 
 
-def get_document_for_update(
-    document_id: str,
+def get_documents_for_update(
+    document_ids: list[str],
     db_session: Session,
-) -> DbDocument | None:
-    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
-    return db_session.scalar(stmt)
+) -> list[DbDocument]:
+    """Locks the existing documents among the given ids. Rows are locked in id
+    order so two batches that share documents cannot deadlock."""
+    stmt = (
+        select(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .order_by(DbDocument.id)
+        .with_for_update()
+    )
+    return list(db_session.scalars(stmt))
+
+
+def get_linked_cc_pair_ids_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, list[int]]:
+    """Maps each document to every cc-pair that links it, DELETING ones
+    included (unlike get_cc_pair_ids_for_documents)."""
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+    )
+    doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
+    for document_id, cc_pair_id in db_session.execute(stmt):
+        doc_id_to_cc_pair_ids[document_id].append(cc_pair_id)
+    return dict(doc_id_to_cc_pair_ids)
 
 
 def get_cc_pairs_for_document(
@@ -2260,14 +2298,6 @@ def fetch_known_chunk_counts_for_documents(
     )
     chunk_counts = {str(row.id): row.chunk_count for row in db_session.execute(stmt)}
     return [(doc_id, chunk_counts.get(doc_id)) for doc_id in document_ids]
-
-
-def fetch_chunk_count_for_document(
-    document_id: str,
-    db_session: Session,
-) -> int | None:
-    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
-    return db_session.execute(stmt).scalar_one_or_none()
 
 
 def reset_all_document_kg_stages(db_session: Session) -> int:
