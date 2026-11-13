@@ -27,6 +27,7 @@ from onyx.db.models import (
     ChatSession,
     DocumentSet,
     DocumentSet__User,
+    Integration,
     Marketplace,
     MCPConnectionConfig,
     MCPServer,
@@ -963,6 +964,22 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    user_uploads_plugin_ids = (
+        select(Plugin.id)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_to_delete.id,
+        )
+    )
+    # A private integration goes with its owner: deleting its home plugin
+    # deletes the integration.
+    db_session.execute(
+        delete(Plugin).where(
+            Plugin.id.in_(user_uploads_plugin_ids),
+            Plugin.id.in_(select(Integration.plugin_id)),
+        )
+    )
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
     if (

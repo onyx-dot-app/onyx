@@ -22,11 +22,13 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from onyx.db.enums import SkillSharePermission
+from onyx.db.models import User
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
     apply_plugin_access_change__no_commit,
 )
+from onyx.db.users import delete_user_from_db__no_commit
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
 PREVIOUS_REVISION = "ff11c4042c42"
@@ -112,6 +114,7 @@ class Seeded:
     custom_shared: int
     custom_default: int
     custom_oauth: int
+    custom_disabled: int
     gated: dict[str, int]
     names: dict[str, str]
 
@@ -268,19 +271,23 @@ def _seed(conn: Connection) -> Seeded:
     )
 
     def custom(
-        name: str, headers: list[dict[str, str]] | None, oauth: int | None
+        name: str,
+        headers: list[dict[str, str]] | None,
+        oauth: int | None,
+        enabled: bool = True,
     ) -> int:
         return _insert(
             conn,
             "INSERT INTO tool (name, description, display_name, openapi_schema, "
             "custom_headers, user_id, passthrough_auth, oauth_config_id, enabled) "
             "VALUES (:name, 'd', :name, CAST(:schema AS jsonb), "
-            "CAST(:headers AS jsonb), :owner, false, :oauth, true) RETURNING id",
+            "CAST(:headers AS jsonb), :owner, false, :oauth, :enabled) RETURNING id",
             name=name,
             schema=json.dumps(OPENAPI_SCHEMA),
             headers=json.dumps(headers) if headers is not None else None,
             owner=users["owner"],
             oauth=oauth,
+            enabled=enabled,
         )
 
     custom_private = custom(
@@ -289,6 +296,8 @@ def _seed(conn: Connection) -> Seeded:
     custom_shared = custom(f"u1-custom-shared-{s}", None, None)
     custom_default = custom(f"u1-custom-default-{s}", None, None)
     custom_oauth = custom(f"u1-custom-oauth-{s}", None, oauth_config)
+    # Turned off for the default agent; a custom agent still has it.
+    custom_disabled = custom(f"u1-custom-disabled-{s}", None, None, enabled=False)
 
     for persona_id, tool_id in (
         (other_persona, tool_read),
@@ -299,6 +308,8 @@ def _seed(conn: Connection) -> Seeded:
         (bot_persona, tool_write),
         (bot_persona, custom_oauth),
         (0, custom_default),
+        (0, custom_disabled),
+        (own_persona, custom_disabled),
     ):
         conn.execute(
             text("INSERT INTO persona__tool (persona_id, tool_id) VALUES (:p, :t)"),
@@ -437,6 +448,7 @@ def _seed(conn: Connection) -> Seeded:
         custom_shared=custom_shared,
         custom_default=custom_default,
         custom_oauth=custom_oauth,
+        custom_disabled=custom_disabled,
         gated=gated,
         names=names,
     )
@@ -448,6 +460,7 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         seeded.custom_shared,
         seeded.custom_default,
         seeded.custom_oauth,
+        seeded.custom_disabled,
     ]
     if conn.execute(text("SELECT to_regclass('integration')")).scalar_one():
         conn.execute(
@@ -458,8 +471,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
             {"gated": list(seeded.gated.values()), "tools": custom_tools},
         )
     conn.execute(
-        text("DELETE FROM persona__tool WHERE persona_id = 0 AND tool_id = :t"),
-        {"t": seeded.custom_default},
+        text("DELETE FROM persona__tool WHERE persona_id = 0 AND tool_id = ANY(:t)"),
+        {"t": [seeded.custom_default, seeded.custom_disabled]},
     )
     conn.execute(
         text("DELETE FROM mcp_server__user_group WHERE mcp_server_id = :s"),
@@ -594,6 +607,7 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 ("shared", seeded.custom_shared),
                 ("default", seeded.custom_default),
                 ("oauth", seeded.custom_oauth),
+                ("disabled", seeded.custom_disabled),
             )
         }
 
@@ -633,6 +647,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         # Placement.
         assert public.marketplace_id == ORGANIZATION_LIBRARY_ID and public.published
         assert slack.marketplace_kind == "organization_library" and slack.published
+        assert slack.installation_policy == "NOT_AVAILABLE"
+        assert app_custom.installation_policy == "NOT_AVAILABLE"
         assert {public.plugin_name, slack.plugin_name} == {
             seeded.names["shared"],
             f"{seeded.names['shared']}-2",
@@ -819,6 +835,24 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
             )
             is not None
         )
+        # The default agent leaves out a turned-off tool; a custom agent keeps it.
+        assert custom["disabled"].installation_policy is None
+        assert (
+            _settings(
+                conn, "persona__plugin", "persona_id", 0, custom["disabled"].plugin_id
+            )
+            is None
+        )
+        assert (
+            _settings(
+                conn,
+                "persona__plugin",
+                "persona_id",
+                seeded.own_persona,
+                custom["disabled"].plugin_id,
+            )
+            == {}
+        )
 
         # A task keeps its pre-approvals, and each other action asks.
         assert _settings(
@@ -933,3 +967,33 @@ def test_share_publish_and_delete_a_home_plugin(engine: Engine, seeded: Seeded) 
                 ).scalar_one()
                 == 0
             )
+
+
+def test_user_delete_removes_private_integrations(
+    engine: Engine, seeded: Seeded
+) -> None:
+    """Private integrations of a user go with the user. They do not block the
+    delete as private skills do."""
+    _migrate("upgrade", "head")
+    with Session(engine) as db_session:
+        owner = db_session.get(User, seeded.owner)
+        assert owner is not None
+        delete_user_from_db__no_commit(owner, db_session)
+        db_session.commit()
+
+    with engine.connect() as conn:
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM integration WHERE legacy_tool_id = :t"),
+                {"t": seeded.custom_private},
+            ).scalar_one()
+            == 0
+        )
+        # A published integration stays.
+        assert (
+            conn.execute(
+                text("SELECT count(*) FROM integration WHERE legacy_tool_id = :t"),
+                {"t": seeded.custom_shared},
+            ).scalar_one()
+            == 1
+        )

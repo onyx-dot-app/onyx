@@ -230,14 +230,17 @@ def _create_tables() -> None:
     )
 
     for table in ("action_receipt", "action_approval"):
-        op.add_column(
+        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
+        # NOT VALID: no scan of the old rows under a lock. The constraint still
+        # checks each new or changed row, so the backfill below is checked too.
+        op.create_foreign_key(
+            f"fk_{table}_integration_id",
             table,
-            sa.Column(
-                "integration_id",
-                sa.Integer(),
-                sa.ForeignKey("integration.id", ondelete="SET NULL"),
-                nullable=True,
-            ),
+            "integration",
+            ["integration_id"],
+            ["id"],
+            ondelete="SET NULL",
+            postgresql_not_valid=True,
         )
 
     op.add_column(
@@ -324,7 +327,8 @@ _CREATE_SOURCES = f"""
             NULL::integer AS legacy_tool_id,
             'organization_library' AS placement,
             NULL::uuid AS author_user_id,
-            NULL::text AS installation_policy,
+            -- An admin turns each app on again.
+            'NOT_AVAILABLE' AS installation_policy,
             a.created_at,
             a.updated_at
         FROM external_app a
@@ -781,7 +785,10 @@ _INSERT_PERSONA_PLUGINS = f"""
         END
     FROM persona__tool pt
     JOIN tool_integration ti ON ti.tool_id = pt.tool_id
+    JOIN tool t ON t.id = ti.tool_id
     LEFT JOIN ({_BOT_PERSONAS}) bot ON bot.persona_id = pt.persona_id
+    -- The default agent leaves out an OpenAPI tool that the admin turned off.
+    WHERE NOT (pt.persona_id = 0 AND ti.kind = 'app' AND NOT t.enabled)
     GROUP BY pt.persona_id, ti.plugin_id, ti.kind, bot.persona_id
 """
 

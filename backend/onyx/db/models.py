@@ -8096,7 +8096,11 @@ class ActionReceipt(Base):
     )
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("integration.id", ondelete="SET NULL"),
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_receipt_integration_id",
+        ),
         nullable=True,
     )
     # The approval that authorized this action, when it went through one.
@@ -8265,7 +8269,11 @@ class ActionApproval(Base):
     )
     integration_id: Mapped[int | None] = mapped_column(
         Integer,
-        ForeignKey("integration.id", ondelete="SET NULL"),
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_approval_integration_id",
+        ),
         nullable=True,
     )
     gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")

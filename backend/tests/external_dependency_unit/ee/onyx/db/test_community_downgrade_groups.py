@@ -17,6 +17,8 @@ from onyx.configs.constants import TokenRateLimitPeriod, TokenRateLimitScope
 from onyx.db.enums import (
     AccountType,
     GrantSource,
+    IntegrationAuthMode,
+    IntegrationKind,
     Permission,
     PersonaSharePermission,
     PluginInstallationPolicy,
@@ -27,6 +29,7 @@ from onyx.db.models import (
     Base,
     DocumentSet,
     DocumentSet__UserGroup,
+    Integration,
     LLMProvider,
     LLMProvider__UserGroup,
     MCPServer,
@@ -37,6 +40,7 @@ from onyx.db.models import (
     Persona__UserGroup,
     Plugin,
     Plugin__UserGroup,
+    PluginVersion,
     Skill,
     Skill__UserGroup,
     TokenRateLimit,
@@ -46,7 +50,11 @@ from onyx.db.models import (
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.plugin import create_skill_plugin__no_commit, legacy_skill_version_content
+from onyx.db.plugin import (
+    create_skill_plugin__no_commit,
+    get_or_create_user_uploads__no_commit,
+    legacy_skill_version_content,
+)
 from onyx.db.skill import replace_skill_shares, set_skill_public_permission
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
@@ -354,6 +362,58 @@ def test_group_shared_skill_is_published_with_a_free_name_on_a_clash(
         assert plugin.name == f"{published.name}-2"
         assert plugin.published_version_id == plugin.current_version_id
         assert plugin_access_mismatches(db_session, [published.id, shared.id]) == []
+    finally:
+        db_session.rollback()
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_group_shared_integration_is_published(db_session: Session) -> None:
+    """The home plugin of an integration has no skill row. Shared with a
+    group, it is published too, so the members keep the integration."""
+    try:
+        owner = _make_user(db_session, in_basic=True)
+        group = _make_group(db_session, [owner])
+        plugin_id = uuid4()
+        db_session.add(
+            Plugin(
+                id=plugin_id,
+                name=f"downgrade-mcp-{plugin_id.hex[:8]}",
+                description="",
+                marketplace_id=get_or_create_user_uploads__no_commit(
+                    owner.id, db_session
+                ),
+                author_user_id=owner.id,
+                current_version_id=plugin_id,
+            )
+        )
+        db_session.flush()
+        db_session.add(
+            PluginVersion(id=plugin_id, plugin_id=plugin_id, version_number=1)
+        )
+        db_session.add(
+            Integration(
+                kind=IntegrationKind.MCP_SERVER,
+                name="downgrade-mcp",
+                plugin_id=plugin_id,
+                auth_mode=IntegrationAuthMode.NONE,
+            )
+        )
+        db_session.add(
+            Plugin__UserGroup(
+                plugin_id=plugin_id,
+                user_group_id=group.id,
+                permission=SkillSharePermission.VIEWER,
+            )
+        )
+        db_session.flush()
+
+        remove_custom_user_groups__no_commit(db_session)
+
+        plugin = db_session.get(Plugin, plugin_id)
+        assert plugin is not None
+        db_session.refresh(plugin)
+        assert plugin.marketplace_id == ORGANIZATION_LIBRARY_ID
+        assert plugin.published_version_id == plugin.current_version_id
     finally:
         db_session.rollback()
 
