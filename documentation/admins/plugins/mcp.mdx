@@ -132,8 +132,10 @@ When Craft is enabled, the **Approval settings** tab sets the Craft policy for e
 
 Each tool starts at **Ask**. A tool that the server marks as read-only (`readOnlyHint`) starts at **Auto-approve**.
 Onyx cannot confirm that a tool is read-only. If you do not trust the server, set its tools to **Ask**.
-Your setting always replaces the default. Onyx reads the marks when it loads the tools. To read them again now,
-click **Refresh tools**.
+Onyx reads the marks when it loads the tools. To read them again now, click **Refresh tools**.
+Onyx saves a setting only when it is different from the tool's default.
+If a tool keeps its default and a refresh changes the default, the tool uses the new default. After a refresh,
+examine the tools and set **Ask** again where necessary.
 
 Tool availability and Craft policies are separate.
 A tool that you turn off in **Available tools** is not available anywhere.
