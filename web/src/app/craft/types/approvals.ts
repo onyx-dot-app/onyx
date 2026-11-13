@@ -2,6 +2,9 @@ import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 
 export type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
 
+// Mirrors backend `ApprovalDecidedVia`.
+export type ApprovalDecidedVia = "USER" | "PRE_APPROVAL" | "SESSION_GRANT";
+
 // Mirrors backend `ActionMatch`.
 export interface ApprovalAction {
   action_type: string;
@@ -23,6 +26,7 @@ export interface ApprovalView {
   can_approve_for_session?: boolean;
   decision: ApprovalDecision | null;
   decided_at: string | null;
+  decided_via: ApprovalDecidedVia | null;
   is_live: boolean;
 }
 

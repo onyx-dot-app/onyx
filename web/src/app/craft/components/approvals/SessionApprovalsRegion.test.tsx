@@ -10,9 +10,28 @@ import type { ApprovalView } from "@/app/craft/types/approvals";
 
 // Stored outcomes
 describe("Approval history", () => {
-  it.each(["APPROVED", "REJECTED"] as const)(
-    "retains the %s outcome after refreshing the session query",
-    async (decision) => {
+  it.each([
+    [
+      "Approve this action once",
+      "APPROVED",
+      "USER",
+      "Approved: Send message in Slack",
+    ],
+    [
+      "Approve matching actions for this session",
+      "APPROVED",
+      "SESSION_GRANT",
+      "Approved for this session: Send message in Slack",
+    ],
+    [
+      "Reject this action",
+      "REJECTED",
+      "USER",
+      "Not approved: Send message in Slack",
+    ],
+  ] as const)(
+    "retains the outcome of %s after refreshing the session query",
+    async (button, decision, decidedVia, record) => {
       const user = setupUser();
       let approval: ApprovalView = {
         approval_id: "request",
@@ -32,13 +51,19 @@ describe("Approval history", () => {
         expires_at: null,
         decision: null,
         decided_at: null,
+        decided_via: null,
         is_live: true,
       };
       const fetchMock = jest
         .spyOn(global, "fetch")
         .mockImplementation(async (url, options) => {
           if (options?.method === "POST") {
-            approval = { ...approval, decision, is_live: false };
+            approval = {
+              ...approval,
+              decision,
+              decided_via: decidedVia,
+              is_live: false,
+            };
             return new Response(JSON.stringify(approval), { status: 200 });
           }
           if (String(url).endsWith("/status")) {
@@ -58,12 +83,7 @@ describe("Approval history", () => {
           });
         });
       render(<SessionApprovalsRegion sessionId="session" />);
-      await user.click(
-        await screen.findByRole("button", {
-          name:
-            decision === "APPROVED" ? /approve.*once/i : "Reject this action",
-        })
-      );
+      await user.click(await screen.findByRole("button", { name: button }));
       await waitFor(
         () =>
           expect(
@@ -74,11 +94,7 @@ describe("Approval history", () => {
           ).toHaveLength(2),
         { timeout: 2000 }
       );
-      expect(screen.getByRole("status")).toHaveTextContent(
-        decision === "APPROVED"
-          ? "Approved: Send message in Slack"
-          : "Not approved: Send message in Slack"
-      );
+      expect(screen.getByRole("status")).toHaveTextContent(record);
       fetchMock.mockRestore();
     }
   );
