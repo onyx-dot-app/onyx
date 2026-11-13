@@ -230,13 +230,13 @@ def _add_mcp_server_access_filter(stmt: Select, user: User) -> Select:
 
 
 def get_mcp_servers_accessible_to_user(
-    user: User, db_session: Session
+    user: User, db_session: Session, *, server_ids: set[int] | None = None
 ) -> list[MCPServer]:
     """MCP servers the user may attach to personas (public, or shared with them)."""
-    stmt = _add_mcp_server_access_filter(
-        select(MCPServer).order_by(MCPServer.created_at), user
-    )
-    return list(db_session.scalars(stmt).all())
+    stmt = select(MCPServer).order_by(MCPServer.created_at)
+    if server_ids is not None:
+        stmt = stmt.where(MCPServer.id.in_(server_ids))
+    return list(db_session.scalars(_add_mcp_server_access_filter(stmt, user)).all())
 
 
 def user_can_access_mcp_server(user: User, server_id: int, db_session: Session) -> bool:

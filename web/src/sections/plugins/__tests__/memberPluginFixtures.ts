@@ -76,6 +76,7 @@ export function memberServer(overrides: Partial<MCPServer> = {}): MCPServer {
     users: [],
     tool_count: 1,
     available_in_craft: true,
+    users_can_manage_policies: true,
     default_chat_enabled: true,
     connection_status: MCPConnectionStatus.CONNECTED,
     auth_type: MCPAuthenticationType.OAUTH,

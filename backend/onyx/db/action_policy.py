@@ -15,6 +15,7 @@ from onyx.db.enums import (
 )
 from onyx.db.mcp import (
     get_craft_enabled_mcp_servers,
+    get_mcp_servers_accessible_to_user,
     user_can_access_mcp_server,
 )
 from onyx.db.models import (
@@ -313,6 +314,25 @@ def _stored_policies(
     return dict(rows.tuples().all())
 
 
+def _policy_mcp_servers(
+    db_session: Session,
+    user: User,
+    server_ids: set[int],
+    *,
+    admin: bool,
+    craft_only: bool,
+) -> list[MCPServer]:
+    if admin:
+        return list(
+            db_session.scalars(select(MCPServer).where(MCPServer.id.in_(server_ids)))
+        )
+    if craft_only:
+        return get_craft_enabled_mcp_servers(
+            db_session, user, server_ids=server_ids, include_personal_disabled=True
+        )
+    return get_mcp_servers_accessible_to_user(user, db_session, server_ids=server_ids)
+
+
 def list_action_policies(
     db_session: Session,
     user: User,
@@ -324,8 +344,12 @@ def list_action_policies(
 ) -> list[AppActionPoliciesView]:
     """Read accessible catalogs and policy rows in batches. Never creates rows.
 
+    A personal read of one app covers every MCP server the user can access,
+    because personal MCP settings do not need Craft. Catalog lists and task
+    reads are Craft surfaces, so they cover only Craft-enabled MCP servers.
     Task ownership is checked by the scheduled-task endpoint before this read.
     """
+    single_app = gated_app_id is not None or target is not None
     query = (
         select(GatedApp)
         .order_by(GatedApp.external_app_id.is_(None), GatedApp.id)
@@ -344,15 +368,12 @@ def list_action_policies(
         external_query = external_query.where(ExternalApp.enabled.is_(True))
     external_apps = {app.id: app for app in db_session.scalars(external_query)}
     server_ids = {app.mcp_server_id for app in apps if app.mcp_server_id is not None}
-    servers = (
-        list(db_session.scalars(select(MCPServer).where(MCPServer.id.in_(server_ids))))
-        if admin
-        else get_craft_enabled_mcp_servers(
-            db_session,
-            user,
-            server_ids=server_ids,
-            include_personal_disabled=True,
-        )
+    servers = _policy_mcp_servers(
+        db_session,
+        user,
+        server_ids,
+        admin=admin,
+        craft_only=task_id is not None or not single_app,
     )
     mcp_servers = {server.id: server for server in servers if server.id in server_ids}
     tools_by_server: dict[int, dict[str, Tool]] = {}
@@ -488,7 +509,7 @@ def list_action_policies(
                 actions=actions,
             )
         )
-    if (gated_app_id is not None or target is not None) and not result:
+    if single_app and not result:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "App is unavailable")
     return result
 
@@ -497,8 +518,13 @@ def _load_workspace_rules(
     db_session: Session,
     user: User,
     gated_app_id: int,
+    *,
+    craft_only: bool,
 ) -> tuple[GatedApp, dict[str, ActionPolicy]]:
-    """Check app access and read the rules used to validate personal/task saves."""
+    """Check app access and read the rules used to validate personal/task saves.
+
+    ``craft_only`` also requires an MCP server to be available in Craft.
+    """
     app = db_session.get(GatedApp, gated_app_id, populate_existing=True)
     if app is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "App is unavailable")
@@ -512,7 +538,7 @@ def _load_workspace_rules(
         server = db_session.get(MCPServer, app.mcp_server_id, populate_existing=True)
         if (
             server is None
-            or not server.available_in_craft
+            or (craft_only and not server.available_in_craft)
             or not user_can_access_mcp_server(user, server.id, db_session)
         ):
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "App is unavailable")
@@ -560,7 +586,9 @@ def save_user_action_policies(
     db_session.execute(
         select(GatedApp.id).where(GatedApp.id == setting.gated_app_id).with_for_update()
     )
-    app, workspace = _load_workspace_rules(db_session, user, setting.gated_app_id)
+    app, workspace = _load_workspace_rules(
+        db_session, user, setting.gated_app_id, craft_only=False
+    )
     if not app.users_can_manage_policies:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -623,7 +651,9 @@ def replace_task_action_policies(
         .with_for_update()
     ).all()
     for setting in settings:
-        app, workspace = _load_workspace_rules(db_session, user, setting.gated_app_id)
+        app, workspace = _load_workspace_rules(
+            db_session, user, setting.gated_app_id, craft_only=True
+        )
         stored = _stored_policies(db_session, user.id, app.id, task.id)
         editable = _validate_owner_choices(
             workspace, app.users_can_manage_policies, setting.action_policies, stored

@@ -469,7 +469,7 @@ class MCPServerSimpleCreateRequest(BaseModel):
 class MCPServerSimpleUpdateRequest(BaseModel):
     users_can_manage_policies: bool | None = Field(
         default=None,
-        description="Whether users may manage Craft action policies. None leaves this unchanged.",
+        description="Whether users may manage their own action policies. None leaves this unchanged.",
     )
     name: Optional[str] = Field(None, description="Name of the MCP server")
     description: Optional[str] = Field(

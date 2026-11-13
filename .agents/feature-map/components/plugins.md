@@ -5,8 +5,10 @@
 > plugin is on in Default Chat.
 
 **Verified against:** `a4e97fcea1` (2026-10-29)
-**Edition:** CE. Craft apps, Craft availability and Craft approval settings
-appear only when Craft is available. Group or user restriction needs EE.
+**Edition:** CE. Craft apps, Craft availability and the admin approval
+settings appear only when Craft is available. The member MCP approval settings
+and the user-management switch do not need Craft. Group or user restriction
+needs EE.
 
 ---
 
@@ -178,6 +180,15 @@ that does not exist yet.
     Craft proxy ([[craft-external-apps]]). `MCPTool` and `CustomTool` in Chat
     never read them and run every call with no approval. The plugin UI must not
     show read or write badges to members or promise an approval in Chat.
+    The member approval tab (`sections/plugins/MemberPluginDetailModal.tsx`)
+    shows for a connected MCP server whose `users_can_manage_policies` is on,
+    with or without Craft and whatever its `available_in_craft`. So does the
+    admin user-management switch (`sections/actions/modals/MCPServerDetailsPage.tsx`).
+    The tab reads and writes `/action-policies/{kind}/{target_id}`
+    (`server/features/action_policies/api.py`), which checks server access but
+    not Craft. External apps on the same routes still need Craft. The Craft
+    catalog list (`/build/action-policies`) and task choices cover only
+    Craft-enabled MCP servers (`db/action_policy.py:list_action_policies`).
 12. `shared-oauth-config-shared-connection` **OpenAPI tools that share an
     `OAuthConfig` share each user's connection.** `OAuthUserToken` is unique on
     the configuration and the user, not the tool. A member who connects or

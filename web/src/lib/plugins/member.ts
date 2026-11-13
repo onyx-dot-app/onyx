@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR, { mutate, useSWRConfig, type ScopedMutator } from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import { errorHandlingFetcher, parseErrorDetail } from "@/lib/fetcher";
 import {
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
@@ -31,7 +31,10 @@ import type {
   ToolUserPreferencesRequest,
 } from "@/lib/tools/types";
 import { updateToolUserPreferences } from "@/lib/tools/svc";
-import type { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
+import type {
+  ActionPolicy,
+  ExternalAppUserResponse,
+} from "@/app/craft/v1/apps/registry";
 import {
   disconnectUserFromApp,
   startExternalAppOAuth,
@@ -379,6 +382,21 @@ export async function saveMemberMCPPreferences(
   );
   await request;
   await refreshMemberPluginCaches(mutateCache);
+}
+
+export async function saveMemberActionPolicies(
+  kind: "external_app" | "mcp_server",
+  targetId: number,
+  actionPolicies: Record<string, ActionPolicy>,
+  errorMessage: string
+): Promise<void> {
+  const response = await fetch(SWR_KEYS.appActionPolicies(kind, targetId), {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action_policies: actionPolicies }),
+  });
+  if (!response.ok)
+    throw new Error(await parseErrorDetail(response, errorMessage));
 }
 
 export async function saveMemberOpenAPIPreferences(

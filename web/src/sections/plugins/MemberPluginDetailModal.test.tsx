@@ -460,9 +460,7 @@ test("Tools tab searches stored tools and expands full descriptions without live
   expect(screen.getByText("1 tool")).toBeVisible();
   expect(screen.getByRole("searchbox", { name: "Search tools" })).toBeVisible();
   expect(requests).toHaveBeenCalledTimes(1);
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
   expect(screen.queryByText("Read")).not.toBeInTheDocument();
   expect(screen.queryByText("Ask first")).not.toBeInTheDocument();
 });
@@ -492,9 +490,7 @@ test("canceling MCP disconnect returns to Connection without a request", async (
   );
   expect(screen.queryByText("Search issues")).not.toBeInTheDocument();
   expect(requests).toHaveBeenCalledTimes(1);
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
 });
 
 test("empty MCP tools use the stored-catalog empty state", async () => {
@@ -892,13 +888,87 @@ test("external app Tools shows approval settings without nested tabs", async () 
   ).not.toBeInTheDocument();
 });
 
+test.each([false, undefined])(
+  "MCP approval settings do not need Craft when Craft access is %s",
+  async (enabled) => {
+    mockCraftEnabled = enabled;
+    const requests = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async (input) =>
+        jsonResponse(
+          String(input).includes("/action-policies/") ? approvalApp : {}
+        )
+      );
+    show({
+      ...approvalPlugin,
+      server: memberServer({ id: 7, available_in_craft: false }),
+    });
+    const user = setupUser();
+    await user.click(screen.getByRole("tab", { name: "Tools" }));
+    await user.click(screen.getByRole("tab", { name: "Approval settings" }));
+    await user.click(
+      within(
+        await screen.findByRole("group", { name: "Send report" })
+      ).getByRole("button", { name: "Ask" })
+    );
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(requests).toHaveBeenCalledWith(
+        "/api/action-policies/mcp_server/7",
+        expect.objectContaining({
+          method: "PUT",
+          body: JSON.stringify({ action_policies: { send: "ASK" } }),
+        })
+      )
+    );
+  }
+);
+
+test("MCP approval settings stay hidden when the workspace manages them", async () => {
+  const requests = jest
+    .spyOn(global, "fetch")
+    .mockResolvedValue(jsonResponse(approvalApp));
+  show(
+    {
+      ...approvalPlugin,
+      tools: [storedMcpTool],
+      server: memberServer({ id: 7, users_can_manage_policies: false }),
+    },
+    jest.fn(),
+    "all",
+    { initialTab: "approvals" }
+  );
+  await setupUser().click(screen.getByRole("tab", { name: "Tools" }));
+  expect(screen.getByText("Search issues")).toBeVisible();
+  expect(
+    screen.queryByRole("tab", { name: "Approval settings" })
+  ).not.toBeInTheDocument();
+  expect(requests).not.toHaveBeenCalledWith(
+    "/api/action-policies/mcp_server/7"
+  );
+});
+
+test("external app approval settings need Craft", () => {
+  mockCraftEnabled = false;
+  const requests = jest.spyOn(global, "fetch");
+  show({
+    kind: "external-app",
+    app: memberApp({ authenticated: true }),
+    connection: { kind: "connected", ownership: "user" },
+  });
+  expect(screen.queryByRole("tab", { name: "Tools" })).not.toBeInTheDocument();
+  expect(
+    requests.mock.calls.some(([input]) =>
+      String(input).includes("/action-policies/")
+    )
+  ).toBe(false);
+});
+
 test("approval loading retains the available tools until the editor is ready", async () => {
   const pending = deferred<Response>();
   const requests = jest.spyOn(global, "fetch").mockReturnValue(pending.promise);
   show({ ...approvalPlugin, tools: [storedMcpTool] });
-  expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/mcp_server/7"
-  );
+  expect(requests).toHaveBeenCalledWith("/api/action-policies/mcp_server/7");
   expect(screen.getByRole("tab", { name: "Connection" })).toHaveAttribute(
     "aria-selected",
     "true"
@@ -1008,7 +1078,7 @@ test("loads a fresh approval snapshot and saves displayed choices including pers
   await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() => expect(close).toHaveBeenCalled());
   expect(requests).toHaveBeenCalledWith(
-    "/api/build/action-policies/42",
+    "/api/action-policies/mcp_server/7",
     expect.objectContaining({
       body: JSON.stringify({ action_policies: { send: "DENY" } }),
     })
@@ -1072,7 +1142,7 @@ test("reset clears personal overrides only when saved", async () => {
   await user.click(screen.getByRole("button", { name: "Save" }));
   await waitFor(() =>
     expect(requests).toHaveBeenCalledWith(
-      "/api/build/action-policies/42",
+      "/api/action-policies/mcp_server/7",
       expect.objectContaining({ body: JSON.stringify({ action_policies: {} }) })
     )
   );
