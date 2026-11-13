@@ -1049,6 +1049,39 @@ class PluginInstallationPolicy(str, PyEnum):
     NOT_AVAILABLE = "NOT_AVAILABLE"
 
 
+class IntegrationKind(str, PyEnum):
+    MCP_SERVER = "mcp_server"
+    APP = "app"
+
+
+class IntegrationAuthMode(str, PyEnum):
+    NONE = "none"
+    # One connection for the organization.
+    SHARED = "shared"
+    # One connection for each user.
+    INDIVIDUAL = "individual"
+
+
+class IntegrationAuthMethod(str, PyEnum):
+    OAUTH2 = "oauth2"
+    API_KEY = "api_key"
+    # Onyx sends the user's own Onyx login token.
+    ONYX_LOGIN = "onyx_login"
+    MANAGED = "managed"
+
+
+class IntegrationConnectionStatus(str, PyEnum):
+    CONNECTED = "connected"
+    NEEDS_RECONNECT = "needs_reconnect"
+
+
+class IntegrationActionPolicyValue(str, PyEnum):
+    ALLOW = "allow"
+    AUTO = "auto"
+    ASK = "ask"
+    BLOCKED = "blocked"
+
+
 class ConnectorEventType(str, PyEnum):
     """What an inbound connector event says happened to one document."""
 

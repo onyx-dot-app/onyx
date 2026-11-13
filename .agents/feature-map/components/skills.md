@@ -371,7 +371,11 @@ The library preview of an external-app skill calls the same renderer
     `plugin`, `plugin_version`, `plugin_skill`, `plugin__user`,
     `plugin__user_group` and `user_plugin_preference` (`db/models.py:Plugin`
     and its neighbours), and fills them from each custom skill. Built-in
-    skills get no plugin. A plugin and the legacy skill row share one id.
+    skills get no plugin. A plugin and the legacy skill row share one id,
+    except the home plugin of an integration (`integration.plugin_id`,
+    migration `730bce2814a0`): its version has no bundle and no
+    `plugin_skill` row, and no skill row has its id. A join from `plugin` to
+    `plugin_skill` or `skill` must be an outer join or filter on purpose.
     No foreign key checks the version pointers (`current_version_id`,
     `published_version_id`, `pending_version_id`); write them only through
     `db/plugin.py`, which sets them to a version of the same plugin.
