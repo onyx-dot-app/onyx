@@ -7,12 +7,6 @@ import React from "react";
 export interface TimelineTokens {
   railWidth: string;
   headerRowHeight: string;
-  /** The run header's avatar or logo. */
-  headerIconSize: string;
-  /** Padding around the header icon; its box matches the header text's. */
-  headerIconPadding: string;
-  /** Padding of the run header's surface. */
-  headerSurfacePadding: string;
   stepHeaderHeight: string;
   topConnectorHeight: string;
   firstTopSpacerHeight: string;
@@ -35,12 +29,6 @@ export interface TimelineTokens {
  * - first: smaller spacer used for the first step.
  * - none: no spacer (use when connector is drawn outside layout flow).
  */
-/**
- * The header icon size in px (`--spacing-block-24`), for icon components that
- * take a number.
- */
-export const TIMELINE_HEADER_ICON_PX = 24;
-
 export type TimelineTopSpacerVariant = "default" | "first" | "none";
 
 /**
@@ -49,9 +37,6 @@ export type TimelineTopSpacerVariant = "default" | "first" | "none";
 export const timelineTokenDefaults: TimelineTokens = {
   railWidth: "var(--spacing-block-36)",
   headerRowHeight: "var(--spacing-block-36)",
-  headerIconSize: "var(--spacing-block-24)",
-  headerIconPadding: "var(--padding-icon-2)",
-  headerSurfacePadding: "var(--spacing-inline-4)",
   stepHeaderHeight: "2rem",
   topConnectorHeight: "0.5rem",
   firstTopSpacerHeight: "0.25rem",
@@ -78,9 +63,6 @@ export function getTimelineStyles(
   return {
     "--timeline-rail-width": merged.railWidth,
     "--timeline-header-row-height": merged.headerRowHeight,
-    "--timeline-header-icon-size": merged.headerIconSize,
-    "--timeline-header-icon-padding": merged.headerIconPadding,
-    "--timeline-header-surface-padding": merged.headerSurfacePadding,
     "--timeline-step-header-height": merged.stepHeaderHeight,
     "--timeline-top-connector-height": merged.topConnectorHeight,
     "--timeline-first-top-spacer-height": merged.firstTopSpacerHeight,
