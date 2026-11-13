@@ -23,8 +23,9 @@ annotations:
     - kind: changed
       description: Craft Firecracker alerts link to the operations page on
         docs.onyx.app. CraftFcTemplateUnusable also fires when a node has no
-        usable template from its root drive. The host agent dashboard shows
-        node report age, template state and the VM cap.
+        usable template from its root drive. Refusal and session transfer
+        alerts show whole counts. The host agent dashboard shows node report
+        age, template state and the VM cap, and counts new counter series.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
