@@ -3862,6 +3862,8 @@ class ToolCall(Base):
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
     tool_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # The tool's display name when called; None for a tool without one.
+    display_name: Mapped[str | None] = mapped_column(String(), nullable=True)
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())

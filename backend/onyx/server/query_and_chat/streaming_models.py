@@ -273,7 +273,10 @@ class PythonToolDelta(BaseObj):
 class CustomToolStart(BaseObj):
     type: Literal["custom_tool_start"] = StreamingType.CUSTOM_TOOL_START.value
 
+    # The name the model calls; custom and MCP tools use a qualified name.
     tool_name: str
+    # The name users see.
+    display_name: str
     tool_id: int | None = None
 
 

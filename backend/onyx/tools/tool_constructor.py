@@ -1,4 +1,3 @@
-from collections import Counter
 from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
@@ -59,13 +58,6 @@ from onyx.utils.headers import header_dict_to_header_list
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-
-def _disambiguate_mcp_tool_names(tools: list[Tool]) -> None:
-    tool_name_counts = Counter(tool.name for tool in tools)
-    for tool in tools:
-        if isinstance(tool, MCPTool) and tool_name_counts[tool.name] > 1:
-            tool.use_disambiguated_name()
 
 
 class SearchToolConfig(BaseModel):
@@ -571,10 +563,5 @@ def _construct_tools_impl(
             logger.warning(
                 "MemoryTool not found in the database. Run the latest alembic migration to seed it."
             )
-
-    tools: list[Tool] = []
-    for tool_list in tool_dict.values():
-        tools.extend(tool_list)
-    _disambiguate_mcp_tool_names(tools)
 
     return tool_dict

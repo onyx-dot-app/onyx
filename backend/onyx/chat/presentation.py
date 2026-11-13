@@ -413,13 +413,16 @@ class ResponsePresenter:
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
                 self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
-                    call, tool_placement, self.tool_ids.get(call.name)
+                    call,
+                    tool_placement,
+                    self.tool_ids.get(call.name),
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             if isinstance(event, ToolStartEvent):
+                tool.display_name = event.display_name
                 output = tool.start()
             elif isinstance(event, ToolUpdateEvent):
                 output = tool.update(event.progress.details, event.progress.content)
@@ -441,6 +444,7 @@ class ResponsePresenter:
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
+                    event.display_name,
                 )
             output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
@@ -526,7 +530,10 @@ def replay_response(
                 )
                 result = result.model_copy(update={"details": restored})
             renderer_of_call = tool_renderer(
-                call, tool_placement, record.tool_id if record is not None else None
+                call,
+                tool_placement,
+                record.tool_id if record is not None else None,
+                execution.display_name if execution is not None else None,
             )
             packets.extend(renderer_of_call.start())
             for child in response.child_runs:

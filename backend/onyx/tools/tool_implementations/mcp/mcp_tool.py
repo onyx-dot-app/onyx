@@ -45,7 +45,7 @@ from onyx.tools.models import (
     CustomToolCallSummary,
     ToolContext,
 )
-from onyx.tools.tool_name import sanitize_tool_name
+from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -133,12 +133,13 @@ class MCPTool(Tool):
         )
 
         self._mcp_tool_name = tool_name
-        self._name = tool_name  # NOTE: this may change in _disambiguate_mcp_tool_names
+        self._name = normalize_external_tool_name(
+            self.code_mode_function_name.qualified
+        )
         self._tool_definition = tool_definition
         self._output_schema = output_schema
         self._description = tool_description
         self._display_name = tool_definition.get("displayName", tool_name)
-        self._llm_name = sanitize_tool_name(f"mcp_{mcp_server.name}_{tool_name}")
 
     @property
     def id(self) -> int:
@@ -163,7 +164,8 @@ class MCPTool(Tool):
     @property
     def code_mode_function_name(self) -> CodeModeFunctionName:
         return CodeModeFunctionName(
-            name=self._mcp_tool_name, namespace=self.mcp_server.name
+            name=self._mcp_tool_name,
+            namespace=f"mcp__{self.mcp_server.id}__{sanitize_tool_name(self.mcp_server.name)}",
         )
 
     @property
@@ -177,9 +179,6 @@ class MCPTool(Tool):
             "arrays arrive parsed; other output arrives as a string. Print a small "
             "sample first if the shape is unknown.",
         )
-
-    def use_disambiguated_name(self) -> None:
-        self._name = self._llm_name
 
     def tool_definition(self) -> ToolDefinition:
         """Return the tool definition from the MCP server"""

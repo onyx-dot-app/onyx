@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 
 import httpx
@@ -42,10 +43,12 @@ def requires_code_mode(enabled: bool) -> pytest.MarkDecorator:
 def tool_call_reply(
     *calls: ToolCall, tool_choice: str | None = None, required: bool = True
 ) -> Reply:
-    """A reply that calls built-in tools the way the server offers them: native
-    tool calls, or with code mode on, one `execute_code` program that awaits
-    each call in order. The program call takes the first call's id, so a later
-    reply can wait for `has_results_for=[calls[0].id]` in both modes."""
+    """A reply that calls tools the way the server offers them: native tool
+    calls, or with code mode on, one `execute_code` program that awaits each
+    call in order. A program names a tool with its other characters as `_`; it
+    can call a deferred (MCP or custom) function without `tool_search`. The
+    program call takes the first call's id, so a later reply can wait for
+    `has_results_for=[calls[0].id]` in both modes."""
     if not CODE_MODE_ENABLED:
         return Reply(
             tool_calls=list(calls),
@@ -55,7 +58,7 @@ def tool_call_reply(
             required=required,
         )
     program = "\n".join(
-        f"await {call.name}("
+        f"await {re.sub(r'[^0-9A-Za-z_]', '_', call.name)}("
         + ", ".join(f"{name}={value!r}" for name, value in call.arguments.items())
         + ")"
         for call in calls

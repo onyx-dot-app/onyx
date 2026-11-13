@@ -230,6 +230,7 @@ class AgentTool:
         ]
         | None = None,
         interrupted_result: ToolResult | None = None,
+        display_name: str | None = None,
     ) -> None:
         self.definition = definition
         self.execute = execute
@@ -237,6 +238,7 @@ class AgentTool:
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
         self.interrupted_result = interrupted_result
+        self.display_name = display_name
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -247,6 +249,7 @@ class AgentTool:
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
             interrupted_result=self.interrupted_result,
+            display_name=self.display_name,
         )
 
     @property

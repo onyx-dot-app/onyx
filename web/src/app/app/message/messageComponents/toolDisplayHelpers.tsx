@@ -1,6 +1,7 @@
 import type { useTranslations } from "next-intl";
 import type { IconFunctionComponent } from "@opal/types";
 import {
+  CustomToolStart,
   Packet,
   PacketType,
   SearchToolPacket,
@@ -81,11 +82,12 @@ export function getToolName(packets: Packet[], t: TimelineTranslate): string {
       return t("toolNames.codeInterpreter");
     case PacketType.FETCH_TOOL_START:
       return t("toolNames.openUrls");
-    case PacketType.CUSTOM_TOOL_START:
+    case PacketType.CUSTOM_TOOL_START: {
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name ||
+        (firstPacket.obj as CustomToolStart).display_name ||
         t("toolNames.customTool")
       );
+    }
     case PacketType.IMAGE_GENERATION_TOOL_START:
       return t("toolNames.generateImage");
     case PacketType.DEEP_RESEARCH_PLAN_START:

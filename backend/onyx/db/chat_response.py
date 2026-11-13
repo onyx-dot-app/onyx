@@ -865,6 +865,7 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
                 step.tools[call.id] = ToolExecutionRecord(
                     status=tool.operation_status,
                     result=result.model_copy(deep=True) if result is not None else None,
+                    display_name=tool.display_name,
                 )
         steps.append(step)
     if any(tool.result is not None for tool in tools.values()):
@@ -1017,6 +1018,8 @@ def write_response_items(
                 raise ValueError("Response update cannot discard recorded results")
             tool.tool_call_arguments = arguments
             tool.operation_status = execution.status if execution is not None else None
+            if execution is not None:
+                tool.display_name = execution.display_name
             if (step_index, stored_call_id) not in stored_tools:
                 response_tools.append(tool)
             db_session.add(tool)

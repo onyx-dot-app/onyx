@@ -135,5 +135,6 @@ live reload recovery is not a supported contract for usage-only incognito chats.
 
 CI runs the specs tagged `@code-mode` a second time, in the `code-mode` project, against a backend with
 `CODE_MODE_ENABLED=true`. The model then calls most tools from `execute_code` programs, so a scripted native tool call
-does not match. Tag a spec when its backend flow or rendering differs in code mode. Branch on `CODE_MODE_ENABLED` from
-`tests/e2e/utils/mockLlm.ts`, which reads the variable that CI also sets for the runner. Set it the same way locally.
+does not match. Tag a spec when its backend flow or rendering differs in code mode. Script tool calls with
+`mockLlmToolCallReply`, which picks the call shape for the mode, or branch on `CODE_MODE_ENABLED`. Both are in
+`tests/e2e/utils/mockLlm.ts` and read the variable that CI also sets for the runner. Set it the same way locally.

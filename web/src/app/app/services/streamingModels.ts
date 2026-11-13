@@ -218,7 +218,10 @@ export interface CustomToolErrorInfo {
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // The name the model calls; custom and MCP tools use a qualified name.
   tool_name: string;
+  // The name users see.
+  display_name: string;
   tool_id?: number | null;
 }
 

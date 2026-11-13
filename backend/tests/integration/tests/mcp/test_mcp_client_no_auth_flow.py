@@ -174,10 +174,11 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
 ) -> None:
     """A tool result that the MCP server sends as JSON text reaches the LLM as
     JSON inside `tool_result`, not as an escaped string."""
+    server_name = f"integration-mcp-json-{uuid4().hex[:8]}"
     create_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/servers/create",
         json={
-            "name": f"integration-mcp-json-{uuid4().hex[:8]}",
+            "name": server_name,
             "description": "Integration test MCP server",
             "server_url": MCP_SERVER_URL,
             "transport": MCPTransport.STREAMABLE_HTTP.value,
@@ -212,15 +213,16 @@ def test_mcp_json_tool_result_reaches_llm_encoded_once(
         if tool["name"] == "get_ticket"
     )
 
+    callable_name = f"mcp__{server_id}__{server_name}__get_ticket"
     mock_llm.conversation(
         "chat",
         Reply(
             tool_calls=[
                 ToolCall(
-                    id="call_ticket", name="get_ticket", arguments={"ticket_id": 12}
+                    id="call_ticket", name=callable_name, arguments={"ticket_id": 12}
                 )
             ],
-            conditions=RequestConditions(offers=["get_ticket"]),
+            conditions=RequestConditions(offers=[callable_name]),
         ),
         Reply(
             text="Ticket 12 is about the widget parser.",

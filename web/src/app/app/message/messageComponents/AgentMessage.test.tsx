@@ -460,7 +460,11 @@ test("code mode reads as the tool calls it makes", async () => {
   const lookup = (at: typeof cell, done: boolean): Packet[] => [
     {
       placement: { ...at, sub_turn_index: 0 },
-      obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "lookup_orders" },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: "lookup_orders",
+        display_name: "lookup_orders",
+      },
     },
     ...(done
       ? ([
@@ -469,6 +473,7 @@ test("code mode reads as the tool calls it makes", async () => {
             obj: {
               type: PacketType.CUSTOM_TOOL_DELTA,
               tool_name: "lookup_orders",
+              display_name: "lookup_orders",
               response_type: "text",
               data: "3 orders",
             },
@@ -584,7 +589,11 @@ test("a later report of a code mode call replaces what the step shows", async ()
   });
   const start = (at: typeof cell): Packet => ({
     placement: { ...at, ...call },
-    obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "lookup_orders" },
+    obj: {
+      type: PacketType.CUSTOM_TOOL_START,
+      tool_name: "lookup_orders",
+      display_name: "lookup_orders",
+    },
   });
   // The call is running when the program yields; the wait_code observation
   // reports it again with as many packets.
@@ -685,7 +694,11 @@ test("an expanded step keeps its state when a call is inserted before it", async
   ): Packet[] => [
     {
       placement,
-      obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: toolName },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: toolName,
+        display_name: toolName,
+      },
     },
     {
       placement,

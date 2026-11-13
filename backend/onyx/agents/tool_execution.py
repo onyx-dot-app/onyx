@@ -332,7 +332,7 @@ class ToolBatch:
         step = self.step
         options = self.options
         tool = self.tools.get(call.name)
-        self.run.start_tool_calls(calls)
+        self.run.start_tool_calls(calls, tool.display_name if tool else None)
         cancellation_signal.check()
         if (
             tool is None
