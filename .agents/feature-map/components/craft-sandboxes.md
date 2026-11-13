@@ -787,8 +787,10 @@ Cleanup accepts only direct bundle children and remains best effort under concur
   inventory. The deployment gate scans apt before the browser. CVE report collection uses `--report` to
   resolve the image without enforcing the browser gate, so browser failures
   cannot stop unrelated alerts.
-  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
-  use the ODS allowlist or automatic issue tracking.
+  Release gates retain that scan. Browser PR checks use ODS with an explicit
+  inventory (`--sbom --sbom-only`), the shared advisory allowlist, and native
+  rendering and screenshot checks on AMD64 and ARM64. The ordinary OSV image
+  scan does not detect the browser ZIP.
   `.github/workflows/update-sandbox-browser.yml` moves the pin: it runs every
   four hours and when a deploy audit gate fails, and opens a PR on each stale
   branch among main and the four newest release lines.
