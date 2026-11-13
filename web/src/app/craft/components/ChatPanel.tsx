@@ -685,8 +685,7 @@ function ChatPanelContent({
                       sessionId={sessionId ?? existingSessionId ?? null}
                       attachmentRefreshKey={session?.webappNeedsRefresh}
                       messages={session?.messages ?? []}
-                      streamItems={session?.streamItems ?? []}
-                      timelineEvents={session?.timelineEvents}
+                      timelineEvents={session?.timelineEvents ?? []}
                       outputCards={outputCards}
                       onOutputOpen={openOutput}
                       onFileOpen={openOutputFile}

@@ -10,7 +10,7 @@ import type {
   SubagentState,
   SubagentTurn,
 } from "@/app/craft/types/displayTypes";
-import type { StreamItem } from "@/app/craft/types/displayTypes";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 interface SubagentViewProps {
   subagentSessionId: string;
@@ -19,9 +19,9 @@ interface SubagentViewProps {
 /**
  * SubagentView - Read-only transcript of a subagent's run. Reuses the main
  * chat renderer (BuildMessageList): each turn becomes a user message (the
- * dispatch prompt) + an assistant message whose stream items are the
- * subagent's tool calls and final response — so tool groups, assistant
- * styling, etc. all mirror the main conversation.
+ * dispatch prompt) + an assistant message whose timeline events are the
+ * subagent's thinking, tool calls and response — so the transcript mirrors
+ * the main conversation.
  */
 export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
   const t = useTranslations("craft.subagentView");
@@ -29,13 +29,13 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
   // Static transcript (autoScroll off) — ref only satisfies the prop contract.
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
-  const { messages, activeStreamItems } = useMemo<{
+  const { messages, activeEvents } = useMemo<{
     messages: BuildMessage[];
-    activeStreamItems: StreamItem[];
+    activeEvents: TimelineEvent[];
   }>(() => {
-    if (!subagent) return { messages: [], activeStreamItems: [] };
+    if (!subagent) return { messages: [], activeEvents: [] };
     const out: BuildMessage[] = [];
-    let activeItems: StreamItem[] = [];
+    let active: TimelineEvent[] = [];
     subagent.turns.forEach((turn, i) => {
       const prompt = promptForTurn(subagent, turn, i);
       if (prompt) {
@@ -46,15 +46,8 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
           timestamp: new Date(),
         });
       }
-      const isActiveTurn = isRunningActiveTurn(subagent, i);
-      const streamItems = turnToStreamItems(
-        turn,
-        subagentSessionId,
-        i,
-        isActiveTurn
-      );
-      if (isActiveTurn) {
-        activeItems = streamItems;
+      if (isRunningActiveTurn(subagent, i)) {
+        active = turn.timelineEvents;
         return;
       }
       out.push({
@@ -62,10 +55,10 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
         type: "assistant",
         content: turn.response ?? "",
         timestamp: new Date(),
-        message_metadata: { streamItems },
+        timelineEvents: turn.timelineEvents,
       });
     });
-    return { messages: out, activeStreamItems: activeItems };
+    return { messages: out, activeEvents: active };
   }, [subagent, subagentSessionId]);
 
   if (!subagent) {
@@ -82,7 +75,7 @@ export default function SubagentView({ subagentSessionId }: SubagentViewProps) {
     <BuildMessageList
       sessionId={null}
       messages={messages}
-      streamItems={activeStreamItems}
+      timelineEvents={activeEvents}
       isStreaming={subagent.status === "running"}
       autoScrollEnabled={subagent.status === "running"}
       scrollContainerRef={scrollRef}
@@ -103,43 +96,4 @@ function promptForTurn(
 
 function isRunningActiveTurn(subagent: SubagentState, index: number): boolean {
   return subagent.status === "running" && index === subagent.turns.length - 1;
-}
-
-function turnToStreamItems(
-  turn: SubagentTurn,
-  subagentSessionId: string,
-  turnIndex: number,
-  isActiveTurn: boolean
-): StreamItem[] {
-  if (turn.streamItems.length > 0) {
-    return turn.streamItems;
-  }
-
-  return [
-    ...(turn.thinking !== null
-      ? [
-          {
-            type: "thinking" as const,
-            id: `${subagentSessionId}-t${turnIndex}`,
-            content: turn.thinking,
-            isStreaming: isActiveTurn,
-          },
-        ]
-      : []),
-    ...turn.toolCalls.map((tc) => ({
-      type: "tool_call" as const,
-      id: tc.id,
-      toolCall: tc,
-    })),
-    ...(turn.response !== null
-      ? [
-          {
-            type: "text" as const,
-            id: `${subagentSessionId}-r${turnIndex}`,
-            content: turn.response,
-            isStreaming: isActiveTurn,
-          },
-        ]
-      : []),
-  ];
 }

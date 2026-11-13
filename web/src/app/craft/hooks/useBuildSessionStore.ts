@@ -29,6 +29,7 @@ import {
 import { craftPacketToEvents } from "@/lib/timeline/craft/events";
 import { cancelLatestRunningCall } from "@/lib/timeline/craft/stop";
 import type { TimelineEvent } from "@/lib/timeline/events";
+import { reduceTimelineEvents } from "@/lib/timeline/reducer";
 
 import {
   StreamItem,
@@ -257,7 +258,36 @@ function emptyTurn(prompt = ""): SubagentTurn {
     thinking: null,
     response: null,
     streamItems: [],
+    timelineEvents: [],
   };
+}
+
+/**
+ * Sets a subagent turn's final response. It replaces the text of the turn's
+ * last message, or adds a message when the turn has none.
+ */
+function withResponseEvent(
+  turn: SubagentTurn,
+  response: string | null | undefined
+): SubagentTurn {
+  if (!response) return turn;
+  const lastMessage = reduceTimelineEvents(turn.timelineEvents)
+    .entries.filter((entry) => entry.payload.kind === "message")
+    .at(-1);
+  const partId = lastMessage?.id.startsWith("part:")
+    ? lastMessage.id.slice("part:".length)
+    : undefined;
+  const event: TimelineEvent = {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: response },
+      ...(lastMessage && {
+        _meta: { onyx: { snapshotText: response, partId } },
+      }),
+    },
+  };
+  return { ...turn, timelineEvents: [...turn.timelineEvents, event] };
 }
 
 function isPlaceholderSubagentLabel(value: string): boolean {
@@ -426,9 +456,13 @@ function buildSubagentsFromMessages(
         const sa = ensure(packet.sessionId);
         const turns = sa.turns.length > 0 ? [...sa.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
+        const childEvents = craftPacketToEvents(metadata, {
+          subagentSessionId: packet.sessionId,
+        });
         if (packet.type === "text_chunk") {
           turns[turns.length - 1] = {
             ...last,
+            timelineEvents: [...last.timelineEvents, ...childEvents],
             response: (last.response ?? "") + packet.text,
             streamItems: settleStreamItems(
               appendStreamingChunk(
@@ -442,6 +476,7 @@ function buildSubagentsFromMessages(
         } else {
           turns[turns.length - 1] = {
             ...last,
+            timelineEvents: [...last.timelineEvents, ...childEvents],
             thinking: (last.thinking ?? "") + packet.text,
             streamItems: settleStreamItems(
               appendStreamingChunk(
@@ -465,10 +500,20 @@ function buildSubagentsFromMessages(
     if (cls.kind === "child") {
       const sa = ensure(cls.subagentSessionId);
       const toolCall = toolCallStateFromProgress(packet);
-      subagents.set(cls.subagentSessionId, {
-        ...sa,
-        turns: appendToolCallToLastTurn(sa, toolCall),
-      });
+      const turns = appendToolCallToLastTurn(sa, toolCall);
+      const last = turns[turns.length - 1];
+      if (last) {
+        turns[turns.length - 1] = {
+          ...last,
+          timelineEvents: [
+            ...last.timelineEvents,
+            ...craftPacketToEvents(metadata, {
+              subagentSessionId: cls.subagentSessionId,
+            }),
+          ],
+        };
+      }
+      subagents.set(cls.subagentSessionId, { ...sa, turns });
     } else if (cls.kind === "parentTask") {
       const sa = ensure(cls.subagentSessionId);
       const status: SubagentStatus =
@@ -485,7 +530,7 @@ function buildSubagentsFromMessages(
           ? firstTurn.response
           : (firstTurn.response ?? cleanTaskOutput(packet.taskOutput));
       turns[0] = {
-        ...firstTurn,
+        ...withResponseEvent(firstTurn, response),
         prompt: firstTurn.prompt || packet.command,
         response,
         // Child rows own the transcript; response can contain several parts.
@@ -1352,6 +1397,12 @@ interface BuildSessionStore {
     subagentSessionId: string,
     text: string,
     part?: TextPartUpdate
+  ) => void;
+  /** Append timeline events to the subagent's LAST turn. */
+  appendSubagentTimelineEvents: (
+    sessionId: string,
+    subagentSessionId: string,
+    events: TimelineEvent[]
   ) => void;
 }
 
@@ -3361,7 +3412,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         turns = existing.turns.length > 0 ? [...existing.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
         turns[turns.length - 1] = {
-          ...last,
+          ...withResponseEvent(last, response),
           response,
           streamItems: replaceOrAppendSettledTextItem(
             last.streamItems,
@@ -3445,6 +3496,47 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  appendSubagentTimelineEvents: (
+    sessionId: string,
+    subagentSessionId: string,
+    events: TimelineEvent[]
+  ) => {
+    if (events.length === 0) return;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const existing = session.subagents.get(subagentSessionId);
+      const base: SubagentState = existing ?? {
+        sessionId: subagentSessionId,
+        parentToolCallId: "",
+        subagentType: null,
+        name: "",
+        status: "running",
+        turns: [emptyTurn()],
+        startedAt: Date.now(),
+        completedAt: null,
+      };
+
+      const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
+      const last = turns[turns.length - 1] ?? emptyTurn();
+      turns[turns.length - 1] = {
+        ...last,
+        timelineEvents: [...last.timelineEvents, ...events],
+      };
+
+      const subagents = new Map(session.subagents);
+      subagents.set(subagentSessionId, { ...base, turns });
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        subagents,
+        lastAccessed: new Date(),
+      });
       return { sessions: newSessions };
     });
   },
