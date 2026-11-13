@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import cast
 
 from onyx.access.models import ExternalAccess
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
@@ -17,6 +18,7 @@ def get_project_permissions(
     source_operations: JiraSourceOperations,
     jira_project: str,
     add_prefix: bool = False,
+    source: DocumentSource = DocumentSource.JIRA,
 ) -> ExternalAccess | None:
     """
     Fetch the project + issue level permissions / access-control.
@@ -28,6 +30,9 @@ def get_project_permissions(
         add_prefix: When True, prefix group IDs with source type (for indexing path).
                    When False (default), leave unprefixed (for permission sync path
                    where upsert_document_external_perms handles prefixing).
+        source: The connector's DocumentSource. Accepted for forward
+                compatibility; group-prefixing in the EE implementation is
+                left unchanged in this PR.
 
     Returns:
         ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
