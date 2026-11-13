@@ -60,6 +60,11 @@ def get_harness_sandbox() -> HarnessSandbox:
     return _firecracker_sandbox()
 
 
+def get_firecracker_sandbox() -> "FirecrackerHarnessSandbox":
+    """The Firecracker sandbox itself, for its purge calls (delete hooks)."""
+    return _firecracker_sandbox()
+
+
 def get_eviction_policy() -> tuple[SandboxCheckpointer, SandboxActivityProbe]:
     """The node-report idle evictor's save and busy checks. Firecracker VMs
     serve only the harness: without harness sandboxes no VM is stopped

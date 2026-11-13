@@ -79,11 +79,23 @@ func RunImage(opts ImageOptions) (*Result, error) {
 		packages = append(packages, extra.ScannedPackages...)
 	}
 
-	ignores, err := FetchIgnores(opts.IgnoreURL)
+	result := filterFindings(findings, opts.IgnoreURL, opts.FailOn)
+	result.ScannedPackages = packages
+	result.Updates = updates
+	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// filterFindings dedupes findings, applies the allowlist at ignoreURL and marks
+// the kept findings at or above failOn as blocking.
+func filterFindings(findings []Finding, ignoreURL string, failOn Severity) *Result {
+	ignores, err := FetchIgnores(ignoreURL)
 	if err != nil {
 		// Err toward blocking: proceed with an empty allowlist so unignored
 		// criticals still fail the gate rather than slipping through.
-		log.Warnf("Could not fetch allowlist from %s: %v (continuing with no suppressions)", opts.IgnoreURL, err)
+		log.Warnf("Could not fetch allowlist from %s: %v (continuing with no suppressions)", ignoreURL, err)
 		ignores = nil
 	}
 
@@ -93,18 +105,11 @@ func RunImage(opts ImageOptions) (*Result, error) {
 	sortFindings(kept)
 	sortFindings(suppressed)
 
-	result := &Result{
-		Findings:        kept,
-		ScannedPackages: packages,
-		Updates:         updates,
-		Ignored:         suppressed,
-		Blocking:        blockingFindings(kept, opts.FailOn),
+	return &Result{
+		Findings: kept,
+		Ignored:  suppressed,
+		Blocking: blockingFindings(kept, failOn),
 	}
-
-	if err := renderReport(opts.Stdout, opts.Stderr, opts.Format, result); err != nil {
-		return nil, err
-	}
-	return result, nil
 }
 
 // scanImage runs osv-scanner's layer-aware container scanner (as a library)

@@ -1069,6 +1069,23 @@ It saves this minimum before upstream discovery, preserving release timestamps e
 It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
 CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
 
+#### Audit the Craft Firecracker guest kernel and Firecracker
+
+A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
+`ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
+`deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
+
+- The guest kernel is an Amazon Linux `microvm-kernel` tag. Each Amazon Linux 2023
+  advisory (ALAS) for the same kernel series, fixed in a newer package than the pin, is a finding.
+- Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
+
+The allowlist, report formats and `--fail-on` work as for `ods audit image`.
+A feed that cannot be read fails the command. Set `GH_TOKEN` to raise the GitHub API rate limit.
+
+```shell
+ods audit craft-fc --fail-on=high
+```
+
 #### Checking a release branch before a tag
 
 `ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,

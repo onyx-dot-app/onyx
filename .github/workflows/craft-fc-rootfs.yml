@@ -9,7 +9,13 @@
 # Pull requests and pushes to main check Dockerfile.image and
 # install-rootfs.sh with a small test drive, with no push. Conversion and
 # KVM boot of the real image are checked by craft-runtime.yml.
-# Only a manual dispatch on main converts a source image and publishes it.
+# Two paths convert a source image and publish it:
+# - a manual dispatch on main, as rootfs-<version> (for example rootfs-0.2.1);
+# - craft-runtime-release.yml on each stable and beta Onyx tag: it converts
+#   onyxdotapp/craft-runtime:<tag> and publishes rootfs-<tag> (for example
+#   rootfs-v5.3.0). The chart defaults to it.
+# A publish audits the root drive files (OS packages and the Go binaries)
+# before the push. An unignored critical stops it.
 name: Craft Firecracker Rootfs
 concurrency:
   group: Craft-FC-Rootfs-${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -35,6 +41,15 @@ on:
       version:
         description: "Version to publish as rootfs-<version>, for example 0.1.0. An existing tag is never replaced."
         type: string
+        required: true
+  workflow_call:
+    inputs:
+      release-tag:
+        description: "Onyx release tag. Converts onyxdotapp/craft-runtime:<tag> and publishes rootfs-<tag>."
+        type: string
+        required: true
+    secrets:
+      AWS_OIDC_ROLE_ARN:
         required: true
 
 permissions:
@@ -73,7 +88,7 @@ jobs:
   publish:
     needs:
       - check-image
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || inputs.release-tag != ''
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -90,9 +105,10 @@ jobs:
       contents: read
       id-token: write
     env:
-      SOURCE_IMAGE: ${{ inputs.source_image }}
-      IMAGE_TAG: rootfs-${{ inputs.version }}
-      VERSION: ${{ inputs.version }}
+      SOURCE_IMAGE: ${{ inputs.release-tag != '' && format('onyxdotapp/craft-runtime:{0}', inputs.release-tag) || inputs.source_image }}
+      IMAGE_TAG: rootfs-${{ inputs.release-tag || inputs.version }}
+      VERSION: ${{ inputs.release-tag || inputs.version }}
+      RELEASE: ${{ inputs.release-tag != '' }}
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
@@ -104,8 +120,13 @@ jobs:
       - name: Check the inputs
         run: |
           set -euo pipefail
-          if ! [[ "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::version must look like 0.1.0."
+          if [ "${RELEASE}" = true ]; then
+            pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          else
+            pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
+          fi
+          if ! [[ "${VERSION}" =~ ${pattern} ]]; then
+            echo "::error::${VERSION} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 for a release."
             exit 1
           fi
           # A pinned tag: the published drive must name the image it came from.
@@ -209,6 +230,26 @@ jobs:
       # the Docker config (buildx state). The push runs as the runner user.
       - name: Give the Docker config back to the runner user
         run: sudo chown -R "$(id -u):$(id -g)" "${DOCKER_CONFIG:-$HOME/.docker}"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+
+      - name: Build audit from this revision
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
+
+      # The source image is audited when it is published. This audit also
+      # covers what the conversion adds: packages and the guest Go binaries.
+      - name: Audit the root drive
+        run: |
+          set -euo pipefail
+          mnt="$(mktemp -d)"
+          sudo mount -o loop,ro "${RUNNER_TEMP}/rootfs/rootfs.ext4" "${mnt}"
+          trap 'sudo umount "${mnt}"' EXIT
+          sudo tar -C "${mnt}" -c . | docker import - craft-fc-rootfs:audit
+          "${RUNNER_TEMP}/ods-audit" image craft-fc-rootfs:audit --fail-on=critical --strict
 
       - name: Push the root drive image by digest
         id: push

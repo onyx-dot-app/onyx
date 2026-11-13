@@ -203,3 +203,21 @@ func TestAnnounceHelpers(t *testing.T) {
 		t.Errorf("ignoreReason should cap at 120 runes, got %d", len(got))
 	}
 }
+
+func TestCVECountNamesTheSeverities(t *testing.T) {
+	cases := []struct {
+		count      int
+		severities map[Severity]int
+		want       string
+	}{
+		{1, map[Severity]int{SeverityCritical: 1}, "1 critical CVE"},
+		{4, map[Severity]int{SeverityCritical: 4}, "4 critical CVEs"},
+		{18, map[Severity]int{SeverityHigh: 18}, "18 high CVEs"},
+		{3, map[Severity]int{SeverityCritical: 1, SeverityHigh: 2}, "3 CVEs (1 critical, 2 high)"},
+	}
+	for _, tc := range cases {
+		if got := cveCount(tc.count, tc.severities); got != tc.want {
+			t.Errorf("cveCount(%d, %v) = %q, want %q", tc.count, tc.severities, got, tc.want)
+		}
+	}
+}

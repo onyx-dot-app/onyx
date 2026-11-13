@@ -212,6 +212,11 @@ class ImageResolverTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "onyx-sandbox-os:audit")
         self.assertNotIn("browser audit ran", result.stderr)
 
+    def test_craft_fc_host_agent_resolves_to_the_built_image(self) -> None:
+        result = resolve_image("craft-fc-host-agent", 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "onyx-craft-fc-host-agent:audit")
+
     def test_unknown_component_keeps_its_distinct_exit_status(self) -> None:
         result = resolve_image("unknown", 0)
         self.assertEqual(result.returncode, 2, result.stderr)

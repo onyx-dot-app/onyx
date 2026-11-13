@@ -351,6 +351,35 @@ sandbox ID, the tenant ID and the time.
   credentials.
 - A whole node: drain it, then delete the node. VM data is only on the node data disk.
 
+### Patch a kernel or Firecracker CVE
+
+`ods audit craft-fc` matches the guest kernel and Firecracker pins in
+`deployment/craft-fc/Dockerfile.artifacts` with the Amazon Linux 2023 advisories and the
+Firecracker GitHub advisories. CVE Alerts runs it every day with `--fail-on=high` and opens a
+`cve-alert` issue for each finding. Each release runs it with `--fail-on=critical` before it
+publishes the host agent.
+
+1. Read the advisory. A guest escape (Firecracker, the jailer, or KVM in the host kernel) is
+   urgent: ship a patch release. A guest kernel issue goes in the next monthly bump, because
+   guest root is in the threat model.
+2. If the advisory does not apply to our use, suppress its ID (`ALAS2023-...` or `GHSA-...`) with a
+   reason and an expiry. An ALAS ID covers all of its CVEs:
+   `ods audit ignore add <ID> --ecosystem craft-fc --reason "<why>" --expires <YYYY-MM-DD>`.
+3. Else change the version. Follow "Change a version" in `deployment/craft-fc/README.md`: the
+   newest `microvm-kernel-<series>.*` tag of `amazonlinux/linux`, or the fixed Firecracker
+   release, with its SHA256 pins. In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile`
+   to the new tag and update the binary pins in `microvm/internal/binaries`. The host agent build
+   checks that `ARTIFACTS_TAG` matches `Dockerfile.artifacts`. If no newer `microvm-kernel` tag has
+   the fix, escalate.
+4. Do the boot test, and run the "Craft Firecracker Host Agent KVM" workflow (full lane) on the
+   branch. Until the new artifacts tag is published, CI builds the artifacts from the branch.
+5. Merge. Then publish `craft-fc-artifacts` from `main` (it pushes the `-source` tag first),
+   before the next Onyx release tag. The host agent release publish needs the published tag.
+6. The next Onyx release publishes `craft-fc-host-agent:<tag>` with the new kernel and Firecracker.
+   The DaemonSet replaces one agent pod at a time. Running VMs keep the old kernel and Firecracker
+   until they stop. After a guest escape fix, stop and start each running VM after its session is
+   saved (see "Drain a node").
+
 ## Signals with no metric
 
 These have no Prometheus metric yet. Use the agent log:

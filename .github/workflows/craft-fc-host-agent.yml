@@ -2,7 +2,13 @@
 # See microvm/Dockerfile.
 #
 # Pull requests and pushes to main build and check the image, with no push.
-# Only a manual dispatch on main publishes it to Docker Hub.
+# Two paths publish it to Docker Hub:
+# - a manual dispatch on main, with a numeric version (for example 0.5.0);
+# - craft-runtime-release.yml on each stable and beta Onyx tag, with the
+#   Onyx tag as the image tag (for example v5.3.0). The chart defaults to it.
+# A publish first audits the image (OS packages and Go modules), the guest
+# kernel and Firecracker pins (ods audit craft-fc). The build job also runs
+# govulncheck on the Go module (report only).
 #
 # The image copies /craft-fc/ from onyxdotapp/craft-fc-artifacts. Until that tag
 # is published (craft-fc-artifacts.yml), the build job builds
@@ -31,6 +37,15 @@ on:
       version:
         description: "Image tag to publish, for example 0.1.0. An existing tag is never replaced."
         type: string
+        required: true
+  workflow_call:
+    inputs:
+      release-tag:
+        description: "Onyx release tag to publish as the image tag, for example v5.3.0."
+        type: string
+        required: true
+    secrets:
+      AWS_OIDC_ROLE_ARN:
         required: true
 
 permissions:
@@ -148,10 +163,23 @@ jobs:
       - name: Check host agent image
         run: bash "${AGENT_DIR}/check-image.sh" "${REGISTRY_IMAGE}:ci"
 
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.AGENT_DIR }}/go.mod
+          cache: false
+
+      # Report only: a Go fix needs a new agent build and the KVM tests.
+      - name: Scan the Go module with govulncheck
+        working-directory: ${{ env.AGENT_DIR }}
+        run: |
+          if ! go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...; then
+            echo "::warning::govulncheck reports vulnerabilities in ${AGENT_DIR}. See the step log."
+          fi
+
   publish:
     needs:
       - build
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') || inputs.release-tag != ''
     runs-on:
       - runs-on
       - runner=8cpu-linux-x64
@@ -163,7 +191,8 @@ jobs:
       contents: read
       id-token: write
     env:
-      IMAGE_TAG: ${{ inputs.version }}
+      IMAGE_TAG: ${{ inputs.release-tag || inputs.version }}
+      RELEASE: ${{ inputs.release-tag != '' }}
       ARTIFACTS_TAG: ${{ needs.build.outputs.artifacts-tag }}
     steps:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
@@ -176,8 +205,13 @@ jobs:
       - name: Check the version input
         run: |
           set -euo pipefail
-          if ! [[ "${IMAGE_TAG}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "::error::version must look like 0.1.0."
+          if [ "${RELEASE}" = true ]; then
+            pattern='^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          else
+            pattern='^[0-9]+\.[0-9]+\.[0-9]+$'
+          fi
+          if ! [[ "${IMAGE_TAG}" =~ ${pattern} ]]; then
+            echo "::error::${IMAGE_TAG} is not a version: use 0.1.0 for a dispatch, or an Onyx tag such as v5.3.0 for a release."
             exit 1
           fi
 
@@ -263,6 +297,28 @@ jobs:
           set -euo pipefail
           docker pull --platform linux/amd64 "${REGISTRY_IMAGE}@${DIGEST}"
           bash "${AGENT_DIR}/check-image.sh" "${REGISTRY_IMAGE}@${DIGEST}"
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # ratchet:actions/setup-go@v5
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+
+      - name: Build audit from this revision
+        working-directory: tools/ods
+        run: go build -o "${RUNNER_TEMP}/ods-audit" ./odsaudit
+
+      # The same gate as the other release images: an unignored critical in
+      # the image or in the guest kernel and Firecracker pins stops the tag.
+      - name: Audit the pushed image, the guest kernel and Firecracker
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          status=0
+          "${RUNNER_TEMP}/ods-audit" image "${REGISTRY_IMAGE}@${DIGEST}" --fail-on=critical --strict || status=1
+          "${RUNNER_TEMP}/ods-audit" craft-fc --fail-on=critical || status=1
+          exit "${status}"
 
       - name: Tag the checked image
         env:
