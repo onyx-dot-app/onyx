@@ -266,3 +266,16 @@ class Tool(abc.ABC):
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
         )
+
+
+def tool_definition_from_arguments(
+    name: str, description: str, arguments: type[BaseModel]
+) -> ToolDefinition:
+    """A tool definition whose parameters are the JSON schema of the Pydantic
+    model that `parse_tool_arguments` validates the call with."""
+    schema = arguments.model_json_schema()
+    # Titles repeat the property names; leave them out of every request.
+    schema.pop("title", None)
+    for field in schema["properties"].values():
+        field.pop("title", None)
+    return ToolDefinition(name=name, description=description, parameters=schema)
