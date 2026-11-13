@@ -2,7 +2,7 @@
   "id": null,
   "uid": "onyx-craft-fc-host-agent",
   "title": "Onyx Craft Firecracker Host Agent",
-  "description": "Craft Firecracker host agent, per node. Metrics: microvm/README.md. Runbooks: microvm/RUNBOOKS.md.",
+  "description": "Craft Firecracker host agent, per node. Metrics: microvm/README.md. Runbooks: https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations.",
   "tags": [
     "onyx",
     "craft",
@@ -2140,6 +2140,235 @@
     },
     {
       "type": "row",
+      "title": "Node registration, templates and VM slots",
+      "id": 41,
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 83
+      },
+      "panels": []
+    },
+    {
+      "type": "timeseries",
+      "id": 42,
+      "title": "Time since last accepted report / key registration",
+      "description": "Seconds since the api_server last accepted a node state report or a signing key registration. The api_server treats a node with no report for SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) as dead and places no VM on it.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (node) (time() - (craft_fc_host_agent_node_report_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"} > 0))",
+          "legendFormat": "report {{node}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (node) (time() - (craft_fc_host_agent_key_registration_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"} > 0))",
+          "legendFormat": "key {{node}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 43,
+      "title": "Template ready and builds",
+      "description": "template_ready is 1 when the last build from the root drive gave a usable template, 0 before the first build and after a failed one.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (node) (craft_fc_host_agent_template_ready{namespace=~\"$namespace\", node=~\"$node\"})",
+          "legendFormat": "ready {{node}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (node, result) (increase(craft_fc_host_agent_template_builds_total{namespace=~\"$namespace\", node=~\"$node\"}[$__rate_interval]))",
+          "legendFormat": "build {{result}} {{node}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 44,
+      "title": "VMs vs VM cap",
+      "description": "Starting and running VMs on each node against --max-vms (0 = no cap). Template builds and processes in doubt also take a slot, so the agent can refuse CAPACITY_VM_SLOTS a little before the VM count reaches the cap.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 84
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            }
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": [
+            "lastNotNull",
+            "max"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "sum by (node) (craft_fc_host_agent_vms{namespace=~\"$namespace\", node=~\"$node\", state=~\"starting|running\"})",
+          "legendFormat": "VMs {{node}}",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${DS_PROMETHEUS}"
+          },
+          "expr": "max by (node) (craft_fc_host_agent_max_vms{namespace=~\"$namespace\", node=~\"$node\"})",
+          "legendFormat": "cap {{node}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "type": "row",
       "title": "api_server: sandbox ready (all sandbox runtimes)",
       "id": 38,
       "collapsed": false,
@@ -2147,7 +2376,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 83
+        "y": 92
       },
       "panels": []
     },
@@ -2164,7 +2393,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 93
       },
       "fieldConfig": {
         "defaults": {
@@ -2227,7 +2456,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 84
+        "y": 93
       },
       "fieldConfig": {
         "defaults": {
