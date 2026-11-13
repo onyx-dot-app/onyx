@@ -54,6 +54,7 @@ from onyx.db.skill import (
     share_skill__no_commit,
     transfer_skill_ownership,
 )
+from onyx.db.skill_limit import users_past_write_limit
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -78,6 +79,7 @@ from onyx.server.features.skill.models import (
     SkillCreateRequest,
     SkillEditableDetailResponse,
     SkillEnableRequest,
+    SkillLimitUsersResponse,
     SkillPatchRequest,
     SkillPreviewResponse,
     SkillPublishRequest,
@@ -117,6 +119,7 @@ from onyx.skills.ingest import (
     ingested_skill_bundle,
 )
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
+from onyx.skills.limits import SKILL_WRITE_MAX_BYTES, SKILL_WRITE_MAX_FILES
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
 from onyx.skills.push import (
@@ -421,6 +424,20 @@ def set_organization_library_default_access(
     push_skills_and_commit(affected, db_session)
     return OrganizationLibraryDefaultAccess(
         installation_policy=request.installation_policy
+    )
+
+
+@user_router.get("/users-over-limit")
+def list_users_over_skill_limit(
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> SkillLimitUsersResponse:
+    """Active users past 500 MB or 5,000 files of skills, with how many of
+    their skills the run-time limit leaves out."""
+    return SkillLimitUsersResponse(
+        max_bytes=SKILL_WRITE_MAX_BYTES,
+        max_files=SKILL_WRITE_MAX_FILES,
+        users=users_past_write_limit(db_session),
     )
 
 

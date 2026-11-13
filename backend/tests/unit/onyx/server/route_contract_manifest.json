@@ -362,6 +362,7 @@
   "GET /skills/custom/{skill_id}/versions/{version_id}": "basic",
   "GET /skills/organization-library/default-access": "manage:plugins",
   "GET /skills/review-requests": "manage:plugins",
+  "GET /skills/users-over-limit": "manage:plugins",
   "GET /skills/{skill_id}": "basic",
   "GET /skills/{skill_id}/preview": "basic",
   "GET /tenants/anonymous-user-path": "admin",

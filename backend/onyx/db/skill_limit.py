@@ -4,26 +4,29 @@ A user's own write (turning a skill on, an upload or import, a new version of
 a skill they run) may not move them from within the limits in
 ``onyx.skills.limits`` to past them. A user who is already past them is not
 refused. Writes that change what other users get (settings, shares,
-publishing, membership) are not checked.
+publishing, membership) are not checked: the run-time limit and the admin
+list cover those users.
 """
 
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from onyx.db.models import User
+from onyx.db.models import Sandbox, User
 from onyx.db.plugin_access import (
+    active_skill_user,
     load_user_plugin_states,
     skill_usage_by_user,
+    users_with_usage_past,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills import limits
 from onyx.skills.built_in import built_in_skills_usage
-from onyx.skills.models import SkillLimitRefusal, SkillUsage
+from onyx.skills.models import SkillLimitRefusal, SkillUsage, UserPastWriteLimit
 
 _MB = 1024 * 1024
 
@@ -94,3 +97,49 @@ def check_skill_limit(
         total_before
     ):
         raise skill_limit_error(total_after)
+
+
+# --- Users past the write limit ------------------------------------------------
+
+
+def users_past_write_limit(db_session: Session) -> list[UserPastWriteLimit]:
+    """Active users past the write limit (500 MB or 5,000 files), largest
+    first, with how many plugins the last push left out of their sandbox."""
+    room = (
+        SkillUsage(
+            bytes=limits.SKILL_WRITE_MAX_BYTES, files=limits.SKILL_WRITE_MAX_FILES
+        )
+        - built_in_skills_usage()
+    )
+    candidates = list(
+        db_session.scalars(users_with_usage_past(active_skill_user(), room))
+    )
+    over = {
+        user_id: total
+        for user_id, usage in _usage(candidates, db_session).items()
+        if limits.is_over_write_limit(total := usage + built_in_skills_usage())
+    }
+    if not over:
+        return []
+    user = User.__table__.c
+    rows = db_session.execute(
+        select(
+            user.id,
+            user.email,
+            func.coalesce(func.jsonb_array_length(Sandbox.skill_omissions), 0),
+        )
+        .outerjoin(Sandbox, Sandbox.user_id == user.id)
+        .where(user.id.in_(over))
+    )
+    return sorted(
+        (
+            UserPastWriteLimit(
+                user_id=user_id,
+                email=email,
+                usage=over[user_id],
+                skills_not_loaded=not_loaded,
+            )
+            for user_id, email, not_loaded in rows
+        ),
+        key=lambda item: (-item.usage.bytes, item.email),
+    )

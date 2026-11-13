@@ -19,7 +19,11 @@ from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.models import GITHUB_SKILL_MAX_COUNT, SkillBundleFile
+from onyx.skills.models import (
+    GITHUB_SKILL_MAX_COUNT,
+    SkillBundleFile,
+    UserPastWriteLimit,
+)
 from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
@@ -361,6 +365,14 @@ class OrganizationLibraryDefaultAccess(BaseModel):
     """The install setting of every published skill with no own setting."""
 
     installation_policy: PluginInstallationPolicy
+
+
+class SkillLimitUsersResponse(BaseModel):
+    """Active users past the write limit (``max_bytes`` or ``max_files``)."""
+
+    max_bytes: int
+    max_files: int
+    users: list[UserPastWriteLimit]
 
 
 class SkillEnableRequest(BaseModel):

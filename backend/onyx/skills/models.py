@@ -1,5 +1,6 @@
 import re
-from typing import Any, Final
+from typing import Any, Final, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
@@ -192,3 +193,37 @@ class SkillLimitRefusal(BaseModel):
     usage: SkillUsage
     max_bytes: int
     max_files: int
+
+
+class SkillOmission(BaseModel):
+    """A plugin that the run-time limit left out of a sandbox."""
+
+    model_config = ConfigDict(frozen=True)
+
+    plugin_id: UUID
+    name: str
+    # Size and file count of the version the user runs.
+    bytes: int
+    files: int
+    # The limit it would break.
+    reason: Literal["bytes", "files"]
+
+
+class SandboxSkillsState(BaseModel):
+    """The skill content a sandbox got: its hash and the plugins the run-time
+    skill limit left out of it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    skills_hash: str | None
+    omissions: tuple[SkillOmission, ...]
+
+
+class UserPastWriteLimit(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    user_id: UUID
+    email: str
+    usage: SkillUsage
+    # Plugins the last push left out of the user's sandbox.
+    skills_not_loaded: int
