@@ -12892,11 +12892,6 @@
           "text": "Image generation stopped"
         }
       },
-      "markdownTable": {
-        "copyButton": {
-          "label": "Copy table"
-        }
-      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"

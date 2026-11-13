@@ -12892,11 +12892,6 @@
           "text": "画像の生成を停止しました"
         }
       },
-      "markdownTable": {
-        "copyButton": {
-          "label": "表をコピー"
-        }
-      },
       "memoizedLink": {
         "questionFallback": {
           "label": "質問"
