@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 // StreamEvent is the interface for all parsed stream events.
 type StreamEvent interface {
 	EventType() string
@@ -26,6 +28,8 @@ const (
 	EventResearchAgentStart   = "research_agent_start"
 	EventIntermediateReport   = "intermediate_report_start"
 	EventIntermediateReportDt = "intermediate_report_delta"
+	EventToolApprovalRequest  = "tool_approval_request"
+	EventToolApprovalResolved = "tool_approval_resolved"
 	EventUnknown              = "unknown"
 )
 
@@ -58,7 +62,8 @@ type ErrorEvent struct {
 	Error       string     `json:"error"`
 	StackTrace  *string    `json:"stack_trace,omitempty"`
 	IsRetryable bool       `json:"is_retryable"`
-	StatusCode  int        `json:"-"` // HTTP status for client-side errors; zero for server-pushed stream errors
+	StatusCode  int        `json:"-"`                    // HTTP status for client-side errors; zero for server-pushed stream errors
+	ErrorCode   string     `json:"error_code,omitempty"` // Onyx error code of a rejected request, e.g. APPROVAL_PENDING
 }
 
 func (e ErrorEvent) EventType() string { return EventError }
@@ -180,6 +185,42 @@ type IntermediateReportDeltaEvent struct {
 }
 
 func (e IntermediateReportDeltaEvent) EventType() string { return EventIntermediateReportDt }
+
+// ToolApprovalRequestEvent asks the user to approve one tool call. The tool
+// call waits until the user decides or the request expires. Arguments come
+// from the model and are untrusted.
+type ToolApprovalRequestEvent struct {
+	Placement   *Placement     `json:"placement,omitempty"`
+	ApprovalID  string         `json:"approval_id"`
+	ToolCallID  string         `json:"tool_call_id"`
+	ToolName    string         `json:"tool_name"`
+	DisplayName string         `json:"display_name"`
+	Arguments   map[string]any `json:"arguments"`
+	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
+}
+
+func (e ToolApprovalRequestEvent) EventType() string { return EventToolApprovalRequest }
+
+// Outcomes of a tool approval request.
+const (
+	ApprovalOutcomeApproved = "approved"
+	// ApprovalOutcomeApprovedForChat: a grant for the session's later calls of
+	// the tool approved the request.
+	ApprovalOutcomeApprovedForChat = "approved_for_chat"
+	ApprovalOutcomeRejected        = "rejected"
+	ApprovalOutcomeExpired         = "expired"
+	ApprovalOutcomeDisabled        = "disabled"
+	ApprovalOutcomeCancelled       = "cancelled"
+)
+
+// ToolApprovalResolvedEvent reports how an approval request ended.
+type ToolApprovalResolvedEvent struct {
+	Placement  *Placement `json:"placement,omitempty"`
+	ApprovalID string     `json:"approval_id"`
+	Outcome    string     `json:"outcome"`
+}
+
+func (e ToolApprovalResolvedEvent) EventType() string { return EventToolApprovalResolved }
 
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {

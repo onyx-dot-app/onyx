@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"golang.org/x/text/cases"
@@ -41,7 +42,7 @@ func ParseStreamLine(line string) models.StreamEvent {
 			userMsgID = &id
 		}
 		return models.MessageIDEvent{
-			UserMessageID:              userMsgID,
+			UserMessageID:          userMsgID,
 			ReservedAgentMessageID: reservedID,
 		}
 	}
@@ -199,6 +200,27 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 	case "intermediate_report_delta":
 		content, _ := obj["content"].(string)
 		return models.IntermediateReportDeltaEvent{Placement: placement, Content: content}
+
+	case "tool_approval_request":
+		event := models.ToolApprovalRequestEvent{
+			Placement:   placement,
+			ApprovalID:  jsonString(obj["approval_id"]),
+			ToolCallID:  jsonString(obj["tool_call_id"]),
+			ToolName:    jsonString(obj["tool_name"]),
+			DisplayName: jsonString(obj["display_name"]),
+		}
+		event.Arguments, _ = obj["arguments"].(map[string]any)
+		if expiresAt, err := time.Parse(time.RFC3339, jsonString(obj["expires_at"])); err == nil {
+			event.ExpiresAt = &expiresAt
+		}
+		return event
+
+	case "tool_approval_resolved":
+		return models.ToolApprovalResolvedEvent{
+			Placement:  placement,
+			ApprovalID: jsonString(obj["approval_id"]),
+			Outcome:    jsonString(obj["outcome"]),
+		}
 
 	default:
 		return models.UnknownEvent{Placement: placement, RawData: obj}

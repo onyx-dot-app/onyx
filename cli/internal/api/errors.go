@@ -6,10 +6,16 @@ import (
 	"net/http"
 )
 
+// ErrorCodeApprovalPending rejects a new message while a tool call in the
+// chat waits for the user's approval.
+const ErrorCodeApprovalPending = "APPROVAL_PENDING"
+
 // OnyxAPIError is returned when an Onyx API call fails.
 type OnyxAPIError struct {
 	StatusCode int
-	Detail     string
+	// ErrorCode is the server's machine-readable code, empty when the body has none.
+	ErrorCode string
+	Detail    string
 }
 
 func (e *OnyxAPIError) Error() string {
@@ -40,4 +46,11 @@ func IsRetryableReadinessError(err error) bool {
 	}
 	// Transport errors and malformed responses can recover on a later request.
 	return true
+}
+
+// IsApprovalNoLongerWaiting reports a decision the server cannot apply because
+// the request was already decided, expired, or does not exist.
+func IsApprovalNoLongerWaiting(err error) bool {
+	var apiErr *OnyxAPIError
+	return errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusConflict || apiErr.StatusCode == http.StatusNotFound)
 }

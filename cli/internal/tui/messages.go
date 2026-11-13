@@ -7,7 +7,7 @@ import (
 // InitDoneMsg signals that async initialization is complete.
 type InitDoneMsg struct {
 	Agents []models.AgentSummary
-	Err      error
+	Err    error
 }
 
 // SessionsLoadedMsg carries loaded chat sessions.
@@ -19,7 +19,10 @@ type SessionsLoadedMsg struct {
 // SessionResumedMsg carries a loaded session detail.
 type SessionResumedMsg struct {
 	Detail *models.ChatSessionDetailResponse
-	Err    error
+	// Running reports a response that still runs, such as one that waits for
+	// an approval.
+	Running bool
+	Err     error
 }
 
 // FileUploadedMsg carries an uploaded file descriptor.

@@ -57,6 +57,30 @@ onyx-cli chat --agent-name "Support Agent"
 | `--agent-id <int>` | Agent ID to use for this session |
 | `--agent-name <string>` | Agent name to use for this session (exact or unique substring; mutually exclusive with `--agent-id`) |
 
+#### Tool approvals
+
+Some tool calls need your approval before they run. The chat shows a card with
+the tool name, its arguments, and the time by which to decide. The server waits
+up to 10 minutes for a decision.
+
+| Key | Action |
+|-----|--------|
+| `y` | Approve once |
+| `a` | Approve for this session |
+| `n` | Reject |
+| `Up` / `Down`, `Enter` | Select and confirm an action |
+| `Escape`, `Ctrl+C` | Stop the response |
+
+The shortcuts work when the input is empty. While a request waits, you can type
+a draft, but you cannot send it. After the decision, the card changes to a
+one-line record: Approved, Approved for this session, Not approved, Timed out,
+Disabled, or No longer waiting.
+
+When you open a session with `/resume` while a request in it waits, the chat
+shows the response again with its card, so you can decide here. If you send a
+message while a request waits elsewhere, the chat does the same and keeps your
+message as a draft.
+
 ### One-shot question
 
 ```shell
@@ -74,6 +98,23 @@ onyx-cli ask --json "Hello"
 | `--prompt <string>` | Question text (use with piped stdin context) |
 | `--quiet` | Buffer output and print once at end |
 | `--max-output <int>` | Max bytes before truncating (0 to disable) |
+| `--approve <answer>` | Answer to tool approval requests when `ask` cannot prompt: `fail` (default), `reject`, `once`, or `session` |
+
+When a tool call needs approval and stderr is a terminal, `ask` shows the
+request on stderr and prompts:
+`[y] approve once / [a] approve for session / [N] reject`. If the server ends
+the request first, for example at its deadline, the prompt ends and `ask` shows
+the outcome.
+
+Without a terminal, in CI, or with `--json`, `ask` never waits for input. It
+uses `--approve` instead:
+
+- `fail` rejects the tool call, stops the response, and exits with code 10.
+- `reject` rejects the tool call and continues the response without it.
+- `once` and `session` approve the tool call.
+
+If you set `--approve`, `ask` uses it on a terminal too. With `--json`, approval
+requests appear as `tool_approval_request` and `tool_approval_resolved` events.
 
 ### List agents
 
@@ -171,6 +212,7 @@ export ONYX_PAT="your-pat"
 | 7 | Timeout | Request timed out |
 | 8 | ServerError | Server returned 5xx |
 | 9 | NotAvailable | Feature/endpoint doesn't exist |
+| 10 | ApprovalRequired | A tool call needed approval and `ask --approve=fail` rejected it |
 
 ### Skill File
 
@@ -208,7 +250,8 @@ onyx-cli install-skill --agent claude-code
 | Key | Action |
 |-----|--------|
 | `Enter` | Send message |
-| `Escape` | Cancel current generation |
+| `Escape`, `Ctrl+C` | Cancel current generation |
+| `y` / `a` / `n` | Approve once / approve for this session / reject a tool call |
 | `Ctrl+O` | Toggle source citations |
 | `Ctrl+D` | Quit (press twice) |
 | `Scroll` / `Shift+Up/Down` | Scroll chat history |
@@ -342,3 +385,6 @@ so a delayed Stop cannot cancel a later turn. If acknowledgement never arrives,
 cancellation closes delivery after ten seconds without sending an unscoped Stop.
 For acknowledged runs, delivery closes after the bounded Stop request completes.
 Session and response identities remain available after cancellation so the next message can continue from the cancelled turn.
+
+A chat stream has no total time limit, because a turn can wait minutes for a tool approval.
+The server sends a heartbeat every 15 seconds. The client fails the stream after 2 minutes without data.

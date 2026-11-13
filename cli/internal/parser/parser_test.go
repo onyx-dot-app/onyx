@@ -3,6 +3,7 @@ package parser
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
@@ -44,7 +45,7 @@ func TestSessionCreated(t *testing.T) {
 
 func TestMessageIDInfo(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
-		"user_message_id":              1,
+		"user_message_id":               1,
 		"reserved_assistant_message_id": 2,
 	})
 	event := ParseStreamLine(line)
@@ -62,7 +63,7 @@ func TestMessageIDInfo(t *testing.T) {
 
 func TestMessageIDInfoNullUserID(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
-		"user_message_id":              nil,
+		"user_message_id":               nil,
 		"reserved_assistant_message_id": 5,
 	})
 	event := ParseStreamLine(line)
@@ -348,6 +349,64 @@ func TestCustomToolStartUsesDisplayName(t *testing.T) {
 	}
 	if e.ToolName != "create_issue" {
 		t.Errorf("got %s", e.ToolName)
+	}
+}
+
+func TestToolApprovalRequest(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":         "tool_approval_request",
+		"approval_id":  "a1",
+		"tool_call_id": "call-1",
+		"tool_name":    "mcp__3__linear__create_issue",
+		"display_name": "Create issue",
+		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2},
+		"expires_at":   "2026-11-13T10:00:00.123456+00:00",
+	}, 1, 0)
+	event := ParseStreamLine(line)
+	e, ok := event.(models.ToolApprovalRequestEvent)
+	if !ok {
+		t.Fatalf("expected ToolApprovalRequestEvent, got %T", event)
+	}
+	if e.ApprovalID != "a1" || e.ToolCallID != "call-1" || e.ToolName != "mcp__3__linear__create_issue" || e.DisplayName != "Create issue" {
+		t.Errorf("unexpected identity fields: %+v", e)
+	}
+	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != float64(2) {
+		t.Errorf("arguments = %v", e.Arguments)
+	}
+	if e.ExpiresAt == nil || !e.ExpiresAt.Equal(time.Date(2026, 11, 13, 10, 0, 0, 123456000, time.UTC)) {
+		t.Errorf("expires_at = %v", e.ExpiresAt)
+	}
+	if e.EventType() != models.EventToolApprovalRequest {
+		t.Errorf("event type = %s", e.EventType())
+	}
+}
+
+func TestToolApprovalRequestToleratesBadFields(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":        "tool_approval_request",
+		"approval_id": "a1",
+		"arguments":   "not an object",
+		"expires_at":  "soon",
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolApprovalRequestEvent)
+	if !ok {
+		t.Fatal("expected ToolApprovalRequestEvent")
+	}
+	if e.Arguments != nil || e.ExpiresAt != nil {
+		t.Errorf("bad fields must parse as absent, got %+v", e)
+	}
+}
+
+func TestToolApprovalResolved(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "expired",
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolApprovalResolvedEvent)
+	if !ok {
+		t.Fatal("expected ToolApprovalResolvedEvent")
+	}
+	if e.ApprovalID != "a1" || e.Outcome != models.ApprovalOutcomeExpired {
+		t.Errorf("got %+v", e)
 	}
 }
 

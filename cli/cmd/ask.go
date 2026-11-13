@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
+	"github.com/onyx-dot-app/onyx/cli/internal/approval"
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -29,6 +31,7 @@ func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 		askJSON      bool
 		askQuiet     bool
 		askPrompt    string
+		askApprove   string
 		maxOutput    int
 	)
 
@@ -43,14 +46,20 @@ with the question from --prompt (or used as the question itself).
 
 When stdout is not a TTY (e.g., called by a script or AI agent), output is
 automatically truncated to --max-output bytes and the full response is saved
-to a temp file. Set --max-output 0 to disable truncation.`,
+to a temp file. Set --max-output 0 to disable truncation.
+
+Some tool calls need your approval before they run. On a terminal, ask
+prompts for each one. Without a terminal, or with --json, it never waits:
+--approve sets the answer. The default, fail, rejects the tool call and exits
+with code 10.`,
 		Args: cobra.MaximumNArgs(1),
 		Example: `  onyx-cli ask "What connectors are available?"
   onyx-cli ask --agent-id 3 "Summarize our Q4 revenue"
   onyx-cli ask --agent-name "Support Agent" "hello"
   onyx-cli ask --json "List all users" | jq '.event.content'
   cat error.log | onyx-cli ask --prompt "Find the root cause"
-  echo "what is onyx?" | onyx-cli ask`,
+  echo "what is onyx?" | onyx-cli ask
+  onyx-cli ask --approve=reject "File a ticket for this bug"`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, client, err := requireClient()
 			if err != nil {
@@ -59,6 +68,15 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 
 			if askJSON && askQuiet {
 				return exitcodes.New(exitcodes.BadRequest, "--json and --quiet cannot be used together")
+			}
+			approveDecision, validApprove := map[string]models.ApprovalDecision{
+				"fail":    models.RejectApproval,
+				"reject":  models.RejectApproval,
+				"once":    models.ApproveOnce,
+				"session": models.ApproveSession,
+			}[askApprove]
+			if !validApprove {
+				return exitcodes.Newf(exitcodes.BadRequest, "--approve must be fail, reject, once, or session, not %q", askApprove)
 			}
 
 			question, err := resolveQuestion(ios, args, askPrompt)
@@ -82,9 +100,23 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				return err
 			}
 
+			// A person answers approval prompts on a terminal. Scripts, agents,
+			// CI and --json get the --approve answer instead and never block.
+			var promptReader *bufio.Reader
+			if !askJSON && !cmd.Flags().Changed("approve") && ios.IsStderrTTY && os.Getenv("CI") == "" {
+				if ios.IsStdinTTY {
+					promptReader = bufio.NewReader(ios.In)
+				} else if tty, err := os.Open("/dev/tty"); err == nil {
+					defer func() { _ = tty.Close() }()
+					promptReader = bufio.NewReader(tty)
+				}
+			}
+
+			streamCtx, cancelStream := context.WithCancel(ctx)
+			defer cancelStream()
 			parentID := -1
 			ch := client.SendMessageStream(
-				ctx,
+				streamCtx,
 				question,
 				nil,
 				agentID,
@@ -105,12 +137,136 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 			var sessionID string
 			var lastErr error
 			gotStop := false
+			// approvalErr ends the run after --approve=fail rejected a tool call.
+			var approvalErr error
+			// The titles of the requests shown here, by approval id.
+			asked := map[string]string{}
+			// Events that arrived while a prompt waited, handled after it.
+			var deferred []models.StreamEvent
+			// One reader serves every prompt and reads a line only when a prompt
+			// asks for one, so a prompt that the stream ended leaves no reader
+			// behind. A line read before a prompt showed answers an earlier one.
+			type promptLine struct {
+				text string
+				at   time.Time
+			}
+			var promptLines chan promptLine
+			readLine := make(chan struct{}, 1)
+			reading := false
+			if promptReader != nil {
+				promptLines = make(chan promptLine)
+				go func() {
+					for {
+						select {
+						case <-readLine:
+						case <-ctx.Done():
+							return
+						}
+						// At end of input every prompt reads "", which rejects.
+						line, _ := promptReader.ReadString('\n')
+						select {
+						case promptLines <- promptLine{strings.ToLower(strings.TrimSpace(line)), time.Now()}:
+						case <-ctx.Done():
+							return
+						}
+					}
+				}()
+			}
 
 			// Overflow writer: tees to stdout and optionally to a temp file.
 			// In quiet mode, buffer everything and print once at the end.
 			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet, Out: ios.Out, ErrOut: ios.ErrOut}
 
-			for event := range ch {
+			answerApproval := func(req models.ToolApprovalRequestEvent) error {
+				title := approval.Title(req)
+				if !askJSON {
+					if isTTY {
+						fmt.Fprintln(ios.ErrOut)
+					}
+					fmt.Fprintf(ios.ErrOut, "Approval requested: %s\n", title)
+					for _, arg := range approval.Arguments(req.Arguments) {
+						fmt.Fprintf(ios.ErrOut, "  %s\n", arg)
+					}
+					if deadline := approval.Deadline(req.ExpiresAt); deadline != "" {
+						fmt.Fprintf(ios.ErrOut, "  %s\n", deadline)
+					}
+				}
+				asked[req.ApprovalID] = title
+				decision := approveDecision
+				if promptLines != nil {
+					fmt.Fprint(ios.ErrOut, "[y] approve once / [a] approve for session / [N] reject: ")
+					shownAt := time.Now()
+				prompt:
+					for {
+						if !reading {
+							readLine <- struct{}{}
+							reading = true
+						}
+						select {
+						case <-ctx.Done():
+							// Interrupted: stream cancellation stops the turn.
+							return nil
+						case event, ok := <-ch:
+							if !ok {
+								fmt.Fprintln(ios.ErrOut)
+								return nil
+							}
+							deferred = append(deferred, event)
+							// The server ended the request, e.g. at its deadline.
+							if resolved, isResolved := event.(models.ToolApprovalResolvedEvent); isResolved && resolved.ApprovalID == req.ApprovalID {
+								fmt.Fprintln(ios.ErrOut)
+								return nil
+							}
+						case line := <-promptLines:
+							reading = false
+							if line.at.Before(shownAt) {
+								continue
+							}
+							switch line.text {
+							case "y", "yes":
+								decision = models.ApproveOnce
+							case "a":
+								decision = models.ApproveSession
+							default:
+								decision = models.RejectApproval
+							}
+							break prompt
+						}
+					}
+				}
+				if promptReader == nil && askApprove == "fail" {
+					approvalErr = exitcodes.Newf(exitcodes.ApprovalRequired,
+						"tool call %q needs approval; rerun on a terminal, or with --approve=once, --approve=session, or --approve=reject", title)
+					// The rejected turn would continue without the tool; stop it.
+					defer cancelStream()
+				}
+				_, err := client.DecideApproval(ctx, req.ApprovalID, decision)
+				switch {
+				case err == nil || ctx.Err() != nil:
+					return nil
+				case api.IsApprovalNoLongerWaiting(err):
+					if !askJSON {
+						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.NoLongerWaiting, title)
+					}
+					return nil
+				default:
+					return apiErrorToExit(err, "cannot send the approval decision")
+				}
+			}
+
+			for {
+				var event models.StreamEvent
+				if len(deferred) > 0 {
+					event, deferred = deferred[0], deferred[1:]
+				} else if next, ok := <-ch; ok {
+					event = next
+				} else {
+					break
+				}
+				if approvalErr != nil {
+					// Drain so the stream owner can stop the turn before exit.
+					continue
+				}
 				switch e := event.(type) {
 				case models.SessionCreatedEvent:
 					sessionID = e.ChatSessionID
@@ -133,6 +289,11 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 						return fmt.Errorf("error marshaling event: %w", err)
 					}
 					fmt.Fprintln(ios.Out, string(data))
+					if req, ok := event.(models.ToolApprovalRequestEvent); ok {
+						if err := answerApproval(req); err != nil {
+							return err
+						}
+					}
 					if errEvt, ok := event.(models.ErrorEvent); ok {
 						if errEvt.StatusCode != 0 {
 							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", sanitize.Terminal(errEvt.Error))
@@ -172,6 +333,15 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 					if isTTY && !askQuiet && e.ToolName != "" {
 						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
 					}
+				case models.ToolApprovalRequestEvent:
+					if err := answerApproval(e); err != nil {
+						ow.Finish()
+						return err
+					}
+				case models.ToolApprovalResolvedEvent:
+					if title, ok := asked[e.ApprovalID]; ok {
+						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.OutcomeLabel(e.Outcome), title)
+					}
 				case models.ErrorEvent:
 					ow.Finish()
 					if e.StatusCode != 0 {
@@ -185,6 +355,9 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 				ow.Finish()
 			}
 
+			if approvalErr != nil {
+				return approvalErr
+			}
 			if ctx.Err() != nil {
 				return nil
 			}
@@ -212,6 +385,8 @@ to a temp file. Set --max-output 0 to disable truncation.`,
 	cmd.Flags().BoolVar(&askJSON, "json", false, "Output NDJSON stream events instead of plain text")
 	cmd.Flags().BoolVarP(&askQuiet, "quiet", "q", false, "Buffer output and print once at end (no streaming)")
 	cmd.Flags().StringVar(&askPrompt, "prompt", "", "Question text (use with piped stdin context)")
+	cmd.Flags().StringVar(&askApprove, "approve", "fail",
+		"Answer to tool approval requests when ask cannot prompt: fail (reject and exit 10), reject, once, or session")
 	cmd.Flags().IntVar(&maxOutput, "max-output", defaultMaxOutputBytes,
 		"Max bytes to print before truncating (0 to disable, auto-enabled for non-TTY)")
 	return cmd

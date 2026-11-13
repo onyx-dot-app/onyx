@@ -19,11 +19,11 @@ type DocumentSetSummary struct {
 
 // ChatSessionDetails is a session with timestamps as strings.
 type ChatSessionDetails struct {
-	ID        string  `json:"id"`
-	Name      *string `json:"name"`
+	ID      string  `json:"id"`
+	Name    *string `json:"name"`
 	AgentID *int    `json:"persona_id"`
-	Created   string  `json:"time_created"`
-	Updated   string  `json:"time_updated"`
+	Created string  `json:"time_created"`
+	Updated string  `json:"time_updated"`
 }
 
 // ChatMessageDetail is a single message in a session.
@@ -41,8 +41,8 @@ type ChatMessageDetail struct {
 type ChatSessionDetailResponse struct {
 	ChatSessionID string              `json:"chat_session_id"`
 	Description   *string             `json:"description"`
-	AgentID     *int                `json:"persona_id"`
-	AgentName   *string             `json:"persona_name"`
+	AgentID       *int                `json:"persona_id"`
+	AgentName     *string             `json:"persona_name"`
 	Messages      []ChatMessageDetail `json:"messages"`
 }
 
@@ -131,6 +131,25 @@ type LLMProviderResponse struct {
 	DefaultText *DefaultModel           `json:"default_text"`
 }
 
+// ApprovalDecision is the user's answer to a tool approval request.
+type ApprovalDecision string
+
+const (
+	ApproveOnce    ApprovalDecision = "approve_once"
+	ApproveSession ApprovalDecision = "approve_session"
+	RejectApproval ApprovalDecision = "reject"
+)
+
+// ApprovalDecisionResult is the decision the server saved for a request.
+type ApprovalDecisionResult struct {
+	ApprovalID string `json:"approval_id"`
+	// APPROVED or REJECTED.
+	Decision string `json:"decision"`
+	// USER, SESSION_GRANT, or POLICY: the action policy disabled the tool, so
+	// the approval rejected the call.
+	DecidedVia string `json:"decided_via"`
+}
+
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
 type SendMessagePayload struct {
 	Message          string                   `json:"message"`
@@ -138,7 +157,7 @@ type SendMessagePayload struct {
 	ChatSessionInfo  *ChatSessionCreationInfo `json:"chat_session_info,omitempty"`
 	LLMOverride      *LLMOverride             `json:"llm_override,omitempty"`
 	ParentMessageID  *int                     `json:"parent_message_id"`
-	FileDescriptors  []FileDescriptorPayload `json:"file_descriptors"`
+	FileDescriptors  []FileDescriptorPayload  `json:"file_descriptors"`
 	Origin           string                   `json:"origin"`
 	IncludeCitations bool                     `json:"include_citations"`
 	Stream           bool                     `json:"stream"`
