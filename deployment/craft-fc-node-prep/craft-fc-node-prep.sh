@@ -207,41 +207,52 @@ apply_sysctl() {
 }
 
 apply_xfs_device() {
-	local dev=$1 current uuid
+	local dev=$1 current uuid mounted=0
 	[ -b "$dev" ] || die "$dev is not a block device"
 	command -v mkfs.xfs >/dev/null || die "mkfs.xfs not found. Install xfsprogs."
 	if findmnt -n -S "$dev" >/dev/null 2>&1; then
 		[ "$(findmnt -n -o TARGET -S "$dev")" = "$DATA_DIR" ] || die "$dev is mounted somewhere else"
-		return
+		mounted=1
+	else
+		if [ -n "$(find "$DATA_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+			die "$DATA_DIR is not empty. A mount would hide its files. Drain the node, stop the host agent and empty $DATA_DIR first."
+		fi
+		current=$(blkid -o value -s TYPE "$dev" 2>/dev/null || true)
+		if [ -z "$current" ]; then
+			run mkfs.xfs -m reflink=1 "$dev"
+		elif [ "$current" != "xfs" ]; then
+			die "$dev has the file system $current. This script does not erase it. Wipe it yourself, then run apply again."
+		fi
 	fi
-	if [ -n "$(find "$DATA_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
-		die "$DATA_DIR is not empty. A mount would hide its files. Drain the node, stop the host agent and empty $DATA_DIR first."
-	fi
-	current=$(blkid -o value -s TYPE "$dev" 2>/dev/null || true)
-	if [ -z "$current" ]; then
-		run mkfs.xfs -m reflink=1 "$dev"
-	elif [ "$current" != "xfs" ]; then
-		die "$dev has the file system $current. This script does not erase it. Wipe it yourself, then run apply again."
-	fi
-	if [ "$dry_run" -eq 1 ]; then
+	uuid=$(blkid -o value -s UUID "$dev" 2>/dev/null || true)
+	if [ -z "$uuid" ]; then
+		# Only with --dry-run: the device is not formatted yet.
 		echo "DRY   add $dev to /etc/fstab at $DATA_DIR and mount it"
 		return
 	fi
-	uuid=$(blkid -o value -s UUID "$dev")
+	# The fstab entry makes the mount survive a reboot, also for a disk mounted by hand.
 	local fs_target fs_source
 	fs_target=$(awk -v u="UUID=$uuid" '$1 == u {print $2; exit}' /etc/fstab)
 	fs_source=$(awk -v d="$DATA_DIR" '$1 !~ /^#/ && $2 == d {print $1; exit}' /etc/fstab)
 	if [ -n "$fs_target" ] && [ "$fs_target" != "$DATA_DIR" ]; then
 		die "/etc/fstab already mounts $dev (UUID=$uuid) at $fs_target. Fix /etc/fstab first."
 	fi
-	if [ -n "$fs_source" ] && [ "$fs_source" != "UUID=$uuid" ]; then
+	if [ -n "$fs_source" ] && [ "$(findfs "$fs_source" 2>/dev/null || echo "$fs_source")" != "$(readlink -f "$dev")" ]; then
 		die "/etc/fstab already mounts $fs_source at $DATA_DIR. Fix /etc/fstab first."
 	fi
-	if [ -z "$fs_target" ]; then
-		echo "UUID=$uuid $DATA_DIR xfs defaults 0 2" | write_file_append /etc/fstab
+	if [ -z "$fs_target" ] && [ -z "$fs_source" ]; then
+		if [ "$dry_run" -eq 1 ]; then
+			echo "DRY   append to /etc/fstab: UUID=$uuid $DATA_DIR xfs defaults 0 2"
+		else
+			echo "UUID=$uuid $DATA_DIR xfs defaults 0 2" | write_file_append /etc/fstab
+		fi
 	fi
-	command -v systemctl >/dev/null && run systemctl daemon-reload
-	run mount "$DATA_DIR"
+	if [ "$mounted" -eq 0 ]; then
+		if command -v systemctl >/dev/null; then
+			run systemctl daemon-reload
+		fi
+		run mount "$DATA_DIR"
+	fi
 }
 
 write_file_append() {
