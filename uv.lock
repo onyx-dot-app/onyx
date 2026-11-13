@@ -3844,15 +3844,6 @@ wheels = [
 ]
 
 [[package]]
-name = "monotonic"
-version = "1.6"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ea/ca/8e91948b782ddfbd194f323e7e7d9ba12e5877addf04fb2bf8fca38e86ac/monotonic-1.6.tar.gz", hash = "sha256:3a55207bcfed53ddd5c5bae174524062935efed17792e9de2ad0205ce9ad63f7", size = 7615, upload-time = "2021-08-11T14:37:28.79Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/9a/67/7e8406a29b6c45be7af7740456f7f37025f0506ae2e05fb9009a53946860/monotonic-1.6-py2.py3-none-any.whl", hash = "sha256:68687e19a14f11f26d140dd5c86f3dba4bf5df58003000ed467e0e2a69bca96c", size = 8154, upload-time = "2021-04-09T21:58:05.122Z" },
-]
-
-[[package]]
 name = "more-itertools"
 version = "10.8.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4730,7 +4721,7 @@ dev = [
     { name = "types-requests", specifier = "==2.32.0.20250328" },
     { name = "zizmor", specifier = "==1.25.2" },
 ]
-ee = [{ name = "posthog", specifier = "==3.7.4" }]
+ee = [{ name = "posthog", specifier = "==7.78.0" }]
 loadtest = [
     { name = "fastapi", specifier = ">=0.115" },
     { name = "locust", specifier = ">=2.32" },
@@ -5278,18 +5269,17 @@ wheels = [
 
 [[package]]
 name = "posthog"
-version = "3.7.4"
+version = "7.78.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "backoff" },
-    { name = "monotonic" },
-    { name = "python-dateutil" },
+    { name = "distro" },
     { name = "requests" },
-    { name = "six" },
+    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/77/a0/7607d4fd7c52b086671d8618e76cb5b9a642311fd6f352ebd7eb035319f2/posthog-3.7.4.tar.gz", hash = "sha256:19384bd09d330f9787a7e2446aba14c8057ece56144970ea2791072d4e40cd36", size = 50174, upload-time = "2024-11-27T22:25:54.61Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8a/d8/7e3f9e19969929fa7888510a5b114e946dfbf459c51501874b5265c122cd/posthog-7.78.0.tar.gz", hash = "sha256:9684792a76d100a62dc545078bdc6ca8fff7f88a91a3e03d12bc4d01977c9548", size = 823872, upload-time = "2026-10-28T14:02:01.047Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d3/f2/5ee24cd69e2120bf87356c02ace0438b4e4fb78229fddcbf6f1c6be377d5/posthog-3.7.4-py2.py3-none-any.whl", hash = "sha256:21c18c6bf43b2de303ea4cd6e95804cc0f24c20cb2a96a8fd09da2ed50b62faa", size = 54777, upload-time = "2024-11-27T22:25:53.358Z" },
+    { url = "https://files.pythonhosted.org/packages/54/ce/9aa8ec73220903ed6eeba5dfc3c9f2bd42a62d1fa202bcd03432dda46066/posthog-7.78.0-py3-none-any.whl", hash = "sha256:3bda84fdc055ab00247d33538ed11a4506c130a6ed9014de11efab40243a46d6", size = 962470, upload-time = "2026-10-28T14:01:58.754Z" },
 ]
 
 [[package]]
