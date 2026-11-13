@@ -68,6 +68,7 @@ func TestVersionInRange(t *testing.T) {
 		// An open lower bound runs on.
 		{"1.17.0", ">= 1.16.0", true},
 		{"1.15.9", "> 1.16.0", false},
+		{"1.5.0", ">= 1.0.0, >= 2.0.0", true},
 		// A range it cannot read is reported for a person to check.
 		{"1.17.0", "all versions", true},
 		{"1.17.0", "", true},
@@ -95,6 +96,7 @@ func TestCompareNumeric(t *testing.T) {
 // advisory, and two Firecracker advisories split over two pages.
 func craftFCFeeds(t *testing.T) *httptest.Server {
 	t.Helper()
+	t.Setenv("GH_TOKEN", "test-token")
 	mux := http.NewServeMux()
 	var srv *httptest.Server
 	mux.HandleFunc("/alas.rss", func(w http.ResponseWriter, _ *http.Request) {
@@ -115,8 +117,13 @@ func craftFCFeeds(t *testing.T) *httptest.Server {
 			_, _ = fmt.Fprint(w, `[{"ghsa_id":"GHSA-new","cve_id":"CVE-2026-9","severity":"high","summary":"guest escape","html_url":"https://example.test/GHSA-new","vulnerabilities":[{"package":{"name":"Firecracker"},"vulnerable_version_range":">= 1.17.0, < 1.17.1","patched_versions":"1.17.1"}]}]`)
 			return
 		}
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 		w.Header().Set("Link", fmt.Sprintf(`<%s/advisories?page=2>; rel="next"`, srv.URL))
-		_, _ = fmt.Fprint(w, `[{"ghsa_id":"GHSA-old","severity":"high","vulnerabilities":[{"package":{"name":"Firecracker"},"vulnerable_version_range":">= 0.23.0, <= 1.16.1","patched_versions":"1.16.2, 1.17.0"}]}]`)
+		_, _ = fmt.Fprint(w, `[{"ghsa_id":"GHSA-old","severity":"high","vulnerabilities":[{"package":{"name":"Firecracker"},"vulnerable_version_range":">= 0.23.0, <= 1.16.1","patched_versions":"1.16.2, 1.17.0"}]},
+{"ghsa_id":"GHSA-jailer-crate","severity":"critical","vulnerabilities":[{"package":{"name":"other-crate"},"vulnerable_version_range":">= 0.1.0","patched_versions":""}]}]`)
 	})
 	srv = httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
@@ -195,5 +202,119 @@ func TestKernelFindingsFailsWhenThePageNamesNoPackage(t *testing.T) {
 	pins := CraftFCPins{KernelPackage: "kernel6.18", KernelVersion: "6.18.25-57.115.amzn2023", FirecrackerVersion: "1.17.0"}
 	if _, err := kernelFindings(srv.Client(), srv.URL+"/alas.rss", pins); err == nil {
 		t.Fatal("expected an error when an advisory page names no fixed package")
+	}
+}
+
+func TestAlasSeverity(t *testing.T) {
+	want := map[string]Severity{
+		"critical":  SeverityCritical,
+		"important": SeverityHigh,
+		"medium":    SeverityModerate,
+		"low":       SeverityLow,
+		"other":     SeverityUnknown,
+	}
+	for in, sev := range want {
+		if got := alasSeverity(in); got != sev {
+			t.Errorf("alasSeverity(%q) = %q, want %q", in, got, sev)
+		}
+	}
+}
+
+func TestReadCraftFCPinsErrors(t *testing.T) {
+	if _, err := ReadCraftFCPins(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("expected an error for a missing file")
+	}
+	content := strings.Replace(testArtifactsDockerfile, "v1.17.0", "main", 1)
+	if _, err := ReadCraftFCPins(writeArtifactsDockerfile(t, content)); err == nil {
+		t.Fatal("expected an error for an FC_VERSION that is not vX.Y.Z")
+	}
+}
+
+func TestRunCraftFCReadsTheRepositoryDockerfile(t *testing.T) {
+	srv := craftFCFeeds(t)
+	result, err := RunCraftFC(CraftFCOptions{
+		FirecrackerAdvisoriesURL: srv.URL + "/advisories",
+		ALASFeedURL:              srv.URL + "/alas.rss",
+		Format:                   "json",
+		FailOn:                   SeverityCritical,
+		Stdout:                   &bytes.Buffer{},
+		Stderr:                   &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.ScannedPackages) != 2 || result.ScannedPackages[1].Package != "firecracker" {
+		t.Fatalf("scanned packages = %+v", result.ScannedPackages)
+	}
+}
+
+func TestRunCraftFCFeedErrors(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/bad.json", func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprint(w, "not json") })
+	mux.HandleFunc("/bad.rss", func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprint(w, "<rss><channel>") })
+	mux.HandleFunc("/empty.rss", func(w http.ResponseWriter, _ *http.Request) { _, _ = fmt.Fprint(w, "<rss><channel></channel></rss>") })
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	good := craftFCFeeds(t)
+
+	cases := map[string]struct{ fc, alas string }{
+		"unparsable advisories": {srv.URL + "/bad.json", good.URL + "/alas.rss"},
+		"missing advisories":    {srv.URL + "/missing.json", good.URL + "/alas.rss"},
+		"unparsable ALAS feed":  {good.URL + "/advisories", srv.URL + "/bad.rss"},
+		"empty ALAS feed":       {good.URL + "/advisories", srv.URL + "/empty.rss"},
+		"unreachable feed":      {good.URL + "/advisories", "http://127.0.0.1:0/alas.rss"},
+		"invalid URL":           {good.URL + "/advisories", "://bad"},
+	}
+	for name, tc := range cases {
+		_, err := RunCraftFC(CraftFCOptions{
+			Dockerfile:               writeArtifactsDockerfile(t, testArtifactsDockerfile),
+			FirecrackerAdvisoriesURL: tc.fc,
+			ALASFeedURL:              tc.alas,
+			Format:                   "json",
+			FailOn:                   SeverityCritical,
+			Stdout:                   &bytes.Buffer{},
+			Stderr:                   &bytes.Buffer{},
+		})
+		if err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+func TestRunCraftFCInputErrors(t *testing.T) {
+	srv := craftFCFeeds(t)
+	base := CraftFCOptions{
+		Dockerfile:               writeArtifactsDockerfile(t, testArtifactsDockerfile),
+		FirecrackerAdvisoriesURL: srv.URL + "/advisories",
+		ALASFeedURL:              srv.URL + "/alas.rss",
+		Format:                   "json",
+		FailOn:                   SeverityCritical,
+		Stdout:                   &bytes.Buffer{},
+		Stderr:                   &bytes.Buffer{},
+	}
+
+	missing := base
+	missing.Dockerfile = filepath.Join(t.TempDir(), "missing")
+	if _, err := RunCraftFC(missing); err == nil {
+		t.Error("expected an error for a missing Dockerfile")
+	}
+
+	badFormat := base
+	badFormat.Format = "xml"
+	if _, err := RunCraftFC(badFormat); err == nil {
+		t.Error("expected an error for an unknown format")
+	}
+
+	mux := http.NewServeMux()
+	var pages *httptest.Server
+	mux.HandleFunc("/alas.rss", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintf(w, `<rss><channel><item><title>ALAS2023-2026-0010 (low): kernel6.18</title><link>%s/gone.html</link></item></channel></rss>`, pages.URL)
+	})
+	pages = httptest.NewServer(mux)
+	defer pages.Close()
+	pageMissing := base
+	pageMissing.ALASFeedURL = pages.URL + "/alas.rss"
+	if _, err := RunCraftFC(pageMissing); err == nil {
+		t.Error("expected an error when an advisory page cannot be read")
 	}
 }

@@ -1,6 +1,7 @@
 package audit
 
 import (
+	"cmp"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -106,10 +107,7 @@ func ReadCraftFCPins(path string) (CraftFCPins, error) {
 // the pinned Firecracker against its GitHub advisories. A feed that cannot be
 // read fails the run, so a missed advisory never reads as fixed.
 func RunCraftFC(opts CraftFCOptions) (*Result, error) {
-	path := opts.Dockerfile
-	if path == "" {
-		path = DefaultCraftFCDockerfile
-	}
+	path := cmp.Or(opts.Dockerfile, DefaultCraftFCDockerfile)
 	if !filepath.IsAbs(path) {
 		root, err := paths.GitRoot()
 		if err != nil {
@@ -121,21 +119,12 @@ func RunCraftFC(opts CraftFCOptions) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	fcURL := opts.FirecrackerAdvisoriesURL
-	if fcURL == "" {
-		fcURL = DefaultFirecrackerAdvisoriesURL
-	}
-	alasURL := opts.ALASFeedURL
-	if alasURL == "" {
-		alasURL = DefaultALASFeedURL
-	}
-
 	client := &http.Client{Timeout: 60 * time.Second}
-	kernel, err := kernelFindings(client, alasURL, pins)
+	kernel, err := kernelFindings(client, cmp.Or(opts.ALASFeedURL, DefaultALASFeedURL), pins)
 	if err != nil {
 		return nil, fmt.Errorf("guest kernel advisories: %w", err)
 	}
-	fc, err := firecrackerFindings(client, fcURL, pins)
+	fc, err := firecrackerFindings(client, cmp.Or(opts.FirecrackerAdvisoriesURL, DefaultFirecrackerAdvisoriesURL), pins)
 	if err != nil {
 		return nil, fmt.Errorf("firecracker advisories: %w", err)
 	}

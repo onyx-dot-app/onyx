@@ -8,6 +8,9 @@ import (
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/audit"
 )
 
+// runCraftFC is audit.RunCraftFC; tests replace it.
+var runCraftFC = audit.RunCraftFC
+
 // AuditCraftFCOptions holds options for the `ods audit craft-fc` command.
 type AuditCraftFCOptions struct {
 	Dockerfile string
@@ -56,7 +59,7 @@ func runAuditCraftFC(opts *AuditCraftFCOptions, stdout, stderr io.Writer) error 
 		return failf("Invalid --fail-on %q (want critical, high, moderate, or low)", opts.FailOn)
 	}
 
-	result, err := audit.RunCraftFC(audit.CraftFCOptions{
+	result, err := runCraftFC(audit.CraftFCOptions{
 		Dockerfile: opts.Dockerfile,
 		Format:     opts.Format,
 		FailOn:     failOn,
