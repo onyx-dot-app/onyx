@@ -472,9 +472,17 @@ def backfill_plugins_from_skills() -> None:
         op.execute(statement)
 
 
+_DEFERRED_PLUGIN_FKS = "fk_plugin_current_version, fk_plugin_published_version"
+
+
 def upgrade() -> None:
     _create_tables()
     backfill_plugins_from_skills()
+    # The writes above queue deferred FK checks until commit. Every revision
+    # runs in one transaction, and ALTER TABLE refuses a table with queued
+    # checks, so run them now and restore the deferred default.
+    op.execute(f"SET CONSTRAINTS {_DEFERRED_PLUGIN_FKS} IMMEDIATE")
+    op.execute(f"SET CONSTRAINTS {_DEFERRED_PLUGIN_FKS} DEFERRED")
 
 
 def downgrade() -> None:
