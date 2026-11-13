@@ -426,13 +426,14 @@ health calls are not retried.
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
     tool as a function of `execute_code` programs.
-    Nested calls go through the run's `before_tool_call` hook as direct calls
-    do (`ToolInvocation.before_call`,
-    `tools/tool_implementations/code_mode/cells.py:_decided_result`): a
+    Nested calls get the run's `before_tool_call` hook and approval gate as
+    direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
+    `tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does, and a `PendingToolInput` decision fails the
-    call, since a program cannot wait for approval. A hook that raises fails
-    the run, as for a direct call: `before_call` raises
+    program as a tool error does, and a `PendingToolInput` decision blocks the
+    call in its cell until the answer
+    (`agents/README.md`, nested calls). A hook that raises fails
+    the run, as for a direct call: `NestedCallGate.decide` raises
     `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
     cannot catch; the cell stops its program, and the observation that reports
     the end raises it out of the tool. When no observation reports it, closing

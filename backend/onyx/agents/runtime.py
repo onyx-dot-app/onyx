@@ -5,7 +5,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Future
+from concurrent.futures import CancelledError, Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
@@ -38,6 +38,7 @@ from onyx.agents.events import (
     AgentEvent,
     AgentStartEvent,
     AgentSuspendedEvent,
+    InputEndedEvent,
     InputRequiredEvent,
     MessageEndEvent,
     MessageStartEvent,
@@ -119,6 +120,7 @@ from onyx.llm.models import (
 from onyx.llm.token_budget import resolve_token_budget
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
+from onyx.utils.timing import PausableClock
 
 if TYPE_CHECKING:
     from onyx.agents.agent_coordination import AgentCoordinator, RunCoordination
@@ -545,6 +547,15 @@ class Run:
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
         self._watched_children: dict[str, Future[RunState]] = {}
+        # Requests of calls that tools make for the model, by request ID. Their
+        # callers block on the futures; the requests are not saved with the run.
+        # Whoever removes a request publishes its end: its waiter, or the run's
+        # end for a request still open then.
+        self._nested_inputs: dict[
+            str, tuple[InputRequiredEvent, Future[HumanToolAnswer]]
+        ] = {}
+        # Stands still while a call waits for input; see wait_for_tool_activity.
+        self._input_wait_clock = PausableClock()
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._configured_tools: tuple[AgentTool, ...] = ()
@@ -555,6 +566,9 @@ class Run:
         self.before_tool_call: (
             Callable[[ToolCallContext], ToolResult | PendingToolInput | None] | None
         ) = None
+        # Calls that wait for the user's approval before they run; see
+        # AgentTool.approval_required.
+        self.approval_required: frozenset[str] = frozenset()
         self.after_tool_call: (
             Callable[[ToolCallContext, ToolResult], ToolResult] | None
         ) = None
@@ -602,15 +616,20 @@ class Run:
         """Copy unanswered tool requests without copying execution history."""
         with self.execution_lock:
             progress = self._state.progress
-            return (
-                [
-                    pending.model_copy(deep=True)
-                    for pending in progress.pending_tool_calls.values()
-                    if isinstance(pending, PendingToolInput)
-                ]
-                if progress is not None
-                else []
-            )
+            direct = progress.pending_tool_calls.values() if progress else ()
+            nested = (required.request for required, _ in self._nested_inputs.values())
+            return [
+                pending.model_copy(deep=True)
+                for pending in (*direct, *nested)
+                if isinstance(pending, PendingToolInput)
+            ]
+
+    @property
+    def has_event_listeners(self) -> bool:
+        """Whether a listener receives this run's events, directly or through a
+        foreground ancestor."""
+        delivery = self.event_delivery
+        return delivery is not None and delivery.has_listeners
 
     @property
     def delivery_failed(self) -> bool:
@@ -657,6 +676,20 @@ class Run:
         with self._execution_condition:
             if self._released:
                 raise RunReleased("Run was released; deliver input through its run ID")
+            if (nested := self._nested_inputs.get(answer.request_id)) is not None:
+                required, waiter = nested
+                if (required.request.mode == InputMode.RESULT) != (
+                    answer.decision == InputDecision.RESULT
+                ):
+                    raise ValueError("Answer does not match the request mode")
+                if waiter.cancelled():
+                    # The call stopped waiting; its end removes the request.
+                    return
+                if not waiter.done():
+                    waiter.set_result(answer.model_copy(deep=True))
+                elif waiter.result() != answer:
+                    raise ValueError("Conflicting answer for request")
+                return
             progress = self._state.progress
             if progress is None:
                 raise ValueError("Run has no input state")
@@ -815,18 +848,28 @@ class Run:
                     )
                 )
 
+    def _step_message_id(self) -> str:
+        message_id = self._state.steps[self._progress.step_index].message.id
+        if message_id is None:
+            raise RuntimeError("Tool execution requires a message ID")
+        return message_id
+
     def record_pending_tool(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait
     ) -> None:
-        event = (
-            InputRequiredEvent(
-                **self.event_context, tool_call_id=call.id, request=pending
-            )
-            if isinstance(pending, PendingToolInput)
-            else None
-        )
         with self.execution_lock:
             self.cancellation_signal.check()
+            event = (
+                InputRequiredEvent(
+                    **self.event_context,
+                    message_id=self._step_message_id(),
+                    step_index=self._progress.step_index,
+                    tool_call=call,
+                    request=pending,
+                )
+                if isinstance(pending, PendingToolInput)
+                else None
+            )
             if isinstance(pending, PendingToolInput) and (
                 pending.request_id in self._progress.human_tool_answers
                 or any(
@@ -838,13 +881,169 @@ class Run:
                 raise ValueError("Input request IDs must be unique within a run")
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
             self._state.revision += 1
+            self._track_input_wait()
             if event is not None and self.is_accepting and self.event_delivery:
                 self.event_delivery.publish(event)
 
-    def resolve_tool_wait(self, call: ToolCall) -> None:
+    def await_nested_input(
+        self, required: InputRequiredEvent, cancellation: CancellationSignal
+    ) -> HumanToolAnswer:
+        """Publish `required`, for a call that a tool makes for the model, and
+        block that call until `submit` answers its request. Raises
+        AgentCancelled when the run or `cancellation`, the scope of the waiting
+        call, is cancelled."""
+        request = required.request
+        waiter = Future[HumanToolAnswer]()
         with self.execution_lock:
-            del self._progress.pending_tool_calls[call.id]
+            self.cancellation_signal.check()
+            if (
+                request.request_id in self._nested_inputs
+                or request.request_id in self._progress.human_tool_answers
+                or any(
+                    isinstance(existing, PendingToolInput)
+                    and existing.request_id == request.request_id
+                    for existing in self._progress.pending_tool_calls.values()
+                )
+            ):
+                raise ValueError("Input request IDs must be unique within a run")
+            self._nested_inputs[request.request_id] = (
+                required.model_copy(deep=True),
+                waiter,
+            )
+            self._track_input_wait()
+            self.publish_event(required)
+
+        def stop_waiting() -> None:
+            waiter.cancel()
+
+        answer: HumanToolAnswer | None = None
+        try:
+            with (
+                self.cancellation_signal.on_cancel(stop_waiting),
+                cancellation.on_cancel(stop_waiting),
+            ):
+                try:
+                    answer = waiter.result()
+                except CancelledError:
+                    self.cancellation_signal.check()
+                    cancellation.check()
+                    raise
+            return answer
+        finally:
+            with self.execution_lock:
+                # The run's end already ended a request that it found open.
+                if self._nested_inputs.pop(request.request_id, None) is not None:
+                    self._track_input_wait()
+                    self.publish_event(
+                        self._input_ended(
+                            message_id=required.message_id,
+                            step_index=required.step_index,
+                            tool_call=required.tool_call,
+                            nested_call=required.nested_call,
+                            request=required.request,
+                            answer=answer,
+                        )
+                    )
+
+    def _input_ended(
+        self,
+        *,
+        message_id: str,
+        step_index: int,
+        tool_call: ToolCall,
+        nested_call: ToolCall | None,
+        request: PendingToolInput,
+        answer: HumanToolAnswer | None,
+    ) -> InputEndedEvent:
+        """The end of a request of this run: of a direct call, or of the call
+        `nested_call` that `tool_call` makes for the model."""
+        return InputEndedEvent(
+            **self.event_context,
+            message_id=message_id,
+            step_index=step_index,
+            tool_call=tool_call,
+            nested_call=nested_call,
+            request=request,
+            answer=answer,
+        )
+
+    def _withdraw_pending_inputs(self) -> None:
+        """Report the requests that end unanswered with the run: those of direct
+        calls, and those of calls that tools make for the model, whose waiting
+        threads can wake after the run has ended. Call under the execution lock."""
+        if self.event_delivery:
+            for required, _waiter in self._nested_inputs.values():
+                self.event_delivery.publish(
+                    self._input_ended(
+                        message_id=required.message_id,
+                        step_index=required.step_index,
+                        tool_call=required.tool_call,
+                        nested_call=required.nested_call,
+                        request=required.request,
+                        answer=None,
+                    )
+                )
+        self._nested_inputs.clear()
+        self._track_input_wait()
+        progress = self._state.progress
+        if progress is None or not progress.pending_tool_calls:
+            return
+        message = self._state.steps[progress.step_index].message
+        for call in message.tool_calls:
+            pending = progress.pending_tool_calls.get(call.id)
+            if isinstance(pending, PendingToolInput) and self.event_delivery:
+                if message.id is None:
+                    raise RuntimeError("Recorded generation has no message ID")
+                self.event_delivery.publish(
+                    self._input_ended(
+                        message_id=message.id,
+                        step_index=progress.step_index,
+                        tool_call=call,
+                        nested_call=None,
+                        request=pending,
+                        answer=None,
+                    )
+                )
+
+    @property
+    def input_wait_seconds(self) -> float:
+        """Time this run's calls spent waiting for input, such as the user's
+        approval: directly or through a call that a tool makes for the model."""
+        return self._input_wait_clock.paused_seconds
+
+    def _track_input_wait(self) -> None:
+        """Pause the run's clock while a call waits for input. Call under the
+        execution lock."""
+        progress = self._state.progress
+        self._input_wait_clock.set_paused(
+            bool(self._nested_inputs)
+            or (
+                progress is not None
+                and any(
+                    isinstance(pending, PendingToolInput)
+                    for pending in progress.pending_tool_calls.values()
+                )
+            )
+        )
+
+    def resolve_tool_wait(
+        self, call: ToolCall, answer: HumanToolAnswer | None = None
+    ) -> None:
+        with self.execution_lock:
+            pending = self._progress.pending_tool_calls.pop(call.id)
             self._state.revision += 1
+            self._track_input_wait()
+            if answer is not None and isinstance(pending, PendingToolInput):
+                self.publish_event(
+                    self._input_ended(
+                        message_id=self._step_message_id(),
+                        step_index=self._progress.step_index,
+                        tool_call=call,
+                        nested_call=None,
+                        request=pending,
+                        answer=answer,
+                    )
+                )
 
     def finish_tool(self, call: ToolCall, context: ToolCallContext | None) -> None:
         with self.execution_lock:
@@ -976,6 +1175,9 @@ class Run:
             self._prepare_step = agent.prepare_step
             self._after_step = agent.after_step
             self.before_tool_call = agent.before_tool_call
+            self.approval_required = frozenset(
+                name for tool in agent._tools for name in tool.approval_required
+            )
             self.after_tool_call = agent.after_tool_call
             self._on_finish = agent.on_finish
             self._on_suspend = agent.on_suspend
@@ -1074,17 +1276,20 @@ class Run:
             return True
 
     def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
+        """Wait until a tool completes. A tool that shows no activity for
+        OPERATION_TIMEOUT_SECONDS fails the run; time in which one of its calls
+        waits for input does not count."""
+        deadline = self._input_wait_clock.now() + OPERATION_TIMEOUT_SECONDS
         with self._execution_condition:
-            ready = self._execution_condition.wait_for(
-                lambda: (
-                    self.cancellation_signal.cancelled
-                    or self._execution_request == ExecutionRequest.WAKE
-                    or completed()
-                ),
-                OPERATION_TIMEOUT_SECONDS,
-            )
-        if not ready:
-            raise TimeoutError("Agent tool exceeded its execution bound")
+            while not (
+                self.cancellation_signal.cancelled
+                or self._execution_request == ExecutionRequest.WAKE
+                or completed()
+            ):
+                remaining = deadline - self._input_wait_clock.now()
+                if remaining <= 0:
+                    raise TimeoutError("Agent tool exceeded its execution bound")
+                self._execution_condition.wait(remaining)
 
     def _execute(self) -> None:
         llm = self._llm
@@ -1267,6 +1472,7 @@ class Run:
                         execution.status = ExecutionStatus(outcome.value)
             # After partial messages end, so live events keep the saved order.
             self._apply_amendments(amendments)
+            self._withdraw_pending_inputs()
             if outcome == RunStatus.CANCELLED and self._state.failure is None:
                 # Deadlines and user stops are reported; a plain request is not.
                 self._state.failure = cancellation_failure(
@@ -1384,6 +1590,7 @@ class Run:
         self._prepare_step = None
         self._after_step = None
         self.before_tool_call = None
+        self.approval_required = frozenset()
         self.after_tool_call = None
         self._on_finish = None
         self._on_suspend = None
@@ -1545,6 +1752,7 @@ def _advance_loop(
                     step=step,
                     previous=previous,
                     received_inputs=received,
+                    input_wait_seconds=run.input_wait_seconds,
                 ).model_copy(deep=True)
                 prepared = prepare(decision)
                 cancellation_signal.check()

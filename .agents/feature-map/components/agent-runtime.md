@@ -95,7 +95,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
-          ToolBatch only waits on ChildRunWait
+          ToolBatch waits on ChildRunWait and PendingToolInput
             -> _suspend (on_suspend amendments, capture_state)
             -> child ends -> _wake_execution on a new "agent-run" thread
   AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
@@ -182,7 +182,9 @@ the unwired `ChatRunStore.resume` calls it. Checkpoint serialization,
 the checkpoint owner and delete any row at a terminal status.
 To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
-and ignore thread-pool `submit` calls; expect no runtime matches.
+and ignore thread-pool `submit` calls and code mode `state.resume`. Expect
+only the program-call wait in
+`tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`.
 
 ---
 

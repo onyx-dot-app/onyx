@@ -42,6 +42,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     STORE_STUBS,
     ProgramStore,
 )
+from onyx.utils.timing import PausableClock
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import until
 
@@ -172,6 +173,7 @@ def run(
         cancellation=cancellation or CancellationSignal(),
         on_print=on_print,
         on_yield=on_yield,
+        clock=PausableClock(),
         **({"pool": lambda: pool} if pool is not None else {}),
     )
     return Ran(
@@ -845,6 +847,7 @@ def test_a_dump_that_cannot_fit_is_skipped(monkeypatch: pytest.MonkeyPatch) -> N
         cancellation=CancellationSignal(),
         on_print=lambda _text: None,
         on_yield=lambda: None,
+        clock=PausableClock(),
     )
     # A fake snapshot: skip the isinstance validation.
     waiting = ProgramWaiting.model_construct(state=cast(FunctionSnapshot, Snapshot()))
@@ -1621,3 +1624,32 @@ def test_type_checker_notes_stay_within_the_output_limit() -> None:
     # The last diagnostic is kept.
     assert "main.py:60:" in result.type_check_notes
     assert len(result.type_check_notes) < LIMITS.max_output_chars + 100
+
+
+@pytest.mark.parametrize("paused", [True, False])
+def test_a_call_that_pauses_the_clock_does_not_use_up_the_lifetime(
+    paused: bool,
+) -> None:
+    clock = PausableClock()
+
+    def wait_for_person(_call: ExternalCall) -> object:
+        clock.set_paused(paused)
+        time.sleep(1.5)
+        clock.set_paused(False)
+        return "done"
+
+    result = execute_program(
+        "print(await slow(seconds=0))\n",
+        stubs=STUBS,
+        function_names=FUNCTIONS,
+        plain_functions={},
+        async_functions={},
+        handler=wait_for_person,
+        limits=LIMITS.model_copy(update={"lifetime_seconds": 1}),
+        cancellation=CancellationSignal(),
+        on_print=lambda _text: None,
+        on_yield=lambda: None,
+        clock=clock,
+    )
+
+    assert result.status == ("completed" if paused else "timed_out"), result

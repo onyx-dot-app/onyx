@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import JsonValue
 
-from onyx.agents.events import ToolUpdateEvent
+from onyx.agents.events import InputRequiredEvent, ToolUpdateEvent
 from onyx.agents.models import (
     AgentStep,
     RunProgress,
@@ -19,14 +19,17 @@ from onyx.agents.tools import (
     AgentTool,
     BeforeToolCallFailed,
     ChildRunWait,
+    HumanToolAnswer,
     InputDecision,
     InputMode,
+    NestedCallGate,
     PendingToolInput,
     ToolExecutionMode,
     ToolInvocation,
     ToolOutcome,
     ToolProgress,
 )
+from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
     Message,
     NamedToolChoice,
@@ -38,6 +41,7 @@ from onyx.llm.models import (
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
+    from onyx.agents.agent_coordination import ToolApprovals
     from onyx.agents.runtime import Run
 
 logger = setup_logger()
@@ -52,6 +56,8 @@ def _tool_view(message: Message) -> Message:
 
 
 MAX_TOOL_CALLS_PER_STEP = 64
+# What the model sees for a call whose request was denied without a result.
+DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
 
 
 class ToolBatch:
@@ -102,23 +108,34 @@ class ToolBatch:
             messages=[_tool_view(item) for item in self.context_messages],
         )
 
-    def _before_tool_call(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
-        """The run's before_tool_call decision on a call of this step, or on a
-        call that one of its tools makes for the model, such as a program's."""
-        before_tool_call = self.run.before_tool_call
-        return (
-            None if before_tool_call is None else before_tool_call(self._context(call))
-        )
+    @property
+    def approvals(self) -> "ToolApprovals | None":
+        coordination = self.run.coordination
+        return coordination.coordinator.approvals if coordination is not None else None
 
-    def _before_nested_call(
-        self, call: ToolCall
-    ) -> ToolResult | PendingToolInput | None:
-        """`_before_tool_call` for a call that a tool makes for the model; a hook
-        that raises fails the run, as for a direct call."""
-        try:
-            return self._before_tool_call(call)
-        except Exception as error:
-            raise BeforeToolCallFailed(error) from error
+    def decide_call(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
+        """The decision on a call of this step, or on a call that one of its tools
+        makes for the model, such as a program's: the run's before_tool_call
+        hook, then the user's approval when the call requires it."""
+        if self.run.before_tool_call is not None:
+            decision = self.run.before_tool_call(self._context(call))
+            if decision is not None:
+                return decision
+        if call.name not in self.run.approval_required:
+            return None
+        approvals = self.approvals
+        if approvals is None:
+            return ToolResult(
+                content=(
+                    f"The {call.name} tool needs the user's approval, and this "
+                    "run cannot ask for it. Do not retry the call."
+                ),
+                is_error=True,
+            )
+        decision = approvals.request_approval(self.run, call)
+        if isinstance(decision, PendingToolInput):
+            return decision.model_copy(update={"approval": True})
+        return decision
 
     def _recorded_before(self) -> tuple[ToolResultMessage, ...]:
         """Recorded tool results before a call: earlier steps, then this step's
@@ -230,12 +247,12 @@ class ToolBatch:
                         if isinstance(pending, PendingToolInput):
                             if answer is None:
                                 continue
-                            self.run.resolve_tool_wait(call)
+                            self.run.resolve_tool_wait(call, answer)
                             if answer.decision == InputDecision.APPROVE:
                                 self._start([call], approved=True)
                             else:
                                 output = answer.result or ToolResult(
-                                    content="Tool execution was denied.", is_error=True
+                                    content=DENIED_CALL_MESSAGE, is_error=True
                                 )
                                 self.run.record_tool_results(output, [call])
                             continue
@@ -356,7 +373,7 @@ class ToolBatch:
                 is_error=True,
             )
         if not approved and children is None:
-            decision = self._before_tool_call(call)
+            decision = self.decide_call(call)
             if decision is not None:
                 return decision
         cancellation_signal.check()
@@ -393,8 +410,8 @@ class ToolBatch:
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,
-            before_call=self._before_nested_call
-            if self.run.before_tool_call is not None
+            nested_calls=_NestedCallGate(self, call)
+            if self.run.before_tool_call is not None or self.run.approval_required
             else None,
         )
         try:
@@ -434,3 +451,47 @@ class ToolBatch:
         finally:
             with self.run.execution_lock:
                 active.clear()
+
+
+class _NestedCallGate(NestedCallGate):
+    """Decides the calls that one direct call of a step makes for the model."""
+
+    def __init__(self, batch: ToolBatch, call: ToolCall) -> None:
+        self._batch = batch
+        self._call = call
+
+    def decide(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
+        try:
+            return self._batch.decide_call(call)
+        except Exception as error:
+            # As when the hook raises for a direct call: the run fails.
+            raise BeforeToolCallFailed(error) from error
+
+    def wait_for_input(
+        self,
+        call: ToolCall,
+        request: PendingToolInput,
+        cancellation: CancellationSignal,
+    ) -> ToolResult | None:
+        batch = self._batch
+        answer: HumanToolAnswer | None = None
+        try:
+            answer = batch.run.await_nested_input(
+                InputRequiredEvent(
+                    **batch.run.event_context,
+                    message_id=batch.message_id,
+                    step_index=batch.step.index,
+                    tool_call=self._call,
+                    nested_call=call,
+                    request=request,
+                ),
+                cancellation,
+            )
+        finally:
+            approvals = batch.approvals
+            if answer is None and request.approval and approvals is not None:
+                # The run may continue, so its end does not end the request.
+                approvals.withdraw_approval(request.request_id)
+        if answer.decision == InputDecision.APPROVE:
+            return None
+        return answer.result or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True)

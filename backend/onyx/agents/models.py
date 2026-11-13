@@ -284,6 +284,9 @@ class StepInput(BaseModel):
     step: AgentStep
     previous: StepResult | None = None
     received_inputs: list[UserMessage] = Field(default_factory=list)
+    # Time this run's calls have spent waiting for input, such as the user's
+    # approval, so features can leave it out of their own timing.
+    input_wait_seconds: float = 0.0
 
 
 class RunResult(BaseModel):
