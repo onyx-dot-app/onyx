@@ -1488,7 +1488,12 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
             else:
                 release_child.set()
             first_coordinator.completion(direct_child.run_id).result(timeout=10)
-        later_calls = [ToolCall(id="list", name="list_agents", arguments={})]
+        # Agents from the earlier turn are listed on request.
+        later_calls = [
+            ToolCall(
+                id="list", name="list_agents", arguments={"include_finished": True}
+            )
+        ]
         if action == "cancel":
             later_calls.append(
                 ToolCall(

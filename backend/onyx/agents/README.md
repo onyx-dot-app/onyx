@@ -288,7 +288,8 @@ On restore, a call that a lost owner left running runs again, unless the tool se
 `interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
-arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.
+arguments the model truncated. A step whose results all set `terminate=True` ends the run, whatever `after_step` returns,
+and its unread messages wait for the next run.
 A custom `after_step` function chooses whether to continue.
 
 ## Subagents
@@ -363,6 +364,9 @@ it returns None while the previous run drains.
 A subagent waits for those results before finishing, or before its last step, and suspends while they are pending;
 this releases its execution thread until it can incorporate the results.
 The root can finish its response while background children continue.
+
+Chat's root can also end its turn with `wait_agents` and get one follow-up for those children;
+`.agents/feature-map/components/chat-persistence.md` describes the wait rule.
 Foreground tools retain their `ChildRunWait` result path.
 
 Use `add_completion_cleanup(run_id, callback)` for resources that must survive suspension, such as a coding workspace.
@@ -691,7 +695,7 @@ Chat agent tools start background children. The root response can finish while t
 the turn's control worker keeps their leases until they release. Only callers that deliver follow-up responses,
 for a client that shows them (`SendMessageRequest.accepts_follow_ups`, set by the web chat), offer agent tools,
 and only in single-model turns: results follow one answer. Each step reads at most `MAX_AGENT_COMPLETIONS_PER_STEP` finished results;
-the rest stay unread and wake the agent's next run. Loaded agents are evicted least recently used first; only idle ones leave memory.
+a run whose read hit that bound, or a root follow-up that answers results, keeps stepping until it has read the rest, then answers. Other results start the recipient's next run. Loaded agents are evicted least recently used first; only idle ones leave memory.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
 One control worker per chat turn renews ownership, reads Stop, and refreshes the processing marker in sequence.

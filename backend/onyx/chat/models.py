@@ -228,7 +228,11 @@ class AgentResultState(BaseModel):
     """An unread child result on a branch; it is readable once its response finishes."""
 
     recipient_id: UUID
+    # The agent whose run delivers the result.
+    agent_id: UUID
     response_id: int
+    # The root response that the run belongs to.
+    root_response_id: int
     status: RunStatus
     failure: RunFailure | None = None
 
@@ -250,6 +254,20 @@ class AgentResultState(BaseModel):
         Only `spawn_agent` runs have result rows, so foreground workers never count.
         """
         return not self.status.is_terminal
+
+
+class AgentWait(BaseModel):
+    """A root `wait_agents` call on a branch, as `AgentWaitDetails` records it."""
+
+    response_id: int
+    agent_ids: frozenset[UUID] | None
+    # A message to one of its agents still waits to start that agent's run.
+    queued: bool
+
+    def holds(self, agent_id: UUID, root_response_id: int) -> bool:
+        return root_response_id <= self.response_id and (
+            self.agent_ids is None or agent_id in self.agent_ids
+        )
 
 
 class AgentInboxWork(BaseModel):

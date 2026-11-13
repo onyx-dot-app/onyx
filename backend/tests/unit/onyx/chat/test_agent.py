@@ -60,6 +60,7 @@ from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
@@ -1046,16 +1047,21 @@ def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) ->
         "interrupt_agent",
         "send_message",
     }
+    # Only the root waits for its agents by ending its turn.
     assert [{tool.name for tool in request.tools} for request in requests] == [
-        expected,
+        {*expected, "wait_agents"},
         expected,
     ]
     roles = [
-        [m for m in request.messages if m.text == SUBAGENT_INSTRUCTIONS]
+        [
+            m.text
+            for m in request.messages
+            if m.text in (ROOT_AGENT_INSTRUCTIONS, SUBAGENT_INSTRUCTIONS)
+            and m.cacheable
+        ]
         for request in requests
     ]
-    assert [len(messages) for messages in roles] == [0, 1]
-    assert roles[1][0].cacheable
+    assert roles == [[ROOT_AGENT_INSTRUCTIONS], [SUBAGENT_INSTRUCTIONS]]
 
 
 @pytest.mark.parametrize("custom", [False, True])

@@ -568,7 +568,7 @@ describe("usePacketProcessor", () => {
   });
 });
 
-test("a stop after a retracted answer completes without a hidden renderer", () => {
+test("a stop shows the text that a later tool call retracted", () => {
   const packets = [createMessageStartPacket({ turn_index: 0 })];
   const { result, rerender } = renderHook(
     ({ packets }) => usePacketProcessor(packets, 1),
@@ -582,7 +582,9 @@ test("a stop after a retracted answer completes without a hidden renderer", () =
       createStopPacket(StopReason.USER_CANCELLED),
     ],
   });
-  expect(result.current.finalAnswerComing).toBe(false);
-  expect(result.current.displayGroups).toEqual([]);
+  expect(result.current.finalAnswerComing).toBe(true);
+  expect(result.current.displayGroups).toHaveLength(1);
+  expect(result.current.isComplete).toBe(false);
+  act(() => result.current.onRenderComplete());
   expect(result.current.isComplete).toBe(true);
 });

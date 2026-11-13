@@ -54,8 +54,10 @@ document does not repeat it.
   pause queued work. `interrupt_agent` cancels one agent's active run, including its in-flight
   tool calls and foreground children; agents it started in the background keep running. The run
   reports no result (`RunOwnership.withdraw_result`), and its conversation remains. The caller
-  and the root cannot be interrupted. `list_agents` shows the whole branch tree and marks the caller.
-  Chat starts a follow-up response when an idle parent has unread child results.
+  and the root cannot be interrupted. `list_agents` shows unfinished agents and agents of the
+  current user turn, and marks the caller; `include_finished` lists the whole branch tree.
+  Chat starts a follow-up response when an idle parent has unread child results; a root
+  `wait_agents` call batches them ([[chat-persistence]], `db/chat_inputs.py:wakes_for_results`).
   Queued messages and follow-ups start through one entry,
   `AgentCoordinator.start_message_run`, which restores the agent through its
   spawner whoever sent the work.

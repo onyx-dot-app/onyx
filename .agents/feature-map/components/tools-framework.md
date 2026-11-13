@@ -185,8 +185,9 @@ A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the use
 result wakes no agent; the root reads it at its next step.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
-`list_agents` shows the whole agent tree of the selected branch, including the root and agents
-from earlier turns; it marks the caller and accepts a `path_prefix` filter. An agent can message
+`list_agents` shows running and suspended agents, and agents whose latest run belongs to the
+current user turn (`AgentInfo.current_turn`); `include_finished` adds the rest. It marks the caller
+and accepts a `path_prefix` filter. An agent can message
 any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
 with fresh limits; a message to the root waits for the root's next run and never starts one.
 `send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
@@ -199,7 +200,8 @@ running until it returns.
 Results reach the agent's spawner automatically before its next model call.
 A subagent suspends before completing until the results of children it spawned are available.
 The root can finish its response while background children continue.
-An idle agent starts a follow-up response for unread child results. These results
+An idle agent starts a follow-up response for unread child results.
+Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
 Tool replies use concise text. The `agent_id` from spawn/list is the control
 handle; paths are display labels and need not be unique.

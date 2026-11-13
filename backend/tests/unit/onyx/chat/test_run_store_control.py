@@ -263,14 +263,18 @@ def test_every_step_receives_a_bounded_number_of_child_results(
     )
     finished = [
         AgentResultState(
-            recipient_id=chat_id, response_id=index, status=RunStatus.COMPLETE
+            recipient_id=chat_id,
+            agent_id=chat_id,
+            response_id=index,
+            root_response_id=1,
+            status=RunStatus.COMPLETE,
         )
         for index in range(2, 2 + run_store.MAX_AGENT_COMPLETIONS_PER_STEP + 1)
     ]
     monkeypatch.setattr(
         run_store, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
     )
-    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_: ([], finished))
+    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_, **__: ([], finished))
     monkeypatch.setattr(
         run_store,
         "read_agent_completions",
@@ -299,7 +303,7 @@ def test_every_step_receives_a_bounded_number_of_child_results(
 
     received = store.receive_inputs(run)
 
-    # The final step is bounded too; unread results wake the agent's next run.
+    # The final step is bounded too; the run reads the rest in later steps.
     assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP
 
 

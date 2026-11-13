@@ -1370,6 +1370,12 @@ class CodeCells:
             terminate=terminate,
         )
 
+    @property
+    def has_open(self) -> bool:
+        """Whether a cell's end has not been observed yet; ending the run stops it."""
+        with self._lock:
+            return any(not cell.closed for cell in self._cells.values())
+
     def finish(self, results: Sequence[ToolResultMessage]) -> list[ToolResultAmendment]:
         """Stop every open cell and return the final records of the response's
         cells: the result of each observation that Stop interrupted, and the

@@ -230,7 +230,8 @@ text atomically; editing resubmits a new entry. No browser reader is needed.
 Background children keep running; the same control thread renews their owner
 leases until they finish. After admission is released, it does not check the
 turn's Stop key, admission lease or deadline. When a child releases ownership, the turn
-dispatches queued input and root results again. `ChatRunStore` scans child
+dispatches queued input and root results again; that dispatch also ends a root's
+`wait_agents` wait. `ChatRunStore` scans child
 inboxes after a notification and while children run on the branch, and only
 while its response is on the selected branch. A dispatch failure never cancels
 the turn. When child work can start but no running child keeps a store
