@@ -45,8 +45,12 @@ _PAGE_SIZE = 10
 
 @pytest.fixture
 def small_pages(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pages of 10 files, so 2000 files are 200 pages."""
+    """Pages of 10 files, so 2000 files are 200 pages. The split thresholds
+    shrink with the pages."""
     monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", _PAGE_SIZE)
+    monkeypatch.setattr(parallel_listing, "LEAF_TARGET_FILES", 24 * _PAGE_SIZE)
+    monkeypatch.setattr(parallel_listing, "MIN_FILES_TO_SPLIT", 48 * _PAGE_SIZE)
+    monkeypatch.setattr(parallel_listing, "MIN_FILES_TO_PROBE", 24 * _PAGE_SIZE)
     monkeypatch.setattr(parallel_listing, "CALL_BUDGET_FILES", 1500)
 
 
@@ -190,7 +194,7 @@ def test_parallel_listing_adds_few_list_calls(
     assert _max_shards_of_one_drive(parallel) > 1
 
     # The same listing with no split: each partition is one serial shard.
-    monkeypatch.setattr(parallel_listing, "MIN_PAGES_TO_SPLIT", 10**9)
+    monkeypatch.setattr(parallel_listing, "MIN_FILES_TO_SPLIT", 10**9)
     own_mock_drive.reset_stats()
     serial = list_with_resume(own_mock_drive.build_connector())
     serial_calls = own_mock_drive.list_calls()
@@ -319,8 +323,8 @@ def test_a_shard_splits_again_after_a_bulk_upload_burst(
     for. A shard that lists through that burst unsplit must split on a later
     page that starts after the burst."""
     monkeypatch.setattr(parallel_listing, "MAX_FRONTIER_IDS", 10)
-    monkeypatch.setattr(parallel_listing, "LEAF_TARGET_PAGES", 4)
-    monkeypatch.setattr(parallel_listing, "MIN_PAGES_TO_SPLIT", 8)
+    monkeypatch.setattr(parallel_listing, "LEAF_TARGET_FILES", 4 * _PAGE_SIZE)
+    monkeypatch.setattr(parallel_listing, "MIN_FILES_TO_SPLIT", 8 * _PAGE_SIZE)
     own_mock_drive.set_corpus(_SHARDED_CORPUS)
     burst_ids = own_mock_drive.client.post(
         "/_mock/corpus/touch", json={"count": 600}
