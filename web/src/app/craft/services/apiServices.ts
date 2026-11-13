@@ -20,10 +20,8 @@ import {
   type OutputInventory,
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
-import {
-  ApprovalView,
-  ApprovalSubmitDecision,
-} from "@/app/craft/types/approvals";
+import { ApprovalView } from "@/app/craft/types/approvals";
+import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { BUILD_API_BASE } from "@/app/craft/v1/constants";
 import type { ErrorResponseBody } from "@/lib/fetcher";

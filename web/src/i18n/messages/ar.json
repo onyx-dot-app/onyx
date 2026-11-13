@@ -14440,6 +14440,48 @@
         "decision": "قرار",
         "vision": "رؤية"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "لا توجد بيانات."
+      },
+      "showLess": {
+        "button": "عرض أقل"
+      },
+      "showMore": {
+        "button": "عرض المزيد"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
+        "button": "الموافقة مرة واحدة"
+      },
+      "approveSession": {
+        "button": "الموافقة للجلسة",
+        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
+      },
+      "deadline": "الموافقة قبل {time}",
+      "header": {
+        "required": "تم طلب الموافقة: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
+        "singleAction": "{action} في {app}"
+      },
+      "reject": {
+        "ariaLabel": "رفض هذا الإجراء",
+        "button": "رفض"
+      },
+      "record": {
+        "approved": "تمت الموافقة: {headline}",
+        "closed": "لم يعد في الانتظار: {headline}",
+        "expired": "انتهت المهلة: {headline}",
+        "rejected": "لم تتم الموافقة: {headline}",
+        "approvedForSession": "تمت الموافقة لهذه الجلسة: {headline}"
+      },
+      "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "تبديل الوكيل"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
-        "button": "الموافقة مرة واحدة"
-      },
-      "approveSession": {
-        "button": "الموافقة للجلسة",
-        "tooltip": "الموافقة على الإجراءات المطابقة لهذه الجلسة"
-      },
-      "details": {
-        "hideAriaLabel": "إخفاء التفاصيل",
-        "showAriaLabel": "عرض التفاصيل"
-      },
-      "header": {
-        "required": "الموافقة مطلوبة: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# إجراء} other {# إجراءات}} في {app}",
-        "singleAction": "{action} في {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "لا توجد بيانات."
-        },
-        "showLess": {
-          "button": "عرض أقل"
-        },
-        "showMore": {
-          "button": "عرض المزيد"
-        }
-      },
-      "reject": {
-        "ariaLabel": "رفض هذا الإجراء",
-        "button": "رفض"
-      },
-      "status": {
-        "approved": "تمت الموافقة",
-        "rejected": "مرفوض",
-        "expired": "انتهت الصلاحية"
-      },
-      "submit": {
-        "errorFallback": "فشل إرسال القرار"
       }
     },
     "apps": {

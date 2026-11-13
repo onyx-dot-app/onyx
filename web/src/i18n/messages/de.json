@@ -14440,6 +14440,48 @@
         "decision": "Entscheidung",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Keine Nutzdaten."
+      },
+      "showLess": {
+        "button": "Weniger anzeigen"
+      },
+      "showMore": {
+        "button": "Mehr anzeigen"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "Diese Aktion einmalig genehmigen",
+        "button": "Einmalig genehmigen"
+      },
+      "approveSession": {
+        "button": "Für Sitzung genehmigen",
+        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
+      },
+      "deadline": "Bis {time} genehmigen",
+      "header": {
+        "required": "Freigabe angefordert: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "reject": {
+        "ariaLabel": "Diese Aktion ablehnen",
+        "button": "Ablehnen"
+      },
+      "record": {
+        "approved": "Freigegeben: {headline}",
+        "closed": "Wartet nicht mehr: {headline}",
+        "expired": "Zeitüberschreitung: {headline}",
+        "rejected": "Nicht freigegeben: {headline}",
+        "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
+      },
+      "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "Agent wechseln"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Diese Aktion einmalig genehmigen",
-        "button": "Einmalig genehmigen"
-      },
-      "approveSession": {
-        "button": "Für Sitzung genehmigen",
-        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
-      },
-      "details": {
-        "hideAriaLabel": "Details ausblenden",
-        "showAriaLabel": "Details anzeigen"
-      },
-      "header": {
-        "required": "Genehmigung erforderlich: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
-        "singleAction": "{action} in {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Keine Nutzdaten."
-        },
-        "showLess": {
-          "button": "Weniger anzeigen"
-        },
-        "showMore": {
-          "button": "Mehr anzeigen"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Diese Aktion ablehnen",
-        "button": "Ablehnen"
-      },
-      "status": {
-        "approved": "Genehmigt",
-        "rejected": "Abgelehnt",
-        "expired": "Abgelaufen"
-      },
-      "submit": {
-        "errorFallback": "Entscheidung konnte nicht übermittelt werden"
       }
     },
     "apps": {

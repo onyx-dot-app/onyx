@@ -25,7 +25,7 @@ import {
 } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 
 // ---------------------------------------------------------------------------
 // The Living Map, filmed by a camera. The whole Craft system is one fixed

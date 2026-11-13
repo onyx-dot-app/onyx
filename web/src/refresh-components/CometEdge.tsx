@@ -48,6 +48,12 @@ export default function CometEdge({
   className,
 }: CometEdgeProps) {
   const show = active || settled;
+  const cometStyle: CSSProperties & Record<`--${string}`, string> = {
+    // Comet is always the live "working" color; tone is the settled edge.
+    "--comet-color": "var(--status-info-05)",
+    "--comet-settle-color": TONE_VAR[tone],
+    "--comet-speed": `${speedSeconds}s`,
+  };
 
   return (
     <div className={cn("relative", className)} style={{ borderRadius: radius }}>
@@ -56,14 +62,7 @@ export default function CometEdge({
         <svg
           aria-hidden
           className="pointer-events-none absolute inset-0 h-full w-full overflow-visible"
-          style={
-            {
-              // Comet is always the live "working" color; tone is the settled edge.
-              "--comet-color": "var(--status-info-05)",
-              "--comet-settle-color": TONE_VAR[tone],
-              "--comet-speed": `${speedSeconds}s`,
-            } as CSSProperties
-          }
+          style={cometStyle}
         >
           <rect
             {...RECT_PROPS}

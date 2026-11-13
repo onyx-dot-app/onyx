@@ -14440,6 +14440,48 @@
         "decision": "Decision",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "No payload."
+      },
+      "showLess": {
+        "button": "Show less"
+      },
+      "showMore": {
+        "button": "Show more"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "Approve this action once",
+        "button": "Approve once"
+      },
+      "approveSession": {
+        "button": "Approve for session",
+        "tooltip": "Approve matching actions for this session"
+      },
+      "deadline": "Approve by {time}",
+      "header": {
+        "required": "Approval requested: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "reject": {
+        "ariaLabel": "Reject this action",
+        "button": "Reject"
+      },
+      "record": {
+        "approved": "Approved: {headline}",
+        "closed": "No longer waiting: {headline}",
+        "expired": "Timed out: {headline}",
+        "rejected": "Not approved: {headline}",
+        "approvedForSession": "Approved for this session: {headline}"
+      },
+      "submitError": "Could not submit your decision. Try again.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "Switch agent"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Approve this action once",
-        "button": "Approve once"
-      },
-      "approveSession": {
-        "button": "Approve for session",
-        "tooltip": "Approve matching actions for this session"
-      },
-      "details": {
-        "hideAriaLabel": "Hide details",
-        "showAriaLabel": "Show details"
-      },
-      "header": {
-        "required": "Approval required: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# action} other {# actions}} in {app}",
-        "singleAction": "{action} in {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "No payload."
-        },
-        "showLess": {
-          "button": "Show less"
-        },
-        "showMore": {
-          "button": "Show more"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Reject this action",
-        "button": "Reject"
-      },
-      "status": {
-        "approved": "Approved",
-        "rejected": "Rejected",
-        "expired": "Expired"
-      },
-      "submit": {
-        "errorFallback": "Failed to submit decision"
       }
     },
     "apps": {

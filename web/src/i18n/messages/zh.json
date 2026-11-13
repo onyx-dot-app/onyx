@@ -14440,6 +14440,48 @@
         "decision": "决策",
         "vision": "视觉"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "无载荷。"
+      },
+      "showLess": {
+        "button": "收起"
+      },
+      "showMore": {
+        "button": "展开"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "仅批准此操作一次",
+        "button": "批准一次"
+      },
+      "approveSession": {
+        "button": "批准整个会话",
+        "tooltip": "批准此会话中的匹配操作"
+      },
+      "deadline": "请在 {time} 前批准",
+      "header": {
+        "required": "已请求批准：{headline}"
+      },
+      "headline": {
+        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
+        "singleAction": "{app} 中的 {action}"
+      },
+      "reject": {
+        "ariaLabel": "拒绝此操作",
+        "button": "拒绝"
+      },
+      "record": {
+        "approved": "已批准：{headline}",
+        "closed": "不再等待：{headline}",
+        "expired": "已超时：{headline}",
+        "rejected": "未批准：{headline}",
+        "approvedForSession": "已在此会话中批准：{headline}"
+      },
+      "submitError": "无法提交你的决定。请重试。",
+      "actionWithDescription": "{action}：{description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "切换代理"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "仅批准此操作一次",
-        "button": "批准一次"
-      },
-      "approveSession": {
-        "button": "批准整个会话",
-        "tooltip": "批准此会话中的匹配操作"
-      },
-      "details": {
-        "hideAriaLabel": "隐藏详情",
-        "showAriaLabel": "显示详情"
-      },
-      "header": {
-        "required": "需要批准：{headline}"
-      },
-      "headline": {
-        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
-        "singleAction": "{app} 中的 {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "无载荷。"
-        },
-        "showLess": {
-          "button": "收起"
-        },
-        "showMore": {
-          "button": "展开"
-        }
-      },
-      "reject": {
-        "ariaLabel": "拒绝此操作",
-        "button": "拒绝"
-      },
-      "status": {
-        "approved": "已批准",
-        "rejected": "已拒绝",
-        "expired": "已过期"
-      },
-      "submit": {
-        "errorFallback": "提交决定失败"
       }
     },
     "apps": {

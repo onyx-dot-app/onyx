@@ -14440,6 +14440,48 @@
         "decision": "Decisión",
         "vision": "Visión"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Sin contenido."
+      },
+      "showLess": {
+        "button": "Mostrar menos"
+      },
+      "showMore": {
+        "button": "Mostrar más"
+      }
+    },
+    "approvalCard": {
+      "approveOnce": {
+        "ariaLabel": "Aprobar esta acción una vez",
+        "button": "Aprobar una vez"
+      },
+      "approveSession": {
+        "button": "Aprobar para la sesión",
+        "tooltip": "Aprobar acciones coincidentes para esta sesión"
+      },
+      "deadline": "Aprobar antes de {time}",
+      "header": {
+        "required": "Aprobación solicitada: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# acción} other {# acciones}} en {app}",
+        "singleAction": "{action} en {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rechazar esta acción",
+        "button": "Rechazar"
+      },
+      "record": {
+        "approved": "Aprobado: {headline}",
+        "closed": "Ya no espera: {headline}",
+        "expired": "Tiempo agotado: {headline}",
+        "rejected": "No aprobado: {headline}",
+        "approvedForSession": "Aprobado para esta sesión: {headline}"
+      },
+      "submitError": "No se pudo enviar tu decisión. Inténtalo de nuevo.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14452,50 +14494,6 @@
       },
       "switch": {
         "ariaLabel": "Cambiar de agente"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Aprobar esta acción una vez",
-        "button": "Aprobar una vez"
-      },
-      "approveSession": {
-        "button": "Aprobar para la sesión",
-        "tooltip": "Aprobar acciones coincidentes para esta sesión"
-      },
-      "details": {
-        "hideAriaLabel": "Ocultar detalles",
-        "showAriaLabel": "Mostrar detalles"
-      },
-      "header": {
-        "required": "Se requiere aprobación: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# acción} other {# acciones}} en {app}",
-        "singleAction": "{action} en {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Sin contenido."
-        },
-        "showLess": {
-          "button": "Mostrar menos"
-        },
-        "showMore": {
-          "button": "Mostrar más"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rechazar esta acción",
-        "button": "Rechazar"
-      },
-      "status": {
-        "approved": "Aprobado",
-        "rejected": "Rechazado",
-        "expired": "Caducada"
-      },
-      "submit": {
-        "errorFallback": "No se pudo enviar la decisión"
       }
     },
     "apps": {
