@@ -1,7 +1,14 @@
-import { render, screen, setupUser } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import { act, createRef } from "react";
 import AppInputBar, {
   type AppInputBarHandle,
+  type AppInputBarProps,
 } from "@/sections/input/AppInputBar";
 import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
 import { ChatFileType } from "@/app/app/types";
@@ -18,12 +25,20 @@ import {
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
+import type { PickerSkill } from "@/lib/skills/picker";
+import { draftKey } from "@/hooks/useDraft";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
 }));
+let mockUser: { preferences: { shortcut_enabled: boolean } } | null = null;
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ user: null, isAdmin: false }),
+  useUser: () => ({ user: mockUser, isAdmin: false }),
+}));
+let mockChatSkills: PickerSkill[] = [];
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual("@/lib/skills/hooks"),
+  useChatSkills: () => mockChatSkills,
 }));
 let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
@@ -111,6 +126,7 @@ function Composer({
   inputBarRef,
   chatState = "input",
   disabled = false,
+  onSubmit = jest.fn(),
 }: {
   plugins: readonly MemberPlugin[];
   agentId?: number;
@@ -118,6 +134,7 @@ function Composer({
   inputBarRef?: React.Ref<AppInputBarHandle>;
   chatState?: ChatState;
   disabled?: boolean;
+  onSubmit?: AppInputBarProps["onSubmit"];
 }) {
   const configuration = useToolConfiguration(agentId);
   const llmManager = useLlmManager();
@@ -141,7 +158,7 @@ function Composer({
         toolConfiguration={configuration}
         llmManager={llmManager}
         stopGenerating={jest.fn()}
-        onSubmit={jest.fn()}
+        onSubmit={onSubmit}
         handleFileUpload={jest.fn()}
         deepResearchEnabled={false}
         toggleDeepResearch={jest.fn()}
@@ -155,6 +172,9 @@ function Composer({
 
 beforeEach(() => {
   localStorage.clear();
+  sessionStorage.clear();
+  mockUser = null;
+  mockChatSkills = [];
   mockIncognitoEnabled = false;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
@@ -238,21 +258,43 @@ describe("restore after a failed send", () => {
   }
   const failedFiles = [projectFile("failed-file")] satisfies ProjectFile[];
 
-  test("puts the message and files back into an empty composer", () => {
+  test("puts the message, its picks and its files back into an empty composer", async () => {
     const inputBarRef = createRef<AppInputBarHandle>();
-    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
-    act(() => inputBarRef.current?.restore("failed message", failedFiles));
-    expect(screen.getByRole("textbox")).toHaveTextContent("failed message");
+    const onSubmit = jest.fn();
+    render(
+      <Composer plugins={[]} inputBarRef={inputBarRef} onSubmit={onSubmit} />
+    );
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "failed @code-review message",
+        mentions: [{ type: "skill", name: "code-review" }],
+        files: failedFiles,
+      })
+    );
+    const input = screen.getByRole("textbox");
+    expect(input).toHaveTextContent("failed @code-review message");
     expect(mockProjectsContext.setCurrentMessageFiles).toHaveBeenCalledWith(
       failedFiles
     );
+
+    await setupUser().type(input, "{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "failed @code-review message",
+      mentions: [{ type: "skill", name: "code-review" }],
+    });
   });
 
   test("keeps text typed while the send was pending", async () => {
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
     await setupUser().type(screen.getByRole("textbox"), "newer draft");
-    act(() => inputBarRef.current?.restore("failed message", failedFiles));
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "failed message",
+        mentions: [],
+        files: failedFiles,
+      })
+    );
     expect(screen.getByRole("textbox")).toHaveTextContent("newer draft");
     expect(screen.getByRole("textbox")).not.toHaveTextContent("failed message");
     expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
@@ -264,7 +306,13 @@ describe("restore after a failed send", () => {
     ] satisfies ProjectFile[];
     const inputBarRef = createRef<AppInputBarHandle>();
     render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
-    act(() => inputBarRef.current?.restore("failed message", failedFiles));
+    act(() =>
+      inputBarRef.current?.restore({
+        message: "failed message",
+        mentions: [],
+        files: failedFiles,
+      })
+    );
     expect(screen.getByRole("textbox")).not.toHaveTextContent("failed message");
     expect(mockProjectsContext.setCurrentMessageFiles).not.toHaveBeenCalled();
   });
@@ -287,3 +335,179 @@ test.each([
     );
   }
 );
+
+describe("`@` skill mentions", () => {
+  // jsdom has no layout, so ranges cannot measure the caret.
+  const rangeRect = Range.prototype.getBoundingClientRect;
+  beforeAll(() => {
+    Range.prototype.getBoundingClientRect = () => new DOMRect();
+  });
+  afterAll(() => {
+    Range.prototype.getBoundingClientRect = rangeRect;
+  });
+
+  beforeEach(() => {
+    mockUser = { preferences: { shortcut_enabled: true } };
+    mockChatSkills = [
+      {
+        kind: "skill",
+        slug: "code-review",
+        name: "code-review",
+        description: "Review code",
+      },
+    ];
+  });
+
+  async function pickCodeReview(user: ReturnType<typeof setupUser>) {
+    await user.type(screen.getByRole("textbox"), "use @co");
+    await user.click(await screen.findByTestId("skill-picker-row-code-review"));
+  }
+
+  function skillTiles() {
+    return screen
+      .getByRole("textbox")
+      .querySelectorAll('[data-mention-type="skill"]');
+  }
+
+  test("opens on `@` with the chat skills that start with the query", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    const input = screen.getByRole("textbox");
+
+    await user.type(input, "costs $co (@co");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+
+    await user.type(input, " or @Co");
+    expect(await screen.findByTestId("skill-picker-popover")).toHaveTextContent(
+      "@code-review"
+    );
+    await user.type(input, "x");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  test("hides the `/` prompt shortcuts while it is open", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    const input = screen.getByRole("textbox");
+
+    await user.type(input, "/foo");
+    expect(await screen.findByText("Create New Prompt")).toBeVisible();
+
+    await user.type(input, " @co");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+    expect(screen.queryByText("Create New Prompt")).toBeNull();
+  });
+
+  test("a pick becomes a tile that sends its skill with the message", async () => {
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    const user = setupUser();
+
+    await pickCodeReview(user);
+    expect(skillTiles()).toHaveLength(1);
+    await user.type(screen.getByRole("textbox"), "now{Enter}");
+
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "use @code-review now",
+      mentions: [{ type: "skill", name: "code-review" }],
+    });
+  });
+
+  test("an IME Enter does not pick", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "use @co");
+    await screen.findByTestId("skill-picker-popover");
+
+    act(() => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Enter", isComposing: true })
+      );
+    });
+    expect(skillTiles()).toHaveLength(0);
+    expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
+  });
+
+  test("the caret after a tile does not reopen the picker on its text", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+
+    await pickCodeReview(user);
+    await user.type(screen.getByRole("textbox"), "{Backspace}");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  test("undoing a tile's removal restores its skill", async () => {
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    const user = setupUser();
+    await pickCodeReview(user);
+
+    const remove = screen
+      .getByRole("textbox")
+      .querySelector("[data-rich-tile-remove]");
+    if (!remove) throw new Error("The tile has no remove button");
+    await user.pointer({ keys: "[MouseLeft>]", target: remove });
+    expect(skillTiles()).toHaveLength(0);
+
+    await user.keyboard("{Control>}z{/Control}");
+    expect(skillTiles()).toHaveLength(1);
+    await user.type(screen.getByRole("textbox"), "{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "use @code-review ",
+      mentions: [{ type: "skill", name: "code-review" }],
+    });
+  });
+
+  test("cut and pasted mention text is not a pick", async () => {
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    const user = setupUser();
+    await pickCodeReview(user);
+    const input = screen.getByRole("textbox");
+
+    window.getSelection()!.selectAllChildren(input);
+    let cutText = "";
+    fireEvent.cut(input, {
+      clipboardData: {
+        setData: (_type: string, text: string) => (cutText = text),
+      },
+    });
+    expect(cutText).toBe("use @code-review ");
+    expect(input).toHaveTextContent(/^$/);
+    await user.paste(cutText);
+    expect(input).toHaveTextContent("use @code-review");
+    expect(skillTiles()).toHaveLength(0);
+
+    await user.type(input, "now{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "use @code-review now",
+      mentions: [],
+    });
+  });
+
+  test("a restored draft keeps its picks as tiles", async () => {
+    jest.useFakeTimers();
+    try {
+      const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+      const { unmount } = render(<Composer plugins={[]} />);
+      await pickCodeReview(user);
+      // The draft saves after a delay.
+      act(() => jest.advanceTimersByTime(300));
+      unmount();
+
+      const onSubmit = jest.fn();
+      render(<Composer plugins={[]} onSubmit={onSubmit} />);
+      expect(screen.getByRole("textbox")).toHaveTextContent("use @code-review");
+      expect(skillTiles()).toHaveLength(1);
+      await user.type(screen.getByRole("textbox"), "now{Enter}");
+
+      expect(onSubmit).toHaveBeenCalledWith({
+        message: "use @code-review now",
+        mentions: [{ type: "skill", name: "code-review" }],
+      });
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+});

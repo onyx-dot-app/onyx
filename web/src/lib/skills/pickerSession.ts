@@ -1,30 +1,31 @@
 /**
- * Pure state machine for the `/` skill-picker session in the chat input.
+ * Pure state machine for the skill-picker session in an input bar.
  *
- * The picker is a typing session keyed on the active "/" character, not a
- * reflection of the caret. `slashIndex` tracks that "/"; `suppressed` hides the
- * picker within the token after Esc; both reset once the slash is gone. Caret
- * movement never opens the picker — only typing a slash trigger does.
+ * The picker is a typing session keyed on the active trigger character ("/"
+ * in Craft, "@" in chat; see `detectPickerTrigger`), not a reflection of the caret.
+ * `triggerIndex` tracks that character; `suppressed` hides the picker within the
+ * token after Esc; both reset once the trigger is gone. Caret movement never
+ * opens the picker — only typing a trigger does.
  *
  * These reducers are pure (no DOM): the host reads the text-before-cursor and
  * the caret rect, then feeds the text in here and applies the result.
  */
 
-import { detectSlashTrigger } from "@/lib/skills/picker";
+import { detectPickerTrigger } from "@/lib/skills/picker";
 
 export interface PickerSession {
-  /** Index of the tracked "/" in the input text, or null when no session. */
-  slashIndex: number | null;
+  /** Index of the tracked trigger in the input text, or null when no session. */
+  triggerIndex: number | null;
   /** Whether the picker is hidden within the tracked token (Esc). */
   suppressed: boolean;
   /** Whether the picker is currently visible. */
   open: boolean;
-  /** The query typed after the tracked "/". */
+  /** The query typed after the tracked trigger. */
   query: string;
 }
 
 export const INITIAL_PICKER_SESSION: PickerSession = {
-  slashIndex: null,
+  triggerIndex: null,
   suppressed: false,
   open: false,
   query: "",
@@ -37,55 +38,59 @@ function hidden(state: PickerSession): PickerSession {
 /** Typing: the only event that can open the picker. */
 export function reduceOnInput(
   state: PickerSession,
-  textBeforeCursor: string | null
+  textBeforeCursor: string | null,
+  trigger: string
 ): PickerSession {
-  const trigger =
-    textBeforeCursor === null ? null : detectSlashTrigger(textBeforeCursor);
+  const match =
+    textBeforeCursor === null
+      ? null
+      : detectPickerTrigger(textBeforeCursor, trigger);
 
-  if (!trigger) {
-    // No active trigger. Keep a dismissed session alive while its slash
-    // survives (so deleting back into the token doesn't reopen it); fully
-    // reset once that slash is gone, letting a fresh "/" re-arm later.
-    const slash = state.slashIndex;
-    if (slash === null || textBeforeCursor?.[slash] !== "/") {
+  if (!match) {
+    // No active trigger. Keep a dismissed session alive while its trigger
+    // character survives (so deleting back into the token doesn't reopen it);
+    // fully reset once it is gone, letting a fresh trigger re-arm later.
+    const index = state.triggerIndex;
+    if (index === null || textBeforeCursor?.[index] !== trigger) {
       return INITIAL_PICKER_SESSION;
     }
     return hidden(state);
   }
 
-  if (trigger.slashIndex !== state.slashIndex) {
+  if (match.triggerIndex !== state.triggerIndex) {
     return {
-      slashIndex: trigger.slashIndex,
+      triggerIndex: match.triggerIndex,
       suppressed: false,
       open: true,
-      query: trigger.query,
+      query: match.query,
     };
   }
 
   if (state.suppressed) return hidden(state);
 
-  return state.open && state.query === trigger.query
+  return state.open && state.query === match.query
     ? state
-    : { ...state, open: true, query: trigger.query };
+    : { ...state, open: true, query: match.query };
 }
 
 /** Caret moved (arrows/click): never opens; closes or syncs the query. */
 export function reduceOnSelection(
   state: PickerSession,
-  textBeforeCursor: string | null
+  textBeforeCursor: string | null,
+  trigger: string
 ): PickerSession {
   if (!state.open) return state;
-  const trigger =
-    textBeforeCursor === null ? null : detectSlashTrigger(textBeforeCursor);
-  if (!trigger || trigger.slashIndex !== state.slashIndex) {
+  const match =
+    textBeforeCursor === null
+      ? null
+      : detectPickerTrigger(textBeforeCursor, trigger);
+  if (!match || match.triggerIndex !== state.triggerIndex) {
     return INITIAL_PICKER_SESSION;
   }
-  return state.query === trigger.query
-    ? state
-    : { ...state, query: trigger.query };
+  return state.query === match.query ? state : { ...state, query: match.query };
 }
 
-/** Esc / outside-click: hide within the current token until its slash is gone. */
+/** Esc / outside-click: hide within the current token until its trigger is gone. */
 export function reduceOnDismiss(state: PickerSession): PickerSession {
   return state.open || !state.suppressed
     ? { ...state, suppressed: true, open: false }

@@ -2,7 +2,7 @@ import React from "react";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { deferred, render } from "@tests/setup/test-utils";
 import { draftKey } from "@/hooks/useDraft";
-import type { BaseInputBarHandle } from "@/sections/input/BaseInputBar";
+import type { PickerEntry } from "@/lib/skills/picker";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
 import {
   UploadFileStatus,
@@ -75,16 +75,18 @@ jest.mock("@/hooks/useEscapeInterrupt", () => ({
   useEscapeInterrupt: jest.fn(),
 }));
 
-let mockDeleteBeforeToken: (token: string) => boolean | undefined;
-jest.mock("@/hooks/useSlashPicker", () => ({
-  __esModule: true,
-  default: ({
-    inputRef,
+let mockPickEntry: (token: string) => void;
+jest.mock("@/lib/skills/hooks", () => ({
+  useEntryPicker: ({
+    onSelect,
   }: {
-    inputRef: React.RefObject<BaseInputBarHandle | null>;
+    onSelect: (entry: PickerEntry, token: string) => void;
   }) => {
-    mockDeleteBeforeToken = (token) =>
-      inputRef.current?.deleteBeforeToken(token);
+    mockPickEntry = (token) =>
+      onSelect(
+        { kind: "skill", slug: "pptx", name: "pptx", description: "" },
+        token
+      );
     return {
       open: false,
       anchorRect: null,
@@ -99,7 +101,9 @@ jest.mock("@/hooks/useSlashPicker", () => ({
 }));
 
 jest.mock("@/lib/skills/picker", () => ({
+  CRAFT_PICKER_TRIGGER: "/",
   pickerEntryConnectionPath: () => null,
+  filterPickerSections: () => ({ skills: [], apps: [], mcpServers: [] }),
   pickerEntryKey: () => "",
   pickerEntryPromptPrefix: () => "",
   toPickerSections: () => ({ skills: [], apps: [], mcpServers: [] }),
@@ -311,9 +315,7 @@ describe("Craft draft review regressions", () => {
     range.setStart(textNode, textNode.textContent?.length ?? 0);
     range.collapse(true);
     selection?.addRange(range);
-    act(() => {
-      expect(mockDeleteBeforeToken("/pptx")).toBe(true);
-    });
+    act(() => mockPickEntry("/pptx"));
     unmount();
     render(<CraftInputBar {...props} />);
     expect(screen.getByRole("textbox").textContent).toBe("Prompt ");

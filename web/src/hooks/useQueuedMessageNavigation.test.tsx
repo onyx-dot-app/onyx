@@ -11,6 +11,7 @@ const messages: PendingChatMessage[] = [
     target_response_id: 2,
     deep_research: false,
     llm_override: null,
+    mentions: [],
   },
 ];
 

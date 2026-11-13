@@ -3,7 +3,7 @@ import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { PendingChatMessage } from "@/lib/chat/types";
+import type { Mention, PendingChatMessage } from "@/lib/chat/types";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
@@ -174,6 +174,8 @@ export interface LLMOverride {
 export interface SendMessageParams {
   message: string;
   fileDescriptors?: FileDescriptor[];
+  // What the user tagged in the message with `@`.
+  mentions?: Mention[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: SearchFiltersRequest | null;
@@ -201,6 +203,7 @@ export class ChatSendRejectedError extends Error {}
 export async function* sendMessage({
   message,
   fileDescriptors,
+  mentions,
   parentMessageId,
   chatSessionId,
   filters,
@@ -222,6 +225,7 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
+    mentions: mentions ?? [],
     internal_search_filters: filters,
     deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,
@@ -530,6 +534,7 @@ export function processRawChatHistory(
           ? "error"
           : (messageInfo.message_type as Message["type"]),
       files: messageInfo.files,
+      mentions: messageInfo.mentions,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null
           ? Number(messageInfo.alternate_assistant_id)
@@ -587,6 +592,7 @@ export function processRawChatHistory(
 const PARAMS_TO_SKIP = [
   SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD,
   SEARCH_PARAM_NAMES.USER_PROMPT,
+  SEARCH_PARAM_NAMES.SKILLS,
   SEARCH_PARAM_NAMES.TITLE,
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,

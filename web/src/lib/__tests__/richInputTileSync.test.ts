@@ -43,14 +43,14 @@ function expectColorsFromTag(tile: HTMLElement, color: StatusColor) {
   }
 }
 
-describe("skill tile stays in sync with the Opal Badge + sparkle icon", () => {
+describe("skill mention tile stays in sync with the Opal Badge + sparkle icon", () => {
   function skillTile() {
     return createRichInputTileNode({
-      type: "skill",
-      text: "/pptx ",
-      preview: "Skill: Slides",
+      type: "mention",
+      text: "@pptx",
+      preview: "@pptx",
       meta: "",
-      skillSlug: "pptx",
+      mention: { type: "skill", name: "pptx" },
     });
   }
 

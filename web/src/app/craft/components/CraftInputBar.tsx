@@ -25,7 +25,6 @@ import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
-import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
@@ -35,7 +34,10 @@ import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import { useEntryPicker } from "@/lib/skills/hooks";
 import {
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
@@ -197,10 +199,21 @@ const CraftInputBar = memo(
         );
       }, []);
 
-      const slashPicker = useSlashPicker({
-        inputRef: baseRef,
-        onSelect: addEntry,
+      const pickEntry = useCallback(
+        (entry: PickerEntry, token: string) => {
+          baseRef.current?.deleteBeforeToken(token);
+          addEntry(entry);
+        },
+        [addEntry]
+      );
+      const slashPicker = useEntryPicker({
+        onSelect: pickEntry,
+        trigger: CRAFT_PICKER_TRIGGER,
       });
+      const slashPickerSections = useMemo(
+        () => filterPickerSections(pickerSections, slashPicker.query),
+        [pickerSections, slashPicker.query]
+      );
 
       const interruptible = !!onInterrupt && isRunning;
       const handleInterrupt = useCallback(() => {
@@ -363,9 +376,10 @@ const CraftInputBar = memo(
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={pickerSections}
+            sections={slashPickerSections}
             onSelect={slashPicker.onSelect}
             onClose={slashPicker.onClose}
+            trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (
             <EntryInfoPopover

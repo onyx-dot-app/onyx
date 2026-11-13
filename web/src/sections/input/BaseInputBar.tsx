@@ -15,7 +15,6 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
-import { getTextContent } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
@@ -38,8 +37,6 @@ export interface BaseInputBarHandle {
   focus: () => void;
   setMessage: (message: string) => void;
   pasteText: (text: string) => void;
-  getTextBeforeCursor: () => string | null;
-  getCaretRect: () => DOMRect | null;
   /** Delete `token` immediately before the caret (e.g. `"/pptx"`). */
   deleteBeforeToken: (token: string) => boolean;
 }
@@ -71,8 +68,9 @@ export interface BaseInputBarProps {
   onPasteText?: (text: string) => boolean;
   onPasteFiles?: (files: File[]) => void;
   onContentChange?: (text: string) => void;
-  onInputCallback?: () => void;
-  onSelectionChange?: () => void;
+  onInputCallback?: (event: SyntheticEvent<HTMLDivElement>) => void;
+  /** Called after the caret may have moved (key up, mouse up). */
+  onSelectionChange?: (event: SyntheticEvent<HTMLDivElement>) => void;
 }
 
 const BaseInputBar = memo(
@@ -164,36 +162,6 @@ const BaseInputBar = memo(
         },
         setMessage: (msg: string) => setMessage(msg),
         pasteText: (text: string) => pasteText(text),
-        getTextBeforeCursor: (): string | null => {
-          const el = inputRef.current;
-          if (!el) return null;
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0);
-          if (!el.contains(range.startContainer)) return null;
-          const cloned = range.cloneRange();
-          cloned.selectNodeContents(el);
-          cloned.setEnd(range.startContainer, range.startOffset);
-          const tmp = document.createElement("div");
-          tmp.appendChild(cloned.cloneContents());
-          return getTextContent(tmp);
-        },
-        getCaretRect: (): DOMRect | null => {
-          const sel = window.getSelection();
-          if (!sel || sel.rangeCount === 0) return null;
-          const range = sel.getRangeAt(0).cloneRange();
-          range.collapse(true);
-          const rect = range.getBoundingClientRect();
-          if (
-            rect.top === 0 &&
-            rect.left === 0 &&
-            rect.width === 0 &&
-            rect.height === 0
-          ) {
-            return inputRef.current?.getBoundingClientRect() ?? null;
-          }
-          return rect;
-        },
         deleteBeforeToken,
       }));
 
@@ -259,7 +227,7 @@ const BaseInputBar = memo(
       const handleInput = useCallback(
         (event: SyntheticEvent<HTMLDivElement>) => {
           onInput(event);
-          onInputCallback?.();
+          onInputCallback?.(event);
         },
         [onInput, onInputCallback]
       );
@@ -278,10 +246,6 @@ const BaseInputBar = memo(
         },
         [handleSubmit, handleTileKeyDown, queueNav]
       );
-
-      const handleSelectionChange = useCallback(() => {
-        onSelectionChange?.();
-      }, [onSelectionChange]);
 
       const canSubmit =
         message.trim().length > 0 &&
@@ -334,8 +298,8 @@ const BaseInputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
-                onKeyUp={handleSelectionChange}
-                onMouseUp={handleSelectionChange}
+                onKeyUp={onSelectionChange}
+                onMouseUp={onSelectionChange}
                 onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",

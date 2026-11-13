@@ -1,12 +1,13 @@
 import { BADGE_COLORS, badgeTextClass } from "@opal/components/badge/colors";
 import type { StatusColor } from "@opal/types";
+import type { Mention } from "@/lib/chat/types";
 
-/** Value stored in a tile's `data-tile-type` for slash-command skill tiles. */
-export const SKILL_TILE_TYPE = "skill";
+/** Value stored in a tile's `data-tile-type` for `@` mention tiles. */
+export const MENTION_TILE_TYPE = "mention";
 
-/** Whether `el` is a skill rich tile. */
-export function isSkillTile(el: Element | null): boolean {
-  return el?.getAttribute("data-tile-type") === SKILL_TILE_TYPE;
+/** Whether `el` is a mention rich tile. */
+export function isMentionTile(el: Element | null): boolean {
+  return el?.getAttribute("data-tile-type") === MENTION_TILE_TYPE;
 }
 
 export const PASTE_TILE_THRESHOLD_CHARS = 200;
@@ -65,18 +66,19 @@ interface TileSpec {
   icon: IconSpec;
 }
 
-// Spec per tile type. Keyed by RichTileConfig.type; falls back to "paste".
-const TILE_SPECS: Record<string, TileSpec> = {
-  paste: {
-    tagColor: "default",
-    icon: {
-      paths: [CLIPBOARD_PATH],
-      viewBox: "0 0 16 16",
-      size: 14,
-      strokeWidth: 1.5,
-      strokeLinecap: "round",
-    },
+const PASTE_TILE_SPEC: TileSpec = {
+  tagColor: "default",
+  icon: {
+    paths: [CLIPBOARD_PATH],
+    viewBox: "0 0 16 16",
+    size: 14,
+    strokeWidth: 1.5,
+    strokeLinecap: "round",
   },
+};
+
+// Spec per mention kind; other tiles use the paste spec.
+const MENTION_TILE_SPECS: Record<Mention["type"], TileSpec> = {
   skill: {
     tagColor: "info",
     icon: {
@@ -119,36 +121,39 @@ export interface RichTileConfig {
   text: string;
   preview: string;
   meta: string;
-  /** Skill slug, set for skill tiles. Stored as data-skill-slug. */
-  skillSlug?: string;
+  /** Set for mention tiles. Stored as data-mention-type and
+   * data-mention-name. */
+  mention?: Mention;
 }
 
 export function createRichInputTileNode(
   config: RichTileConfig
 ): HTMLSpanElement {
-  const isSkill = config.type === SKILL_TILE_TYPE;
+  const { mention } = config;
 
   const tile = document.createElement("span");
   tile.contentEditable = "false";
   tile.setAttribute("data-rich-tile", "");
   tile.setAttribute("data-tile-type", config.type);
   tile.setAttribute("data-text", config.text);
-  if (config.skillSlug !== undefined) {
-    tile.setAttribute("data-skill-slug", config.skillSlug);
+  if (mention !== undefined) {
+    tile.setAttribute("data-mention-type", mention.type);
+    tile.setAttribute("data-mention-name", mention.name);
   }
   tile.className = "rich-input-tile";
-  const spec = TILE_SPECS[config.type] ?? TILE_SPECS.paste!;
+  const spec =
+    mention !== undefined ? MENTION_TILE_SPECS[mention.type] : PASTE_TILE_SPEC;
   const tagColor = BADGE_COLORS[spec.tagColor];
   const textClass = badgeTextClass(spec.tagColor);
   tile.classList.add(...tagColor.bg.split(" "));
-  tile.title = isSkill
+  tile.title = mention
     ? config.preview
     : config.text.length > 200
       ? config.text.slice(0, 200) + "…"
       : config.text;
   tile.setAttribute(
     "aria-label",
-    isSkill
+    mention
       ? config.preview
       : "Pasted text: " + config.preview + ", " + config.meta
   );
@@ -170,7 +175,7 @@ export function createRichInputTileNode(
   previewSpan.textContent = config.preview;
   tile.appendChild(previewSpan);
 
-  // Skill tiles pass an empty meta — only render it when present.
+  // Mention tiles pass an empty meta — only render it when present.
   if (config.meta) {
     const metaSpan = document.createElement("span");
     metaSpan.className = "rich-input-tile-meta";
@@ -185,7 +190,7 @@ export function createRichInputTileNode(
   removeBtn.setAttribute("role", "button");
   removeBtn.setAttribute(
     "aria-label",
-    isSkill ? "Remove skill" : "Remove pasted text"
+    mention ? `Remove ${config.preview}` : "Remove pasted text"
   );
   removeBtn.appendChild(createSvgIcon([X_PATH], "0 0 28 28", 10, 2.5));
   tile.appendChild(removeBtn);
