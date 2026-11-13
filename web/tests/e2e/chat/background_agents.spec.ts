@@ -1,6 +1,7 @@
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import {
   addMockLlmConversation,
+  getMockLlmConversationRequests,
   mockLlmNonce,
   MOCK_LLM_DEFAULT_RESPONSE,
   releaseMockLlmGate,
@@ -130,6 +131,79 @@ test("separate background results reach an idle chat and survive reload @code-mo
     await releaseMockLlmGate(secondGateId);
     await releaseMockLlmGate(firstReplyGateId);
     await releaseMockLlmGate(secondReplyGateId);
+    if (sessionId) await api.deleteChatSession(sessionId);
+  }
+});
+
+test("Stop subagents ends background work @code-mode", async ({
+  api,
+  chatPage,
+  page,
+}) => {
+  const nonce = mockLlmNonce();
+  const gateId = mockLlmNonce();
+  const question = `Research in the background. ${nonce}`;
+  const childTask = `Find the answer. ${gateId}`;
+  await addMockLlmConversation({
+    name: nonce,
+    conditions: { prompt_contains: [question] },
+    replies: [
+      {
+        tool_calls: [
+          {
+            id: "spawn-research",
+            name: "spawn_agent",
+            arguments: { name: "research", instruction: childTask },
+          },
+        ],
+      },
+      {
+        text: "Research is running in the background.",
+        conditions: { has_results_for: ["spawn-research"] },
+      },
+    ],
+  });
+  await addMockLlmConversation({
+    name: gateId,
+    conditions: { prompt_contains: [childTask] },
+    replies: [
+      {
+        text: "Private child result: forty-two.",
+        pause_after_first_chunk: gateId,
+      },
+    ],
+  });
+  let sessionId: string | null = null;
+  try {
+    await chatPage.goto();
+    await chatPage.inputBar.fill(question);
+    const created = page.waitForResponse((response) =>
+      response.url().endsWith("/chat/create-chat-session")
+    );
+    await chatPage.inputBar.send();
+    const session: { chat_session_id: string } = await (await created).json();
+    sessionId = session.chat_session_id;
+    await expect(chatPage.inputBar.subagentActivity).toBeVisible();
+    // Stop only after the child reaches the model, so its late result is real.
+    await expect
+      .poll(async () => (await getMockLlmConversationRequests(gateId)).length)
+      .toBeGreaterThan(0);
+    const stopped = page.waitForResponse((response) =>
+      response.url().endsWith(`/chat-session/${sessionId}/stop-subagents`)
+    );
+    await chatPage.inputBar.stopSubagents();
+    expect((await stopped).ok()).toBe(true);
+    // The released child can finish its reply; Stop must still drop its result.
+    await releaseMockLlmGate(gateId);
+    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await chatPage.reload();
+    await expect(chatPage.inputBar.subagentActivity).toBeHidden();
+    await expect(chatPage.agentResultsDividers).toHaveCount(0);
+    await expect(chatPage.scrollContainer).not.toContainText(
+      "Private child result:"
+    );
+  } finally {
+    await releaseMockLlmGate(gateId);
     if (sessionId) await api.deleteChatSession(sessionId);
   }
 });

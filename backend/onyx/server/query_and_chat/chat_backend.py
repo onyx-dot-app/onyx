@@ -58,7 +58,11 @@ from onyx.chat.process_message import (
     run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
-from onyx.chat.run_store import ownerless_response_ids
+from onyx.chat.run_store import (
+    ownerless_response_ids,
+    request_response_stop,
+    stop_response,
+)
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
@@ -87,6 +91,7 @@ from onyx.db.chat import (
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
     get_owned_chat_session,
+    get_selected_branch,
     set_as_latest_chat_message,
     set_chat_session_tool_selection__no_commit,
     set_preferred_response,
@@ -94,9 +99,12 @@ from onyx.db.chat import (
     update_chat_session,
 )
 from onyx.db.chat_inputs import (
+    active_agent_response_ids,
+    drop_agent_work__no_commit,
     get_human_input_session,
     interrupt_human_message__no_commit,
     list_human_messages,
+    lock_agent,
     pause_chat_queue__no_commit,
     read_chat_inbox,
     submit_human_message__no_commit,
@@ -171,6 +179,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
     SetPreferredResponseRequest,
     StopChatResponse,
+    StopSubagentsResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
@@ -1653,6 +1662,33 @@ def update_chat_tool_selection(
     if db_session.dirty:
         db_session.commit()
     return stored
+
+
+@router.post("/chat-session/{session_id}/stop-subagents")
+def stop_chat_subagents(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> StopSubagentsResponse:
+    """Stop every active background agent on the selected branch.
+
+    The root turn and its foreground workers keep running. Pending work for
+    agents below the root is dropped. A stopped agent's result wakes no agent;
+    the root reads it as a notice at its next step.
+    """
+    get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
+    lock_agent(db_session, str(session_id))
+    _, branch = get_selected_branch(db_session, session_id)
+    stopped = active_agent_response_ids(db_session, branch.message_ids)
+    drop_agent_work__no_commit(db_session, branch)
+    # Spawns check their parent's Stop after the chat lock, so the keys go first.
+    for response_id in stopped:
+        request_response_stop(cache, response_id, "user")
+    db_session.commit()
+    for response_id in stopped:
+        stop_response(cache, get_current_tenant_id(), response_id, "user")
+    return StopSubagentsResponse(stopped_count=len(stopped))
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)

@@ -852,16 +852,33 @@ const AppInputBar = React.memo(
                 height="fit"
                 gap={1}
                 data-testid="subagent-activity"
-                role="status"
                 className="shrink-0"
               >
-                <span
-                  aria-hidden
-                  className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+                {/* The live region holds only the status text, not the Stop control. */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  width="auto"
+                  height="fit"
+                  gap={1}
+                  role="status"
+                >
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+                  />
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                    {t("appInputBar.subagentsWorking")}
+                  </Text>
+                </Section>
+                <Button
+                  icon={SvgStop}
+                  prominence="tertiary"
+                  size="xs"
+                  aria-label={t("appInputBar.stopSubagentsButton.label")}
+                  tooltip={t("appInputBar.stopSubagentsButton.label")}
+                  onClick={() => void queue.stopSubagents()}
                 />
-                <Text font="secondary-body" color="text-03" maxLines={1}>
-                  {t("appInputBar.subagentsWorking")}
-                </Text>
               </Section>
             )}
             {hasPendingInput && (

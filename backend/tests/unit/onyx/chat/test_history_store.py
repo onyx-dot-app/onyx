@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentInfo,
     ExecutionStatus,
@@ -40,7 +41,7 @@ from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat_response import save_chat_response_to_db
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatSession
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLMUserIdentity
@@ -52,6 +53,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
@@ -70,7 +72,11 @@ def test_recording_policy_selects_history_store(persist_content: bool) -> None:
     assert isinstance(store, expected_type)
 
 
-def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> None:
+@pytest.mark.parametrize("depth", [1, MAX_CHILD_DEPTH])
+def test_research_request_restores_a_chat_child_without_a_live_chat_root(
+    depth: int,
+) -> None:
+    """An agent at the nesting limit keeps every agent tool except spawn_agent."""
     setup = Mock(spec=ChatTurnSetup)
     setup.new_msg_req = Mock(deep_research=True, include_citations=True)
     setup.custom_agent_prompt = None
@@ -110,6 +116,7 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> No
     llm = FakeModelClient(reply)
     restored = restore_subagent(
         history,
+        depth,
         setup=setup,
         llm=llm,
         tools=[],
@@ -117,6 +124,9 @@ def test_research_request_restores_a_chat_child_without_a_live_chat_root() -> No
     )
     assert isinstance(restored, ChatAgent)
     assert restored.id == "child"
+    names = {tool.name for tool in restored.application_tools}
+    assert (SPAWN_AGENT_TOOL_NAME in names) == (depth < MAX_CHILD_DEPTH)
+    assert {"list_agents", "interrupt_agent", SEND_MESSAGE_TOOL_NAME} <= names
     assert (
         run_agent(
             restored,
@@ -364,6 +374,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
             visible_response_ids=[],
             cache=cache,
             follow_up_steps=4,
+            user=User(),
             control_cache=cache,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")

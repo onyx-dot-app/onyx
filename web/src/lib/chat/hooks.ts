@@ -254,6 +254,20 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
           }
         });
       },
+      stopSubagents: async () => {
+        const status = statusKey;
+        if (!sessionId || !status) return;
+        try {
+          await errorHandlingFetchWith<unknown>(
+            `/api/chat/chat-session/${sessionId}/stop-subagents`,
+            { method: "POST" }
+          );
+        } catch (failure) {
+          toast.error(fetchErrorDetail(failure) ?? t("stopSubagentsFailed"));
+        } finally {
+          void mutate(status);
+        }
+      },
     };
   }, [
     enabled,

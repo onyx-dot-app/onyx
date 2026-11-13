@@ -51,4 +51,6 @@ export interface ChatSessionQueue {
   ) => Promise<boolean>;
   withdraw: (id: string) => Promise<PendingChatMessage | null>;
   interrupt: (id: string) => Promise<void>;
+  /** Interrupts every running subagent on the selected branch. */
+  stopSubagents: () => Promise<void>;
 }

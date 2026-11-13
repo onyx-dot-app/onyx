@@ -14,6 +14,7 @@ from pydantic import (
 
 from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -69,12 +70,27 @@ class RunFailureKind(str, Enum):
     LLM_RATE_LIMIT = "llm_rate_limit"
     EXECUTION = "execution"
     DEADLINE = "deadline"
+    STOPPED_BY_USER = "stopped_by_user"
 
 
 class RunFailure(BaseModel):
     kind: RunFailureKind
     message: str
     llm_error: LLMErrorInfo | None = None
+
+
+def cancellation_failure(reason: CancelReason) -> RunFailure | None:
+    """The failure a cancelled run records for its reason; a plain request records none."""
+    if reason == "deadline":
+        return RunFailure(
+            kind=RunFailureKind.DEADLINE,
+            message="The run was stopped at its deadline.",
+        )
+    if reason == "user":
+        return RunFailure(
+            kind=RunFailureKind.STOPPED_BY_USER, message="The user stopped this agent."
+        )
+    return None
 
 
 class AgentCompletion(BaseModel):
@@ -158,6 +174,13 @@ class AgentInfo(BaseModel):
     restoration_config: SerializeAsAny[BaseModel] | None
     latest_run_id: str | None = None
     status: RunStatus | None = None
+    # Why the latest run failed or was stopped, when it records a reason.
+    failure_kind: RunFailureKind | None = None
+
+    @property
+    def depth(self) -> int:
+        """Levels below the root, which is at depth 0."""
+        return self.path.count("/") - 1
 
 
 class AgentStep(BaseModel):

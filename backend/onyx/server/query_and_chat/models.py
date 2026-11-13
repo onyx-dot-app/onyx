@@ -260,6 +260,11 @@ class StopChatResponse(BaseModel):
     message: str
 
 
+class StopSubagentsResponse(BaseModel):
+    # The running agent runs that were interrupted.
+    stopped_count: int
+
+
 class ChatSessionDetails(BaseModel):
     id: UUID
     name: str | None

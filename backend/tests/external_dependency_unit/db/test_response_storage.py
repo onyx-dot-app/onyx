@@ -92,6 +92,7 @@ from onyx.db.chat_checkpoint import (
 )
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
+    active_agent_response_ids,
     agent_queue_paused,
     agent_result_states,
     can_start_input,
@@ -552,6 +553,7 @@ def test_later_child_run_keeps_earlier_unread_result(
         visible_response_ids=branch,
         cache=cache,
         follow_up_steps=4,
+        user=User(),
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -602,6 +604,51 @@ def test_agent_result_is_accepted_once_by_concurrent_consumers(
     assert sorted(worker.result(timeout=20) for worker in workers) == [False, True]
 
 
+def test_only_spawned_agents_are_active_background_agents(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """The cap and Stop subagents skip foreground workers, such as research agents."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    background = _child_record(
+        db_session, parent, uuid4(), "Background", tool_name="spawn_agent"
+    )
+    foreground = _child_record(
+        db_session, parent, uuid4(), "Foreground", tool_name="research_agent"
+    )
+    _save(db_session, response, parent)
+    for record in (background, foreground):
+        row = db_session.get(ChatMessage, int(record.run_id))
+        assert row is not None
+        row.response_status = RunStatus.RUNNING
+    db_session.flush()
+    assert active_agent_response_ids(db_session, [response.id]) == [
+        int(background.run_id)
+    ]
+
+
+def test_the_agent_cap_counts_suspended_background_agents(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A suspended agent resumes without a capacity check, so it keeps its slot."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Partial output", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    for status, expected in (
+        (RunStatus.RUNNING, 1),
+        (RunStatus.SUSPENDED, 1),
+        (RunStatus.COMPLETE, 0),
+    ):
+        child_row.response_status = status
+        db_session.flush()
+        assert len(active_agent_response_ids(db_session, [response.id])) == expected
+
+
 def test_abandoned_background_child_is_delivered_as_failure(
     db_session: Session, conversation: ChatSession
 ) -> None:
@@ -623,6 +670,7 @@ def test_abandoned_background_child_is_delivered_as_failure(
         visible_response_ids=[response.id],
         cache=cache,
         follow_up_steps=4,
+        user=User(),
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -2676,6 +2724,7 @@ def test_coordinator_discovery_reads_no_content_or_inbox(
         visible_response_ids=[response_id],
         cache=cache,
         follow_up_steps=4,
+        user=User(),
         control_cache=cache,
     )
     coordinator = AgentCoordinator(directory=store)
@@ -3845,6 +3894,7 @@ def test_existing_descendant_accepts_an_ancestor_invocation_without_reparenting(
             visible_response_ids=visible,
             cache=cache,
             follow_up_steps=4,
+            user=User(),
             control_cache=cache,
         )
 

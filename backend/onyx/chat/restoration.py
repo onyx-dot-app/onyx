@@ -46,6 +46,7 @@ _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 def restore_subagent(
     history: SavedAgentContext,
+    depth: int,
     *,
     setup: ChatTurnSetup,
     llm: LLM,
@@ -70,6 +71,7 @@ def restore_subagent(
             inject_memories=inject_memories,
             with_subagents=True,
             is_subagent=True,
+            depth=depth,
         )
     if isinstance(configuration, ResearchConfiguration):
         return ResearchAgent(

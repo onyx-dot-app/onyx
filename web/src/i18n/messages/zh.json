@@ -12506,6 +12506,9 @@
           "interruptLabel": "中断",
           "waitHint": "请等待回复完成。",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "停止子代理"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
-        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。"
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
+        "stopSubagentsFailed": "无法停止子代理。"
       }
     },
     "mcpApiKey": {

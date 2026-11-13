@@ -30,7 +30,7 @@ from onyx.db.chat_response import (
     save_response_content,
 )
 from onyx.db.chat_subagents import load_agent_history, load_chat_branch
-from onyx.db.models import ChatMessage, ChatSession
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.cancellation import CancellationSignal
@@ -259,7 +259,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         branch = load_chat_branch(response_id)
         identity = LLMUserIdentity()
 
-        def restore_research(history: SavedAgentContext) -> ResearchAgent:
+        def restore_research(history: SavedAgentContext, _depth: int) -> ResearchAgent:
             configuration = history.configuration
             assert isinstance(configuration, ResearchConfiguration)
             return ResearchAgent(
@@ -283,6 +283,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             visible_response_ids=branch.message_ids,
             cache=get_cache_backend(),
             follow_up_steps=4,
+            user=User(),
             restore_subagent=restore_research,
         )
         coordinator = run_store.bind(

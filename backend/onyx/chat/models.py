@@ -21,6 +21,7 @@ from onyx.agents.models import (
     CompactionMetadata,
     MessageDelivery,
     RunFailure,
+    RunFailureKind,
     RunStatus,
     StepRecord,
     messages_from_steps,
@@ -229,6 +230,18 @@ class AgentResultState(BaseModel):
     recipient_id: UUID
     response_id: int
     status: RunStatus
+    failure: RunFailure | None = None
+
+    @property
+    def wakes_recipient(self) -> bool:
+        """A finished result starts its idle recipient's next run.
+
+        A run the user stopped does not: its recipient reads the stop as a
+        notice at its next step instead.
+        """
+        return self.status.is_terminal and (
+            self.failure is None or self.failure.kind != RunFailureKind.STOPPED_BY_USER
+        )
 
     @property
     def is_active(self) -> bool:

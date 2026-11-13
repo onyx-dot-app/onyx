@@ -76,7 +76,13 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
-from onyx.db.chat_inputs import agent_result_states, next_queued_turn, pending_inputs
+from onyx.db.chat_inputs import (
+    agent_result_states,
+    lock_agent,
+    next_queued_turn,
+    pending_inputs,
+    submit_human_message__no_commit,
+)
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
@@ -96,7 +102,10 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
+    User,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ExtractedContextFiles
 from onyx.file_store.postgres_file_store import PostgresBackedFileStore
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
@@ -194,6 +203,7 @@ def unpolled_store(
         visible_response_ids=visible_response_ids or [],
         cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
         follow_up_steps=4,
+        user=User(),
     )
 
 
@@ -679,6 +689,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             visible_response_ids=[],
             cache=get_cache_backend(),
             follow_up_steps=4,
+            user=User(),
         )
         with pytest.raises(ValueError, match="unavailable on this branch"):
             unauthorized.read_run(run.id, "")
@@ -1754,7 +1765,7 @@ def test_later_turn_sends_to_chat_child_through_another_coordinator(
 
         llm = FakeModelClient(later_reply)
 
-        def restore_child(history: SavedAgentContext) -> ChatAgent:
+        def restore_child(history: SavedAgentContext, _depth: int) -> ChatAgent:
             restored_ids.append(history.agent_id)
             assert history.previous_run_id == child.run_id
             return make_agent(
@@ -1870,7 +1881,7 @@ def test_message_from_an_earlier_turn_continues_the_recipients_latest_run(
             tools=[SendMessageTool(max_steps=2).bind(ToolContext)],
         )
 
-    def restore_child(history: SavedAgentContext) -> Agent:
+    def restore_child(history: SavedAgentContext, _depth: int) -> Agent:
         return child(
             AgentState(messages=history.messages, checkpoint=history.checkpoint),
             history.agent_id,
@@ -2017,7 +2028,7 @@ def test_queued_reservation_failure_is_durable_and_explicit_send_recovers(
         return text("Child answer")
 
     llm = FakeModelClient(reply)
-    owner._restore_subagent = lambda history: chat_agent(
+    owner._restore_subagent = lambda history, _depth: chat_agent(
         llm,
         state=AgentState(messages=history.messages, checkpoint=history.checkpoint),
         agent_id=history.agent_id,
@@ -2230,8 +2241,6 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
     coordinator = AgentCoordinator()
     release_leaf = threading.Event()
     release_child = threading.Event()
-    release_middle = threading.Event()
-    middle_continued = threading.Event()
     continued = threading.Event()
     response = db_session.get(ChatMessage, branch[1])
     assert response is not None and response.parent_message is not None
@@ -2240,36 +2249,12 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
     response.chat_session.user_id = user.id
     db_session.commit()
 
-    def evidence_reply(*_: object) -> AssistantMessage:
+    def leaf_reply(*_: object) -> AssistantMessage:
         assert release_leaf.wait(10)
-        return text("The deepest evidence")
-
-    leaf_replies = replies(
-        calls(spawn_call("evidence", "evidence", "Find evidence")),
-        text("Evidence delegated"),
-    )
-
-    def leaf_reply(
-        request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        if any(
-            isinstance(message, UserMessage) and "The deepest evidence" in message.text
-            for message in request.messages
-        ):
-            middle_continued.set()
-            assert release_middle.wait(10)
-            return text("The leaf found the evidence")
-        return leaf_replies(request, _signal)
+        return text("The leaf found the evidence")
 
     def create_leaf() -> Agent:
-        return fake_agent(
-            leaf_reply,
-            tools=[
-                SpawnAgentTool(lambda: fake_agent(evidence_reply), max_steps=3).bind(
-                    ToolContext
-                )
-            ],
-        )
+        return fake_agent(leaf_reply)
 
     child_replies = replies(
         calls(spawn_call("leaf", "leaf", "Collect evidence")),
@@ -2319,22 +2304,11 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
         assert child.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
         leaf = child_info(owner, child.agent_id)
         assert leaf.latest_run_id is not None
-        leaf_run = view.child_run(leaf.latest_run_id, child.agent_id)
-        assert leaf_run is not None
-        assert leaf_run.wait_until_settled(timeout=10).status == RunStatus.SUSPENDED
-        evidence = child_info(owner, leaf.id)
-        assert evidence.latest_run_id is not None
         assert not any(
             status.is_terminal
             for status in owner.delegated_runs(str(branch[0])).values()
         )
         release_leaf.set()
-        assert middle_continued.wait(10)
-        assert not any(
-            status.is_terminal
-            for status in owner.delegated_runs(str(branch[0])).values()
-        )
-        release_middle.set()
         assert continued.wait(10)
         assert child.result(timeout=10).output.text == "The final research report"
         assert child.wait_for_idle(timeout=10)
@@ -2427,7 +2401,6 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
         )
 
     finally:
-        release_middle.set()
         release_child.set()
         release_leaf.set()
         assert coordinator.close(timeout=10)
@@ -2935,17 +2908,13 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
     user_message: UserMessage,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """root spawns A, A spawns B, root messages B, and B's message run spawns C.
+    """root spawns A, A spawns B, B queues work for A, and A's queued run spawns C.
 
-    B's latest run was started by root, not by its spawner A, so its follow-up
-    must still restore B through A.
+    A's latest run was started by B, not by its spawner root, so its follow-up
+    must still restore A through the root.
     """
     owner = store(branch)
     coordinator = AgentCoordinator()
-    response = db_session.get(ChatMessage, branch[1])
-    assert response is not None and response.parent_message is not None
-    response.parent_message.latest_child_message_id = response.id
-    db_session.commit()
 
     def agent_info(path: str) -> AgentInfo:
         for _ in range(500):
@@ -2966,99 +2935,91 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
             for message in request.messages
         )
 
-    def leaf_reply(
+    def worker_reply(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
-        if received(request, "C evidence"):
-            return text("B used evidence")
-        if received(request, "Use C"):
-            return spawn("evidence")
-        return text("B done")
+        if received(request, "Work as evidence"):
+            return text("C evidence")
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return text("B done")
+        return calls(
+            ToolCall(
+                id="queue-research",
+                name="send_message",
+                arguments={
+                    "agent_id": agent_info("/root/research").id,
+                    "message": "Use C",
+                    "delivery": "queue",
+                },
+            )
+        )
 
-    def leaf_agent() -> Agent:
+    def worker_agent() -> Agent:
         return fake_agent(
-            leaf_reply,
-            tools=[
-                SpawnAgentTool(
-                    lambda: fake_agent(answering("C evidence")), max_steps=3
-                ).bind(ToolContext)
-            ],
+            worker_reply, tools=[SendMessageTool(max_steps=3).bind(ToolContext)]
+        )
+
+    def spawned(request: GenerationRequest, name: str) -> bool:
+        return any(
+            isinstance(message, ToolResultMessage) and message.tool_call_id == name
+            for message in request.messages
         )
 
     def research_reply(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
-        return text("A done") if received(request, "B done") else spawn("leaf")
+        # A waits for each child's result instead of starting another child.
+        if received(request, "C evidence"):
+            return text("A used evidence")
+        if received(request, "Use C"):
+            return (
+                text("Waiting for C")
+                if spawned(request, "evidence")
+                else spawn("evidence")
+            )
+        if received(request, "B done"):
+            return text("A done")
+        return text("Waiting for B") if spawned(request, "leaf") else spawn("leaf")
 
     def research_agent() -> Agent:
         return fake_agent(
             research_reply,
-            tools=[SpawnAgentTool(leaf_agent, max_steps=3).bind(ToolContext)],
+            tools=[SpawnAgentTool(worker_agent, max_steps=3).bind(ToolContext)],
         )
 
-    root_calls = 0
-
-    def root_reply(
-        _request: GenerationRequest, _signal: CancellationSignal
-    ) -> AssistantMessage:
-        nonlocal root_calls
-        root_calls += 1
-        if root_calls == 1:
-            return spawn("research")
-        if root_calls == 2:
-            research = agent_info("/root/research")
-            assert research.latest_run_id is not None
-            assert (
-                coordinator.completion(research.latest_run_id).result(10).status
-                == RunStatus.COMPLETE
-            )
-            return calls(
-                ToolCall(
-                    id="message-leaf",
-                    name="send_message",
-                    arguments={
-                        "agent_id": agent_info("/root/research/leaf").id,
-                        "message": "Use C",
-                    },
-                )
-            )
-        return text("Root done")
-
-    root = fake_agent(
-        root_reply,
-        agent_id=str(branch[0]),
-        tools=[
-            SpawnAgentTool(research_agent, max_steps=3).bind(ToolContext),
-            SendMessageTool(max_steps=3).bind(ToolContext),
-        ],
+    root = spawning_root(
+        branch,
+        research_agent,
+        name="research",
+        instruction="Work as research",
+        answer="Root done",
     )
     view = owner.bind(coordinator, build_agent=never_restore("No restore"))
     monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
     try:
         run = root.start(messages=[user_message], max_steps=3, coordinator=view)
         assert run.result(timeout=15).output.text == "Root done"
-        evidence = agent_info("/root/research/leaf/evidence")
-        leaf = agent_info("/root/research/leaf")
-        assert evidence.latest_run_id is not None
-        assert (
-            coordinator.completion(evidence.latest_run_id).result(10).status
-            == RunStatus.COMPLETE
-        )
-        message_run_id = leaf.latest_run_id
-        assert message_run_id is not None
-        assert (
-            coordinator.completion(message_run_id).result(10).messages[-1].text
-            == "B used evidence"
-        )
+        evidence = agent_info("/root/research/evidence")
+        worker = agent_info("/root/research/leaf")
+        assert evidence.latest_run_id is not None and worker.latest_run_id is not None
+        message_run_id = evidence.latest_run_id
+        for _ in range(500):
+            research = agent_info("/root/research")
+            assert research.latest_run_id is not None
+            state = coordinator.completion(research.latest_run_id).result(10)
+            if state.messages[-1].text == "A used evidence":
+                message_run_id = research.latest_run_id
+                break
+            threading.Event().wait(0.02)
         assert coordinator.run(message_run_id).wait_for_idle(timeout=10)
-        # The message run answered under root's invocation, not its spawner's.
-        assert coordinator.completion(message_run_id).result(0).parent_run_id == str(
-            branch[1]
-        )
-        # A late unread result for B wakes it while its spawner A is idle.
+        # The queued run answered under B's invocation, not its spawner's.
+        sender_run_id = coordinator.completion(message_run_id).result(0).parent_run_id
+        assert sender_run_id is not None
+        assert coordinator.completion(sender_run_id).result(10).agent_id == worker.id
+        # A late unread result for A wakes it while its sender B is idle.
         db_session.add(
             ChatInput(
-                recipient_session_id=UUID(leaf.id),
+                recipient_session_id=UUID(research.id),
                 message_id=f"{AGENT_RESULT_MESSAGE_PREFIX}{evidence.latest_run_id}",
                 source=InputSource.AGENT_RESULT,
                 source_response_id=int(evidence.latest_run_id),
@@ -3070,7 +3031,7 @@ def test_results_follow_up_restores_through_the_spawner_after_another_sender(
         follow_up_id = message_run_id
         for _ in range(500):
             owner.poll_control()
-            follow_up_id = agent_info("/root/research/leaf").latest_run_id
+            follow_up_id = agent_info("/root/research").latest_run_id
             if follow_up_id != message_run_id:
                 break
             threading.Event().wait(0.02)
@@ -3127,5 +3088,293 @@ def test_a_reserved_child_run_is_its_agents_latest_run(
         assert child.latest_run_id is not None
         assert reserved == [(int(child.latest_run_id), RunStatus.RUNNING)]
         coordinator.completion(child.latest_run_id).result(timeout=10)
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+def test_spawning_stops_at_the_running_agent_cap(
+    branch: tuple[UUID, int], user_message: UserMessage
+) -> None:
+    """A chat runs at most the capped number of agents at a time."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    release = threading.Event()
+
+    def blocked(*_: object) -> AssistantMessage:
+        assert release.wait(30)
+        return text("Done")
+
+    spawns = [
+        spawn_call(f"spawn-{index}", f"agent{index}", "Task")
+        for index in range(run_store.MAX_RUNNING_AGENTS + 1)
+    ]
+    root = fake_agent(
+        replies(calls(*spawns), text("Started")),
+        agent_id=str(branch[0]),
+        tools=[
+            SpawnAgentTool(lambda: fake_agent(blocked), max_steps=2).bind(ToolContext)
+        ],
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    try:
+        run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert run.result(timeout=30).output.text == "Started"
+        results = [run.snapshot().steps[0].tools[spawn.id].result for spawn in spawns]
+        refused = [
+            result for result in results if result is not None and result.is_error
+        ]
+        assert len(refused) == 1
+        assert (
+            f"{run_store.MAX_RUNNING_AGENTS} agents are already running"
+            in refused[0].text
+        )
+    finally:
+        release.set()
+        assert coordinator.close(timeout=30)
+
+
+def test_spawn_takes_the_chat_lock_before_its_parent_response(
+    branch: tuple[UUID, int], user_message: UserMessage
+) -> None:
+    """A spawn and a user's send to the spawning response lock in one order."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    release = threading.Event()
+    spawn_locking = threading.Event()
+    original_lock = run_store.lock_agent
+
+    def signal_lock(session: Session, agent_id: str) -> ChatSession:
+        spawn_locking.set()
+        return original_lock(session, agent_id)
+
+    def blocked(*_: object) -> AssistantMessage:
+        assert release.wait(30)
+        return text("Done")
+
+    root = spawning_root(
+        branch,
+        lambda: fake_agent(blocked),
+        name="worker",
+        instruction="Task",
+        answer="Started",
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    try:
+        with (
+            get_session_with_tenant(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            ) as sending,
+            patch.object(run_store, "lock_agent", side_effect=signal_lock),
+        ):
+            # The user's send holds the chat lock while the spawn starts.
+            lock_agent(sending, str(branch[0]))
+            run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+            assert spawn_locking.wait(10)
+            pending = submit_human_message__no_commit(
+                sending,
+                branch[0],
+                message="Steer",
+                delivery=MessageDelivery.SEND,
+                target_response_id=branch[1],
+                turn_preparing=False,
+            )
+            assert pending.target_response_id == branch[1]
+            sending.commit()
+            assert run.result(timeout=30).output.text == "Started"
+        spawned = run.snapshot().steps[0].tools["worker"].result
+        assert spawned is not None and not spawned.is_error
+    finally:
+        release.set()
+        assert coordinator.close(timeout=30)
+
+
+def test_a_stopped_parent_cannot_start_an_agent(
+    branch: tuple[UUID, int], user_message: UserMessage
+) -> None:
+    """A spawn checks its parent's Stop under the parent's ownership lock."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    root = spawning_root(
+        branch,
+        lambda: fake_agent(lambda *_: text("Done")),
+        name="worker",
+        instruction="Task",
+        answer="Started",
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    # The Stop arrives before the parent's control poll cancels it.
+    run_store.request_response_stop(owner.cache, branch[1], "user")
+    try:
+        run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+        assert run.result(timeout=30).output.text == "Started"
+        spawned = run.snapshot().steps[0].tools["worker"].result
+        assert spawned is not None and spawned.is_error
+        assert "stopped" in spawned.content
+    finally:
+        owner.cache.delete(f"chat_response_stop:{branch[1]}")
+        assert coordinator.close(timeout=30)
+
+
+def test_a_stopped_sender_cannot_queue_agent_work(
+    branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
+) -> None:
+    """A send checks its sender's Stop under the chat lock that Stop holds."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    spawned: list[SpawnResult] = []
+    refused: list[str] = []
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            fake_agent(lambda *_: text("Child answer")),
+            name="worker",
+            description="Collect evidence",
+            messages=[UserMessage(content="Initial task")],
+            max_steps=1,
+            restoration_config=ChatConfiguration(kind="chat"),
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        spawned.append(child)
+        coordinator.completion(child.run_id).result(timeout=10)
+        # Stop subagents dropped pending work before this send reached the inbox.
+        run_store.request_response_stop(owner.cache, branch[1], "user")
+        try:
+            invocation.agents.send_message(
+                child.agent_id,
+                message="Follow up",
+                delivery=MessageDelivery.QUEUE,
+                max_steps=1,
+            )
+        except ValueError as error:
+            refused.append(str(error))
+        return ToolResult(content="Done")
+
+    root = delegating_root(
+        branch, agent_tool("delegate", delegate), answer="Root answer"
+    )
+    try:
+        run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+        run.result(timeout=30)
+        assert refused and "stopped" in refused[0]
+        assert pending_agent_messages(db_session, spawned[0].agent_id) == 0
+    finally:
+        owner.cache.delete(f"chat_response_stop:{branch[1]}")
+        assert coordinator.close(timeout=30)
+
+
+def test_inbox_work_waits_while_the_branch_runs_the_agent_cap(
+    branch: tuple[UUID, int],
+    db_session: Session,
+    user_message: UserMessage,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An idle agent's inbox run counts against the cap and starts once a slot frees."""
+    monkeypatch.setattr("onyx.chat.run_store.INPUT_POLL_SECONDS", 0)
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    view = owner.bind(coordinator, build_agent=never_restore("Unexpected restoration"))
+    child_messages: list[list[str]] = []
+    spawned: list[SpawnResult] = []
+
+    def child_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        child_messages.append([message.text for message in request.messages])
+        return text("Child answer")
+
+    def delegate(invocation: ToolInvocation) -> ToolResult:
+        child = invocation.agents.spawn_agent(
+            fake_agent(child_reply),
+            name="worker",
+            description="Collect evidence",
+            messages=[UserMessage(content="Initial task")],
+            max_steps=1,
+            restoration_config=ChatConfiguration(kind="chat"),
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        spawned.append(child)
+        coordinator.completion(child.run_id).result(timeout=10)
+        invocation.agents.send_message(
+            child.agent_id,
+            message="Follow up",
+            delivery=MessageDelivery.QUEUE,
+            max_steps=1,
+        )
+        return ToolResult(content="Queued")
+
+    root = delegating_root(
+        branch, agent_tool("delegate", delegate), answer="Root answer"
+    )
+    try:
+        run = root.start(messages=[user_message], max_steps=2, coordinator=view)
+        assert run.result(timeout=10).output.text == "Root answer"
+        assert run.wait_for_idle(timeout=10)
+        coordinator.completion(run.id).result(timeout=10)
+        with patch(
+            "onyx.chat.run_store.active_agent_response_ids",
+            return_value=list(range(run_store.MAX_RUNNING_AGENTS)),
+        ):
+            owner.poll_control()
+        child = next(
+            info for info in view.discover_agents() if info.id == spawned[0].agent_id
+        )
+        assert child.latest_run_id == spawned[0].run_id
+        assert pending_agent_messages(db_session, child.id) == 1
+        assert owner.has_owned_work
+        owner.poll_control()
+        child = next(
+            info for info in view.discover_agents() if info.id == spawned[0].agent_id
+        )
+        assert child.latest_run_id is not None
+        assert child.latest_run_id != spawned[0].run_id
+        assert (
+            coordinator.completion(child.latest_run_id).result(timeout=10).status
+            == RunStatus.COMPLETE
+        )
+        assert "Follow up" in child_messages[1]
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+def test_runs_that_agents_start_check_the_token_rate_limit(
+    branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
+) -> None:
+    """A run an agent starts counts against the chat owner's limits."""
+    owner = unpolled_store(branch)
+    coordinator = AgentCoordinator()
+    checks = 0
+
+    def limit(_user: User) -> None:
+        nonlocal checks
+        checks += 1
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, "Usage budget reached")
+
+    root = spawning_root(
+        branch,
+        lambda: fake_agent(answering("Child answer")),
+        name="worker",
+        instruction="Task",
+        answer="Started",
+    )
+    view = owner.bind(coordinator, build_agent=never_restore("No restore expected"))
+    try:
+        with patch("onyx.chat.run_store.check_token_rate_limits", side_effect=limit):
+            run = root.start(messages=[user_message], max_steps=3, coordinator=view)
+            assert run.result(timeout=10).output.text == "Started"
+        spawned = run.snapshot().steps[0].tools["worker"].result
+        assert spawned is not None and spawned.is_error
+        assert "Usage budget reached" in spawned.text
+        # The root turn checked its limits when it was sent.
+        assert checks == 1
+        db_session.expire_all()
+        assert (
+            db_session.scalar(
+                select(func.count()).where(
+                    ChatSession.spawned_by_message_id == branch[1]
+                )
+            )
+            == 0
+        )
     finally:
         assert coordinator.close(timeout=10)

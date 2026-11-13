@@ -172,6 +172,17 @@ the user message (`chat/process_message.py:prepare_chat_turn`). These controls h
 catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
 with `build_chat_agent`, the same builder that restores saved children.
 Each child builds its own controls and conversation state.
+Agents nest two levels below the root (`agents/agent_coordination.py:MAX_CHILD_DEPTH`); an agent
+at that depth gets no `spawn_agent`. A chat runs at most ten active background agents on a branch
+(`chat/run_store.py:MAX_RUNNING_AGENTS`); `chat/models.py:AgentResultState.is_active` defines them:
+unfinished runs with a result row, so foreground workers never count. A spawn beyond that
+returns a tool error, and inbox work for an idle agent waits until a run finishes. Each run checks the owner's token rate limits: root turns when they are sent
+or leave the queue, and runs that agents start in `chat/run_store.py:ChatRunStore.reserve_run_id`,
+where inbox work checks capacity first. The `stop-subagents` route takes the chat lock, drops
+pending work for agents below the root (`db/chat_inputs.py:drop_agent_work__no_commit`), and stops
+the active background agents with the reason "user". A parent's Stop refuses its later spawns.
+A stopped run records `STOPPED_BY_USER`: `list_agents` shows "stopped by the user", and its
+result wakes no agent; the root reads it at its next step.
 The controls stay direct in code mode. Each child inherits code mode but owns
 its own code cells.
 `list_agents` shows the whole agent tree of the selected branch, including the root and agents

@@ -665,6 +665,7 @@ def bind_run_store(
         visible_response_ids=branch.message_ids,
         cache=get_cache_backend(),
         follow_up_steps=follow_up_steps,
+        user=user,
         restore_subagent=partial(
             restore_subagent,
             setup=setup,
@@ -684,7 +685,11 @@ def bind_run_store(
             tools=tools,
             user_identity=setup.user_identity,
             create_subagent=chat_subagent_factory(
-                setup=setup, llm=llm, tools=tools, inject_memories=user.use_memories
+                setup=setup,
+                llm=llm,
+                tools=tools,
+                inject_memories=user.use_memories,
+                depth=1,
             )
             if with_subagents
             else None,

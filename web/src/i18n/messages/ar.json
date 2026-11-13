@@ -12506,6 +12506,9 @@
           "interruptLabel": "مقاطعة",
           "waitHint": "انتظر حتى ينتهي الرد.",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "إيقاف الوكلاء الفرعيين"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
         "loadFailed": "تعذر تحميل الرسائل المعلقة.",
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
-        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار."
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
+        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
       }
     },
     "mcpApiKey": {

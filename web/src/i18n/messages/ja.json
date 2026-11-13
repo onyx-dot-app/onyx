@@ -12506,6 +12506,9 @@
           "interruptLabel": "中断",
           "waitHint": "応答が終わるまでお待ちください。",
           "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "サブエージェントを停止"
         }
       },
       "baseInputBar": {
@@ -12639,7 +12642,8 @@
         "withdrawFailed": "保留中のメッセージを削除できませんでした。",
         "loadFailed": "保留中のメッセージを読み込めませんでした。",
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
-        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。"
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
+        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
       }
     },
     "mcpApiKey": {

@@ -44,7 +44,9 @@
   keyboard navigation are shared.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the
-  pending-input hint. The input stays usable. While
+  pending-input hint. Its Stop subagents button stops every active
+  background agent on the selected branch; it sits outside the `role="status"`
+  text, so the live region announces only the status. The input stays usable. While
   subagents run, status polling finds automatic follow-up responses in an idle
   chat and loads them through the normal refresh and replay path. Internal
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
@@ -347,7 +349,8 @@ Input that joins a running response arrives as a `user_message` packet;
 reader, with no request. Saved replay emits the same packets from each step's
 human inputs, so both paths render user bubbles between response sections.
 Status polls every 2 seconds while `has_startable_input` or
-`has_active_subagents` is true. An idle chat that sees a running or unknown
+`has_active_subagents` is true. `stopSubagents` posts
+`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status. An idle chat that sees a running or unknown
 response refreshes history and attaches to the stream.
 `app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
 the latest response's last packet is a turn-level stop. `AppInputBar` then
