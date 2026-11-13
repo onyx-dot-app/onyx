@@ -90,6 +90,7 @@ class Workers:
         failing: frozenset[str] = frozenset(),
         spawn_and_wait: bool = False,
         before_wait: Callable[[], object] | None = None,
+        wait: bool = True,
     ) -> None:
         self.names = names
         # None waits for all workers.
@@ -97,6 +98,8 @@ class Workers:
         self.failing = failing
         self.spawn_and_wait = spawn_and_wait
         self.before_wait = before_wait
+        # False answers the first turn with text and no wait call.
+        self.wait = wait
         self.started = {name: Event() for name in names}
         self.release = {name: Event() for name in names}
         self.root_requests: list[GenerationRequest] = []
@@ -134,6 +137,8 @@ class Workers:
                 return _text(WAITING)
             if self.before_wait is not None:
                 self.before_wait()
+            if not self.wait:
+                return _text(WAITING)
             return AssistantMessage(
                 content=[TextContent(text=WAITING), self._wait_call(request)]
             )
@@ -474,6 +479,29 @@ def test_a_result_that_finishes_before_the_wait_call_waits_with_the_rest(
     _settled(db_session, chat.id, 2)
     [follow_up] = _follow_ups(db_session, chat.id)
     assert follow_up.message == "Answer with alpha, beta"
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_result_during_a_user_turn_answer_starts_a_separate_follow_up(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Alpha finishes while the root writes its answer with no wait. The answer
+    stays as the user saw it, and the result starts its own follow-up."""
+    workers = Workers(
+        ("alpha",),
+        wait=False,
+        before_wait=lambda: _finish(db_session, chat, workers, "alpha"),
+    )
+    _start(chat, owner, workers, monkeypatch)
+    _settled(db_session, chat.id, 2)
+    answer, follow_up = _root_answers(db_session, chat.id)
+    assert answer.message == WAITING
+    assert follow_up.parent_message is not None
+    assert follow_up.parent_message.message_type == MessageType.AGENT_RESULTS
+    assert follow_up.message == "Answer with alpha"
 
 
 @pytest.mark.usefixtures("idle_turn_work")

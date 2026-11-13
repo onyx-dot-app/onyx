@@ -278,8 +278,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         control_cache: CacheBackend | None = None,
         on_child_released: Callable[[], None] | None = None,
         tool_ids: Mapping[str, int | None] | None = None,
+        answers_agent_results: bool = False,
     ) -> None:
         self.tenant_id = tenant_id
+        # The root response answers unread agent results under a hidden
+        # AGENT_RESULTS question, as a released wait's follow-up does.
+        self._answers_agent_results = answers_agent_results
+        # Runs whose last read left results for a later step.
+        self._capped_runs: set[str] = set()
         # Saved child tool calls link to these tool rows by name.
         self._tool_ids = dict(tool_ids or {})
         self.chat_session_id = chat_session_id
@@ -480,12 +486,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 run.id,
                 self._root_branch(run),
                 self._input_branch.message_ids,
+                follow_up=self._is_follow_up(run),
             )
-        # Each step reads a bounded number of results; `has_unread_inputs` keeps
-        # the run stepping until it has read the rest.
-        completed = [
+        finished = [
             result.response_id for result in results if result.status.is_terminal
-        ][:MAX_AGENT_COMPLETIONS_PER_STEP]
+        ]
+        completed = finished[:MAX_AGENT_COMPLETIONS_PER_STEP]
+        with self._lock:
+            if len(finished) > len(completed):
+                self._capped_runs.add(run.id)
+            else:
+                self._capped_runs.discard(run.id)
         if not completed:
             return messages
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -520,12 +531,15 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 return True
 
     def has_unread_inputs(self, run: Run) -> bool:
-        """Sends and the results that wake this run, which it reads before it answers.
+        """Sends keep a run going; results keep it going only to finish a batch.
 
-        A step reads a bounded number of results, so a run that has more keeps
-        stepping. Input that arrives after this check starts the recipient's
-        next run.
+        A released wait's follow-up reads every result before it answers, and a
+        run whose last read hit the per-step cap reads the rest. Other results
+        start the recipient's next run, so an answer the user saw stays saved.
         """
+        with self._lock:
+            capped = run.id in self._capped_runs
+        follow_up = self._is_follow_up(run)
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             messages, results = read_run_inputs(
                 session,
@@ -533,8 +547,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 run.id,
                 self._root_branch(run),
                 self._input_branch.message_ids,
+                follow_up=follow_up,
             )
-        return bool(messages) or any(result.wakes_recipient for result in results)
+        return bool(messages) or (
+            (follow_up or capped) and any(result.wakes_recipient for result in results)
+        )
+
+    def _is_follow_up(self, run: Run) -> bool:
+        return self._answers_agent_results and run.agent_id == str(self.chat_session_id)
 
     def _read_inbox(self) -> ChatInbox | None:
         """Read the inbox; None when this store's response left the selected branch."""

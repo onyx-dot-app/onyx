@@ -274,7 +274,7 @@ def test_every_step_receives_a_bounded_number_of_child_results(
     monkeypatch.setattr(
         run_store, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
     )
-    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_: ([], finished))
+    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_, **__: ([], finished))
     monkeypatch.setattr(
         run_store,
         "read_agent_completions",

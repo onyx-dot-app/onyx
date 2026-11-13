@@ -695,7 +695,7 @@ Chat agent tools start background children. The root response can finish while t
 the turn's control worker keeps their leases until they release. Only callers that deliver follow-up responses,
 for a client that shows them (`SendMessageRequest.accepts_follow_ups`, set by the web chat), offer agent tools,
 and only in single-model turns: results follow one answer. Each step reads at most `MAX_AGENT_COMPLETIONS_PER_STEP` finished results;
-the run keeps stepping until it has read the rest, then answers. Loaded agents are evicted least recently used first; only idle ones leave memory.
+a run whose read hit that bound, or a root follow-up that answers results, keeps stepping until it has read the rest, then answers. Other results start the recipient's next run. Loaded agents are evicted least recently used first; only idle ones leave memory.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
 One control worker per chat turn renews ownership, reads Stop, and refreshes the processing marker in sequence.

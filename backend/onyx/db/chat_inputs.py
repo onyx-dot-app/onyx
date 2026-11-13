@@ -871,11 +871,14 @@ def read_run_inputs(
     run_id: str,
     root_branch: Collection[int] | None,
     result_branch: Collection[int] | None,
+    *,
+    follow_up: bool = False,
 ) -> tuple[list[UserMessage], list[AgentResultState]]:
     """Read messages sent to a run and, with `result_branch`, its unread child results.
 
     One query reads both. Results are returned as states; the caller reads the
-    output of finished ones.
+    output of finished ones. A root `follow_up` that answers unread results
+    leaves results that an open wait holds for the wait's own follow-up.
     """
     reads = _sends(int(run_id), root_branch)
     if result_branch is not None:
@@ -925,24 +928,17 @@ def read_run_inputs(
                 ),
             )
         )
-    if root_branch is not None and results:
-        response = session.get(ChatMessage, int(run_id))
-        question = response.parent_message if response is not None else None
-        # An automatic follow-up leaves results that an open wait holds unread,
-        # so the wait's follow-up reads them together. A user's turn reads all.
-        if question is not None and question.message_type == MessageType.AGENT_RESULTS:
-            waits = agent_waits(
-                session,
-                UUID(agent_id),
-                ChatBranch(
-                    chat_session_id=UUID(agent_id), message_ids=list(root_branch)
-                ),
-            )
-            results = [
-                result
-                for result in results
-                if not _held_by_open_wait(result, results, waits)
-            ]
+    if follow_up and root_branch is not None and results:
+        waits = agent_waits(
+            session,
+            UUID(agent_id),
+            ChatBranch(chat_session_id=UUID(agent_id), message_ids=list(root_branch)),
+        )
+        results = [
+            result
+            for result in results
+            if not _held_by_open_wait(result, results, waits)
+        ]
     return messages, results
 
 

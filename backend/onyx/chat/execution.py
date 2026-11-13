@@ -676,6 +676,8 @@ def bind_run_store(
         root_response=root_response,
         on_child_released=on_child_released,
         tool_ids={tool.name: tool.id for tool in tools},
+        # Child-result delivery saves no user message.
+        answers_agent_results=setup.user_message_id is None,
     )
     view = store.bind(
         coordinator,
