@@ -1,15 +1,19 @@
-"""Pending human messages. Callers own transactions and response leases.
+"""Pending agent and human messages. Callers own transactions and response leases.
 
-A row is pending until a step or a new turn consumes it; consuming deletes it.
+A row is pending until a step or a new run consumes it; consuming deletes it.
 """
 
+from collections.abc import Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, delete, func, select
-from sqlalchemy.orm import Session
+from sqlalchemy import Select, and_, delete, func, or_, select
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.agents.models import (
+    AgentInfo,
+    AgentMessageReceipt,
+    AgentMessageRequest,
     InputMessageMetadata,
     InputSource,
     MessageDelivery,
@@ -18,29 +22,49 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.models import (
+    AgentInboxWork,
+    AgentResultState,
     ChatBranch,
     ChatInbox,
     PendingChatMessage,
     QueuedChatTurn,
 )
+from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
+    agent_session_path,
     configure_response_transaction__no_commit,
     get_owned_chat_session,
     get_selected_branch,
+    parent_session_id,
+    response_invocation,
+    root_response_id,
+    session_ancestors,
 )
 from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
+from onyx.db.chat_response import reserve_child_response__no_commit
+from onyx.db.chat_subagents import (
+    agent_metadata,
+    latest_agent_response,
+    latest_agent_responses,
+    visible_agent,
+)
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
+    ChatResponseItem,
     ChatSession,
+    ToolCall,
     User,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import UserMessage
 from onyx.llm.override_models import LLMOverride
+from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
+
+logger = setup_logger()
 
 MAX_PENDING_MESSAGES = 64
 MAX_PENDING_MESSAGE_BYTES = 1024 * 1024
@@ -86,6 +110,27 @@ def can_start_input(
 def pause_chat_queue__no_commit(session: Session, chat_session_id: UUID) -> None:
     """Record a Stop: queued turns wait until the next turn starts."""
     lock_agent(session, str(chat_session_id)).queue_paused_at = func.now()
+
+
+def agent_queue_paused(latest_status: RunStatus | None) -> bool:
+    """An agent's queue waits after its latest run was stopped or interrupted."""
+    return latest_status == RunStatus.CANCELLED
+
+
+def wakes_for_results(
+    latest_status: RunStatus | None,
+    results: Iterable[AgentResultState],
+    *,
+    queue_paused: bool,
+) -> bool:
+    """Whether unread finished results start an idle recipient's next run."""
+    return (
+        latest_status is not None
+        and latest_status.is_terminal
+        and latest_status != RunStatus.ERROR
+        and not queue_paused
+        and any(result.status.is_terminal for result in results)
+    )
 
 
 def get_human_input_session(
@@ -233,19 +278,22 @@ def submit_human_message__no_commit(
 
 
 def has_chat_inputs(session: Session, chat_session_id: UUID) -> bool:
-    """Whether any inbox row belongs to this conversation.
+    """Whether any inbox row belongs to this conversation, including its agents.
 
-    Without one, the conversation has no queued turn.
+    Without one, the conversation has no queued turn and no running child.
     """
-    return bool(
-        session.scalar(
-            select(
-                select(ChatInput.id)
-                .where(ChatInput.recipient_session_id == chat_session_id)
-                .exists()
-            )
-        )
+    addressed = (
+        select(ChatInput.id)
+        .where(ChatInput.recipient_session_id == chat_session_id)
+        .exists()
     )
+    descendant = (
+        select(ChatInput.id)
+        .join(ChatMessage, ChatMessage.id == ChatInput.root_response_id)
+        .where(ChatMessage.chat_session_id == chat_session_id)
+        .exists()
+    )
+    return bool(session.scalar(select(or_(addressed, descendant))))
 
 
 def list_human_messages(
@@ -282,9 +330,11 @@ def next_queued_turn(
     chat_session_id: UUID,
     selected: ChatMessage | None,
     branch: ChatBranch,
+    results: Iterable[AgentResultState],
 ) -> QueuedChatTurn | None:
     """Read the next root turn on the selected branch from `get_selected_branch`.
 
+    `results` are the branch's unread child results; those for the root wake it.
     Acceptance rechecks the turn under the session lock.
     """
     if selected is None and len(branch.message_ids) > 1:
@@ -294,6 +344,7 @@ def next_queued_turn(
     status = (
         None if selected is None else selected.response_status or RunStatus.COMPLETE
     )
+    parent_response_id = selected.id if selected is not None else None
     row = session.scalar(
         _pending_human_inputs(chat_session_id)
         .order_by(None)
@@ -302,39 +353,131 @@ def next_queued_turn(
         )
         .limit(1)
     )
-    if row is None:
-        return None
-    paused_at = session.scalar(
-        select(ChatSession.queue_paused_at).where(ChatSession.id == chat_session_id)
+    paused = (
+        session.scalar(
+            select(ChatSession.queue_paused_at).where(ChatSession.id == chat_session_id)
+        )
+        is not None
     )
-    if not can_start_input(
-        row.delivery,
-        row.target_response_id,
-        status,
-        queue_paused=paused_at is not None,
+    if row is not None and can_start_input(
+        row.delivery, row.target_response_id, status, queue_paused=paused
     ):
-        return None
-    return QueuedChatTurn(
-        parent_response_id=selected.id if selected is not None else None,
-        message=_pending_human_message(row),
-    )
+        return QueuedChatTurn(
+            parent_response_id=parent_response_id,
+            message=_pending_human_message(row),
+        )
+    if wakes_for_results(
+        status,
+        (result for result in results if result.recipient_id == chat_session_id),
+        queue_paused=paused,
+    ):
+        return QueuedChatTurn(parent_response_id=parent_response_id, message=None)
+    return None
 
 
 def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
-    """Read the selected branch and the next turn that can start on it.
+    """Read the selected branch's running children and the work that can start.
 
-    The next root turn starts through chat admission.
+    The next root turn starts through chat admission. Child work starts in a
+    chat turn that hosts agents on the branch.
     """
     selected, branch = get_selected_branch(session, chat_session_id)
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
-    # Only conversations with inbox rows have queued turns.
+    # Only conversations with inbox rows have queued turns or child work.
     if not has_chat_inputs(session, chat_session_id):
         return inbox
+    inbox.results = agent_result_states(session, branch.message_ids)
     if selected is not None and selected.response_status == RunStatus.RUNNING:
         inbox.running_response_ids.append(selected.id)
-    inbox.next_turn = next_queued_turn(session, chat_session_id, selected, branch)
+    inbox.running_response_ids.extend(
+        result.response_id for result in inbox.results if result.is_active
+    )
+    inbox.next_turn = next_queued_turn(
+        session, chat_session_id, selected, branch, inbox.results
+    )
+    rows = [
+        row
+        for row in pending_inputs(session, branch)
+        # Agent messages never start a root run.
+        if row.recipient_session_id != chat_session_id
+    ]
+    # The root receives results through its own turns.
+    result_agents = {
+        str(result.recipient_id)
+        for result in inbox.results
+        if result.status.is_terminal and result.recipient_id != chat_session_id
+    }
+    latest_by_agent = latest_agent_responses(
+        session, branch, {str(row.recipient_session_id) for row in rows} | result_agents
+    )
+    # A message for the agent's latest run waits until that run finishes.
+    for row in sorted(rows, key=lambda item: item.target_response_id is not None):
+        agent_id = str(row.recipient_session_id)
+        latest = latest_by_agent.get(agent_id)
+        if agent_id in {work.agent_id for work in inbox.child_work}:
+            continue
+        latest_status = latest.response_status if latest else None
+        if not can_start_input(
+            row.delivery,
+            row.target_response_id,
+            latest_status,
+            queue_paused=agent_queue_paused(latest_status),
+        ):
+            if (
+                latest is not None
+                and latest.response_status is not None
+                and not latest.response_status.is_terminal
+            ):
+                inbox.waiting_response_ids.append(latest.id)
+            continue
+        if row.max_steps is None:
+            raise ValueError("Pending agent message has no step limit")
+        parent_run_id, parent_message_id, parent_tool_call_id = _invocation_ids(
+            row.invoking_tool_call
+        )
+        # The message becomes the recipient's next question.
+        inbox.child_work.append(
+            AgentInboxWork(
+                agent_id=agent_id,
+                message=UserMessage(id=row.message_id, content=row.content),
+                max_steps=row.max_steps,
+                total_timeout_s=row.total_timeout_s,
+                parent_run_id=parent_run_id,
+                parent_message_id=parent_message_id,
+                parent_tool_call_id=parent_tool_call_id,
+            )
+        )
+    for agent_id in sorted(
+        result_agents - {work.agent_id for work in inbox.child_work}
+    ):
+        latest = latest_by_agent.get(agent_id)
+        if latest is None or not wakes_for_results(
+            latest.response_status,
+            (
+                result
+                for result in inbox.results
+                if str(result.recipient_id) == agent_id
+            ),
+            queue_paused=agent_queue_paused(latest.response_status),
+        ):
+            continue
+        # An idle child answers its results under its latest invocation.
+        parent_run_id, parent_message_id, parent_tool_call_id = _invocation_ids(
+            response_invocation(latest)
+        )
+        inbox.child_work.append(
+            AgentInboxWork(
+                agent_id=agent_id,
+                message=None,
+                max_steps=None,
+                total_timeout_s=CHAT_EXECUTION_TIMEOUT_S,
+                parent_run_id=parent_run_id,
+                parent_message_id=parent_message_id,
+                parent_tool_call_id=parent_tool_call_id,
+            )
+        )
     return inbox
 
 
@@ -344,54 +487,279 @@ def accept_queued_turn__no_commit(
     """Consume the expected turn in the transaction that starts it."""
     lock_agent(session, str(chat_session_id))
     selected, branch = get_selected_branch(session, chat_session_id)
-    current = next_queued_turn(session, chat_session_id, selected, branch)
+    current = next_queued_turn(
+        session,
+        chat_session_id,
+        selected,
+        branch,
+        agent_result_states(session, branch.message_ids, chat_session_id),
+    )
     if (
         current is None
         or current.parent_response_id != turn.parent_response_id
-        or current.message.id != turn.message.id
+        or (current.message.id if current.message else None)
+        != (turn.message.id if turn.message else None)
     ):
         raise OnyxError(
             OnyxErrorCode.CONFLICT, "The queued chat input is no longer next"
         )
+    if turn.message is not None:
+        session.execute(
+            delete(ChatInput).where(
+                ChatInput.recipient_session_id == chat_session_id,
+                ChatInput.message_id == turn.message.id,
+                ChatInput.source == InputSource.HUMAN,
+            )
+        )
+
+
+def _results_on_branch(branch_ids: Collection[int]) -> ColumnElement[bool]:
+    """Child result rows whose spawning root response is on the branch."""
+    return and_(
+        ChatInput.source == InputSource.AGENT_RESULT,
+        ChatInput.root_response_id.in_(branch_ids),
+    )
+
+
+def agent_result_states(
+    session: Session,
+    visible_ids: Collection[int],
+    recipient_id: UUID | None = None,
+) -> list[AgentResultState]:
+    """Unread child results whose spawning root response is on the branch."""
+    query = (
+        select(
+            ChatInput.recipient_session_id.label("recipient_id"),
+            ChatMessage.id.label("response_id"),
+            ChatMessage.response_status.label("status"),
+        )
+        .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
+        .where(_results_on_branch(visible_ids))
+        .order_by(ChatInput.id)
+    )
+    if recipient_id is not None:
+        query = query.where(ChatInput.recipient_session_id == recipient_id)
+    return [
+        AgentResultState.model_validate(row)
+        for row in session.execute(query).mappings()
+    ]
+
+
+def withdraw_agent_result__no_commit(session: Session, response_id: int) -> None:
+    """Drop an interrupted run's result unless the run already finished.
+
+    The recipient's lock orders this against the step that would accept it.
+    """
+    recipient_id = session.scalar(
+        select(ChatInput.recipient_session_id).where(
+            ChatInput.source == InputSource.AGENT_RESULT,
+            ChatInput.source_response_id == response_id,
+        )
+    )
+    if recipient_id is None:
+        return
+    lock_agent(session, str(recipient_id))
+    status = session.scalar(
+        select(ChatMessage.response_status).where(ChatMessage.id == response_id)
+    )
+    if status is not None and status.is_terminal:
+        return
     session.execute(
         delete(ChatInput).where(
-            ChatInput.recipient_session_id == chat_session_id,
-            ChatInput.message_id == turn.message.id,
-            ChatInput.source == InputSource.HUMAN,
+            ChatInput.source == InputSource.AGENT_RESULT,
+            ChatInput.source_response_id == response_id,
         )
     )
 
 
-def _sends(run_id: int) -> ColumnElement[bool]:
-    """Messages a running response reads."""
-    return (ChatInput.target_response_id == run_id) & (
-        ChatInput.delivery == MessageDelivery.SEND
-    )
-
-
-def read_run_inputs(session: Session, agent_id: str, run_id: str) -> list[UserMessage]:
-    """Read messages sent to a run."""
-    return [
-        UserMessage(
-            id=row.message_id,
-            content=row.content,
-            metadata=InputMessageMetadata(source=row.source),
+def _branch_pending_inputs(
+    session: Session, branch: ChatBranch, agent_id: str | None = None
+) -> Select[tuple[ChatInput]]:
+    """Agent messages whose sender's root response is on the branch."""
+    query = (
+        select(ChatInput)
+        .where(
+            ChatInput.source == InputSource.AGENT,
+            ChatInput.root_response_id.in_(branch.message_ids),
         )
-        for row in session.scalars(
-            select(ChatInput)
-            .where(
-                ChatInput.recipient_session_id == UUID(agent_id),
-                _sends(int(run_id)),
+        .order_by(ChatInput.id)
+    )
+    if agent_id is not None:
+        visible_agent(session, branch, agent_id)
+        query = query.where(ChatInput.recipient_session_id == UUID(agent_id))
+    return query
+
+
+def pending_inputs(
+    session: Session, branch: ChatBranch, agent_id: str | None = None
+) -> list[ChatInput]:
+    return list(
+        session.scalars(
+            _branch_pending_inputs(session, branch, agent_id).options(
+                selectinload(ChatInput.invoking_tool_call)
             )
-            .order_by(ChatInput.id)
         )
-    ]
+    )
+
+
+def enqueue_message(
+    session: Session,
+    branch: ChatBranch,
+    request: AgentMessageRequest,
+    root_message_id: int,
+) -> AgentMessageReceipt:
+    if not isinstance(request.message.content, str):
+        raise ValueError("Agent messages must contain text only")
+    if request.agent_id == request.parent_id:
+        raise ValueError("An agent cannot message itself")
+    recipient = lock_agent(session, request.agent_id)
+    pending_count = session.scalar(
+        select(func.count()).select_from(
+            _branch_pending_inputs(session, branch, request.agent_id).subquery()
+        )
+    )
+    if pending_count is not None and pending_count >= MAX_PENDING_MESSAGES:
+        raise ValueError("Agent message queue is full")
+    invocation = session.scalar(
+        select(ToolCall)
+        .join(
+            ChatResponseItem,
+            (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+            & (ChatResponseItem.step_index == ToolCall.turn_number),
+        )
+        .where(
+            ToolCall.parent_chat_message_id == int(request.parent_run_id),
+            ToolCall.tool_call_id == request.parent_tool_call_id,
+            ChatResponseItem.id == request.parent_message_id,
+            ToolCall.chat_session_id == UUID(request.parent_id),
+        )
+    )
+    if invocation is None:
+        raise ValueError("Agent message has no saved invoking tool")
+    latest = latest_agent_response(session, branch, request.agent_id)
+    accepting = latest is not None and latest.response_status in _ACCEPTING_STATUSES
+    if recipient.spawned_by_message_id is None:
+        # The root reads agent messages at its next step and never starts a run for them.
+        delivery = MessageDelivery.SEND
+        target_id = None
+    else:
+        delivery = request.delivery
+        target_id = (
+            latest.id
+            if latest is not None and (delivery == MessageDelivery.QUEUE or accepting)
+            else None
+        )
+        if recipient.restoration_config is None and (
+            delivery == MessageDelivery.QUEUE or target_id is None
+        ):
+            raise ValueError(
+                "This agent cannot start another run after its resources are released"
+            )
+    content = _pending_content(request.message.content)
+    if parent_session_id(session, recipient) != UUID(request.parent_id):
+        sender = session.get(ChatSession, UUID(request.parent_id))
+        if sender is None:
+            raise ValueError("Message sender is unavailable")
+        content = (
+            f"Message from agent {agent_session_path(session, sender)} "
+            f"(agent_id: {sender.id}):\n{content}"
+        )
+    row = ChatInput(
+        recipient_session_id=UUID(request.agent_id),
+        message_id=request.message.id or str(uuid4()),
+        source=InputSource.AGENT,
+        invoking_tool_call_id=invocation.id,
+        source_response_id=invocation.parent_chat_message_id,
+        target_response_id=target_id,
+        root_response_id=root_message_id,
+        delivery=delivery,
+        content=content,
+        max_steps=request.max_steps,
+        total_timeout_s=request.total_timeout_s,
+    )
+    session.add(row)
+    session.flush()
+    return AgentMessageReceipt(
+        id=row.message_id,
+        run_id=str(latest.id)
+        if latest is not None and (target_id is not None or accepting)
+        else None,
+    )
+
+
+def _sends(run_id: int, root_branch: Collection[int] | None) -> ColumnElement[bool]:
+    """Messages a running agent reads; the root also reads untargeted agent messages."""
+    targeted = and_(
+        ChatInput.target_response_id == run_id,
+        ChatInput.delivery == MessageDelivery.SEND,
+    )
+    if root_branch is None:
+        return targeted
+    return or_(
+        targeted,
+        and_(
+            ChatInput.source == InputSource.AGENT,
+            ChatInput.target_response_id.is_(None),
+            ChatInput.root_response_id.in_(root_branch),
+        ),
+    )
+
+
+def read_run_inputs(
+    session: Session,
+    agent_id: str,
+    run_id: str,
+    root_branch: Collection[int] | None,
+    result_branch: Collection[int] | None,
+) -> tuple[list[UserMessage], list[AgentResultState]]:
+    """Read messages sent to a run and, with `result_branch`, its unread child results.
+
+    One query reads both. Results are returned as states; the caller reads the
+    output of finished ones.
+    """
+    reads = _sends(int(run_id), root_branch)
+    if result_branch is not None:
+        reads = or_(reads, _results_on_branch(result_branch))
+    rows = session.execute(
+        select(ChatInput, ChatMessage.response_status)
+        .outerjoin(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
+        .where(ChatInput.recipient_session_id == UUID(agent_id), reads)
+        .order_by(ChatInput.id)
+    ).all()
+    messages: list[UserMessage] = []
+    results: list[AgentResultState] = []
+    for row, status in rows:
+        if row.source == InputSource.AGENT_RESULT:
+            if row.source_response_id is None or status is None:
+                raise ValueError("Agent result has no source response")
+            results.append(
+                AgentResultState(
+                    recipient_id=row.recipient_session_id,
+                    response_id=row.source_response_id,
+                    status=status,
+                )
+            )
+            continue
+        messages.append(
+            UserMessage(
+                id=row.message_id,
+                content=row.content,
+                metadata=InputMessageMetadata(
+                    source=row.source,
+                    source_run_id=str(row.source_response_id)
+                    if row.source_response_id is not None
+                    else None,
+                ),
+            )
+        )
+    return messages, results
 
 
 def consume_inputs__no_commit(
     session: Session,
     run_id: int,
     messages: list[UserMessage],
+    visible_ids: Collection[int],
     *,
     ownership_version: int | None,
 ) -> bool:
@@ -417,21 +785,26 @@ def consume_inputs__no_commit(
         .where(
             ChatInput.recipient_session_id == response.chat_session_id,
             ChatInput.message_id.in_(pending_ids),
-            _sends(run_id),
+            or_(_results_on_branch(visible_ids), _sends(run_id, visible_ids)),
         )
         .returning(ChatInput.message_id)
     ).all()
     return set(consumed) == pending_ids
 
 
-def has_pending_sends(session: Session, agent_id: str, run_id: int) -> bool:
+def has_pending_sends(
+    session: Session,
+    agent_id: str,
+    run_id: int,
+    root_branch: Collection[int] | None,
+) -> bool:
     """Read unreceived steering; a send that misses its run starts the next one."""
     return (
         session.scalar(
             select(ChatInput.id)
             .where(
                 ChatInput.recipient_session_id == UUID(agent_id),
-                _sends(run_id),
+                _sends(run_id, root_branch),
             )
             .limit(1)
         )
@@ -439,7 +812,97 @@ def has_pending_sends(session: Session, agent_id: str, run_id: int) -> bool:
     )
 
 
-def fail_response_start__no_commit(session: Session, response_id: int) -> None:
+def _invocation_ids(invocation: ToolCall | None) -> tuple[str, str, str]:
+    """The parent run, assistant message, and tool call identities of an invocation."""
+    if invocation is None or invocation.parent_chat_message_id is None:
+        raise ValueError("Agent input has no invoking execution")
+    return (
+        str(invocation.parent_chat_message_id),
+        f"{invocation.parent_chat_message_id}:{invocation.turn_number}",
+        invocation.tool_call_id,
+    )
+
+
+def reserve_inbox_run__no_commit(
+    session: Session,
+    branch: ChatBranch,
+    agent: AgentInfo,
+    *,
+    message_id: str | None,
+    previous_run_id: str | None,
+    parent_ids: tuple[str, str, str] | None,
+) -> tuple[int, int] | None:
+    """Start an idle child's next run from its inbox; None when that work changed.
+
+    A message becomes the run's USER question and leaves the inbox. Without a
+    message, the run answers its unread results under a hidden AGENT_RESULTS
+    question, and its first step consumes them. The run belongs to the newer
+    root response of its sender's turn and its predecessor's turn.
+    """
+    lock_agent(session, agent.id)
+    latest = latest_agent_response(session, branch, agent.id)
+    if (str(latest.id) if latest else None) != previous_run_id:
+        return None
+    instruction: UserMessage | None = None
+    row: ChatInput | None = None
+    if message_id is not None:
+        row = session.scalar(
+            _branch_pending_inputs(session, branch, agent.id)
+            .where(ChatInput.message_id == message_id)
+            .options(selectinload(ChatInput.invoking_tool_call))
+        )
+        latest_status = latest.response_status if latest else None
+        if row is None or not can_start_input(
+            row.delivery,
+            row.target_response_id,
+            latest_status,
+            queue_paused=agent_queue_paused(latest_status),
+        ):
+            return None
+        ids = _invocation_ids(row.invoking_tool_call)
+        instruction = UserMessage(id=row.message_id, content=row.content)
+    else:
+        if latest is None or not wakes_for_results(
+            latest.response_status,
+            agent_result_states(session, branch.message_ids, UUID(agent.id)),
+            queue_paused=agent_queue_paused(latest.response_status),
+        ):
+            return None
+        ids = _invocation_ids(response_invocation(latest))
+    if parent_ids is not None and parent_ids != ids:
+        raise ValueError("Agent input changed its invocation")
+    parent = session.get(ChatMessage, int(ids[0]))
+    if parent is None:
+        raise ValueError("Message sender is unavailable")
+    roots = {root_response_id(session, parent)}
+    if latest is not None:
+        roots.add(root_response_id(session, latest))
+    if not roots <= set(branch.message_ids):
+        return None
+    # Both roots are on this branch, newest first, so the first is their descendant.
+    root_id = min(roots, key=branch.message_ids.index)
+    response_id = reserve_child_response__no_commit(
+        session,
+        root_id,
+        agent=agent,
+        instruction=instruction,
+        previous_response_id=latest.id if latest else None,
+        parent_response_id=int(ids[0]),
+        parent_message_id=ids[1],
+        parent_tool_call_id=ids[2],
+        # Nothing waits on an inbox run, so its spawner receives the result.
+        delivers_result=True,
+    )
+    if row is not None:
+        session.delete(row)
+    return response_id, root_id
+
+
+def fail_response_start__no_commit(
+    session: Session,
+    response_id: int,
+    failure_message: str = "The response could not start",
+) -> None:
     """Record that reserved work could not start, so it does not retry forever."""
     response = session.get(ChatMessage, response_id)
     if (
@@ -450,6 +913,65 @@ def fail_response_start__no_commit(session: Session, response_id: int) -> None:
         return
     response.response_status = RunStatus.ERROR
     response.response_failure = RunFailure(
-        kind=RunFailureKind.EXECUTION,
-        message="The response could not start",
+        kind=RunFailureKind.EXECUTION, message=failure_message
+    )
+
+
+def fail_inbox_start__no_commit(
+    session: Session,
+    branch: ChatBranch,
+    agent_id: str,
+    message_id: str | None,
+    failure_message: str = "The response could not start",
+) -> None:
+    """Consume inbox work that could not start, so it does not retry.
+
+    The work becomes a failed run. When even that reservation fails, the work is
+    dropped: the message, or the agent's finished results on the branch.
+    """
+    agent = lock_agent(session, agent_id)
+    try:
+        with session.begin_nested():
+            latest = latest_agent_response(session, branch, agent_id)
+            reserved = reserve_inbox_run__no_commit(
+                session,
+                branch,
+                agent_metadata(
+                    agent,
+                    session_ancestors(session, [agent.id]),
+                    latest.id if latest else None,
+                    latest.response_status if latest else None,
+                ),
+                message_id=message_id,
+                previous_run_id=str(latest.id) if latest else None,
+                parent_ids=None,
+            )
+            if reserved is not None:
+                fail_response_start__no_commit(session, reserved[0], failure_message)
+        return
+    except ValueError:
+        logger.exception("Could not record failed inbox work; dropping it")
+    work = (
+        and_(
+            ChatInput.source == InputSource.AGENT,
+            ChatInput.message_id == message_id,
+        )
+        if message_id is not None
+        else and_(
+            _results_on_branch(branch.message_ids),
+            ChatInput.source_response_id.in_(
+                select(ChatMessage.id).where(
+                    ChatMessage.response_status.in_(
+                        [status for status in RunStatus if status.is_terminal]
+                    )
+                )
+            ),
+        )
+    )
+    session.execute(
+        delete(ChatInput).where(
+            ChatInput.recipient_session_id == UUID(agent_id),
+            ChatInput.root_response_id.in_(branch.message_ids),
+            work,
+        )
     )

@@ -32,7 +32,6 @@ from onyx.agents.concurrency import (
     EventDelivery,
     EventDispatcher,
     ExecutionWork,
-    wait_operation,
 )
 from onyx.agents.events import (
     AgentEndEvent,
@@ -141,6 +140,10 @@ class RunNotTransferable(RuntimeError):
 
 class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
+
+
+class AgentBusy(RuntimeError):
+    """The agent cannot start a run now; a later attempt can."""
 
 
 class RunFailed(RuntimeError):
@@ -318,6 +321,15 @@ class Agent:
         return self._id
 
     @property
+    def latest_run_id(self) -> str | None:
+        with self._lock:
+            return (
+                self._latest_run.id
+                if self._latest_run is not None
+                else self._previous_run_id
+            )
+
+    @property
     def state(self) -> AgentState:
         with self._lock:
             latest_run = self._latest_run
@@ -373,7 +385,7 @@ class Agent:
                         not previous._state.status.is_terminal
                         or not previous._reusable.done()
                     ):
-                        raise RuntimeError("Agent is already running or draining")
+                        raise AgentBusy("Agent is already running or draining")
                     previous._reusable.result(timeout=0)
             history = self.state
             external_cancellation = (
@@ -728,10 +740,6 @@ class Run:
     def wait_for_completion(self, timeout: float = OPERATION_TIMEOUT_SECONDS) -> None:
         """Wait for terminal handling without copying output or waiting for cleanup."""
         self._completed.result(timeout=timeout)
-
-    def wait_until_reusable(self, cancellation: CancellationSignal) -> None:
-        """Wait for ownership cleanup before another run uses this agent."""
-        wait_operation(self._reusable, cancellation)
 
     def track_child_work(self, child: "Run") -> None:
         """Keep this execution busy until the child's current workers drain."""
@@ -1504,6 +1512,16 @@ def _advance_loop(
             ):
                 raise RuntimeError("Execution is missing its terminal decision")
             return progress.outcome
+        if progress.action == RunAction.WAIT_CHILDREN:
+            if not run.begin_work_cycle():
+                return RunStatus.SUSPENDED
+            if run.coordination is None:
+                raise RuntimeError("Waiting for delegated work requires a coordinator")
+            if run.coordination.wait_for_delegations():
+                return RunStatus.SUSPENDED
+            with run.execution_lock:
+                progress.action = RunAction.PREPARE
+                run._state.revision += 1
         if progress.action == RunAction.PREPARE:
             if not run.begin_work_cycle():
                 return RunStatus.SUSPENDED
@@ -1991,6 +2009,14 @@ def _complete_step(run: Run) -> None:
             results and all(result.terminate for result in results)
         )
     cancellation_signal.check()
+    has_delegated_work = run.coordination is not None and bool(
+        run.coordination.delegated_runs()
+    )
+    # Collect delegated results before accepting an early answer or using the last step.
+    wait_for_children = has_delegated_work and (
+        not should_continue or progress.step_index + 2 >= progress.step_limit
+    )
+    should_continue = should_continue or has_delegated_work
     ownership = run.coordination.coordinator.ownership if run.coordination else None
     with run.execution_lock:
         progress.previous_options = progress.options
@@ -2007,7 +2033,9 @@ def _complete_step(run: Run) -> None:
                 run._state.answer_step_index = progress.step_index
         else:
             progress.step_index += 1
-            progress.action = RunAction.PREPARE
+            progress.action = (
+                RunAction.WAIT_CHILDREN if wait_for_children else RunAction.PREPARE
+            )
             progress.finalized_tool_call_ids.clear()
             progress.pending_tool_calls = {}
             progress.options = None

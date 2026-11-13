@@ -1409,6 +1409,8 @@ def get_chat_session_processing_status(
     stream_id = get_processing_stream_id(session_id, cache)
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
+        has_active_subagents=any(result.is_active for result in inbox.results)
+        or bool(inbox.child_work),
         has_startable_input=inbox.next_turn is not None,
         is_processing=stream_id is not None
         or is_chat_session_processing(session_id, cache),
@@ -1424,7 +1426,9 @@ def get_chat_session_processing_status(
         and (
             inbox.next_turn is not None
             # Dispatch saves a response whose owner is gone as interrupted.
-            or ownerless_response_ids(cache, inbox.running_response_ids)
+            or ownerless_response_ids(cache, inbox.unfinished_response_ids)
+            # Agent work needs a host when no running child's store scans.
+            or (inbox.child_work and not inbox.running_response_ids)
         )
     ):
         # Queued work can outlive the process that completed its previous response.

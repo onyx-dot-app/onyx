@@ -1425,6 +1425,8 @@ def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() 
     "outcome, failure, reason",
     [
         (RunStatus.COMPLETE, None, "finished"),
+        (RunStatus.LIMIT, None, "finished"),
+        (RunStatus.ERROR, None, "finished"),
         (RunStatus.CANCELLED, None, "user_cancelled"),
         (
             RunStatus.CANCELLED,

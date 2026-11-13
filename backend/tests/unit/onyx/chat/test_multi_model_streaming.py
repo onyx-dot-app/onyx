@@ -32,6 +32,7 @@ from onyx.chat.execution import (
     ChatTurnExecution,
     chat_turn_work,
     create_chat_agent,
+    host_agent_work,
     start_chat_turn,
 )
 from onyx.chat.models import (
@@ -98,7 +99,11 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
-from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
+from tests.unit.onyx.agents.fakes import (
+    FakeModelClient,
+    FakeRunOwnership,
+    FakeRunStore,
+)
 
 MODEL_REFUSAL_ERROR_CODE = "MODEL_REFUSAL"
 CONTENT_FILTER_FINISH_REASON = "content_filter"
@@ -407,6 +412,7 @@ def _make_setup(n_models: int = 1) -> MagicMock:
     )
     setup.preferred_tool_id = None
     setup.previous_run_id = None
+    setup.checkpoint = None
     setup.messages = []
     setup.input_messages = []
     setup.chat_session_id = uuid4()
@@ -511,13 +517,15 @@ class TestRunModels:
         _search_selection_model.return_value = fast_llm
 
         with (
-            patch("onyx.chat.execution.ChatAgent") as answer,
+            patch("onyx.chat.agent.ChatAgent") as answer,
             patch("onyx.chat.execution.construct_tools", return_value={}) as tools,
             patch(
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
             ),
         ):
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
 
         assert answer.call_args.kwargs["llm"] is setup.responses[0].llm
         assert tools.call_args.kwargs["llm"] is setup.responses[0].llm
@@ -567,7 +575,9 @@ class TestRunModels:
                 "onyx.chat.execution.get_llm_token_counter", return_value=lambda _: 0
             ),
         ):
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
 
         offered = {
             configured.in_code_tool_id
@@ -576,6 +586,28 @@ class TestRunModels:
         assert offered == (
             {"SearchTool"} if incognito else {"SearchTool", CODING_AGENT_TOOL_ID}
         )
+
+    @pytest.mark.parametrize("n_models", [1, 2])
+    def test_only_single_model_turns_offer_agent_tools(self, n_models: int) -> None:
+        """Results follow one answer, so a multi-model turn starts no agents."""
+        offered: list[bool] = []
+
+        def create(*_args: object, with_subagents: bool, **_kwargs: object) -> None:
+            offered.append(with_subagents)
+            raise RuntimeError("Agent construction recorded")
+
+        setup = _make_setup(n_models=n_models)
+        setup.new_msg_req.accepts_follow_ups = True
+        with patch("onyx.chat.execution.create_chat_agent", side_effect=create):
+            reader = start_chat_turn(
+                setup, MagicMock(), dispatch_pending_messages=lambda: None
+            )
+            try:
+                list(reader)
+            finally:
+                reader.close()
+
+        assert offered == [n_models == 1] * n_models
 
     def test_n1_overall_stop_from_llm_loop_passes_through(self) -> None:
         """OverallStop emitted by agent is passed through the drain loop unchanged."""
@@ -1385,6 +1417,7 @@ def mock_model_execution(
         index: int,
         _cancellation: CancellationSignal,
         auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         with lock:
             response_future, emitter = captured[index]
@@ -1453,10 +1486,6 @@ def _mock_settings() -> Generator[None, None, None]:
         patch(
             "onyx.chat.execution.load_chat_branch",
             return_value=MagicMock(chat_session_id=ANY, message_ids=[]),
-        ),
-        patch(
-            "onyx.chat.history_store.PostgresChatHistoryStore.list_agents",
-            return_value=[],
         ),
         patch("onyx.chat.execution.get_cache_backend"),
         patch("onyx.chat.execution.get_session_with_current_tenant"),
@@ -2336,6 +2365,7 @@ def test_stop_retains_turn_while_preparation_drains(
         _index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         entered.set()
         assert release.wait(5)
@@ -2394,6 +2424,7 @@ def test_model_failure_does_not_cancel_comparison_response() -> None:
         index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         return prepared[index]
 
@@ -2571,6 +2602,7 @@ def test_response_workers_track_generations_and_share_one_event_consumer(
         index: int,
         _cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         with lock:
             preparation_threads[index] = threading.get_ident()
@@ -3003,7 +3035,7 @@ def test_control_failure_retains_turn_and_polls_ownership_until_workers_drain(
         )
     )
 
-    def prepare(*_args: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3357,7 +3389,7 @@ def test_execution_deadline_cancels_work_but_waits_for_preparation_to_drain(
         )
     )
 
-    def prepare(*_args: object) -> ChatAgent:
+    def prepare(*_args: object, **_kwargs: object) -> ChatAgent:
         entered.set()
         assert release.wait(5)
         return prepared
@@ -3409,6 +3441,7 @@ def test_preparation_that_outlives_the_deadline_ends_the_turn_as_timed_out(
         _index: int,
         cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         # Preparation that never starts a run, e.g. a slow tool server.
         stopped = threading.Event()
@@ -3487,7 +3520,9 @@ def test_invalid_preferred_tool_returns_an_actionable_error() -> None:
     setup.preferred_tool_saved = False
     with patch("onyx.chat.execution.construct_tools", return_value={}):
         with pytest.raises(OnyxError) as raised:
-            create_chat_agent(setup, MagicMock(), 0, CancellationSignal(), True)
+            create_chat_agent(
+                setup, MagicMock(), 0, CancellationSignal(), True, with_subagents=True
+            )
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
     packet = chat_error(raised.value, setup.responses[0].llm, model_index=1)
     assert packet.details == {
@@ -3531,6 +3566,7 @@ def test_completed_model_does_not_hide_a_second_models_stop(
         index: int,
         cancellation: CancellationSignal,
         _auto_filters: bool,
+        **_kwargs: object,
     ) -> ChatAgent:
         if index == 0:
             return _chat_agent(
@@ -3605,3 +3641,27 @@ def test_user_stop_after_run_deadline_keeps_live_and_saved_timeout(
         finally:
             turn.delivery.reader.close()
             _wait_for_chat_workers(chat_workers)
+
+
+def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
+    """Generation spans record usage only inside a trace."""
+    from onyx.tracing.framework.scope import Scope
+
+    setup = _make_setup(n_models=1)
+    setup.chat_session_id = uuid4()
+    setup.user_identity.user_id = str(uuid4())
+    traces: list[object | None] = []
+    store = MagicMock()
+    store.has_owned_work = False
+    store.poll_control.side_effect = lambda: traces.append(Scope.get_current_trace())
+    with (
+        patch(
+            "onyx.chat.execution.create_chat_agent",
+            return_value=MagicMock(spec=ChatAgent, configured_tools=[], max_steps=3),
+        ),
+        patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),
+        patch("onyx.chat.execution.load_settings"),
+    ):
+        host_agent_work(setup, MagicMock(), lambda: None)
+    assert traces and traces[0] is not None
+    setup.admission.release.assert_called_once()

@@ -138,7 +138,10 @@ for their display). `KEEP_MARKERS` emits no `CitationInfo`, but a report still
 lists the sources it cites in `IntermediateReportCitedDocs`
 (`chat/renderer.py:MessageRenderer.finish`).
 `chat/citation_utils.py:collapse_citations` renumbers those markers when
-`deep_research/agent.py` merges the reports. In `REMOVE` mode,
+`deep_research/agent.py` merges the reports. Chat, research and deep research
+also use `remap_received_citations` before accepting background results.
+It preserves input identities and gives the received text and next answer the same source numbers.
+In `REMOVE` mode,
 `MessageRenderer.complete` does not re-send unrendered final text, so an answer
 of only markers stays empty.
 

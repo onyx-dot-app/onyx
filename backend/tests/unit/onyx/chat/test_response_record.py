@@ -50,7 +50,9 @@ class ApplicationData(BaseModel):
 
 def test_response_capture_keeps_input_provenance_without_transient_payloads() -> None:
     metadata = InputMessageMetadata(
-        source=InputSource.HUMAN, content_metadata=ApplicationData()
+        source=InputSource.AGENT_RESULT,
+        source_run_id="child-run",
+        content_metadata=ApplicationData(),
     )
     agent = Agent(
         FakeModelClient(
@@ -59,7 +61,7 @@ def test_response_capture_keeps_input_provenance_without_transient_payloads() ->
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(
             input_messages=[
-                UserMessage(id="delivery", content="Accepted input", metadata=metadata)
+                UserMessage(id="delivery", content="Accepted result", metadata=metadata)
             ]
         ),
     )
@@ -67,8 +69,11 @@ def test_response_capture_keeps_input_provenance_without_transient_payloads() ->
     run_agent(agent, runs=runs, max_steps=1)
     restored = response_snapshot(response_record(runs[0].snapshot()))
     accepted = restored.steps[0].input_messages[0]
-    assert accepted.id == "delivery" and accepted.text == "Accepted input"
-    assert accepted.metadata == InputMessageMetadata(source=InputSource.HUMAN)
+    assert accepted.id == "delivery" and accepted.text == "Accepted result"
+    assert accepted.metadata == InputMessageMetadata(
+        source=InputSource.AGENT_RESULT,
+        source_run_id="child-run",
+    )
     assert metadata.content_metadata == ApplicationData()
 
 

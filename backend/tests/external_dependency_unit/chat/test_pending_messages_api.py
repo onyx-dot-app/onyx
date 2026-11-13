@@ -1,6 +1,7 @@
 """Pending user messages remain editable until Chat accepts them for execution."""
 
 import asyncio
+import time
 from collections.abc import Generator
 from concurrent.futures import Future
 from threading import Event
@@ -20,6 +21,7 @@ from onyx.agents.models import (
     InputSource,
     MessageDelivery,
     RunStatus,
+    agent_result_message_id,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution
@@ -31,6 +33,7 @@ from onyx.chat.process_message import (
     dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
+    run_chat_turn,
 )
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX
 from onyx.chat.stop_signal_checker import request_stop
@@ -41,14 +44,17 @@ from onyx.db.chat import reserve_chat_response_ids
 from onyx.db.chat_inputs import (
     MAX_PENDING_MESSAGE_BYTES,
     consume_inputs__no_commit,
+    list_human_messages,
     pause_chat_queue__no_commit,
+    read_chat_inbox,
     read_run_inputs,
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
 from onyx.db.chat_response import read_response_record
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint, IncognitoRecordMode
-from onyx.db.models import ChatInput, ChatMessage, ChatSession, User
+from onyx.db.models import ChatInput, ChatMessage, ChatSession, ToolCall, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.hooks.executor import HookSkipped
@@ -65,11 +71,11 @@ from onyx.llm.models import (
     GenerationStartEvent,
     TextContent,
     TextDeltaEvent,
-    ToolCall,
     ToolResultMessage,
     UserMessage,
     content_text,
 )
+from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -78,6 +84,7 @@ from onyx.server.query_and_chat.streaming_models import (
     StreamingError,
     UserMessagePacket,
 )
+from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_implementations.code_mode.store import ProgramStore
 from onyx.utils.threadpool_concurrency import start_thread_future
@@ -195,7 +202,9 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
     chat_id = response.chat_session_id
 
     def read() -> list[UserMessage]:
-        messages = read_run_inputs(db_session, str(chat_id), str(response.id))
+        messages = read_run_inputs(
+            db_session, str(chat_id), str(response.id), [response.id], None
+        )[0]
         assert len(messages) == 1
         assert messages[0].metadata == InputMessageMetadata(source=InputSource.HUMAN)
         return messages
@@ -210,14 +219,14 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
     )
     messages = read()
     assert consume_inputs__no_commit(
-        db_session, response.id, messages, ownership_version=None
+        db_session, response.id, messages, [], ownership_version=None
     )
     db_session.commit()
     with pytest.raises(OnyxError) as withdrawn:
         withdraw_human_message__no_commit(db_session, chat_id, accepted.id)
     assert withdrawn.value.error_code == OnyxErrorCode.CONFLICT
     assert not consume_inputs__no_commit(
-        db_session, response.id, messages, ownership_version=None
+        db_session, response.id, messages, [], ownership_version=None
     )
     db_session.rollback()
 
@@ -242,7 +251,7 @@ def test_input_changed_after_a_run_read_it_is_not_accepted(
         assert promoted.status_code == 200, promoted.text
         remaining = [promoted.json()]
     assert not consume_inputs__no_commit(
-        db_session, response.id, messages, ownership_version=None
+        db_session, response.id, messages, [], ownership_version=None
     )
     db_session.rollback()
     assert client.get(path).json() == remaining
@@ -621,7 +630,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
     requests: list[GenerationRequest] = []
     # Steps of the first response before the one that reads the send.
     steps = 2 if code_mode else 1
-    monkeypatch.setattr(execution, "CODE_MODE_ENABLED", code_mode)
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", code_mode)
     store = ProgramStore.store
 
     def gated_store(program_store: ProgramStore, key: object, value: object) -> None:
@@ -658,7 +667,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             program = "print('started')\nyield_control()\nstore('gate', 1)\n"
             return AssistantMessage(
                 content=[
-                    ToolCall(
+                    ModelToolCall(
                         id="start", name="execute_code", arguments={"code": program}
                     )
                 ]
@@ -667,7 +676,7 @@ def test_submitted_messages_process_once_and_execute_without_a_browser(
             waiting.set()
             return AssistantMessage(
                 content=[
-                    ToolCall(
+                    ModelToolCall(
                         id="wait",
                         name="wait_code",
                         arguments={"cell_id": 1, "yield_time_ms": 30000},
@@ -972,7 +981,14 @@ def test_send_now_starts_after_a_send_fails_during_preparation(
 
 # Each failure point follows the response reservation in turn preparation.
 @pytest.mark.parametrize(
-    "failure", ["token_rate_limit", "write_access", "model_setup", "file_loading"]
+    ("work", "failure"),
+    [
+        ("message", "token_rate_limit"),
+        ("message", "write_access"),
+        ("message", "model_setup"),
+        ("message", "file_loading"),
+        ("results", "token_rate_limit"),
+    ],
 )
 def test_queued_start_failure_saves_error_and_pauses_queue(
     client: TestClient,
@@ -980,11 +996,40 @@ def test_queued_start_failure_saves_error_and_pauses_queue(
     owner: User,
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
+    work: str,
     failure: str,
 ) -> None:
-    """A queued message that cannot start is answered with an error, not retried."""
+    """Queued work that cannot start is answered with an error, not retried.
+
+    The work is a queued message, or a follow-up on a child's result.
+    """
     chat_id = response.chat_session_id
     response.response_status = RunStatus.COMPLETE
+    if work == "results":
+        child = ChatSession(
+            id=uuid4(), user_id=owner.id, spawned_by_message_id=response.id
+        )
+        db_session.add(child)
+        db_session.flush()
+        finished = ChatMessage(
+            chat_session_id=child.id,
+            message="",
+            token_count=0,
+            message_type=MessageType.ASSISTANT,
+            response_status=RunStatus.COMPLETE,
+        )
+        db_session.add(finished)
+        db_session.flush()
+        db_session.add(
+            ChatInput(
+                recipient_session_id=chat_id,
+                message_id=agent_result_message_id(str(finished.id)),
+                source=InputSource.AGENT_RESULT,
+                source_response_id=finished.id,
+                root_response_id=response.id,
+                content="",
+            )
+        )
     db_session.commit()
     path = f"/chat/chat-session/{chat_id}/pending-messages"
     model = QueueTestLLM(
@@ -1014,8 +1059,11 @@ def test_queued_start_failure_saves_error_and_pauses_queue(
             }[failure],
             fail,
         )
-    first = client.post(path, json={"message": "First", "delivery": "queue"})
-    assert first.status_code == 200, first.text
+    if work == "message":
+        first = client.post(path, json={"message": "First", "delivery": "queue"})
+        assert first.status_code == 200, first.text
+    else:
+        dispatch_pending_chat_messages(chat_id, owner.id)
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.expire_all()
     answer = db_session.scalar(
@@ -1031,8 +1079,12 @@ def test_queued_start_failure_saves_error_and_pauses_queue(
     assert answer.response_items == []
     question = answer.parent_message
     assert question is not None and question.parent_message_id == response.id
-    assert question.message_type == MessageType.USER
-    assert question.message == "First"
+    if work == "message":
+        assert question.message_type == MessageType.USER
+        assert question.message == "First"
+    else:
+        assert question.message_type == MessageType.AGENT_RESULTS
+        assert question.message == ""
     assert client.get(path).json() == []
     # The error pauses the queue, so later queued input waits for the user.
     second = client.post(path, json={"message": "Second", "delivery": "queue"})
@@ -1197,7 +1249,9 @@ def test_send_during_preparation_goes_to_the_preparing_turn(
         )
         assert [
             message.content
-            for message in read_run_inputs(db_session, str(chat_id), str(reserved))
+            for message in read_run_inputs(
+                db_session, str(chat_id), str(reserved), [reserved], None
+            )[0]
         ] == ["Focus on cost"]
     finally:
         admission.release()
@@ -1266,6 +1320,88 @@ def test_status_recovers_queued_message_after_previous_dispatcher_exits(
     assert answer is not None and answer.message == "Recovered answer"
     assert model_headers == [{"x-proxy-user": "user-1"}]
     assert client.get(path).json() == []
+
+
+@pytest.mark.parametrize("lost_status", [RunStatus.RUNNING, RunStatus.SUSPENDED])
+def test_status_wakes_the_root_for_a_child_whose_owner_is_gone(
+    response: ChatMessage,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    lost_status: RunStatus,
+) -> None:
+    """After a pod restart, a running or suspended child has no owner.
+
+    Status reports it, and its dispatch saves the child as failed, so the
+    result wakes the root.
+    """
+    chat_id = response.chat_session_id
+    response.response_status = RunStatus.COMPLETE
+    child = ChatSession(
+        id=uuid4(),
+        user_id=owner.id,
+        persona_id=DEFAULT_PERSONA_ID,
+        spawned_by_message_id=response.id,
+        agent_name="worker",
+    )
+    db_session.add(child)
+    db_session.flush()
+    child_response = ChatMessage(
+        chat_session_id=child.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+        response_status=lost_status,
+    )
+    db_session.add(child_response)
+    db_session.flush()
+    db_session.add(
+        ChatInput(
+            recipient_session_id=chat_id,
+            message_id=agent_result_message_id(str(child_response.id)),
+            source=InputSource.AGENT_RESULT,
+            source_response_id=child_response.id,
+            root_response_id=response.id,
+            content="",
+        )
+    )
+    db_session.commit()
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(
+            content=[TextContent(text="The worker stopped")]
+        )
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(
+        chat_id, tasks, _NO_HEADERS, owner
+    )
+    assert status.has_active_subagents
+    assert not status.has_startable_input
+    asyncio.run(tasks())
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    stopped = db_session.get(ChatMessage, child_response.id)
+    assert stopped is not None and stopped.response_status == RunStatus.ERROR
+    follow_up = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.parent_message_id == response.id,
+            ChatMessage.message_type == MessageType.AGENT_RESULTS,
+        )
+    )
+    assert follow_up is not None
+    answer = db_session.scalar(
+        select(ChatMessage).where(ChatMessage.parent_message_id == follow_up.id)
+    )
+    assert answer is not None and answer.response_status == RunStatus.COMPLETE
+    assert answer.message == "The worker stopped"
+    status = chat_backend.get_chat_session_processing_status(
+        chat_id, BackgroundTasks(), _NO_HEADERS, owner
+    )
+    assert not status.has_active_subagents
+    assert status.latest_response_id == answer.id
 
 
 def test_stop_after_the_answer_finishes_pauses_the_queue(
@@ -1997,3 +2133,256 @@ def test_a_queued_turn_runs_without_a_saved_preferred_tool_that_is_gone(
     )
     assert answer.response_status == RunStatus.COMPLETE
     assert answer.message == "Done"
+
+
+def _stream_turn(
+    chat: ChatSession, owner: User, message: str, *, accepts_follow_ups: bool = True
+) -> None:
+    for _packet in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message=message,
+            chat_session_id=chat.id,
+            accepts_follow_ups=accepts_follow_ups,
+        ),
+        user=owner,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+
+
+def _root_result_count(db_session: Session, chat_id: UUID) -> int:
+    db_session.expire_all()
+    return len(
+        db_session.scalars(
+            select(ChatMessage).where(
+                ChatMessage.chat_session_id == chat_id,
+                ChatMessage.message_type == MessageType.AGENT_RESULTS,
+            )
+        ).all()
+    )
+
+
+@pytest.mark.parametrize(
+    "host_event", ["none", "over_budget", "stop", "release_while_scanning"]
+)
+def test_status_starts_child_work_when_no_turn_hosts_it(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    host_event: str,
+) -> None:
+    """Child work that becomes startable after every run store exited still starts.
+
+    Status counts it as active agent work, and its dispatch hosts the run. When
+    the owner is over budget, the work becomes a visible failed run instead of
+    failing silently on every poll. A Stop while the host holds chat admission
+    pauses the queue, so a message queued then waits after the host ends. A
+    child that finishes during the host's first scan still wakes the root.
+    """
+    over_budget = host_event == "over_budget"
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        if "Initial task" in texts:
+            answer = "Follow-up done" if "Follow up" in texts else "Child done"
+            return AssistantMessage(content=[TextContent(text=answer)])
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="Started")])
+        return AssistantMessage(
+            content=[
+                ModelToolCall(
+                    id="spawn",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"name": "worker", "instruction": "Initial task"},
+                )
+            ]
+        )
+
+    # Agent tools come from the chat agent; persona tools play no part here.
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    _stream_turn(chat, owner, "Start a worker")
+    spawn = db_session.scalar(
+        select(ToolCall).where(
+            ToolCall.chat_session_id == chat.id, ToolCall.tool_call_id == "spawn"
+        )
+    )
+    assert spawn is not None and spawn.parent_chat_message_id is not None
+    worker = db_session.scalar(
+        select(ChatSession).where(
+            ChatSession.spawned_by_message_id == spawn.parent_chat_message_id
+        )
+    )
+    assert worker is not None
+    finished = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == worker.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    assert finished is not None and finished.response_status == RunStatus.COMPLETE
+    # A message queued for the idle worker, left by a store that has exited.
+    db_session.add(
+        ChatInput(
+            recipient_session_id=worker.id,
+            message_id=str(uuid4()),
+            source=InputSource.AGENT,
+            invoking_tool_call_id=spawn.id,
+            source_response_id=spawn.parent_chat_message_id,
+            target_response_id=finished.id,
+            root_response_id=spawn.parent_chat_message_id,
+            delivery=MessageDelivery.QUEUE,
+            content="Follow up",
+            max_steps=2,
+        )
+    )
+    db_session.commit()
+
+    if over_budget:
+
+        def over_limit(_user: User) -> None:
+            raise OnyxError(OnyxErrorCode.RATE_LIMITED, "Over budget")
+
+        monkeypatch.setattr(
+            "onyx.chat.process_message.check_token_rate_limits", over_limit
+        )
+    queued_ids: list[str] = []
+    if host_event == "stop":
+        bind = execution.bind_run_store
+
+        def stop_while_hosting(*args: Any, **kwargs: Any) -> Any:
+            # The host holds chat admission here; a message and a Stop arrive.
+            with get_session_with_current_tenant() as session:
+                queued_ids.append(
+                    submit_human_message__no_commit(
+                        session,
+                        chat.id,
+                        message="Answer later",
+                        delivery=MessageDelivery.QUEUE,
+                        target_response_id=None,
+                        turn_preparing=False,
+                    ).id
+                )
+                session.commit()
+                chat_backend.stop_chat_session(chat.id, None, owner, session)
+            return bind(*args, **kwargs)
+
+        monkeypatch.setattr(execution, "bind_run_store", stop_while_hosting)
+    root_results_before = _root_result_count(db_session, chat.id)
+    if host_event == "release_while_scanning":
+        bind = execution.bind_run_store
+
+        def finish_child_during_first_scan(*args: Any, **kwargs: Any) -> Any:
+            # Only the host's store; later turns bind their own stores.
+            monkeypatch.setattr(execution, "bind_run_store", bind)
+            released = Event()
+            on_released = kwargs["on_child_released"]
+
+            def child_released() -> None:
+                released.set()
+                on_released()
+
+            kwargs["on_child_released"] = child_released
+            store, view = bind(*args, **kwargs)
+            first_scan = store.poll_control
+
+            def scan_until_the_child_is_released() -> None:
+                # The child finishes while the host still holds chat admission.
+                monkeypatch.setattr(store, "poll_control", first_scan)
+                deadline = time.monotonic() + 30
+                while not released.is_set():
+                    assert time.monotonic() < deadline
+                    first_scan()
+                    released.wait(0.1)
+
+            monkeypatch.setattr(store, "poll_control", scan_until_the_child_is_released)
+            return store, view
+
+        monkeypatch.setattr(execution, "bind_run_store", finish_child_during_first_scan)
+    tasks = BackgroundTasks()
+    status = chat_backend.get_chat_session_processing_status(
+        chat.id, tasks, _NO_HEADERS, owner
+    )
+    assert status.has_active_subagents
+    assert not status.has_startable_input
+    asyncio.run(tasks())
+    assert chat_turn_work.wait_idle(timeout=30)
+    db_session.expire_all()
+    if host_event == "stop":
+        assert queued_ids
+        stopped = db_session.get(ChatSession, chat.id)
+        assert stopped is not None and stopped.queue_paused_at is not None
+        # The paused queue starts nothing after the host ends.
+        assert [
+            message.id for message in list_human_messages(db_session, chat.id)
+        ] == queued_ids
+        assert read_chat_inbox(db_session, chat.id).next_turn is None
+    if over_budget:
+        failed = db_session.scalar(
+            select(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == worker.id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .order_by(ChatMessage.id.desc())
+            .limit(1)
+        )
+        assert failed is not None and failed.response_status == RunStatus.ERROR
+        assert failed.response_failure is not None
+        assert failed.response_failure.message == "Over budget"
+        assert not read_chat_inbox(db_session, chat.id).child_work
+        return
+    follow_up = db_session.scalar(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == worker.id,
+            ChatMessage.message == "Follow-up done",
+        )
+    )
+    assert follow_up is not None
+    assert follow_up.response_status == RunStatus.COMPLETE
+    assert follow_up.parent_message is not None
+    assert follow_up.parent_message.message == "Follow up"
+    status = chat_backend.get_chat_session_processing_status(
+        chat.id, BackgroundTasks(), _NO_HEADERS, owner
+    )
+    assert not status.has_active_subagents
+    if host_event == "release_while_scanning":
+        # The result started a root follow-up after the host released the chat.
+        assert _root_result_count(db_session, chat.id) == root_results_before + 1
+
+
+def test_one_shot_turns_offer_no_agent_tools(
+    chat: ChatSession, owner: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Only callers that deliver follow-up responses to a client that shows them
+    offer agent tools."""
+    offered: list[set[str]] = []
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        offered.append({tool.name for tool in request.tools or []})
+        return AssistantMessage(content=[TextContent(text="Done")])
+
+    # Agent tools come from the chat agent; persona tools play no part here.
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    model = QueueTestLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    run_chat_turn(
+        new_msg_req=SendMessageRequest(message="One shot", chat_session_id=chat.id),
+        user=owner,
+    )
+    _stream_turn(chat, owner, "Streamed")
+    _stream_turn(chat, owner, "Streamed to a client", accepts_follow_ups=False)
+    one_shot, streamed, unshown = offered
+    assert SPAWN_AGENT_TOOL_NAME not in one_shot
+    assert SPAWN_AGENT_TOOL_NAME in streamed
+    assert SPAWN_AGENT_TOOL_NAME not in unshown

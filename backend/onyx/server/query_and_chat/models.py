@@ -139,6 +139,15 @@ class SendMessageRequest(BaseModel):
     # Origin of the message for telemetry tracking
     origin: MessageOrigin = MessageOrigin.UNSET
 
+    accepts_follow_ups: bool = Field(
+        default=False,
+        description=(
+            "Set to true if the client can receive automatic follow-up answers "
+            "after the stream ends. This enables background agents for the "
+            "turn. Clients that only read the streamed answer leave it false."
+        ),
+    )
+
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
     # - null: regeneration from root (first message)
@@ -330,7 +339,9 @@ class CurrentStreamInfo(BaseModel):
 
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
-    # Queued input can start a turn now; a paused queue cannot.
+    # Background agents are active on the selected branch, or their queued work waits.
+    has_active_subagents: bool = False
+    # Queued input or unread root results can start a turn now; a paused queue cannot.
     has_startable_input: bool = False
     # The newest response on the selected branch.
     latest_response_id: int | None = None

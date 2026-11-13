@@ -189,7 +189,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
 | Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), `start_run`, and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

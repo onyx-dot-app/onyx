@@ -1,17 +1,29 @@
 """Synchronous ownership checks reject expired leases and retry transient cache failures."""
 
 import threading
-from typing import Literal
+from contextlib import nullcontext
+from typing import Any, Literal
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 
+from onyx.agents.models import (
+    AgentCompletion,
+    ExecutionStatus,
+    RunProgress,
+    RunState,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.agents.runtime import Run
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
-from onyx.chat.models import ResponseOwner
+from onyx.chat.models import AgentResultState, ChatResponseSnapshot, ResponseOwner
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
+from onyx.llm.models import AssistantMessage, ToolResultMessage
+from onyx.llm.models import ToolCall as ModelToolCall
 
 
 class Clock:
@@ -36,6 +48,7 @@ def ownership(
         response_id=1,
         visible_response_ids=[],
         cache=cache,
+        follow_up_steps=4,
         control_cache=cache,
     )
     lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
@@ -165,3 +178,116 @@ def test_root_and_child_control_calls_use_the_callers_thread(
     assert renewals == [run_store._owner_key(1), run_store._owner_key(2)]
     root.cancel.assert_not_called()
     child.cancel.assert_called_once()
+
+
+def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = MagicMock(spec=CacheBackend)
+    name = "mcp__3__my__srv__create_issue"
+    store = ChatRunStore(
+        tenant_id="tenant",
+        chat_session_id=uuid4(),
+        response_id=1,
+        visible_response_ids=[],
+        cache=cache,
+        follow_up_steps=4,
+        control_cache=cache,
+        tool_ids={name: 7},
+    )
+    call = ModelToolCall(id="call", name=name, arguments={})
+    snapshot = RunState(
+        run_id="2",
+        agent_id="child",
+        parent_run_id="1",
+        status=RunStatus.COMPLETE,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="2:0", content=[call]),
+                generation_status=ExecutionStatus.COMPLETE,
+                tools={
+                    call.id: ToolExecutionRecord(
+                        status=ExecutionStatus.COMPLETE,
+                        result=ToolResultMessage(
+                            tool_call_id=call.id, tool_name=name, content="created"
+                        ),
+                        display_name="create_issue",
+                    )
+                },
+            )
+        ],
+    )
+    projected: list[ChatResponseSnapshot] = []
+    project = run_store.project_response
+
+    def capture(*args: Any, **kwargs: Any) -> ChatResponseSnapshot:
+        projected.append(project(*args, **kwargs))
+        raise RuntimeError("projected")
+
+    monkeypatch.setattr(run_store, "project_response", capture)
+    lease = _OwnerLease(ResponseOwner(token=uuid4(), root_message_id=1))
+    run = MagicMock(spec=Run)
+    run.id = "2"
+    with pytest.raises(RuntimeError, match="projected"):
+        store._save_output(_OwnedRun(run, lease), snapshot)
+    [display] = projected
+    assert [info.tool_id for info in display.tool_calls] == [7]
+    assert display.response is not None
+    assert display.response.steps[0].tools[call.id].display_name == "create_issue"
+
+
+@pytest.mark.parametrize("final_step", [False, True])
+def test_every_step_receives_a_bounded_number_of_child_results(
+    monkeypatch: pytest.MonkeyPatch, final_step: bool
+) -> None:
+    cache = MagicMock(spec=CacheBackend)
+    chat_id = uuid4()
+    store = ChatRunStore(
+        tenant_id="tenant",
+        chat_session_id=chat_id,
+        response_id=1,
+        visible_response_ids=[],
+        cache=cache,
+        follow_up_steps=4,
+        control_cache=cache,
+    )
+    finished = [
+        AgentResultState(
+            recipient_id=chat_id, response_id=index, status=RunStatus.COMPLETE
+        )
+        for index in range(2, 2 + run_store.MAX_AGENT_COMPLETIONS_PER_STEP + 1)
+    ]
+    monkeypatch.setattr(
+        run_store, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
+    )
+    monkeypatch.setattr(run_store, "read_run_inputs", lambda *_: ([], finished))
+    monkeypatch.setattr(
+        run_store,
+        "read_agent_completions",
+        lambda _session, ids: [
+            AgentCompletion(
+                agent_id="child",
+                agent_path="/root/child",
+                run_id=str(response_id),
+                status=RunStatus.COMPLETE,
+            )
+            for response_id in ids
+        ],
+    )
+    run = Run.from_snapshot(
+        RunState(
+            run_id="1",
+            agent_id="parent",
+            status=RunStatus.COMPLETE,
+            progress=RunProgress(
+                step_index=3 if final_step else 2,
+                step_limit=4,
+                tool_configuration_digest="",
+            ),
+        )
+    )
+
+    received = store.receive_inputs(run)
+
+    # The final step is bounded too; unread results wake the agent's next run.
+    assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP

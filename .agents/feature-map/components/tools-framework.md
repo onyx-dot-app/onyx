@@ -159,6 +159,40 @@ result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
 
+**Default subagent controls.** `ChatAgent` adds the tools in
+`tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
+`chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller
+delivers follow-up responses, the request sets `accepts_follow_ups`, as the web chat does, and
+the turn has one model.
+Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
+(`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
+omit these controls. In incognito, chat also excludes the coding agent from tool configuration
+(`chat/execution.py:create_chat_agent`), and preparation rejects deep research before it saves
+the user message (`chat/process_message.py:prepare_chat_turn`). These controls have no
+catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
+with `build_chat_agent`, the same builder that restores saved children.
+Each child builds its own controls and conversation state.
+The controls stay direct in code mode. Each child inherits code mode but owns
+its own code cells.
+`list_agents` shows the whole agent tree of the selected branch, including the root and agents
+from earlier turns; it marks the caller and accepts a `path_prefix` filter. An agent can message
+any other agent in the tree. `send_message` reaches the next model step or starts an idle agent
+with fresh limits; a message to the root waits for the root's next run and never starts one.
+`send_message(delivery="queue")` waits for normal completion or the step limit. `interrupt_agent` cancels one
+agent's active run, except the caller's and the root's, including its in-flight tool calls and
+foreground children; agents it started in the background keep running. The
+interrupted run reports no result and starts no follow-up; its conversation remains.
+Cancellation is cooperative: the runtime signals each tool's `ToolInvocation.cancellation`
+and discards results that arrive later, but a tool that does not check the signal keeps
+running until it returns.
+Results reach the agent's spawner automatically before its next model call.
+A subagent suspends before completing until the results of children it spawned are available.
+The root can finish its response while background children continue.
+An idle agent starts a follow-up response for unread child results. These results
+stay in model history; only the parent's response appears as a chat message.
+Tool replies use concise text. The `agent_id` from spawn/list is the control
+handle; paths are display labels and need not be unique.
+
 **Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
 runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
 return `ChildRunWait`; the runtime calls `result_from_children` when the child
@@ -170,9 +204,6 @@ with no tool calls. Definitions remain advertised for cache reuse where the prov
 Their control functions, such as `think_tool`, `generate_report` and
 `generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
-Incognito chats run no child agents. Chat excludes the coding agent from their tool
-configuration (`chat/execution.py:create_chat_agent`), and preparation rejects deep
-research before it saves the user message (`chat/process_message.py:prepare_chat_turn`).
 
 ---
 

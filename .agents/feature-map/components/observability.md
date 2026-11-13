@@ -39,8 +39,9 @@ for the usage report, log export, query history and workspace analytics.
   429.
 - **An EE admin with query-history permission** reads and exports chat
   sessions. Each answer lists the messages its response accepted while it
-  ran, such as mid-response user messages, in model order. The
-  `query_history_type` setting can hide user emails or turn the feature off.
+  ran, such as mid-response user messages and background agent results, in
+  model order. The `query_history_type` setting can hide user emails or turn
+  the feature off.
 - **An EE admin** sees workspace analytics: query, active-user, Slack bot and
   per-agent counts. A user with agent-analytics permission sees the stats of
   an agent.
@@ -164,15 +165,11 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    budgets do not count it. A new Celery task or endpoint that calls an LLM
    must wrap its work in `tracing/framework/create.py:trace` or
    `tracing/framework/create.py:ensure_trace`.
-   **Trap: the chat root trace ends at the first suspension.**
-   `chat/execution.py:ChatTurnExecution._run_response` wraps only
-   `chat_agent.start(background=False)` in `trace`. The call returns when the
-   run suspends on a `ChildRunWait` (deep research, coding agent). Steps that
-   resume after the children finish run in a thread with the copied context
-   of the ended trace (`agents/runtime.py:Run._wake_execution`). Langfuse then
-   makes orphan spans, and the per-trace incognito drop no longer applies. A
-   root trace must stay open until the run is terminal, or each processor must
-   handle spans after trace end.
+   `chat/execution.py:ChatTurnExecution.run` owns one trace for the turn's
+   models and child agents. It stays open through suspension and until all
+   locally owned child work drains, including background agents after the
+   browser stream closes. Ending the trace earlier loses provider parent
+   links and per-trace content controls for later spans.
 2. `tag-llm-flow` **Tag each new LLM, embedding, rerank, image or voice call
    with an `LLMFlow`.** Set `GenerationContext.flow` on `invoke` or `stream`,
    or use `tracing/llm_utils.py:llm_generation_span` or

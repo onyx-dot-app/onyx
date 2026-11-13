@@ -6,6 +6,7 @@ import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
@@ -166,6 +167,17 @@ export default function SharedChatDisplay({
                           />
                         </div>
                       )}
+                    </div>
+                  );
+                }
+
+                if (message.type === "agent_results") {
+                  return (
+                    <div
+                      key={message.messageId}
+                      className="w-[min(50rem,100%)]"
+                    >
+                      <AgentResultsDivider />
                     </div>
                   );
                 }

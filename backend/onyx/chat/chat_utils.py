@@ -414,6 +414,9 @@ def convert_chat_history(
 
         elif chat_message.message_type == MessageType.ASSISTANT:
             messages.extend(chat_message.response_messages)
+        elif chat_message.message_type == MessageType.AGENT_RESULTS:
+            # Results reach the model as the next response's accepted step inputs.
+            input_start = len(messages)
         else:
             raise ValueError(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"

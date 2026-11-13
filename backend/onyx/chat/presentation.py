@@ -61,6 +61,7 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     UserMessagePacket,
 )
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -83,6 +84,8 @@ def _collect_tool_history(
     snapshot: RunState,
     tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
+    *,
+    include_parent: bool = False,
 ) -> ToolHistorySnapshot:
     """Project completed and interrupted operations from one execution tree.
 
@@ -114,6 +117,7 @@ def _collect_tool_history(
                     snapshot,
                     step_index,
                     index,
+                    include_parent=include_parent,
                 )
             )
             sources = tool_result_sources(result.details) if result else None
@@ -123,7 +127,7 @@ def _collect_tool_history(
                 documents.setdefault(document.document_id, document)
             citations.update_citation_mapping(sources.citations)
     for child in snapshot.child_runs:
-        child_history = _collect_tool_history(child, tool_ids)
+        child_history = _collect_tool_history(child, tool_ids, include_parent=True)
         records.extend(child_history.tool_calls)
         documents.update(child_history.all_search_docs)
     return ToolHistorySnapshot(
@@ -141,6 +145,8 @@ def _tool_record(
     snapshot: RunState,
     turn: int,
     index: int,
+    *,
+    include_parent: bool,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     sources = tool_result_sources(data)
@@ -173,8 +179,8 @@ def _tool_record(
 
     return ToolCallInfo(
         message_id=_message_identity(output),
-        parent_message_id=snapshot.parent_message_id,
-        parent_tool_call_id=snapshot.parent_tool_call_id,
+        parent_message_id=snapshot.parent_message_id if include_parent else None,
+        parent_tool_call_id=snapshot.parent_tool_call_id if include_parent else None,
         turn_index=turn,
         tab_index=index,
         tool_name=tool_call.name,
@@ -570,8 +576,10 @@ def replay_response(
             )
             packets.extend(renderer_of_call.start())
             for child in response.child_runs:
+                # Agent tools start background runs, whose output arrives separately.
                 if (
-                    child.parent_message_id != message_id
+                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+                    or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue

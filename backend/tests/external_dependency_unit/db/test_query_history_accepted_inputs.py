@@ -71,7 +71,10 @@ def test_export_lists_accepted_inputs_in_model_order(
                 id="first", source=InputSource.HUMAN, content="Focus on latency"
             ),
             AcceptedChatInput(
-                id="second", source=InputSource.HUMAN, content="Include support"
+                id="result",
+                source=InputSource.AGENT_RESULT,
+                source_run_id="7",
+                content="Vendor A is faster",
             ),
         ],
     ]
@@ -102,9 +105,10 @@ def test_export_lists_accepted_inputs_in_model_order(
     [pair] = QuestionAnswerPairSnapshot.from_chat_session_snapshot(snapshot)
     assert [accepted.id for accepted in pair.accepted_inputs] == [
         "first",
-        "second",
+        "result",
         "late",
     ]
     assert pair.to_json()["accepted_inputs"] == (
-        "[human] Focus on latency\n\n[human] Include support\n\n[human] Then cost"
+        "[human] Focus on latency\n\n[agent_result] Vendor A is faster\n\n"
+        "[human] Then cost"
     )

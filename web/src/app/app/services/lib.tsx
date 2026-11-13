@@ -240,6 +240,8 @@ export async function* sendMessage({
     // Default to "unknown" for consistency with backend; callers should set explicitly
     origin: origin ?? "unknown",
     additional_context: additionalContext ?? null,
+    // The web chat shows responses that background agents start later.
+    accepts_follow_ups: true,
   };
 
   const body = JSON.stringify(payload);
@@ -526,7 +528,7 @@ export function processRawChatHistory(
       type:
         messageInfo.error_info || messageInfo.error
           ? "error"
-          : (messageInfo.message_type as "user" | "assistant"),
+          : (messageInfo.message_type as Message["type"]),
       files: messageInfo.files,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null

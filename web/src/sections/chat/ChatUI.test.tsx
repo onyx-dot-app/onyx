@@ -471,3 +471,70 @@ test("accepting an instruction reveals preceding text before its user bubble", (
     animation.mockRestore();
   }
 });
+
+test("an automatic follow-up renders a divider instead of a user bubble", () => {
+  const answer = (id: string, content: string): Packet[] => [
+    {
+      placement: { turn_index: 0 },
+      obj: { type: "message_start", id, final_documents: [], content },
+    },
+    { placement: { turn_index: 0 }, obj: { type: "section_end" } },
+    { placement: { turn_index: 0 }, obj: { type: "stop" } },
+  ];
+  const response: BackendMessage = {
+    ...saved,
+    error: null,
+    error_info: null,
+  };
+  const tree = processRawChatHistory(
+    [
+      {
+        ...response,
+        message_id: 1,
+        message_type: "user",
+        parent_message: null,
+        latest_child_message: 2,
+        message: "hi",
+      },
+      { ...response, latest_child_message: 3, message: "Earlier answer" },
+      {
+        ...response,
+        message_id: 3,
+        message_type: "agent_results",
+        parent_message: 2,
+        latest_child_message: 4,
+        message: "",
+      },
+      {
+        ...response,
+        message_id: 4,
+        parent_message: 3,
+        message: "Follow-up answer",
+      },
+    ],
+    [
+      answer("earlier", "Earlier answer"),
+      answer("follow-up", "Follow-up answer"),
+    ]
+  );
+  useChatSessionStore.getState().updateSessionMessageTree("session", tree);
+  render(<ChatUI {...props} />);
+
+  const divider = screen.getByText("Subagent results received");
+  expect(screen.getAllByTestId("human-message-bubble")).toHaveLength(1);
+  expect(
+    screen.getByText("Earlier answer").compareDocumentPosition(divider) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  expect(
+    divider.compareDocumentPosition(screen.getByText("Follow-up answer")) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  // The follow-up names its model but has no question to regenerate from.
+  expect(screen.getAllByTestId("AgentMessage/regenerate")).toHaveLength(1);
+  const followUp = screen
+    .getByText("Follow-up answer")
+    .closest<HTMLElement>('[data-testid="onyx-ai-message"]');
+  if (!followUp) throw new Error("Follow-up answer is missing");
+  expect(within(followUp).getByText("test")).toBeVisible();
+});
