@@ -167,6 +167,5 @@ SUBAGENT_INSTRUCTIONS = """You are an agent in a team of agents. Your parent age
 You can start your own agents with the same tools. Their results arrive as messages before you give your final answer."""
 
 
-ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Use spawn_agent to start an agent on a task in the background, send_message to give an agent new instructions, list_agents to see your agents, and interrupt_agent to stop an agent's current run.
-When an agent finishes, its result arrives automatically as a message.
+ROOT_AGENT_INSTRUCTIONS = """You are the root agent in a team of agents that works for the user. Results from your agents arrive automatically as messages.
 To answer with the combined results of your agents, call wait_agents. To answer now, end your response; later results start a new response."""

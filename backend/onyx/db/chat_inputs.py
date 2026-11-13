@@ -602,9 +602,8 @@ def agent_waits(
 ) -> list[AgentWait]:
     """The root's `wait_agents` calls on the branch that can hold unread results.
 
-    The saved call is the only record of a wait. It holds only runs of its own
-    or earlier root responses, so calls before the oldest unread result's root
-    response are skipped.
+    Calls before the oldest unread result's root response hold nothing, so
+    they are skipped.
     """
     oldest_result_root = (
         select(func.min(ChatInput.root_response_id))

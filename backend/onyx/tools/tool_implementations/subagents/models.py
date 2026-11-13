@@ -13,12 +13,7 @@ class ChatConfiguration(BaseModel):
 
 
 class AgentWaitDetails(BaseModel):
-    """The agents that a root `wait_agents` call waits for; None means all.
-
-    The saved call is the wait's only record. It holds the root's unread
-    results from those agents' runs that belong to its response or an earlier
-    one, including runs that start later from messages already queued.
-    """
+    """The agents that a root `wait_agents` call waits for; None means all."""
 
     type: Literal["agent_wait"] = "agent_wait"
     agent_ids: list[str] | None

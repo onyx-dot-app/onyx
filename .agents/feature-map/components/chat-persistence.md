@@ -231,8 +231,8 @@ follow-up stepping until it has read the rest, then it answers once; it also con
 last read hit that bound. Other results start the recipient's next run, so an answer stays as saved. An interim follow-up leaves the results that an open
 wait holds unread (`db/chat_inputs.py:read_run_inputs`); a user's turn reads all of them.
 `agent_waits` reads waits only when results would wake the root, from the oldest unread
-result's root response on. The existing dispatch callers evaluate the rule: a child's
-release, the turn's own release, the agent host, and `/status`.
+result's root response on. Dispatch evaluates the rule after a child's release, the turn's
+own release, the agent host, and `/status`.
 A pod crash while awaited runs are active, with no browser open, delays the wake until
 `/status` or a run store repairs the orphaned runs.
 A user turn reads the root's unread results at its first step, so it ends a wait whose wake was lost.
