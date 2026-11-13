@@ -56,4 +56,42 @@ describe("CreateCredential", () => {
     await waitFor(() => expect(submitCredential).toHaveBeenCalled());
     expect(submitCredential.mock.calls[0][0]).not.toHaveProperty("name");
   });
+
+  function renderJsm() {
+    render(
+      <CreateCredential
+        sourceType={ValidSources.JiraServiceManagement}
+        accessType="public"
+        refresh={jest.fn()}
+        onSwitch={jest.fn().mockResolvedValue(undefined)}
+      />
+    );
+  }
+
+  it("blocks a JSM submission without an API token", async () => {
+    const user = setupUser();
+    renderJsm();
+    await user.type(screen.getByTestId("jira_user_email"), "agent@example.com");
+    const create = screen.getByRole("button", { name: /Create/ });
+    await waitFor(() => expect(create).toBeDisabled());
+  });
+
+  it("submits a complete JSM credential", async () => {
+    const user = setupUser();
+    renderJsm();
+    await user.type(screen.getByTestId("jira_user_email"), "agent@example.com");
+    await user.type(screen.getByTestId("jira_api_token"), "secret-token");
+    await user.click(screen.getByRole("button", { name: /Create/ }));
+
+    await waitFor(() =>
+      expect(submitCredential).toHaveBeenCalledWith(
+        expect.objectContaining({
+          credential_json: {
+            jira_user_email: "agent@example.com",
+            jira_api_token: "secret-token",
+          },
+        })
+      )
+    );
+  });
 });
