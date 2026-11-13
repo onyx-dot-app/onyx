@@ -278,7 +278,9 @@ def project_response(
     """
     record = response_record(snapshot, registrations)
     response = ChatResponseSnapshot(
-        answer=record.answer,
+        answer=record.steps[record.answer_step_index].message.text
+        if record.answer_step_index is not None
+        else "",
         reasoning=None,
         request_params=snapshot.request_params,
         citation_to_doc={},
@@ -347,7 +349,7 @@ def _project_response_display(
                 continue
             response = response.model_copy(
                 update={
-                    "answer": renderer.answer or response.answer,
+                    "answer": renderer.answer,
                     "reasoning": renderer.reasoning,
                     "citation_info": renderer.citations,
                     "top_documents": renderer.documents or response.top_documents,

@@ -184,21 +184,6 @@ class ResponseRecord(BaseModel):
     def messages(self) -> list[Message]:
         return messages_from_steps(self.steps)
 
-    @property
-    def answer(self) -> str:
-        """The answer step's text; without text, the result of its terminating tool."""
-        if self.answer_step_index is None:
-            return ""
-        step = self.steps[self.answer_step_index]
-        return step.message.text or next(
-            (
-                execution.result.content
-                for execution in step.tools.values()
-                if execution.result is not None and execution.result.terminate
-            ),
-            "",
-        )
-
 
 class HistoryLink(BaseModel):
     id: int

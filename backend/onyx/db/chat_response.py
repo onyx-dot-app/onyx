@@ -585,7 +585,11 @@ class _ResponseWriter:
             )
         )
         if parent is not None:
-            response.message = sanitize_string(record.answer)
+            response.message = (
+                sanitize_string(record.steps[record.answer_step_index].message.text)
+                if record.answer_step_index is not None
+                else ""
+            )
             response.token_count = count_tokens(response.message)
         if record.checkpoint is not None:
             checkpoint = record.checkpoint.model_copy(
