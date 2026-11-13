@@ -2155,7 +2155,7 @@
       "type": "timeseries",
       "id": 42,
       "title": "Time since last accepted report / key registration",
-      "description": "Seconds since the api_server last accepted a node state report or a signing key registration. The api_server treats a node with no report for SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) as dead and places no VM on it.",
+      "description": "Seconds since the api_server last accepted a node state report or a signing key registration. The api_server treats a node with no report for SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180 s) as dead and places no VM on it. A node with no accepted report or registration since the agent started shows more than 50 years (the timestamp is 0).",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2208,7 +2208,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max by (node) (time() - (craft_fc_host_agent_node_report_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"} > 0))",
+          "expr": "max by (node) (time() - craft_fc_host_agent_node_report_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"})",
           "legendFormat": "report {{node}}",
           "refId": "A"
         },
@@ -2217,7 +2217,7 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "max by (node) (time() - (craft_fc_host_agent_key_registration_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"} > 0))",
+          "expr": "max by (node) (time() - craft_fc_host_agent_key_registration_last_success_timestamp_seconds{namespace=~\"$namespace\", node=~\"$node\"})",
           "legendFormat": "key {{node}}",
           "refId": "B"
         }
@@ -2226,8 +2226,8 @@
     {
       "type": "timeseries",
       "id": 43,
-      "title": "Template ready and builds",
-      "description": "template_ready is 1 when the last build from the root drive gave a usable template, 0 before the first build and after a failed one.",
+      "title": "Template ready and builds since agent start",
+      "description": "template_ready is 1 when the last build from the root drive gave a usable template, 0 before the first build and after a failed one. Builds count the start-up build and each BuildTemplate call since the agent started, by result.",
       "datasource": {
         "type": "prometheus",
         "uid": "${DS_PROMETHEUS}"
@@ -2289,8 +2289,8 @@
             "type": "prometheus",
             "uid": "${DS_PROMETHEUS}"
           },
-          "expr": "sum by (node, result) (increase(craft_fc_host_agent_template_builds_total{namespace=~\"$namespace\", node=~\"$node\"}[$__rate_interval]))",
-          "legendFormat": "build {{result}} {{node}}",
+          "expr": "max by (node, result) (craft_fc_host_agent_template_builds_total{namespace=~\"$namespace\", node=~\"$node\"})",
+          "legendFormat": "builds {{result}} {{node}}",
           "refId": "B"
         }
       ]

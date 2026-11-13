@@ -272,8 +272,8 @@ kernel log), or when host processes other than VMs use the memory.
 `TEMPLATE_INCOMPATIBLE`, or a `BuildTemplate` call failed. The node cannot start VMs for that
 template.
 
-The start-up template build has no metric. The api_server skips a node with no template, so this
-alert does not see a failed start-up build. Read the agent log after each agent start.
+The alert also fires when `craft_fc_host_agent_template_ready` is 0: the node has no usable
+template from its root drive, for example after a failed start-up build. The agent log names the cause.
 
 **Check.**
 
