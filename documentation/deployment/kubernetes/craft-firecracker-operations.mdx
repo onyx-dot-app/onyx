@@ -306,7 +306,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100
 - For a 401 with no token, set `auth.metricsAuth` and upgrade. Do not set `DISABLE_METRICS_AUTH: "true"` to fix a 401:
   it also removes the auth of the API server metrics.
 
-**Escalate** when the host agent does not start after one restart,
+**Contact Onyx support** when the host agent does not start after one restart,
 or when `recovered VMs` shows `unresponsive` microVMs.
 
 ### CraftFcHostAgentPodsMissing
@@ -329,7 +329,7 @@ kubectl $K -n $NS get events --sort-by=.lastTimestamp | tail -20
 
 **Fix.** Fix the image, the pull Secret, the toleration, or the node resources. Then delete the failed pod.
 
-**Escalate** when a node with `onyx.app/kvm=true` gets no host agent pod after the fix.
+**Contact Onyx support** when a node with `onyx.app/kvm=true` gets no host agent pod after the fix.
 
 ### CraftFcCreateFailures
 
@@ -355,7 +355,7 @@ The dashboard panel "Admission refusals and failures by reason" shows the reason
 **Fix.** If one node fails and other nodes do not, [drain that node](#drain-a-node) and restart its host agent.
 If all nodes fail after an upgrade, roll back the upgrade.
 
-**Escalate** when the failures continue on a new node or after a rollback.
+**Contact Onyx support** when the failures continue on a new node or after a rollback.
 
 ### CraftFcAdmissionRefusals
 
@@ -391,7 +391,7 @@ The dashboard row "Node memory and disk" shows the trend.
   namespace) and the Role `<DS>-egress-ca-read`.
 - `CAPACITY_VM_SLOTS` with few microVMs, or `SANDBOX_IN_DOUBT`: see [Clear a sandbox in doubt](#clear-a-sandbox-in-doubt).
 
-**Escalate** when the node has free memory and disk but still refuses,
+**Contact Onyx support** when the node has free memory and disk but still refuses,
 or when the refusals continue after more nodes join.
 
 ### CraftFcSessionTransferFailures
@@ -422,7 +422,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
   server and the host agent.
 - `CAPTURE_TOO_LARGE`: the session is too large for the limit.
 
-**Escalate** at once when restores fail: users can lose work.
+**Contact Onyx support** at once when restores fail: users can lose work.
 
 ### CraftFcRelayErrors
 
@@ -446,7 +446,7 @@ The dashboard panel "Relay connections by result" shows which result grows.
   node key is registered (`node signing key registered`).
 - `over_cap` from one microVM: a user program opens too many connections. The limit protects the node.
 
-**Escalate** when the proxy is healthy and the node key is registered, but the errors continue.
+**Contact Onyx support** when the proxy is healthy and the node key is registered, but the errors continue.
 
 ### CraftFcNodeMemoryLow
 
@@ -469,7 +469,7 @@ Compare "Guest memory allocated vs node memory" on the dashboard.
 - [Drain the node](#drain-a-node) if one node stays full and other nodes have space.
 - Stop the microVMs that the API server does not know.
 
-**Escalate** when the kernel stops microVMs on the node (`EXITED` in `agent List`),
+**Contact Onyx support** when the kernel stops microVMs on the node (`EXITED` in `agent List`),
 or when processes other than microVMs use the memory.
 
 ### CraftFcTemplateUnusable
@@ -492,7 +492,7 @@ agent NodeInfo   # templates on the node
 
 **Fix.** See [Rebuild a template](#rebuild-a-template).
 
-**Escalate** when a new build fails on a node of the same type as nodes that work.
+**Contact Onyx support** when a new build fails on a node of the same type as nodes that work.
 
 ## Procedures
 
@@ -527,7 +527,7 @@ The host agent never stops a process that it is not sure of.
   </Step>
 </Steps>
 
-Escalate before you remove a record of a microVM that a user can still use.
+Contact Onyx support before you remove a record of a microVM that a user can still use.
 
 ### Restore a user session
 
