@@ -90,7 +90,8 @@ async function waitForUserRecord(
 
 /**
  * Create an OAuth MCP server through the admin UI, completing the IdP handshake,
- * and enable its tool on the server card. Returns the new server's id.
+ * enable its tool on the server card, and let the tool run without approval.
+ * Returns the new server's id.
  */
 async function configureOauthServer(
   page: Page,
@@ -119,7 +120,12 @@ async function configureOauthServer(
 
   await adminMcp.expectServerDetail(options.serverName);
   await adminMcp.setToolEnabled(options.toolName, true);
-  return adminMcp.connectedServerId();
+  const serverId = await adminMcp.connectedServerId();
+  // These tests cover OAuth and invocation, not approval (mcp_tool_approval.spec.ts).
+  await new OnyxApiClient(page.request).setMcpActionPolicies(serverId, {
+    [options.toolName]: "ALWAYS",
+  });
+  return serverId;
 }
 
 /** Confirm the server is present in chat, then prove the tool actually runs. */

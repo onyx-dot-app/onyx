@@ -29,9 +29,15 @@ from onyx.chat.chat_processing_checker import get_processing_stream_id
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.stop_signal_checker import request_stop
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    replace_workspace_action_policies,
+)
 from onyx.db.chat_inputs import submit_human_message__no_commit
 from onyx.db.chat_response import read_response_steps
 from onyx.db.enums import (
+    ActionPolicy,
+    GatedAppKind,
     IncognitoRecordMode,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -243,6 +249,13 @@ def _persona_with_mcp_tool(
         deleted=False,
     )
     db_session.add_all([*tools, persona])
+    db_session.flush()
+    # These tests run programs, not approvals, so the tools run without asking.
+    replace_workspace_action_policies(
+        db_session,
+        get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, mcp_server.id),
+        dict.fromkeys(tool_names, ActionPolicy.ALWAYS),
+    )
     db_session.commit()
     db_session.refresh(persona)
     return persona, f"mcp__{mcp_server.id}__{MCP_SERVER}"

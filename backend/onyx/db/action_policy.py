@@ -1,5 +1,6 @@
 """Shared app identity, action policy storage, views, and execution decisions."""
 
+from collections.abc import Collection, Mapping
 from typing import Literal
 from uuid import UUID
 
@@ -195,6 +196,42 @@ def effective_action_policy(
     return ActionPolicy.ASK if is_scheduled_task else workspace_policy
 
 
+def _resolve_policies(
+    db_session: Session,
+    *,
+    user_id: UUID,
+    apps: Mapping[int, tuple[bool, Mapping[str, ActionPolicy]]],
+    scheduled_task_id: UUID | None,
+) -> dict[int, dict[str, ActionPolicy]]:
+    """Resolve the catalog defaults of each app, keyed by GatedApp ID with the
+    app's users_can_manage_policies, against current workspace and owner
+    settings. Two queries for any number of apps."""
+    if not apps:
+        return {}
+    workspace: dict[int, dict[str, ActionPolicy]] = {}
+    for gated_app_id, action_id, policy in db_session.execute(
+        select(
+            WorkspaceActionPolicy.gated_app_id,
+            WorkspaceActionPolicy.action_id,
+            WorkspaceActionPolicy.policy,
+        ).where(WorkspaceActionPolicy.gated_app_id.in_(apps.keys()))
+    ).tuples():
+        workspace.setdefault(gated_app_id, {})[action_id] = policy
+    stored = _stored_policies(db_session, user_id, apps.keys(), scheduled_task_id)
+    return {
+        gated_app_id: {
+            action_id: effective_action_policy(
+                workspace.get(gated_app_id, {}).get(action_id, default_policy),
+                users_can_manage,
+                stored.get(gated_app_id, {}).get(action_id),
+                is_scheduled_task=scheduled_task_id is not None,
+            )
+            for action_id, default_policy in default_policies.items()
+        }
+        for gated_app_id, (users_can_manage, default_policies) in apps.items()
+    }
+
+
 def resolve_action_policies(
     db_session: Session,
     *,
@@ -203,46 +240,93 @@ def resolve_action_policies(
     catalog_policies: dict[str, ActionPolicy],
     scheduled_task_id: UUID | None = None,
 ) -> dict[str, ActionPolicy]:
-    """Resolve catalog defaults against current workspace and owner settings."""
+    """Resolve catalog defaults against current workspace and owner settings.
+
+    An app without a GatedApp ID has no settings, so its defaults apply. An ID
+    whose app no longer exists raises NOT_FOUND."""
     if scheduled_task_id is not None and (
         gated_app_id is None
         or not task_app_enabled(db_session, scheduled_task_id, gated_app_id)
     ):
         return dict.fromkeys(catalog_policies, ActionPolicy.DENY)
-    workspace = dict(catalog_policies)
-    stored: dict[str, ActionPolicy] = {}
-    users_can_manage = True
-    if gated_app_id is not None:
-        # Query columns, not identity-map objects: repeated requests need live values.
-        users_can_manage = db_session.scalar(
-            select(GatedApp.users_can_manage_policies).where(
-                GatedApp.id == gated_app_id
-            )
-        )
-        if users_can_manage is None:
-            raise OnyxError(OnyxErrorCode.NOT_FOUND, "App permissions no longer exist")
-        workspace.update(
-            dict(
-                db_session.execute(
-                    select(
-                        WorkspaceActionPolicy.action_id,
-                        WorkspaceActionPolicy.policy,
-                    ).where(WorkspaceActionPolicy.gated_app_id == gated_app_id)
-                )
-                .tuples()
-                .all()
-            )
-        )
-        stored = _stored_policies(db_session, user_id, gated_app_id, scheduled_task_id)
-    return {
-        action_id: effective_action_policy(
-            workspace[action_id],
-            users_can_manage,
-            stored.get(action_id),
-            is_scheduled_task=scheduled_task_id is not None,
-        )
-        for action_id in catalog_policies
+    if gated_app_id is None:
+        return dict(catalog_policies)
+    # Query columns, not identity-map objects: repeated requests need live values.
+    users_can_manage = db_session.scalar(
+        select(GatedApp.users_can_manage_policies).where(GatedApp.id == gated_app_id)
+    )
+    if users_can_manage is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "App permissions no longer exist")
+    return _resolve_policies(
+        db_session,
+        user_id=user_id,
+        apps={gated_app_id: (users_can_manage, catalog_policies)},
+        scheduled_task_id=scheduled_task_id,
+    )[gated_app_id]
+
+
+def resolve_user_action_policies(
+    db_session: Session,
+    *,
+    user_id: UUID,
+    app_kind: GatedAppKind,
+    default_policies_by_target: Mapping[int, Mapping[str, ActionPolicy]],
+) -> dict[int, dict[str, ActionPolicy]]:
+    """`resolve_action_policies` for many targets of one kind (by target ID,
+    e.g. the MCP server ID, then action ID), for a user's own calls outside
+    scheduled tasks. A target without a GatedApp has no settings, so its
+    defaults apply. Three queries for any number of targets."""
+    target_column = _target_column(app_kind)
+    apps = {
+        target_id: (gated_app_id, users_can_manage)
+        for gated_app_id, target_id, users_can_manage in db_session.execute(
+            select(
+                GatedApp.id, target_column, GatedApp.users_can_manage_policies
+            ).where(target_column.in_(default_policies_by_target.keys()))
+        ).tuples()
+        if target_id is not None
     }
+    resolved = _resolve_policies(
+        db_session,
+        user_id=user_id,
+        apps={
+            gated_app_id: (users_can_manage, default_policies_by_target[target_id])
+            for target_id, (gated_app_id, users_can_manage) in apps.items()
+        },
+        scheduled_task_id=None,
+    )
+    return {
+        target_id: resolved[apps[target_id][0]]
+        if target_id in apps
+        else dict(default_policies)
+        for target_id, default_policies in default_policies_by_target.items()
+    }
+
+
+def current_action_policy(
+    db_session: Session, *, user_id: UUID, gated_app_id: int, action_id: str
+) -> ActionPolicy:
+    """The policy of a user's own call of an action now, from the current
+    catalog and settings. An action that left the catalog asks; an app that no
+    longer exists denies."""
+    app = db_session.get(GatedApp, gated_app_id, populate_existing=True)
+    if app is None:
+        return ActionPolicy.DENY
+    return _resolve_policies(
+        db_session,
+        user_id=user_id,
+        apps={
+            app.id: (
+                app.users_can_manage_policies,
+                {
+                    action_id: _catalog_defaults(db_session, app).get(
+                        action_id, ActionPolicy.ASK
+                    )
+                },
+            )
+        },
+        scheduled_task_id=None,
+    )[app.id][action_id]
 
 
 def get_active_scheduled_task_context(
@@ -292,26 +376,38 @@ def task_app_enabled(
 
 
 def _stored_policies(
-    db_session: Session, user_id: UUID, gated_app_id: int, task_id: UUID | None
-) -> dict[str, ActionPolicy]:
+    db_session: Session,
+    user_id: UUID,
+    gated_app_ids: Collection[int],
+    task_id: UUID | None,
+) -> dict[int, dict[str, ActionPolicy]]:
+    """The owner's (or the task's) stored choices, by GatedApp ID."""
     if task_id is not None:
         rows = db_session.execute(
             select(
+                ScheduledTaskActionPolicy.gated_app_id,
                 ScheduledTaskActionPolicy.action_id,
                 ScheduledTaskActionPolicy.policy,
             ).where(
                 ScheduledTaskActionPolicy.scheduled_task_id == task_id,
-                ScheduledTaskActionPolicy.gated_app_id == gated_app_id,
+                ScheduledTaskActionPolicy.gated_app_id.in_(gated_app_ids),
             )
         )
     else:
         rows = db_session.execute(
-            select(UserActionPolicy.action_id, UserActionPolicy.policy).where(
+            select(
+                UserActionPolicy.gated_app_id,
+                UserActionPolicy.action_id,
+                UserActionPolicy.policy,
+            ).where(
                 UserActionPolicy.user_id == user_id,
-                UserActionPolicy.gated_app_id == gated_app_id,
+                UserActionPolicy.gated_app_id.in_(gated_app_ids),
             )
         )
-    return dict(rows.tuples().all())
+    stored: dict[int, dict[str, ActionPolicy]] = {}
+    for gated_app_id, action_id, policy in rows.tuples():
+        stored.setdefault(gated_app_id, {})[action_id] = policy
+    return stored
 
 
 def list_action_policies(
@@ -326,8 +422,8 @@ def list_action_policies(
     """Read accessible catalogs and policy rows in batches. Never creates rows.
 
     A personal read of one app covers every MCP server the user can access,
-    because personal MCP settings do not need Craft. Catalog lists and task
-    reads are Craft surfaces, so they cover only Craft-enabled MCP servers.
+    because chat uses MCP servers too. Catalog lists and task reads are Craft
+    surfaces, so they cover only Craft-enabled MCP servers.
     Task ownership is checked by the scheduled-task endpoint before this read.
     """
     single_app = gated_app_id is not None or target is not None
@@ -577,7 +673,7 @@ def save_user_action_policies(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Workspace settings prevent this action policy change",
         )
-    stored = _stored_policies(db_session, user.id, app.id, None)
+    stored = _stored_policies(db_session, user.id, [app.id], None).get(app.id, {})
     editable = _validate_owner_choices(
         workspace, app.users_can_manage_policies, setting.action_policies, stored
     )
@@ -637,7 +733,9 @@ def replace_task_action_policies(
         app, workspace = _load_workspace_rules(
             db_session, user, setting.gated_app_id, craft_only=True
         )
-        stored = _stored_policies(db_session, user.id, app.id, task.id)
+        stored = _stored_policies(db_session, user.id, [app.id], task.id).get(
+            app.id, {}
+        )
         editable = _validate_owner_choices(
             workspace, app.users_can_manage_policies, setting.action_policies, stored
         )

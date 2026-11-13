@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,7 +9,11 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
-from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ChatSessionSharedStatus,
+)
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
@@ -302,6 +306,12 @@ class RenameChatSessionResponse(BaseModel):
 
 class StopChatResponse(BaseModel):
     message: str
+
+
+class ApprovalDecisionResponse(BaseModel):
+    approval_id: UUID
+    decision: Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]
+    decided_via: ApprovalDecidedVia
 
 
 class StopSubagentsResponse(BaseModel):
