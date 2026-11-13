@@ -159,7 +159,13 @@ serviceAccount:
     iam.gke.io/gcp-service-account: <workload_google_service_account_email>
 ```
 
-On your own cluster, make the same setup:
+On your own cluster, turn on the IAM Service Account Credentials API first. The `gcp/onyx` module does this for you:
+
+```bash
+gcloud services enable iamcredentials.googleapis.com --project=<project>
+```
+
+Then make the same setup:
 a Google service account with `roles/iam.serviceAccountTokenCreator` on itself and write access to the file store
 bucket, mapped to the Onyx Kubernetes service account.
 

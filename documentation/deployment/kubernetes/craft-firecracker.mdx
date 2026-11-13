@@ -117,8 +117,9 @@ The host agent clones microVM disks with reflink copies. The data directory need
 
 - **XFS with reflink.** Amazon Linux 2023 root disks have this. A data disk made with `mkfs.xfs -m reflink=1` also has it.
 - **Any other file system, such as ext4.** {/* depends: loop store */} The host agent makes a sparse XFS file in the
-  data directory, mounts it as a loop device, and keeps its data there. The file grows as microVMs write data.
-  Size the node disk for it.
+  data directory, mounts it as a loop device, and keeps its data there.
+  The node needs the `loop` kernel module and XFS support. By default the file can grow to 80% of the free disk,
+  between 20 GiB and 4 TiB. Set `craft.hostAgent.loopStore.sizeGiB` to choose another size.
 
 A dedicated XFS data disk gives better disk performance than the loop file. To use one,
 mount it at the data directory before the host agent starts.
@@ -162,7 +163,6 @@ mount it at the data directory before the host agent starts.
       sandboxRuntime: firecracker
       firecrackerPreflight:
         enabled: true
-        scratchHostPath: /var/lib/craft-fc
     ```
 
     ```bash
@@ -195,11 +195,13 @@ With `craft.sandboxRuntime: firecracker`, the chart:
 - lets only the API server, the heavy worker, and the Scheduled Task worker reach the agent port (7443);
 - lets the host agent pods reach the sandbox proxy;
 - makes the mutual TLS certificates for the host agent and its clients. {/* depends: chart PR (certs) */}
+  See [Certificates](#certificates).
 
 ### Versions
 
 {/* depends: chart PR (tags derived from global.version) and release image tags (images published on each release) */}
 The chart takes the Firecracker image tags from the Onyx version (`global.version`, without a `-dev` suffix).
+`global.version` must be a pinned Onyx release tag. With `latest`, `edge`, or `beta`, Helm refuses to render the chart.
 For Onyx `v5.2.0`, the chart uses:
 
 | Item | Value |
@@ -209,8 +211,10 @@ For Onyx `v5.2.0`, the chart uses:
 | `SANDBOX_FC_TEMPLATE` | `v5.2.0` |
 
 Keep these defaults. The API server, the host agent, and the root drive of one release work together.
-`craft.hostAgent.image.tag` and `craft.hostAgent.rootfs.image.tag` override the tags, for example for a hotfix image.
-To pull the images from your own registry,
+To use another root drive, set `craft.hostAgent.rootfs.version`. It sets the root drive tag (`rootfs-<version>`)
+and `SANDBOX_FC_TEMPLATE` together. `craft.hostAgent.image.tag` overrides the host agent tag,
+for example for a hotfix image. If you set `craft.hostAgent.rootfs.image.tag` directly,
+also set `configMap.SANDBOX_FC_TEMPLATE` to the version of that root drive. To pull the images from your own registry,
 see [Sizing and images](/deployment/kubernetes/craft-firecracker-sizing#mirror-the-images).
 
 ### Host agent settings
@@ -227,6 +231,22 @@ Most deployments keep the defaults. These settings change often:
 | `craft.hostAgent.nodeSelector` | the sandbox selector plus `onyx.app/kvm=true` | Only if your KVM nodes use other labels. |
 | `craft.hostAgent.apiServerUrl` | the in-cluster API server URL | Keep the default. The host agent must reach the API server without a login page or a web application firewall. |
 | `craft.hostAgent.resources` | 250m CPU, 256Mi memory request, 1Gi memory limit | microVMs run outside these limits, in a host systemd slice. |
+
+### Certificates
+
+{/* depends: chart PR (certs) */} By default, the chart makes a private CA, the host agent certificate,
+and the client certificate. It keeps them in two Secrets:
+`<release>-craft-fc-host-agent-tls` in the host agent namespace and `<release>-craft-fc-host-agent-client-tls` in the
+release namespace. The certificates are valid for 10 years. The chart renews them automatically in their last 30 days.
+To rotate them,
+see [Rotate the certificates](/deployment/kubernetes/craft-firecracker-operations#rotate-the-certificates).
+
+<Warning>
+  The chart reads the existing Secrets from the cluster at each upgrade.
+  Tools that render the chart without cluster access, for example Argo CD or `helm template`,
+  make new certificates at each render. With these tools, use your own certificates:
+  see [Use your own Secrets](#use-your-own-secrets).
+</Warning>
 
 ### Use your own Secrets
 
@@ -255,8 +275,8 @@ craft:
     registrationExistingSecret: craft-fc-node-registration
 ```
 
-**Certificates.** The host agent accepts TLS 1.3 only, and both sides check the peer certificate. Make two Secrets.
-{/* depends: chart PR (certs). Confirm that these values turn off the chart-made certificates. */}
+**Certificates.** The host agent accepts TLS 1.3 only, and both sides check the peer certificate. Make two Secrets,
+and set both `existingSecret` values. Set both or neither. {/* depends: chart PR (certs) */}
 
 | Secret | Namespace | Keys | Content |
 | --- | --- | --- | --- |
@@ -275,6 +295,7 @@ craft:
 ```
 
 The clients connect to host agent pod IPs. Set `client.tlsServerName` to a DNS SAN of the host agent certificate.
+With the chart-made certificates, `client.tlsServerName` is optional.
 Set `clientAllowedSans` to accept only client certificates with one of these SANs. When it is empty,
 the host agent accepts every client certificate that its CA signed.
 

@@ -212,6 +212,8 @@ apply_xfs_device() {
 	command -v mkfs.xfs >/dev/null || die "mkfs.xfs not found. Install xfsprogs."
 	if findmnt -n -S "$dev" >/dev/null 2>&1; then
 		[ "$(findmnt -n -o TARGET -S "$dev")" = "$DATA_DIR" ] || die "$dev is mounted somewhere else"
+		current=$(findmnt -n -o FSTYPE -S "$dev")
+		[ "$current" = "xfs" ] || die "$dev is mounted at $DATA_DIR with the file system $current, not XFS."
 		mounted=1
 	else
 		if [ -n "$(find "$DATA_DIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
@@ -231,8 +233,9 @@ apply_xfs_device() {
 		return
 	fi
 	# The fstab entry makes the mount survive a reboot, also for a disk mounted by hand.
-	local fs_target fs_source
+	local fs_target fs_source fs_options
 	fs_target=$(awk -v u="UUID=$uuid" '$1 == u {print $2; exit}' /etc/fstab)
+	fs_options=$(awk -v d="$DATA_DIR" '$1 !~ /^#/ && $2 == d {print $4; exit}' /etc/fstab)
 	fs_source=$(awk -v d="$DATA_DIR" '$1 !~ /^#/ && $2 == d {print $1; exit}' /etc/fstab)
 	if [ -n "$fs_target" ] && [ "$fs_target" != "$DATA_DIR" ]; then
 		die "/etc/fstab already mounts $dev (UUID=$uuid) at $fs_target. Fix /etc/fstab first."
@@ -240,6 +243,9 @@ apply_xfs_device() {
 	if [ -n "$fs_source" ] && [ "$(findfs "$fs_source" 2>/dev/null || echo "$fs_source")" != "$(readlink -f "$dev")" ]; then
 		die "/etc/fstab already mounts $fs_source at $DATA_DIR. Fix /etc/fstab first."
 	fi
+	case ",$fs_options," in
+	*,noauto,*) die "/etc/fstab mounts $DATA_DIR with noauto, so it does not mount at boot. Remove noauto first." ;;
+	esac
 	if [ -z "$fs_target" ] && [ -z "$fs_source" ]; then
 		if [ "$dry_run" -eq 1 ]; then
 			echo "DRY   append to /etc/fstab: UUID=$uuid $DATA_DIR xfs defaults 0 2"

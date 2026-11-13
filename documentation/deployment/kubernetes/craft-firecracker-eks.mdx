@@ -35,6 +35,7 @@ See [Terraform](/deployment/local/terraform) for the full module.
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=<tag>"
       # ... your existing settings
 
+      enable_network_policy              = true
       enable_craft                       = true
       craft_sandbox_runtime              = "firecracker"
       craft_sandbox_node_instance_types  = ["m8i.4xlarge"]
@@ -57,6 +58,16 @@ See [Terraform](/deployment/local/terraform) for the full module.
     - keeps the group on-demand and keeps IMDSv2 with hop limit 1.
 
     The module refuses a blocked instance type, and a group that mixes `.metal` and nested virtualization types.
+
+    `enable_network_policy = true` turns on NetworkPolicy enforcement in the VPC CNI add-on.
+    Firecracker and pod sandboxes need it. On an existing cluster,
+    set `vpc_cni_addon_version` to the VPC CNI version that the cluster runs,
+    so that the apply does not upgrade the CNI. Check the add-on settings after the apply:
+
+    ```bash
+    aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni \
+      --query 'addon.configurationValues' --output text   # must contain "enableNetworkPolicy": "true"
+    ```
   </Step>
 
   <Step title="Apply">
@@ -93,6 +104,8 @@ or the AWS console.
     - Labels: `onyx.app/workload=sandbox` and `onyx.app/kvm=true`.
     - Taints: `workload=sandbox:NoSchedule` and `onyx.app/kvm=true:NoSchedule`.
     - Instance metadata: IMDSv2 required, hop limit 1.
+    - NetworkPolicy: turn on enforcement in the VPC CNI add-on (`enableNetworkPolicy: "true"`), or use another
+    CNI that enforces it.
   </Step>
 
   <Step title="Set vm.max_map_count">

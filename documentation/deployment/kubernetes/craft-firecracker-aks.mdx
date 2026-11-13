@@ -152,6 +152,9 @@ shared key access can stay off.
     (`az aks update --enable-oidc-issuer --enable-workload-identity`).
     - Make a user-assigned managed identity and federate it to the Onyx service account
     (default `onyx-workload-access` in the namespace `onyx`).
+    - Make that service account with the annotation `azure.workload.identity/client-id: <identity client ID>`.
+    Use the same namespace and name in the federated credential subject
+    (`system:serviceaccount:onyx:onyx-workload-access`).
     - Set `serviceAccount.create: false` and `serviceAccount.name` to that service account in your Helm values.
     - Add the pod label `azure.workload.identity/use: "true"` to the API server and to each Celery worker,
     under their `podLabels` values.

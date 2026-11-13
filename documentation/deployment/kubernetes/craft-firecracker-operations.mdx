@@ -44,8 +44,10 @@ agent NodeInfo   # memory, microVM count, templates, drain state
 agent List       # microVMs on the node
 ```
 
-{/* depends: chart PR (certs). Name the Secret that holds the chart-made client certificate. */}
-With your own certificates,
+{/* depends: chart PR (certs) */} With the chart-made certificates,
+`SECRET` is `<release>-craft-fc-host-agent-client-tls`,
+and `SERVER_NAME` is a DNS SAN of the host agent certificate (`openssl x509 -noout -ext subjectAltName` on its `tls.crt`
+shows it). With your own certificates,
 `SECRET` is `craft.hostAgent.client.existingSecret` and `SERVER_NAME` is `craft.hostAgent.client.tlsServerName`.
 Delete `$D` and stop the port-forward when you are done.
 
@@ -56,7 +58,7 @@ The host agent, the root drive, and the template name follow the Onyx version. A
 <Steps>
   <Step title="Upgrade with Helm">
     ```bash
-    helm upgrade onyx onyx/onyx -n onyx --values onyx-values.yaml --values craft-fc-values.yaml \
+    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml --values craft-fc-values.yaml \
       --values craft-fc-secrets.yaml --version <chart version>
     ```
 
@@ -105,8 +107,15 @@ Stop them after their sessions are saved.
   </Step>
 
   <Step title="Stop the microVMs">
-    List the microVMs with `agent List`. Make sure that each session is saved. Then stop each microVM:
-    `agent Stop '{"sandbox_id": "<id>", "attempt": <n>, "generation": <n>}'`.
+    <Warning>
+      A direct `agent Stop` does not save the session first. Changes after the last session save are lost.
+      No operator command shows when a session was last saved.
+    </Warning>
+
+    Wait until the microVMs stop by themselves:
+    the API server saves a session and stops its microVM after it is idle (15 minutes by default).
+    Check with `agent List`. To stop a microVM at once and accept the data loss, run `agent Stop '{"sandbox_id": "<id>",
+    "attempt": <n>, "generation": <n>}'`.
   </Step>
 
   <Step title="Remove the node">
@@ -121,7 +130,17 @@ To put the node back, run `kubectl $K uncordon <node>` and `agent SetDrain '{"dr
 The host agent reads its certificate files again on the next connection after they change, so it needs no restart.
 The API server and the workers read their client certificate at start.
 
-{/* depends: chart PR (certs). Add the rotation procedure for chart-made certificates. */}
+{/* depends: chart PR (certs) */} For the chart-made certificates, delete both Secrets and upgrade.
+The chart makes new certificates, and the clients restart by themselves:
+
+```bash
+kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-tls
+kubectl $K -n $REL delete secret onyx-craft-fc-host-agent-client-tls
+helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
+  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
+```
+
+The Secret names start with the release name (`onyx` here). New calls to the host agents fail until the upgrade ends.
 
 For your own certificates (`existingSecret`):
 

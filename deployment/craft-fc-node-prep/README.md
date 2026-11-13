@@ -14,7 +14,9 @@ The default data dir is `/var/lib/craft-fc`, the chart default of `craft.hostAge
 `apply` never erases data. It refuses a device that has a file system other than XFS, and a device that is mounted
 somewhere else, and a data dir that is not empty (a mount would hide its files). It cannot turn on cgroup v2 or VT-x: `check` names the fix.
 
-Without `--xfs-device`, a data dir on ext4 is fine: the host agent makes its own XFS loop file there.
+Without `--xfs-device`, a data dir on ext4 needs a host agent with the XFS loop store (Onyx releases with the
+`craft.hostAgent.loopStore` chart values). It then makes its own XFS loop file there. Older host agents need an XFS
+data dir with reflink: use `--xfs-device`.
 
 ## Tests
 
