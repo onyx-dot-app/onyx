@@ -30,6 +30,7 @@ from onyx.file_processing.extract_file_text import (
     ExtractionResult,
     extract_text_and_images,
     get_file_ext,
+    is_text_file,
 )
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.image_utils import store_image_and_create_section
@@ -106,10 +107,15 @@ def _process_file(
     extension = get_file_ext(file_name)
 
     if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-        logger.warning(
-            "Skipping file '%s' with unrecognized extension '%s'", file_name, extension
-        )
-        return []
+        file.seek(0)
+        if not is_text_file(file):
+            logger.warning(
+                "Skipping file '%s' with unrecognized extension '%s'",
+                file_name,
+                extension,
+            )
+            return []
+        file.seek(0)
 
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)

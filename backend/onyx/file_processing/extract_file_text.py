@@ -1063,6 +1063,11 @@ def _extract_text_and_images(
         if extension in OnyxFileExtensions.PLAIN_TEXT_EXTENSIONS:
             return extract_result_from_text_file(file)
 
+        # Fallback for plain-text data if extension is not explicitly listed
+        file.seek(0)
+        if is_text_file(file):
+            return extract_result_from_text_file(file)
+
         # If it's an image file or something else, we do not parse embedded images from them
         # just return empty text
         return ExtractionResult(text_content="", embedded_images=[], metadata={})
