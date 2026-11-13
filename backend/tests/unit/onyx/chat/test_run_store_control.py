@@ -269,7 +269,7 @@ def test_every_step_receives_a_bounded_number_of_child_results(
             root_response_id=1,
             status=RunStatus.COMPLETE,
         )
-        for index in range(2, 2 + run_store.MAX_RUNNING_AGENTS + 1)
+        for index in range(2, 2 + run_store.MAX_AGENT_COMPLETIONS_PER_STEP + 1)
     ]
     monkeypatch.setattr(
         run_store, "get_session_with_tenant", lambda **_: nullcontext(MagicMock())
@@ -303,10 +303,8 @@ def test_every_step_receives_a_bounded_number_of_child_results(
 
     received = store.receive_inputs(run)
 
-    # A step reads the results of every agent that a branch can run at once,
-    # which a wait can hold. The final step is bounded too; unread results wake
-    # the agent's next run.
-    assert len(received) == run_store.MAX_RUNNING_AGENTS
+    # The final step is bounded too; the run reads the rest in later steps.
+    assert len(received) == run_store.MAX_AGENT_COMPLETIONS_PER_STEP
 
 
 def test_the_agent_cap_counts_runs_of_a_later_turn_on_the_branch(

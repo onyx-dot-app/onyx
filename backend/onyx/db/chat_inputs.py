@@ -977,26 +977,6 @@ def consume_inputs__no_commit(
     return set(consumed) == pending_ids
 
 
-def has_pending_sends(
-    session: Session,
-    agent_id: str,
-    run_id: int,
-    root_branch: Collection[int] | None,
-) -> bool:
-    """Read unreceived steering; a send that misses its run starts the next one."""
-    return (
-        session.scalar(
-            select(ChatInput.id)
-            .where(
-                ChatInput.recipient_session_id == UUID(agent_id),
-                _sends(run_id, root_branch),
-            )
-            .limit(1)
-        )
-        is not None
-    )
-
-
 def _invocation_ids(invocation: ToolCall | None) -> tuple[str, str, str]:
     """The parent run, assistant message, and tool call identities of an invocation."""
     if invocation is None or invocation.parent_chat_message_id is None:

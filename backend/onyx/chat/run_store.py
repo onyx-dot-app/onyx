@@ -67,7 +67,6 @@ from onyx.db.chat_inputs import (
     enqueue_message,
     fail_inbox_start__no_commit,
     fail_response_start__no_commit,
-    has_pending_sends,
     lock_agent,
     read_chat_inbox,
     read_run_inputs,
@@ -110,9 +109,9 @@ OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
 INPUT_POLL_SECONDS = 1.0
 MAX_RUNNING_AGENTS = 10
-# A wait can hold every agent that a branch runs at once, so one step reads all
-# of their results.
-MAX_AGENT_COMPLETIONS_PER_STEP = MAX_RUNNING_AGENTS
+# A step reads at most this many finished results; a run reads the rest in its
+# next steps before it answers.
+MAX_AGENT_COMPLETIONS_PER_STEP = 8
 RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
 # Start failures that a later poll retries; other failures end the inbox work.
 _RETRYABLE_START_ERRORS = (
@@ -482,8 +481,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 self._root_branch(run),
                 self._input_branch.message_ids,
             )
-        # Each step reads a bounded number of results; the rest stay unread and
-        # wake the agent's next run.
+        # Each step reads a bounded number of results; `has_unread_inputs` keeps
+        # the run stepping until it has read the rest.
         completed = [
             result.response_id for result in results if result.status.is_terminal
         ][:MAX_AGENT_COMPLETIONS_PER_STEP]
@@ -521,11 +520,21 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 return True
 
     def has_unread_inputs(self, run: Run) -> bool:
-        # A send that arrives after this check starts the recipient's next run.
+        """Sends and the results that wake this run, which it reads before it answers.
+
+        A step reads a bounded number of results, so a run that has more keeps
+        stepping. Input that arrives after this check starts the recipient's
+        next run.
+        """
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            return has_pending_sends(
-                session, run.agent_id, int(run.id), self._root_branch(run)
+            messages, results = read_run_inputs(
+                session,
+                run.agent_id,
+                run.id,
+                self._root_branch(run),
+                self._input_branch.message_ids,
             )
+        return bool(messages) or any(result.wakes_recipient for result in results)
 
     def _read_inbox(self) -> ChatInbox | None:
         """Read the inbox; None when this store's response left the selected branch."""

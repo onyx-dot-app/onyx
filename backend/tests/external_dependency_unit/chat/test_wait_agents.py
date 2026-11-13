@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.cache.factory import get_cache_backend
-from onyx.chat import execution
+from onyx.chat import execution, run_store
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
@@ -429,6 +429,27 @@ def test_the_root_waits_for_staggered_agents_and_answers_once(
         response.id for response in finished
     )
     # The follow-up read the results, so the wait cannot wake the root again.
+    assert read_chat_inbox(db_session, chat.id).next_turn is None
+
+
+@pytest.mark.usefixtures("idle_turn_work")
+def test_a_wait_with_more_results_than_one_step_reads_answers_once(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A step reads at most two results here, so the follow-up reads the third
+    in a later step before it answers."""
+    monkeypatch.setattr(run_store, "MAX_AGENT_COMPLETIONS_PER_STEP", 2)
+    names = ("alpha", "beta", "gamma")
+    workers = Workers(names)
+    _start(chat, owner, workers, monkeypatch)
+    for name in names:
+        _finish(db_session, chat, workers, name)
+    _settled(db_session, chat.id, 2)
+    [follow_up] = _follow_ups(db_session, chat.id)
+    assert follow_up.message == "Answer with alpha, beta, gamma"
     assert read_chat_inbox(db_session, chat.id).next_turn is None
 
 

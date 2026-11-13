@@ -99,7 +99,6 @@ from onyx.db.chat_inputs import (
     consume_inputs__no_commit,
     enqueue_message,
     fail_inbox_start__no_commit,
-    has_pending_sends,
     latest_agent_response,
     lock_agent,
     pending_inputs,
@@ -3779,7 +3778,7 @@ def test_unreceived_send_starts_the_next_child_run(
     )
     late = enqueue_message(db_session, branch, request, response.id)
     assert late.run_id == child.run_id
-    assert has_pending_sends(db_session, child.agent_id, int(child.run_id), None)
+    assert read_run_inputs(db_session, child.agent_id, child.run_id, None, None)[0]
     child_row.response_status = RunStatus.ERROR
     idle = enqueue_message(db_session, branch, request, response.id)
     assert idle.run_id is None
