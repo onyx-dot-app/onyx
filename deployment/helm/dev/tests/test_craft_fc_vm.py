@@ -87,6 +87,16 @@ class BundleTest(unittest.TestCase):
         self.assertEqual(infos["skill/SKILL.md"].date_time, vm.ZIP_EPOCH)
         self.assertEqual(len(bundle.warnings), 1)
         self.assertIn("noexec", bundle.warnings[0])
+        self.assertIn("`sh /mnt/skills/skill/run.sh`", bundle.warnings[0])
+
+    def test_run_hint_uses_shebang(self) -> None:
+        self.assertEqual(
+            vm.run_hint("a/x.py", b"#!/usr/bin/env python3\n", "/mnt/spaces"),
+            "python3 /mnt/spaces/a/x.py",
+        )
+        self.assertEqual(
+            vm.run_hint("x", b"#!/bin/bash\n", "/mnt/skills"), "bash /mnt/skills/x"
+        )
 
     def test_refuses_symlink(self) -> None:
         src = self.tree("s", {"a.md": b"a"})
@@ -373,6 +383,23 @@ class LogLineTest(unittest.TestCase):
         self.assertEqual(
             vm.log_line(f"plain {self.sid}", self.sid, guest=False, agent=True),
             f"plain {self.sid}",
+        )
+
+    def test_tail_counts_only_this_vm(self) -> None:
+        mine = [json.dumps({"msg": f"m{i}", "sandbox_id": self.sid}) for i in range(3)]
+        other = [json.dumps({"msg": "o", "sandbox_id": "x"})] * 5
+        lines = [mine[0], *other, mine[1], *other, mine[2], *other]
+        shown = list(vm.matching_lines(lines, self.sid, guest=True, agent=True, tail=2))
+        self.assertEqual([s.split()[0] for s in shown], ["m1", "m2"])
+        self.assertEqual(
+            len(
+                list(
+                    vm.matching_lines(
+                        lines, self.sid, guest=True, agent=True, tail=None
+                    )
+                )
+            ),
+            3,
         )
 
 

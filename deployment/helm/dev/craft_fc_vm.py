@@ -16,6 +16,7 @@ explicitly. The commands act only on the sandbox of your user
 """
 
 import argparse
+import collections
 import hashlib
 import io
 import json
@@ -62,6 +63,7 @@ class Target:
     namespace: str = "onyx"
     agent_namespace: str = "onyx-sandbox-runtime"
     agent_selector: str = "app.kubernetes.io/component=craft-fc-host-agent"
+    agent_container: str = "host-agent"
     api_deployment: str = "onyx-api-server"
     api_container: str = "api-server"
     tenant_id: str | None = None
@@ -148,6 +150,7 @@ def target_from(
         namespace=_opt(namespaces, "app") or defaults.namespace,
         agent_namespace=_opt(namespaces, "agent") or defaults.agent_namespace,
         agent_selector=_opt(agent, "selector") or defaults.agent_selector,
+        agent_container=_opt(agent, "container") or defaults.agent_container,
         api_deployment=_opt(_section(data, "api"), "deployment")
         or defaults.api_deployment,
         tenant_id=tenant_id,
@@ -194,7 +197,16 @@ def _walk(src: Path) -> Iterator[tuple[str, Path]]:
         yield rel.as_posix(), path
 
 
-def build_bundle(src: Path) -> Bundle:
+def run_hint(name: str, data: bytes, mount_path: str) -> str:
+    """How to run a script from the noexec mount: through its interpreter."""
+    shebang = data.split(b"\n", 1)[0]
+    interpreter = (
+        "python3" if b"python" in shebang else "bash" if b"bash" in shebang else "sh"
+    )
+    return f"{interpreter} {mount_path}/{name}"
+
+
+def build_bundle(src: Path, mount_path: str = "/mnt/skills") -> Bundle:
     """A zip of src that the agent accepts as a managed bundle. Same tree,
     same bytes: sorted names, fixed times and modes. The agent rejects
     symlinks and special files, so this refuses them first."""
@@ -227,7 +239,8 @@ def build_bundle(src: Path) -> Bundle:
             executable = bool(mode & 0o111)
             if data.startswith(b"#!"):
                 warnings.append(
-                    f"{name}: the mount is noexec; run it as `sh {name}` or `python {name}`"
+                    f"{name}: the mount is noexec; run it as "
+                    f"`{run_hint(name, data, mount_path)}`"
                 )
             info = zipfile.ZipInfo(name, ZIP_EPOCH)
             info.compress_type = zipfile.ZIP_DEFLATED
@@ -406,7 +419,7 @@ def cmd_exec(target: Target, args: argparse.Namespace) -> int:
 
 
 def cmd_skills_push(target: Target, args: argparse.Namespace) -> int:
-    bundle = build_bundle(Path(args.dir))
+    bundle = build_bundle(Path(args.dir), f"/mnt/{args.mount}")
     for warning in bundle.warnings:
         print(f"warning: {warning}", file=sys.stderr)
     print(
@@ -470,6 +483,27 @@ def log_line(raw: str, sandbox_id: str, *, guest: bool, agent: bool) -> str | No
     return f"{data.get('time', '')} {data.get('level', '')} {data.get('msg', '')} {extra}".strip()
 
 
+def matching_lines(
+    lines: Iterable[str],
+    sandbox_id: str,
+    *,
+    guest: bool,
+    agent: bool,
+    tail: int | None,
+) -> Iterator[str]:
+    """The display lines of this sandbox; with tail, only the last `tail`."""
+    shown = (
+        s
+        for raw in lines
+        if (s := log_line(raw.rstrip("\n"), sandbox_id, guest=guest, agent=agent))
+        is not None
+    )
+    if tail is None:
+        yield from shown
+    else:
+        yield from collections.deque(shown, maxlen=tail)
+
+
 def agent_pods(target: Target, node: str | None) -> list[str]:
     argv = target.kubectl(target.agent_namespace) + [
         "get",
@@ -496,6 +530,8 @@ def cmd_logs(target: Target, args: argparse.Namespace) -> int:
     )
     if not pods:
         raise CommandError(f"no host agent pods in {target.agent_namespace}")
+    if args.follow and args.tail is not None:
+        raise CommandError("-f streams from --since; --tail works only without -f")
     if args.follow and len(pods) > 1:
         raise CommandError(
             "-f needs one agent pod; wake the VM first so its node is known"
@@ -503,22 +539,23 @@ def cmd_logs(target: Target, args: argparse.Namespace) -> int:
     guest = not args.agent
     agent = not args.guest
     for pod in pods:
+        # --tail counts this VM's lines, so the filter applies it, not kubectl.
         argv = target.kubectl(target.agent_namespace) + [
             "logs",
             pod,
+            "-c",
+            target.agent_container,
             f"--since={args.since}",
         ]
-        if args.tail is not None:
-            argv.append(f"--tail={args.tail}")
         if args.follow:
             argv.append("-f")
         proc = subprocess.Popen(argv, stdout=subprocess.PIPE, text=True)
         assert proc.stdout is not None
         try:
-            for raw in proc.stdout:
-                shown = log_line(raw.rstrip("\n"), sandbox_id, guest=guest, agent=agent)
-                if shown is not None:
-                    print(shown, flush=True)
+            for shown in matching_lines(
+                proc.stdout, sandbox_id, guest=guest, agent=agent, tail=args.tail
+            ):
+                print(shown, flush=True)
         except KeyboardInterrupt:
             proc.terminate()
         proc.wait()
@@ -565,7 +602,9 @@ def parser() -> argparse.ArgumentParser:
     which.add_argument("--guest", action="store_true", help="only guest console lines")
     which.add_argument("--agent", action="store_true", help="only agent lines")
     logs.add_argument("--since", default="1h")
-    logs.add_argument("--tail", type=int)
+    logs.add_argument(
+        "--tail", type=int, help="only the last N lines of your VM (not with -f)"
+    )
     logs.add_argument("-f", "--follow", action="store_true")
     logs.set_defaults(handler=cmd_logs)
 
