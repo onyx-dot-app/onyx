@@ -34,6 +34,7 @@ so that the rest of the code can persist it, render it in the UI, etc. The respo
 refer to by using matching keywords to other parts of the prompt and reminders.
 """
 
+import re
 import time
 from collections.abc import Callable
 from functools import cached_property
@@ -43,7 +44,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.chat.emitter import Emitter
-from onyx.configs.chat_configs import MAX_CHUNKS_FED_TO_CHAT
+from onyx.configs.chat_configs import (
+    MAX_CHUNKS_FED_TO_CHAT,
+    SEARCH_CHUNK_TOKEN_OVERHEAD,
+    SEARCH_CONTEXT_TOKEN_RESERVE,
+    SEARCH_HIGH_RECALL_SELECTED_SECTIONS,
+    SEARCH_MIN_SELECTED_SECTIONS,
+)
 from onyx.configs.constants import DocumentSource, FederatedConnectorSource
 from onyx.context.search.federated.slack_search import slack_retrieval
 from onyx.context.search.models import (
@@ -148,6 +155,36 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 QUERIES_FIELD = "queries"
+
+
+_HIGH_RECALL_PATTERNS = (
+    re.compile(
+        r"全部|所有|逐一|完整(?:列出|罗列)|尽可能多|有哪些|列出|罗列|盘点|清单|汇总"
+    ),
+    re.compile(
+        r"(?:总结|概括).{0,16}(?:知识库|站点|网站).{0,24}(?:案例|文档|资料|条目)"
+    ),
+    re.compile(
+        r"\b(all|every|list|enumerate|catalog|inventory|comprehensive|exhaustive)\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def is_high_recall_query(query: str) -> bool:
+    """Return True when the user asks for broad source coverage."""
+    return any(pattern.search(query) for pattern in _HIGH_RECALL_PATTERNS)
+
+
+def calculate_llm_chunk_limit(
+    requested_limit: int,
+    max_input_tokens: int,
+) -> int:
+    """Fit search chunks into the model context and keep a fixed reserve."""
+    usable_tokens = max(0, max_input_tokens - SEARCH_CONTEXT_TOKEN_RESERVE)
+    estimated_chunk_tokens = DOC_EMBEDDING_CONTEXT_SIZE + SEARCH_CHUNK_TOKEN_OVERHEAD
+    context_limit = max(1, usable_tokens // estimated_chunk_tokens)
+    return max(1, min(requested_limit, context_limit))
 
 
 class QueryExpansionAndScope(BaseModel):
@@ -321,6 +358,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         self.auto_detect_filters = auto_detect_filters
 
         self._search_cycles: list[SearchCycle] = []
+        self._grounded_evidence: list[str] = []
         self._cached_expansion: tuple[str | None, list[str]] | None = None
         self._scope_decision_settled = False
         self._time_filter: TimeFilter | None = None
@@ -876,13 +914,27 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             list(self._search_cycles),
             llm_queries,
         )
-        expansion = self._expand_queries_and_decide_scope(
-            skip_query_expansion=override_kwargs.skip_query_expansion,
-            message_history=message_history,
-            user_info=user_info,
-            memories=memories,
-            decide_args=decide_args,
+        expansion = (
+            QueryExpansionAndScope(
+                semantic_query=None, keyword_queries=[], plan_scope=None
+            )
+            if override_kwargs.grounded_fast_mode
+            else self._expand_queries_and_decide_scope(
+                skip_query_expansion=override_kwargs.skip_query_expansion,
+                message_history=message_history,
+                user_info=user_info,
+                memories=memories,
+                decide_args=decide_args,
+            )
         )
+        if override_kwargs.grounded_fast_mode:
+            from onyx.chat.knowledge_rag import lexical_queries
+
+            expansion.keyword_queries = lexical_queries(
+                override_kwargs.original_query or llm_queries[0]
+            )
+            federated_retrieval_infos = []
+            slack_access_token = None
         semantic_query = expansion.semantic_query
         keyword_queries = expansion.keyword_queries
         plan_scope = expansion.plan_scope
@@ -1087,7 +1139,9 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     self._run_search_for_query,
                     (
                         query,
-                        KEYWORD_QUERY_HYBRID_ALPHA,
+                        0.0
+                        if override_kwargs.grounded_fast_mode
+                        else KEYWORD_QUERY_HYBRID_ALPHA,
                         override_kwargs.num_hits,
                         acl_filters,
                         embedding_model,
@@ -1141,9 +1195,38 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             id_extractor=lambda chunk: f"{chunk.document_id}_{chunk.chunk_id}",
         )
 
+        if override_kwargs.grounded_fast_mode:
+            from onyx.chat.knowledge_rag import indexed_case_chunks, is_case_overview
+
+            if is_case_overview(override_kwargs.original_query or llm_queries[0]):
+                from onyx.context.search.pipeline import _build_index_filters
+
+                case_filters = _build_index_filters(
+                    user_provided_filters=effective_filters,
+                    user=self.user,
+                    project_id_filter=self.project_id_filter,
+                    persona_id_filter=self.persona_id_filter,
+                    persona_document_sets=self.persona_search_info.document_set_names,
+                    persona_time_cutoff=self.persona_search_info.search_start_date,
+                    acl_filters=acl_filters,
+                )
+                case_chunks = indexed_case_chunks(self.document_index, case_filters)
+                seen = {(c.document_id, c.chunk_id) for c in case_chunks}
+                top_chunks = case_chunks + [
+                    c for c in top_chunks if (c.document_id, c.chunk_id) not in seen
+                ]
+
         # We can disregard all of the chunks that exceed the num_hits parameter since it's not valid to have
         # documents/contents from things that aren't returned to the user on the frontend
-        top_sections = merge_individual_chunks(top_chunks)[: override_kwargs.num_hits]
+        top_sections = merge_individual_chunks(top_chunks)
+        if override_kwargs.grounded_fast_mode:
+            from onyx.chat.knowledge_rag import diversify_sections
+
+            top_sections = diversify_sections(
+                top_sections, override_kwargs.num_hits or 50
+            )
+        else:
+            top_sections = top_sections[: override_kwargs.num_hits]
 
         if not top_sections:
             logger.info("Search tool - no results found, returning empty response")
@@ -1158,6 +1241,37 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
                     displayed_docs=None,
                 ),
                 llm_facing_response=empty_response,
+            )
+
+        if override_kwargs.grounded_fast_mode:
+            from onyx.chat.knowledge_rag import rank_sections
+
+            top_sections = rank_sections(
+                top_sections, override_kwargs.original_query or llm_queries[0]
+            )
+            docs = convert_inference_sections_to_search_docs(
+                top_sections, is_internet=False
+            )
+            self._grounded_evidence = [
+                section.combined_content for section in top_sections
+            ]
+            payload, mapping = convert_inference_sections_to_llm_string(
+                top_sections=top_sections,
+                citation_start=override_kwargs.starting_citation_num,
+                limit=override_kwargs.max_llm_chunks,
+                include_document_id=False,
+                include_link=True,
+            )
+            self.emitter.emit(
+                Packet(
+                    placement=placement, obj=SearchToolDocumentsDelta(documents=docs)
+                )
+            )
+            return ToolResponse(
+                rich_response=SearchDocsResponse(
+                    search_docs=docs, displayed_docs=docs, citation_mapping=mapping
+                ),
+                llm_facing_response=payload,
             )
 
         # Enrich chunks with `Document.file_id` (Postgres-only metadata not
@@ -1177,13 +1291,23 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         )
 
         token_counter = get_llm_token_counter(self.llm)
+        effective_llm_chunks = calculate_llm_chunk_limit(
+            requested_limit=override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT,
+            max_input_tokens=self.llm.config.max_input_tokens,
+        )
+        high_recall_query = is_high_recall_query(secondary_flows_user_query)
+        minimum_sections = (
+            SEARCH_HIGH_RECALL_SELECTED_SECTIONS
+            if high_recall_query
+            else SEARCH_MIN_SELECTED_SECTIONS
+        )
 
         # Trim sections to fit within token budget before LLM selection
         # This is to account for very short chunks flooding the search context
         # Only consider MAX_CHUNKS_FOR_RELEVANCE chunks per section to avoid flooding from
         # documents with many matching sections
         max_tokens_for_selection = (
-            (override_kwargs.max_llm_chunks or MAX_CHUNKS_FED_TO_CHAT)
+            effective_llm_chunks
             * DOC_EMBEDDING_CONTEXT_SIZE
             * SELECTION_TOKEN_BUDGET_MULTIPLIER
         )
@@ -1207,6 +1331,8 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             llm=self.selection_llm,
             max_chunks_per_section=MAX_CHUNKS_FOR_RELEVANCE,
             enforce_llm_input_budget=self.enforce_selection_input_budget,
+            try_to_fill_to_max=high_recall_query,
+            minimum_sections=min(minimum_sections, len(sections_for_selection)),
         )
 
         # End timing for LLM document selection
@@ -1300,7 +1426,7 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
         docs_str, citation_mapping = convert_inference_sections_to_llm_string(
             top_sections=merged_sections,
             citation_start=override_kwargs.starting_citation_num,
-            limit=override_kwargs.max_llm_chunks,
+            limit=effective_llm_chunks,
             include_document_id=False,
             include_link=override_kwargs.include_link,
             note=scope_note or None,
@@ -1315,6 +1441,15 @@ class SearchTool(Tool[SearchToolOverrideKwargs]):
             format(document_expansion_elapsed, ".3f"),
         )
 
+        logger.info(
+            "event=rag_search_pipeline high_recall=%s selection_candidates=%s selected=%s expanded=%s merged=%s llm_chunk_limit=%s",
+            high_recall_query,
+            len(sections_for_selection),
+            len(selected_sections),
+            len(expanded_sections),
+            len(merged_sections),
+            effective_llm_chunks,
+        )
         llm_facing_response = docs_str
 
         return ToolResponse(

@@ -16,6 +16,7 @@ from enum import StrEnum
 class LLMFlow(StrEnum):
     # Chat / agent
     CHAT_RESPONSE = "chat_response"
+    KNOWLEDGE_SYNTHESIS = "knowledge_synthesis"
     CHAT_HISTORY_SUMMARIZATION = "chat_history_summarization"
     MODEL_VALIDATION = "model_validation"
 

@@ -32,6 +32,12 @@ here. Read the component that documents the setting in its env table.
 | `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go` | tools-framework, mcp-and-custom-tools |
 | `terraform-provider-onyx/docs/resources/custom_tool.md` | tools-framework, mcp-and-custom-tools |
 
+## Backend: QEdge Beta grounded summaries
+
+| Path | Component(s) |
+|---|---|
+| `backend/onyx/chat/knowledge_rag.py`, `backend/onyx/db/knowledge_rag.py` | core-chat-loop, internal-search |
+
 ## Backend: core loop
 
 | Path | Component(s) |

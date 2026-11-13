@@ -47,6 +47,12 @@ from onyx.chat.incognito_context import (
     incognito_session_ended,
     load_incognito_context,
 )
+from onyx.chat.knowledge_rag import enabled as knowledge_enabled
+from onyx.chat.knowledge_rag import (
+    run_knowledge_turn,
+    summary_model_override,
+    summary_request_policy,
+)
 from onyx.chat.llm_loop import EmptyLLMResponseError, run_llm_loop
 from onyx.chat.models import (
     AnswerStream,
@@ -679,6 +685,19 @@ def build_chat_turn(
         if is_multi
         else [new_msg_req.llm_override or chat_session.llm_override]
     )
+    # Route ordinary summaries and deeper analysis before model bookkeeping.
+    use_knowledge_route = (
+        not is_multi
+        and persona is not None
+        and knowledge_enabled(persona.id)
+        and not new_msg_req.file_descriptors
+        and chat_session.project_id is None
+        and chat_session.incognito_record_mode is None
+    )
+    if use_knowledge_route:
+        routed = summary_model_override()
+        if routed is not None:
+            selected_overrides = [routed]
     # Provider-keyed so the factory can apply it to whichever provider the
     # persona resolution lands on, with final precedence over other sources.
     incognito_policy_fn = partial(
@@ -690,7 +709,9 @@ def build_chat_turn(
             user=user,
             llm_override=override,
             additional_headers=litellm_additional_headers,
-            policy_fn=incognito_policy_fn,
+            policy_fn=summary_request_policy
+            if use_knowledge_route
+            else incognito_policy_fn,
         )
         check_llm_cost_limit_for_provider(
             db_session=db_session,
@@ -1180,6 +1201,13 @@ def _run_models(
         ``OverallStop(stop_reason="user_cancelled")`` if the connection drops).
     """
     n_models = len(setup.llms)
+    knowledge_mode = (
+        n_models == 1
+        and knowledge_enabled(setup.persona.id)
+        and not setup.chat_files_for_tools
+        and not setup.chat_session_project_id
+        and setup.incognito_record_mode is None
+    )
 
     # Workspace toggle: infer source/time filters from the query (default on).
     auto_detect_search_filters = load_settings().auto_detect_search_filters is not False
@@ -1265,7 +1293,7 @@ def _run_models(
                 assistant_message=setup.reserved_messages[model_idx],
                 llm=setup.llms[model_idx],
                 reserved_tokens=setup.reserved_token_count,
-                run_compression=run_compression,
+                run_compression=run_compression and not knowledge_mode,
                 # The single compression check must still protect the
                 # smallest-window model, so it measures against the min
                 # window across the turn's models.
@@ -1376,7 +1404,18 @@ def _run_models(
                 )
 
             # Per-thread copy: run_llm_loop mutates simple_chat_history in-place.
-            if n_models == 1 and setup.new_msg_req.deep_research:
+            if knowledge_mode:
+                run_knowledge_turn(
+                    emitter=model_emitter,
+                    state=sc,
+                    history=list(setup.simple_chat_history),
+                    tools=model_tools,
+                    persona=setup.persona,
+                    llm=model_llm,
+                    force_deep=setup.new_msg_req.deep_research,
+                    include_citations=setup.new_msg_req.include_citations,
+                )
+            elif n_models == 1 and setup.new_msg_req.deep_research:
                 if setup.chat_session_project_id:
                     raise RuntimeError("Deep research is not supported for projects")
                 run_deep_research_llm_loop(

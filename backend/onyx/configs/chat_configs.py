@@ -5,6 +5,25 @@ NUM_RETURNED_HITS = 50
 # May be less depending on model
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
+# Keep room for instructions, chat history, tool schemas, and the final answer.
+# Search context uses the remaining model context window.
+SEARCH_CONTEXT_TOKEN_RESERVE = max(
+    1024, int(os.environ.get("SEARCH_CONTEXT_TOKEN_RESERVE") or 4096)
+)
+# Account for titles and JSON structure around each indexed chunk.
+SEARCH_CHUNK_TOKEN_OVERHEAD = max(
+    0, int(os.environ.get("SEARCH_CHUNK_TOKEN_OVERHEAD") or 128)
+)
+# The LLM selector can be too strict with small local models. Keep a small
+# ranked fallback for normal questions and a larger fallback for coverage asks.
+SEARCH_MIN_SELECTED_SECTIONS = max(
+    1, int(os.environ.get("SEARCH_MIN_SELECTED_SECTIONS") or 3)
+)
+SEARCH_HIGH_RECALL_SELECTED_SECTIONS = max(
+    SEARCH_MIN_SELECTED_SECTIONS,
+    int(os.environ.get("SEARCH_HIGH_RECALL_SELECTED_SECTIONS") or 10),
+)
+
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
 # agent is forced to answer. Default 6 covers the common search → open_url
 # pattern documented at the call site; raise via env when integrating with

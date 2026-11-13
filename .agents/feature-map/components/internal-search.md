@@ -491,3 +491,19 @@ latency and failure thresholds. The load client supports ERAG question JSONL,
 seeded question order, startup staggering, and think-time jitter. Workload metrics
 report active turns and actual stream/search event counts. See the load-test README
 for calibration assumptions, distributed reproducibility limits, and fault modes.
+
+
+## QEdge Beta grounded summaries
+
+`backend/onyx/chat/knowledge_rag.py` provides a deployment-scoped route selected by `QEDGE_RAG_PERSONAS`.
+It uses one Flash synthesis call for ordinary questions and deeper analysis, with evidence-only prompts and validated citation numbers.
+Standalone questions exclude previous assistant answers. No evidence means no generation.
+Summary failures return a retry message, never raw excerpts.
+`process_message.py` retains model selection bookkeeping, writer-thread persistence, and the normal emitter contract.
+Search emits `SectionEnd`; saved tool responses retain the rich `SearchDocsResponse` needed for conversation replay.
+File, Project, incognito, and multi-model turns retain the standard pipeline.
+
+Candidate retrieval preserves fresh ACL and Document Set checks. Only relevance scores use `CacheBackend`, with a 120-second lifetime.
+`backend/onyx/db/knowledge_rag.py` owns provider and indexed-case metadata reads.
+A missing dedicated reranker uses lexical filtering; it does not restore deleted provider credentials.
+Regression checks cover Starter summaries, fresh and same-session repeats, unsupported questions, scope boundaries, streaming, and replay.

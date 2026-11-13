@@ -203,6 +203,8 @@ class OpenURLToolOverrideKwargs(BaseModel):
 
 # None indicates that the default value should be used
 class SearchToolOverrideKwargs(BaseModel):
+    grounded_fast_mode: bool = False
+
     # To know what citation number to start at for constructing the string to the LLM
     starting_citation_num: int
     # This is needed because the LLM won't be able to do a really detailed semantic query well

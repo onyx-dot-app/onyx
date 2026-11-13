@@ -509,6 +509,10 @@ def _generate_or_fallback_chat_session_name(
 ) -> str:
     user_id = user.id
     fallback_name = get_fallback_chat_session_name(chat_history)
+    from onyx.chat.knowledge_rag import enabled as knowledge_enabled
+
+    if persona is not None and knowledge_enabled(persona.id):
+        return fallback_name
     max_tokens_for_naming = 3000
 
     try:

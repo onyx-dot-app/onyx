@@ -1,0 +1,12 @@
+ARG ONYX_BASE_IMAGE=onyxdotapp/onyx-backend:v5.1.2
+FROM ${ONYX_BASE_IMAGE}
+
+COPY backend/onyx/chat/knowledge_rag.py /app/onyx/chat/knowledge_rag.py
+COPY backend/onyx/chat/process_message.py /app/onyx/chat/process_message.py
+COPY backend/onyx/configs/chat_configs.py /app/onyx/configs/chat_configs.py
+COPY backend/onyx/db/knowledge_rag.py /app/onyx/db/knowledge_rag.py
+COPY backend/onyx/secondary_llm_flows/document_filter.py /app/onyx/secondary_llm_flows/document_filter.py
+COPY backend/onyx/server/query_and_chat/chat_backend.py /app/onyx/server/query_and_chat/chat_backend.py
+COPY backend/onyx/tools/models.py /app/onyx/tools/models.py
+COPY backend/onyx/tools/tool_implementations/search/search_tool.py /app/onyx/tools/tool_implementations/search/search_tool.py
+COPY backend/onyx/tracing/flows.py /app/onyx/tracing/flows.py

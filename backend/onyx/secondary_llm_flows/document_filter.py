@@ -28,6 +28,59 @@ from onyx.utils.timing import log_function_time
 logger = setup_logger()
 
 
+def _section_key(section: InferenceSection) -> tuple[str, int]:
+    center = section.center_chunk
+    return center.document_id, center.chunk_id
+
+
+def backfill_selected_sections(
+    selected_sections: list[InferenceSection],
+    ranked_sections: list[InferenceSection],
+    minimum_sections: int,
+    max_sections: int,
+) -> list[InferenceSection]:
+    """Add ranked fallback sections when the LLM selector is too strict."""
+    target = min(max(minimum_sections, 0), max_sections, len(ranked_sections))
+    result: list[InferenceSection] = []
+    seen_sections: set[tuple[str, int]] = set()
+
+    for section in selected_sections:
+        key = _section_key(section)
+        if key not in seen_sections:
+            result.append(section)
+            seen_sections.add(key)
+        if len(result) >= max_sections:
+            return result
+
+    seen_documents = {section.center_chunk.document_id for section in result}
+
+    # First add a high-ranked section from a new document. This improves source
+    # coverage for list and summary questions.
+    for section in ranked_sections:
+        if len(result) >= target:
+            break
+        key = _section_key(section)
+        document_id = section.center_chunk.document_id
+        if key in seen_sections or document_id in seen_documents:
+            continue
+        result.append(section)
+        seen_sections.add(key)
+        seen_documents.add(document_id)
+
+    # A corpus can contain fewer documents than the target. Fill the remainder
+    # with the best unused sections.
+    for section in ranked_sections:
+        if len(result) >= target:
+            break
+        key = _section_key(section)
+        if key in seen_sections:
+            continue
+        result.append(section)
+        seen_sections.add(key)
+
+    return result
+
+
 def select_chunks_for_relevance(
     section: InferenceSection,
     max_chunks: int = MAX_CHUNKS_FOR_RELEVANCE,
@@ -246,6 +299,7 @@ def select_sections_for_expansion(
     max_chunks_per_section: int | None = MAX_CHUNKS_FOR_RELEVANCE,
     try_to_fill_to_max: bool = False,
     enforce_llm_input_budget: bool = False,
+    minimum_sections: int = 0,
 ) -> tuple[list[InferenceSection], list[str] | None]:
     """Use LLM to select the most relevant document sections for expansion.
 
@@ -450,6 +504,21 @@ def select_sections_for_expansion(
                 "No valid sections selected from LLM response, returning first max_sections"
             )
             return sections[:max_sections], None
+
+        llm_selected_count = len(selected_sections)
+        selected_sections = backfill_selected_sections(
+            selected_sections=selected_sections,
+            ranked_sections=sections[:num_sections],
+            minimum_sections=minimum_sections,
+            max_sections=max_sections,
+        )
+        logger.info(
+            "event=rag_section_selection candidates=%s llm_selected=%s final_selected=%s minimum=%s",
+            num_sections,
+            llm_selected_count,
+            len(selected_sections),
+            minimum_sections,
+        )
 
         # Collect all selected document IDs
         selected_document_ids = [
