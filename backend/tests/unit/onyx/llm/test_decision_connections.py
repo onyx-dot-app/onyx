@@ -34,6 +34,18 @@ def _secret(value: str) -> SensitiveValue[str]:
     )
 
 
+@pytest.mark.parametrize(
+    "provider,expected_timeout", [("nace", 60.0), ("typesafe", 30.0)]
+)
+def test_decision_factory_uses_provider_timeout(
+    provider: str, expected_timeout: float
+) -> None:
+    client = factory.build_decision_client(
+        provider=provider, model="test-model", api_key="test-key"
+    )
+    assert client.timeout == expected_timeout
+
+
 def _voice(key: str = "scribe-key", secret: str = "scribe-secret" * 4) -> VoiceProvider:
     return VoiceProvider(
         id=4,
@@ -350,6 +362,7 @@ def test_decision_page_catalog_contains_supported_providers_without_selecting_a_
     assert response.providers == []
     assert set(response.supported_providers) == {
         "typesafe",
+        "nace",
         "zoom_ai",
         "openai",
         "openrouter",

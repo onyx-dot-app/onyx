@@ -69,6 +69,7 @@ export interface ModelConfiguration {
 
 export enum LLMProviderName {
   TYPESAFE = "typesafe",
+  NACE = "nace",
   ZOOM_AI = "zoom_ai",
   OPENAI = "openai",
   ANTHROPIC = "anthropic",

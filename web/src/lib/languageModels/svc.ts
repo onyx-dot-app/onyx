@@ -354,16 +354,21 @@ export const fetchOllamaModels = async (
   }
 };
 
-/**
- * Fetches OpenRouter models directly without any form state dependencies.
- * Uses snake_case params to match API structure.
- */
-export async function fetchTypeSafeModels(params: {
+interface HostedDecisionFetchParams {
   api_key?: string;
   provider_id?: number;
   signal?: AbortSignal;
-}): Promise<ModelConfiguration[]> {
-  const response = await fetch("/api/admin/llm/typesafe/available-models", {
+}
+
+/**
+ * Discovers models from a hosted System One provider (TypeSafe AI, Nace).
+ * Omit api_key with a provider_id to discover with the saved key.
+ */
+async function fetchHostedDecisionModels(
+  path: string,
+  params: HostedDecisionFetchParams
+): Promise<ModelConfiguration[]> {
+  const response = await fetch(path, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -383,6 +388,24 @@ export async function fetchTypeSafeModels(params: {
     supports_reasoning: false,
     effectiveDisplayName: model.display_name || model.name,
   }));
+}
+
+export function fetchTypeSafeModels(
+  params: HostedDecisionFetchParams
+): Promise<ModelConfiguration[]> {
+  return fetchHostedDecisionModels(
+    "/api/admin/llm/typesafe/available-models",
+    params
+  );
+}
+
+export function fetchNaceModels(
+  params: HostedDecisionFetchParams
+): Promise<ModelConfiguration[]> {
+  return fetchHostedDecisionModels(
+    "/api/admin/llm/nace/available-models",
+    params
+  );
 }
 
 export const fetchOpenRouterModels = async (

@@ -15,6 +15,7 @@ class LlmProviderNames(str, Enum):
 
     OPENAI = "openai"
     TYPESAFE = "typesafe"
+    NACE = "nace"
     ZOOM_AI = "zoom_ai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
@@ -52,6 +53,7 @@ APPROX_CHARS_PER_TOKEN = 4
 
 WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.TYPESAFE,
+    LlmProviderNames.NACE,
     LlmProviderNames.ZOOM_AI,
     LlmProviderNames.OPENAI,
     LlmProviderNames.ANTHROPIC,
@@ -69,10 +71,18 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.VERCEL_AI_GATEWAY,
 ]
 
+# Decision-only providers on a fixed hosted System One endpoint: they take an
+# API key only (no custom API base), store no chat models, and never run in
+# auto mode.
+HOSTED_DECISION_PROVIDER_NAMES = frozenset(
+    {LlmProviderNames.TYPESAFE, LlmProviderNames.NACE}
+)
+
 
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.TYPESAFE: "TypeSafe AI",
+    LlmProviderNames.NACE: "Nace",
     LlmProviderNames.ZOOM_AI: "Zoom AI Services",
     LlmProviderNames.OPENAI: "OpenAI",
     LlmProviderNames.ANTHROPIC: "Anthropic",
