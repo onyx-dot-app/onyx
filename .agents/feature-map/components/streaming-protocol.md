@@ -104,7 +104,9 @@ and no ID lines. A send whose preparation fails after it saved the question
 and reserved its responses gets their ID lines first
 (`chat/process_message.py:prepare_chat_turn` `on_reserved`):
 `CreateChatSessionID` when the request created its session, then the
-message IDs, then the `StreamingError`. So ID lines mean a saved turn, and no ID lines mean a
+message IDs, then the `StreamingError`. The same holds when
+`start_chat_turn` fails before it returns its reader. A usage-only incognito
+question saves no text, so its failure has no ID lines. So ID lines mean a saved turn, and no ID lines mean a
 rejected send. A non-streaming caller still gets the error as an HTTP status.
 
 **`Placement`.** `turn_index` is the rendering block. `tab_index` separates

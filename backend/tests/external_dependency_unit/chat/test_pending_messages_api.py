@@ -1036,6 +1036,44 @@ def test_a_send_that_creates_its_session_names_it_when_preparation_fails(
         )
 
 
+@pytest.mark.parametrize("failure", ["preparation", "start"])
+def test_a_failure_before_the_stream_names_only_a_turn_with_saved_content(
+    chat: ChatSession,
+    owner: User,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: str,
+) -> None:
+    """A content-free question has no saved text, so its failure has no IDs."""
+    model = QueueTestLLM(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="Done")])
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+
+    def fail(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("Unavailable")
+
+    if failure == "preparation":
+        chat.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+        db_session.commit()
+        monkeypatch.setattr("onyx.chat.process_message.load_chat_files", fail)
+    else:
+        monkeypatch.setattr("onyx.chat.process_message.start_chat_turn", fail)
+    packets = list(
+        handle_stream_message_objects(
+            new_msg_req=SendMessageRequest(message="Question", chat_session_id=chat.id),
+            user=owner,
+        )
+    )
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert isinstance(packets[-1], StreamingError)
+    assert [type(packet) for packet in packets[:-1]] == (
+        [] if failure == "preparation" else [MessageResponseIDInfo]
+    )
+
+
 def test_a_non_streaming_send_that_fails_after_saving_raises_its_error(
     chat: ChatSession,
     owner: User,

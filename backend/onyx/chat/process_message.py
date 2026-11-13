@@ -279,8 +279,8 @@ def prepare_chat_turn(
     the request's parent, and its agents run with that configuration.
 
     `on_reserved` receives a send's ID packets, a created session first, once
-    its question and responses are saved, so a later preparation failure can
-    still name the saved turn.
+    its question and responses are saved with their content, so a later
+    preparation failure can still name the saved turn.
     """
     results_turn = queued_turn is not None and queued_turn.message is None
     admission = ChatTurnAdmission(
@@ -484,7 +484,9 @@ def prepare_chat_turn(
                     parent_message_id=user_message.id,
                     model_display_names=[name for _, name in selected_models],
                 )
-                if on_reserved is not None:
+                # A content-free question has no saved text to continue from,
+                # so its failure stays a rejected send.
+                if on_reserved is not None and keeps_content:
                     if new_msg_req.chat_session_id is None:
                         on_reserved(
                             CreateChatSessionID(
@@ -981,10 +983,10 @@ def _stream_chat_turn(
         else:
             logger.exception("Chat request failed")
         streaming_error = chat_error(error, setup.responses[0].llm if setup else None)
-        if setup is None and saved_turn_packets:
+        if stream is None and saved_turn_packets:
             # The saved question and its error answer belong to the client's chat.
             yield from saved_turn_packets
-            if response_future is not None:
+            if response_future is not None and not response_future.done():
                 response_future.set_exception(streaming_error_as_onyx(streaming_error))
         yield streaming_error
     finally:
