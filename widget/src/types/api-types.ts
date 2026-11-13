@@ -28,6 +28,8 @@ export type PacketType =
   | DeepResearchPlanStart
   | ResearchAgentStart
   | IntermediateReportStart
+  | ToolApprovalRequest
+  | ToolApprovalResolved
   | Stop
   | OverallStop
   | ErrorPacket;
@@ -136,6 +138,32 @@ export interface ResearchAgentStart {
 
 export interface IntermediateReportStart {
   type: "intermediate_report_start";
+}
+
+/** A tool call waits for the user's decision; the run pauses until then. */
+export interface ToolApprovalRequest {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // ISO 8601 UTC; only shown as the deadline. The server resolves expiry.
+  expires_at: string;
+}
+
+export interface ToolApprovalResolved {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // approved | approved_for_chat | rejected | expired | disabled | cancelled;
+  // anything else is ignored
+  outcome: string;
+}
+
+export interface ApprovalDecisionResponse {
+  decision: "APPROVED" | "REJECTED";
+  // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  decided_via: string;
 }
 
 export interface Stop {
