@@ -10,7 +10,7 @@ import useShareableGroups, {
   type MinimalUserGroupSnapshot,
 } from "@/hooks/useShareableGroups";
 import useShareableUsers from "@/hooks/useShareableUsers";
-import { Content, Section, toast } from "@opal/layouts";
+import { Content, InputPadder, Section, toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Modal } from "@opal/components";
@@ -50,8 +50,8 @@ import { Permission, type MinimalUserSnapshot } from "@/lib/types";
 import {
   Button,
   Card,
+  InputSingleSelect,
   MessageCard,
-  SelectCard,
   Tabs,
   Text,
 } from "@opal/components";
@@ -59,7 +59,6 @@ import {
   SvgArrowExchange,
   SvgArrowLeft,
   SvgBubbleText,
-  SvgLock,
   SvgOrganization,
   SvgBlocks,
   SvgUser,
@@ -68,7 +67,19 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
-import { usePublishAction } from "@/lib/skills/hooks";
+import {
+  useInstallationPolicyCopy,
+  usePolicyOptions,
+  usePublishAction,
+  useSharingAllowed,
+} from "@/lib/skills/hooks";
+import {
+  INHERIT,
+  fromPolicyChoice,
+  isPolicyChoice,
+  toPolicyChoice,
+} from "@/lib/skills/installationPolicy";
+import SharingOffNotice from "@/sections/modals/skills/SharingOffNotice";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
 type ShareModalView = "share" | "transfer";
@@ -133,6 +144,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
+  const policyCopy = useInstallationPolicyCopy();
+  const companyOptions = usePolicyOptions({
+    inherit: {
+      scope: "skill",
+      policy: loadedSkill?.default_installation_policy ?? null,
+    },
+  });
+  const sharingAllowed = useSharingAllowed();
   const { mutate } = useSWRConfig();
   const publishAction = usePublishAction();
 
@@ -152,9 +171,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     useState<TransferOwnershipTarget>(null);
   const [view, setView] = useState<ShareModalView>("share");
   const [installationPolicy, setInstallationPolicy] =
-    useState<SkillInstallationPolicy>("AVAILABLE");
+    useState<SkillInstallationPolicy | null>(null);
   const [initialPolicy, setInitialPolicy] =
-    useState<SkillInstallationPolicy>("AVAILABLE");
+    useState<SkillInstallationPolicy | null>(null);
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -215,7 +234,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
+    sharingAllowed &&
     (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
+  // With Sharing off, a member can remove a share but not change its level.
+  const levelOptions = (current: SkillSharePermission) =>
+    sharingAllowed
+      ? permissionOptions
+      : permissionOptions.filter((option) => option.value === current);
   const isDirty =
     !!effectiveState &&
     !!initialState &&
@@ -369,11 +394,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(
-        nextDraft,
-        isAdmin,
-        isOrganizationManager
-      );
+      const payload = serializeSkillSharing(nextDraft, isOrganizationManager);
       const saved = await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       if (
@@ -512,79 +533,28 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           )}
         </Section>
 
-        {isAdmin && (
+        {isOrganizationManager && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
               font="main-ui-action"
               title={t("share.installation.title")}
               description={t("share.installation.description")}
             />
-            <Section
-              role="group"
-              flexDirection="row"
-              aria-label={t("share.installation.title")}
-              gap={2}
-              height="auto"
-              alignItems="stretch"
-            >
-              {(
-                [
-                  {
-                    value: "AVAILABLE",
-                    label: "available",
-                    icon: SvgUser,
-                  },
-                  {
-                    value: "DEFAULT",
-                    label: "default",
-                    icon: SvgOrganization,
-                  },
-                  {
-                    value: "REQUIRED",
-                    label: "required",
-                    icon: SvgLock,
-                  },
-                ] as const
-              ).map((option) => (
-                <Section key={option.value} height="full" className="min-w-0">
-                  <SelectCard
-                    role="button"
-                    aria-label={t(`share.installation.${option.label}`)}
-                    aria-pressed={installationPolicy === option.value}
-                    state={
-                      installationPolicy === option.value ? "selected" : "empty"
-                    }
-                    disabled={saving || !canEditShares}
-                    onClick={() => setInstallationPolicy(option.value)}
-                    padding={2}
-                    rounding={3}
-                  >
-                    <Section flexDirection="row" gap={2} height="auto">
-                      <option.icon
-                        size={18}
-                        aria-hidden
-                        className="shrink-0 stroke-text-03"
-                      />
-                      <Text font="main-ui-action">
-                        {t(`share.installation.${option.label}`)}
-                      </Text>
-                    </Section>
-                  </SelectCard>
-                </Section>
-              ))}
-            </Section>
+            <InputPadder>
+              <InputSingleSelect
+                placeholder={t("share.installation.title")}
+                value={toPolicyChoice(installationPolicy)}
+                defaultOption={INHERIT}
+                options={companyOptions}
+                disabled={saving || !canEditShares}
+                onValueChange={(value) => {
+                  if (isPolicyChoice(value))
+                    setInstallationPolicy(fromPolicyChoice(value));
+                }}
+              />
+            </InputPadder>
             <Text color="text-03" font="secondary-body" role="status">
-              {t(
-                `share.installation.${
-                  (
-                    {
-                      AVAILABLE: "availableDescription",
-                      DEFAULT: "defaultDescription",
-                      REQUIRED: "requiredDescription",
-                    } as const
-                  )[installationPolicy]
-                }`
-              )}
+              {policyCopy.description(installationPolicy)}
             </Text>
           </Section>
         )}
@@ -610,8 +580,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   : "share.peopleTitle"
               )}
             />
+            {canEditShares && !sharingAllowed && <SharingOffNotice />}
             {canEditShares ? (
               <AddPeoplePicker
+                disabled={!sharingAllowed}
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
                 groups={shareableGroupsData ?? []}
@@ -662,7 +634,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                               )
                             }
                             onRemove={() => removeUserShare(share.user.id)}
-                            options={permissionOptions}
+                            options={levelOptions(share.permission)}
                             value={share.permission}
                           />
                         }
@@ -695,7 +667,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                             )
                           }
                           onRemove={() => removeGroupShare(share.group_id)}
-                          options={permissionOptions}
+                          options={levelOptions(share.permission)}
                           value={share.permission}
                         />
                       }

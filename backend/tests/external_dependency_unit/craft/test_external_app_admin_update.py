@@ -62,7 +62,7 @@ def test_patch_updates_config_on_non_managed_built_in(
     test_user: User,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(api, "push_skills_for_users", _noop)
+    monkeypatch.setattr(api, "push_skills_and_commit", _noop)
     app = _slack_app(db_session)
     app_id = app.id
     [original_skill] = get_skills_for_external_app(db_session, app_id)
@@ -116,9 +116,7 @@ def test_patch_commits_before_sandbox_reconciliation(
             observed_names.append(stored.name)
 
     monkeypatch.setattr(
-        api,
-        "push_skills_for_users",
-        _observe_committed_state,
+        "onyx.skills.push.push_skills_for_users", _observe_committed_state
     )
 
     api.update_external_app_admin(

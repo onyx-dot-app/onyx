@@ -6,6 +6,11 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import (
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
@@ -16,6 +21,7 @@ from onyx.db.skill import (
     persist_skill_validity,
 )
 from onyx.file_store.file_store import get_default_file_store
+from onyx.server.features.build.configs import ENABLE_CRAFT
 from onyx.server.features.build.db.sandbox import (
     get_sandbox_user_map,
     lock_sandbox_skills_hashes,
@@ -30,6 +36,7 @@ from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
+from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
     COMPANY_SEARCH,
@@ -54,6 +61,7 @@ from onyx.skills.validation import (
     validate_stored_custom_skill,
 )
 from onyx.utils.logger import setup_logger
+from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
@@ -403,3 +411,35 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
             logger.exception("Failed to persist successful skill push state")
     except Exception:
         logger.exception("Failed to push skills to sandboxes")
+
+
+def enqueue_skill_push(user_ids: Iterable[UUID]) -> None:
+    """Push to the users in the background, after the caller committed. For a
+    change that can reach many users, such as a group membership sync, so the
+    request does not wait for the pushes."""
+    from onyx.background.celery.versioned_apps.client import app as celery_app
+
+    ids = sorted({str(user_id) for user_id in user_ids})
+    # No Craft, no sandboxes; Lite also runs no Celery workers.
+    if not ids or not ENABLE_CRAFT:
+        return
+    celery_app.send_task(
+        OnyxCeleryTask.PUSH_SKILLS_TO_USERS,
+        kwargs={"user_ids": ids, "tenant_id": get_current_tenant_id()},
+        queue=OnyxCeleryQueues.SANDBOX,
+        priority=OnyxCeleryPriority.MEDIUM,
+        expires=QUEUE_RESIDENCY_SECONDS,
+    )
+
+
+def push_skills_and_commit(user_ids: Iterable[UUID], db_session: Session) -> None:
+    """Push to the users after the caller committed the change, and commit the
+    push state."""
+    push_skills_for_users(set(user_ids), db_session)
+    try:
+        db_session.commit()
+    except Exception:
+        # The caller's change is already committed; a lost push state only
+        # makes the next push send the skills again.
+        db_session.rollback()
+        logger.exception("Failed to commit the skill push state")

@@ -5,19 +5,6 @@ import SkillCard, {
 } from "@/sections/cards/SkillCard";
 import type { CustomSkill } from "@/lib/skills/types";
 
-let mockPermissions: string[] = [];
-jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({
-    isAdmin: false,
-    permissions: mockPermissions,
-    adminCapabilities: mockPermissions,
-  }),
-}));
-
-beforeEach(() => {
-  mockPermissions = [];
-});
-
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
 }));
@@ -51,6 +38,9 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     enabled: true,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    required_for_user: false,
     author_user_id: "user-id",
     author_email: "owner@example.com",
     owner: { id: "user-id", email: "owner@example.com" },
@@ -91,6 +81,9 @@ function invalidCustom(): CustomSkillCardItem {
     enabled: false,
     can_toggle: false,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    required_for_user: false,
   });
 }
 
@@ -198,7 +191,7 @@ describe("SkillCard", () => {
     const user = setupUser();
     render(
       <SkillCard
-        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+        item={custom({ required_for_user: true, can_toggle: false })}
       />
     );
 
@@ -211,7 +204,12 @@ describe("SkillCard", () => {
   it("shows required skills without a switch or delete action", () => {
     render(
       <SkillCard
-        item={custom({ installation_policy: "REQUIRED", can_toggle: false })}
+        item={custom({
+          installation_policy: "REQUIRED",
+          can_delete: false,
+          required_for_user: true,
+          can_toggle: false,
+        })}
         onDelete={jest.fn()}
       />
     );
@@ -472,18 +470,18 @@ test("invalid editable skills can be deleted without opening their preview", asy
   expect(onClick).not.toHaveBeenCalled();
 });
 
-test.each(["OWNER", "EDITOR", "VIEWER"] as const)(
-  "delete follows %s permissions even when the skill is invalid",
-  (user_permission) => {
+test.each([true, false])(
+  "Delete follows can_delete (%s) even when the skill is invalid",
+  (can_delete) => {
     render(
       <SkillCard
-        item={custom({ user_permission, is_valid: false })}
+        item={custom({ can_delete, is_valid: false })}
         onDelete={jest.fn()}
       />
     );
     const button = screen.queryByRole("button", { name: "Delete skill" });
-    if (user_permission === "VIEWER") expect(button).not.toBeInTheDocument();
-    else expect(button).toBeInTheDocument();
+    if (can_delete) expect(button).toBeInTheDocument();
+    else expect(button).not.toBeInTheDocument();
   }
 );
 
@@ -493,22 +491,3 @@ test("built-in skills never expose Delete", () => {
     screen.queryByRole("button", { name: "Delete skill" })
   ).not.toBeInTheDocument();
 });
-
-test.each([
-  { permissions: [], visible: false },
-  { permissions: ["manage:plugins"], visible: true },
-])(
-  "only an organization-wide manager sees Delete on a published skill ($permissions)",
-  ({ permissions, visible }) => {
-    mockPermissions = permissions;
-    render(
-      <SkillCard
-        item={custom({ is_personal: false, public_permission: "VIEWER" })}
-        onDelete={jest.fn()}
-      />
-    );
-    const button = screen.queryByRole("button", { name: "Delete skill" });
-    if (visible) expect(button).toBeInTheDocument();
-    else expect(button).not.toBeInTheDocument();
-  }
-);

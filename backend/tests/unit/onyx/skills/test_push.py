@@ -389,3 +389,44 @@ def test_skill_dropped_by_resolution_does_not_crowd_out_later_skills(
     )
 
     assert set(files) == {"b-healthy/SKILL.md", "b-healthy/scripts/run.py"}
+
+
+def test_push_and_commit_keeps_the_callers_change_when_the_commit_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db_session = MagicMock(spec=Session)
+    db_session.commit.side_effect = RuntimeError("connection lost")
+    monkeypatch.setattr(push, "push_skills_for_users", MagicMock())
+
+    push.push_skills_and_commit([uuid4()], db_session)
+
+    db_session.rollback.assert_called_once()
+
+
+def test_enqueue_skill_push_sends_the_push_task_to_the_sandbox_queue(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.background.celery.versioned_apps import client
+    from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
+
+    send_task = MagicMock()
+    monkeypatch.setattr(client.app, "send_task", send_task)
+    monkeypatch.setattr(push, "get_current_tenant_id", lambda: "tenant")
+    first, second = uuid4(), uuid4()
+
+    monkeypatch.setattr(push, "ENABLE_CRAFT", False)
+    push.enqueue_skill_push([first])
+    send_task.assert_not_called()
+
+    monkeypatch.setattr(push, "ENABLE_CRAFT", True)
+    push.enqueue_skill_push([second, first, second])
+    push.enqueue_skill_push([])
+
+    send_task.assert_called_once()
+    args, kwargs = send_task.call_args
+    assert args == (OnyxCeleryTask.PUSH_SKILLS_TO_USERS,)
+    assert kwargs["kwargs"] == {
+        "user_ids": sorted({str(first), str(second)}),
+        "tenant_id": "tenant",
+    }
+    assert kwargs["queue"] == OnyxCeleryQueues.SANDBOX

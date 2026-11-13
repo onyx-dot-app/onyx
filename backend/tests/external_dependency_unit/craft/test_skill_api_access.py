@@ -433,7 +433,7 @@ def test_admin_can_set_installation_policy(
     skill = make_skill(db_session, is_public=True)
     set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     push = MagicMock()
-    monkeypatch.setattr("onyx.server.features.skill.api.push_skills_for_users", push)
+    monkeypatch.setattr("onyx.server.features.skill.api.push_skills_and_commit", push)
     response = share_current_user_skill(
         skill.id,
         SkillShareRequest(installation_policy=policy),
@@ -577,9 +577,7 @@ def test_required_creation_preserves_same_name_personal_preference(
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skill_to_affected_sandboxes", MagicMock()
     )
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = create_custom_skill_from_editor(
         name=personal.name,
         description="Admin required skill",
@@ -614,9 +612,7 @@ def test_sharing_without_policy_preserves_existing_policy(
     owner = make_user(db_session, is_admin=is_admin, standard_account=not is_admin)
     skill = make_skill(db_session, author_user_id=owner.id)
     set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = share_current_user_skill(
         skill.id,
         SkillShareRequest.model_validate(sharing),

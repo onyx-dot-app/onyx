@@ -53,18 +53,19 @@ export function emptySkillSharingDraft(
     user_shares: [],
     group_shares: [],
     public_permission: null,
-    installation_policy: "AVAILABLE",
+    installation_policy: null,
     external_app: null,
   };
 }
 
 export function serializeSkillSharing(
   draft: SkillSharingDraft,
-  isAdmin: boolean,
   isOrganizationManager: boolean
 ): SkillShareUpdatePayload {
   return {
-    installation_policy: isAdmin ? draft.installation_policy : undefined,
+    installation_policy: isOrganizationManager
+      ? draft.installation_policy
+      : undefined,
     public_permission:
       !draft.external_app &&
       canChangeOrganizationAccess(draft, isOrganizationManager)
