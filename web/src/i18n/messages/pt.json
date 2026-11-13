@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "Organização"
+        },
+        "unpublished": {
+          "label": "Alterações não publicadas",
+          "tooltip": "A organização ainda usa a versão {number}."
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "Não foi possível carregar esta versão"
           }
+        },
+        "status": {
+          "pending": "Revisão pendente",
+          "published": "Publicada"
+        },
+        "publishUpdate": {
+          "label": "Publicar atualização",
+          "successToast": "Versão {number} publicada para a organização.",
+          "failedToast": "Não foi possível publicar esta atualização.",
+          "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
         }
       }
     },

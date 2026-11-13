@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "組織"
+        },
+        "unpublished": {
+          "label": "未公開の変更",
+          "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "このバージョンを読み込めませんでした"
           }
+        },
+        "status": {
+          "pending": "レビュー待ち",
+          "published": "公開済み"
+        },
+        "publishUpdate": {
+          "label": "更新を公開",
+          "successToast": "バージョン {number} を組織に公開しました。",
+          "failedToast": "この更新を公開できませんでした。",
+          "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
         }
       }
     },

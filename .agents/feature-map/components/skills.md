@@ -465,7 +465,8 @@ The library preview of an external-app skill calls the same renderer
     (`on_name_clash="rename"`); other publishes return CONFLICT. Requests
     (`GET /skills/review-requests`, approve, deny) need global
     `MANAGE_PLUGINS`; the list shows the plugin author and the version's
-    `created_at`.
+    `created_at`. The web hook `usePublishAction` mirrors the setting for the
+    share dialog and the Versions tab.
 
 ---
 

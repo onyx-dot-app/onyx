@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "Organization"
+        },
+        "unpublished": {
+          "label": "Unpublished changes",
+          "tooltip": "The organization still runs version {number}."
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "Couldn't load this version"
           }
+        },
+        "status": {
+          "pending": "Pending review",
+          "published": "Published"
+        },
+        "publishUpdate": {
+          "label": "Publish update",
+          "successToast": "Published version {number} to the organization.",
+          "failedToast": "Couldn't publish this update.",
+          "offNotice": "Publishing is turned off. Ask an admin to publish this update."
         }
       }
     },

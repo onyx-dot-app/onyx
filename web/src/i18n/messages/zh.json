@@ -12143,6 +12143,10 @@
         },
         "organization": {
           "label": "组织"
+        },
+        "unpublished": {
+          "label": "未发布的更改",
+          "tooltip": "组织仍在使用版本 {number}。"
         }
       },
       "toggle": {
@@ -17428,6 +17432,16 @@
           "loadError": {
             "title": "无法加载此版本"
           }
+        },
+        "status": {
+          "pending": "待审核",
+          "published": "已发布"
+        },
+        "publishUpdate": {
+          "label": "发布更新",
+          "successToast": "已将版本 {number} 发布到组织。",
+          "failedToast": "无法发布此更新。",
+          "offNotice": "发布已关闭。请让管理员发布此更新。"
         }
       }
     },
