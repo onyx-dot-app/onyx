@@ -28,10 +28,15 @@ from onyx.llm.models import (
     GenerationRequestParams,
     Message,
     ReasoningEffort,
+    TextContent,
     TextDeltaEvent,
     ToolCall,
     ToolResultMessage,
     UserMessage,
+)
+from onyx.llm.prompt_cache.providers.openai import (
+    CACHE_BREAKPOINT_FLAG,
+    explicit_cache_breakpoints,
 )
 
 _RESPONSE = LiteLLMModelResponse(
@@ -44,16 +49,22 @@ _RESPONSE = LiteLLMModelResponse(
 _RESULTS = [f"Evidence {index}" for index in range(6)]
 
 
-def _turn() -> list[Message]:
-    messages: list[Message] = [UserMessage(content="Question")]
-    for index, text in enumerate(_RESULTS):
+def _turn(results: list[str] = _RESULTS, cacheable: bool = False) -> list[Message]:
+    """A question, its tool steps and a reminder. `cacheable` puts the question
+    and the tool steps in the cacheable prefix, as chat history caching does."""
+    messages: list[Message] = [UserMessage(content="Question", cacheable=cacheable)]
+    for index, text in enumerate(results):
         call_id = f"c{index}"
         messages += [
             AssistantMessage(
-                content=[ToolCall(id=call_id, name="internal_search", arguments={})]
+                content=[ToolCall(id=call_id, name="internal_search", arguments={})],
+                cacheable=cacheable,
             ),
             ToolResultMessage(
-                content=text, tool_call_id=call_id, tool_name="internal_search"
+                content=text,
+                tool_call_id=call_id,
+                tool_name="internal_search",
+                cacheable=cacheable,
             ),
         ]
     return [
@@ -68,13 +79,14 @@ def _sent(
     messages: list[Message],
     *,
     api_base: str | None = None,
+    deployment_name: str | None = None,
     custom_config: dict[str, str] | None = None,
     model_kwargs: dict[str, JsonValue] | None = None,
 ) -> Mapping[str, Any]:
     client = get_llm(
         provider=provider,
         model=model,
-        deployment_name=None,
+        deployment_name=deployment_name,
         max_input_tokens=100_000,
         api_base=api_base,
         custom_config=custom_config,
@@ -112,11 +124,113 @@ def test_other_requests_keep_plain_tool_results(
     assert "prompt_cache_options" not in sent
 
 
-def test_disabled_prompt_caching_keeps_plain_tool_results() -> None:
-    with patch("onyx.llm.prompt_cache.providers.openai.ENABLE_PROMPT_CACHING", False):
-        sent = _sent("openai", "gpt-5.6-luna", _turn())
-    assert all(isinstance(content, str) for content in _tool_contents(sent))
+# A user message keeps the chat-completions part type; the Responses bridge
+# converts it to input_text with its marker.
+_MARKED_QUESTION = [
+    {
+        "type": "text",
+        "text": "Question",
+        "prompt_cache_breakpoint": {"mode": "explicit"},
+    }
+]
+
+
+def _user_contents(sent: Mapping[str, Any]) -> list[Any]:
+    return [m["content"] for m in sent["messages"] if m["role"] == "user"]
+
+
+def test_first_call_marks_the_prefix_that_later_calls_repeat() -> None:
+    """The first call of a turn has no tool result yet. It marks the end of its
+    cacheable prefix, so the next call, which repeats that marker before its
+    marked tool results, reads the entry the first call wrote."""
+    first = _sent("openai", "gpt-5.6-luna", _turn([], cacheable=True))
+    second = _sent("openai", "gpt-5.6-luna", _turn(_RESULTS[:1], cacheable=True))
+
+    for sent in (first, second):
+        assert sent["prompt_cache_options"] == {"mode": "explicit"}
+        assert _user_contents(sent) == [
+            _MARKED_QUESTION,
+            "<system-reminder>Cite sources.</system-reminder>",
+        ]
+    assert second["messages"][: len(first["messages"]) - 1] == first["messages"][:-1]
+    assert _tool_contents(second)[0][0]["prompt_cache_breakpoint"] == {
+        "mode": "explicit"
+    }
+
+
+def test_next_turn_repeats_the_marker_on_earlier_questions() -> None:
+    """A request reads an entry only at a marker it carries. The next turn
+    keeps the marker on the first question, so it reads the entry the first
+    turn wrote even though the tool results after it changed."""
+    first_turn = _sent("openai", "gpt-5.6-luna", _turn([], cacheable=True))
+    history = [
+        *_turn(["Shortened evidence"], cacheable=True)[:-1],
+        AssistantMessage(content=[TextContent(text="Answer")], cacheable=True),
+    ]
+    next_turn = _sent(
+        "openai",
+        "gpt-5.6-luna",
+        [*history, UserMessage(content="Follow-up", cacheable=True)],
+    )
+
+    question = 1 if first_turn["messages"][0]["role"] == "system" else 0
+    assert (
+        next_turn["messages"][: question + 1] == first_turn["messages"][: question + 1]
+    )
+    assert _user_contents(next_turn) == [
+        _MARKED_QUESTION,
+        [{**_MARKED_QUESTION[0], "text": "Follow-up"}],
+    ]
+
+
+def test_markers_survive_transforms_that_add_messages() -> None:
+    """A Mistral-named deployment gets a bridge message between a tool result
+    and the next user message. The flag travels on the message, so the user
+    messages after the inserted bridge keep their markers."""
+    sent = _sent(
+        "azure",
+        "gpt-5.6-luna",
+        [
+            *_turn(_RESULTS[:1], cacheable=True)[:-1],
+            UserMessage(content="Follow-up", cacheable=True),
+        ],
+        api_base="https://test.openai.azure.com",
+        deployment_name="mistral-router",
+    )
+
+    roles = [message["role"] for message in sent["messages"]]
+    assert roles[roles.index("tool") + 1] == "assistant"
+    assert sent["prompt_cache_options"] == {"mode": "explicit"}
+    assert _user_contents(sent) == [
+        _MARKED_QUESTION,
+        [{**_MARKED_QUESTION[0], "text": "Follow-up"}],
+    ]
+    assert all("cache_breakpoint" not in message for message in sent["messages"])
+
+
+def test_marking_a_text_part_keeps_its_fields() -> None:
+    part: dict[str, JsonValue] = {
+        "type": "text",
+        "text": "Question",
+        "cache_control": {"type": "ephemeral"},
+    }
+    marked, options = explicit_cache_breakpoints(
+        [{"role": "user", "content": [part], CACHE_BREAKPOINT_FLAG: True}]
+    )
+    assert options == {"mode": "explicit"}
+    assert marked == [
+        {
+            "role": "user",
+            "content": [{**part, "prompt_cache_breakpoint": {"mode": "explicit"}}],
+        }
+    ]
+
+
+def test_prefix_mark_stays_off_requests_without_explicit_caching() -> None:
+    sent = _sent("openai", "gpt-4.1", _turn([], cacheable=True))
     assert "prompt_cache_options" not in sent
+    assert _user_contents(sent)[0] == "Question"
+    assert all("cache_breakpoint" not in message for message in sent["messages"])
 
 
 def test_no_tool_result_keeps_implicit_caching() -> None:
@@ -382,7 +496,7 @@ def test_real_bridge_preserves_breakpoints_in_responses_body(
     )
     with patch("onyx.llm.multi_llm._env_injection_enabled", return_value=False):
         request = GenerationRequest(
-            messages=_turn(),
+            messages=_turn(cacheable=True),
             options=GenerationOptions(reasoning_effort=ReasoningEffort.HIGH),
         )
         if stream:
@@ -426,6 +540,9 @@ def test_real_bridge_preserves_breakpoints_in_responses_body(
         for text in _RESULTS
     ]
 
+    assert bodies[0]["input"][0]["content"] == [
+        {**_MARKED_QUESTION[0], "type": "input_text"}
+    ]
     assert bodies[0]["input"][-1]["content"] == [
         {
             "type": "input_text",

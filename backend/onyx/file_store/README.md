@@ -237,7 +237,8 @@ URL. Temporary errors (network, metadata server) are raised as they are.
 - Signing needs an IAM service account. A direct Workload Identity principal
   (`principal://...`, the default of `deployment/terraform/modules/gcp`) has
   none, so it cannot sign. Map the Kubernetes service account to an IAM service
-  account first.
+  account first. That module does this when `craft_sandbox_runtime =
+  "firecracker"`.
 - An upload URL signs `x-goog-if-generation-match: 0` and
   `x-goog-content-length-range`, so it creates the object once and with the
   expected size. GCS keeps no SHA-256, so finalize reads the object once and

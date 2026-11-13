@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.agents.models import RunStatus
+from onyx.agents.models import CompactionCheckpoint, RunStatus
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
@@ -19,7 +19,8 @@ from onyx.chat.chat_processing_checker import (
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
-    IncognitoContext,
+    IncognitoAgentResponse,
+    IncognitoState,
 )
 from onyx.chat.process_message import (
     _process_query,
@@ -41,7 +42,13 @@ from onyx.file_store.models import (
 )
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.models import ReasoningEffort, SystemMessage, UserMessage
+from onyx.llm.models import (
+    AssistantMessage,
+    ReasoningEffort,
+    SystemMessage,
+    TextContent,
+    UserMessage,
+)
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.tools.models import PersonaToolConfiguration
 from tests.unit.fakes import FakeCache
@@ -300,7 +307,9 @@ def _mock_chat_preparation(
             uncapped_token_count=0,
         ),
     )
-    monkeypatch.setattr("onyx.chat.process_message.load_chat_files", lambda _inputs: [])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.load_chat_files", lambda _inputs, **_kwargs: []
+    )
     monkeypatch.setattr(
         "onyx.chat.process_message.reserve_chat_response_ids", lambda **_kwargs: [3]
     )
@@ -465,7 +474,7 @@ def test_busy_session_rejects_before_model_or_history_setup() -> None:
 
 
 @pytest.mark.parametrize("expires_in_hook", [False, True])
-def test_expired_preparation_does_not_save_user_message(
+def test_expired_preparation_does_not_save_user_messages(
     expires_in_hook: bool,
     chat_session: ChatSession,
     _mock_chat_preparation: None,
@@ -554,11 +563,13 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
         patch("onyx.chat.process_message.ChatTurnAdmission", return_value=admission),
         patch("onyx.chat.process_message.load_chat_files") as load_files,
         patch("onyx.chat.process_message.convert_chat_history") as convert_history,
-        patch("onyx.chat.history_store.save_incognito_user_message") as append_message,
+        patch("onyx.chat.history_store.save_incognito_user_messages") as append_message,
         patch("onyx.chat.history_store.load_incognito_context") as load_history,
     ):
 
-        def load(_file_inputs: list[ChatFileInput]) -> list[ChatLoadedFile]:
+        def load(
+            _file_inputs: list[ChatFileInput], **_kwargs: object
+        ) -> list[ChatLoadedFile]:
             if expiry_stage == "files":
                 replace_owner()
             return []
@@ -568,10 +579,10 @@ def test_expired_history_preparation_cannot_append_after_new_owner_claims(
                 replace_owner()
             return converted
 
-        def load_stored(_session_id: UUID) -> IncognitoContext:
+        def load_stored(_session_id: UUID) -> IncognitoState:
             if expiry_stage == "history_load":
                 replace_owner()
-            return IncognitoContext(messages=[])
+            return IncognitoState(messages=[])
 
         load_files.side_effect = load
         convert_history.side_effect = lambda **_kwargs: convert()
@@ -594,9 +605,10 @@ def test_incognito_history_retains_summary_checkpoint(
     accepted_text: str | None,
 ) -> None:
     chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
-    stored = IncognitoContext(
+    stored = IncognitoState(
         messages=[
-            UserMessage(id="chat:1", content="Earlier question"),
+            UserMessage(id="chat:0", content="Earlier question"),
+            AssistantMessage(id="previous-run:0", content=[TextContent(text="Answer")]),
             *(
                 [UserMessage(id="chat:2", content="Accepted")]
                 if accepted_text is None
@@ -604,6 +616,16 @@ def test_incognito_history_retains_summary_checkpoint(
             ),
         ],
         previous_run_id="previous-run",
+        responses={
+            "1": IncognitoAgentResponse(
+                replay_digest="",
+                run_id="previous-run",
+                message_ids=["previous-run:0"],
+                checkpoint=CompactionCheckpoint(
+                    summary="Summary", covered_through_message_id="chat:0"
+                ),
+            )
+        },
     )
     parent = ChatMessage(
         id=2 if accepted_text is None else 1,
@@ -612,14 +634,17 @@ def test_incognito_history_retains_summary_checkpoint(
         if accepted_text is None
         else MessageType.ASSISTANT,
     )
+    canonical = [
+        UserMessage(id="chat:0", content=""),
+        AssistantMessage(id="chat:1", content=[]),
+    ]
+    if accepted_text is not None:
+        canonical.append(UserMessage(id="chat:2", content=accepted_text))
     with (
         patch(
-            "onyx.chat.process_message.find_summary_for_branch",
-            return_value=ChatMessage(
-                id=3,
-                message="Summary",
-                token_count=1,
-                last_summarized_message_id="chat:1",
+            "onyx.chat.process_message.convert_chat_history",
+            return_value=ChatHistoryResult(
+                messages=canonical, input_start=2, all_injected_file_metadata={}
             ),
         ),
         patch(
@@ -631,7 +656,7 @@ def test_incognito_history_retains_summary_checkpoint(
             return_value=QueryProcessingResponse(query="Accepted"),
         ) as query_hook,
         patch("onyx.chat.history_store.load_incognito_context", return_value=stored),
-        patch("onyx.chat.history_store.save_incognito_user_message") as append_message,
+        patch("onyx.chat.history_store.save_incognito_user_messages") as append_message,
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(
@@ -647,16 +672,24 @@ def test_incognito_history_retains_summary_checkpoint(
         assert current_user.content == accepted_text
         expected.append(current_user)
         append_message.assert_called_once_with(
-            chat_session.id, current_user, admission=setup.admission
+            chat_session.id,
+            [current_user],
+            admission=setup.admission,
+            file_metadata={},
+            history_message_ids=["chat:0", "previous-run:0"],
         )
     else:
         append_message.assert_called_once_with(
-            chat_session.id, setup.input_messages[0], admission=setup.admission
+            chat_session.id,
+            setup.input_messages,
+            admission=setup.admission,
+            file_metadata={},
+            history_message_ids=["chat:0", "previous-run:0"],
         )
     assert setup.messages + setup.input_messages == expected
     assert setup.checkpoint is not None
     assert setup.checkpoint.summary == "Summary"
-    assert setup.checkpoint.covered_through_message_id == "chat:1"
+    assert setup.checkpoint.covered_through_message_id == "chat:0"
     assert setup.previous_run_id == (
         "previous-run" if accepted_text is not None else None
     )
@@ -680,10 +713,13 @@ def test_storage_saves_its_resolved_input(
     )
     stored_user = UserMessage(content="Backend-normalized input")
     store = MagicMock()
-    store.prepare_messages.return_value = ([stored_user], "prior-run")
+    stored_history = ChatHistoryResult(
+        messages=[stored_user], input_start=0, all_injected_file_metadata={}
+    )
+    store.prepare_messages.return_value = (stored_history, "prior-run", None)
     with (
         patch("onyx.chat.process_message.convert_chat_history", return_value=source),
-        patch("onyx.chat.process_message.get_chat_history_store", return_value=store),
+        patch("onyx.chat.process_message.RedisChatHistoryStore", return_value=store),
     ):
         setup = prepare_chat_turn(
             SendMessageRequest(message="Question", chat_session_id=chat_session.id),
@@ -691,8 +727,8 @@ def test_storage_saves_its_resolved_input(
             llm_overrides=None,
         )
     assert setup.input_messages == [stored_user]
-    store.save_user_message.assert_called_once_with(stored_user)
-    assert store.save_user_message.call_args.args[0] is stored_user
+    store.save_user_messages.assert_called_once_with(stored_history)
+    assert store.save_user_messages.call_args.args[0] is stored_history
     setup.admission.release()
 
 
@@ -772,9 +808,9 @@ def test_incognito_preparation_rejects_ended_context_before_reserving_response(
         patch("onyx.chat.process_message.incognito_session_ended", return_value=True),
         patch(
             "onyx.chat.history_store.load_incognito_context",
-            return_value=IncognitoContext(messages=[]),
+            return_value=IncognitoState(messages=[]),
         ),
-        patch("onyx.chat.history_store.save_incognito_user_message"),
+        patch("onyx.chat.history_store.save_incognito_user_messages"),
         patch(
             "onyx.chat.process_message.reserve_chat_response_ids"
         ) as reserve_response,

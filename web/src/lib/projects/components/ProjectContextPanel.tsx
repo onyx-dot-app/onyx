@@ -138,7 +138,7 @@ export default function ProjectContextPanel({
           title={projectName}
           editable
           onTitleChange={async (newName) => {
-            if (currentProjectId) {
+            if (currentProjectId && newName) {
               await renameProject(currentProjectId, newName);
             }
           }}

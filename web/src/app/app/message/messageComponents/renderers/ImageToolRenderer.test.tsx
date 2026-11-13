@@ -36,6 +36,8 @@ test("the timeline counts unique images across repeated deltas", () => {
   render(
     <ImageToolRenderer
       packets={packets}
+      nestedCalls={[]}
+      streamPackets={packets}
       state={{}}
       onComplete={() => {}}
       renderType={RenderType.COMPACT}
@@ -74,6 +76,8 @@ test.each([
     render(
       <ImageToolRenderer
         packets={packets}
+        nestedCalls={[]}
+        streamPackets={packets}
         state={{}}
         onComplete={() => {}}
         renderType={RenderType.COMPACT}

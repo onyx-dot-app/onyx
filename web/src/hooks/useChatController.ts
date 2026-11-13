@@ -33,7 +33,6 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -87,7 +86,7 @@ import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import {
-  effectiveChatForcedToolId,
+  effectiveChatPreferredToolId,
   enabledChatToolIds,
 } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
@@ -114,7 +113,6 @@ export interface OnSubmitProps {
   // optional params
   messageIdToResend?: number;
   queryOverride?: string;
-  forceSearch?: boolean;
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
@@ -127,7 +125,6 @@ export interface OnSubmitProps {
 interface RegenerationRequest {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
 }
 
 interface UseChatControllerProps {
@@ -388,7 +385,6 @@ export default function useChatController({
       deepResearch,
       messageIdToResend,
       queryOverride,
-      forceSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
@@ -1096,22 +1092,13 @@ export default function useChatController({
           currentMessageTreeLocal
         );
 
-        // Find the search tool's numeric ID for forceSearch
-        const searchToolNumericId = activeAgent?.tools.find(
-          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-        )?.id;
-
-        // The tool this message is made to use: the search tool when the
-        // caller asked for a search, otherwise whatever the chat has forced.
-        //
-        const requestedForcedToolId = forceSearch
-          ? (searchToolNumericId ?? null)
-          : toolConfiguration.forcedToolId;
-        const effectiveForcedToolId = effectiveChatForcedToolId({
-          requestedToolId: requestedForcedToolId,
-          agent: activeAgent,
-          plugins: memberPlugins ?? [],
-        });
+        const effectivePreferredToolId = deepResearch
+          ? null
+          : effectiveChatPreferredToolId({
+              requestedToolId: toolConfiguration.preferredToolId,
+              agent: activeAgent,
+              plugins: memberPlugins ?? [],
+            });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
         const { isExtension, context: extensionContext } =
@@ -1174,7 +1161,7 @@ export default function useChatController({
           enabledToolIds: activeAgent
             ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
             : undefined,
-          forcedToolId: effectiveForcedToolId,
+          preferredToolId: effectivePreferredToolId,
           origin: messageOrigin,
           additionalContext,
           llmOverrides: isMultiModel

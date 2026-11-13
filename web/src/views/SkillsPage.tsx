@@ -15,6 +15,7 @@ import {
   Dropdown,
   type DropdownMenuRow,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import {
   ConfirmationModalLayout,
@@ -41,6 +42,8 @@ import {
 import { SvgGitHub } from "@opal/logos";
 import BulkSkillSharingModal from "@/sections/modals/skills/BulkSkillSharingModal";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import TextSeparator from "@/refresh-components/TextSeparator";
 import useOnMount from "@/hooks/useOnMount";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -72,10 +75,13 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const t = useTranslations("skills");
   const bulkCopy = useTranslations("skills.bulk");
   const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkBusy, setBulkBusy] = useState(false);
   const [bulkSharingOpen, setBulkSharingOpen] = useState(false);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const bulkDeleteModal = useCreateModal();
   const [bulkFailures, setBulkFailures] = useState<
     { name: string; detail: string }[]
   >([]);
@@ -95,11 +101,12 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const [deleteTarget, setDeleteTarget] = useState<CustomSkillCardItem | null>(
     null
   );
+  const deleteModal = useCreateModal();
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [githubImportOpen, setGitHubImportOpen] = useState(false);
+  const githubImportModal = useCreateModal();
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [skillDialog, setSkillDialog] = useState<{
     item: SkillCardItem;
@@ -114,6 +121,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   >(new Map());
   const [pendingSwitchTarget, setPendingSwitchTarget] =
     useState<SkillCardItem | null>(null);
+  const switchModal = useCreateModal();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useOnMount(() => {
@@ -150,7 +158,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           );
         });
       }
-      setDeleteTarget(null);
+      deleteModal.toggle(false);
       toast.success(t("editor.toasts.deleted", { name: deleteTarget.name }));
     } catch (error) {
       toast.error(
@@ -181,6 +189,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       )
     ) {
       setPendingSwitchTarget(item);
+      switchModal.toggle(true);
       return;
     }
 
@@ -215,7 +224,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         enabled,
         replaceConflict
       );
-      if (replaceConflict) setPendingSwitchTarget(null);
+      if (replaceConflict) switchModal.toggle(false);
       await refresh(
         (current) => {
           if (!current) return current;
@@ -255,6 +264,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     } catch (error) {
       if (enabled && !replaceConflict && isSkillNameConflict(error)) {
         setPendingSwitchTarget(item);
+        switchModal.toggle(true);
         return;
       }
       toast.error(
@@ -370,6 +380,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const selectedItems = selectableItems.filter((item) =>
     selectedIds.has(item.id)
   );
+  // The skills the bulk-delete confirm lists. Snapshotted on open: the
+  // selection clears when the delete lands, while the card still fades out.
+  const [bulkDeleteTargets, setBulkDeleteTargets] = useState(selectedItems);
   const canManageSelected =
     selectedItems.length > 0 &&
     selectedItems.every(
@@ -408,14 +421,18 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     action: "share" | "enable" | "disable" | "delete",
     sharing?: SkillShareUpdatePayload
   ) {
-    if (bulkLocked || selectedItems.length === 0) return;
+    const pool = action === "delete" ? bulkDeleteTargets : selectedItems;
+    if (bulkLocked || pool.length === 0) return;
     setBulkBusy(true);
     setBulkFailures([]);
     try {
+      // Delete acts on exactly the skills its confirm listed.
       const targets =
         action === "enable" || action === "disable"
           ? toggleableItems
-          : selectedItems;
+          : action === "delete"
+            ? bulkDeleteTargets
+            : selectedItems;
       const skill_ids = targets.map((item) => item.id);
       const result = await bulkUpdateSkills(
         action === "share"
@@ -436,7 +453,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
       if (result.succeeded.length)
         toast.success(bulkCopy("updated", { count: result.succeeded.length }));
       setBulkSharingOpen(false);
-      setBulkDeleteOpen(false);
+      bulkDeleteModal.toggle(false);
       await Promise.all([
         revalidateSkills(),
         mutate(SWR_KEYS.buildExternalAppsAdmin),
@@ -508,7 +525,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                   icon: SvgGitHub,
                   title: t("page.createMenu.github.title"),
                   description: t("page.createMenu.github.description"),
-                  onSelect: () => setGitHubImportOpen(true),
+                  onSelect: () => githubImportModal.toggle(true),
                 },
               ]}
             />
@@ -681,8 +698,17 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                                                 item.skill
                                                   .installation_policy ===
                                                 "REQUIRED"
+                                            )) ||
+                                          (!canManageOrgSkills &&
+                                            selectedItems.some(
+                                              (item) =>
+                                                item.skill.public_permission !==
+                                                null
                                             )),
-                                        onSelect: () => setBulkDeleteOpen(true),
+                                        onSelect: () => {
+                                          setBulkDeleteTargets(selectedItems);
+                                          bulkDeleteModal.toggle(true);
+                                        },
                                       },
                                     ],
                                   },
@@ -715,7 +741,10 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                             onShare={(skill) =>
                               setSkillDialog({ item: skill, tab: "sharing" })
                             }
-                            onDelete={setDeleteTarget}
+                            onDelete={(skill) => {
+                              setDeleteTarget(skill);
+                              deleteModal.toggle(true);
+                            }}
                             onClick={(skill) =>
                               setSkillDialog({ item: skill, tab: "details" })
                             }
@@ -787,15 +816,15 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onClose={() => setBulkSharingOpen(false)}
         onSave={(sharing) => runBulk("share", sharing)}
       />
-      {bulkDeleteOpen && (
+      <bulkDeleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgAlertTriangle}
-          title={bulkCopy("deleteTitle", { count: selectedItems.length })}
+          title={bulkCopy("deleteTitle", { count: bulkDeleteTargets.length })}
           description={bulkCopy("deleteDescription", {
-            count: selectedItems.length,
+            count: bulkDeleteTargets.length,
           })}
           onClose={() => {
-            if (!bulkBusy) setBulkDeleteOpen(false);
+            if (!bulkBusy) bulkDeleteModal.toggle(false);
           }}
           submit={
             <Button
@@ -814,7 +843,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             gap={2}
             className="max-h-60 overflow-y-auto"
           >
-            {selectedItems.map((item) => (
+            {bulkDeleteTargets.map((item) => (
               <Section
                 key={item.id}
                 role="listitem"
@@ -830,7 +859,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
             ))}
           </Section>
         </ConfirmationModalLayout>
-      )}
+      </bulkDeleteModal.Provider>
 
       {editablePreview && (
         <ShareSkillModal
@@ -855,31 +884,33 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         }}
       />
 
-      {githubImportOpen && (
+      <githubImportModal.Provider>
         <ImportSkillsFromGitHubModal
           open
-          onClose={() => setGitHubImportOpen(false)}
+          onClose={() => githubImportModal.toggle(false)}
           onImported={() => void revalidateSkills()}
         />
-      )}
+      </githubImportModal.Provider>
 
-      {deleteTarget && (
-        <ConfirmEntityModal
-          danger
-          entityType={t("editor.deleteModal.entityType")}
-          entityName={deleteTarget.name}
-          additionalDetails={t("editor.delete.description")}
-          actionButtonText={t(
-            deleting
-              ? "editor.deleteModal.pendingLabel"
-              : "editor.deleteModal.label"
-          )}
-          onClose={() => {
-            if (!deleting) setDeleteTarget(null);
-          }}
-          onSubmit={() => void deleteSkill()}
-        />
-      )}
+      <deleteModal.Provider>
+        {deleteTarget && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("editor.deleteModal.entityType")}
+            entityName={deleteTarget.name}
+            additionalDetails={t("editor.delete.description")}
+            actionButtonText={t(
+              deleting
+                ? "editor.deleteModal.pendingLabel"
+                : "editor.deleteModal.label"
+            )}
+            onClose={() => {
+              if (!deleting) deleteModal.toggle(false);
+            }}
+            onSubmit={() => void deleteSkill()}
+          />
+        )}
+      </deleteModal.Provider>
 
       <SkillPreviewModal
         open={previewTarget !== null && editablePreview === null}
@@ -889,35 +920,37 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
         onClose={() => setSkillDialog(null)}
       />
 
-      {pendingSwitchTarget && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={t("page.switchModal.title", {
-            name: pendingSwitchTarget.name,
-          })}
-          description={t("page.switchModal.description", {
-            name: pendingSwitchTarget.name,
-          })}
-          onClose={
-            switchPending ? undefined : () => setPendingSwitchTarget(null)
-          }
-          submit={
-            <Button
-              disabled={switchPending}
-              onClick={() => {
-                const target = pendingSwitchTarget;
-                void updateSkillEnabled(target, true, true);
-              }}
-            >
-              {switchPending
-                ? t("page.switchModal.submit.pendingLabel")
-                : t("page.switchModal.submit.label")}
-            </Button>
-          }
-        >
-          {t("page.switchModal.body")}
-        </ConfirmationModalLayout>
-      )}
+      <switchModal.Provider>
+        {pendingSwitchTarget && (
+          <ConfirmationModalLayout
+            icon={SvgAlertTriangle}
+            title={t("page.switchModal.title", {
+              name: pendingSwitchTarget.name,
+            })}
+            description={t("page.switchModal.description", {
+              name: pendingSwitchTarget.name,
+            })}
+            onClose={
+              switchPending ? undefined : () => switchModal.toggle(false)
+            }
+            submit={
+              <Button
+                disabled={switchPending}
+                onClick={() => {
+                  const target = pendingSwitchTarget;
+                  void updateSkillEnabled(target, true, true);
+                }}
+              >
+                {switchPending
+                  ? t("page.switchModal.submit.pendingLabel")
+                  : t("page.switchModal.submit.label")}
+              </Button>
+            }
+          >
+            {t("page.switchModal.body")}
+          </ConfirmationModalLayout>
+        )}
+      </switchModal.Provider>
     </SettingsLayouts.Root>
   );
 }

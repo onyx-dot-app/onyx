@@ -27,7 +27,7 @@ An **agent** holds the configuration and conversation state used to execute a ru
 Chat creates a fresh `Agent` for each request from saved history.
 `AgentState` holds the in-memory messages and compaction checkpoint.
 SDK callers can also reuse an `Agent` across runs; each run appends to its history.
-Instructions, tools, and generation settings are Agent defaults or choices captured for a step in `PreparedStep`.
+Tools are fixed at agent construction. Instructions, execution permissions, and generation settings can change in `PreparedStep`.
 
 A **run** is one execution of an agent, with a step budget. It drives the agent until the
 model produces a final answer (`COMPLETE`), the budget runs out (`LIMIT`), someone cancels it
@@ -57,6 +57,7 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
 | `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
+| `tool_result_amended` | A finish or suspend hook set the final result of a call of this run. |
 
 Each event carries a run ID so consumers can distinguish concurrent executions.
 The run applies generation updates under its state lock before notifying listeners.
@@ -153,10 +154,18 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
-A custom callback returns the complete step configuration; the runtime does not merge agent defaults into it.
-Register executable tools on `Agent.tools`. `PreparedStep.tools` selects those same instances;
-it cannot supply new implementations. Invalid selections fail before the model call.
-On restoration, the registered tools must match the saved step's declarations.
+A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
+Pass executable tools to `Agent(tools=...)`. Construction snapshots their definitions and fixes their order.
+`Agent.tools` returns detached inspection copies; changing those copies cannot change the configured tools.
+`PreparedStep.allowed_tool_names` restricts execution without changing the advertised definitions.
+`None` allows every tool in the active phase; an empty set disables tool execution.
+The runtime rejects unknown permission names and contradictory required or named tool choices before generation.
+
+For deliberate schema changes, register named subsets with `Agent(tool_phases=...)` and select `PreparedStep.tool_phase`.
+Each phase preserves the configured tool order. Deep Research uses phases for clarification, planning, research, and reporting.
+Ordinary step restrictions should use permissions instead of creating a phase.
+The LLM adapter handles provider exceptions that require narrower advertised definitions.
+Saved steps retain both advertised declarations and execution permissions. Restoration validates the declarations before using those permissions.
 
 `after_step(StepResult)` processes each completed step, including the last allowed step.
 Return `True` to continue or `False` to finish. Without this callback, the agent continues after tool calls
@@ -181,6 +190,24 @@ Caller cancellation propagates into the run. Run failure or cancellation does no
 Each model call receives a separate context copy. Compaction applies its own tracing flow and timeout.
 `PreparedStep.stall_timeout_s` overrides the stream's idle timeout; `None` uses the agent's setting.
 Generation options remain part of `PreparedStep`, since tool choice and token limits can change between steps.
+The executor enforces step permissions, `NONE`, and `NamedToolChoice` before tool approval or execution.
+Other tool definitions can remain in the request for cache reuse.
+Explicit calls recovered from model text follow the same permission checks as native calls.
+A forbidden call returns a tool error so the model can retry; generation alone does not authorize execution.
+
+`on_finish(results)` runs once when the run ends, for every outcome, on the execution thread.
+It receives the run's recorded tool results, not copies, and must not change them.
+It returns `ToolResultAmendment` values: each one replaces the recorded result of a call this run
+started, or gives a call that ended without a result (such as on Stop) its result.
+The call keeps its execution status.
+The run applies them and publishes `tool_result_amended` before `agent_end` and before it saves output.
+A hook that raises `ReleaseFailed` gives its amendments, and the run then fails with its error.
+On suspend, the run fails instead of suspending.
+A cancelled run (Stop or deadline) stays cancelled; the hook's error is only logged.
+A hook that fails otherwise or stops for cancellation is logged; the run keeps its outcome and recorded results.
+An amended result inside the compaction checkpoint drops the checkpoint, so the next request summarizes the new result.
+`on_suspend(results)` has the same contract; it runs when the run suspends, before the run captures its state.
+Chat code mode uses these hooks to stop open cells and save what they did, also for a call that Stop interrupted.
 
 Two optional tool callbacks cover interception and enrichment:
 
@@ -190,6 +217,11 @@ Two optional tool callbacks cover interception and enrichment:
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
+A tool that calls other tools for the model, such as a code mode program, gets `before_tool_call` as `ToolInvocation.before_call` and applies it to each of those calls.
+Such a call cannot wait for approval, so a `PendingToolInput` decision makes it fail.
+A hook that raises fails the run, as for a direct call: `before_call` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
+A code mode program stops at the failure; the observation that reports its end raises it.
+When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
 For example, deep research normalizes a child report's citations before returning the parent tool result.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
@@ -204,6 +236,8 @@ The `ToolInvocation` argument provides everything the tool needs:
 
 - `arguments` — the parsed JSON arguments.
 - `call_id`, `call_index`, `messages` — the call's identity and logical working history.
+- `recorded_results` — every recorded tool result before the call, with details and without
+  compaction: earlier steps, then this step's completed results in call order. Read only.
 - `cancellation` — a `CancellationSignal`; long-running tools should call `check()` often.
 - `update(ToolProgress(...))` — the current partial output and typed result details.
   The details type defines snapshot or delta semantics. Return the complete value in `ToolResult`.
@@ -242,6 +276,9 @@ Prompt assembly replaces exact repeated passages within a step with references t
 
 Tools return `ToolResult(is_error=True)` when the model can respond to a failure.
 The runtime also logs ordinary tool exceptions and converts them to error results. Cancellation propagates.
+A cancelled call returns no result; the run's finish hook can supply one (see `on_finish`).
+On restore, a call that a lost owner left running runs again, unless the tool sets
+`interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
 arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.
@@ -445,7 +482,10 @@ The SDK invokes release once; applications implement the storage operation.
 If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new execution owner can register the same run ID once ownership is released.
 
-Register executable tools on `Agent.tools`; the runtime restores the saved step's selection.
+Pass executable tools to `Agent(tools=...)`; the runtime restores the saved declarations and execution permissions.
+A configuration digest rejects changed definitions, schema key order, tool order, or phases before restoration callbacks run.
+Schema key order matters because it changes the serialized prompt prefix.
+Older checkpoints without a digest still validate their saved step declarations.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
 Rebuild the feature agent and its live resources with `restored.agent_state` and the saved `agent_id`.
@@ -529,8 +569,10 @@ Compaction can include them in a summary, but selects another message as its cut
 
 For chats that retain content, Chat stores new summaries as SUMMARY message rows.
 The existing `last_summarized_message_id` column stores the cutoff as a string. Reusing a summary creates no new row.
-Emergency truncation retains a cutoff in run state so suspended execution can resume,
-but does not save an empty SUMMARY row. The next turn can try summarization again.
+Emergency truncation retains a cutoff in run state so suspended execution can resume.
+Chat saves that cutoff as an empty SUMMARY row for content-retaining sessions.
+Content-free temporary sessions keep the root cutoff in their temporary context.
+Later turns reuse the selected cutoff instead of restoring discarded history.
 
 If a provider still rejects a request for size,
 the runtime compacts and retries the generation once, provided no partial output has
@@ -652,7 +694,7 @@ An expired owner is reported as interrupted when its response is inspected. Unce
 
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
-Incognito runs keep local ownership and do not write checkpoints or child conversations.
+Content-free incognito runs keep local ownership and do not write durable execution checkpoints or child conversations to PostgreSQL.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.

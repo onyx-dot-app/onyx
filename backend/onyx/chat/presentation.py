@@ -11,6 +11,7 @@ from onyx.agents.events import (
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
+    ToolResultAmendedEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
@@ -23,7 +24,6 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     ChatMessageMetadata,
@@ -40,15 +40,17 @@ from onyx.chat.renderer import (
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.tool_results import (
+    restored_result_details,
+    tool_result_parts,
+    tool_result_sources,
+)
 from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import (
-    ResearchAgentCallResult,
-    ResearchMessageMetadata,
-    ResearchPhase,
-)
+from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
 from onyx.server.query_and_chat.placement import Placement
@@ -73,10 +75,14 @@ def _message_identity(message: AssistantMessage) -> str:
 
 def _collect_tool_history(
     snapshot: RunState,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
 ) -> ToolHistorySnapshot:
-    """Project completed and interrupted operations from one execution tree."""
+    """Project completed and interrupted operations from one execution tree.
+
+    `tool_ids` names the application tools to record, with their tool row ids; a
+    tool without a row maps to None. Calls of other tools are skipped.
+    """
     records: list[ToolCallInfo] = []
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
@@ -89,14 +95,13 @@ def _collect_tool_history(
                 message.metadata.sources, update_duplicate_keys=True
             )
         for index, call in enumerate(message.tool_calls):
-            tool_id = tool_ids.get(call.name)
-            if tool_id is None:
+            if call.name not in tool_ids:
                 continue
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
             records.append(
                 _tool_record(
-                    tool_id,
+                    tool_ids[call.name],
                     message,
                     result,
                     call,
@@ -105,15 +110,12 @@ def _collect_tool_history(
                     index,
                 )
             )
-            if result is None:
+            sources = tool_result_sources(result.details) if result else None
+            if sources is None:
                 continue
-            if isinstance(result.details, SearchDocsResponse):
-                for document in result.details.search_docs:
-                    documents.setdefault(document.document_id, document)
-            if isinstance(result.details, ResearchAgentCallResult):
-                for document in result.details.citation_mapping.values():
-                    documents.setdefault(document.document_id, document)
-            citations.update_citation_mapping(message_citation_sources(result))
+            for document in sources.documents:
+                documents.setdefault(document.document_id, document)
+            citations.update_citation_mapping(sources.citations)
     for child in snapshot.child_runs:
         child_history = _collect_tool_history(child, tool_ids)
         records.extend(child_history.tool_calls)
@@ -126,7 +128,7 @@ def _collect_tool_history(
 
 
 def _tool_record(
-    tool_id: int,
+    tool_id: int | None,
     output: AssistantMessage,
     tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
@@ -135,24 +137,33 @@ def _tool_record(
     index: int,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
-    search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
-    displayed_docs = (
-        data.displayed_docs if isinstance(data, SearchDocsResponse) else None
+    sources = tool_result_sources(data)
+    # Artifacts of nested calls belong to the call that made them.
+    parts = (
+        [part.details for part in tool_result_parts(tool_response)]
+        if tool_response
+        else []
     )
-    generated_images = None
-    if isinstance(data, FinalImageGenerationResponse):
-        generated_images = data.generated_images
-
-    generated_files = None
-    if isinstance(data, LlmPythonExecutionResult):
-        generated_files = data.generated_files or None
-
+    generated_images = [
+        image
+        for part in parts
+        if isinstance(part, FinalImageGenerationResponse)
+        for image in part.generated_images
+    ] or None
+    generated_files = [
+        file
+        for part in parts
+        if isinstance(part, LlmPythonExecutionResult)
+        for file in part.generated_files
+    ] or None
     # Custom tools save image/CSV blobs and return their ids.
-    generated_file_ids = None
-    if isinstance(data, CustomToolCallSummary) and isinstance(
-        data.tool_result, CustomToolUserFileSnapshot
-    ):
-        generated_file_ids = data.tool_result.file_ids or None
+    generated_file_ids = [
+        file_id
+        for part in parts
+        if isinstance(part, CustomToolCallSummary)
+        and isinstance(part.tool_result, CustomToolUserFileSnapshot)
+        for file_id in part.tool_result.file_ids
+    ] or None
 
     return ToolCallInfo(
         message_id=_message_identity(output),
@@ -166,7 +177,7 @@ def _tool_record(
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_arguments_for_display(tool_call),
         tool_call_response=tool_response.text if tool_response else "",
-        search_docs=displayed_docs if displayed_docs is not None else search_docs,
+        search_docs=sources.displayed if sources is not None else None,
         generated_images=generated_images,
         generated_files=generated_files,
         generated_file_ids=generated_file_ids,
@@ -244,7 +255,7 @@ def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
 def project_response(
     snapshot: RunState,
     *,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
     registrations: Sequence[AgentInfo] = (),
 ) -> ChatResponseSnapshot:
@@ -357,7 +368,7 @@ class ResponsePresenter:
         self,
         emitter: Emitter,
         *,
-        tool_ids: Mapping[str, int] | None = None,
+        tool_ids: Mapping[str, int | None] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
         self.emitter = emitter
@@ -401,7 +412,7 @@ class ResponsePresenter:
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
-                self.tools[(event.run_id, event.message_id, call.id)] = ToolRenderer(
+                self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
                     call, tool_placement, self.tool_ids.get(call.name)
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
@@ -414,6 +425,24 @@ class ResponsePresenter:
                 output = tool.update(event.progress.details, event.progress.content)
             else:
                 output = tool.complete(event.result)
+        elif isinstance(event, ToolResultAmendedEvent):
+            if event.tool_call.name in HIDDEN_TOOLS:
+                return
+            key = (event.run_id, event.message_id, event.tool_call.id)
+            tool = self.tools.get(key)
+            if tool is None:
+                # A call recorded before a restore has no card in this stream;
+                # the amended result renders in a new card, which later
+                # amendments reuse.
+                renderer = self.renderers.get(event.run_id)
+                tool = self.tools[key] = tool_renderer(
+                    event.tool_call,
+                    renderer.tool_placement(event.tool_call.id)
+                    if renderer is not None
+                    else self.layout.next_section(parent.placement if parent else None),
+                    self.tool_ids.get(event.tool_call.name),
+                )
+            output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -475,27 +504,38 @@ def replay_response(
             record = records.get((message_id, call.id))
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
+            details = result.details if result is not None else None
             if (
                 result is not None
-                and isinstance(result.details, SearchDocsResponse)
+                and isinstance(details, SearchDocsResponse)
                 and record is not None
             ):
                 # Saved document IDs support citation and source-card links.
-                search = result.details.model_copy(
-                    update={"search_docs": record.search_docs or []}
-                )
+                search = details.model_copy(update={"search_docs": record.search_docs})
                 result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
+            elif result is not None and details is not None:
+                # Nested results keep documents as citation numbers; the call's
+                # saved documents and the response's documents refill them.
+                saved_documents = record.search_docs if record is not None else []
+                restored = restored_result_details(
+                    details,
+                    {
+                        **documents,
+                        **{doc.document_id: doc for doc in saved_documents},
+                    },
+                )
+                result = result.model_copy(update={"details": restored})
+            renderer_of_call = tool_renderer(
                 call, tool_placement, record.tool_id if record is not None else None
             )
-            packets.extend(tool_renderer.start())
+            packets.extend(renderer_of_call.start())
             for child in response.child_runs:
                 if (
                     child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue
-                tool_renderer.has_child_output = True
+                renderer_of_call.has_child_output = True
                 child_mode = (
                     PresentationMode.CODING_THINKING
                     if call.name == CODING_AGENT_TOOL_NAME
@@ -512,7 +552,7 @@ def replay_response(
                         child_mode,
                     )
                 )
-            packets.extend(tool_renderer.complete(result))
+            packets.extend(renderer_of_call.complete(result))
     if response.parent_run_id is None:
         packets.append(
             Packet(

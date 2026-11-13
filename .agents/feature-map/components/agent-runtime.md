@@ -62,18 +62,48 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
-          ToolBatch only waits on ChildRunWait -> _suspend (capture_state)
+          ToolBatch only waits on ChildRunWait
+            -> _suspend (on_suspend amendments, capture_state)
             -> child ends -> _wake_execution on a new "agent-run" thread
   AgentCoordinator: children, RunStore / RunOwnership / AgentDirectory adapters
   handoff(save=...) -> ExecutionCheckpoint -> Agent.resume(snapshot) elsewhere
+  end of run: on_finish(results) -> ToolResultAmendment list
+            -> recorded results replaced, ToolResultAmendedEvent each
+            -> AgentEndEvent -> save
 ```
 
 - `backend/onyx/agents/runtime.py` holds `Agent`, `Run` and the step loop
-  (`_advance_step`).
+  (`_advance_step`). `Agent.start(max_steps=...)` sets the step budget; chat
+  passes `ChatAgent.max_steps`: `MAX_LLM_CYCLES`, or `CODE_MODE_MAX_LLM_CYCLES`
+  when code mode applies (`ChatAgent.code_cells` is set).
+- `Agent.on_finish` runs once at the end of every run, without the execution
+  lock, with the run's recorded tool results.
+  `backend/onyx/agents/runtime.py:Run._release_amendments` collects its
+  `agents/models.py:ToolResultAmendment` list, and `Run._apply_amendments`
+  sets those results and publishes `ToolResultAmendedEvent` for each,
+  after the partial messages end and before `AgentEndEvent` and the save. An
+  amendment can also give a call that Stop interrupted its result. An
+  amendment that names no started call is logged and skipped. An amendment
+  inside the span of the compaction checkpoint drops the checkpoint, so the
+  next request builds its context from the amended result, and compacts only
+  when that context is over budget. A hook that fails or stops for
+  cancellation sets no results; the run still ends.
+  `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
+  amendments before it captures state. A suspend hook that fails sets no
+  results and the run still suspends. A suspend hook that stops for
+  cancellation finishes the run as cancelled. Chat uses both hooks to close
+  code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `chat/presentation.py:ResponsePresenter` renders each amendment with
+  `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
+  completes with the amended result. An ended card renders only what the
+  amendment added (`_amendment_packets`), after its section end; the generic
+  display adds nothing. `ToolRenderer.complete` renders that part after the
+  section end too. Live, the closing record follows the answer; replay places
+  it before the answer's `message_start`. Both orders give the same groups.
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary
@@ -144,7 +174,12 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    callbacks or other resources, so the new owner rebuilds them, possibly in
    another process or after a deploy. Each tool's definition must equal the
    saved step's declaration, or `backend/onyx/agents/runtime.py:_execute_tools`
-   raises `ValueError`. `chat/agent.py:ChatAgent.restore_state` also raises when
+   raises `ValueError`. Saved execution permissions are separate from advertised
+   definitions; restoration must not enable a tool merely because it was advertised.
+   A required configuration digest protects definitions, order and named phases
+   across restoration.
+   Steps narrow permissions; registered phases permit deliberate schema changes.
+   `chat/agent.py:ChatAgent.restore_state` also raises when
    the saved prompt, files, memory or settings differ. Keep a tool's definition
    stable while saved checkpoints can still resume.
 4. `context-captured-at-start` **A run copies the caller's context when it
@@ -160,8 +195,9 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    both first ([[multi-tenancy#threads-copy-context]],
    [[observability#root-trace-required]]).
 5. `run-input-protected` **Pass the whole current input in one `start` call.**
-   The question, its attachment text and request context go in
-   `start(messages=...)`. Compaction and truncation keep that group until the
+   The question and its attachment text go in `start(messages=...)`.
+   Chat supplies request-only context through prompt assembly, outside compacted history.
+   Compaction and truncation keep the input group until the
    model's first step in the run answers it, and input that cannot fit fails the
    run with `agents/compaction.py:ContextLimitError` instead of losing an
    attachment. Later steps can summarize or cut the attachment text; only the
@@ -175,7 +211,8 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    `agents/compaction.py:checkpoint_boundary` rejects it and the runtime
    silently drops the summary. Chat builds IDs such as `chat:<message id>` in
    `chat/chat_utils.py`; a change to that scheme discards every saved summary.
-   Mark request-only messages with `allow_compaction_cutoff=False`.
+   Keep transient request context outside recorded history. [[context-assembly]]
+   owns its placement in the uncached suffix, separate from summary input.
 7. `run-id-is-message-id` **A durable chat run ID is the assistant message ID.**
    The run ID is the reserved `ChatMessage.id` as a string, and child responses
    are reserved before their runs start. `ChatRunStore` and the Postgres history

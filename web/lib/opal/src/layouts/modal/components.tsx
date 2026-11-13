@@ -25,7 +25,11 @@ interface ConfirmationModalProps {
 
   hideCancel?: boolean;
 
-  /** Runs when the modal closes (composed via `useModalClose`). */
+  /**
+   * Closes the modal. When passed, the caller owns closing, so it can refuse
+   * (e.g. while a request runs); `undefined` hides Cancel and the X. When
+   * omitted, the `useCreateModal` owner closes it.
+   */
   onClose?: () => void;
 
   /** Gray body background separating it from the header and footer. */
@@ -39,30 +43,38 @@ interface ConfirmationModalProps {
 /**
  * Prebuilt small confirm dialog on `Modal`: icon header, body, Cancel plus
  * a caller-supplied submit action. Renders open, so mount it inside the
- * `Provider` from `useCreateModal` (closing goes through `useModalClose`).
+ * `Provider` from `useCreateModal`; closing goes through `onClose`, or the
+ * owner when `onClose` is omitted.
  */
-function ConfirmationModalLayout({
-  icon,
-  color,
-  title,
-  description,
-  children,
-  submit,
-  hideCancel,
-  onClose: externalOnClose,
-  twoTone = true,
-}: ConfirmationModalProps) {
-  const modalClose = useModalClose(externalOnClose);
-  const closedRef = React.useRef(false);
-  const canClose = modalClose !== undefined;
+function ConfirmationModalLayout(props: ConfirmationModalProps) {
+  const {
+    icon,
+    color,
+    title,
+    description,
+    children,
+    submit,
+    hideCancel,
+    onClose: externalOnClose,
+    twoTone = true,
+  } = props;
+  const ownerClose = useModalClose();
+  // `onClose={undefined}` (e.g. while busy) means "not closable", so only an
+  // omitted prop falls back to the owner.
+  const close = "onClose" in props ? externalOnClose : ownerClose;
+  const closingRef = React.useRef(false);
+  const canClose = close !== undefined;
 
   // The header X sits inside DialogPrimitive.Close AND carries onClick, so
-  // one click reaches here twice (directly and via onOpenChange). A closed
-  // confirmation unmounts, so close is one-shot by definition.
+  // one click reaches here twice (directly and via onOpenChange). Dedupe
+  // within that event only, so a close the caller declined can be retried.
   const onClose = () => {
-    if (!modalClose || closedRef.current) return;
-    closedRef.current = true;
-    modalClose();
+    if (!close || closingRef.current) return;
+    closingRef.current = true;
+    queueMicrotask(() => {
+      closingRef.current = false;
+    });
+    close();
   };
 
   return (

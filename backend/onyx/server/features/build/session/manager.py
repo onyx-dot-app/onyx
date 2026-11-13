@@ -10,6 +10,7 @@ import io
 import json
 import mimetypes
 import threading
+import time
 import uuid
 import zipfile
 from collections.abc import Callable, Generator
@@ -95,6 +96,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
+    OpencodeConfigReloadError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
@@ -131,10 +133,38 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+# After this many failed dispose attempts, turns fail fast (no dispose call)
+# until the backoff passes, then one more attempt is made.
+_DISPOSE_MAX_FAILED_ATTEMPTS = 3
+_DISPOSE_FAILURE_BACKOFF_SECONDS = 300
+
+_DISPOSE_RELOAD_FAILED_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings, so this "
+    "turn did not run."
+)
+_DISPOSE_BACKOFF_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings after "
+    "several attempts, so this turn did not run. Wait a few minutes, then try "
+    "again."
+)
 
 
 def _dispose_pending_key(session_id: UUID) -> str:
     return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def _encode_dispose_pending(failed_attempts: int, last_failure_at: float) -> str:
+    return f"{failed_attempts}:{last_failure_at}"
+
+
+def _decode_dispose_pending(raw: bytes) -> tuple[int, float]:
+    """(failed attempts, epoch of last failure). Unknown values, such as the
+    legacy ``"1"``, decode as no failures."""
+    try:
+        attempts, last_failure_at = raw.decode().split(":", 1)
+        return int(attempts), float(last_failure_at)
+    except ValueError:
+        return 0, 0.0
 
 
 def mark_opencode_dispose_pending(session_id: UUID) -> None:
@@ -142,10 +172,13 @@ def mark_opencode_dispose_pending(session_id: UUID) -> None:
 
     ``reconcile_session_llm_config`` performs it on the next turn, and needs the
     marker because it short-circuits when the file already matches what it would
-    write — which it does after a workspace rebuild.
+    write — which it does after a workspace rebuild. The value also counts
+    failed dispose attempts; a new claim resets the count.
     """
     get_cache_backend().set(
-        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+        _dispose_pending_key(session_id),
+        _encode_dispose_pending(0, 0.0),
+        ex=_DISPOSE_PENDING_TTL_SECONDS,
     )
 
 
@@ -313,11 +346,14 @@ class SessionManager:
             # picked it up: a prior reconcile may have written the file and
             # then failed the dispose. Retry the dispose while the marker is
             # set, else the instance stays on the old config until pod death.
-            if (
-                session.opencode_session_id is not None
-                and cache.get(dispose_pending_key) is not None
-            ):
-                self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            pending = cache.get(dispose_pending_key)
+            if session.opencode_session_id is not None and pending is not None:
+                self._dispose_for_config(
+                    sandbox.id,
+                    session.id,
+                    pending=_decode_dispose_pending(pending),
+                    status="pending_dispose_retry",
+                )
             cache.delete(dispose_pending_key)
             if (
                 session.agent_provider != llm_config.provider
@@ -348,11 +384,72 @@ class SessionManager:
             mcp_servers=mcp_servers,
         )
         if session.opencode_session_id is not None:
-            self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            self._dispose_for_config(
+                sandbox.id, session.id, pending=(0, 0.0), status="config_rewrite"
+            )
         cache.delete(dispose_pending_key)
         session.agent_provider = llm_config.provider
         session.agent_model = llm_config.model_name
         self._db_session.flush()
+
+    def _dispose_for_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        pending: tuple[int, float],
+        status: str,
+    ) -> None:
+        """Dispose the instance so it reloads its config. On failure, keep the
+        marker with a higher failure count and raise
+        ``OpencodeConfigReloadError``; the turn must not run on the old config.
+
+        Logs carry only a status category, the attempt number and the duration.
+        """
+        failed_attempts, last_failure_at = pending
+        if (
+            failed_attempts >= _DISPOSE_MAX_FAILED_ATTEMPTS
+            and time.time() - last_failure_at < _DISPOSE_FAILURE_BACKOFF_SECONDS
+        ):
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=dispose_backoff "
+                "failed_attempts=%d",
+                failed_attempts,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_BACKOFF_MESSAGE)
+
+        attempt = failed_attempts + 1
+        started = time.monotonic()
+        try:
+            self._sandbox_manager.dispose_opencode_instance(sandbox_id, session_id)
+        except httpx.HTTPError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+                "duration_ms=%d error=%s",
+                (
+                    "dispose_timeout"
+                    if isinstance(exc, httpx.TimeoutException)
+                    else "dispose_failed"
+                ),
+                attempt,
+                duration_ms,
+                type(exc).__name__,
+            )
+            get_cache_backend().set(
+                _dispose_pending_key(session_id),
+                _encode_dispose_pending(attempt, time.time()),
+                ex=_DISPOSE_PENDING_TTL_SECONDS,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_RELOAD_FAILED_MESSAGE) from exc
+
+        logger.info(
+            "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+            "duration_ms=%d",
+            "dispose_recovered" if failed_attempts > 0 else status,
+            attempt,
+            int((time.monotonic() - started) * 1000),
+        )
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
         """Reload one runtime and report whether its skills remain stale."""
@@ -1236,6 +1333,9 @@ class SessionManager:
 
     def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
         self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
+
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.close_session_event_bus(sandbox_id, session_id)
 
     # =========================================================================
     # Artifact Operations

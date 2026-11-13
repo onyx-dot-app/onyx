@@ -4,7 +4,7 @@ Covers the bypass where a user could override a persona's configured document
 sets by supplying `internal_search_filters.document_set` on a chat message.
 
 The SearchTool is only invoked when the LLM decides to call it, so these tests
-force the call with `forced_tool_id` and script the mock LLM to make it. They
+prefer the call with `preferred_tool_id` and script the mock LLM to make it. They
 also need a seeded connector because DocumentSetManager rejects creation with
 no connectors.
 """
@@ -25,7 +25,10 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -55,24 +58,20 @@ def _get_internal_search_tool_id(admin_user: DATestUser) -> int:
 def _setup_search_infrastructure(
     admin_user: DATestUser, mock_llm: MockLLMScript, search_expected: bool
 ) -> tuple[int, int]:
-    """A seeded connector, a scripted forced search, and the SearchTool id.
+    """A seeded connector, a scripted preferred search, and the SearchTool id.
     Required because DocumentSetManager rejects empty connector fields and
     SearchTool is only exposed when at least one connector exists.
 
     A blocked request may fail before any LLM call, so its replies are optional."""
     mock_llm.conversation(
         "chat",
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_SEARCH_CALL_ID,
-                    name="internal_search",
-                    arguments={"queries": ["test query"]},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=["internal_search"], tool_choice="required"
+        tool_call_reply(
+            ToolCall(
+                id=_SEARCH_CALL_ID,
+                name="internal_search",
+                arguments={"queries": ["test query"]},
             ),
+            tool_choice="auto",
             required=search_expected,
         ),
         Reply(
@@ -94,7 +93,7 @@ def _send_message_with_document_set_filter(
     user: DATestUser,
     chat_session_id: UUID,
     document_set_names: list[str],
-    forced_tool_id: int,
+    preferred_tool_id: int,
 ) -> Iterator[httpx.Response]:
     with client.stream(
         "POST",
@@ -104,7 +103,7 @@ def _send_message_with_document_set_filter(
             "chat_session_id": str(chat_session_id),
             "stream": True,
             "internal_search_filters": {"document_set": document_set_names},
-            "forced_tool_id": forced_tool_id,
+            "preferred_tool_id": preferred_tool_id,
         },
         headers=user.headers,
         cookies=user.cookies,
@@ -175,7 +174,7 @@ def test_document_set_filter_blocks_unauthorized_names(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[restricted_doc_set.name],
-        forced_tool_id=search_tool_id,
+        preferred_tool_id=search_tool_id,
     ) as response:
         assert _stream_contains_error(response, "document set"), (
             "Expected an access-denied error in the stream when filtering with an "
@@ -214,7 +213,7 @@ def test_document_set_filter_allows_authorized_names(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[allowed_doc_set.name],
-        forced_tool_id=search_tool_id,
+        preferred_tool_id=search_tool_id,
     ) as response:
         assert not _stream_contains_error(response, "document set"), (
             "Did not expect an access-denied error for an authorized document set."
@@ -246,7 +245,7 @@ def test_public_document_set_is_accessible_to_any_user(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=[public_doc_set.name],
-        forced_tool_id=search_tool_id,
+        preferred_tool_id=search_tool_id,
     ) as response:
         assert not _stream_contains_error(response, "document set")
 
@@ -272,6 +271,6 @@ def test_nonexistent_document_set_name_is_blocked(
         user=basic_user,
         chat_session_id=chat_session_id,
         document_set_names=["this_document_set_does_not_exist"],
-        forced_tool_id=search_tool_id,
+        preferred_tool_id=search_tool_id,
     ) as response:
         assert _stream_contains_error(response, "document set")

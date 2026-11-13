@@ -1,5 +1,4 @@
 import datetime
-import json
 import time
 from collections.abc import Generator
 from concurrent.futures import Future
@@ -36,6 +35,7 @@ from onyx.chat.chat_utils import (
     convert_chat_history_basic,
     create_chat_session_from_request,
 )
+from onyx.chat.errors import unhandled_stream_error
 from onyx.chat.incognito import (
     delete_incognito_generated_files,
     incognito_allowed_for_user,
@@ -43,9 +43,9 @@ from onyx.chat.incognito import (
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.models import ChatFullResponse, ChatResponseOutcome, CreateChatSessionID
 from onyx.chat.process_message import (
-    gather_stream_full,
     handle_multi_model_stream,
     handle_stream_message_objects,
+    run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
 from onyx.chat.stop_signal_checker import request_stop
@@ -926,7 +926,7 @@ def handle_send_chat_message(
                     yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
-                yield json.dumps({"error": str(e)})
+                yield get_json_line(unhandled_stream_error(e).model_dump())
 
         return StreamingResponse(
             multi_model_stream_generator(), media_type="text/event-stream"
@@ -955,8 +955,7 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        response_future = Future[ChatResponseOutcome]()
-        packets = handle_stream_message_objects(
+        result = run_chat_turn(
             new_msg_req=chat_message_req,
             user=user,
             litellm_additional_headers=get_relevant_headers(
@@ -967,9 +966,7 @@ def handle_send_chat_message(
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            response_future=response_future,
         )
-        result = gather_stream_full(packets, response_future)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -1002,7 +999,7 @@ def handle_send_chat_message(
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
+            yield get_json_line(unhandled_stream_error(e).model_dump())
 
         finally:
             logger.debug("Stream generator finished")

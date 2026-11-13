@@ -31,7 +31,7 @@ from onyx.chat.incognito_context import (
     load_incognito_agent_metadata,
     load_incognito_context,
     save_incognito_response,
-    save_incognito_user_message,
+    save_incognito_user_messages,
     teardown_incognito_session,
 )
 from onyx.chat.models import PromptMetadata, ResponseRecord, SavedAgentContext
@@ -189,11 +189,13 @@ def test_turn_round_trips_through_the_store() -> None:
     admission = ChatTurnAdmission(get_cache_backend())
     admission.claim(session_id)
     try:
-        save_incognito_user_message(
+        save_incognito_user_messages(
             session_id,
-            UserMessage(
-                content="what is our runway", metadata=PromptMetadata(token_count=4)
-            ),
+            [
+                UserMessage(
+                    content="what is our runway", metadata=PromptMetadata(token_count=4)
+                )
+            ],
             admission=admission,
         )
         save_incognito_response(
@@ -224,9 +226,9 @@ def test_teardown_ends_the_session_immediately() -> None:
     session_id = uuid4()
     admission = ChatTurnAdmission(get_cache_backend())
     admission.claim(session_id)
-    save_incognito_user_message(
+    save_incognito_user_messages(
         session_id,
-        UserMessage(content="secret", metadata=PromptMetadata(token_count=1)),
+        [UserMessage(content="secret", metadata=PromptMetadata(token_count=1))],
         admission=admission,
     )
     assert load_incognito_context(session_id).messages
@@ -383,8 +385,8 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
     admission = ChatTurnAdmission(get_cache_backend())
     admission.claim(session_id)
     try:
-        save_incognito_user_message(
-            session_id, UserMessage(content="root question"), admission=admission
+        save_incognito_user_messages(
+            session_id, [UserMessage(content="root question")], admission=admission
         )
         assert _load_agent_history(session_id, [1]) == []
         assert child.run_id is not None
@@ -460,8 +462,8 @@ def test_temporary_agent_history_sources_and_lifetime() -> None:
         ]
         assert restored.sources[1].document_id == "private-source"
         client.expire(key, 10)
-        save_incognito_user_message(
-            session_id, UserMessage(content="keep active"), admission=admission
+        save_incognito_user_messages(
+            session_id, [UserMessage(content="keep active")], admission=admission
         )
         assert client.ttl(key) >= INCOGNITO_CONTEXT_TTL_SECONDS - 2
         teardown_incognito_session(session_id)
@@ -543,9 +545,9 @@ def test_incognito_response_restores_agents_without_database_content(
     admission = ChatTurnAdmission(get_cache_backend())
     admission.claim(session.id)
     try:
-        save_incognito_user_message(
+        save_incognito_user_messages(
             session.id,
-            UserMessage(content="private root question"),
+            [UserMessage(content="private root question")],
             admission=admission,
         )
         history_store = get_chat_history_store(
@@ -768,8 +770,8 @@ def test_incognito_sibling_responses_keep_independent_agents_and_history(
         return root_run_id, child_id
 
     try:
-        save_incognito_user_message(
-            session_id, UserMessage(content="question"), admission=admission
+        save_incognito_user_messages(
+            session_id, [UserMessage(content="question")], admission=admission
         )
         assert ancestor_run.run_id is not None
 

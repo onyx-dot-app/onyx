@@ -46,6 +46,7 @@ from tests.external_dependency_unit.mock_search_pipeline import (
     use_mock_search_pipeline,
 )
 from tests.external_dependency_unit.mock_search_provider import (
+    MockWebProvider,
     MockWebSearchResult,
     use_mock_web_provider,
 )
@@ -309,13 +310,14 @@ def test_parallel_internal_and_web_search_tool_calls(
     assert all(documents)
 
 
+@pytest.mark.parametrize("calls_tool_at_cap", [False, True])
 def test_chat_stops_tools_at_the_step_cap(
-    db_session: Session, make_test_user: MakeTestUser
+    db_session: Session, make_test_user: MakeTestUser, calls_tool_at_cap: bool
 ) -> None:
     user = make_test_user("stream_step_cap")
     session = create_chat_session(db_session, user)
     cap = 4
-    # Every step before the cap searches; the step at the cap offers no tools.
+    # Definitions remain stable, but the final step cannot execute tools.
     queries = [f"topic {index}" for index in range(cap - 1)]
     llm = ScriptedLLM(
         [
@@ -331,11 +333,23 @@ def test_chat_stops_tools_at_the_step_cap(
                 )
                 for index, q in enumerate(queries)
             ),
-            Delta(content="Answered at the cap."),
+            Delta(
+                content="Answered at the cap.",
+                tool_calls=[
+                    tool_call("web_search", "blocked-at-cap", '{"queries":["blocked"]}')
+                ]
+                if calls_tool_at_cap
+                else [],
+            ),
         ],
         max_input_tokens=128000,
     )
     with (
+        patch(
+            "tests.external_dependency_unit.mock_search_provider.MockWebProvider.search",
+            autospec=True,
+            side_effect=MockWebProvider.search,
+        ) as search,
         patch("onyx.chat.agent.MAX_LLM_CYCLES", cap),
         patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         use_mock_web_provider(db_session) as web,
@@ -359,7 +373,7 @@ def test_chat_stops_tools_at_the_step_cap(
         for request in llm.requests[:-1]
     )
     last = llm.requests[-1]
-    assert not last["tools"]
+    assert last["tools"] == llm.requests[0]["tools"]
     assert last["tool_choice"] == ToolChoiceOptions.NONE
     assert any(
         isinstance(message, RequestUserMessage)
@@ -370,4 +384,5 @@ def test_chat_stops_tools_at_the_step_cap(
     saved_calls = (
         db_session.query(ToolCall).filter(ToolCall.chat_session_id == session.id).all()
     )
-    assert len(saved_calls) == cap - 1
+    assert len(saved_calls) == cap - 1 + int(calls_tool_at_cap)
+    assert [call.args[1] for call in search.call_args_list] == queries

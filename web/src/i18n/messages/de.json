@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Suchquellen auswählen"
+      },
+      "preference": {
+        "tooltip": "{description}\nDieses Tool für diesen Chat bevorzugen. Der Agent kann antworten, ohne es zu verwenden."
       }
     },
     "addMcpModal": {
@@ -350,7 +353,7 @@
         "clientMetadataRejected": "Der Anbieter konnte das Client-Metadatendokument nicht verwenden. Wenn diese Instanz nicht über das öffentliche Internet erreichbar ist, deaktivieren Sie „Client-Metadatendokument verwenden“ und verbinden Sie sich erneut.",
         "discoveryFailed": "Die OAuth-Anmeldeeinstellungen wurden nicht gefunden. Prüfen Sie die Server-URL oder geben Sie die Endpunkte Ihres Anbieters ein.",
         "connectionFailed": "Der Server konnte nicht erreicht werden. Prüfen Sie die Server-URL und versuchen Sie es erneut.",
-        "oauthFailed": "Die OAuth-Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Client-Einstellungen und versuchen Sie es erneut.",
+        "oauthFailed": "Die OAuth-Anmeldung ist fehlgeschlagen. Versuchen Sie es erneut oder prüfen Sie die OAuth-Einstellungen des Servers.",
         "oauthInitFailed": "OAuth konnte nicht gestartet werden: {detail}"
       },
       "header": {
@@ -2621,8 +2624,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Alle behalten den aus der Quelle synchronisierten Zugriff.",
-          "title": "Keine Beschränkung, bis Gruppen hinzugefügt werden"
+          "description": "Eine Einschränkung braucht eine Gruppe. Schalte sie aus, um den aus der Quelle synchronisierten Zugriff zu behalten.",
+          "title": "Wähle mindestens eine Gruppe aus"
         },
         "loadError": "Gruppen konnten nicht geladen werden. Laden Sie die Seite neu, um es erneut zu versuchen.",
         "memberCount": "{count, plural, one {# Mitglied} other {# Mitglieder}}",
@@ -2968,6 +2971,7 @@
           "sync": "Dokumentzugriff **mit {source} synchronisiert**",
           "managedByAdmins": "Verwaltet von **Admins**",
           "managedByGroups": "Verwaltet von **{count, plural, one {# Gruppe} other {# Gruppen}}**",
+          "onlyMe": "Dokumente über diesen Connector sichtbar für **nur seinen Inhaber**",
           "syncRestricted": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **{count, plural, one {# Gruppe} other {# Gruppen}}**",
           "groupsPending": "Dokumente freigegeben für **bestimmte Gruppen**",
           "syncRestrictedPending": "Dokumentzugriff **mit {source} synchronisiert**, beschränkt auf **bestimmte Gruppen**"
@@ -3751,15 +3755,19 @@
             "description": "Von diesem Konnektor indexierte Dokumente sind für alle in Ihrer Organisation verfügbar.",
             "title": "Alle in Ihrer Organisation"
           },
+          "onlyMe": {
+            "description": "Nur der Inhaber der Anmeldedaten dieses Connectors erhält darüber Zugriff; bei einer Quelle ohne Anmeldedaten nur die Person, die ihn erstellt hat.",
+            "title": "Nur ich"
+          },
           "specificGroups": {
             "description": "Benennen Sie Gruppen, die auf Dokumente dieses Konnektors zugreifen können.",
-            "required": "Wählen Sie mindestens eine Gruppe aus.",
             "title": "Bestimmte Gruppen"
           },
           "sync": {
             "description": "{appName} synchronisiert Berechtigungen mit der Quelle. Nutzer können nur durchsuchen, was sie in der Quelle sehen können.",
             "disabledReason": "Die aktuelle Authentifizierungsmethode der Zugangsdaten unterstützt keine automatische Berechtigungssynchronisierung. Bitte wechseln Sie zu einer unterstützten Authentifizierungsmethode.",
-            "title": "Mit {source} synchronisieren"
+            "title": "Mit {source} synchronisieren",
+            "restrictionRequired": "Wähle mindestens eine Gruppe aus oder schalte die Einschränkung aus."
           },
           "title": "Dokumentzugriff"
         },
@@ -7504,7 +7512,8 @@
           "public": "Öffentlich für Ihre Organisation",
           "private": "{count, plural, =0 {Privat} one {Mit # Gruppe geteilt} other {Mit # Gruppen geteilt}}",
           "sync": "Automatische Berechtigungssynchronisierung",
-          "sync_restricted": "Automatische Berechtigungssynchronisierung"
+          "sync_restricted": "Automatische Berechtigungssynchronisierung",
+          "personal": "Nur ich"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.}} in der Warteschlange",
@@ -7631,7 +7640,7 @@
             "targetUriParseFailed": "Die Ziel-URI konnte nicht ausgewertet werden — es werden die ursprünglichen Werte verwendet."
           },
           "validation": {
-            "targetUriInvalid": "Die Ziel-URI muss eine gültige URL mit dem Abfrageparameter api-version und entweder einem Bereitstellungsnamen im Pfad oder /openai/responses sein",
+            "targetUriInvalid": "Die Ziel-URI muss eine gültige URL sein: eine /openai/v1/-URL oder eine URL mit dem Abfrageparameter api-version und entweder einem Bereitstellungsnamen im Pfad oder /openai/responses",
             "targetUriRequired": "Die Ziel-URI ist erforderlich"
           }
         },
@@ -7845,7 +7854,6 @@
           "row": {
             "defaultLabel": "Standardmodell",
             "decisionTag": {
-              "label": "Entscheidung",
               "decisionOnly": "Entscheidungsmodell. Nicht in der Chat-Modellauswahl verfügbar.",
               "chatAndDecision": "Unterstützt Chat- und Entscheidungsaufgaben."
             },
@@ -7854,9 +7862,6 @@
             },
             "setDefaultButton": {
               "label": "Als Standard festlegen"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -12828,6 +12833,11 @@
           "text": "Bildgenerierung gestoppt"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Tabelle kopieren"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Frage"
@@ -12912,6 +12922,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · Exit {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · fehlgeschlagen"
           },
           "bashRequest": {
             "label": "Anfrage"
@@ -13016,6 +13029,9 @@
           },
           "updatingMemory": {
             "label": "Aktualisiert Erinnerung..."
+          },
+          "working": {
+            "label": "In Arbeit"
           }
         },
         "internalSearch": {
@@ -14243,6 +14259,11 @@
       "completeFailed": {
         "message": "Autorisierung konnte nicht abgeschlossen werden"
       },
+      "desktopHandoff": {
+        "button": "Onyx öffnen",
+        "description": "Ihr Browser öffnet die Onyx-Desktop-App, um die Verbindung abzuschließen. Sie können diesen Tab schließen, sobald die App geöffnet ist.",
+        "title": "Zurück zu Onyx"
+      },
       "genericError": {
         "description": "Während des OAuth-Vorgangs ist ein Fehler aufgetreten. Bitte versuchen Sie es erneut.",
         "title": "Etwas ist schiefgelaufen"
@@ -14360,6 +14381,10 @@
       },
       "labels": {
         "default": "Standard"
+      },
+      "modelTypes": {
+        "decision": "Entscheidung",
+        "vision": "Vision"
       }
     }
   },
@@ -14468,7 +14493,7 @@
         "promote": {
           "cancelButton": "Abbrechen",
           "confirmButton": "Organisationsweit verfügbar machen",
-          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Diese Änderung wird beim Speichern der App übernommen.",
+          "description": "Mit Apps verknüpfte Skills müssen für alle verfügbar sein. Beim Speichern der App wird der Skill in der Organisation veröffentlicht. Die Veröffentlichung kann nicht rückgängig gemacht werden.",
           "title": "„{name}“ organisationsweit verfügbar machen?"
         },
         "search": {
@@ -17116,6 +17141,13 @@
         "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
       },
+      "staleVersion": {
+        "description": "Jemand hat eine neuere Version gespeichert. Laden Sie neu, um sie zu erhalten. Ihre nicht gespeicherten Änderungen gehen verloren.",
+        "reload": {
+          "label": "Neu laden"
+        },
+        "title": "Dieser Skill wurde geändert, seit Sie ihn geöffnet haben"
+      },
       "toasts": {
         "created": "„{name}“ erstellt",
         "deleteFailed": "Skill konnte nicht gelöscht werden",
@@ -17316,9 +17348,6 @@
           "message": "Freigabedetails werden geladen..."
         },
         "noOwnerTitle": "Kein aktiver Eigentümer",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Organisationsberechtigung ändern"
-        },
         "ownerLabel": "Eigentümer",
         "permissionMenu": {
           "ariaLabel": "Zugriff für {name} aktualisieren"
@@ -17359,7 +17388,15 @@
         "peopleTitle": "Personen mit Zugriff",
         "manageIndividualAccess": "Individuellen Zugriff verwalten",
         "individualAccessTitle": "Individueller Zugriff",
-        "ownershipTitle": "Eigentümerschaft"
+        "ownershipTitle": "Eigentümerschaft",
+        "published": {
+          "title": "Organisation",
+          "description": "Veröffentlicht. Jeder in der Organisation kann diesen Skill verwenden."
+        },
+        "publishWarning": {
+          "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
+          "description": "Nach dem Speichern kann jeder in der Organisation diesen Skill verwenden. Sie können ihn danach nicht wieder privat machen. Nur ein Administrator kann ihn löschen."
+        }
       },
       "placeholders": {
         "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
@@ -17519,10 +17556,13 @@
       "shareDescription": "Diese Änderungen auf jeden ausgewählten Skill anwenden. Nicht geänderte Einstellungen behalten ihre aktuellen Werte.",
       "unchanged": "Unverändert lassen",
       "everyone": "Alle in der Organisation",
-      "invitedOnly": "Eingeladene Personen und Gruppen",
       "addAccessDescription": "Diese Personen und Gruppen zu jedem ausgewählten Skill hinzufügen. Aufgeführte Personen und Gruppen erhalten die gewählte Berechtigung. Alle anderen behalten ihren bisherigen Zugriff.",
       "apply": "{count, plural, one {Auf # Skill anwenden} other {Auf # Skills anwenden}}",
-      "moreActions": "Weitere Aktionen"
+      "moreActions": "Weitere Aktionen",
+      "publishWarning": {
+        "title": "Die Veröffentlichung kann nicht rückgängig gemacht werden",
+        "description": "Nach dem Anwenden kann jeder in der Organisation die ausgewählten Skills verwenden. Veröffentlichte Skills können nicht wieder privat gemacht werden. Nur ein Administrator kann sie löschen."
+      }
     }
   },
   "opensearchHealth": {

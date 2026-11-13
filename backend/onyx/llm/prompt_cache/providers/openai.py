@@ -1,9 +1,10 @@
 """OpenAI provider adapter for prompt caching.
 
 OpenAI caches prompt prefixes implicitly. Requests on OpenAI or Azure APIs to models
-that LiteLLM's `supports_openai_prompt_cache_breakpoint` accepts also carry
-explicit prompt_cache_breakpoints on every tool result
-(`explicit_cache_breakpoints`, applied in `multi_llm.py`).
+that LiteLLM's `supports_openai_prompt_cache_breakpoint` accepts instead carry
+explicit prompt_cache_breakpoints on every user message of the cacheable prefix
+and on every tool result (`explicit_cache_breakpoints`, applied in
+`multi_llm.py`).
 """
 
 from collections.abc import Iterable, Sequence
@@ -12,8 +13,7 @@ from urllib.parse import urlparse
 
 from pydantic import JsonValue
 
-from onyx.configs.model_configs import ENABLE_PROMPT_CACHING
-from onyx.llm.model_request import ChatCompletionMessage
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 from onyx.llm.prompt_cache.providers.base import PromptCacheProvider
 from onyx.llm.prompt_cache.utils import prepare_messages_with_cacheable_transform
@@ -26,7 +26,7 @@ def uses_explicit_cache_breakpoints(
     model_names: Iterable[str], api_base: str | None, *, azure: bool = False
 ) -> bool:
     """Check model and endpoint support while holding the environment lock."""
-    if not ENABLE_PROMPT_CACHING or not _supports_breakpoint(tuple(model_names)):
+    if not _supports_breakpoint(tuple(model_names)):
         return False
     import litellm
     from litellm.integrations.anthropic_cache_control_hook import targets_openai_api
@@ -51,45 +51,102 @@ def _supports_breakpoint(model_names: tuple[str, ...]) -> bool:
     return any(supports_openai_prompt_cache_breakpoint(name) for name in model_names)
 
 
+# Serialized-message key that carries `CacheableMessage.cache_breakpoint`
+# through request transforms. Never sent to a provider.
+CACHE_BREAKPOINT_FLAG = "cache_breakpoint"
+
+
+def without_cache_breakpoint_flags(
+    messages: Sequence[dict[str, JsonValue]],
+) -> list[dict[str, JsonValue]]:
+    """The messages without `CACHE_BREAKPOINT_FLAG`, as a provider receives them."""
+    return [
+        {key: value for key, value in message.items() if key != CACHE_BREAKPOINT_FLAG}
+        if CACHE_BREAKPOINT_FLAG in message
+        else message
+        for message in messages
+    ]
+
+
+def _marked_text(part: dict[str, JsonValue]) -> dict[str, JsonValue]:
+    return {**part, "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE)}
+
+
+def _marked_user_content(content: JsonValue) -> JsonValue | None:
+    """The content with its last text part marked; None if it has no text."""
+    if isinstance(content, str):
+        return [_marked_text({"type": "text", "text": content})]
+    if not isinstance(content, list):
+        return None
+    for index in range(len(content) - 1, -1, -1):
+        part = content[index]
+        if isinstance(part, dict) and part.get("type") == "text":
+            return [*content[:index], _marked_text(part), *content[index + 1 :]]
+    return None
+
+
 def explicit_cache_breakpoints(
     messages: Sequence[dict[str, JsonValue]],
 ) -> tuple[list[dict[str, JsonValue]], dict[str, JsonValue] | None]:
-    """The messages with every tool result marked with an explicit breakpoint,
-    and the request's prompt_cache_options; None before the first tool result,
-    so that request keeps implicit caching.
+    """The messages with explicit breakpoints on every tool result and on the
+    user messages that carry `CACHE_BREAKPOINT_FLAG`, and the request's
+    prompt_cache_options; None when nothing is marked, so that request keeps
+    implicit caching. The flags are removed.
 
     A breakpoint is part of the cached prefix, so an entry is reused only if
-    the same message still carries the marker. Marking each tool result
-    (not only the last) keeps earlier bytes identical from step to step.
-    Only tool output can carry the marker through LiteLLM: user content must
-    be chat-completions ``text`` (whose extra keys the bridge drops), system
-    messages become ``instructions``, and assistant output does not accept
-    one.
+    the same message still carries the marker. Every request marks each user
+    message of its cacheable prefix, so later steps and later turns repeat the
+    markers of earlier requests and read their entries. Marking each tool
+    result (not only the last) keeps earlier bytes identical from step to
+    step. Tool output takes the marker on an ``input_text`` part; user content
+    must stay chat-completions ``text``, which the patched Responses bridge
+    converts with its marker
+    (`_patch_responses_bridge_keeps_breakpoints`). System messages become
+    ``instructions`` and assistant output does not accept a marker.
     """
-    result = list(messages)
+    result = without_cache_breakpoint_flags(messages)
     marked = False
-    for index, message in enumerate(result):
+    for index, (message, original) in enumerate(zip(result, messages, strict=True)):
         content = message.get("content")
-        if message.get("role") != "tool" or not isinstance(content, str):
+        role = message.get("role")
+        if role == "tool" and isinstance(content, str):
+            marked_content: JsonValue | None = [
+                _marked_text({"type": "input_text", "text": content})
+            ]
+        elif role == "user" and original.get(CACHE_BREAKPOINT_FLAG) is True:
+            marked_content = _marked_user_content(content)
+        else:
             continue
-        result[index] = {
-            **message,
-            "content": [
-                {
-                    "type": "input_text",
-                    "text": content,
-                    "prompt_cache_breakpoint": dict(EXPLICIT_CACHE_MODE),
-                }
-            ],
-        }
+        if marked_content is None:
+            continue
+        result[index] = {**message, "content": marked_content}
         marked = True
     return result, dict(EXPLICIT_CACHE_MODE) if marked else None
+
+
+def _mark_user_messages(
+    messages: Sequence[ChatCompletionMessage],
+) -> Sequence[ChatCompletionMessage]:
+    """Mark every user message of the cacheable prefix.
+
+    A request reads an entry only at a marker it carries itself. Marking only
+    the last user message would drop the marker from earlier user messages on
+    the next turn, so that turn could not read the previous turn's entries.
+    Tool results carry their own breakpoints."""
+    return [
+        message.model_copy(update={"cache_breakpoint": True})
+        if isinstance(message, UserMessage)
+        else message
+        for message in messages
+    ]
 
 
 class OpenAIPromptCacheProvider(PromptCacheProvider):
     """OpenAI adapter for implicit prompt caching.
 
-    Explicit tool-result breakpoints come from `explicit_cache_breakpoints`.
+    It flags the user messages of the cacheable prefix;
+    `explicit_cache_breakpoints` turns the flags into breakpoints where the
+    endpoint accepts them.
     """
 
     def supports_caching(self) -> bool:
@@ -105,8 +162,9 @@ class OpenAIPromptCacheProvider(PromptCacheProvider):
     ) -> list[ChatCompletionMessage]:
         """Prepare messages for OpenAI caching.
 
-        OpenAI handles caching automatically, so we just normalize and combine
-        the messages. The provider will automatically cache prefixes >1024 tokens.
+        Combine the messages and flag every user message of the cacheable
+        prefix. The flag is not serialized, so implicit caching sees the same
+        messages.
 
         Args:
             cacheable_prefix: Optional cacheable prefix
@@ -117,12 +175,11 @@ class OpenAIPromptCacheProvider(PromptCacheProvider):
         Returns:
             Combined messages ready for LLM API call
         """
-        # No transformation needed for OpenAI (implicit caching)
         return prepare_messages_with_cacheable_transform(
             cacheable_prefix=cacheable_prefix,
             suffix=suffix,
             continuation=continuation,
-            transform_cacheable=None,
+            transform_cacheable=_mark_user_messages,
         )
 
     def extract_cache_metadata(

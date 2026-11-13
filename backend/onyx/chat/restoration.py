@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 from onyx.agents.models import ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
-from onyx.chat.models import ChatFeatureState, ChatSearchResult
+from onyx.chat.models import ChatFeatureState, StagedChatFiles
 from onyx.configs.constants import FileOrigin
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.models import DeepResearchFeatureState, ResearchFeatureState
@@ -52,14 +52,16 @@ def restore_chat_agent(
         return ChatAgent(
             messages=context.messages,
             tools=tools,
+            code_mode=state.code_mode,
             custom_agent_prompt=state.custom_prompt,
+            additional_context=state.request_context,
             base_system_prompt=state.base_prompt,
             context_files=state.context_files.restore(),
             persona=state.persona,
             user_memory_context=state.memory,
             llm=llm,
             token_counter=token_counter,
-            forced_tool_id=state.forced_tool_id,
+            preferred_tool_id=state.preferred_tool_id,
             user_identity=user_identity,
             reasoning_effort=state.reasoning_effort,
             include_citations=state.include_citations,
@@ -86,6 +88,8 @@ def restore_chat_agent(
     return DeepResearchAgent(
         messages=context.messages,
         allowed_tools=tools,
+        additional_context=state.request_context,
+        context_files=state.context_files.restore() if state.context_files else None,
         llm=llm,
         token_counter=token_counter,
         user_identity=user_identity,
@@ -126,7 +130,7 @@ def persist_checkpoint_files(
         file.content = None
 
     def payload(value: BaseModel | None) -> None:
-        if isinstance(value, ChatSearchResult):
+        if isinstance(value, StagedChatFiles):
             for staged in value.staged_files:
                 file = SavedChatFile.capture(staged)
                 save(file)

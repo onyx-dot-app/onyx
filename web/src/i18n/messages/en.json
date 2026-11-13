@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "Select Search Sources"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
     "addMcpModal": {
@@ -350,7 +353,7 @@
         "clientMetadataRejected": "The provider could not use the client metadata document. If this instance is not reachable from the public internet, turn off “Use client metadata document” and connect again.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
+        "oauthFailed": "OAuth sign-in failed. Try again, or check the server's OAuth settings.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
       "header": {
@@ -2621,8 +2624,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Everyone keeps the access synced from the source.",
-          "title": "No restriction until groups are added"
+          "description": "Restricting needs a group. Turn the restriction off to keep the access synced from the source.",
+          "title": "Pick at least one group"
         },
         "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
@@ -2968,6 +2971,7 @@
           "sync": "Document access **synced with {source}**",
           "managedByAdmins": "Managed by **admins**",
           "managedByGroups": "Managed by **{count, plural, one {# group} other {# groups}}**",
+          "onlyMe": "Documents visible through this connector to **only its owner**",
           "syncRestricted": "Document access **synced with {source}**, restricted to **{count, plural, one {# group} other {# groups}}**",
           "groupsPending": "Documents shared with **specific groups**",
           "syncRestrictedPending": "Document access **synced with {source}**, restricted to **specific groups**"
@@ -3751,15 +3755,19 @@
             "description": "Documents indexed by this connector are available to everyone in your organization.",
             "title": "Everyone in Your Organization"
           },
+          "onlyMe": {
+            "description": "Only the owner of this connector's credential gets access through it; for a source without a credential, only the person who created it.",
+            "title": "Only Me"
+          },
           "specificGroups": {
             "description": "Name groups who can access documents from this connector.",
-            "required": "Pick at least one group.",
             "title": "Specific Groups"
           },
           "sync": {
             "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
             "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-            "title": "Sync with {source}"
+            "title": "Sync with {source}",
+            "restrictionRequired": "Pick at least one group, or turn off the restriction."
           },
           "title": "Document Access"
         },
@@ -7504,7 +7512,8 @@
           "public": "Public to your organization",
           "private": "{count, plural, =0 {Private} one {Shared with # group} other {Shared with # groups}}",
           "sync": "Auto-sync permissions",
-          "sync_restricted": "Auto-sync permissions"
+          "sync_restricted": "Auto-sync permissions",
+          "personal": "Only me"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
@@ -7631,7 +7640,7 @@
             "targetUriParseFailed": "Failed to parse target URI — using original values."
           },
           "validation": {
-            "targetUriInvalid": "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+            "targetUriInvalid": "Target URI must be a valid URL: an /openai/v1/ URL, or a URL with the api-version query parameter and either a deployment name in the path or /openai/responses",
             "targetUriRequired": "Target URI is required"
           }
         },
@@ -7845,7 +7854,6 @@
           "row": {
             "defaultLabel": "Default Model",
             "decisionTag": {
-              "label": "Decision",
               "decisionOnly": "Decision model. Not available in the chat model picker.",
               "chatAndDecision": "Supports both chat and decision tasks."
             },
@@ -7854,9 +7862,6 @@
             },
             "setDefaultButton": {
               "label": "Set as Default"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -12828,6 +12833,11 @@
           "text": "Image generation stopped"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "Copy table"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "Question"
@@ -12912,6 +12922,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · exit {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · failed"
           },
           "bashRequest": {
             "label": "Request"
@@ -13016,6 +13029,9 @@
           },
           "updatingMemory": {
             "label": "Updating memory..."
+          },
+          "working": {
+            "label": "Working"
           }
         },
         "internalSearch": {
@@ -14243,6 +14259,11 @@
       "completeFailed": {
         "message": "Failed to complete authorization"
       },
+      "desktopHandoff": {
+        "button": "Open Onyx",
+        "description": "Your browser opens the Onyx desktop app to finish connecting. You can close this tab after the app opens.",
+        "title": "Return to Onyx"
+      },
       "genericError": {
         "description": "An error occurred during the OAuth process. Please try again.",
         "title": "Something Went Wrong"
@@ -14360,6 +14381,10 @@
       },
       "labels": {
         "default": "Default"
+      },
+      "modelTypes": {
+        "decision": "Decision",
+        "vision": "Vision"
       }
     }
   },
@@ -14468,7 +14493,7 @@
         "promote": {
           "cancelButton": "Cancel",
           "confirmButton": "Make organization-wide",
-          "description": "App-associated skills must be available to everyone. This change is applied when you save the app.",
+          "description": "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone.",
           "title": "Make “{name}” organization-wide?"
         },
         "search": {
@@ -17116,6 +17141,13 @@
         "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
       },
+      "staleVersion": {
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
+        "reload": {
+          "label": "Reload"
+        },
+        "title": "This skill changed since you opened it"
+      },
       "toasts": {
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
@@ -17316,9 +17348,6 @@
           "message": "Loading sharing details..."
         },
         "noOwnerTitle": "No active owner",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Change organization permission"
-        },
         "ownerLabel": "Owner",
         "permissionMenu": {
           "ariaLabel": "Update access for {name}"
@@ -17359,7 +17388,15 @@
         "peopleTitle": "People with access",
         "manageIndividualAccess": "Manage individual access",
         "individualAccessTitle": "Individual access",
-        "ownershipTitle": "Ownership"
+        "ownershipTitle": "Ownership",
+        "published": {
+          "title": "Organization",
+          "description": "Published. Everyone in the organization can use this skill."
+        },
+        "publishWarning": {
+          "title": "Publishing cannot be undone",
+          "description": "After you save, everyone in the organization can use this skill. You cannot make it private again. Only an admin can delete it."
+        }
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
@@ -17519,10 +17556,13 @@
       "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
       "unchanged": "Keep unchanged",
       "everyone": "Everyone in the organization",
-      "invitedOnly": "Invited people and groups",
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "publishWarning": {
+        "title": "Publishing cannot be undone",
+        "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
+      }
     }
   },
   "opensearchHealth": {

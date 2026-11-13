@@ -32,7 +32,7 @@ from onyx.chat.files import (
     load_context_user_files_for_tools,
     resolve_context_user_files,
 )
-from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.history_store import RedisChatHistoryStore
 from onyx.chat.incognito import (
     content_free_file_descriptors,
     incognito_llm_request_policy,
@@ -40,7 +40,6 @@ from onyx.chat.incognito import (
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     AnswerStream,
-    ChatBasicResponse,
     ChatFullResponse,
     ChatResponseOutcome,
     ChatTurnSetup,
@@ -60,7 +59,6 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.context.search.models import SearchDoc
 from onyx.db.chat import (
     checkpoint_from_summary,
     create_new_chat_message,
@@ -92,21 +90,16 @@ from onyx.llm.factory import (
     get_llm_token_counter,
 )
 from onyx.llm.interfaces import LLM, LLMUserIdentity
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.override_models import LLMOverride
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.onyxbot.slack.models import SlackContext
 from onyx.prompts.prompt_utils import substitute_user_placeholders
-from onyx.server.features.tool.tool_visibility import is_tool_available_for_persona
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import (
-    AgentResponseDelta,
-    AgentResponseStart,
-    CitationInfo,
-    Packet,
     StreamingError,
 )
 from onyx.server.query_and_chat.token_limit import check_model_spend_limits
@@ -121,7 +114,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
-APPROX_CHARS_PER_TOKEN = 4
 
 
 def _load_session(
@@ -383,13 +375,7 @@ def prepare_chat_turn(
             if new_msg_req.deep_research and research_tool_id is None:
                 raise ValueError("Research tool configuration is missing")
             tool_names = {tool.id: tool.name for tool in tools}
-            forced_tool_id = new_msg_req.forced_tool_id
-            if forced_tool_id in {
-                tool.id
-                for tool in tools
-                if not is_tool_available_for_persona(tool, persona.id)
-            }:
-                forced_tool_id = None
+            preferred_tool_id = new_msg_req.preferred_tool_id
             summary_message = find_summary_for_branch(db_session, chat_history)
             checkpoint = checkpoint_from_summary(summary_message)
             descriptors = {
@@ -427,15 +413,21 @@ def prepare_chat_turn(
                 token_counter,
                 checkpoint,
             )
+            if accepted_text is not None and not record_mode_persists_content(
+                incognito_record_mode
+            ):
+                # Filenames belong to the live input, not the content-free database row.
+                descriptors.update(
+                    {
+                        descriptor["id"]: descriptor
+                        for descriptor in new_msg_req.file_descriptors
+                    }
+                )
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
             )
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
-            )
-            search_tool_id = next(
-                (tool.id for tool in tools if tool.in_code_tool_id == SEARCH_TOOL_ID),
-                None,
             )
             skip_clarification = is_last_assistant_message_clarification(chat_history)
         # File loading can be slow; release the preparation DB session first.
@@ -449,12 +441,30 @@ def prepare_chat_turn(
         )
         admission.refresh()
         search_params = determine_search_params(persona_id, project_id, extracted_files)
+        # Inline project context replaces retrieval for this request.
         if (
             search_params.search_usage == SearchToolUsage.DISABLED
-            and forced_tool_id == search_tool_id
+            and (
+                new_msg_req.allowed_tool_ids is None
+                or preferred_tool_id in new_msg_req.allowed_tool_ids
+            )
+            and any(
+                tool.id == preferred_tool_id
+                and tool.in_code_tool_id == SEARCH_TOOL_ID
+                and tool.enabled
+                for tool in tool_configuration.tools
+            )
         ):
-            forced_tool_id = None
-        loaded_files = load_chat_files(file_inputs)
+            preferred_tool_id = None
+        # Temporary history already owns earlier attachment text. Only new inputs need extraction.
+        text_file_ids: set[str] | None = None
+        if not record_mode_persists_content(incognito_record_mode):
+            text_file_ids = (
+                {descriptor["id"] for descriptor in new_msg_req.file_descriptors}
+                if accepted_text is not None
+                else set()
+            )
+        loaded_files = load_chat_files(file_inputs, text_file_ids=text_file_ids)
         chat_files_for_tools = convert_loaded_files_to_chat_files(loaded_files)
         chat_files_for_tools.extend(
             load_context_user_files_for_tools(
@@ -464,9 +474,6 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
-            context_image_files=extracted_files.image_files,
-            token_counter=token_counter,
-            additional_context=additional_context or new_msg_req.additional_context,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -476,33 +483,17 @@ def prepare_chat_turn(
         # Persistent history and the accepted user row are already loaded and saved.
         if not record_mode_persists_content(incognito_record_mode):
             admission.refresh()
-            history_store = get_chat_history_store(
+            history_store = RedisChatHistoryStore(
                 message_id=user_message_id,
                 chat_session_id=chat_session_id,
-                persist_content=False,
+                visible_message_ids=(),
                 admission=admission,
             )
-            input_ids = {
-                message.id for message in history.messages[history.input_start :]
-            }
-            history.messages, previous_run_id = history_store.prepare_messages(
-                history.messages, previous_run_id, accepted_text
+            history, previous_run_id, checkpoint = history_store.prepare_messages(
+                history, accepted_text
             )
-            history.input_start = next(
-                (
-                    index
-                    for index, message in enumerate(history.messages)
-                    if message.id in input_ids
-                ),
-                len(history.messages) - 1,
-            )
-            selected_user_message = history.messages[-1] if history.messages else None
-            if not isinstance(selected_user_message, UserMessage):
-                raise ValueError(
-                    "History storage must retain the accepted user message last"
-                )
             admission.refresh()
-            history_store.save_user_message(selected_user_message)
+            history_store.save_user_messages(history)
             if incognito_session_ended(chat_session_id):
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
@@ -531,14 +522,7 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             research_tool_id=research_tool_id,
-            checkpoint=next(
-                (
-                    message.checkpoint
-                    for message in reversed(captured_history)
-                    if message.checkpoint is not None
-                ),
-                None,
-            ),
+            checkpoint=checkpoint,
             user_message_id=user_message_id,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
@@ -550,13 +534,14 @@ def prepare_chat_turn(
             messages=history.messages[: history.input_start],
             input_messages=history.messages[history.input_start :],
             previous_run_id=previous_run_id,
+            additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
             stream_id=user_message_id if is_multi else models[0].message_id,
             reasoning_effort=reasoning_effort,
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
-            forced_tool_id=forced_tool_id,
+            preferred_tool_id=preferred_tool_id,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
@@ -732,58 +717,6 @@ def remove_answer_citations(answer: str) -> str:
 
 
 @log_function_time()
-def gather_stream(
-    packets: AnswerStream,
-) -> ChatBasicResponse:
-    answer: str | None = None
-    citations: list[CitationInfo] = []
-    error_msg: str | None = None
-    message_id: int | None = None
-    top_documents: list[SearchDoc] = []
-
-    for packet in packets:
-        if isinstance(packet, Packet):
-            if packet.placement.sub_turn_index is not None:
-                continue
-            if isinstance(packet.obj, AgentResponseStart):
-                answer = answer or ""
-                if packet.obj.final_documents:
-                    known_documents = {doc.document_id for doc in top_documents}
-                    top_documents.extend(
-                        doc
-                        for doc in packet.obj.final_documents
-                        if doc.document_id not in known_documents
-                    )
-            elif isinstance(packet.obj, AgentResponseDelta):
-                answer = (answer or "") + packet.obj.content
-            elif isinstance(packet.obj, CitationInfo):
-                citations.append(packet.obj)
-        elif isinstance(packet, StreamingError):
-            error_msg = packet.error
-        elif isinstance(packet, MessageResponseIDInfo):
-            message_id = packet.reserved_assistant_message_id
-
-    if message_id is None:
-        raise ValueError("Message ID is required")
-
-    if answer is None:
-        if error_msg is not None:
-            answer = ""
-        else:
-            # This should never be the case as these non-streamed flows do not have a stop-generation signal
-            raise RuntimeError("Answer was not generated")
-
-    return ChatBasicResponse(
-        answer=answer,
-        answer_citationless=remove_answer_citations(answer),
-        citation_info=citations,
-        message_id=message_id,
-        error_msg=error_msg,
-        top_documents=top_documents,
-    )
-
-
-@log_function_time()
 def gather_stream_full(
     packets: AnswerStream,
     response_future: Future[ChatResponseOutcome],
@@ -844,3 +777,27 @@ def gather_stream_full(
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
     )
+
+
+def run_chat_turn(
+    new_msg_req: SendMessageRequest,
+    user: User,
+    litellm_additional_headers: dict[str, str] | None = None,
+    custom_tool_additional_headers: dict[str, str] | None = None,
+    mcp_headers: dict[str, str] | None = None,
+    additional_context: str | None = None,
+    slack_context: SlackContext | None = None,
+) -> ChatFullResponse:
+    """Run one chat turn to completion for in-process, non-streaming callers."""
+    response_future = Future[ChatResponseOutcome]()
+    packets = handle_stream_message_objects(
+        new_msg_req=new_msg_req,
+        user=user,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+        additional_context=additional_context,
+        slack_context=slack_context,
+        response_future=response_future,
+    )
+    return gather_stream_full(packets, response_future)

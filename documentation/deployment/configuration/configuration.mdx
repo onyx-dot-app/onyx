@@ -276,6 +276,12 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `WEBHOOK_PUBLIC_URL`: The public URL where providers reach the webhook server. It defaults to `WEB_DOMAIN`.
     Set it when the API and web hosts are different, because the Helm webhook ingress is served from the API host.
     Onyx shows callback URLs built from this value, and you paste them into each provider's console.
+
+    `CODE_MODE_ENABLED`: Set to `true` to let the model call actions from a Python program instead of one at a time.
+    Defaults to `false`. The setting applies to every chat in the deployment except Deep Research.
+    It can lower LLM usage for Agents with many actions, such as large MCP servers,
+    and raise it for Agents with few actions. The programs run on the API server.
+    Plan for about 1.3 GB more memory for each API server process.
   </Accordion>
 
   <Accordion title="Craft Configuration">
@@ -804,33 +810,12 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `GEN_AI_MODEL_FALLBACK_MAX_TOKENS`: Maximum token limit for generative AI model fallback
   </Accordion>
 
-  <Accordion title="Enterprise Configuration">
-    <Tip>
-
-      [Contact us](/deployment/miscellaneous/contact_us) to enable Enterprise Edition features!
-    </Tip>
-
-    `DATA_PLANE_SECRET`: Secret for secure control/data plane communication
-
-    `EXPECTED_API_KEY`: Additional security check for control plane API
-
-    `CONTROL_PLANE_API_BASE_URL`: Control plane API base URL
-  </Accordion>
-
-  <Accordion title="Development & Testing">
-    `DEV_MODE`: Enable development mode
-
-    `INTEGRATION_TESTS_MODE`: Enable integration tests mode
-  </Accordion>
-
   <Accordion title="Deployment Configuration">
     `POD_NAME`: Kubernetes pod name
 
     `POD_NAMESPACE`: Kubernetes pod namespace
 
     `AWS_REGION_NAME`: AWS region name
-
-    `TARGET_AVAILABLE_TENANTS`: Number of pre-provisioned tenants to maintain
 
     `SYSTEM_RECURSION_LIMIT`: System recursion limit
   </Accordion>

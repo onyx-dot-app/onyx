@@ -41,7 +41,6 @@ import { getLatestMessageChain } from "@/app/app/services/messageTree";
 export type RegenerationFactory = (regenerationRequest: {
   messageId: number;
   parentMessage: Message;
-  forceSearch?: boolean;
 }) => (modelOverride: LlmDescriptor) => Promise<void>;
 
 export interface AgentMessageProps {
@@ -147,6 +146,7 @@ const AgentMessage = React.memo(function AgentMessage({
     documentMap,
     toolGroups,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
@@ -409,11 +409,13 @@ const AgentMessage = React.memo(function AgentMessage({
         generatedImageCount={generatedImages.length}
         finalAnswerComing={pacedFinalAnswerComing}
         toolProcessingDuration={toolProcessingDuration}
+        codeModeWorking={codeModeWorking}
       />
 
       {/* Row 2: Display content + MessageToolbar */}
       <div
         ref={markdownRef}
+        data-agent-answer
         className={cn(
           "overflow-x-visible focus:outline-hidden select-text cursor-text",
           !fullWidthChat && "px-3"
@@ -448,6 +450,8 @@ const AgentMessage = React.memo(function AgentMessage({
                   displayGroup.tab_index
                 )}
                 packets={displayGroup.packets}
+                nestedCalls={displayGroup.nestedCalls}
+                streamPackets={displayGroup.streamPackets}
                 chatState={effectiveChatState}
                 messageNodeId={nodeId}
                 hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}

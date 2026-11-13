@@ -218,7 +218,8 @@ interface ConnectorValidationMessages {
   confluenceScopeRequired?: string;
   /** Confluence's CQL Query tab with no query. */
   confluenceCqlRequired?: string;
-  specificGroupsRequired?: string;
+  /** Sync with Restrict on and no group picked. */
+  restrictionGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
   stringPairEmptyKey?: string;
   /** Two string-pair rows with the same left key. */
@@ -416,14 +417,16 @@ export function createConnectorValidationSchema(
           ? schema.min(1, "Select at least one group you manage")
           : schema
       ),
-    // Specific Groups with none picked would let no group read the
-    // documents.
-    data_access_group_ids: Yup.array()
+    // Restrict on with no group would save as plain Sync, and reopening the
+    // form would show Restrict off: the choice must name a group.
+    restriction_group_ids: Yup.array()
       .of(Yup.number())
-      .when("access_type", ([accessType], schema) =>
-        accessType === "private"
-          ? schema.min(1, messages.specificGroupsRequired)
-          : schema
+      .when(
+        ["access_type", "restrict_access_to_groups"],
+        ([accessType, restrict], schema) =>
+          accessType === "sync" && restrict === true
+            ? schema.min(1, messages.restrictionGroupsRequired)
+            : schema
       ),
     ...fieldSchemas,
     // These are advanced settings

@@ -267,6 +267,26 @@ it deletes the old one.
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
+- **Hybrid search reads chunk keys first, then the top hits.** On a
+  single-shard index, OpenSearch fetches every hybrid candidate before
+  normalization keeps the top hits: up to `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES`
+  per subquery, about 1,000 chunks at the default of 500.
+  `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
+  fetches the source of the top hits in a second request. That request applies
+  the search filters again and builds the match highlights from the keyword
+  subquery. This path runs only on a single-shard index with explain off (the
+  default). A multi-shard search already fetches only the top hits, and a
+  second request would go to every shard. Explain describes the hybrid
+  scoring, so it keeps one request.
+- **New self-hosted indexes preload their search files.**
+  `DocumentSchema.get_index_settings_based_on_environment` sets
+  `index.store.preload` to the vectors, HNSW graph, postings, terms, doc
+  values and compound files. When a shard opens, OpenSearch reads them in one
+  sequential pass. Without it, the first searches after a restart each wait on
+  thousands of random reads, and search stays slow for minutes. A quantized
+  index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
+  Stored text is not preloaded: only the top hits read it. AWS managed indexes
+  do not set it. The setting applies only when the index is created.
 
 ## Known issues
 

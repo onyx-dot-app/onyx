@@ -13,7 +13,7 @@ from pydantic import (
 )
 
 from onyx.agents.execution_records import messages_for_model
-from onyx.agents.tools import AgentTool, ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -23,6 +23,7 @@ from onyx.llm.models import (
     Message,
     ToolCall,
     ToolDefinition,
+    ToolResult,
     ToolResultMessage,
 )
 
@@ -120,17 +121,20 @@ class CompactionMetadata(BaseModel):
 
 
 class PreparedStep(BaseModel):
-    """Step settings reused during compaction; tools select registered Agent.tools instances."""
+    """Step settings; permissions restrict the configured tools without changing schemas."""
 
     model_config = ConfigDict(extra="forbid", arbitrary_types_allowed=True, frozen=True)
     system_prompt: str = ""
-    tools: list[AgentTool] = Field(default_factory=list)
+    allowed_tool_names: frozenset[str] | None = None
+    tool_phase: str | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
     stall_timeout_s: int | None = Field(default=None, gt=0)
     output_metadata: SerializeAsAny[BaseModel] | None = None
     assemble_messages: Callable[[Sequence[Message]], list[Message]] | None = None
 
-    def generation_request(self, messages: list[Message]) -> GenerationRequest:
+    def generation_request(
+        self, messages: list[Message], *, tools: Sequence[ToolDefinition] = ()
+    ) -> GenerationRequest:
         """Build a detached request; assembly must not mutate borrowed history."""
         history = messages
         if self.assemble_messages is not None:
@@ -138,9 +142,29 @@ class PreparedStep(BaseModel):
         return GenerationRequest(
             messages=messages_for_model(history),
             system_prompt=self.system_prompt,
-            tools=[tool.definition.model_copy(deep=True) for tool in self.tools],
+            tools=[tool.model_copy(deep=True) for tool in tools],
+            allowed_tool_names=self.allowed_tool_names,
             options=self.options.model_copy(deep=True),
         )
+
+
+class ToolResultAmendment(BaseModel):
+    """A replacement for the recorded result of one tool call of the releasing run."""
+
+    call_id: str
+    result: ToolResult
+
+
+class ReleaseFailed(Exception):
+    """Raised by a run's finish or suspend hook: the run applies `amendments`,
+    then fails with `error`."""
+
+    def __init__(
+        self, error: Exception, amendments: Sequence[ToolResultAmendment]
+    ) -> None:
+        super().__init__(str(error))
+        self.error = error
+        self.amendments = list(amendments)
 
 
 class ToolCallContext(BaseModel):
@@ -235,6 +259,8 @@ class RunProgress(BaseModel):
     action: RunAction = RunAction.PREPARE
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
+    allowed_tool_names: frozenset[str] | None = None
+    tool_configuration_digest: str
     previous_options: GenerationOptions | None = None
     finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None
@@ -245,6 +271,12 @@ class RunProgress(BaseModel):
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
+
+    @field_serializer("allowed_tool_names", when_used="json")
+    def serialize_allowed_tool_names(
+        self, value: frozenset[str] | None
+    ) -> list[str] | None:
+        return sorted(value) if value is not None else None
 
     @field_serializer("finalized_tool_call_ids", when_used="json")
     def serialize_finalized_tool_call_ids(self, value: set[str]) -> list[str]:

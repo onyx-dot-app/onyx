@@ -1,4 +1,7 @@
-"""Assess one Locust plateau against explicit latency and failure targets."""
+"""Assess one Locust plateau against explicit latency and failure targets.
+
+For a direct versus code mode comparison, assess each arm's CSV separately.
+"""
 
 from __future__ import annotations
 

@@ -744,10 +744,11 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
     # NO_PROXY is loopback only; api-server traffic goes through the proxy too.
-    assert env["NO_PROXY"] == "127.0.0.1,localhost,::1"
+    assert env["NO_PROXY"] == "127.0.0.1,localhost,::1,[::1]"
     # Case-doubled like the other proxy vars; HTTP libs split on which they
     # read.
     assert env["no_proxy"] == env["NO_PROXY"]
+    assert env["NODE_USE_ENV_PROXY"] == "1"
     # SDK CA envs all point at the bundle the init script writes.
     for key in (
         "NODE_EXTRA_CA_CERTS",
@@ -816,6 +817,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "http_proxy",
         "NO_PROXY",
         "no_proxy",
+        "NODE_USE_ENV_PROXY",
         "NODE_EXTRA_CA_CERTS",
         "REQUESTS_CA_BUNDLE",
         "SSL_CERT_FILE",

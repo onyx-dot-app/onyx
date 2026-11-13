@@ -163,6 +163,144 @@ export function buildMockImageGenStream({
   return serializePackets(packets);
 }
 
+export interface CodeModeCellStreamOptions {
+  code: string;
+  /** The custom tool the program calls; the call outlives the first observation. */
+  toolName: string;
+  toolOutput: string;
+  message: string;
+  /**
+   * "wait": a wait_code call reports the call's end and the program's end.
+   * "response_end": the answer arrives while the cell runs, and the closing
+   * record reports the rest.
+   */
+  end: "wait" | "response_end";
+}
+
+/** A code mode cell that yields during a tool call, then completes or stops
+ * with the response. */
+export function buildMockCodeModeCellStream({
+  code,
+  toolName,
+  toolOutput,
+  message,
+  end,
+}: CodeModeCellStreamOptions): string {
+  const { userMessageId, agentMessageId } = nextMessageIds();
+  const cell = { turn_index: 0, tab_index: 0 };
+  const wait = { turn_index: 1, tab_index: 0 };
+  const waits = end === "wait";
+  const answer = { turn_index: waits ? 2 : 1, tab_index: 0 };
+  const callStart = (at: typeof cell) => ({
+    placement: { ...at, sub_turn_index: 0 },
+    obj: { type: "custom_tool_start", tool_name: toolName },
+  });
+  const callEnd = (at: typeof cell) => [
+    {
+      placement: { ...at, sub_turn_index: 0 },
+      obj: {
+        type: "custom_tool_delta",
+        tool_name: toolName,
+        response_type: "text",
+        data: toolOutput,
+      },
+    },
+    { placement: { ...at, sub_turn_index: 0 }, obj: { type: "section_end" } },
+  ];
+
+  const yielded = [
+    {
+      placement: cell,
+      obj: {
+        type: "tool_call_argument_delta",
+        tool_type: "execute_code",
+        tool_id: "call-code",
+        argument_deltas: { code },
+      },
+    },
+    {
+      placement: cell,
+      obj: { type: "code_mode_start", code, cell_id: null, observation: 0 },
+    },
+    callStart(cell),
+    {
+      placement: cell,
+      obj: {
+        type: "code_mode_delta",
+        stdout: "program output\n",
+        status: "running",
+        duration_seconds: 30,
+        tool_call_count: 1,
+        cell_id: 1,
+        observation: 0,
+      },
+    },
+    { placement: cell, obj: { type: "section_end" } },
+  ];
+  const waited = [
+    {
+      placement: wait,
+      obj: { type: "code_mode_start", code: "", cell_id: 1, observation: 1 },
+    },
+    callStart(wait),
+    ...callEnd(wait),
+    {
+      placement: wait,
+      obj: {
+        type: "code_mode_delta",
+        stdout: "",
+        result: "done",
+        status: "completed",
+        duration_seconds: 41,
+        tool_call_count: 1,
+        cell_id: 1,
+        observation: 1,
+      },
+    },
+    { placement: wait, obj: { type: "section_end" } },
+  ];
+  // The closing record: the calls that ended after the observation, then the
+  // final status.
+  const closing = [
+    ...callEnd(cell),
+    {
+      placement: cell,
+      obj: {
+        type: "code_mode_delta",
+        stdout: "",
+        status: "terminated",
+        tool_call_count: 1,
+        response_ended: true,
+      },
+    },
+  ];
+
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    ...yielded,
+    ...(waits ? waited : []),
+    {
+      placement: answer,
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content: message,
+        final_documents: null,
+      },
+    },
+    // The closing record of a running cell follows the answer, live and on
+    // reload.
+    ...(waits ? [] : closing),
+    { placement: answer, obj: { type: "stop", stop_reason: "finished" } },
+    { message_id: agentMessageId, citations: {}, files: [] },
+  ];
+
+  return serializePackets(packets);
+}
+
 export interface MockDocument {
   document_id: string;
   semantic_identifier: string;

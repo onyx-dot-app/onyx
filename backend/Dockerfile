@@ -9,7 +9,7 @@
 # pull-through cache (<account>.dkr.ecr.us-east-2.amazonaws.com/docker-hub) to avoid Docker
 # Hub rate limits. Declared before the first FROM so it applies to every base image below.
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1 AS builder
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac16ff35925780cf5c459858b2d693f01a9 /uv /uvx /bin/
 
@@ -58,7 +58,7 @@ RUN --mount=type=secret,id=build_ca_bundle \
 # The actual shipped image. Installs only runtime system libraries and copies the already-built
 # Python packages from the builder stage.
 ####################################################################################################
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1 AS os
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS os
 
 # Install runtime system dependencies only (no build toolchain). This stage is
 # everything the shipped image holds outside the lockfiles, so the audit gate
@@ -137,6 +137,7 @@ COPY --from=builder \
     /usr/local/bin/supervisord \
     /usr/local/bin/supervisorctl \
     /usr/local/bin/playwright \
+    /usr/local/bin/monty \
     /usr/local/bin/
 
 # Install the Chromium build used by Playwright; its OS-level runtime libraries came with the os

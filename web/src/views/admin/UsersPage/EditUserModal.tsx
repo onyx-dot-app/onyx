@@ -37,7 +37,11 @@ export default function EditUserModal({
 }: EditUserModalProps) {
   const t = useTranslations("admin.users");
   // defaults included; backend rejects the unsafe removals (last admin, self)
-  const { data: allGroups, isLoading: groupsLoading } = useGroups(true);
+  const {
+    data: allGroups,
+    isLoading: groupsLoading,
+    refreshGroups,
+  } = useGroups(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [popoverOpen, setPopoverOpen] = useState(false);
@@ -115,10 +119,13 @@ export default function EditUserModal({
       }
 
       onMutate();
+      refreshGroups();
       toast.success(t("editModal.toasts.updated"));
       onClose();
     } catch (err) {
-      onMutate(); // refresh to show partially-applied state
+      // refresh to show partially-applied state
+      onMutate();
+      refreshGroups();
       toast.error(
         err instanceof Error ? err.message : t("editModal.toasts.error")
       );

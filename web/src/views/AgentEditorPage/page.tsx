@@ -1228,27 +1228,25 @@ export default function AgentEditorPage({
                   />
                 </shareAgentModal.Provider>
                 <deleteAgentModal.Provider>
-                  {deleteAgentModal.isOpen && (
-                    <ConfirmationModalLayout
-                      icon={SvgTrash}
-                      title={t("editor.deleteModal.title")}
-                      submit={
-                        <Button variant="danger" onClick={handleDeleteAgent}>
-                          {t("editor.delete.button.label")}
-                        </Button>
-                      }
-                      onClose={() => deleteAgentModal.toggle(false)}
-                    >
-                      <Section alignItems="start" gap={2}>
-                        <Text color="text-05">
-                          {t("editor.deleteModal.body.warning")}
-                        </Text>
-                        <Text color="text-05">
-                          {t("editor.deleteModal.body.confirm")}
-                        </Text>
-                      </Section>
-                    </ConfirmationModalLayout>
-                  )}
+                  <ConfirmationModalLayout
+                    icon={SvgTrash}
+                    title={t("editor.deleteModal.title")}
+                    submit={
+                      <Button variant="danger" onClick={handleDeleteAgent}>
+                        {t("editor.delete.button.label")}
+                      </Button>
+                    }
+                    onClose={() => deleteAgentModal.toggle(false)}
+                  >
+                    <Section alignItems="start" gap={2}>
+                      <Text color="text-05">
+                        {t("editor.deleteModal.body.warning")}
+                      </Text>
+                      <Text color="text-05">
+                        {t("editor.deleteModal.body.confirm")}
+                      </Text>
+                    </Section>
+                  </ConfirmationModalLayout>
                 </deleteAgentModal.Provider>
 
                 <Form className="h-full w-full">

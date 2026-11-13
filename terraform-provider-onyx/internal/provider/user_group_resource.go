@@ -121,7 +121,7 @@ func (r *userGroupResource) Schema(ctx context.Context, _ resource.SchemaRequest
 					"The configuration owns the list, so leaving it out revokes every grant the " +
 					"group has.\n\n" +
 					"Only toggleable permissions may be set. Onyx manages the rest itself " +
-					"(`basic`, `admin`, `craft_sandbox`, `manage:skills` and the implied read " +
+					"(`basic`, `admin`, `craft_sandbox`, `manage:plugins` and the implied read " +
 					"tokens); they are neither read back here nor writable, and naming one is " +
 					"refused. Writing this attribute needs full admin access, so the provider only " +
 					"calls the endpoint when the set actually changes.",

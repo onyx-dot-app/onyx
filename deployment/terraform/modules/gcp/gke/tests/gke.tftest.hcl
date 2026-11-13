@@ -369,6 +369,13 @@ run "the_sandbox_pool_runs_pods_by_default" {
     condition     = contains(keys(google_container_node_pool.this["sandbox"].node_config[0].labels), "onyx.app/kvm") == false
     error_message = "Only pools that can run Firecracker carry the onyx.app/kvm label."
   }
+
+  assert {
+    condition = [for t in google_container_node_pool.this["sandbox"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+    ]
+    error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
+  }
 }
 
 run "firecracker_turns_on_nested_virtualization" {
@@ -397,6 +404,14 @@ run "firecracker_turns_on_nested_virtualization" {
   assert {
     condition     = google_container_node_pool.this["sandbox"].node_config[0].labels["onyx.app/workload"] == "sandbox"
     error_message = "The chart's sandbox pods still select the pool by its workload label."
+  }
+
+  assert {
+    condition = [for t in google_container_node_pool.this["sandbox"].node_config[0].taint : "${t.key}=${t.value}:${t.effect}"] == [
+      "workload=sandbox:NO_SCHEDULE",
+      "onyx.app/kvm=true:NO_SCHEDULE",
+    ]
+    error_message = "Firecracker pools must add the onyx.app/kvm taint, so pod sandboxes and the prepuller stay off."
   }
 
   assert {
@@ -619,6 +634,93 @@ run "the_namespace_is_created_before_the_service_account" {
   assert {
     condition     = length(coalesce(kubernetes_service_account.workload[0].metadata[0].annotations, {})) == 0
     error_message = "The service account needs no workload identity annotation."
+  }
+}
+
+run "the_default_runtime_creates_no_google_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = length(google_service_account.workload) == 0
+    error_message = "The pod runtime keeps the direct principal and needs no Google service account."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == null
+    error_message = "There is no Google service account to name with the pod runtime."
+  }
+}
+
+run "firecracker_maps_the_workload_to_a_signing_service_account" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  override_resource {
+    target          = google_service_account.workload
+    override_during = plan
+    values = {
+      email = "onyx-workload@example-project.iam.gserviceaccount.com"
+      name  = "projects/example-project/serviceAccounts/onyx-workload@example-project.iam.gserviceaccount.com"
+    }
+  }
+
+  assert {
+    condition     = google_service_account.workload[0].account_id == "onyx-workload"
+    error_message = "The Google service account is named after the cluster."
+  }
+
+  assert {
+    condition     = kubernetes_service_account.workload[0].metadata[0].annotations["iam.gke.io/gcp-service-account"] == "onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "GKE maps the Kubernetes service account to the Google one through this annotation."
+  }
+
+  assert {
+    condition     = google_service_account_iam_member.workload_identity_user[0].role == "roles/iam.workloadIdentityUser" && google_service_account_iam_member.workload_identity_user[0].member == "serviceAccount:example-project.svc.id.goog[onyx/onyx-workload-access]"
+    error_message = "Only the workload Kubernetes service account may act as the Google service account."
+  }
+
+  # signBlob on itself is what GCS V4 signing without a key file calls.
+  assert {
+    condition     = google_service_account_iam_member.workload_token_creator[0].role == "roles/iam.serviceAccountTokenCreator" && google_service_account_iam_member.workload_token_creator[0].member == "serviceAccount:onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The Google service account must be able to sign as itself."
+  }
+
+  assert {
+    condition     = output.workload_identity_principal == "serviceAccount:onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The pods act as the Google service account, so grants must go to it."
+  }
+
+  assert {
+    condition     = output.workload_google_service_account_email == "onyx-workload@example-project.iam.gserviceaccount.com"
+    error_message = "The output should name the Google service account."
+  }
+}
+
+run "a_long_cluster_name_gets_a_valid_workload_account_id" {
+  command = plan
+
+  variables {
+    name                     = "onyx-production-cluster-name-of-forty-c"
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+  }
+
+  assert {
+    condition     = can(regex("^[a-z][-a-z0-9]{4,28}[a-z0-9]$", google_service_account.workload[0].account_id))
+    error_message = "A service account ID is 6-30 characters, so a long cluster name must be shortened."
+  }
+
+  assert {
+    condition     = startswith(google_service_account.workload[0].account_id, "onyx-production") && endswith(google_service_account.workload[0].account_id, "-workload")
+    error_message = "The shortened ID should still read as this cluster's workload account."
   }
 }
 

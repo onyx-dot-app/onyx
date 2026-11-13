@@ -7,6 +7,11 @@ import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { Button, MessageCard, Modal, Tabs } from "@opal/components";
 import { toast } from "@opal/layouts";
+import {
+  isSilentOAuthOutcome,
+  oauthFailureDetail,
+  openOAuthAuthorization,
+} from "@/lib/oauth/launch";
 import { SvgServer } from "@opal/icons";
 import { IconLoader } from "@opal/loaders";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
@@ -275,14 +280,28 @@ export default function MCPServerDetailPage({
     });
   };
   const authorize = (url: string) => {
-    // Remove the unload warning before continuing the submitted OAuth flow.
+    // The blocked-tab fallback navigates away, so drop the unload warning first.
     flushSync(() => setAuthorizing(true));
-    try {
-      navigation.load(url);
-    } catch (error) {
-      setAuthorizing(false);
-      throw error;
-    }
+    openOAuthAuthorization(url)
+      .then(
+        async () => {
+          const fresh = await mutateServer();
+          if (fresh) await saveAuthentication(fresh);
+          selectTab("tools");
+        },
+        (error: unknown) => {
+          if (isSilentOAuthOutcome(error)) return;
+          const detail = oauthFailureDetail(error);
+          if (detail)
+            toast.error(detail.title, { description: detail.description });
+          else toast.error(t("mcpAuthModal.errors.oauthFailed"));
+        }
+      )
+      .catch((error: unknown) => {
+        console.error("Failed to save MCP authentication:", error);
+        toast.error(t("mcpAuthModal.errors.saveAuthFailed"));
+      })
+      .finally(() => setAuthorizing(false));
   };
   const saveAuthentication = async (saved: MCPServer) => {
     await mutateServer(saved, { revalidate: false });

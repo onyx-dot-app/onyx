@@ -118,7 +118,7 @@ export default function GroupShareList({
   const options = (userGroups ?? []).map((group) => ({
     value: String(group.id),
     title: group.name,
-    description: t("memberCount", { count: group.users.length }),
+    description: t("memberCount", { count: group.member_count }),
     icon: SvgUsers,
   }));
 
@@ -142,7 +142,7 @@ export default function GroupShareList({
         id: `group-${group.id}`,
         name: group.name,
         icon: SvgUsers,
-        memberCount: group.users.length,
+        memberCount: group.member_count,
         groupId: group.id,
       })),
   ];

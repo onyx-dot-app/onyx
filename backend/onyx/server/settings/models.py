@@ -177,6 +177,10 @@ class UserSettings(Settings):
     hide_onyx_branding: bool = False
     # True when hooks are available: single-tenant EE deployments only.
     hooks_enabled: bool = False
+    # True on the playground deployment (IS_PLAYGROUND env var). The web app
+    # reads this instead of a build-time flag, so cloud and playground share
+    # one web image.
+    is_playground: bool = False
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
     # Git details of the server's build (server/settings/build_info.py).

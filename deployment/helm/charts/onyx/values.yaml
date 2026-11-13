@@ -35,7 +35,8 @@ global:
 #   - The Craft sandbox proxy runs non-root on a read-only root filesystem. An
 #     init container builds an additive bundle in its writable confdir and
 #     configures mitmproxy through SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA
-#     to use that bundle for upstream TLS verification.
+#     to use that bundle for upstream TLS verification. SSL_CERT_FILE points
+#     HTTPX OAuth requests at the same bundle.
 # Version coupling: chart >= 0.7.0 pairs with the distroless model-server image
 # and can't run older ones — the model servers now run nonroot (1001, see their
 # securityContext below) and read ONYX_CUSTOM_CA_CERTS_DIR. Upgrade the chart and
@@ -389,11 +390,23 @@ monitoring:
       # -- Set to true to deploy Grafana dashboard ConfigMaps for the Onyx indexing pipeline.
       # Requires kube-prometheus-stack (or equivalent) with the Grafana sidecar enabled and watching this namespace.
       # The sidecar must be configured with label selector: grafana_dashboard=1
+      # With craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled,
+      # it also deploys the Craft Firecracker host agent dashboard.
       enabled: false
   serviceMonitors:
     # -- Set to true to deploy ServiceMonitor resources for API server and Celery worker metrics endpoints.
     # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
     # Use `labels` to match your Prometheus CR's serviceMonitorSelector (e.g. release: onyx-monitoring).
+    enabled: false
+    labels: {}
+  prometheusRules:
+    # -- Set to true to deploy PrometheusRule resources (alert rules).
+    # Requires the Prometheus Operator CRDs (included in kube-prometheus-stack).
+    # Today this has only the Craft Firecracker host agent rules, which also need
+    # craft.sandboxRuntime=firecracker and craft.hostAgent.metrics.enabled.
+    # The rules need the agent series: set serviceMonitors.enabled too, unless
+    # another scrape configuration collects the agent metrics.
+    # Use `labels` to match your Prometheus CR's ruleSelector (e.g. release: onyx-monitoring).
     enabled: false
     labels: {}
 
@@ -1730,6 +1743,18 @@ auth:
       ONYX_SANDBOX_PUSH_PRIVATE_KEY: private_key
     values:
       private_key: ""
+  # Shared credential that Craft Firecracker host agents send to register
+  # their node signing key (craft.sandboxRuntime=firecracker). The api_server
+  # rejects every registration while it is unset.
+  sandboxNodeRegistration:
+    enabled: false
+    allPods: false  # Restricted: only the API server checks it (plus the other restricted pods)
+    secretName: 'onyx-sandbox-node-registration'
+    existingSecret: ""
+    secretKeys:
+      SANDBOX_NODE_REGISTRATION_SECRET: sandbox_node_registration_secret
+    values:
+      sandbox_node_registration_secret: ""
 
 # NetworkPolicy for the per-sandbox push daemon (port 8731).
 # In prod the strict default is correct: only api_server pods can push.
@@ -1897,6 +1922,8 @@ configMap:
   LINEAR_PERMISSION_DOC_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   YOUTRACK_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY: ""
+  EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   AZURE_DATALAKE_PERMISSION_DOC_SYNC_FREQUENCY: ""
   AZURE_DATALAKE_PERMISSION_GROUP_SYNC_FREQUENCY: ""
   AZURE_DATALAKE_ACL_READ_CONCURRENCY: ""
@@ -1957,6 +1984,10 @@ configMap:
   HARD_DELETE_CHATS: ""
   MAX_ALLOWED_UPLOAD_SIZE_MB: ""
   DEFAULT_USER_FILE_MAX_UPLOAD_SIZE_MB: ""
+  # Code mode: "true" makes most chat tools Python functions. The model calls them
+  # from programs that it runs with execute_code and wait_code. It applies to
+  # every chat in the deployment.
+  CODE_MODE_ENABLED: ""
   # Sandbox config — always "kubernetes" for Helm deployments
   SANDBOX_BACKEND: "kubernetes"
   SANDBOX_NAMESPACE: "onyx-sandboxes"
@@ -1989,7 +2020,8 @@ craft:
   # SANDBOX_PROXY_NAMESPACE shared-proxy path); leave empty unless you point at a non-pod proxy.
   proxyExtraCIDRs: []
   # Opt-in check that sandbox nodes can run Firecracker. Runs one pod per
-  # sandbox node (sandboxPod.nodeSelector + tolerations) and writes
+  # sandbox node (sandboxPod.nodeSelector + tolerations + the onyx.app/kvm
+  # taint; with sandboxRuntime=firecracker only onyx.app/kvm=true nodes) and writes
   # PASS/FAIL/WARN lines to the pod log. See README "Check your nodes for
   # Craft Firecracker". Does not need ENABLE_CRAFT.
   firecrackerPreflight:
@@ -2008,6 +2040,168 @@ craft:
     scratchHostPath: /var/lib/onyx-craft-fc-preflight
     # Free disk below this is a WARN.
     minFreeDiskGi: 50
+  # How Craft sandboxes run: "pod" (default) or "firecracker". Mirrors the
+  # Terraform craft_sandbox_runtime of the sandbox node pool. "firecracker"
+  # sets SANDBOX_RUNTIME=firecracker for the backend and sandbox-proxy, deploys
+  # the host agent below, and lets the agent pods reach sandbox-proxy. Needs
+  # ENABLE_CRAFT and auth.sandboxNodeRegistration. Not usable yet: the backend
+  # Firecracker sandbox manager is not released.
+  sandboxRuntime: pod
+  # Craft Firecracker host agent: a privileged DaemonSet with hostPID on the
+  # Firecracker sandbox nodes. Rendered only with sandboxRuntime=firecracker.
+  # Flags: microvm/README.md.
+  hostAgent:
+    # Own namespace, with Pod Security "privileged". It must differ from the
+    # release namespace and configMap.SANDBOX_NAMESPACE.
+    namespace: onyx-sandbox-runtime
+    # false: you create the namespace (with the Pod Security labels).
+    createNamespace: true
+    image:
+      repository: onyxdotapp/craft-fc-host-agent
+      # Required. No default until the image is published.
+      tag: ""
+      pullPolicy: IfNotPresent
+    # Pull secrets for a private agent image, for example [{name: regcred}].
+    # They must exist in the agent namespace: the release imagePullSecrets
+    # are not used here (Secrets are namespaced).
+    imagePullSecrets: []
+    # Empty = sandboxPod.nodeSelector (or onyx.app/workload=sandbox) plus
+    # onyx.app/kvm=true, the label Terraform puts on Firecracker node pools.
+    nodeSelector: {}
+    # Empty = sandboxPod.tolerations (or the workload=sandbox taint). The chart
+    # always adds the onyx.app/kvm=true:NoSchedule toleration (the taint that
+    # Terraform puts on Firecracker nodes).
+    tolerations: []
+    # Same path on the node and in the container. Must be on XFS with reflink.
+    dataDir: /var/lib/craft-fc
+    # Jailer UID/GID range, one per VM. Keep it clear of node users.
+    uidBase: 1000000
+    uidCount: 65536
+    # mTLS listener for the api_server.
+    listenPort: 7443
+    # Guest vsock ports that Dial allows (app preview). The agent always refuses the daemon port.
+    dialPorts: "3010"
+    # Most open egress relay connections per VM; the agent closes new ones
+    # over the cap.
+    relayMaxConns: 256
+    # Most open Dial streams per VM; more fail with DIAL_LIMIT.
+    dialMaxStreams: 64
+    # Most VMs per node, template build VMs included (--max-vms). Over it,
+    # Create refuses with CAPACITY_VM_SLOTS and placement tries the next node.
+    # On nested virtualization (for example m8i.4xlarge), more than 64 VMs of
+    # 2 vCPU make random running VMs fail, so the default is 60. On bare
+    # metal, raise it or set 0 (no cap).
+    maxVms: 60
+    # Comma-separated DNS or URI SANs; the client certificate must have one.
+    # Empty = any certificate that tls ca.crt signed.
+    clientAllowedSans: ""
+    # host:port the agent clients dial, sent with the node key registration.
+    # Empty = the pod IP and listenPort.
+    advertiseAddress: ""
+    # Empty = the in-cluster api_server URL (the sandbox callback URL).
+    apiServerUrl: ""
+    tls:
+      # Required. A Secret in the agent namespace with tls.crt and tls.key (the
+      # agent certificate) and ca.crt (the CA of the api_server client
+      # certificates). The chart does not make certificates.
+      existingSecret: ""
+    # The agent clients: api_server, and the heavy and scheduled-tasks workers.
+    client:
+      # Required. A Secret in the release namespace with tls.crt and tls.key
+      # (the client certificate, signed by the CA in tls ca.crt) and ca.crt
+      # (the CA of the agent certificates).
+      existingSecret: ""
+      # Name to verify in the agent certificate. The clients dial pod IPs, so
+      # set this unless the agent certificates carry the pod IPs.
+      tlsServerName: ""
+    # Secret in the agent namespace with the registration key: the key name
+    # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
+    # (default sandbox_node_registration_secret). Empty = the chart copies
+    # auth.sandboxNodeRegistration.values into the agent namespace.
+    registrationExistingSecret: ""
+    # VMs run in a host systemd slice, outside this container's limits. The
+    # agent itself serves the API and relays VM egress.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 256Mi
+      limits:
+        memory: 1Gi
+    priorityClassName: ""
+    terminationGracePeriodSeconds: 30
+    # Drain: the agent reads its own Node and refuses new VMs while the Node
+    # has one of these taint keys (kubectl cordon and kubectl drain set
+    # node.kubernetes.io/unschedulable). The api_server then saves and
+    # stops the VMs on the node. The chart gives the agent a ServiceAccount
+    # with "get" on nodes. false: no RBAC; only the manual drain (SetDrain).
+    drainWatch:
+      enabled: true
+      # Comma-separated taint keys.
+      taints: "node.kubernetes.io/unschedulable"
+      pollInterval: 10s
+    # Root drive of the VMs. With a tag, an init container copies
+    # the drive into <dataDir>/rootfs and the agent builds its node template
+    # from it at start (--rootfs-dir). Empty tag = no template, and Create
+    # fails with TEMPLATE_MISSING. Publish a tag with
+    # .github/workflows/craft-fc-rootfs.yml, for example rootfs-0.1.0. Pin it.
+    rootfs:
+      image:
+        repository: onyxdotapp/craft-fc-artifacts
+        tag: ""
+        pullPolicy: IfNotPresent
+      # The init container copies about 4 GiB once per drive version.
+      resources: {}
+    # Egress CA. The root drive has no CA. The agent reads the
+    # sandbox-proxy CA from this ConfigMap at each Create (cached 30s) and
+    # the guest daemon installs it at Init. The chart gives the agent "get"
+    # on that one ConfigMap. false: VMs trust only a CA built into the drive.
+    egressCA:
+      enabled: true
+      # Empty = configMap.SANDBOX_NAMESPACE, where sandbox-proxy writes it.
+      namespace: ""
+      # Empty = configMap.SANDBOX_PROXY_CA_CONFIGMAP (sandbox-proxy-ca-bundle).
+      configMapName: ""
+      key: ca.crt
+    # Extra host-agent flags, for example ["--max-scratch-gib=200"].
+    extraArgs: []
+    # Prometheus metrics on a plain HTTP port (--metrics-listen). With
+    # monitoring.serviceMonitors.enabled the chart also makes a ServiceMonitor
+    # in the agent namespace. Auth is the api_server /metrics auth: the
+    # auth.metricsAuth token, or none with configMap.DISABLE_METRICS_AUTH=true.
+    # With neither, every scrape gets 401.
+    metrics:
+      enabled: false
+      port: 9464
+      # Secret in the agent namespace with the auth.metricsAuth token, under
+      # the key in auth.metricsAuth.secretKeys.METRICS_AUTH_TOKEN. Empty = the
+      # chart copies auth.metricsAuth.values into the agent namespace.
+      # Required when auth.metricsAuth uses existingSecret.
+      authExistingSecret: ""
+      # NetworkPolicy sources for the metrics port. Empty = Prometheus
+      # Operator pods (app.kubernetes.io/name=prometheus) in the release
+      # namespace. Set it if Prometheus runs in another namespace.
+      networkPolicyFrom: []
+      # Prometheus job label of the agent series, for the alert rules and the
+      # dashboard. Empty = the agent Service name (the chart ServiceMonitor).
+      # Set it if another scrape configuration collects the agent metrics.
+      job: ""
+    # Alert rules (monitoring.prometheusRules.enabled). The thresholds are
+    # proposed defaults; tune them per deployment. Runbooks: microvm/RUNBOOKS.md.
+    alerts:
+      runbookUrl: https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md
+      # Labels added to every rule (for example team or routing labels).
+      extraLabels: {}
+      # Failed Creates (start failed after admission) / admitted Creates, 15 m.
+      createFailureRatio: 0.2
+      # Capacity refusals per node and reason in 15 m.
+      admissionRefusals: 10
+      # Failed CaptureSession, UploadCapture or RestoreSession calls per node in 30 m.
+      sessionTransferFailures: 3
+      # Failed egress relay connections (over_cap, upstream_failed) / VM
+      # connections (accepted, over_cap), 10 m.
+      relayErrorRatio: 0.1
+      # MemAvailable / MemTotal of the node.
+      memoryAvailableRatio: 0.1
 
 # -- Sandbox Pod scheduling (rendered into the sandbox-pod PodTemplate).
 # Image/resources/ports come from the configMap.SANDBOX_* keys.

@@ -62,7 +62,7 @@ export default function PluginAddCatalogModal({
       : [];
   return (
     <Modal open onOpenChange={(open) => !open && onClose()}>
-      <Modal.Content width="lg" position="top" preventAccidentalClose={false}>
+      <Modal.Content width="lg" preventAccidentalClose={false}>
         <Modal.Header title={t(`kind.${catalogKind}`)} onClose={onClose} />
         <Modal.Body alignItems="stretch">
           <div className="flex w-full flex-col gap-4">

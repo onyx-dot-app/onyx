@@ -123,6 +123,15 @@ Status checked against LiteLLM v1.100.4 (2026-10-27):
      response then has no choices; streaming adds an empty choice for the same reply
    STATUS: STILL NEEDED - Fixed upstream by v1.106.4; drop once we are on it.
 
+11. Bridge Drops User Cache Breakpoints (_patch_responses_bridge_keeps_breakpoints):
+   - The completions -> responses bridge rebuilds each chat-completions `text` part
+     of a user message as a bare `input_text` part, so the part's
+     `prompt_cache_breakpoint` is lost. LiteLLM's own message injection points
+     lose it the same way
+   - Our patch copies the marker onto the converted `input_text` part
+   STATUS: STILL NEEDED - v1.100.4 keeps markers only on parts that are already
+           `input_text`, and LiteLLM rejects that type in a user message.
+
 """
 
 import re
@@ -987,6 +996,41 @@ def _patch_vertex_gemini_newer_models() -> None:
     )
 
 
+_original_convert_content_to_responses_format = (
+    LiteLLMResponsesTransformationHandler._convert_content_to_responses_format
+)
+_BREAKPOINT_KEY = "prompt_cache_breakpoint"
+
+
+def _patch_responses_bridge_keeps_breakpoints() -> None:
+    if (
+        LiteLLMResponsesTransformationHandler._convert_content_to_responses_format.__name__
+        == "_patched_convert_content_to_responses_format"
+    ):
+        return
+
+    def _patched_convert_content_to_responses_format(
+        self: Any, content: Any, role: str
+    ) -> list[dict[str, object]]:
+        if role != "user" or not isinstance(content, list):
+            return _original_convert_content_to_responses_format(self, content, role)
+        # Each part converts on its own, so converting part by part keeps the order.
+        result: list[dict[str, object]] = []
+        for part in content:
+            converted = _original_convert_content_to_responses_format(
+                self, [part], role
+            )
+            marker = part.get(_BREAKPOINT_KEY) if isinstance(part, dict) else None
+            if marker is not None and len(converted) == 1:
+                converted = [{**converted[0], _BREAKPOINT_KEY: marker}]
+            result.extend(converted)
+        return result
+
+    LiteLLMResponsesTransformationHandler._convert_content_to_responses_format = (  # type: ignore[method-assign]
+        _patched_convert_content_to_responses_format
+    )
+
+
 def apply_monkey_patches() -> None:
     """
     Apply all necessary monkey patches to LiteLLM for compatibility.
@@ -1003,6 +1047,7 @@ def apply_monkey_patches() -> None:
     - Patching AnthropicConfig.transform_request to keep requested thinking on tool turns
     - Patching OpenRouterChatCompletionStreamingHandler.chunk_parser to keep the served model
     - Patching VertexGeminiConfig for Gemini 4+ thinking and content-less candidates
+    - Patching the responses bridge to keep cache breakpoints on user text parts
     """
     _patch_ollama_chunk_parser()
     _patch_responses_reasoning_summary_newlines()
@@ -1014,3 +1059,4 @@ def apply_monkey_patches() -> None:
     _patch_anthropic_keeps_requested_thinking()
     _patch_openrouter_routed_model()
     _patch_vertex_gemini_newer_models()
+    _patch_responses_bridge_keeps_breakpoints()

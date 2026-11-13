@@ -114,13 +114,13 @@ function Composer({
     <>
       <Button
         onClick={() =>
-          configuration.setToolState(storedMcpTool.id, () => "forced")
+          configuration.setToolState(storedMcpTool.id, () => "preferred")
         }
       >
-        Force selected tool
+        Prefer selected tool
       </Button>
-      <output aria-label="Stored forced tool">
-        {configuration.forcedToolId}
+      <output aria-label="Stored preferred tool">
+        {configuration.preferredToolId}
       </output>
       <AppInputBar
         ref={inputBarRef}
@@ -146,12 +146,12 @@ beforeEach(() => {
   mockProjectsContext.setCurrentMessageFiles.mockClear();
 });
 
-test("default Chat hides the forced plugin pill until metadata confirms availability without clearing the selection", async () => {
+test("default Chat hides the preferred plugin pill until metadata confirms availability without clearing the selection", async () => {
   const { rerender } = render(<Composer plugins={[]} />);
   await setupUser().click(
-    screen.getByRole("button", { name: "Force selected tool" })
+    screen.getByRole("button", { name: "Prefer selected tool" })
   );
-  expect(screen.getByLabelText("Stored forced tool")).toHaveTextContent(
+  expect(screen.getByLabelText("Stored preferred tool")).toHaveTextContent(
     String(storedMcpTool.id)
   );
   expect(
@@ -174,15 +174,15 @@ test("default Chat hides the forced plugin pill until metadata confirms availabi
   expect(
     screen.queryByRole("button", { name: storedMcpTool.display_name })
   ).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Stored forced tool")).toHaveTextContent(
+  expect(screen.getByLabelText("Stored preferred tool")).toHaveTextContent(
     String(storedMcpTool.id)
   );
 });
 
-test("custom agents retain the forced plugin pill without member metadata", async () => {
+test("custom agents retain the preferred plugin pill without member metadata", async () => {
   render(<Composer plugins={[]} agentId={8} />);
   await setupUser().click(
-    screen.getByRole("button", { name: "Force selected tool" })
+    screen.getByRole("button", { name: "Prefer selected tool" })
   );
   expect(
     screen.getByRole("button", { name: storedMcpTool.display_name })

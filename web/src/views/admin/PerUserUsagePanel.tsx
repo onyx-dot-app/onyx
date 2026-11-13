@@ -2,7 +2,7 @@
 
 import React, { useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { Card, MessageCard, Text } from "@opal/components";
+import { Card, MessageCard, Text, useCreateModal } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { PageLoader } from "@opal/loaders";
@@ -54,6 +54,8 @@ export default function PerUserUsagePanel({
   const locale = useLocale();
   const { usage, isLoading, error } = useUsageExport(timeRange);
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  // `selectedEmail` stays set on close so the modal can animate out.
+  const detailModal = useCreateModal();
 
   const users = usage?.users ?? [];
   const selectedUser =
@@ -226,23 +228,31 @@ export default function PerUserUsagePanel({
             </Text>
           </Card>
         ) : (
-          <SpendByUserTable users={users} onSelectUser={setSelectedEmail} />
+          <SpendByUserTable
+            users={users}
+            onSelectUser={(email) => {
+              setSelectedEmail(email);
+              detailModal.toggle(true);
+            }}
+          />
         )}
       </Section>
 
-      {selectedUser && (
-        <UserUsageDetailModal
-          user={selectedUser}
-          periodLabel={
-            usage
-              ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
-              : undefined
-          }
-          onOpenChange={(open) => {
-            if (!open) setSelectedEmail(null);
-          }}
-        />
-      )}
+      <detailModal.Provider>
+        {selectedUser && (
+          <UserUsageDetailModal
+            user={selectedUser}
+            periodLabel={
+              usage
+                ? `${formatDate(usage.start, locale)} – ${formatDate(usage.end, locale)}`
+                : undefined
+            }
+            onOpenChange={(open) => {
+              if (!open) detailModal.toggle(false);
+            }}
+          />
+        )}
+      </detailModal.Provider>
     </Section>
   );
 }

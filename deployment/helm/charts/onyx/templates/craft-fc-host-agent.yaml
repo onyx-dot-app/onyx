@@ -1,0 +1,499 @@
+{{/*
+Craft Firecracker host agent. Rendered only with
+craft.sandboxRuntime=firecracker. Render tests in
+backend/tests/external_dependency_unit/craft_helm/test_craft_fc_host_agent.py.
+Agent flags and node requirements: microvm/README.md.
+
+- One agent pod per Firecracker sandbox node: the sandbox node selector plus
+  onyx.app/kvm=true (Terraform craft_sandbox_runtime=firecracker), the sandbox
+  tolerations plus the onyx.app/kvm taint, and no RuntimeClass.
+- Own namespace with Pod Security "privileged": the agent needs privileged,
+  hostPID (it starts VMs in the host mount namespace and checks their PIDs)
+  and /dev/kvm. User sandboxes never run in this namespace.
+- The agent joins the host cgroup namespace (nsenter -C) before it starts.
+  With the pod's own cgroup namespace, /proc/<pid>/cgroup of a VM shows a
+  relative path and the agent cannot re-adopt VMs after a restart.
+- The data dir is a hostPath at the same path in the container: the agent
+  passes these paths to the jailer, which runs in the host mount namespace.
+- mTLS: craft.hostAgent.tls.existingSecret (in the agent namespace) has the
+  server certificate (tls.crt, tls.key) and the api_server client CA (ca.crt).
+  craft.hostAgent.client.existingSecret (in the release namespace) has the
+  client certificate and the agent CA for the pods that call the agents
+  (onyx.craftFcAgentClient.*). The chart does not make certificates.
+- The agent registers $(POD_IP):listenPort with its signing key, so the
+  api_server finds the agent of each node.
+- SANDBOX_NODE_REGISTRATION_SECRET: the api_server reads it from
+  auth.sandboxNodeRegistration. Secrets are namespaced, so the agent reads a
+  copy in its own namespace.
+- Only the agent clients (api_server, heavy and scheduled-tasks workers) reach
+  the agent listener (NetworkPolicy below). Agent
+  pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
+- Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
+  ServiceAccount that may only "get" nodes, and refuses new VMs while the
+  Node has a drain taint. Off: no ServiceAccount token in the pod.
+- Root drive (craft.hostAgent.rootfs): with an image tag, an init
+  container copies the drive of onyxdotapp/craft-fc-artifacts:rootfs-<version>
+  into <dataDir>/rootfs (skipped when it is current), and the agent builds
+  its template from it (--rootfs-dir). The drive has no egress CA.
+- Egress CA (craft.hostAgent.egressCA): the agent reads the sandbox-proxy CA
+  ConfigMap (configMap.SANDBOX_PROXY_CA_CONFIGMAP in SANDBOX_NAMESPACE) at
+  each Create and sends it to the guest daemon, which installs it at Init.
+  The agent's ServiceAccount gets "get" on that one ConfigMap.
+- craft.hostAgent.metrics.enabled adds a plain HTTP /metrics port
+  (--metrics-listen); the ServiceMonitor is in
+  craft-fc-host-agent-servicemonitor.yaml. /metrics uses the api_server
+  /metrics auth: the auth.metricsAuth bearer token (the chart copies it into
+  the agent namespace, or craft.hostAgent.metrics.authExistingSecret), or
+  none with configMap.DISABLE_METRICS_AUTH=true. With neither, every scrape
+  gets 401. The agent reads the token file on each scrape, so a rotated
+  Secret applies without a restart.
+*/}}
+{{- $craft := .Values.craft | default dict }}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+{{- if ne (include "onyx.craftEnabled" .) "true" }}
+{{- fail "craft.sandboxRuntime=firecracker needs configMap.ENABLE_CRAFT=true" }}
+{{- end }}
+{{- $agent := $craft.hostAgent | default dict }}
+{{- $ns := include "onyx.craftHostAgentNamespace" . }}
+{{- $sandboxNs := .Values.configMap.SANDBOX_NAMESPACE | default "onyx-sandboxes" }}
+{{- if or (eq $ns .Release.Namespace) (eq $ns $sandboxNs) }}
+{{- fail "craft.hostAgent.namespace must differ from the release namespace and configMap.SANDBOX_NAMESPACE" }}
+{{- end }}
+{{- $image := $agent.image | default dict }}
+{{- if not $image.tag }}
+{{- fail "craft.hostAgent.image.tag is required with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- $tls := $agent.tls | default dict }}
+{{- if not $tls.existingSecret }}
+{{- fail "craft.hostAgent.tls.existingSecret is required with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- $_ := include "onyx.craftFcAgentClient.secretName" . }}
+{{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
+{{- if ne (toString $reg.enabled) "true" }}
+{{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker" }}
+{{- end }}
+{{- /* The key the api_server reads (auth.sandboxNodeRegistration.secretKeys); the agent copy uses the same key. */}}
+{{- $regKey := dig "secretKeys" "SANDBOX_NODE_REGISTRATION_SECRET" "sandbox_node_registration_secret" $reg }}
+{{- $regSecret := $agent.registrationExistingSecret }}
+{{- $regValue := dig "values" $regKey "" $reg }}
+{{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
+{{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
+{{- end }}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
+{{- $dataDir := $agent.dataDir | default "/var/lib/craft-fc" }}
+{{- $port := $agent.listenPort | default 7443 }}
+{{- $sandboxPod := .Values.sandboxPod | default dict }}
+{{- $nodeSelector := $agent.nodeSelector }}
+{{- if not $nodeSelector }}
+{{- $nodeSelector = merge (dict "onyx.app/kvm" "true") (deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox"))) }}
+{{- end }}
+{{- $drain := $agent.drainWatch | default dict }}
+{{- $watchDrain := ne (toString $drain.enabled) "false" }}
+{{- $rootfs := $agent.rootfs | default dict }}
+{{- $rootfsImage := $rootfs.image | default dict }}
+{{- $rootfsDir := printf "%s/rootfs" $dataDir }}
+{{- $egressCA := $agent.egressCA | default dict }}
+{{- $readCA := ne (toString $egressCA.enabled) "false" }}
+{{- $caNs := $egressCA.namespace | default $sandboxNs }}
+{{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
+{{- $caKey := $egressCA.key | default "ca.crt" }}
+{{- $serviceAccount := or $watchDrain $readCA }}
+{{- $tolerations := include "onyx.craftKvmNodeTolerations" (dict "ctx" . "tolerations" $agent.tolerations) | fromYamlArray }}
+{{- $metrics := $agent.metrics | default dict }}
+{{- $metricsPort := $metrics.port | default 9464 }}
+{{- $metricsAuthMode := include "onyx.craftHostAgentMetricsAuth" . }}
+{{- $metricsToken := and $metrics.enabled (eq $metricsAuthMode "token") }}
+{{- $metricsKey := include "onyx.craftHostAgentMetricsKey" . }}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict }}
+{{- $metricsValue := dig "values" $metricsKey "" $metricsAuth }}
+{{- if and $metricsToken (not $metrics.authExistingSecret) (or $metricsAuth.existingSecret (not $metricsValue)) }}
+{{- fail "craft.hostAgent.metrics.authExistingSecret is required when auth.metricsAuth uses existingSecret or has no value" }}
+{{- end }}
+{{- if ne (toString $agent.createNamespace) "false" }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/part-of: {{ include "onyx.fullname" . }}
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/audit: privileged
+    pod-security.kubernetes.io/warn: privileged
+---
+{{- end }}
+{{- if not $regSecret }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}-registration
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: Opaque
+stringData:
+  {{ $regKey }}: {{ $regValue | quote }}
+---
+{{- end }}
+{{- if $serviceAccount }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+automountServiceAccountToken: false
+---
+{{- end }}
+{{- if $readCA }}
+{{- /* The egress CA is public. The agent may read only this one ConfigMap. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $name }}-egress-ca-read
+  namespace: {{ $caNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [configmaps]
+    resourceNames: [{{ $caConfigMap | quote }}]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $name }}-egress-ca-read
+  namespace: {{ $caNs }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $name }}-egress-ca-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
+---
+{{- end }}
+{{- if $watchDrain }}
+{{- /* Cluster-scoped: RBAC cannot limit "get" to the pod's own Node. Node objects hold no secrets. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-read
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [get]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-read
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $ns }}-{{ $name }}-node-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
+---
+{{- end }}
+{{- if and $metricsToken (not $metrics.authExistingSecret) }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "onyx.craftHostAgentMetricsSecret" . }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: Opaque
+stringData:
+  {{ $metricsKey }}: {{ $metricsValue | quote }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-host-agent
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        {{- include "onyx.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: craft-fc-host-agent
+    spec:
+      nodeSelector:
+        {{- $nodeSelector | toYaml | nindent 8 }}
+      tolerations:
+        {{- $tolerations | toYaml | nindent 8 }}
+      {{- with $agent.priorityClassName }}
+      priorityClassName: {{ . }}
+      {{- end }}
+      {{- /* Pull secrets are namespaced: the release's imagePullSecrets do not exist here. */}}
+      {{- with $agent.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # VMs keep running while the agent restarts (journal + re-adopt).
+      hostPID: true
+      {{- if $serviceAccount }}
+      serviceAccountName: {{ $name }}
+      # The agent reads its own Node (drain taints) and the egress CA ConfigMap.
+      automountServiceAccountToken: true
+      {{- else }}
+      automountServiceAccountToken: false
+      {{- end }}
+      enableServiceLinks: false
+      terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
+      {{- if $rootfsImage.tag }}
+      initContainers:
+        # Copies the root drive into --rootfs-dir; does nothing when it is current.
+        - name: rootfs
+          image: "{{ $rootfsImage.repository | default "onyxdotapp/craft-fc-artifacts" }}:{{ $rootfsImage.tag }}"
+          imagePullPolicy: {{ $rootfsImage.pullPolicy | default "IfNotPresent" }}
+          args:
+            - {{ $rootfsDir | quote }}
+          resources:
+            {{- toYaml ($rootfs.resources | default dict) | nindent 12 }}
+          securityContext:
+            # Root: the data dir is root-owned. No capabilities are needed.
+            runAsUser: 0
+            runAsNonRoot: false
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+      {{- end }}
+      containers:
+        - name: host-agent
+          image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $image.tag }}"
+          imagePullPolicy: {{ $image.pullPolicy | default "IfNotPresent" }}
+          command:
+            - nsenter
+            - --target=1
+            - --cgroup
+            - --
+            - /usr/local/bin/host-agent
+          args:
+            - --data-dir={{ $dataDir }}
+            - --artifacts-dir=/opt/craft-fc
+            - --uid-base={{ $agent.uidBase | default 1000000 | int64 }}
+            - --uid-count={{ $agent.uidCount | default 65536 | int64 }}
+            - --listen=:{{ $port }}
+            - --tls-cert=/etc/craft-fc/tls/tls.crt
+            - --tls-key=/etc/craft-fc/tls/tls.key
+            - --client-ca=/etc/craft-fc/tls/ca.crt
+            - --dial-ports={{ $agent.dialPorts | default "3010" }}
+            - --relay-max-conns={{ $agent.relayMaxConns | default 256 | int64 }}
+            - --dial-max-streams={{ $agent.dialMaxStreams | default 64 | int64 }}
+            - --max-vms={{ (hasKey $agent "maxVms" | ternary $agent.maxVms 60) | int64 }}
+            {{- with $agent.clientAllowedSans }}
+            - --client-allowed-sans={{ . }}
+            {{- end }}
+            {{- /* Unset: the agent joins $POD_IP and the --listen port (brackets IPv6). */}}
+            {{- with $agent.advertiseAddress }}
+            - {{ printf "--advertise-address=%s" . | quote }}
+            {{- end }}
+            - --egress-proxy={{ include "onyx.sandboxProxyHost" . }}:{{ include "onyx.sandboxProxyPort" . }}
+            - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
+            {{- if $watchDrain }}
+            - --watch-node-drain
+            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
+            - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
+            {{- end }}
+            {{- if $rootfsImage.tag }}
+            - --rootfs-dir={{ $rootfsDir }}
+            {{- end }}
+            {{- if $readCA }}
+            - --egress-ca-configmap={{ $caNs }}/{{ $caConfigMap }}:{{ $caKey }}
+            {{- end }}
+            {{- if $metrics.enabled }}
+            - --metrics-listen=:{{ $metricsPort }}
+            {{- if eq $metricsAuthMode "disabled" }}
+            - --metrics-auth-disabled
+            {{- else if $metricsToken }}
+            - --metrics-token-file=/etc/craft-fc/metrics-auth/{{ $metricsKey }}
+            {{- end }}
+            {{- end }}
+            {{- range $agent.extraArgs }}
+            - {{ . | quote }}
+            {{- end }}
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: SANDBOX_NODE_REGISTRATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $regSecret | default (printf "%s-registration" $name) }}
+                  key: {{ $regKey }}
+          ports:
+            - name: agent
+              containerPort: {{ $port }}
+              protocol: TCP
+            {{- if $metrics.enabled }}
+            - name: metrics
+              containerPort: {{ $metricsPort }}
+              protocol: TCP
+            {{- end }}
+          # The listener opens only after VM recovery, so readiness means the
+          # agent serves the API.
+          readinessProbe:
+            tcpSocket:
+              port: agent
+            periodSeconds: 5
+          resources:
+            {{- toYaml ($agent.resources | default dict) | nindent 12 }}
+          securityContext:
+            # Needed for /dev/kvm (runc's device cgroup), nsenter into the host
+            # mount and cgroup namespaces, and the jailer's UID/chroot setup.
+            privileged: true
+            runAsUser: 0
+            runAsNonRoot: false
+          volumeMounts:
+            - name: data
+              mountPath: {{ $dataDir }}
+            - name: kvm
+              mountPath: /dev/kvm
+            - name: tls
+              mountPath: /etc/craft-fc/tls
+              readOnly: true
+            {{- if $metricsToken }}
+            {{- /* No subPath: the kubelet updates the file when the Secret changes. */}}
+            - name: metrics-auth
+              mountPath: /etc/craft-fc/metrics-auth
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          hostPath:
+            path: {{ $dataDir }}
+            type: DirectoryOrCreate
+        - name: kvm
+          hostPath:
+            path: /dev/kvm
+            type: CharDevice
+        - name: tls
+          secret:
+            secretName: {{ $tls.existingSecret }}
+            defaultMode: 0400
+        {{- if $metricsToken }}
+        - name: metrics-auth
+          secret:
+            secretName: {{ include "onyx.craftHostAgentMetricsSecret" . }}
+            defaultMode: 0400
+        {{- end }}
+---
+{{- /* Headless: the api_server reaches the agent on a node by its pod IP. */}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  clusterIP: None
+  selector:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+  ports:
+    - name: agent
+      port: {{ $port }}
+      targetPort: agent
+      protocol: TCP
+    {{- if $metrics.enabled }}
+    - name: metrics
+      port: {{ $metricsPort }}
+      targetPort: metrics
+      protocol: TCP
+    {{- end }}
+---
+{{- /* Only the agent clients reach the agent listener. Egress is not limited:
+the agent calls the api_server, sandbox-proxy and DNS. */}}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ $name }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "onyx.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: craft-fc-host-agent
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        {{- range list
+              (.Values.api.deploymentLabels | default (dict "app" "api-server"))
+              (.Values.celery_worker_heavy.deploymentLabels | default (dict "app" "celery-worker-heavy"))
+              (.Values.celery_worker_scheduled_tasks.deploymentLabels | default (dict "app" "celery-worker-scheduled-tasks")) }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- . | toYaml | nindent 14 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $port }}
+    {{- if $metrics.enabled }}
+    {{- /* Default: Prometheus Operator pods (the ServiceMonitor scrapers) in
+    the release namespace, where kube-prometheus-stack runs next to Onyx. */}}
+    - from:
+        {{- with $metrics.networkPolicyFrom }}
+        {{- toYaml . | nindent 8 }}
+        {{- else }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ $metricsPort }}
+    {{- end }}
+{{- end }}

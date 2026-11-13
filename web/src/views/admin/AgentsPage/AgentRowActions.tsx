@@ -71,9 +71,12 @@ export default function AgentRowActions({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [featuredOpen, setFeaturedOpen] = useState(false);
-  const [unlistOpen, setUnlistOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const featuredModal = useCreateModal();
+  // The featured state the confirm was opened for. The list refetches before
+  // the card finishes fading out, which would flip its copy mid-exit.
+  const [wasFeatured, setWasFeatured] = useState(agent.is_featured);
+  const unlistModal = useCreateModal();
 
   async function handleAction(action: () => Promise<void>, close: () => void) {
     setIsSubmitting(true);
@@ -107,7 +110,7 @@ export default function AgentRowActions({
               : t("rowActions.listItem.title"),
             onSelect: () => {
               if (agent.is_listed) {
-                setUnlistOpen(true);
+                unlistModal.toggle(true);
               } else {
                 handleAction(
                   () => toggleAgentListed(agent.id, agent.is_listed),
@@ -148,7 +151,7 @@ export default function AgentRowActions({
             icon: SvgTrash,
             danger: true,
             title: t("rowActions.deleteItem.title"),
-            onSelect: () => setDeleteOpen(true),
+            onSelect: () => deleteModal.toggle(true),
           },
         ]
       : []),
@@ -210,7 +213,7 @@ export default function AgentRowActions({
                 <Button
                   prominence="tertiary"
                   icon={SvgStar}
-                  interaction={featuredOpen ? "hover" : "rest"}
+                  interaction={featuredModal.isOpen ? "hover" : "rest"}
                   tooltip={
                     agent.is_featured
                       ? t("rowActions.removeFeaturedButton.label")
@@ -223,7 +226,8 @@ export default function AgentRowActions({
                   }
                   onClick={() => {
                     setMenuOpen(false);
-                    setFeaturedOpen(true);
+                    setWasFeatured(agent.is_featured);
+                    featuredModal.toggle(true);
                   }}
                 />
               </div>
@@ -254,11 +258,11 @@ export default function AgentRowActions({
         )}
       </div>
 
-      {deleteOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
           icon={SvgTrash}
           title={t("deleteModal.header.title")}
-          onClose={isSubmitting ? undefined : () => setDeleteOpen(false)}
+          onClose={isSubmitting ? undefined : () => deleteModal.toggle(false)}
           submit={
             <Button
               disabled={isSubmitting}
@@ -266,7 +270,7 @@ export default function AgentRowActions({
               onClick={() => {
                 handleAction(
                   () => deleteAgent(agent.id),
-                  () => setDeleteOpen(false)
+                  () => deleteModal.toggle(false)
                 );
               }}
             >
@@ -287,28 +291,28 @@ export default function AgentRowActions({
             )}
           </Text>
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
-      {featuredOpen && (
+      <featuredModal.Provider>
         <ConfirmationModalLayout
-          icon={agent.is_featured ? SvgStarOff : SvgStar}
+          icon={wasFeatured ? SvgStarOff : SvgStar}
           title={
-            agent.is_featured
+            wasFeatured
               ? t("featuredModal.removeHeader.title", { name: agent.name })
               : t("featuredModal.addHeader.title", { name: agent.name })
           }
-          onClose={isSubmitting ? undefined : () => setFeaturedOpen(false)}
+          onClose={isSubmitting ? undefined : () => featuredModal.toggle(false)}
           submit={
             <Button
               disabled={isSubmitting}
               onClick={() => {
                 handleAction(
-                  () => toggleAgentFeatured(agent.id, agent.is_featured),
-                  () => setFeaturedOpen(false)
+                  () => toggleAgentFeatured(agent.id, wasFeatured),
+                  () => featuredModal.toggle(false)
                 );
               }}
             >
-              {agent.is_featured
+              {wasFeatured
                 ? t("featuredModal.unfeatureButton.label")
                 : t("featuredModal.featureButton.label")}
             </Button>
@@ -316,7 +320,7 @@ export default function AgentRowActions({
         >
           <div className="flex flex-col gap-2">
             <Text as="p" color="text-03">
-              {agent.is_featured
+              {wasFeatured
                 ? t("featuredModal.removeBody.description", {
                     name: agent.name,
                   })
@@ -327,22 +331,22 @@ export default function AgentRowActions({
             </Text>
           </div>
         </ConfirmationModalLayout>
-      )}
+      </featuredModal.Provider>
 
-      {unlistOpen && (
+      <unlistModal.Provider>
         <ConfirmationModalLayout
           icon={SvgEyeOff}
           title={markdown(
             t("unlistModal.header.title", { name: escapeMarkdown(agent.name) })
           )}
-          onClose={isSubmitting ? undefined : () => setUnlistOpen(false)}
+          onClose={isSubmitting ? undefined : () => unlistModal.toggle(false)}
           submit={
             <Button
               disabled={isSubmitting}
               onClick={() => {
                 handleAction(
                   () => toggleAgentListed(agent.id, agent.is_listed),
-                  () => setUnlistOpen(false)
+                  () => unlistModal.toggle(false)
                 );
               }}
             >
@@ -359,7 +363,7 @@ export default function AgentRowActions({
             </Text>
           </div>
         </ConfirmationModalLayout>
-      )}
+      </unlistModal.Provider>
     </>
   );
 }

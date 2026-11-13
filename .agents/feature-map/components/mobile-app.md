@@ -18,18 +18,19 @@ SSO providers (OIDC, SAML) have no mobile sign-in.
 The user can then:
 - start a chat or open a past session from the sidebar, and open a project;
 - pick an agent and a model, attach a document or a photo from the library,
-  turn on deep research, force a tool, and turn tools and sources on or off;
+  turn on deep research, prefer an Action, and turn tools and sources on or off;
 - watch the answer stream, open its citations in a sources sheet, and stop
   the answer.
 
 A tool disabled on mobile is also disabled on web, because the server saves
-the setting per agent. The forced tool, the deep-research switch and the
+the setting per agent. The preferred tool, the deep-research switch and the
 source selection stay on the device.
 
 The user cannot regenerate or edit a message, give feedback, compare models,
 use voice, or take a photo with the camera. Tool activity (search, code,
 image generation, deep research, memory) shows as an empty step in the
-timeline. Answer text and reasoning render. Generated images from all steps
+timeline. A code mode program has no step; each tool call it makes shows as its
+own step. Answer text and reasoning render. Generated images from all steps
 appear once above the answer, with their full contents visible.
 
 After an answer ends, Send stays disabled until the server confirms that the
@@ -116,14 +117,19 @@ processor of the web app. Packets group by `getGroupKey` (`turn_index` and
 `tab_index`). The backend closes each answer, reasoning and tool group with
 `section_end`, also on Stop. `injectSectionEnd` closes groups that are still
 open when a new turn starts or on `stop`, for a stream that ends on a root
-error or a dropped connection. Two hooks differ from web because the mobile
+error or a dropped connection. As on web ([[chat-frontend]]), after the answer
+starts only a tool packet of a tool that has not started takes the answer
+back; a late packet of a started tool, such as a code mode closing record, does
+not. Code
+mode steps, `codeModeWorking` and the turn group keys follow the web rules. Two hooks
+differ from web because the mobile
 lint forbids reading refs during render: `usePacketProcessor` regroups in a
 `useMemo`, and `usePacedTurnGroups` keeps pacing state in effects.
 
 **Composer tools.** `state/ComposerToolsProvider.tsx` holds the tool state.
-`resolveToolOptions` gives the controller `deep_research`, `forced_tool_id`,
+`resolveToolOptions` gives the controller `deep_research`, `preferred_tool_id`,
 `allowed_tool_ids` and the search filters at send time. Sources are tied to the
-search tool: turning a source on forces search, and turning search off clears
+search tool: turning a source on prefers search, and turning search off clears
 the sources.
 
 ---

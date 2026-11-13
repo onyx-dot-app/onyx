@@ -8,7 +8,7 @@ resource "onyx_user_group" "everyone_uk" {
 # managing the roster.
 #
 # Permissions use Onyx's own tokens, not the enum names. Only toggleable ones
-# can be set: `basic`, `admin`, `craft_sandbox` and `manage:skills` are managed
+# can be set: `basic`, `admin`, `craft_sandbox` and `manage:plugins` are managed
 # by Onyx and are refused here.
 resource "onyx_user_group" "data_platform" {
   name = "Data Platform"

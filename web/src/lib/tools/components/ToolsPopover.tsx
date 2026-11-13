@@ -3,7 +3,13 @@
 import { useState, useCallback, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { useFocusOnMount } from "@opal/hooks";
-import { InputTypeIn, Button, Popover, PopoverMenu } from "@opal/components";
+import {
+  InputTypeIn,
+  Button,
+  Popover,
+  PopoverMenu,
+  useCreateModal,
+} from "@opal/components";
 import { SvgSliders } from "@opal/icons";
 import type { MinimalAgent } from "@/lib/agents/types";
 import useCCPairs from "@/hooks/useCCPairs";
@@ -50,6 +56,7 @@ export default function ToolsPopover({
     agentId: number;
     plugin: MemberPlugin;
   } | null>(null);
+  const connectionModal = useCreateModal();
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -63,6 +70,7 @@ export default function ToolsPopover({
     setOpen(false);
     setShowSources(false);
     setSearchTerm("");
+    connectionModal.toggle(false);
     setConnection(null);
   }, [agent.id]);
 
@@ -161,6 +169,7 @@ export default function ToolsPopover({
                     disabled={disabled}
                     onConnect={(plugin) => {
                       setConnection({ agentId: agent.id, plugin });
+                      connectionModal.toggle(true);
                       close();
                     }}
                     onBrowse={close}
@@ -171,30 +180,32 @@ export default function ToolsPopover({
           </div>
         </Popover.Content>
       </Popover>
-      {connection && connection.agentId === agent.id && (
-        <MemberPluginConnectionDialog
-          plugin={connection.plugin}
-          agentId={agent.id}
-          surface="chat"
-          open
-          onClose={() => setConnection(null)}
-          onConnected={() => {
-            const reference = memberPluginReference(connection.plugin);
-            const group = chatPluginsForAgent(catalog.plugins, agent).find(
-              ({ plugin }) => {
-                const candidate = memberPluginReference(plugin);
-                return (
-                  candidate.kind === reference.kind &&
-                  candidate.id === reference.id
-                );
-              }
-            );
-            if (group) setChatPluginEnabled(group, true, toolConfiguration);
-            setConnection(null);
-            void catalog.refresh();
-          }}
-        />
-      )}
+      <connectionModal.Provider>
+        {connection && connection.agentId === agent.id && (
+          <MemberPluginConnectionDialog
+            plugin={connection.plugin}
+            agentId={agent.id}
+            surface="chat"
+            open
+            onClose={() => connectionModal.toggle(false)}
+            onConnected={() => {
+              const reference = memberPluginReference(connection.plugin);
+              const group = chatPluginsForAgent(catalog.plugins, agent).find(
+                ({ plugin }) => {
+                  const candidate = memberPluginReference(plugin);
+                  return (
+                    candidate.kind === reference.kind &&
+                    candidate.id === reference.id
+                  );
+                }
+              );
+              if (group) setChatPluginEnabled(group, true, toolConfiguration);
+              connectionModal.toggle(false);
+              void catalog.refresh();
+            }}
+          />
+        )}
+      </connectionModal.Provider>
     </ToolsPopoverProvider>
   );
 }

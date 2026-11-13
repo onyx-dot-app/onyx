@@ -11,18 +11,41 @@ import type {
   WithoutStyles,
 } from "@opal/types";
 import type { ContentColor } from "@opal/layouts/content/components";
-import { Button, Tooltip } from "@opal/components";
+import { Button, ShadowDiv, Tooltip } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
+import { useModalOwner } from "@opal/components/modal/context";
 import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
 // ---------------------------------------------------------------------------
 
-const ModalRoot = DialogPrimitive.Root;
+type ModalRootProps = React.ComponentProps<typeof DialogPrimitive.Root>;
+
+/**
+ * Radix's root. Under a `useCreateModal` owner that is closing, it closes
+ * too, so the modal animates out before the owner unmounts it.
+ */
+function ModalRoot({ open, ...props }: ModalRootProps) {
+  const owner = useModalOwner();
+  return (
+    <DialogPrimitive.Root
+      open={owner && !owner.isOpen ? false : open}
+      {...props}
+    />
+  );
+}
+
+/** Registers the card with its owner, which unmounts once no card is left. */
+function ModalExitSignal() {
+  // A stable store method, so this runs only on mount and unmount.
+  const registerCard = useModalOwner()?.registerCard;
+  React.useEffect(() => registerCard?.(), [registerCard]);
+  return null;
+}
 
 interface ModalOverlayProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -88,12 +111,6 @@ interface ModalContentProps extends WithoutStyles<
   maxHeight?: string;
 
   /**
-   * Vertical placement. `"center"` (default) centers in the viewport.
-   * `"top"` pins the modal near the top, the command-menu position.
-   */
-  position?: "center" | "top";
-
-  /**
    * Two-stage close guard: once the user has typed into any text input in
    * the modal, the first Escape/outside-click focuses the close button
    * instead of closing, and the second closes.
@@ -111,13 +128,20 @@ interface ModalContentProps extends WithoutStyles<
   bottomSlot?: React.ReactNode;
 }
 
+/** A toast sits outside the dialog, but using it must not close the modal. */
+function isToastEvent(e: Event): boolean {
+  return (
+    e.target instanceof Element &&
+    e.target.closest(".opal-toast-viewport") !== null
+  );
+}
+
 function ModalContent({
   ref,
   children,
   width = "xl",
   height = "fit",
   maxHeight,
-  position = "center",
   preventAccidentalClose = true,
   skipOverlay = false,
   background = "default",
@@ -209,29 +233,17 @@ function ModalContent({
     [ref]
   );
 
-  // Center on [data-main-container] when present (the content area beside
-  // the sidebar) instead of the viewport.
-  const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+  // Center horizontally on [data-main-container] when present (the content
+  // area beside the sidebar) instead of the viewport.
+  const { centerX, hasContainerCenter } = useContainerCenter();
 
-  const isTop = position === "top";
-
-  const containerStyle: React.CSSProperties | undefined =
-    hasContainerCenter && !isTop
-      ? ({
-          left: centerX,
-          top: centerY,
-          "--tw-enter-translate-x": "-50%",
-          "--tw-exit-translate-x": "-50%",
-          "--tw-enter-translate-y": "-50%",
-          "--tw-exit-translate-y": "-50%",
-        } as React.CSSProperties)
-      : hasContainerCenter && isTop
-        ? ({
-            left: centerX,
-            "--tw-enter-translate-x": "-50%",
-            "--tw-exit-translate-x": "-50%",
-          } as React.CSSProperties)
-        : undefined;
+  const containerStyle: React.CSSProperties | undefined = hasContainerCenter
+    ? ({
+        left: centerX,
+        "--tw-enter-translate-x": "-50%",
+        "--tw-exit-translate-x": "-50%",
+      } as React.CSSProperties)
+    : undefined;
 
   const positionerStyle = maxHeight
     ? {
@@ -241,7 +253,6 @@ function ModalContent({
     : containerStyle;
 
   const positionerData = {
-    "data-position": position,
     "data-width": width,
     ...(!hasContainerCenter && { "data-viewport-centered": "" }),
   };
@@ -272,8 +283,28 @@ function ModalContent({
         >
       >[0]
     ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
       handleInteractOutside(e);
       props.onPointerDownOutside?.(e);
+    },
+    // Covers focus moving out too, e.g. onto a toast's close button.
+    onInteractOutside: (
+      e: Parameters<
+        NonNullable<
+          React.ComponentPropsWithoutRef<
+            typeof DialogPrimitive.Content
+          >["onInteractOutside"]
+        >
+      >[0]
+    ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
+      props.onInteractOutside?.(e);
     },
   };
 
@@ -305,6 +336,7 @@ function ModalContent({
                 {children}
               </div>
               <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+              <ModalExitSignal />
             </div>
           </DialogPrimitive.Content>
         ) : (
@@ -318,6 +350,7 @@ function ModalContent({
             {...dialogEventHandlers}
           >
             {children}
+            <ModalExitSignal />
           </DialogPrimitive.Content>
         )}
       </DialogPrimitive.Portal>
@@ -480,15 +513,22 @@ function ModalBody({
       className="opal-modal-body"
       {...(twoTone && { "data-two-tone": "" })}
     >
-      <Section
-        height={height}
-        padding={padding}
-        gap={gap}
-        alignItems={alignItems}
-        {...props}
+      {/* The background stays on the body, so the mask fades only content. */}
+      <ShadowDiv
+        variant={{ top: "shadow", bottom: "mask" }}
+        containerClassName="opal-modal-body-frame"
+        className="opal-modal-body-scroll"
       >
-        {children}
-      </Section>
+        <Section
+          height={height}
+          padding={padding}
+          gap={gap}
+          alignItems={alignItems}
+          {...props}
+        >
+          {children}
+        </Section>
+      </ShadowDiv>
     </div>
   );
 }

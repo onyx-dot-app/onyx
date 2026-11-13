@@ -7,8 +7,8 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 # extra registry access. CI overrides both with the matching Docker Hardened Images from
 # dhi.io, which need a Docker account with DHI catalog access.
 # Refresh a digest with: docker buildx imagetools inspect <image reference>
-ARG PYTHON_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
-ARG PYTHON_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
+ARG PYTHON_BUILDER_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+ARG PYTHON_RUNTIME_IMAGE=${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
 # Build stage. Needs a root user plus a shell and build tooling to install the wheels,
 # which both the default slim image and the DHI "-dev" variant provide.

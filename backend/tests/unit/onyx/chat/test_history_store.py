@@ -22,13 +22,13 @@ from onyx.chat.history_store import (
     get_chat_history_store,
 )
 from onyx.chat.models import (
+    ChatHistoryResult,
     ChatMessageMetadata,
     ChatResponseSnapshot,
-    IncognitoContext,
+    IncognitoAgentResponse,
     IncognitoState,
 )
 from onyx.chat.presentation import project_response
-from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
@@ -71,25 +71,39 @@ def test_temporary_history_preparation_waits_for_explicit_user_message_save(
     )
     previous = UserMessage(id="chat:17", content="Original question")
     incoming = UserMessage(content="Converted request with attached context")
-    saved = IncognitoContext(messages=[previous], previous_run_id="saved-run")
+    saved = IncognitoState(messages=[previous], previous_run_id="saved-run")
     with (
         patch("onyx.chat.history_store.load_incognito_context", return_value=saved),
-        patch("onyx.chat.history_store.save_incognito_user_message") as append,
+        patch("onyx.chat.history_store.save_incognito_user_messages") as append,
     ):
-        messages, previous_run_id = store.prepare_messages(
-            [incoming], "database-run", accepted_text
+        prepared_history, previous_run_id, checkpoint = store.prepare_messages(
+            ChatHistoryResult(
+                messages=[incoming], input_start=0, all_injected_file_metadata={}
+            ),
+            accepted_text,
         )
-        assert previous_run_id == ("saved-run" if accepted_text is not None else None)
+        messages = prepared_history.messages
+        assert previous_run_id is None
         append.assert_not_called()
         if accepted_text is None:
             assert messages == [previous]
         else:
-            assert messages == [previous, UserMessage(content=accepted_text)]
+            assert messages == [UserMessage(content=accepted_text)]
             current_user = messages[-1]
             assert isinstance(current_user, UserMessage)
-            store.save_user_message(current_user)
+            store.save_user_messages(
+                ChatHistoryResult(
+                    messages=[current_user],
+                    input_start=0,
+                    all_injected_file_metadata={},
+                )
+            )
             append.assert_called_once_with(
-                session_id, current_user, admission=store.admission
+                session_id,
+                [current_user],
+                admission=store.admission,
+                file_metadata={},
+                history_message_ids=[],
             )
         assert incoming.content == "Converted request with attached context"
         assert saved.messages == [previous]
@@ -304,31 +318,47 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
-def test_incognito_regeneration_uses_selected_question_and_prompt_only_tool_policy() -> (
-    None
-):
+def test_incognito_regeneration_preserves_results_before_selected_question() -> None:
     store = RedisChatHistoryStore(
         message_id=17, chat_session_id=uuid4(), visible_message_ids=()
     )
     search = ToolResultMessage(
-        tool_call_id="search", tool_name="search", content="large passages"
+        id="prior:0",
+        tool_call_id="search",
+        tool_name="search",
+        content="large passages",
     )
     image = ToolResultMessage(
-        tool_call_id="image", tool_name="generate_image", content="image location"
+        id="prior:1",
+        tool_call_id="image",
+        tool_name="generate_image",
+        content="image location",
     )
     question = UserMessage(id="chat:17", content="Original question")
     answer = AssistantMessage(content=[TextContent(text="Old answer")])
-    cached = IncognitoContext(
+    cached = IncognitoState(
         messages=[search, image, question, answer],
+        responses={
+            "16": IncognitoAgentResponse(
+                replay_digest="", run_id="prior", message_ids=["prior:0", "prior:1"]
+            )
+        },
         previous_run_id="old-answer",
     )
     with patch("onyx.chat.history_store.load_incognito_context", return_value=cached):
-        messages, previous = store.prepare_messages([], None, None)
+        prepared_history, previous, checkpoint = store.prepare_messages(
+            ChatHistoryResult(
+                messages=[AssistantMessage(id="chat:16", content=[])],
+                input_start=1,
+                all_injected_file_metadata={},
+            ),
+            None,
+        )
+        messages = prepared_history.messages
 
     assert messages[-1] is question
     assert answer not in messages
     assert previous is None
-    assert prompt_metadata(messages[0]).omit_tool_result_content
-    assert not prompt_metadata(messages[1]).omit_tool_result_content
+    assert messages[:2] == [search, image]
     assert search.metadata is None
     assert cached.messages[-1] is answer

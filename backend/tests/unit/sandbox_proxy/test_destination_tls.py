@@ -1,6 +1,7 @@
 """Exercise destination pinning through mitmproxy's real TLS connection path."""
 
 import asyncio
+import runpy
 import socket
 import ssl
 from contextlib import suppress
@@ -20,6 +21,7 @@ from onyx.sandbox_proxy.destination_policy import (
 )
 from onyx.sandbox_proxy.resolvers.mcp_matching import CraftMCPTarget
 from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.server.features.build import configs
 from tests.unit.sandbox_proxy.conftest import (
     NoMatchedRequest,
     RecordingCredentialResolver,
@@ -116,6 +118,9 @@ async def _read_response(reader: asyncio.StreamReader) -> bytes:
     return headers + body
 
 
+@pytest.mark.parametrize(
+    "ca_setting", ["SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "SSL_CERT_FILE"]
+)
 @pytest.mark.parametrize("connection_strategy", ["eager", "lazy"])
 @pytest.mark.parametrize("mcp_destination", [False, True])
 @pytest.mark.parametrize("certificate_host", [_HOST, "wrong.test"])
@@ -125,6 +130,7 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     certificate_host: str,
+    ca_setting: str,
     mcp_destination: bool,
     connection_strategy: str,
     loopback: str,
@@ -178,8 +184,16 @@ def test_pinned_tls_preserves_hostname_verification_and_injection(
         monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_HOST", loopback)
         monkeypatch.setattr(server, "SANDBOX_PROXY_LISTEN_PORT", 0)
         monkeypatch.setattr(server, "_MITM_CONFDIR", str(tmp_path / "mitm"))
+        monkeypatch.delenv(
+            "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", raising=False
+        )
+        monkeypatch.delenv("SSL_CERT_FILE", raising=False)
+        monkeypatch.setenv(ca_setting, str(upstream_ca))
+        loaded = runpy.run_path(configs.__file__)
         monkeypatch.setattr(
-            server, "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", str(upstream_ca)
+            server,
+            "SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA",
+            loaded["SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA"],
         )
         master: DumpMaster = server._build_mitm_master()
         master.options.update(connection_strategy=connection_strategy)

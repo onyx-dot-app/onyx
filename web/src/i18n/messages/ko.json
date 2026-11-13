@@ -139,6 +139,9 @@
       },
       "selectSearchSources": {
         "label": "검색 소스 선택"
+      },
+      "preference": {
+        "tooltip": "{description}\n이 채팅에서 이 도구를 우선 사용합니다. 에이전트가 도구 없이 답변할 수도 있습니다."
       }
     },
     "addMcpModal": {
@@ -350,7 +353,7 @@
         "clientMetadataRejected": "공급자가 클라이언트 메타데이터 문서를 사용할 수 없습니다. 이 인스턴스가 공용 인터넷에서 접근할 수 없다면 ‘클라이언트 메타데이터 문서 사용’을 끄고 다시 연결하세요.",
         "discoveryFailed": "OAuth 로그인 설정을 찾을 수 없습니다. 서버 URL을 확인하거나 공급자의 엔드포인트를 입력하세요.",
         "connectionFailed": "서버에 연결할 수 없습니다. 서버 URL을 확인하고 다시 시도하세요.",
-        "oauthFailed": "OAuth 로그인을 시작할 수 없습니다. 클라이언트 설정을 확인하고 다시 시도하세요.",
+        "oauthFailed": "OAuth 로그인에 실패했습니다. 다시 시도하거나 서버의 OAuth 설정을 확인하세요.",
         "oauthInitFailed": "OAuth를 시작하지 못했습니다: {detail}"
       },
       "header": {
@@ -2621,8 +2624,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "모든 사용자가 소스에서 동기화된 접근 권한을 유지합니다.",
-          "title": "그룹을 추가하기 전까지 제한 없음"
+          "description": "제한하려면 그룹이 필요합니다. 소스에서 동기화된 액세스를 유지하려면 제한을 끄세요.",
+          "title": "그룹을 하나 이상 선택하세요"
         },
         "loadError": "그룹을 불러오지 못했습니다. 페이지를 새로고침한 후 다시 시도하세요.",
         "memberCount": "{count, plural, other {멤버 #명}}",
@@ -2968,6 +2971,7 @@
           "sync": "문서 접근 권한이 **{source}와 동기화됨**",
           "managedByAdmins": "**관리자**가 관리",
           "managedByGroups": "**{count, plural, one {그룹 #개} other {그룹 #개}}**가 관리",
+          "onlyMe": "이 커넥터를 통한 문서는 **소유자만** 볼 수 있습니다",
           "syncRestricted": "문서 접근 권한이 **{source}와 동기화됨**, **{count, plural, one {그룹 #개} other {그룹 #개}}**로 제한됨",
           "groupsPending": "문서가 **특정 그룹**과 공유됨",
           "syncRestrictedPending": "문서 접근 권한이 **{source}와 동기화됨**, **특정 그룹**으로 제한됨"
@@ -3751,15 +3755,19 @@
             "description": "이 커넥터로 인덱싱된 문서는 조직의 모든 구성원이 사용할 수 있습니다.",
             "title": "조직의 모든 사용자"
           },
+          "onlyMe": {
+            "description": "이 커넥터를 통해서는 자격 증명 소유자만 액세스할 수 있습니다. 자격 증명이 없는 소스는 커넥터를 만든 사람만 액세스할 수 있습니다.",
+            "title": "나만"
+          },
           "specificGroups": {
             "description": "이 커넥터의 문서에 액세스할 수 있는 그룹을 지정합니다.",
-            "required": "그룹을 하나 이상 선택하세요.",
             "title": "특정 그룹"
           },
           "sync": {
             "description": "{appName}이(가) 소스와 권한을 동기화합니다. 사용자는 소스에서 볼 수 있는 항목만 검색할 수 있습니다.",
             "disabledReason": "현재 자격 증명의 인증 방식은 권한 자동 동기화를 지원하지 않습니다. 지원되는 인증 방식으로 변경해 주세요.",
-            "title": "{source}와(과) 동기화"
+            "title": "{source}와(과) 동기화",
+            "restrictionRequired": "그룹을 하나 이상 선택하거나 제한을 끄세요."
           },
           "title": "문서 액세스"
         },
@@ -7504,7 +7512,8 @@
           "public": "조직 전체에 공개",
           "private": "{count, plural, =0 {비공개} other {그룹 #개와 공유됨}}",
           "sync": "권한 자동 동기화",
-          "sync_restricted": "권한 자동 동기화"
+          "sync_restricted": "권한 자동 동기화",
+          "personal": "나만"
         },
         "detail": {
           "queued": "대기열 {position, selectordinal, other {#}}번째",
@@ -7631,7 +7640,7 @@
             "targetUriParseFailed": "대상 URI를 분석하지 못했습니다 — 원래 값을 사용합니다."
           },
           "validation": {
-            "targetUriInvalid": "대상 URI는 api-version 쿼리 파라미터를 포함하고 경로에 배포 이름 또는 /openai/responses가 있는 유효한 URL이어야 합니다",
+            "targetUriInvalid": "대상 URI는 유효한 URL이어야 합니다: /openai/v1/ URL이거나, api-version 쿼리 파라미터를 포함하고 경로에 배포 이름 또는 /openai/responses가 있는 URL",
             "targetUriRequired": "대상 URI는 필수입니다"
           }
         },
@@ -7845,7 +7854,6 @@
           "row": {
             "defaultLabel": "기본 모델",
             "decisionTag": {
-              "label": "판단",
               "decisionOnly": "판단 모델입니다. 채팅 모델 선택기에는 표시되지 않습니다.",
               "chatAndDecision": "채팅과 판단 작업을 모두 지원합니다."
             },
@@ -7854,9 +7862,6 @@
             },
             "setDefaultButton": {
               "label": "기본으로 설정"
-            },
-            "visionMarker": {
-              "title": "비전"
             }
           },
           "selectAllButton": {
@@ -12828,6 +12833,11 @@
           "text": "이미지 생성 중지됨"
         }
       },
+      "markdownTable": {
+        "copyButton": {
+          "label": "표 복사"
+        }
+      },
       "memoizedLink": {
         "questionFallback": {
           "label": "질문"
@@ -12912,6 +12922,9 @@
         "codingAgent": {
           "bashExit": {
             "header": "Bash · 종료 코드 {exitCode}"
+          },
+          "bashFailed": {
+            "header": "Bash · 실패"
           },
           "bashRequest": {
             "label": "요청"
@@ -13016,6 +13029,9 @@
           },
           "updatingMemory": {
             "label": "메모리 업데이트 중..."
+          },
+          "working": {
+            "label": "작업 중"
           }
         },
         "internalSearch": {
@@ -14243,6 +14259,11 @@
       "completeFailed": {
         "message": "인증을 완료하지 못했습니다"
       },
+      "desktopHandoff": {
+        "button": "Onyx 열기",
+        "description": "연결을 완료하기 위해 브라우저가 Onyx 데스크톱 앱을 엽니다. 앱이 열리면 이 탭을 닫아도 됩니다.",
+        "title": "Onyx로 돌아가기"
+      },
       "genericError": {
         "description": "OAuth 과정에서 오류가 발생했습니다. 다시 시도해 주세요.",
         "title": "문제가 발생했습니다"
@@ -14360,6 +14381,10 @@
       },
       "labels": {
         "default": "기본"
+      },
+      "modelTypes": {
+        "decision": "판단",
+        "vision": "비전"
       }
     }
   },
@@ -14468,7 +14493,7 @@
         "promote": {
           "cancelButton": "취소",
           "confirmButton": "조직 전체에 공개",
-          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 이 변경 사항은 앱을 저장할 때 적용됩니다.",
+          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 앱을 저장하면 스킬이 조직에 게시됩니다. 게시는 취소할 수 없습니다.",
           "title": "\"{name}\"을(를) 조직 전체에 공개할까요?"
         },
         "search": {
@@ -17116,6 +17141,13 @@
         "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
       },
+      "staleVersion": {
+        "description": "다른 사용자가 새 버전을 저장했습니다. 새로고침하여 가져오세요. 저장하지 않은 변경 사항은 사라집니다.",
+        "reload": {
+          "label": "새로고침"
+        },
+        "title": "이 스킬은 연 이후에 변경되었습니다"
+      },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
         "deleteFailed": "스킬을 삭제하지 못했습니다",
@@ -17316,9 +17348,6 @@
           "message": "공유 정보를 불러오는 중..."
         },
         "noOwnerTitle": "활성 소유자 없음",
-        "organizationPermissionMenu": {
-          "ariaLabel": "조직 권한 변경"
-        },
         "ownerLabel": "소유자",
         "permissionMenu": {
           "ariaLabel": "{name}의 접근 권한 변경"
@@ -17359,7 +17388,15 @@
         "peopleTitle": "액세스 권한이 있는 사용자",
         "manageIndividualAccess": "개별 액세스 관리",
         "individualAccessTitle": "개별 액세스",
-        "ownershipTitle": "소유권"
+        "ownershipTitle": "소유권",
+        "published": {
+          "title": "조직",
+          "description": "게시됨. 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다."
+        },
+        "publishWarning": {
+          "title": "게시는 취소할 수 없습니다",
+          "description": "저장하면 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+        }
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
@@ -17519,10 +17556,13 @@
       "shareDescription": "선택한 모든 스킬에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
       "unchanged": "변경하지 않음",
       "everyone": "조직의 모든 사용자",
-      "invitedOnly": "초대한 사용자 및 그룹",
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
-      "moreActions": "추가 작업"
+      "moreActions": "추가 작업",
+      "publishWarning": {
+        "title": "게시는 취소할 수 없습니다",
+        "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+      }
     }
   },
   "opensearchHealth": {

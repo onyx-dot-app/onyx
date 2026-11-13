@@ -101,6 +101,7 @@ def list_models() -> JSONResponse:
                 for name in (
                     "mock-profile-chat-v1",
                     "mock-profile-search-v1",
+                    "mock-profile-search-v1-codebatched",
                     "mock-profile-research-v1-agents2",
                     "mock-profile-held-v1",
                     "mock-model",

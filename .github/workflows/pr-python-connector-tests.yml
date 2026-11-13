@@ -226,7 +226,7 @@ jobs:
 
       # The prod image has no uv or .venv; run pytest with the system
       # interpreter directly, where the deps installed above live.
-      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, and Coda)
+      - name: Run Tests (excluding HubSpot, Salesforce, GitHub, Coda, and Egnyte)
         shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
         run: |
           docker exec onyx-connector-tests bash -c '
@@ -241,7 +241,8 @@ jobs:
               --ignore backend/tests/daily/connectors/hubspot \
               --ignore backend/tests/daily/connectors/salesforce \
               --ignore backend/tests/daily/connectors/github \
-              --ignore backend/tests/daily/connectors/coda
+              --ignore backend/tests/daily/connectors/coda \
+              --ignore backend/tests/daily/connectors/egnyte
           '
 
       - name: Run HubSpot Connector Tests
@@ -287,6 +288,20 @@ jobs:
               -xv \
               --ff \
               backend/tests/daily/connectors/github
+          '
+
+      # Egnyte allows 1,000 API calls per token per day, so these tests run on
+      # the daily schedule only.
+      - name: Run Egnyte Connector Tests
+        if: ${{ github.event_name == 'schedule' }}
+        shell: script -q -e -c "bash --noprofile --norc -eo pipefail {0}"
+        run: |
+          docker exec onyx-connector-tests bash -c '
+            python -m pytest \
+              --durations=8 \
+              -o junit_family=xunit2 \
+              -xv \
+              backend/tests/daily/connectors/egnyte
           '
 
       - name: Stop test container

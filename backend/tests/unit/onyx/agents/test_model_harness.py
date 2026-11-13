@@ -327,7 +327,7 @@ def test_native_calls_keep_precedence_and_missing_id_is_stable() -> None:
     accumulator = MessageAccumulator()
     events = list(
         accumulator.consume(
-            chunks(), PreparedStep(tools=[tool()]).generation_request([])
+            chunks(), PreparedStep().generation_request([], tools=[tool().definition])
         )
     )
     starts = [event for event in events if isinstance(event, ToolCallStartEvent)]
@@ -354,8 +354,8 @@ class TestToolRecovery:
         self, choice: ToolChoiceOptions = ToolChoiceOptions.REQUIRED
     ) -> GenerationRequest:
         return PreparedStep(
-            tools=[tool()], options=GenerationOptions(tool_choice=choice)
-        ).generation_request([])
+            options=GenerationOptions(tool_choice=choice)
+        ).generation_request([], tools=[tool().definition])
 
     def test_recovery_is_independent_across_generations(self) -> None:
         from onyx.llm.models import AssistantMessage, TextContent, ToolCall

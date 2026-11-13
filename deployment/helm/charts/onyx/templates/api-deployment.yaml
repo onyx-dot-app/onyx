@@ -125,17 +125,20 @@ spec:
             {{- include "onyx.envSecrets" . | nindent 12}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
             {{- include "onyx.metricsAuthEnv" . | nindent 12}}
+            {{- with include "onyx.craftFcAgentClient.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
             {{- with .Values.api.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- $apiVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" .Values.api.volumeMounts) }}
+          {{- $apiVolumeMounts := include "onyx.renderVolumeMounts" (dict "ctx" . "volumeMounts" (concat (.Values.api.volumeMounts | default list) (include "onyx.craftFcAgentClient.volumeMounts" . | fromYamlArray))) }}
           {{- if $apiVolumeMounts }}
           {{- $apiVolumeMounts | nindent 10 }}
           {{- end }}
-      {{- $apiVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" .Values.api.volumes) }}
+      {{- $apiVolumes := include "onyx.renderVolumes" (dict "ctx" . "volumes" (concat (.Values.api.volumes | default list) (include "onyx.craftFcAgentClient.volumes" . | fromYamlArray))) }}
       {{- if $apiVolumes }}
       {{- $apiVolumes | nindent 6 }}
       {{- end }}

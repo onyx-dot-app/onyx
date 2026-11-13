@@ -63,6 +63,12 @@ class OnyxMimeTypes:
         "application/epub+zip",
     }
 
+    # Agent and project files whose original bytes go to the Python tool.
+    CODE_INTERPRETER_STAGED_MIME_TYPES = TABULAR_MIME_TYPES | {
+        WORD_PROCESSING_MIME_TYPE,
+        PRESENTATION_MIME_TYPE,
+    }
+
     ALLOWED_MIME_TYPES = IMAGE_MIME_TYPES.union(
         TEXT_MIME_TYPES, DOCUMENT_MIME_TYPES, TABULAR_MIME_TYPES
     )

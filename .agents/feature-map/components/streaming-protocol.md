@@ -95,8 +95,10 @@ per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
 is never buffered. When the send route itself fails
-(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes a
-bare `{"error": ...}` object with no newline, which is not a `StreamingError`.
+(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes
+one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
+`OnyxError` detail reaches the client. Other exceptions get a generic message
+with code `INTERNAL_ERROR`, and the full exception goes to the server log.
 A request that fails before `start_chat_turn` gets one `StreamingError` and no
 ID lines.
 
@@ -112,9 +114,39 @@ sub-turn indexes.
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
 citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams the Python tool's code while the
-model writes it; the configured reasoning tool streams as reasoning packets
-instead (`chat/renderer.py:MessageRenderer.consume`). Other tools show their
+bash tool. `ToolCallArgumentDelta` streams the code of the tools in
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
+model writes it, with the tool name as `tool_type`; the configured reasoning
+tool streams as reasoning packets instead
+(`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
+`code_mode_delta`) renders each tool call its program makes with that tool's
+own packets at `sub_turn_index` = call index, inside the code mode tab. A
+call that runs across observations keeps its `sub_turn_index` in each tab, so
+clients identify it by `cell_id` and `sub_turn_index` and show its latest
+report. A
+final `code_mode_delta` with `replace_stdout` replaces live output that stopped
+at the output limit, so live output matches replay. The final delta also
+lists `stored_keys`, the keys the program saved with `store()`, and
+`tool_call_count`, the calls the cell started so far (the model's text reports
+the same count). Each `execute_code` and `wait_code` call is its own code
+mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
+arguments (`None` and 0 for `execute_code`, the cell id and 1 for
+`wait_code`, whose `code` is empty), so live and replay send the same start.
+The final delta of a saved observation carries the exact `cell_id` and
+`observation`; a call that failed or was cancelled before it saved one leaves
+them `None`. Its `status` adds `running` (the cell still runs; the final delta
+does not complete its open nested calls) and `terminated`. A cell's closing record goes to the tab of its last
+observation: the nested calls after the observation, a `code_mode_delta` with
+the new stdout when there is any, then a final delta with `result`, `error`, `status`,
+`tool_call_count`, `stored_keys` and `response_ended=True` (`chat/renderer.py:tool_renderer`
+picks `CodeModeRenderer` by tool name). It follows that tab's `section_end`,
+live and on replay: `ToolRenderer.complete` renders the part of a result that
+an amendment added (`_amendment_packets`) after the section end, and
+`ToolRenderer.amend` of an ended tab renders only that part. Live, it comes from
+`ToolResultAmendedEvent` after the answer, before the stop. The client adds
+packets of an ended tab to that tab. When the observation was recorded
+before a restore, the live stream has no tab for it, so the closing record
+follows the observation's packets and section end in a new tab. Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 
@@ -358,9 +390,6 @@ its background task end ([[#pure-asgi-middleware]]).
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
      decide whether the snapshot needs the new data.
-     `chat/process_message.py:gather_stream` ([[slack-bot]]) builds its answer
-     from root answer and citation packets and skips packets with a
-     `sub_turn_index`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A

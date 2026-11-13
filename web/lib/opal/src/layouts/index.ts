@@ -6,6 +6,7 @@ export {
   type ContentIndentProps,
   type ContentOrientation,
   type ContentBadge,
+  type ContentBadges,
   type ContentEditHandle,
 } from "@opal/layouts/content/components";
 

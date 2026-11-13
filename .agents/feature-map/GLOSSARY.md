@@ -17,7 +17,7 @@ owns the rules.
 | Onyx | Danswer | Some identifiers and comments say Danswer. It is the same product. |
 | Craft | `build` | The product is Craft. The backend directory `backend/onyx/server/features/build/`, the `/build` API paths and `BUILD_MODE_FEATURE_ID` say build. |
 | Action | `Tool` | Some UI text calls tools "Actions". The code calls them Tools. |
-| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. |
+| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. The `plugin` table (`db/models.py:Plugin`) is different: a package of custom skills. Access reads for custom skills come from it. See [[skills#plugin-tables]]. |
 | Free plan | `Tier.COMMUNITY` | The web UI shows the Community tier as the Free plan. |
 | Workspace | the tenant | The tenant-wide scope, as in workspace setting, workspace default and workspace policy. An admin sets it. Not the session workspace (see Craft vocabulary). See [[multi-tenancy]]. |
 
@@ -173,13 +173,14 @@ mobile code checks for it. See [[streaming-protocol]].
 
 | Term | Meaning |
 |---|---|
-| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them. See [[agent-runtime]]. |
+| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 6; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
+| Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one `execute_code` or `wait_code` call on a cell: it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
 | Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
 | Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |
 | Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
-| Custom agent prompt | The agent's instructions, sent as a user message near the newest user message. See [[context-assembly]]. |
+| Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
 | Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
 | `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |

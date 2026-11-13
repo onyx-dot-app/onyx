@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.31
+version: 0.9.43
 appVersion: latest
 annotations:
   category: Productivity
@@ -21,8 +21,9 @@ annotations:
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
     - kind: added
-      description: Add craft.firecrackerPreflight, an opt-in DaemonSet that
-        checks whether sandbox nodes can run Craft Firecracker sandboxes.
+      description: EGNYTE_PERMISSION_DOC_SYNC_FREQUENCY and
+        EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY set how often Egnyte
+        permission sync runs.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

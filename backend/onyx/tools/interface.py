@@ -12,7 +12,11 @@ from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
+    DEFAULT_CODE_MODE_RESULT,
     ChatMinimalTextMessage,
+    CodeModeExposure,
+    CodeModeFunctionName,
+    CodeModeResultSpec,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
@@ -113,7 +117,7 @@ def _invoke_tool[T: ToolOutcome](
 ) -> T | ToolResult:
     """Apply application tracing, error conversion, and cancellation to a callback."""
     invocation.cancellation.check()
-    with function_span(name) as span:
+    with function_span(name, metadata=invocation.trace_metadata) as span:
         span.span_data.input = str(invocation.arguments)
         try:
             result = execute()
@@ -147,6 +151,9 @@ class Tool(abc.ABC):
     """An application tool with context, tracing, and an SDK binding."""
 
     result_from_children: ToolResultFromChildren | None = None
+    # Set by tools that must not run twice: the saved result of a call that
+    # stopped before it finished. See AgentTool.
+    interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
 
@@ -155,8 +162,34 @@ class Tool(abc.ABC):
         return ToolExecutionMode.PARALLEL
 
     @property
+    def inner_tools(self) -> list["Tool"]:
+        """Tools that run inside this tool's calls, such as code mode functions."""
+        return []
+
+    def operation_names(self, tool_id: int) -> list[str]:
+        """How the model calls the configured tool `tool_id` through this tool."""
+        return [self.name] if self.id == tool_id else []
+
+    @property
     @abc.abstractmethod
-    def id(self) -> int:
+    def code_mode_exposure(self) -> CodeModeExposure:
+        """How code mode offers the tool. Tools that wait for child runs
+        (`result_from_children`) must be DIRECT."""
+        raise NotImplementedError
+
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(name=self.name)
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        """The value and stub type a code mode program receives from the tool."""
+        return DEFAULT_CODE_MODE_RESULT
+
+    @property
+    @abc.abstractmethod
+    def id(self) -> int | None:
+        """The tool row; None for a tool built per response without a row."""
         raise NotImplementedError
 
     @property
@@ -230,4 +263,5 @@ class Tool(abc.ABC):
             if self.merge_list_argument is not None
             else None,
             result_from_children=result_from_children,
+            interrupted_result=self.interrupted_result,
         )

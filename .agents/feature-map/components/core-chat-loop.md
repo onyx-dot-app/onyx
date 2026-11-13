@@ -14,8 +14,9 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6) the
-  model must answer without tools.
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
+  `MAX_LLM_CYCLES` when higher) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
   waits until the session is idle before it sends again. The backend refuses a
   second streaming send on the same session with a `StreamingError` packet whose
@@ -41,7 +42,7 @@
   setting, a Query Processing hook that rejects the message), the user sees one
   error, and no response row is reserved. A failure after reservation is saved
   per model: a launch failure adds one `CHAT_STARTUP_ERROR` packet, then each
-  model streams and saves its own error. Agent construction errors (forced tool
+  model streams and saves its own error. Agent construction errors (preferred tool
   missing, deep research in a project or with a small model) and failures during
   the run are also saved on that model's reserved row. An incognito session
   that does not keep content stores a generic error text instead, because
@@ -202,7 +203,8 @@ termination grace period is much shorter, so it ends running turns first
    `chat/renderer.py:MessageRenderer` only read events and saved steps to make
    packets. Feature state that a later step needs lives on the agent, such as
    `ChatAgent.search_context` and its citation mapping, and is captured in
-   `ChatFeatureState` for restoration. All tools in one step read the same
+   `ChatFeatureState` for restoration. `ChatFeatureState.code_mode` keeps the
+   mode, so a restored run keeps its tool layout. All tools in one step read the same
    `ChatAgent._tool_context`; citation and search state advance only in
    `ChatAgent._after_step`, after every call in the step finishes.
 6. `persist-once-per-model` **One final outcome per model.** A new way to end a
@@ -284,10 +286,13 @@ termination grace period is much shorter, so it ends running turns first
     does stream resume. Code that assumes a real user breaks public agents.
     `stop_chat_session` does not allow anonymous users, so their Stop fails
     authentication (see Known issues).
-16. `stopping-tools` **The step cap removes tools.**
-    `chat/agent.py:ChatAgent._prepare_step` offers no tools at the step cap.
+16. `stopping-tools` **The step cap disables tool execution.**
+    `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
+    Definitions remain where providers support this choice. Qwen, GLM, and
+    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle.
+    The default cap is six cycles, including the final answer cycle; code mode
+    uses `CODE_MODE_MAX_LLM_CYCLES` instead.
 
 
 ---
@@ -306,13 +311,12 @@ termination grace period is much shorter, so it ends running turns first
 
 ## Known issues
 
-- **A forced tool that construction did not build fails the whole message.**
-  `chat/process_message.py:prepare_chat_turn` clears `forced_tool_id` only when
-  it names the search tool and search is disabled, or when
-  `is_tool_available_for_persona` excludes the tool. A tool that `is_available`
-  or `allowed_tool_ids` hides fails every model with "Forced tool ... not found
-  in tools" (`chat/execution.py:create_chat_agent`). See the "Force a tool call"
-  recipe in [[tools-framework]].
+- **An unavailable preference fails the message.** `preferred_tool_id` selects an
+  Action from the tools built for this request. Disabled, unavailable, or excluded
+  Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
+  When project context replaces retrieval, preparation omits an enabled, configured, and allowed Search preference
+  for that request. Preferences do not grant access. Tool construction applies
+  `allowed_tool_ids` except to MemoryTool, which follows the user's memory setting.
 - **Stop waits for blocked work.** Cancellation takes effect when a provider
   read returns or times out. Tools that honor `ToolInvocation.cancellation` can
   stop earlier; tools that ignore it keep running until they return.
@@ -365,8 +369,10 @@ termination grace period is much shorter, so it ends running turns first
   to `ChatAgent.capture_state` and `restore_state`. Decide what each incognito
   mode stores ([[chat-persistence#incognito-decision-per-field]]).
 - `in-process-caller` **A new in-process caller.** Copy the Slack bot: it calls
-  `handle_stream_message_objects` and consumes it with `gather_stream`. List the
-  callers with `git grep -n "handle_stream_message_objects(" backend`. Do not
+  `chat/process_message.py:run_chat_turn`, which drains
+  `handle_stream_message_objects` into a `ChatFullResponse` with
+  `gather_stream_full`. List the callers with
+  `git grep -n "run_chat_turn(\|handle_stream_message_objects(" backend`. Do not
   start a `ChatAgent` directly: admission, delivery and saving live in
   `start_chat_turn`.
 - `investigate-stuck-turn` **Investigate a turn that does not end, a stop that
@@ -391,7 +397,7 @@ termination grace period is much shorter, so it ends running turns first
 ## Verification
 
 - Unit: `backend/tests/unit/onyx/chat/` covers the chat agent, preparation,
-  cancellation, multi-model streaming, the stream buffer and `gather_stream`.
+  cancellation, multi-model streaming, the stream buffer and response projection.
 - External dependency: `backend/tests/external_dependency_unit/answer/` runs
   turns through preparation and storage, including compaction.
   `backend/tests/external_dependency_unit/chat/` covers the run store and
@@ -405,7 +411,7 @@ termination grace period is much shorter, so it ends running turns first
   held.
 - Playwright: `web/tests/e2e/chat/stream_recovery.spec.ts` covers reload, network
   recovery and stop against the real API with a scripted model.
-- By hand: send a message that forces a search. Press stop during the answer and
+- By hand: send a message with Search selected as the preferred Action. Press stop during the answer and
   reload: the partial answer must stay. Send again, close the tab during the
   answer, and reopen the session: the answer must resume or show as saved. Run a
   multi-model turn and confirm that each column ends with its own answer or error.

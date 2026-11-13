@@ -113,7 +113,17 @@ class SendMessageRequest(BaseModel):
     llm_overrides: list[LLMOverride] | None = None
 
     allowed_tool_ids: list[int] | None = None
-    forced_tool_id: int | None = None
+    preferred_tool_id: int | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_forced_action(cls, data: Any) -> Any:
+        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use preferred_tool_id for "
+                "an optional Action preference; invocation is not guaranteed."
+            )
+        return data
 
     file_descriptors: list[FileDescriptor] = []
 
@@ -152,6 +162,12 @@ class SendMessageRequest(BaseModel):
     # (not shown in chat history). Used e.g. by the Chrome extension to pass
     # the current tab URL when "Read this tab" is enabled.
     additional_context: str | None = None
+
+    @model_validator(mode="after")
+    def check_preference_supported(self) -> "SendMessageRequest":
+        if self.deep_research and self.preferred_tool_id is not None:
+            raise ValueError("preferred_tool_id is not supported with deep_research")
+        return self
 
     @model_validator(mode="after")
     def check_chat_session_id_or_info(self) -> "SendMessageRequest":

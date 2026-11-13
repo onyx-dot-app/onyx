@@ -2629,6 +2629,89 @@ def test_strip_tool_content_merges_consecutive_tool_results() -> None:
     assert "headline news" in merged
 
 
+@pytest.mark.parametrize(
+    "provider",
+    [
+        LlmProviderNames.BEDROCK,
+        LlmProviderNames.BEDROCK_CONVERSE,
+        LlmProviderNames.OLLAMA,
+        LlmProviderNames.OLLAMA_CHAT,
+    ],
+)
+@pytest.mark.parametrize("choice", [ToolChoiceOptions.NONE, ToolChoiceOptions.AUTO])
+def test_native_final_request_preserves_evidence_without_tool_definitions(
+    provider: str,
+    choice: ToolChoiceOptions,
+) -> None:
+    llm = LitellmLLM(
+        api_key=None,
+        model_provider=provider,
+        model_name="llama3.2"
+        if provider in {LlmProviderNames.OLLAMA, LlmProviderNames.OLLAMA_CHAT}
+        else "anthropic.claude-sonnet-4-20250514-v1:0",
+        max_input_tokens=200000,
+    )
+    messages: list[ChatCompletionMessage] = [
+        UserMessage(content="Weather?"),
+        AssistantMessage(
+            content="Checking",
+            tool_calls=[
+                ToolCall(
+                    id="weather-call",
+                    function=RequestFunctionCall(
+                        name="get_weather", arguments='{"location":"Paris"}'
+                    ),
+                )
+            ],
+        ),
+        ToolMessage(tool_call_id="weather-call", content="Sunny, 20C"),
+    ]
+    original = [message.model_dump() for message in messages]
+    with patch("litellm.completion", return_value=[]) as completion:
+        list(
+            llm.stream_raw(
+                messages, tools=_TOOL_CHOICE_DOWNGRADE_TOOLS, tool_choice=choice
+            )
+        )
+    sent = completion.call_args.kwargs
+    if choice == ToolChoiceOptions.NONE:
+        assert not sent.get("tools")
+        assert "tool_choice" not in sent
+        if provider in {LlmProviderNames.BEDROCK, LlmProviderNames.BEDROCK_CONVERSE}:
+            assert all(
+                message["role"] != "tool" and not message.get("tool_calls")
+                for message in sent["messages"]
+            )
+        assert "get_weather" in str(sent["messages"])
+        assert "Paris" in str(sent["messages"])
+        assert "Sunny, 20C" in str(sent["messages"])
+    else:
+        assert sent["tools"]
+        assert sent["tool_choice"] == ToolChoiceOptions.AUTO
+        calls = [
+            message["tool_calls"]
+            for message in sent["messages"]
+            if message.get("tool_calls")
+        ]
+        assert calls == [
+            [
+                {
+                    "id": "weather-call",
+                    "type": "function",
+                    "function": {
+                        "name": "get_weather",
+                        "arguments": '{"location":"Paris"}',
+                    },
+                }
+            ]
+        ]
+        results = [message for message in sent["messages"] if message["role"] == "tool"]
+        assert results == [
+            {"role": "tool", "tool_call_id": "weather-call", "content": "Sunny, 20C"}
+        ]
+    assert [message.model_dump() for message in messages] == original
+
+
 def test_no_tool_choice_sent_when_no_tools(default_multi_llm: LitellmLLM) -> None:
     """Regression test for providers (e.g. Fireworks) that reject tool_choice=null.
 

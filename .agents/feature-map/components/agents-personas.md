@@ -196,7 +196,7 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
     only when it manages every group before and after the change, and only
     while the agent is private before and after the change. Any other editor may send the current shares back unchanged.
     `ADD_AGENTS` alone lets a user create an agent, not share it with a group.
-    Skills apply a stricter form of this rule with `MANAGE_SKILLS`
+    Skills apply a stricter form of this rule with `MANAGE_PLUGINS`
     ([[skills]]).
 
 ---

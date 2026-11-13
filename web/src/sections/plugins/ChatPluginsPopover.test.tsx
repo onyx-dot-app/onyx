@@ -114,7 +114,7 @@ function PickerHarness({
             chatSessionId: mockChatId ?? "new-chat",
             parentMessageId: null,
             filters: null,
-            forcedToolId: configuration.forcedToolId,
+            preferredToolId: configuration.preferredToolId,
             enabledToolIds: enabledChatToolIds(
               selectedAgent.tools,
               configuration
@@ -396,7 +396,7 @@ test("an MCP group toggle serializes every attached ID through the send service"
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 7],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -418,7 +418,7 @@ test("an attached private MCP server stays visible and can be excluded from the 
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 7],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -445,7 +445,7 @@ test("an OAuth status failure allows disabling a selected plugin but blocks enab
   await waitFor(() =>
     expect(requests[0]).toMatchObject({
       allowed_tool_ids: [1, 2, 71, 72],
-      forced_tool_id: null,
+      preferred_tool_id: null,
       chat_session_id: "chat-a",
     })
   );
@@ -568,7 +568,7 @@ test("Actions keeps built-in search and Sources while custom plugins appear only
     expect(
       JSON.parse(sessionStorage.getItem("onyx:tools:chat:chat-a") ?? "{}")
     ).toMatchObject({
-      tools: { 1: "forced" },
+      tools: { 1: "preferred" },
       filters: { selectedSources: ["slack"] },
     })
   );

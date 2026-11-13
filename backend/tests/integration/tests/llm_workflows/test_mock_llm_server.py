@@ -1,7 +1,10 @@
 from onyx.configs.constants import DocumentSource
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    requires_code_mode,
+)
 from tests.integration.common_utils.test_models import DATestUser, ToolName
 from tests.integration.mock_services.mock_llm_server.models import (
     Reply,
@@ -13,6 +16,7 @@ SEARCH_CALL_ID = "call_search_1"
 ANSWER = "The PTO policy grants twenty days a year."
 
 
+@requires_code_mode(False)
 def test_scripted_turn_runs_native_internal_search_then_answers(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:

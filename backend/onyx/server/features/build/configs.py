@@ -157,8 +157,11 @@ SANDBOX_PROXY_HEALTHZ_PORT = int(os.environ.get("SANDBOX_PROXY_HEALTHZ_PORT", "8
 # Optional additive CA bundle used by mitmproxy when it verifies HTTPS origins.
 # The Helm chart writes it into the proxy's writable confdir because the proxy
 # container intentionally runs non-root with a read-only root filesystem.
+# Other deployments can share the SSL_CERT_FILE bundle used by HTTPX OAuth calls.
 SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA = (
-    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip() or None
+    os.environ.get("SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA", "").strip()
+    or os.environ.get("SSL_CERT_FILE", "").strip()
+    or None
 )
 
 # The CA Secret lives here; the CA ConfigMap is projected into SANDBOX_NAMESPACE

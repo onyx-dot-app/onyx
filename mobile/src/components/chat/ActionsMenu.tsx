@@ -24,8 +24,8 @@ export function ActionsMenu() {
     toggleDeepResearch,
     actionTools,
     unavailableToolIds,
-    forcedToolId,
-    toggleForcedTool,
+    preferredToolId,
+    togglePreferredTool,
     disabledToolIds,
     toggleToolEnabled,
     sourceToolId,
@@ -73,7 +73,7 @@ export function ActionsMenu() {
             <SourceSwitchList />
           ) : (
             <>
-              {/* Deep research is a mode, not a tool: nothing to force or disable, so it renders
+              {/* Deep research is a mode, not a tool: nothing to prefer or disable, so it renders
                   as a plain switch rather than an ActionLineItem. Web keeps it as a composer
                   pill instead. */}
               {showDeepResearch ? (
@@ -98,7 +98,7 @@ export function ActionsMenu() {
                 <ActionLineItem
                   key={tool.id}
                   tool={tool}
-                  isForced={forcedToolId === tool.id}
+                  isPreferred={preferredToolId === tool.id}
                   isDisabled={disabledToolIds.includes(tool.id)}
                   isUnavailable={unavailableToolIds.includes(tool.id)}
                   sourceCounts={
@@ -109,7 +109,7 @@ export function ActionsMenu() {
                         }
                       : null
                   }
-                  onForceToggle={() => toggleForcedTool(tool.id)}
+                  onPreferenceToggle={() => togglePreferredTool(tool.id)}
                   onToggleEnabled={() => toggleToolEnabled(tool.id)}
                   onOpenSources={() => setShowSources(true)}
                   onClose={close}

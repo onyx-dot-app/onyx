@@ -617,7 +617,7 @@ class _ResponseWriter:
                 else ""
             )
             response.token_count = count_tokens(response.message)
-        if record.checkpoint is not None and record.checkpoint.summary:
+        if record.checkpoint is not None:
             checkpoint = record.checkpoint.model_copy(
                 update={
                     "summary": sanitize_string(record.checkpoint.summary),

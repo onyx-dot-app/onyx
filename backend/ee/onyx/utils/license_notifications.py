@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import get_license
+from ee.onyx.db.license import acquire_license_store_lock, get_license
 from ee.onyx.utils.license import verify_license_signature
 from ee.onyx.utils.license_expiry import (
     ExpiryWarningStage,
@@ -169,6 +169,36 @@ def _severity_for_stage(
     return NotificationSeverity.WARNING
 
 
+def _stored_license_expires_at(db_session: Session) -> datetime | None:
+    """Expiry of the stored license, or None when none is stored or it does
+    not verify."""
+    license_record = get_license(db_session)
+    if not license_record:
+        return None
+    try:
+        return verify_license_signature(license_record.license_data).expires_at
+    except ValueError:
+        return None
+
+
+def _lock_warning_to_stored_license(db_session: Session, expires_at: datetime) -> bool:
+    """Take the license store lock and confirm a warning for expires_at still
+    applies.
+
+    A store dismisses warnings for other expiries under this lock, so a warning
+    written by a reader that saw the replaced license would outlive the
+    renewal. On True the lock is held until the caller's next commit; on False
+    it is released.
+    """
+    acquire_license_store_lock(db_session)
+    db_session.expire_all()
+    stored_expires_at = _stored_license_expires_at(db_session)
+    if stored_expires_at is None or stored_expires_at == expires_at:
+        return True
+    db_session.commit()
+    return False
+
+
 def notify_admins_for_stage(
     db_session: Session,
     stage: ExpiryWarningStage,
@@ -202,6 +232,8 @@ def notify_admins_for_stage(
         stage, expires_at, grace_days, renewal_error, is_trial
     )
 
+    if not _lock_warning_to_stored_license(db_session, expires_at):
+        return
     inserted_admin_ids = batch_create_notifications(
         user_ids=[a.id for a in admins],
         notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
@@ -268,6 +300,8 @@ def ensure_license_expiry_notification_for_user(
         stage, payload.expires_at, grace_days, is_trial=payload.ends_with_trial
     )
 
+    if not _lock_warning_to_stored_license(db_session, payload.expires_at):
+        return
     batch_create_notifications(
         user_ids=[user.id],
         notif_type=NotificationType.LICENSE_EXPIRY_WARNING,

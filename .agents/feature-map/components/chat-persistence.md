@@ -79,7 +79,7 @@ availability and the record mode; this component applies them.
 ```
 prepare_chat_turn                          chat/process_message.py
   create_new_chat_message (user row)       commits at once; survives a failed answer
-  ChatHistoryStore.save_user_message       USAGE_ONLY: Redis, before reservation
+  RedisChatHistoryStore.save_user_messages      USAGE_ONLY: Redis, before reservation
   reserve_chat_response_ids                db/chat.py: assistant row(s), placeholder
                                            text, response_status NULL, committed;
                                            moves the parent's active pointer to it
@@ -187,14 +187,22 @@ falls back to `ChatMessage.error` on legacy rows
 (`db/chat.py:translate_db_message_to_chat_message_detail`); a change to the
 failure shape must keep old rows readable.
 
-**History for the next turn.** A later turn does not see earlier tool output.
-`chat/chat_utils.py:omit_prior_tool_result_content` marks saved runtime tool
-results, and `chat/prompt_utils.py:prepare_prompt` replaces their content with
-`TOOL_CALL_RESPONSE_CROSS_MESSAGE`. Legacy rows get the same placeholder from
-`chat/chat_utils.py:_build_tool_call_response_history_message`. Image
-generation is the exception in both: its output stays. The incognito store
-applies the same rule. Within one turn the run keeps the full tool output. The
-stored content stays intact for replay and citations.
+**History for the next turn.** `chat/chat_utils.py:capture_chat_history` reconstructs
+runtime results from their recorded bodies. For legacy generated-image results,
+`_build_tool_call_response_history_message` prefers usable stored file IDs and revised
+prompts. If none are usable, it falls back to saved response text, then a placeholder.
+Other legacy results use saved response text, then the placeholder.
+
+A code mode result is replayed as saved ([[#code-mode-replay-content]]).
+
+The runtime builds its working context from that history. `messages_for_model`
+removes incomplete tool exchanges and unsigned thinking. Context-budget compaction
+can summarize older results; truncation can remove them. These operations change
+model input, not the source records.
+
+Content-persisting sessions retain PostgreSQL evidence for replay and citations.
+`USAGE_ONLY` sessions store no conversation content there. Their temporary history
+can lose evidence before model compaction under the retention limits below.
 
 **Incognito.** A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings
@@ -203,11 +211,23 @@ from the owner. `USAGE_ONLY` (the default) writes rows with blank text and
 real token counts, sets only `response_status` on the answer, writes no
 response items, tool calls, sources, citations or checkpoints, and keeps the
 conversation in Redis through `chat/history_store.py:RedisChatHistoryStore`.
-That history is one linear list for the latest run, not a tree. A new message
-appends to what is stored. A regenerate cuts the list at the selected question
-and fails when that question has expired or was trimmed. The list keeps at
-most 200 messages and 1 MB: older sub-agent records go first, then the oldest
-messages, with no error; one response that cannot fit fails its save
+Tool results there keep their details as the saved type, documents included
+(`chat/models.py:serialize_incognito_message`), so citations and the code
+mode store work in later turns.
+The database branch selects retained user messages and response output IDs from
+the temporary list. Saving a new input removes future turns and unselected model
+answers before appending its text-file messages and question. A small response
+index keeps run IDs, output IDs and each response’s checkpoint even when child-agent
+payloads are evicted. Continuation and regeneration use the selected parent’s
+checkpoint, never the last sibling saved. A failed save or eviction can leave a
+selected database response without temporary content. The next turn’s temporary
+prompt history omits that response and never substitutes a sibling. The chat-session
+API still returns its blank database row and replay stop. Image metadata keeps file references, not image bytes. Regeneration reuses the saved
+input group; it fails when the question has expired or was trimmed.
+The list keeps at most 200 messages and 1 MB. For byte overflows, older sub-agent
+records go first. Remaining byte overflows and message-count overflows remove complete
+oldest turns, including attachments, questions, and response/tool messages.
+An input or response that cannot fit with its complete current turn fails its save
 (`chat/incognito_context.py:_retained_state`). The answer save is two writes
 that are not atomic: the Postgres usage row commits first, then Redis. A
 teardown or lost admission between them leaves a final row, a
@@ -217,6 +237,11 @@ Incognito needs the Redis cache backend and is off on the Postgres one
 `end-incognito-session`, which marks uploads for deletion, drops the Redis
 context and deletes generated files. Deleting an incognito session runs the
 same teardown. A TTL and a server sweep clean up when the call never arrives.
+The stored-value format requires response ownership. Older unindexed values
+are ignored on read: new turns continue without that context, and old questions
+cannot be regenerated. Redis retains the value until a write replaces it, teardown
+deletes it, or its TTL expires. The key namespace stays stable so teardown fences
+survive upgrades.
 `chat/incognito_context.py:teardown_incognito_session` adds the session to a
 tenant pending set and writes the tombstone at once. Under the session lock it
 deletes the context, then deletes the buffered stream keys. When the lock is
@@ -334,7 +359,9 @@ Community downgrade clears it ([[billing]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
    After a tool is deleted, runtime replay still shows its calls from the
    typed result, but legacy replay skips them, and the steps vanish from a
-   reloaded chat silently.
+   reloaded chat silently. Code mode has no tool row: `persistence.tool_ids`
+   maps `execute_code` and `wait_code` to None, and their calls save with a
+   NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
     session.** `db/chat.py:get_chat_session_by_id` adds `deleted IS FALSE`
     whenever `is_shared` is set, because delete does not unshare. Keep that
@@ -358,8 +385,9 @@ Community downgrade clears it ([[billing]]).
     same response twice is a no-op; different content for the same message
     raises.
 13. `stored-tool-result-types` **Saved tool results are a closed set of
-    types.** `db/models.py:StoredToolResult` validates `details` against a
-    union keyed by `type`, on save and on every load. A tool whose result
+    types.** `db/models.py:StoredToolResult` validates `details` against
+    `SavedToolResultDetails`, a union keyed by `type`, on save and on every
+    load. A tool whose result
     details are not in the union fails its save. Renaming or removing a
     member makes old rows fail to load. Add new detail types to the union and
     keep old ones readable.
@@ -380,6 +408,24 @@ Community downgrade clears it ([[billing]]).
     restart interrupts is never resumed ([[#save-chat-turn-one-commit]]). A
     feature that starts to suspend runs must keep blobs under the root session
     id, because hard delete finds them only by that prefix.
+16. `code-mode-replay-content` **A code mode result is replayed as saved, so
+    its content must carry what the next turn needs**
+    (`tools/tool_implementations/code_mode/prompt.py:format_content`). An
+    observation that reports a program that did not complete lists every call
+    of the cell, those of earlier observations included, with their states,
+    because those calls may have had effects (`calls_note`). A running or
+    completed observation lists no calls; when a cell ends without completing,
+    its last observation or its closing record lists them. Each observation gives the `file_id` and revised prompt of
+    each image that its calls generated (`images_note`), so a later message
+    can edit it. When the response ends or the run pauses after a cell's last
+    observation, the saved content adds the cell's closing record, formatted
+    like an observation. It starts with `closing_heading` ("Cell N stopped when
+    the response ended" or "when the run paused", or how it ended) and has the
+    output, result and store writes after that observation; it lists the calls
+    only when the cell did not complete. A restored
+    run closes a cell that its saved observation reports running as
+    interrupted: the heading says that calls after the saved output are not
+    known, and the record lists the calls that the saved observations hold.
 
 ---
 
@@ -452,9 +498,8 @@ Community downgrade clears it ([[billing]]).
   `db/chat.py:translate_db_message_to_chat_message_detail` if the client
   needs it, and to replay if it changes what a reload shows.
 - `replay-new-tool` **Replay for a new tool.** Add the tool's result details
-  type to `db/models.py:StoredToolResult` ([[#stored-tool-result-types]]) and
-  to `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES`
-  ([[tools-framework#durable-details-registered]]), and
+  type to `db/models.py:SavedToolResultDetails` ([[#stored-tool-result-types]],
+  [[tools-framework#durable-details-registered]]), and
   its packets to `chat/renderer.py:ToolRenderer`, which serves the live stream
   and runtime replay alike; copy the `MemoryTool` branch there. A new tool has
   no legacy rows, so it needs no builder in

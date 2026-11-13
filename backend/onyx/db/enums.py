@@ -367,6 +367,9 @@ class AccessType(str, PyEnum):
     SYNC = "sync"
     # Perm sync, narrowed to members of the connector's data-access groups.
     SYNC_RESTRICTED = "sync_restricted"
+    # Only the credential owner reads the documents; takes no groups. Distinct
+    # from PRIVATE with no groups.
+    PERSONAL = "personal"
 
     def is_perm_synced(self) -> bool:
         return self in (AccessType.SYNC, AccessType.SYNC_RESTRICTED)
@@ -740,6 +743,11 @@ class HookFailStrategy(str, PyEnum):
     SOFT = "soft"  # log error, return original input, pipeline continues
 
 
+# Old values read as their new member. Remove "manage:skills" in the release after
+# the one that renamed it.
+LEGACY_PERMISSION_ALIASES: dict[str, str] = {"manage:skills": "manage:plugins"}
+
+
 class Permission(str, PyEnum):
     """
     Permission tokens for group-based authorization and PAT scoping.
@@ -781,7 +789,7 @@ class Permission(str, PyEnum):
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
-    MANAGE_SKILLS = "manage:skills"
+    MANAGE_PLUGINS = "manage:plugins"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
@@ -798,6 +806,12 @@ class Permission(str, PyEnum):
     # Permissions that are implied by other grants and must never be stored
     # directly in the permission_grant table.
     IMPLIED: ClassVar[frozenset[Permission]]
+
+    @classmethod
+    def _missing_(cls, value: object) -> Permission | None:
+        if isinstance(value, str) and value in LEGACY_PERMISSION_ALIASES:
+            return cls(LEGACY_PERMISSION_ALIASES[value])
+        return None
 
 
 Permission.IMPLIED = frozenset(
@@ -1003,6 +1017,25 @@ class SkillInstallationPolicy(str, PyEnum):
     AVAILABLE = "AVAILABLE"
     DEFAULT = "DEFAULT"
     REQUIRED = "REQUIRED"
+
+
+class MarketplaceKind(str, PyEnum):
+    """Where a plugin comes from. A marketplace grants no access."""
+
+    # One "My uploads" for each user.
+    USER_UPLOADS = "user_uploads"
+    # One for each tenant. A plugin here is published to the organization.
+    ORGANIZATION_LIBRARY = "organization_library"
+
+
+class PluginInstallationPolicy(str, PyEnum):
+    """Install setting of a plugin, a group override or a marketplace default.
+    Writes refuse NOT_AVAILABLE until group install settings ship."""
+
+    REQUIRED = "REQUIRED"
+    DEFAULT = "DEFAULT"
+    AVAILABLE = "AVAILABLE"
+    NOT_AVAILABLE = "NOT_AVAILABLE"
 
 
 class ConnectorEventType(str, PyEnum):

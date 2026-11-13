@@ -90,6 +90,8 @@ export interface AgentTimelineProps {
   generatedImageCount?: number;
   /** Tool processing duration from backend (via MESSAGE_START packet) */
   toolProcessingDuration?: number;
+  /** A code mode program works between tool calls; it has no step */
+  codeModeWorking?: boolean;
 }
 
 /**
@@ -111,7 +113,8 @@ function areAgentTimelinePropsEqual(
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
     prev.generatedImageCount === next.generatedImageCount &&
-    prev.toolProcessingDuration === next.toolProcessingDuration
+    prev.toolProcessingDuration === next.toolProcessingDuration &&
+    prev.codeModeWorking === next.codeModeWorking
   );
 }
 
@@ -128,11 +131,13 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   processingDurationSeconds,
   generatedImageCount = 0,
   toolProcessingDuration,
+  codeModeWorking = false,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
-    stopReason
+    stopReason,
+    codeModeWorking
   );
 
   // Memoized metrics derived from turn groups
@@ -228,6 +233,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     parallelActiveStepSupportsCollapsedStreaming,
     parallelActiveStepHasCollapsedContent,
     finalAnswerComing,
+    codeModeWorking,
   });
 
   const headerIsInteractive = useMemo(() => {

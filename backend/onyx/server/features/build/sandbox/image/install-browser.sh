@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Update the version and both archive hashes together.
-version=157.0.8103.38
+# update-sandbox-browser.sh rewrites these pins by line shape: keep `version=`
+# at column 0 and one `checksum=` in each architecture arm.
+version=157.0.8103.78
 case "$(dpkg --print-architecture)" in
   amd64)
     platform=linux64
-    checksum=8cdeb344e9b2cefe59f4aea8d1d93d5d93054c03cde217665c16fc1f62e72a66
+    checksum=9223832977a13db3646201b1341c1f9cf08afa3ceae92540116d7b0c062364fb
     ;;
   arm64)
     platform=linux-arm64
-    checksum=5517510e61657ff43ee9ab804ecd1a499b3d5bd3caf72f097516bd6565ba5a17
+    checksum=f354d666822a11d8fe99e923c44be77dd226fab2750c5b5947e6318818bf10f1
     ;;
   *) echo 'Unsupported browser architecture' >&2; exit 1 ;;
 esac

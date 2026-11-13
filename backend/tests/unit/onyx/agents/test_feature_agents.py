@@ -127,12 +127,16 @@ def test_coding_bash_order_history_and_final_answer() -> None:
     responses = [
         message for message in harness.state.messages if message.role == "tool_result"
     ]
-    assert [(message.tool_call_id, message.text) for message in responses] == [
-        ("call-0", "first"),
-        ("call-1", "second"),
-        ("call-0", "Ready to produce the final answer."),
+    assert [message.text for message in responses] == [
+        "first",
+        "second",
+        "Ready to produce the final answer.",
     ]
-    assert llm.requests[-1]["tools"] is None
+    # The provider repeats call-0 in the second step, which gets a new ID.
+    ids = [message.tool_call_id for message in responses]
+    assert ids[:2] == ["call-0", "call-1"] and ids[2] not in ids[:2]
+    assert llm.requests[-1]["tools"] == llm.requests[0]["tools"]
+    assert llm.requests[-1]["tool_choice"] == ToolChoiceOptions.NONE
 
 
 def test_cancel_after_coding_tools_prevents_final_model_call() -> None:
@@ -855,7 +859,8 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
         )
     )
     assert prepared is not None
-    initial = prepared.generation_request(history)
+    definitions = [tool.definition for tool in feature.tools]
+    initial = prepared.generation_request(history, tools=definitions)
     final = feature._prepare_step(
         StepInput(
             history=[],
@@ -865,7 +870,9 @@ def test_coding_prepared_request_keeps_decisions_when_history_changes() -> None:
         )
     )
     assert final is not None
-    rebuilt = prepared.generation_request([UserMessage(content="Compacted evidence")])
+    rebuilt = prepared.generation_request(
+        [UserMessage(content="Compacted evidence")], tools=definitions
+    )
 
     assert final.options.tool_choice == ToolChoiceOptions.NONE
     assert rebuilt.options == initial.options

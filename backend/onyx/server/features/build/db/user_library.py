@@ -323,7 +323,7 @@ def get_or_create_craft_connector(db_session: Session, user: User) -> tuple[int,
         credential_id=credential.id,
         user=user,
         cc_pair_name=USER_LIBRARY_CONNECTOR_NAME,
-        access_type=AccessType.PRIVATE,
+        access_type=AccessType.PERSONAL,
         manage_access={},
         processing_mode=ProcessingMode.RAW_BINARY,
     )

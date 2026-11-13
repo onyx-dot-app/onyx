@@ -120,18 +120,25 @@ of the chat picker.
 **The wrapper.** `llm/multi_llm.py:LitellmLLM` has two layers. `invoke_raw` and
 `stream_raw` return provider chunks (`ModelResponseStream`). `invoke` and
 `stream` add the event layer (`GenerationEvent`, see `backend/onyx/llm/README.md`)
-and open a generation span. The agent runtime
-(`agents/runtime.py`) uses `stream`; the gateway uses the raw layer and opens
-its own spans. `_completion` shapes the request
-for each model family and provider. Supported OpenAI and Azure requests mark tool
-results with explicit cache breakpoints after message normalization. Cache endpoint
+and open a generation span. These typed calls translate semantic tool permissions
+into provider-compatible tool definitions and choices without changing the runtime's
+execution policy. The agent runtime (`agents/runtime.py`) uses `stream`; the gateway
+uses the raw layer and opens its own spans. `_completion` shapes the request
+for each model family and provider. Supported OpenAI and Azure requests mark every
+flagged user message of the cacheable prefix and every tool result with explicit cache
+breakpoints after message normalization. The flag travels on the serialized
+message (`llm/prompt_cache/providers/openai.py:CACHE_BREAKPOINT_FLAG`), so
+transforms that add or remove messages keep it. A transform that replaces a
+message must copy the flag. Cache endpoint
 checks run under the same environment lock as each dispatch. The lock releases
 before retry handling; removing cache options prevents later attempts from adding
 markers again. When a provider 400 names a
 reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
-(`_retry_attempts`). A cache fallback also removes the tool-result markers. It
-never drops tools, tool choice or messages. `_track_llm_cost` counts cost only when
-usage limits are on and the key is Onyx-managed. Per-user usage comes from
+(`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
+never drops tools, tool choice or messages during that retry. Separately, final-answer
+requests omit tool definitions for native Bedrock and Ollama adapters that cannot
+enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
+cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
 
 **Env-only provider config.** Some `custom_config` keys have no LiteLLM kwarg

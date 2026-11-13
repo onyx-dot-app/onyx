@@ -17,7 +17,10 @@ import {
   createConnectorInitialValues,
   formOnlyFieldNames,
 } from "@/lib/connectors/utils";
-import { NEW_ACCOUNT_FIELD } from "@/views/admin/connectors/AddConnectorPage/newAccount";
+import {
+  NEW_ACCOUNT_FIELD,
+  SAVED_ACCOUNT_FIELD,
+} from "@/views/admin/connectors/AddConnectorPage/newAccount";
 import type { AccessType } from "@/lib/types";
 import type { ConnectorEditProposal } from "@/lib/connectors/edit/types";
 
@@ -251,7 +254,10 @@ function formConfig(
     source,
     configuration,
     configValues,
-    connectorFormControlFieldNames(configuration, [NEW_ACCOUNT_FIELD])
+    connectorFormControlFieldNames(configuration, [
+      NEW_ACCOUNT_FIELD,
+      SAVED_ACCOUNT_FIELD,
+    ])
   );
 }
 

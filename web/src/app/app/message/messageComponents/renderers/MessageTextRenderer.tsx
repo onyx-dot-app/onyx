@@ -29,6 +29,10 @@ import {
   MemoizedParagraph,
 } from "@/app/app/message/MemoizedTextComponents";
 import { extractCodeText } from "@/app/app/message/codeUtils";
+import {
+  createCitationResolver,
+  tableToCopyContent,
+} from "@/app/app/message/tableCopyUtils";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
@@ -386,8 +390,23 @@ export const MessageTextRenderer: MessageRenderer<
           {children}
         </li>
       ),
-      table: ({ className, children, ...rest }) => (
-        <ScrollableTable className={className} {...rest}>
+      table: ({ node, className, children, ...rest }) => (
+        <ScrollableTable
+          className={className}
+          getCopyContent={
+            node
+              ? () =>
+                  tableToCopyContent(
+                    node,
+                    createCitationResolver(
+                      stateRef.current?.docs,
+                      stateRef.current?.citations
+                    )
+                  )
+              : undefined
+          }
+          {...rest}
+        >
           {children}
         </ScrollableTable>
       ),

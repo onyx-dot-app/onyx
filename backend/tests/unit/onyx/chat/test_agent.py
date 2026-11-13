@@ -28,6 +28,7 @@ from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.interfaces import LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -44,6 +45,12 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.prompts.chat_prompts import (
+    FILE_REMINDER,
+    IMAGE_GEN_REMINDER,
+    OPEN_URL_REMINDER,
+    REQUIRE_CITATION_GUIDANCE,
+)
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.models import ChatFile
@@ -58,15 +65,57 @@ from tests.unit.onyx.agents.fakes import (
 )
 
 
+@pytest.mark.parametrize("multiple_operations", [False, True])
 @pytest.mark.parametrize(
     "render, observer_fails", [(True, False), (False, False), (True, True)]
 )
-def test_chat_preserves_parallel_tool_history_forcing_and_packets(
+@pytest.mark.parametrize(
+    ("model_name", "deployment_name", "last_has_tools"),
+    [
+        ("test-model", None, True),
+        ("claude-haiku-4-5", None, True),
+        ("qwen3.7-plus", None, False),
+        ("z-ai/glm-5.3", None, False),
+        ("alias", "glm-5.3", False),
+    ],
+)
+def test_chat_preserves_parallel_tool_history_preference_and_packets(
     render: bool,
     observer_fails: bool,
     monkeypatch: pytest.MonkeyPatch,
+    model_name: str,
+    deployment_name: str | None,
+    last_has_tools: bool,
+    multiple_operations: bool,
 ) -> None:
+    class SecondOperation(EchoTool):
+        @property
+        def name(self) -> str:
+            return "second_operation"
+
+    class OtherTool(EchoTool):
+        @property
+        def id(self) -> int:
+            return 2
+
+        @property
+        def name(self) -> str:
+            return "other"
+
     runs: list[Run] = []
+    monkeypatch.setattr(
+        ScriptedLLM,
+        "config",
+        property(
+            lambda self: LLMConfig(
+                model_provider="openai",
+                model_name=model_name,
+                deployment_name=deployment_name,
+                max_input_tokens=self.max_input_tokens,
+                temperature=0,
+            )
+        ),
+    )
     if observer_fails:
 
         def broken_observer(_presenter: ResponsePresenter, _event: AgentEvent) -> None:
@@ -76,6 +125,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
             "onyx.chat.presentation.ResponsePresenter.consume", broken_observer
         )
 
+    operation_name = "second_operation" if multiple_operations else "echo"
     llm = ScriptedLLM(
         [
             Delta(
@@ -84,7 +134,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
                         id=f"call-{index}",
                         index=index,
                         function=ResponseFunctionCall(
-                            name="echo", arguments='{"value":"hello"}'
+                            name=operation_name, arguments='{"value":"hello"}'
                         ),
                     )
                     for index in range(2)
@@ -108,7 +158,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
     ]
     agent = ChatAgent(
         messages=[],
-        tools=[EchoTool()],
+        tools=[
+            EchoTool(),
+            *([SecondOperation()] if multiple_operations else []),
+            OtherTool(),
+        ],
         custom_agent_prompt=None,
         base_system_prompt="",
         context_files=ExtractedContextFiles(
@@ -123,7 +177,7 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         user_memory_context=None,
         llm=llm,
         token_counter=len,
-        forced_tool_id=1,
+        preferred_tool_id=1,
     )
     project = partial(
         project_response,
@@ -142,8 +196,20 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         observation.finish()
         assert telemetry.call_args.args[1]["llm_cycles"] == 2
     assert len(llm.requests) == 2
-    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.REQUIRED
-    assert llm.requests[1]["tools"] is None
+    assert llm.requests[0]["tool_choice"] == ToolChoiceOptions.AUTO
+    assert [tool["function"]["name"] for tool in llm.requests[0]["tools"]] == [
+        tool.name for tool in agent.application_tools
+    ]
+    for request in llm.requests:
+        assert "The user selected these operations for this request: " in str(
+            request["prompt"]
+        )
+    if last_has_tools:
+        assert [tool["function"]["name"] for tool in llm.requests[1]["tools"]] == [
+            tool.name for tool in agent.application_tools
+        ]
+    else:
+        assert llm.requests[1]["tools"] is None
     assert llm.requests[1]["tool_choice"] == ToolChoiceOptions.NONE
     assert [message.role for message in agent.state.messages] == [
         "user",
@@ -157,6 +223,11 @@ def test_chat_preserves_parallel_tool_history_forcing_and_packets(
         for message in agent.state.messages[2:4]
         if message.role == "tool_result"
     ] == ["call-0", "call-1"]
+    assert all(
+        message.tool_name == operation_name and not message.is_error
+        for message in agent.state.messages[2:4]
+        if isinstance(message, ToolResultMessage)
+    )
     assert agent.state.messages[-1].text == "Final answer"
     snapshot = project(runs[-1].snapshot())
     assert snapshot.answer == "Final answer"
@@ -396,6 +467,7 @@ def test_cancelled_source_file_staging_drains_before_completion(
             )
         ]
     )
+    # Files of found documents are staged only for the Python tool.
     agent = ChatAgent(
         [],
         [EchoTool(), _PythonTool()],
@@ -488,6 +560,9 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         history = IncognitoState.model_validate_json(
             IncognitoState(messages=history).model_dump_json()
         ).messages
+    llm = ScriptedLLM(
+        [Delta(content="Evidence [4]"), Delta(content="More evidence [4]")], 128000
+    )
     feature = ChatAgent(
         messages=history,
         tools=[],
@@ -503,9 +578,7 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
         ),
         persona=None,
         user_memory_context=None,
-        llm=ScriptedLLM(
-            [Delta(content="Evidence [4]"), Delta(content="More evidence [4]")], 128000
-        ),
+        llm=llm,
         token_counter=len,
     )
     for _ in range(2):
@@ -519,6 +592,12 @@ def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
                 Emitter(model_idx=0, publish=output.put_nowait)
             ).consume,
         )
+        reminder = llm.requests[-1]["prompt"][-1].content
+        assert isinstance(reminder, str)
+        assert REQUIRE_CITATION_GUIDANCE.strip() in reminder
+        assert FILE_REMINDER.strip() not in reminder
+        assert IMAGE_GEN_REMINDER.strip() not in reminder
+        assert OPEN_URL_REMINDER.strip() not in reminder
         assert feature.citation_mapping == {4: "reference"}
         assert feature.citation_processor.citation_to_doc == {4: document}
         assert feature.gathered_documents == [document]
@@ -659,7 +738,6 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
     replace_base: bool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("onyx.chat.prompt_utils.get_company_context", lambda: None)
-    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
     files = ExtractedContextFiles(
         file_texts=["Attached evidence"],
         image_files=[],
@@ -698,10 +776,14 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
         UserMessage(content="Current question"),
     ]
     original = [message.model_dump() for message in history]
-    first = prepared.generation_request(history)
+    first = prepared.generation_request(
+        history, tools=[tool.definition for tool in agent.tools]
+    )
     files.file_texts[0] = "Changed attachment"
     agent.custom_agent_prompt = "Changed instructions"
-    second = prepared.generation_request([history[-1]])
+    second = prepared.generation_request(
+        [history[-1]], tools=[tool.definition for tool in agent.tools]
+    )
     for request in [first, second]:
         assert request.messages[0].text.startswith(
             "Replacement instructions" if replace_base else "Base instructions"
@@ -736,7 +818,6 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
     monkeypatch.setattr(
         "onyx.chat.prompt_utils.get_company_context", lambda: "Acme Inc"
     )
-    monkeypatch.setattr("onyx.chat.prompt_formatting.PROMPT_CACHE_CHAT_HISTORY", True)
     requests = []
     for name in ("Alice", "Bob"):
         agent = ChatAgent(
@@ -789,3 +870,96 @@ def test_user_information_is_split_out_of_the_shared_system_prompt(
         assert "prefers bullet points" in user_info.text
         assert ("works on billing" in user_info.text) == inject_memories
         assert question.text == "Question"
+
+
+@pytest.mark.parametrize("use_other_tool", [False, True])
+def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
+    use_other_tool: bool,
+) -> None:
+    class OtherTool(EchoTool):
+        @property
+        def id(self) -> int:
+            return 2
+
+        @property
+        def name(self) -> str:
+            return "other"
+
+    requests: list[GenerationRequest] = []
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        if use_other_tool and len(requests) == 1:
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="other-call", name="other", arguments={"value": "evidence"}
+                    )
+                ]
+            )
+        return AssistantMessage(
+            content=[TextContent(text="Answered without the preferred tool.")]
+        )
+
+    make_agent = partial(
+        ChatAgent,
+        tools=[EchoTool(), OtherTool()],
+        custom_agent_prompt="Stable instructions",
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+        reminders_enabled=False,
+    )
+    original = make_agent(messages=[], preferred_tool_id=1)
+    saved = TypeAdapter(dict[str, JsonValue]).validate_json(
+        original.capture_state().model_dump_json()
+    )
+    restored = make_agent(messages=[], preferred_tool_id=1)
+    restored.restore_state(saved)
+    outcome = run_agent(
+        restored, messages=[UserMessage(content="Question")], max_steps=2
+    )
+    assert outcome.output.text == "Answered without the preferred tool."
+    assert len(requests) == (2 if use_other_tool else 1)
+    for request in requests:
+        assert [tool.name for tool in request.tools] == ["echo", "other"]
+        reminder = request.messages[-1]
+        assert (
+            "The user selected these operations for this request: echo."
+            in reminder.text
+        )
+        assert not reminder.cacheable
+        assert request.messages[0].text.startswith("Stable instructions")
+        assert request.messages[0] == requests[0].messages[0]
+        assert request.messages[0].cacheable
+    assert requests[0].options.tool_choice == ToolChoiceOptions.AUTO
+    assert requests[0].allowed_tool_names is None
+    if use_other_tool:
+        assert requests[-1].options.tool_choice == ToolChoiceOptions.NONE
+        assert "Prefer them when" not in requests[-1].messages[-1].text
+        result = next(
+            message
+            for message in restored.state.messages
+            if isinstance(message, ToolResultMessage)
+        )
+        assert result.tool_name == "other" and not result.is_error
+    assert not any(
+        "The user selected" in message.text for message in restored.state.messages
+    )
+    followup = make_agent(messages=restored.state.messages)
+    run_agent(followup, messages=[UserMessage(content="Next question")], max_steps=2)
+    assert not any(
+        "The user selected" in message.text for message in requests[-1].messages
+    )

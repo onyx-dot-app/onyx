@@ -175,14 +175,14 @@ export default function UsersTable({
   >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
-  const { data: allGroups } = useGroups(true);
+  const { data: allGroups } = useGroups(true, false);
 
   const groupOptions: GroupOption[] = useMemo(
     () =>
       (allGroups ?? []).map((g) => ({
         id: g.id,
         name: g.name,
-        memberCount: g.users.length,
+        memberCount: g.member_count,
       })),
     [allGroups]
   );

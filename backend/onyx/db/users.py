@@ -21,29 +21,34 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import AccountType, MarketplaceKind, Permission
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
     DocumentSet,
     DocumentSet__User,
+    Marketplace,
     MCPConnectionConfig,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
     Persona,
     Persona__User,
+    Plugin,
     SamlAccount,
-    Skill,
     User,
     User__ExternalUserGroupId,
     User__UserGroup,
     UserGroup,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.utils import is_check_violation
+from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.db.sandbox import get_user_sandbox_blob_paths
+from onyx.server.features.build.sandbox.snapshot_manager import (
+    delete_sandbox_blobs_best_effort,
+)
 from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -949,26 +954,30 @@ def release_personas_owned_by_user__no_commit(
     )
 
 
+_PRIVATE_SKILLS_BLOCK_DELETE = (
+    "Transfer or delete this user's private skills before deleting the user."
+)
+
+
 def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    # A private plugin lives in its owner's "My uploads". Published plugins stay
+    # in the Organization library with no author.
     if (
         db_session.scalar(
-            select(Skill.id)
+            select(Plugin.id)
+            .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
             .where(
-                Skill.author_user_id == user_to_delete.id,
-                Skill.built_in_skill_id.is_(None),
-                Skill.public_permission.is_(None),
+                Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+                Marketplace.owner_user_id == user_to_delete.id,
             )
             .limit(1)
         )
         is not None
     ):
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "Transfer or delete this user's private skills before deleting the user.",
-        )
+        raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE)
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1002,20 +1011,25 @@ def delete_user_from_db__no_commit(
     try:
         db_session.flush()
     except IntegrityError as exc:
-        if not is_check_violation(exc, "ck_private_skill_has_owner"):
+        # A private plugin added after the check above.
+        if not (
+            is_check_violation(exc, "ck_private_plugin_has_owner")
+            or is_check_violation(exc, "ck_private_skill_has_owner")
+            or is_fk_violation(exc, "plugin_marketplace_id_fkey")
+        ):
             raise
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "Transfer or delete this user's private skills before deleting the user.",
-        ) from exc
+        raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE) from exc
 
 
 def delete_user_from_db(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    # Collect before the cascade removes the rows; delete only after commit.
+    sandbox_blob_paths = get_user_sandbox_blob_paths(db_session, user_to_delete.id)
     delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
+    delete_sandbox_blobs_best_effort(sandbox_blob_paths)
 
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.

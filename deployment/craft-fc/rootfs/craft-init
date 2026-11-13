@@ -1,0 +1,241 @@
+#!/bin/bash
+# PID 1 of a Craft Firecracker guest. Installed as /sbin/craft-init.
+#
+# 1. Mounts proc, sys, dev, cgroup2, /run, /tmp and /dev/shm.
+# 2. Attaches the scratch and managed drives (see attach.sh), unless the
+#    kernel command line has craft.scratch=defer. Then the guest daemon runs
+#    attach after a snapshot restore. If attach fails, init starts no service.
+# 3. Starts the egress relay and the guest daemon, and restarts them when
+#    they exit. Neither is PID 1, so a crash cannot panic the guest.
+#
+# Every program that init starts, and attach, lives in /craft-fc on the
+# read-only root. /craft-fc is never in the overlay list, so root in the guest
+# cannot replace what init restarts. Init starts no service if /craft-fc is
+# writable.
+#
+# After the boot steps, init runs only bash builtins and the static busybox
+# /craft-fc/bin/busybox, by absolute path. The overlays make /usr and /etc
+# writable (a saved scratch disk brings the changes back at the next boot), so
+# a program or library from /usr, or /etc/ld.so.preload, is not trusted there.
+#
+# This script must never exit: the kernel panics when PID 1 exits. So there is
+# no `set -e` or `set -u`, and every step only logs its failure.
+
+# Boot steps only. Before attach, /usr is the read-only root drive.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+BOOT_PATH=${PATH}
+umask 022
+# Bash uses TZ for printf %()T only when it is exported.
+export TZ=UTC0
+
+CRAFT=/craft-fc
+BB=${CRAFT}/bin/busybox
+CONF=${CRAFT}/etc/init.conf
+STATE=/run/craft-fc
+
+log() {
+  local line="craft-init: $*" ts
+  printf -v ts '%(%Y-%m-%dT%H:%M:%S)T' -1
+  echo "${line}" >/dev/kmsg 2>/dev/null || echo "${line}" >/dev/console 2>/dev/null
+  echo "${ts}.${EPOCHREALTIME#*.}Z ${line}" >>"${STATE}/init.log" 2>/dev/null
+}
+
+# halt <reason>: start nothing and wait forever. PID 1 must not exit; the host
+# sees no daemon and fails the VM.
+halt() {
+  log "FATAL: $*; no services started"
+  # read -t on a FIFO with no writer is a builtin sleep.
+  while :; do
+    read -r -t 3600 <>"${STATE}/halt.fifo" 2>/dev/null || "${BB}" sleep 3600 2>/dev/null || sleep 3600
+  done
+}
+
+mnt() {
+  # mnt <mountpoint> <mount args...>: skip a mount point that is already mounted.
+  local target=$1
+  shift
+  mountpoint -q "${target}" 2>/dev/null && return 0
+  mkdir -p "${target}" 2>/dev/null
+  mount "$@" "${target}" || log "mount ${target} failed"
+}
+
+mnt /proc -t proc -o nosuid,nodev,noexec proc
+mnt /sys -t sysfs -o nosuid,nodev,noexec sysfs
+mnt /dev -t devtmpfs -o nosuid,mode=0755 devtmpfs
+mnt /dev/pts -t devpts -o nosuid,noexec,gid=5,mode=0620,ptmxmode=0666 devpts
+mnt /dev/shm -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
+mnt /sys/fs/cgroup -t cgroup2 -o nosuid,nodev,noexec,nsdelegate cgroup2
+mnt /run -t tmpfs -o nosuid,nodev,mode=0755 tmpfs
+mnt /tmp -t tmpfs -o nosuid,nodev,mode=1777 tmpfs
+for link in fd:/proc/self/fd stdin:/proc/self/fd/0 stdout:/proc/self/fd/1 stderr:/proc/self/fd/2; do
+  [ -e "/dev/${link%%:*}" ] || ln -s "${link#*:}" "/dev/${link%%:*}"
+done
+mkdir -p "${STATE}/log" /run/lock
+mkfifo -m 0600 "${STATE}/halt.fifo" 2>/dev/null
+log "boot $(cut -d' ' -f1 /proc/uptime)s"
+
+# Refuse to read or run anything from a writable /craft-fc. The probe write
+# fails with EROFS on the read-only root.
+if (: >"${CRAFT}/.rw-probe") 2>/dev/null; then
+  rm -f "${CRAFT}/.rw-probe"
+  halt "${CRAFT} is on a writable mount"
+fi
+[ -x "${BB}" ] || halt "${BB} is missing"
+
+# Defaults. init.conf overrides them. Read once, before the /etc overlay
+# exists, so a change in the guest takes effect only after a new boot.
+DAEMON_CMD=${CRAFT}/bin/guest-daemon
+EGRESS_RELAY_CMD=${CRAFT}/bin/egress-relay
+EGRESS_RELAY_UID=65534
+ATTACH=${CRAFT}/lib/attach
+ENV_FILE=${CRAFT}/etc/guest.env
+LOG_MAX_BYTES=4194304
+# shellcheck source=/dev/null
+[ -r "${CONF}" ] && . "${CONF}"
+
+# Every controller, so the daemon can put each command in its own cgroup.
+controllers=$(sed -E 's/([a-z_]+)/+\1/g' /sys/fs/cgroup/cgroup.controllers 2>/dev/null)
+[ -n "${controllers}" ] && { echo "${controllers}" >/sys/fs/cgroup/cgroup.subtree_control || log "cgroup controllers not enabled"; }
+
+hostname sandbox 2>/dev/null || echo sandbox >/proc/sys/kernel/hostname
+
+# The VM has no network card. Bring up loopback with an ioctl (the image has
+# no iproute2): SIOCSIFFLAGS with IFF_UP | IFF_RUNNING.
+/usr/local/bin/python3 -I -S -c '
+import fcntl, socket, struct
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+fcntl.ioctl(s.fileno(), 0x8914, struct.pack("16sH", b"lo", 0x1 | 0x40))
+' || log "loopback up failed"
+
+ulimit -n 65536 2>/dev/null || log "RLIMIT_NOFILE not raised"
+
+if grep -qw 'craft.scratch=defer' /proc/cmdline; then
+  log "scratch deferred: the daemon runs ${ATTACH} after restore"
+elif ! "${ATTACH}" >>"${STATE}/log/attach.log" 2>&1; then
+  halt "attach failed, see ${STATE}/log/attach.log"
+fi
+
+# From here on: builtins and ${BB} only. A command that is not one of them
+# fails (it is not found), it does not run from the overlays.
+PATH=${CRAFT}/bin
+hash -r
+
+# The service environment: only HOME, TERM, PATH and the variables in guest.env.
+# No secrets: the daemon gets per-VM values from the host in Init.
+declare -a SERVICE_ENV=(HOME=/root TERM=linux "PATH=${BOOT_PATH}")
+if [ -r "${ENV_FILE}" ]; then
+  while IFS= read -r line; do
+    case "${line}" in '' | '#'*) continue ;; *=*) SERVICE_ENV+=("${line}") ;; esac
+  done <"${ENV_FILE}"
+fi
+
+declare -A CMD SUP
+CMD[guest-daemon]="${DAEMON_CMD}"
+if [ -n "${EGRESS_RELAY_CMD}" ]; then
+  # nsenter -F with no namespace only sets the ids (and drops the extra
+  # groups); setpriv --nnp blocks any gain of privileges on exec.
+  CMD[egress-relay]="${BB} nsenter -F -G ${EGRESS_RELAY_UID} -S ${EGRESS_RELAY_UID} ${BB} setpriv --nnp ${EGRESS_RELAY_CMD}"
+fi
+
+ignore_signals() {
+  # PID 1 gets only the signals it has a handler for. Handlers (not SIG_IGN)
+  # keep the children's default signal actions. A subshell resets the traps,
+  # so each supervisor sets them again.
+  local sig
+  for sig in TERM INT HUP QUIT USR1 USR2; do
+    # shellcheck disable=SC2064
+    trap "log 'ignored SIG${sig}'" "${sig}"
+  done
+}
+
+# supervise <name>: runs in a subshell, one per service. It starts the service,
+# waits for that PID only, and starts it again. Waiting for one known PID
+# cannot miss an exit, also one that happens during a backoff.
+supervise() {
+  local name=$1 backoff=0 pid rc started ran logf="${STATE}/log/$1.log"
+  ignore_signals
+  while :; do
+    # Word splitting of the command is intended: CMD values are argv strings.
+    # shellcheck disable=SC2086
+    "${BB}" env -i "${SERVICE_ENV[@]}" ${CMD[${name}]} </dev/null >>"${logf}" 2>&1 &
+    pid=$!
+    started=${SECONDS}
+    # The daemon's Init sends SIGHUP to the PID in /run/craft-fc/egress-relay.pid.
+    # env, nsenter -F and setpriv exec into the service, so $! is its own PID.
+    echo "${pid}" >"${STATE}/${name}.pid.tmp" && "${BB}" mv -f "${STATE}/${name}.pid.tmp" "${STATE}/${name}.pid"
+    log "started ${name} pid ${pid}"
+    while :; do
+      wait "${pid}"
+      rc=$?
+      # A trapped signal also ends the wait; then the service still runs.
+      if [ "${rc}" -eq 127 ] || ! kill -0 "${pid}" 2>/dev/null; then
+        break
+      fi
+    done
+    ran=$((SECONDS - started))
+    # Restart at once after a long run. Back off when it keeps dying fast: 1, 2, 4, 5 s.
+    if [ "${ran}" -ge 10 ]; then
+      backoff=0
+    elif [ "${backoff}" -eq 0 ]; then
+      backoff=1
+    else
+      backoff=$((backoff * 2 > 5 ? 5 : backoff * 2))
+    fi
+    log "${name} pid ${pid} exited rc ${rc} after ${ran}s; restart in ${backoff}s"
+    [ "${backoff}" -gt 0 ] && "${BB}" sleep "${backoff}"
+  done
+}
+
+# stop_orphan <name>: the service of a killed supervisor keeps running under
+# PID 1, with no supervisor and the port still in use. Stop it, so that only
+# the new supervisor's copy runs. Only a process whose parent is PID 1 is
+# stopped, so a stale PID file cannot stop another program.
+stop_orphan() {
+  local pid key val
+  read -r pid 2>/dev/null <"${STATE}/$1.pid" || return 0
+  case "${pid}" in '' | *[!0-9]* | 0 | 1) return 0 ;; esac
+  while read -r key val; do
+    [ "${key}" = PPid: ] || continue
+    [ "${val}" = 1 ] && kill -KILL "${pid}" 2>/dev/null && log "stopped orphan ${1} pid ${pid}"
+    break
+  done 2>/dev/null <"/proc/${pid}/status"
+}
+
+start_supervisor() {
+  supervise "$1" &
+  SUP[$1]=$!
+}
+
+# cap_logs: copy a log over LOG_MAX_BYTES to <log>.1 and empty it. The
+# services append (O_APPEND), so they keep writing to the emptied file. /run
+# is RAM.
+cap_logs() {
+  local f size
+  for f in "${STATE}"/log/*.log "${STATE}/init.log"; do
+    [ -f "${f}" ] || continue
+    size=$("${BB}" stat -c %s "${f}" 2>/dev/null) || continue
+    [ "${size}" -gt "${LOG_MAX_BYTES}" ] || continue
+    "${BB}" cp -f "${f}" "${f}.1" && : >"${f}"
+    log "rotated ${f} at ${size} bytes"
+  done
+}
+
+ignore_signals
+for name in "${!CMD[@]}"; do
+  start_supervisor "${name}"
+done
+
+# PID 1 reaps orphans that the kernel re-parents to it: bash collects every
+# child that exits while it waits for the foreground sleep. Each tick it caps
+# the logs and starts a supervisor again if guest root killed it.
+while :; do
+  "${BB}" sleep 5
+  cap_logs
+  for name in "${!SUP[@]}"; do
+    kill -0 "${SUP[${name}]}" 2>/dev/null && continue
+    log "supervisor of ${name} stopped; start it again"
+    stop_orphan "${name}"
+    start_supervisor "${name}"
+  done
+done

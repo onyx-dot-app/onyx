@@ -102,6 +102,7 @@ from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult, ToolResultMessage
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
 from onyx.onyxbot.slack.models import SlackContext
+from onyx.prompts.tool_prompts import CODE_MODE_SEARCH_USAGE
 from onyx.secondary_llm_flows.decision_rerank_expansion import (
     MAX_DECISION_QUESTIONS,
     rank_sections_listwise,
@@ -126,6 +127,8 @@ from onyx.tools.interface import (
 )
 from onyx.tools.models import (
     ChatMinimalTextMessage,
+    CodeModeExposure,
+    CodeModeResultSpec,
     ToolCallException,
     ToolContext,
 )
@@ -157,6 +160,7 @@ from onyx.tools.tool_implementations.search.search_utils import (
     weighted_reciprocal_rank_fusion,
 )
 from onyx.tools.tool_implementations.utils import (
+    SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
 from onyx.utils.logger import setup_logger
@@ -179,6 +183,10 @@ logger = setup_logger()
 SEARCH_DECISION_RERANK_EXPANSION_FLAG = "onyx-search-decision-rerank-expansion"
 
 QUERIES_FIELD = "queries"
+MAX_QUERIES_PER_CALL = 3
+_CODE_MODE_RESULT = SEARCH_RESULTS_CODE_MODE_RESULT.model_copy(
+    update={"usage": CODE_MODE_SEARCH_USAGE}
+)
 
 
 def update_search_context(
@@ -339,6 +347,7 @@ def _trim_sections_by_tokens(
 
 class SearchTool(Tool):
     merge_list_argument = QUERIES_FIELD
+    merge_list_limit = MAX_QUERIES_PER_CALL
 
     NAME = INTERNAL_SEARCH_TOOL_NAME
     DISPLAY_NAME = "Internal Search"
@@ -472,6 +481,20 @@ class SearchTool(Tool):
     def _is_project_only_search(self) -> bool:
         return self.project_id_filter is not None and self.persona_id_filter is None
 
+    @property
+    def _selected_document_set_names(self) -> list[str] | None:
+        """Document sets the caller selected; they replace the persona's sets."""
+        if self._is_project_only_search or self.user_selected_filters is None:
+            return None
+        return self.user_selected_filters.document_set
+
+    @property
+    def _scoped_document_set_names(self) -> list[str]:
+        selected = self._selected_document_set_names
+        if selected is not None:
+            return selected
+        return self.persona_search_info.document_set_names
+
     def _prefetch_slack_data(
         self, db_session: Session
     ) -> tuple[str | None, str | None, dict[str, Any]]:
@@ -489,9 +512,9 @@ class SearchTool(Tool):
         entities: dict[str, Any] = {}
 
         # Case 1: Slack bot context — requires a Slack federated connector
-        # linked via the persona's document sets
+        # linked via the scoped document sets
         if self.slack_context:
-            document_set_names = self.persona_search_info.document_set_names
+            document_set_names = self._scoped_document_set_names
             if not document_set_names:
                 logger.debug(
                     "Skipping Slack federated search: no document sets on persona"
@@ -560,15 +583,32 @@ class SearchTool(Tool):
                 if not federated_oauth_tokens:
                     return access_token, bot_token, entities
 
-                slack_oauth_token = next(
-                    (
+                slack_tokens = [
+                    token
+                    for token in federated_oauth_tokens
+                    if token.federated_connector.source
+                    == FederatedConnectorSource.FEDERATED_SLACK
+                ]
+                selected = self._selected_document_set_names
+                if slack_tokens and selected:
+                    linked_connector_ids = {
+                        mapping.federated_connector_id
+                        for mapping in get_federated_connector_document_set_mappings_by_document_set_names(
+                            db_session, selected
+                        )
+                    }
+                    slack_tokens = [
                         token
-                        for token in federated_oauth_tokens
-                        if token.federated_connector.source
-                        == FederatedConnectorSource.FEDERATED_SLACK
-                    ),
-                    None,
-                )
+                        for token in slack_tokens
+                        if token.federated_connector_id in linked_connector_ids
+                    ]
+                    if not slack_tokens:
+                        logger.debug(
+                            "Skipping Slack federated search: Slack is not linked to the selected document sets %s",
+                            selected,
+                        )
+                        return access_token, bot_token, entities
+                slack_oauth_token = next(iter(slack_tokens), None)
                 if slack_oauth_token and slack_oauth_token.token:
                     access_token = slack_oauth_token.token.get_value(apply_mask=False)
                     entities = slack_oauth_token.federated_connector.config or {}
@@ -700,6 +740,10 @@ class SearchTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -710,6 +754,10 @@ class SearchTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return _CODE_MODE_RESULT
 
     """For explicit tool calling"""
 
@@ -726,7 +774,9 @@ class SearchTool(Tool):
                         "type": "array",
                         "items": {"type": "string"},
                         "description": (
-                            "List of search queries to execute, typically a single query. "
+                            f"List of up to {MAX_QUERIES_PER_CALL} search queries to "
+                            "execute, typically a single query. Later queries are "
+                            "ignored. "
                             "Query expansion and filter extraction steps will be run "
                             "automatically downstream, do not include time or source type "
                             "scoping details in your query."
@@ -844,6 +894,13 @@ class SearchTool(Tool):
         llm_queries = parse_tool_arguments(
             SearchArguments, invocation.arguments
         ).queries
+        if len(llm_queries) > MAX_QUERIES_PER_CALL:
+            logger.warning(
+                "Search tool received %s queries, but the max is %s.",
+                len(llm_queries),
+                MAX_QUERIES_PER_CALL,
+            )
+            llm_queries = llm_queries[:MAX_QUERIES_PER_CALL]
 
         return self.search(
             llm_queries,
@@ -926,8 +983,8 @@ class SearchTool(Tool):
     ) -> ToolResult:
         """Retrieve documents using the original question and optional query variants."""
         # An explicitly empty source selection is a statement, not an absent
-        # filter: the tool still runs (it may be forced), and it honestly
-        # finds nothing. `None` keeps its meaning of "no source filter".
+        # filter: if the model calls the tool, it finds nothing.
+        # `None` means "no source filter".
         # Project-only searches ignore user filters, so the guard must too.
         if (
             self.user_selected_filters is not None
@@ -1015,7 +1072,7 @@ class SearchTool(Tool):
                     db_session=db_session,
                     user_id=self.user.id if self.user else None,
                     source_types=prefetch_source_types,
-                    document_set_names=self.persona_search_info.document_set_names,
+                    document_set_names=self._scoped_document_set_names,
                 )
                 or []
             )

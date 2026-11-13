@@ -225,7 +225,6 @@ describe("CreateCustomAppModal", () => {
     fireEvent.change(name, { target: { value: "Draft" } });
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("data-width", "lg");
-    expect(dialog).toHaveAttribute("data-position", "top");
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(
@@ -249,7 +248,6 @@ describe("CreateCustomAppModal", () => {
       name: "Discard unsaved changes?",
     });
     expect(confirmation).toHaveAttribute("data-width", "lg");
-    expect(confirmation).toHaveAttribute("data-position", "top");
   });
 
   beforeEach(() => {
@@ -574,7 +572,7 @@ describe("CreateCustomAppModal", () => {
     );
     expect(
       screen.getByText(
-        "App-associated skills must be available to everyone. This change is applied when you save the app."
+        "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone."
       )
     ).toBeInTheDocument();
     expect(externalAppsService.updateExternalApp).not.toHaveBeenCalled();

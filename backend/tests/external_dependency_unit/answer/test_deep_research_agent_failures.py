@@ -1,8 +1,12 @@
 import threading
+from typing import Any
 from unittest.mock import patch
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.agent_coordination import _ToolControl
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import SpawnResult
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.chat import get_chat_messages_by_session
@@ -18,6 +22,7 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolResultMessage,
 )
 from onyx.server.query_and_chat.models import MessageResponseIDInfo, SendMessageRequest
@@ -34,7 +39,18 @@ SLOW_CALL_ID = "call_research_slow"
 RESEARCH_PLAN = "1. Research alpha\n2. Research beta"
 FAST_REPORT = "Alpha market findings."
 FINAL_REPORT = "Final report on alpha."
-TEST_TIMEOUT_SECONDS = 1
+SLOW_TASK_TIMEOUT_SECONDS = 1
+_spawn_agent = _ToolControl.spawn_agent
+
+
+def _spawn_with_slow_task_deadline(
+    control: _ToolControl, agent: Agent, **kwargs: Any
+) -> SpawnResult:
+    """Give only the slow task a deadline, so a loaded machine cannot time out the fast one."""
+    kwargs["total_timeout_s"] = (
+        SLOW_TASK_TIMEOUT_SECONDS if kwargs["description"] == SLOW_TASK else None
+    )
+    return _spawn_agent(control, agent, **kwargs)
 
 
 class RecordedRequest:
@@ -59,6 +75,7 @@ class DeepResearchScriptLLM(FakeModelClient):
     def __init__(self) -> None:
         self._lock = threading.Lock()
         self.requests: list[RecordedRequest] = []
+        self.slow_task_cancelled = threading.Event()
         super().__init__(self._reply)
 
     @property
@@ -101,12 +118,14 @@ class DeepResearchScriptLLM(FakeModelClient):
                 ]
             )
         if recorded.mentions(SLOW_TASK):
-            cancelled = threading.Event()
-            with signal.on_cancel(cancelled.set):
-                if not cancelled.wait(10):
-                    raise AssertionError("Research deadline did not cancel the child")
+            # Only the deadline ends this call; any other failure leaves it unset.
+            with signal.on_cancel(self.slow_task_cancelled.set):
+                self.slow_task_cancelled.wait(10)
             signal.check()
-        if GENERATE_REPORT_TOOL_NAME in recorded.tool_names:
+        if (
+            GENERATE_REPORT_TOOL_NAME in recorded.tool_names
+            and request.options.tool_choice != ToolChoiceOptions.NONE
+        ):
             return AssistantMessage(
                 content=[
                     ToolCall(
@@ -145,10 +164,7 @@ def test_timed_out_research_agent_is_a_failed_call(
     with (
         patch("onyx.chat.process_message.get_llm_for_persona", return_value=llm),
         patch("onyx.chat.execution.SKIP_DEEP_RESEARCH_CLARIFICATION", True),
-        patch(
-            "onyx.deep_research.agent.RESEARCH_AGENT_TIMEOUT_SECONDS",
-            TEST_TIMEOUT_SECONDS,
-        ),
+        patch.object(_ToolControl, "spawn_agent", _spawn_with_slow_task_deadline),
     ):
         parts: list[AnswerStreamPart] = list(
             handle_stream_message_objects(new_msg_req=request, user=user)
@@ -156,6 +172,7 @@ def test_timed_out_research_agent_is_a_failed_call(
 
     errors = [part for part in parts if isinstance(part, StreamingError)]
     assert not errors, errors
+    assert llm.slow_task_cancelled.is_set(), "The research deadline did not cancel"
 
     # The orchestrator's next request answers the timed-out call with the failure message.
     orchestrator_follow_ups = [
@@ -190,11 +207,15 @@ def test_timed_out_research_agent_is_a_failed_call(
     research_agent_tool_id = get_tool_by_name(
         tool_name=RESEARCH_AGENT_TOOL_NAME, db_session=db_session
     ).id
-    saved_research_calls = [
-        tool_call
-        for tool_call in assistant_message.tool_calls or []
-        if tool_call.tool_id == research_agent_tool_id
-    ]
+    # The relationship has no order; history replay sorts the same way.
+    saved_research_calls = sorted(
+        (
+            tool_call
+            for tool_call in assistant_message.tool_calls or []
+            if tool_call.tool_id == research_agent_tool_id
+        ),
+        key=lambda call: (call.turn_number, call.tab_index, call.id),
+    )
     assert [
         (tool_call.tool_call_id, tool_call.tool_call_response)
         for tool_call in saved_research_calls

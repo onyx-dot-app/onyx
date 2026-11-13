@@ -141,6 +141,7 @@ class ImageUrlDetail(BaseModel):
 class ImageContentPart(BaseModel):
     type: Literal["image_url"] = "image_url"
     image_url: ImageUrlDetail
+    cache_control: dict[str, JsonValue] | None = None
 
 
 ContentPart = TextContentPart | ImageContentPart
@@ -316,7 +317,11 @@ class GenerationRequest(BaseModel):
     messages: list[Message] = Field(default_factory=list)
     system_prompt: str = ""
     tools: list[ToolDefinition] = Field(default_factory=list)
+    allowed_tool_names: frozenset[str] | None = None
     options: GenerationOptions = Field(default_factory=GenerationOptions)
+    # Tool call IDs that the conversation uses outside `messages`, such as calls
+    # that compaction left out. New calls get other IDs.
+    reserved_tool_call_ids: frozenset[str] = frozenset()
 
 
 class GenerationRequestParams(BaseModel):

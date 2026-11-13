@@ -95,6 +95,50 @@ docker compose \
 Other Compose service names such as `api_server` and `nginx` do not resolve from the isolated sandbox bridge.
 A public URL without its `/api` prefix fails at sandbox provisioning. The error names the corrected value.
 
+## Trust private CA certificates
+
+For MCP servers or OAuth endpoints with private certificates, mount a PEM CA bundle into the `sandbox-proxy` container.
+Include both public roots and your organization's private CA certificates in the bundle.
+
+Before configuring the proxy, ensure `api_server` also trusts the private CA.
+MCP setup and OAuth discovery make outbound requests from `api_server`, independently of the sandbox proxy.
+Mount the bundle into `api_server`, set its `SSL_CERT_FILE` to that path, and recreate the service if needed.
+The proxy configuration below does not change API server trust.
+
+Create `docker-compose.craft-ca.yml` in your deployment directory:
+
+```yaml
+services:
+  sandbox-proxy:
+    volumes:
+      - ./certs/upstream-ca-bundle.crt:/etc/onyx/upstream-ca-bundle.crt:ro
+    environment:
+      SSL_CERT_FILE: /etc/onyx/upstream-ca-bundle.crt
+      SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA: /etc/onyx/upstream-ca-bundle.crt
+```
+
+`SSL_CERT_FILE` configures OAuth HTTP requests.
+`SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA` configures forwarded HTTPS traffic.
+The proxy falls back to `SSL_CERT_FILE` when its upstream CA setting is unset or blank.
+The explicit upstream CA setting takes precedence.
+Set both as shown for compatibility with releases without this fallback.
+Setting `REQUESTS_CA_BUNDLE` alone does not configure forwarded HTTPS traffic.
+
+Place your bundle at `certs/upstream-ca-bundle.crt`, then recreate the proxy:
+
+```bash
+cd ~/.config/onyx/deployment
+docker compose \
+  -f docker-compose.yml \
+  -f docker-compose.craft.yml \
+  -f docker-compose.craft-ca.yml \
+  up -d --no-deps --force-recreate sandbox-proxy
+```
+
+Include the CA overlay in subsequent Compose commands.
+Recreate the proxy after changing its bundle or environment variables.
+Start a new Craft session to retry MCP discovery after correcting certificate trust.
+
 ## Plan host capacity
 
 Docker sandboxes default to one CPU and 2 GB of memory each:

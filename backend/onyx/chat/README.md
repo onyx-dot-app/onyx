@@ -20,8 +20,9 @@ the context instead (see "Reminders").
 
 ## Custom Agent Prompt
 
-The custom agent is inserted as a user message above the most recent user message, it is dynamically moved in the history as the user sends more messages.
-If the user has opted to completely replace the System Prompt, then this Custom Agent prompt replaces the system prompt and does not move along the history.
+The custom agent instructions are a separate user message in the fixed preamble, before project files and chronological history.
+They stay in the same position as the conversation grows. If the agent replaces the base system prompt, its system instructions
+use the system-message role; project instructions remain a separate user message.
 
 ## How Files are handled
 
@@ -32,7 +33,9 @@ On upload, Files are processed for tokens, if too many tokens to fit in the cont
 - Files are added into chat context as a “point in time” inclusion and move up the context window as the conversation progresses.
   Every file knows how many tokens it is (model agnostic), image files have some assumed number of tokens.
 
-Image files are attached to User Messages also as point in time inclusions.
+User-uploaded images stay attached to their original user messages. Project images belong to the fixed project preamble.
+Usage-only temporary chats retain each question with its text-file messages and image references.
+Follow-up requests and regeneration use the same saved attachments until compaction or temporary-history limits remove them.
 
 **Future Extension**:
 Files selected from the search results are also counted as “point in time” inclusions. Files that are too large cannot be selected.
@@ -40,10 +43,9 @@ For these files, the "entire file" does not exist for most connectors, it's piec
 
 ## Projects
 
-If a Project contains few enough files that it all fits in the model context, we keep it close enough in the history to ensure it is easy for the LLM to
-access. Note that the project documents are assumed to be quite useful and that they should 1. never be dropped from context, 2. is not just a needle in
-a haystack type search with a strong keyword to make the LLM attend to it.
-
+When project files fit in the model context, their text and images form a fixed preamble before conversation history.
+They remain available after history compaction. New user turns do not move them or attach them to the newest question.
+Changing project contents can change the preamble and invalidate the cached prefix.
 Project files are vectorized and stored in the Search Engine so that if the user chooses a model with less context than the number of tokens in the project,
 the system can RAG over the project files.
 
@@ -85,16 +87,17 @@ If a search related tool is called at any point during the turn, the reminder wi
 
 ## Tool Calls
 
-As tool call responses can get very long (like an internal search can be many thousands of tokens), tool responses are current replaced with a hardcoded
-string saying it is no longer available. Tool Call details like the search query and other arguments are kept in the history as this is information
-rich and generally very few tokens.
-
+Tool-call arguments and full results stay in chronological history across user turns. This preserves evidence for follow-up
+questions and avoids rewriting a cached prefix. The original results remain available until the runtime compacts or truncates
+history to meet the context budget. Legacy records use a placeholder only when no saved result is available.
 > Note: in the Internal Search flow with query expansion, the Tool Call which was actually run differs from what the LLM provided as arguments.
 > The tool-call arguments keep only the queries the LLM provided, and so does the model's history. The expanded queries are saved in the tool result (`SearchDocsResponse.queries`) and reach the client in `SearchToolQueriesDelta` packets, also on replay.
 
-**Possible Future Extension**:
-Instead of dropping the Tool Call response, we might summarize it using an LLM so that it is just 1-2 sentences and captures the main points. That said,
-this is questionable value add because anything relevant and useful should be already captured in the Agent response.
+## Request-only context
+
+Additional context supplied with a request goes after the stable history as an uncacheable reminder. It is available during
+that run, including restoration, but does not become a historical user message. Changing this context does not rewrite the
+cacheable history. File notices and step-specific reminders follow the same separation.
 
 ## Examples
 
@@ -111,40 +114,45 @@ P -> Project Files (not overflowed case)
 1,2,3 etc. to represent turn number. A turn consists of a user input and a final response from the Agent
 
 Flow with Custom Agent
-S, U1, TC, TR, A1, CA, U2, A2  -- user sends another message, triggers tool call -> S, U1, TC, TR, A1, U2, A2, CA, U3, TC, TR, R, A3
-- Custom agent response moves
-- Reminder inserted after TR
+S, CA, U1, TC, TR, A1 -- user sends another message -> S, CA, U1, TC, TR, A1, U2, TC, TR, R
+- Custom instructions stay in the preamble
+- Prior tool results retain their content
+- Reminder follows the current history and stays outside the cacheable prefix
 
 Flow with Project and File Upload
-S, CA, P, F, U1, A1 -- user sends another message -> S, F, U1, A1, CA, P, U2, A2
-- File stays in place, above the user message
-- Project files move along the chain as new messages are sent
-- Custom Agent prompt comes before project files which come before user uploaded files in each turn
+S, CA, P, F, U1, A1 -- user sends another message -> S, CA, P, F, U1, A1, U2
+- Project text and images stay in the preamble
+- User-uploaded files stay beside their original question
+- New questions extend chronological history
 
 Reminders during a single Turn
-S, U1, TC, TR, R -- agent calls another tool -> S, U1, TC, TR, TC, TR, R, A1
-- Reminder moved to the end
+S, CA, P, U1, TC, TR, R -- agent calls another tool -> S, CA, P, U1, TC, TR, TC, TR, R
+- Only the trailing reminder changes position
+- Compaction is an explicit history rewrite when the context budget requires it
 ```
 
 ## Product considerations
 
-Project files are important to the entire duration of the chat session. If the user has uploaded project files, they are likely very intent on working with
-those files. The LLM is much better at referencing documents close to the end of the context window so keeping it there for ease of access.
+Project files remain available for the session. User attachments stay beside the question that supplied them and can leave
+working history through compaction. A forgotten-files notice identifies retrieval options when the file-reader configuration
+supports them.
 
-User uploaded files are considered relevant for that point in time, it is ok if the Agent forgets about it as the chat gets long. If every uploaded file is
-constantly moved towards the end of the chat, it would degrade quality as these stack up. Even with a single file, there is some cost of making the previous
-User Message further away. This tradeoff is accepted for Projects because of the intent of the feature.
+Keeping results costs cache-read tokens and context space. Removing them saves those tokens but can force a cache write for
+later messages and a new search for lost evidence. The runtime therefore manages growth through compaction rather than
+removing every previous tool result at the next user turn. Cache expiry, configuration changes, and image-cap enforcement can
+still cause cache misses.
 
-Reminder are absolutely necessary to ensure 1-2 specific instructions get followed with a very high probability. It is less detailed than the system prompt
-and should be very targetted for it to work reliably and also not interfere with the last user message.
-
+Focused trailing reminders keep citation and task guidance close to generation. They do not move large instruction or file
+blocks through the history.
 ## Reasons / Experiments
 
-Custom Agent instructions being placed in the system prompt is poorly followed. It also degrades performance of the system especially when the instructions
-are orthogonal (or even possibly contradictory) to the system prompt. For weaker models, it causes strange artifacts in tool calls and final responses
-that completely ruins the user experience. Empirically, this way works better across a range of models especially when the history gets longer.
-Having the Custom Agent instructions not move means it fades more as the chat gets long which is also not ok from a UX perspective.
+The earlier design kept custom instructions separate from the system prompt because combining them reduced instruction
+following in prior experiments. It also moved those instructions and project files near each new question to improve attention.
 
+The fixed preamble deliberately revises that placement decision: moving existing blocks breaks exact-prefix caching on each
+user turn. Instructions retain their separate user-message role, and focused reminders remain near generation. Cross-turn
+prefix tests verify stability, but model evaluations must also check instruction following and project-file recall in long chats.
+Do not infer answer quality from cache-hit rates alone.
 Different LLMs vary in this but some now have a section that cannot be set via the API layer called the "System Prompt" (OpenAI terminology) which contains
 information like the model cutoff date, identity, and some other basic non-changing information. The System prompt described above is in that convention called
 the "Developer Prompt". It seems the distribution of the System Prompt, by which I mean the style of wording and terms used can also affect the behavior. This
@@ -257,6 +265,11 @@ The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
 3,600 seconds. Reaching it requests cancellation. The turn retains session ownership
 until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
+
+`MAX_LLM_CYCLES` (default 6) caps the steps of a chat response. The last step offers
+no tools, so the model must answer. When code mode applies (`CODE_MODE_ENABLED` and at
+least one tool runs inside programs), the cap is `CODE_MODE_MAX_LLM_CYCLES`: a safety
+cap of 100, or `MAX_LLM_CYCLES` when that is higher.
 
 ## Deploying the shared runtime
 

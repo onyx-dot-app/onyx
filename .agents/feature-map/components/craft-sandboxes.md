@@ -16,8 +16,10 @@ that user's sessions. Each session has its own session workspace, a directory
 inside the sandbox. The user never manages the sandbox.
 
 After an idle period (`SANDBOX_IDLE_TIMEOUT_SECONDS`, one hour by default) the
-sandbox sleeps: the platform saves each session's outputs, attachments and the
-agent's chat history, then removes the container. The next message wakes a new
+sandbox sleeps. App preview requests count as activity
+(`server/features/build/preview_activity.py`). On sleep the platform saves
+each session's outputs, attachments and the agent's chat history, then
+removes the container. The next message wakes a new
 container and restores the session, with a short delay. Work that only lives
 outside `outputs/` and `attachments/`, such as installed packages or browser
 logins, is not kept.
@@ -29,6 +31,11 @@ the Onyx API and Craft MCP servers that the proxy allows.
 An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
+
+A third runtime is in development: Firecracker micro-VMs on KVM nodes, opt-in
+with `SANDBOX_RUNTIME=firecracker` (default `pod`). It is not wired to the API
+server yet, so users and operators do not see it. The Kubernetes and Docker
+paths do not change.
 
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
@@ -46,7 +53,15 @@ This component owns:
 - session snapshots, the opencode history archive, and the cleanup of runtime
   resources;
 - the Helm sandbox pod template, RBAC and network policies, and the local
-  Kubernetes dev tooling.
+  Kubernetes dev tooling;
+- the Firecracker runtime in development (Go): the guest daemon and the
+  in-guest egress relay inside each VM, and the node agent on each KVM node.
+  The API server will reach a VM's guest daemon through the node agent: the
+  agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
+  over mTLS and then vsock, without decoding it. Session saves in this
+  runtime hold only `attachments/`, without dependencies
+  (tar + zstd). The node agent moves the archive to and from object storage
+  with presigned URLs from the API server.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this
@@ -60,9 +75,30 @@ Neighbours:
 
 ## Architecture
 
+The separate userspace image in `deployment/craft-runtime/` is only for the
+new integrated harness. Existing Craft keeps its current sandbox image and
+skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
+assets, without OpenCode or the current Python sidecar. The existing converter
+adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
+In a Firecracker VM, managed content mounts on read-only, noexec drives at
+`/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
+same A/B slot mechanism); scripts run through interpreters. Each session has
+`/home/onyx/workspaces/<session-id>`, the default working directory of its
+commands; commands can still reach any path in the VM. Publishing the
+userspace image does not change the current pod/Docker image settings.
+
+Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
+`craft-runtime` tag with no egress CA and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
+it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
+`SetKey`; the guest daemon installs it at `Init`. So one drive and one template
+key serve every deployment CA.
+
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
-(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
+(Docker backend), `deployment/helm/dev/README.md` (local kind cluster), and
+`microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
 SessionManager / scheduled executor / sweep
@@ -181,6 +217,98 @@ sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
 
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+`backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
+- `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
+  agent, with session saves (capture, upload, discard, restore) and the
+  managed drive (put, swap). Stubs in `backend/onyx/microvm/generated/`; the
+  `microvm-python-stubs` pre-commit hook fails when they differ from
+  `microvm/proto` (`regenerate.sh --check`).
+- `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
+  the agent pass-through: Health, Init, exec (run, start, stream by offsets,
+  interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
+  tracked executions per VM) and files (read, write, upload, list, delete,
+  zip; session-relative, or absolute VM paths with no session). Every call but
+  Health sends `x-sandboxd-key`.
+- `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
+  free memory (a node at its `max_vms` cap is skipped),
+  `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. When every node refuses,
+  placement deletes the attempt's daemon key, unless it skipped the pinned
+  node (no template there) without a Create. Wake is an
+  idempotent ensure: it reads the durable placement record and asks that
+  node's agent whether the VM runs. Before Create it takes the sandbox's
+  reservation (attempt, node) atomically; a Create with no known outcome
+  keeps the reservation on its node. Each attempt gets a random daemon key,
+  stored encrypted in the tenant cache before Create. A rejected or lost key,
+  an exited VM, or a dead node creates the next attempt; the caller must
+  store the returned attempt. A node is dead when its registration expired
+  or ended (an agent that stops on a drained node calls
+  `POST /microvm/node/deregister`), or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (180 s).
+- `backend/onyx/microvm/registry.py`: placement records, reservations and
+  daemon keys have no TTL. Record writes are fenced on (attempt, generation)
+  with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
+  `volatile-*` or `noeviction` policy (the chart's bundled Redis uses
+  `allkeys-lru`), or use the Postgres cache backend.
+- `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
+  (decides, and stops only after a saved checkpoint).
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, driven by
+  pushed node reports. Each agent pushes its VMs and recently ended VMs to
+  `POST /microvm/node/state`, signed with its registered key
+  (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
+  node under a per-node lease: it clears records of ended VMs, and adopts a
+  VM that a reservation names once its daemon holds the attempt's key. It
+  stops a VM of an older attempt on that report, and an unknown VM only
+  after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (no checkpoint). A record that no
+  reported VM names is cleared after a fresh `List` under the sandbox lock.
+  See `microvm/README.md`, "Sandbox state model".
+
+Agents become reachable when their signing-key registration carries
+`agent_address`.
+
+Harness sandboxes (the agent harness runs outside the sandbox):
+- `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
+  is the narrow interface the new harness calls: `ensure_running`, the Codex
+  `exec_command` / `write_stdin` contract (yield time, head and tail output
+  caps, "\x03" sends SIGINT), `read_file` / `write_file` (exact bytes for
+  view_image and apply_patch), `publish_artifact`, and busy signals (turn
+  and parked-approval marks). Each chat session works in
+  `SESSION_WORKSPACE_ROOT/<session_id>` (`/home/onyx/workspaces`).
+- `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
+  implements it on the microvm code: wake on the first call (capacity
+  retry for 10 s), Init only when `Health.initialized` is false or the
+  Health generation is not the VM's generation (under a cache lock per VM
+  instance, so concurrent wakes run one Init). Exec
+  sessions are durable records in the tenant cache
+  (`.../firecracker/harness_state.py`, no TTL, compare-and-set, the 64 most
+  recently used per sandbox); a record of another VM instance raises
+  `ExecSessionEndedError`. Commands send `Command.session_id`, so the daemon
+  makes the session directory and uses it as the default cwd. A full daemon
+  execution table (`EXECUTION_CAP_REACHED`) raises `ExecCapReachedError`.
+  Each command has a client label; when Start gets no answer, the harness
+  finds the command by that label and adopts it.
+- `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`, the source image
+  tag of the root drive. Each node names its templates
+  `<tag>-<key hash[:12]>` and the hash differs per node, so
+  `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
+  compatible template of the tag. Opencode sessions keep
+  `get_sandbox_manager` (pod or Docker).
+- Session saves (`.../firecracker/session_saves.py`): the idle evictor
+  (node reports, `get_eviction_policy`, 15 min) saves each session on the
+  VM first, in the background: CaptureSession of the session's top-level
+  directories (without dependencies and caches), presigned upload, file
+  store finalize, commit of the new save in the cache, then deletion of the
+  old archive. A busy sandbox (running command, turn, parked approval) or a
+  failed save keeps the VM. A session's first use on a new VM instance
+  restores its last save, once across pods (cache lock + session-instance
+  record). The record is written under the placement lock only while the
+  placement is still that instance. Session setup takes no command slot.
+  The stop renews its sandbox lock before each session's save and keeps the
+  VM if it lost the lock. A session with no directory keeps its last save.
+  A configuration error in the eviction
+  policy turns idle eviction off; it never fails the node report.
+
 ---
 
 ## Contracts and traps
@@ -287,6 +415,9 @@ the stored token on each request, so a new token takes effect at once.
   cannot stop unrelated alerts.
   Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
   use the ODS allowlist or automatic issue tracking.
+  `.github/workflows/update-sandbox-browser.yml` moves the pin: it runs every
+  four hours and when a deploy audit gate fails, and opens a PR on each stale
+  branch among main and the four newest release lines.
 
 - **One sandbox per user, not per session.** Sessions share a warm pod, the
   managed skills and the user library.
@@ -368,6 +499,10 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Verification
 
+- Integrated harness image: `deployment/craft-runtime/check-kvm.sh` converts
+  the image and runs the daemon, init, restore, and tool smoke tests on x86
+  KVM with the pinned guest kernel. Container smoke and rootfs conversion
+  alone do not establish VM tool coverage.
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.
