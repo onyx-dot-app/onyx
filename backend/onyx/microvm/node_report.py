@@ -21,7 +21,11 @@ import time
 from collections.abc import Callable
 
 from onyx.cache.interface import CacheBackend, CacheLock, CacheLockLostError
-from onyx.microvm.agent_client import HostAgentClientFactory, HostAgentConfigError
+from onyx.microvm.agent_client import (
+    HostAgentClientFactory,
+    HostAgentConfigError,
+    HostAgentError,
+)
 from onyx.microvm.models import NodeStateReport, NodeStateReportResult
 from onyx.microvm.reconcile import reconcile_node
 from onyx.microvm.registry import (
@@ -29,6 +33,7 @@ from onyx.microvm.registry import (
     get_registered_node,
     node_report_lease,
     record_node_report,
+    set_node_draining,
 )
 from onyx.sandbox_proxy.sandbox_identity.signed import (
     CLOCK_SKEW_SECONDS,
@@ -142,6 +147,25 @@ def _check_lease(lease: CacheLock, deadline: float) -> None:
     lease.extend(_LEASE_SECONDS)
 
 
+def _node_draining(
+    shared_cache: CacheBackend,
+    client_factory: HostAgentClientFactory,
+    node_id: str,
+    address: str,
+) -> bool:
+    """The node's drain state from its agent, recorded for background
+    stops. A failed read counts as not draining and keeps the last record."""
+    try:
+        draining = client_factory.client(address).node_info().draining
+    except HostAgentConfigError:
+        raise
+    except HostAgentError as e:
+        logger.warning("sandbox_fc_node_drain_read_failed node=%s error=%s", node_id, e)
+        return False
+    set_node_draining(shared_cache, node_id, draining)
+    return draining
+
+
 def reconcile_node_report(
     shared_cache: CacheBackend,
     client_factory: HostAgentClientFactory,
@@ -172,6 +196,9 @@ def reconcile_node_report(
         return NodeStateReportResult(reconciled=False)
     deadline = time.monotonic() + NODE_REPORT_DEADLINE_SECONDS
     try:
+        draining = checkpointer.supported and _node_draining(
+            shared_cache, client_factory, node.node_id, node.address
+        )
         result = reconcile_node(
             shared_cache,
             client_factory,
@@ -183,6 +210,7 @@ def reconcile_node_report(
             now=now,
             check_lease=lambda: _check_lease(lease, deadline),
             deadline=deadline,
+            draining=draining,
         )
     except (TimeoutError, CacheLockLostError) as e:
         logger.warning(
@@ -209,9 +237,10 @@ def reconcile_node_report(
         or result.failed
     ):
         logger.info(
-            "sandbox_fc_node_report node=%s vms=%d ended=%d failed=%s adopted=%d "
-            "cleared=%d orphans=%d stopped=%d idle=%d slept=%d",
+            "sandbox_fc_node_report node=%s draining=%s vms=%d ended=%d failed=%s "
+            "adopted=%d cleared=%d orphans=%d stopped=%d idle=%d slept=%d",
             node.node_id,
+            draining,
             len(report.vms),
             len(report.ended),
             result.failed,

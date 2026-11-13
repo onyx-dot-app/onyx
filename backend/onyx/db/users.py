@@ -45,7 +45,13 @@ from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.sandbox import get_user_sandbox_blob_paths
+from onyx.server.features.build.db.sandbox import (
+    get_user_sandbox_blob_paths,
+    get_user_sandbox_ids,
+)
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_sandboxes,
+)
 from onyx.server.features.build.sandbox.snapshot_manager import (
     delete_sandbox_blobs_best_effort,
 )
@@ -1027,9 +1033,11 @@ def delete_user_from_db(
 ) -> None:
     # Collect before the cascade removes the rows; delete only after commit.
     sandbox_blob_paths = get_user_sandbox_blob_paths(db_session, user_to_delete.id)
+    sandbox_ids = get_user_sandbox_ids(db_session, user_to_delete.id)
     delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
     delete_sandbox_blobs_best_effort(sandbox_blob_paths)
+    purge_harness_sandboxes(sandbox_ids)
 
     # NOTE: edge case may exist with race conditions
     # with this `invited user` scheme generally.

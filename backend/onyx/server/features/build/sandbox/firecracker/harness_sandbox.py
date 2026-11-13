@@ -5,7 +5,8 @@ if needed (placement + wake in `onyx.microvm`) and runs the guest daemon Init
 only when the daemon is not initialized. A session's first use on a VM
 instance restores its last save (`session_saves`). Exec sessions live in
 durable cache records (`harness_state`), so any API pod can serve
-`write_stdin`.
+`write_stdin`. `purge_session` and `purge_sandbox` delete what a session or
+a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
 import mimetypes
@@ -26,8 +27,10 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentError,
+    HostAgentErrorReason,
     MtlsHostAgentClientFactory,
 )
+from onyx.microvm.configs import SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS
 from onyx.microvm.daemon_client import (
     SandboxDaemonClient,
     SandboxDaemonError,
@@ -57,11 +60,14 @@ from onyx.microvm.models import (
     VmInstance,
     VmRequest,
 )
-from onyx.microvm.placement import find_vm, sandbox_placement_lock
+from onyx.microvm.placement import find_vm, forget_placement, sandbox_placement_lock
 from onyx.microvm.registry import (
+    clear_sandbox_daemon_key,
+    clear_sandbox_reservation,
     get_registered_node,
     get_sandbox_daemon_key,
     get_sandbox_placement,
+    is_node_draining,
     touch_sandbox_placement,
 )
 from onyx.server.features.build.sandbox.exec_output import (
@@ -70,23 +76,43 @@ from onyx.server.features.build.sandbox.exec_output import (
     estimate_tokens,
 )
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
+    ARTIFACTS_PREFIX,
+    EXEC_SESSIONS_PREFIX,
+    SANDBOX_STATE_PREFIXES,
+    SAVED_SESSIONS_PREFIX,
+    SESSION_INSTANCES_PREFIX,
+    add_id,
+    forget_session_on_instances,
     get_exec_session,
+    get_ids,
+    get_session_save,
     has_marks,
     last_attempt,
+    mark_purged,
     mark_session_on_instance,
+    note_wanted,
     put_exec_session,
     record_attempt,
     remove_exec_session,
+    remove_id,
     sessions_on_instance,
     set_mark,
 )
-from onyx.server.features.build.sandbox.firecracker.models import ExecSessionRecord
+from onyx.server.features.build.sandbox.firecracker.models import (
+    ExecSessionRecord,
+    ExecSessionTable,
+    SessionInstanceTable,
+)
 from onyx.server.features.build.sandbox.firecracker.session_saves import (
     BackgroundIdleStop,
+    BackgroundTurnSave,
     SessionArchiveStore,
     SessionSaveCheckpointer,
     SessionSaveError,
+    delete_session_archives,
     restore_session,
+    save_session,
+    session_save_lock,
     tenant_scope,
 )
 from onyx.server.features.build.sandbox.harness_base import (
@@ -187,6 +213,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         template: str,
         client_factory: HostAgentClientFactory | None = None,
         archive_store: SessionArchiveStore | None = None,
+        turn_end_save_interval_seconds: int = SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS,
     ) -> None:
         if not template:
             raise ValueError("FirecrackerHarnessSandbox needs a template image tag")
@@ -194,7 +221,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         self._client_factory = client_factory or MtlsHostAgentClientFactory()
         # None: no session saves, so the idle evictor keeps every VM.
         self._archive_store = archive_store
+        self._turn_end_save_interval = turn_end_save_interval_seconds
         self.idle_stop = BackgroundIdleStop(self._stop_if_idle)
+        self.turn_save = BackgroundTurnSave(self._save_after_turn)
 
     # Lifecycle
 
@@ -207,6 +236,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         placement replaced after a crash."""
         shared_cache = get_shared_cache_backend()
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        # A stop that saves this sandbox now gives way to this call.
+        note_wanted(tenant_cache, ref.sandbox_id)
         request = VmRequest(
             tenant_id=ref.tenant_id,
             sandbox_id=ref.sandbox_id,
@@ -345,6 +376,52 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             None,
         )
         self.touch(ref)
+        if self._archive_store is not None and self._turn_end_save_interval:
+            self.turn_save.submit(ref)
+
+    def _save_after_turn(self, ref: HarnessSandboxRef) -> None:
+        """Save the session on its running VM, unless a new turn began, its
+        last save is recent, or another save of it runs. Never starts the VM
+        and never blocks a call."""
+        store = self._archive_store
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        if store is None or has_marks(
+            tenant_cache, ref.sandbox_id, f"turn:{ref.session_id}"
+        ):
+            return
+        last = get_session_save(tenant_cache, ref.session_id)
+        if (
+            last is not None
+            and time.time() - last.saved_at < self._turn_end_save_interval
+        ):
+            return
+        placed = self._placed_if_running(tenant_cache, ref.sandbox_id)
+        if placed is None:
+            return
+        # Only a session restored on this instance: a save of a session that
+        # was never set up here would replace its last save with less.
+        if ref.session_id not in sessions_on_instance(
+            tenant_cache, ref.sandbox_id, (placed.vm.attempt, placed.vm.generation)
+        ):
+            return
+        with session_save_lock(tenant_cache, ref.session_id) as held:
+            if not held:
+                return
+            with tenant_scope(ref.tenant_id):
+                save_session(
+                    tenant_cache,
+                    self._client_factory.client(placed.node.address),
+                    sandbox_daemon(self._client_factory, placed),
+                    store,
+                    VmInstance(
+                        sandbox_id=placed.vm.sandbox_id,
+                        attempt=placed.vm.attempt,
+                        generation=placed.vm.generation,
+                        sandboxd_key=placed.sandboxd_key,
+                    ),
+                    ref.sandbox_id,
+                    ref.session_id,
+                )
 
     def set_approval_parked(self, ref: HarnessSandboxRef, parked: bool) -> None:
         set_mark(
@@ -459,8 +536,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         placement = get_sandbox_placement(tenant_cache, sandbox_id)
         if placement is None:
             return VmStopOutcome.NOT_PLACED
+        shared_cache = get_shared_cache_backend()
         return evict_idle_sandbox_vm(
-            get_shared_cache_backend(),
+            shared_cache,
             tenant_cache,
             self._client_factory,
             checkpointer,
@@ -469,6 +547,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             sandbox_id=sandbox_id,
             last_active=placement.last_active,
             now=int(time.time()),
+            draining=is_node_draining(shared_cache, placement.node_id),
         )
 
     def exec_command(
@@ -704,7 +783,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         name = display_name or posixpath.basename(rel)
         # The file store keys and records the file under the context tenant.
         with tenant_scope(ref.tenant_id):
-            return get_default_file_store().save_file(
+            file_id = get_default_file_store().save_file(
                 content=BytesIO(data),
                 display_name=name,
                 file_origin=FileOrigin.OTHER,
@@ -715,3 +794,166 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     "path": rel,
                 },
             )
+        # A session delete keeps artifacts; a sandbox purge deletes them.
+        add_id(
+            get_cache_backend(tenant_id=ref.tenant_id),
+            ARTIFACTS_PREFIX,
+            ref.sandbox_id,
+            file_id,
+        )
+        return file_id
+
+    # Purge (delete hooks). Each step runs even when an earlier one failed;
+    # the call raises at the end if any step failed.
+
+    def purge_session(
+        self, *, tenant_id: str, sandbox_id: UUID, session_id: UUID
+    ) -> None:
+        """Delete a chat session's save, its directory on the running VM and
+        its exec records. Its published artifacts stay."""
+        tenant_cache = get_cache_backend(tenant_id=tenant_id)
+        mark_purged(tenant_cache, session_id=session_id)
+        errors: list[Exception] = []
+        try:
+            placed = self._placed_if_running(tenant_cache, sandbox_id)
+            if placed is not None:
+                self._cancel_session_commands(
+                    tenant_cache, placed, sandbox_id, session_id
+                )
+                # The VM-wide path: a session-relative call cannot delete
+                # the session directory itself.
+                sandbox_daemon(self._client_factory, placed).delete_file(
+                    session_id="", path=session_workspace(session_id), recursive=True
+                )
+        except (HostAgentError, SandboxDaemonError) as e:
+            # The directory goes with the VM at its next stop.
+            errors.append(e)
+        forget_session_on_instances(tenant_cache, sandbox_id, session_id)
+        try:
+            with tenant_scope(tenant_id):
+                delete_session_archives(
+                    tenant_cache, self._archive_store, sandbox_id, session_id
+                )
+        except Exception as e:
+            errors.append(e)
+        _raise_first(errors, f"session {session_id}")
+        logger.info(
+            "sandbox_fc_session_purged sandbox=%s session=%s", sandbox_id, session_id
+        )
+
+    def _cancel_session_commands(
+        self,
+        tenant_cache: CacheBackend,
+        placed: PlacedVm,
+        sandbox_id: UUID,
+        session_id: UUID,
+    ) -> None:
+        daemon = sandbox_daemon(self._client_factory, placed)
+        table = ExecSessionTable.model_validate_json(
+            tenant_cache.get(EXEC_SESSIONS_PREFIX + str(sandbox_id)) or b"{}"
+        )
+        for record in table.sessions.values():
+            if record.chat_session_id != str(session_id):
+                continue
+            if (record.attempt, record.generation) == (
+                placed.vm.attempt,
+                placed.vm.generation,
+            ):
+                try:
+                    daemon.cancel(record.execution_id)
+                except SandboxDaemonError:
+                    pass
+            remove_exec_session(tenant_cache, sandbox_id, record.exec_session_id)
+
+    def purge_sandbox(self, *, tenant_id: str, sandbox_id: UUID) -> None:
+        """Stop the sandbox's VM (the agent deletes its disk) and delete
+        every save, artifact and record of the sandbox."""
+        tenant_cache = get_cache_backend(tenant_id=tenant_id)
+        mark_purged(tenant_cache, sandbox_id=sandbox_id)
+        # A stop that saves the sandbox now gives way to the purge.
+        note_wanted(tenant_cache, sandbox_id)
+        errors: list[Exception] = []
+        try:
+            self._stop_for_purge(tenant_id, tenant_cache, sandbox_id)
+        except Exception as e:
+            # With no record left, the node report stops the VM as an orphan.
+            errors.append(e)
+        instances = SessionInstanceTable.model_validate_json(
+            tenant_cache.get(SESSION_INSTANCES_PREFIX + str(sandbox_id)) or b"{}"
+        )
+        sessions = set(get_ids(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id))
+        with tenant_scope(tenant_id):
+            for session_id in sorted(sessions | set(instances.sessions)):
+                try:
+                    delete_session_archives(
+                        tenant_cache, self._archive_store, sandbox_id, UUID(session_id)
+                    )
+                except Exception as e:
+                    errors.append(e)
+            for file_id in get_ids(tenant_cache, ARTIFACTS_PREFIX, sandbox_id):
+                try:
+                    get_default_file_store().delete_file(
+                        file_id, error_on_missing=False
+                    )
+                    remove_id(tenant_cache, ARTIFACTS_PREFIX, sandbox_id, file_id)
+                except Exception as e:
+                    errors.append(e)
+        clear_sandbox_reservation(tenant_cache, sandbox_id)
+        clear_sandbox_daemon_key(tenant_cache, sandbox_id)
+        # The saved-session and artifact indexes keep what failed, for a retry.
+        for prefix in SANDBOX_STATE_PREFIXES:
+            tenant_cache.delete(prefix + str(sandbox_id))
+        _raise_first(errors, f"sandbox {sandbox_id}")
+        logger.info("sandbox_fc_sandbox_purged sandbox=%s", sandbox_id)
+
+    def _stop_for_purge(
+        self, tenant_id: str, tenant_cache: CacheBackend, sandbox_id: UUID
+    ) -> None:
+        try:
+            with sandbox_placement_lock(tenant_cache, sandbox_id, blocking=True):
+                self._stop_and_forget(tenant_id, tenant_cache, sandbox_id)
+        except SandboxProvisionContentionError:
+            # A purge does not wait for a stuck lock holder.
+            self._stop_and_forget(tenant_id, tenant_cache, sandbox_id)
+
+    def _stop_and_forget(
+        self, tenant_id: str, tenant_cache: CacheBackend, sandbox_id: UUID
+    ) -> None:
+        """Stop the placed VM, and clear its record even when the Stop fails
+        (the node report then stops the VM as an orphan)."""
+        shared_cache = get_shared_cache_backend()
+        placement = get_sandbox_placement(tenant_cache, sandbox_id)
+        if placement is None:
+            return
+        try:
+            node = get_registered_node(shared_cache, placement.node_id)
+            if node is not None:
+                try:
+                    self._client_factory.client(node.address).stop(
+                        sandbox_id=str(sandbox_id),
+                        attempt=placement.attempt,
+                        generation=placement.generation,
+                    )
+                except HostAgentError as e:
+                    if e.reason not in (
+                        HostAgentErrorReason.SANDBOX_NOT_FOUND,
+                        HostAgentErrorReason.INSTANCE_MISMATCH,
+                    ):
+                        raise
+        finally:
+            forget_placement(
+                shared_cache,
+                tenant_cache,
+                tenant_id=tenant_id,
+                sandbox_id=sandbox_id,
+                node_id=placement.node_id,
+                attempt=placement.attempt,
+                generation=placement.generation,
+            )
+
+
+def _raise_first(errors: list[Exception], what: str) -> None:
+    if errors:
+        for e in errors[1:]:
+            logger.warning("sandbox_fc_purge_step_failed %s: %s", what, e)
+        raise errors[0]

@@ -3,8 +3,10 @@ fake host agents: save on sleep, restore on the next use, busy and failure
 cases keep the VM, and the idle evictor stops only after a save."""
 
 import hashlib
+import threading
 import time
 from collections.abc import Callable, Generator
+from concurrent.futures import Future
 from typing import Protocol
 from uuid import UUID, uuid4
 
@@ -14,6 +16,8 @@ from pydantic import SecretStr
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
+from onyx.configs.constants import FileOrigin
+from onyx.file_store.file_store import get_default_file_store
 from onyx.microvm import placement, registry
 from onyx.microvm.configs import SANDBOX_FC_IDLE_TIMEOUT_SECONDS
 from onyx.microvm.daemon_client import (
@@ -28,8 +32,13 @@ from onyx.microvm.lifecycle import (
     VmStopOutcome,
     evict_idle_sandbox_vm,
 )
-from onyx.microvm.models import PresignedRequest
-from onyx.microvm.registry import get_sandbox_placement
+from onyx.microvm.models import NodeStateReport, PresignedRequest, ReportedVm
+from onyx.microvm.node_report import reconcile_node_report
+from onyx.microvm.registry import (
+    get_sandbox_placement,
+    is_node_draining,
+    set_node_draining,
+)
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
@@ -109,7 +118,10 @@ class FakeArchiveStore(SessionArchiveStore):
 
 class MakeSandbox(Protocol):
     def __call__(
-        self, *, archive_store: SessionArchiveStore | None = ...
+        self,
+        *,
+        archive_store: SessionArchiveStore | None = ...,
+        turn_end_save_interval_seconds: int = ...,
     ) -> FirecrackerHarnessSandbox: ...
 
 
@@ -128,10 +140,15 @@ def make_sandbox(
     client_factory: InsecureClientFactory, store: FakeArchiveStore
 ) -> MakeSandbox:
     def make(
-        *, archive_store: SessionArchiveStore | None = store
+        *,
+        archive_store: SessionArchiveStore | None = store,
+        turn_end_save_interval_seconds: int = 0,
     ) -> FirecrackerHarnessSandbox:
         return FirecrackerHarnessSandbox(
-            template="tpl-1", client_factory=client_factory, archive_store=archive_store
+            template="tpl-1",
+            client_factory=client_factory,
+            archive_store=archive_store,
+            turn_end_save_interval_seconds=turn_end_save_interval_seconds,
         )
 
     return make
@@ -150,13 +167,27 @@ def ref(
         harness_state.ACTIVITY_PREFIX,
         harness_state.SESSION_INSTANCES_PREFIX,
         harness_state.LAST_ATTEMPT_PREFIX,
+        harness_state.SAVED_SESSIONS_PREFIX,
+        harness_state.ARTIFACTS_PREFIX,
+        harness_state.WANTED_PREFIX,
+        harness_state.PURGED_SANDBOX_PREFIX,
     ):
         tenant_cache.delete(prefix + str(ref.sandbox_id))
-    tenant_cache.delete(harness_state.SESSION_SAVE_PREFIX + str(ref.session_id))
+    for prefix in (
+        harness_state.SESSION_SAVE_PREFIX,
+        harness_state.PURGED_SESSION_PREFIX,
+    ):
+        tenant_cache.delete(prefix + str(ref.session_id))
+
+
+def _forget_calls(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    """As if no call asked for the sandbox recently (a stop gives way to one)."""
+    tenant_cache.delete(harness_state.WANTED_PREFIX + str(sandbox_id))
 
 
 def _sleep(sandbox: FirecrackerHarnessSandbox, sandbox_id: UUID) -> VmStopOutcome:
     """The idle stop of the sandbox now, as if it were idle long enough."""
+    _forget_calls(get_cache_backend(tenant_id=TENANT_ID), sandbox_id)
     return evict_idle_sandbox_vm(
         get_shared_cache_backend(),
         get_cache_backend(tenant_id=TENANT_ID),
@@ -171,6 +202,7 @@ def _sleep(sandbox: FirecrackerHarnessSandbox, sandbox_id: UUID) -> VmStopOutcom
 
 
 def _make_idle(tenant_cache: CacheBackend, sandbox_id: UUID) -> None:
+    _forget_calls(tenant_cache, sandbox_id)
     placed = get_sandbox_placement(tenant_cache, sandbox_id)
     assert placed is not None
     tenant_cache.set(
@@ -370,6 +402,7 @@ def test_the_idle_evictor_stops_only_an_idle_saved_sandbox(
     now = int(time.time())
 
     def evict(last_active: int) -> VmStopOutcome:
+        _forget_calls(tenant_cache, ref.sandbox_id)
         return evict_idle_sandbox_vm(
             shared_cache,
             tenant_cache,
@@ -733,3 +766,240 @@ def test_a_turn_that_begins_during_the_save_keeps_the_vm(
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.KEPT_NO_CHECKPOINT
     assert node.agent.stop_calls == []
     assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is not None
+
+
+# Delete hooks and save follow-ups: session and sandbox purges, a call that
+# cancels a stop's save, turn-end saves and saves on a draining node.
+
+
+def _cleanup_session(tenant_cache: CacheBackend, session_id: UUID) -> None:
+    tenant_cache.delete(harness_state.SESSION_SAVE_PREFIX + str(session_id))
+    tenant_cache.delete(harness_state.PURGED_SESSION_PREFIX + str(session_id))
+
+
+@pytest.fixture
+def other_ref(
+    tenant_cache: CacheBackend, ref: HarnessSandboxRef
+) -> Generator[HarnessSandboxRef, None, None]:
+    """A second chat session in the same sandbox."""
+    other = ref.model_copy(update={"session_id": uuid4()})
+    yield other
+    _cleanup_session(tenant_cache, other.session_id)
+
+
+def _wait(running: dict[UUID, Future[None]], key: UUID) -> None:
+    pending = running.get(key)
+    if pending is not None:
+        pending.result(timeout=30)
+
+
+def _has_artifact(file_id: str) -> bool:
+    return get_default_file_store().has_file(file_id, FileOrigin.OTHER, "text/plain")
+
+
+@pytest.mark.usefixtures("db_session", "initialize_file_store")
+def test_session_purge_deletes_its_save_and_directory_and_keeps_the_rest(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    store: FakeArchiveStore,
+    ref: HarnessSandboxRef,
+    other_ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    sandbox.write_file(ref, "out/report.txt", b"report")
+    sandbox.write_file(other_ref, "src/b.py", b"b")
+    artifact = sandbox.publish_artifact(ref, "out/report.txt")
+    try:
+        assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+        saved = harness_state.get_session_save(tenant_cache, ref.session_id)
+        assert saved is not None and saved.file_id is not None
+        assert sorted(
+            harness_state.get_ids(
+                tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
+            )
+        ) == sorted([str(ref.session_id), str(other_ref.session_id)])
+        # Restore both sessions on a new VM, then delete one.
+        sandbox.read_file(ref, "src/a.py", max_bytes=10)
+        sandbox.read_file(other_ref, "src/b.py", max_bytes=10)
+
+        sandbox.purge_session(
+            tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+        )
+
+        assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
+        assert saved.file_id in store.deleted
+        assert saved.file_id not in node.agent.objects
+        assert _session_files(node, ref) == {}
+        assert _session_files(node, other_ref) == {"src/b.py": b"b"}
+        assert _has_artifact(artifact)
+        assert harness_state.get_session_save(tenant_cache, other_ref.session_id)
+        assert harness_state.get_ids(
+            tenant_cache, harness_state.SAVED_SESSIONS_PREFIX, ref.sandbox_id
+        ) == [str(other_ref.session_id)]
+    finally:
+        get_default_file_store().delete_file(artifact, error_on_missing=False)
+
+
+@pytest.mark.usefixtures("db_session", "initialize_file_store")
+def test_sandbox_purge_stops_the_vm_and_deletes_every_save_and_artifact(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    store: FakeArchiveStore,
+    ref: HarnessSandboxRef,
+    other_ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    sandbox.write_file(other_ref, "src/b.py", b"b")
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    saved = [
+        harness_state.get_session_save(tenant_cache, r.session_id)
+        for r in (ref, other_ref)
+    ]
+    # A running VM again, with an artifact.
+    sandbox.write_file(ref, "out/report.txt", b"report")
+    artifact = sandbox.publish_artifact(ref, "out/report.txt")
+    assert _has_artifact(artifact)
+    placed = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placed is not None
+
+    sandbox.purge_sandbox(tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id)
+
+    assert (str(ref.sandbox_id), placed.attempt, placed.generation) in (
+        node.agent.stop_calls
+    )
+    assert str(ref.sandbox_id) not in node.agent.vms
+    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
+    for save in saved:
+        assert save is not None and save.file_id in store.deleted
+    for r in (ref, other_ref):
+        assert harness_state.get_session_save(tenant_cache, r.session_id) is None
+    assert not _has_artifact(artifact)
+    for prefix in (
+        harness_state.SAVED_SESSIONS_PREFIX,
+        harness_state.ARTIFACTS_PREFIX,
+        *harness_state.SANDBOX_STATE_PREFIXES,
+    ):
+        assert tenant_cache.get(prefix + str(ref.sandbox_id)) is None
+
+
+def test_a_save_that_ends_after_a_purge_keeps_no_archive(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    store: FakeArchiveStore,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    store.on_presign = lambda: sandbox.purge_session(
+        tenant_id=TENANT_ID, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+    # The purged session needs no save, so the stop goes on.
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
+    assert node.agent.objects == {}
+
+
+def test_a_call_cancels_a_stop_that_saves_and_runs_at_once(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    node.agent.capture_delay_seconds = 30.0
+    outcome: list[VmStopOutcome] = []
+    stop = threading.Thread(
+        target=lambda: outcome.append(_sleep(sandbox, ref.sandbox_id))
+    )
+    stop.start()
+    # The stop holds the sandbox lock while its capture runs.
+    assert node.agent.capture_started.wait(timeout=10)
+    started = time.monotonic()
+    assert sandbox.read_file(ref, "src/a.py", max_bytes=10) == b"a"
+    assert time.monotonic() - started < 10
+    stop.join(timeout=10)
+    assert outcome == [VmStopOutcome.KEPT_NO_CHECKPOINT]
+    assert node.agent.capture_cancelled.wait(timeout=5)
+    assert node.agent.stop_calls == []
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) is None
+
+
+def test_turn_end_saves_the_session_once_per_interval(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+    other_ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox(turn_end_save_interval_seconds=300)
+    sandbox.begin_turn(ref)
+    sandbox.write_file(ref, "src/a.py", b"a")
+    sandbox.end_turn(ref)
+    _wait(sandbox.turn_save.running, ref.session_id)
+    first = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert first is not None and first.file_id is not None
+    # The VM keeps running.
+    assert node.agent.stop_calls == []
+
+    # Within the interval: no new save.
+    sandbox.write_file(ref, "src/a.py", b"changed")
+    sandbox.end_turn(ref)
+    _wait(sandbox.turn_save.running, ref.session_id)
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) == first
+
+    # A session never set up on this VM is not saved.
+    sandbox.end_turn(other_ref)
+    _wait(sandbox.turn_save.running, other_ref.session_id)
+    assert harness_state.get_session_save(tenant_cache, other_ref.session_id) is None
+
+
+def test_a_draining_node_saves_and_stops_a_vm_that_is_not_idle(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandbox: FirecrackerHarnessSandbox = make_sandbox()
+    sandbox.write_file(ref, "src/a.py", b"a")
+    tenant_cache.delete(harness_state.WANTED_PREFIX + str(ref.sandbox_id))
+    monkeypatch.setattr(
+        harness_factory, "get_eviction_policy", lambda: sandbox.eviction_policy()
+    )
+    placed = get_sandbox_placement(tenant_cache, ref.sandbox_id)
+    assert placed is not None
+    report = NodeStateReport(
+        node_id=placed.node_id,
+        vms=[
+            ReportedVm(**vm.model_dump())
+            for vm in client_factory.client(node.address).list_vms()
+        ],
+    )
+
+    # Active node, recent activity: the VM stays.
+    reconcile_node_report(shared_cache, client_factory, report, now=int(time.time()))
+    _wait(sandbox.idle_stop.running, ref.sandbox_id)
+    assert node.agent.stop_calls == []
+    assert not is_node_draining(shared_cache, placed.node_id)
+
+    node.agent.drain_state = hostagent_pb2.DRAIN_STATE_DRAINING
+    result = reconcile_node_report(
+        shared_cache, client_factory, report, now=int(time.time())
+    )
+    assert result.reconciled
+    assert is_node_draining(shared_cache, placed.node_id)
+    _wait(sandbox.idle_stop.running, ref.sandbox_id)
+    assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
+    assert harness_state.get_session_save(tenant_cache, ref.session_id) is not None
+    node.agent.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
+    set_node_draining(shared_cache, placed.node_id, False)
+    # The next use restores the session (on any node that is not draining).
+    assert sandbox.read_file(ref, "src/a.py", max_bytes=10) == b"a"

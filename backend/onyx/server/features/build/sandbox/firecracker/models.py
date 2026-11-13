@@ -45,3 +45,9 @@ class SessionSave(BaseModel):
     # Top-level directories in the archive (what a restore replaces).
     roots: list[str]
     saved_at: float
+
+
+class IdSet(BaseModel):
+    """A set of IDs kept in one cache record (saved sessions, artifacts)."""
+
+    ids: list[str] = []

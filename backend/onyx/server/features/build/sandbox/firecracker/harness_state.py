@@ -10,6 +10,13 @@
 - Session saves (no TTL): per chat session, the committed archive in the
   file store. A new save is committed before the old file is deleted.
 - Last attempt (no TTL): an agent never creates a stopped attempt again.
+- Saved sessions and artifacts (no TTL): per sandbox, the chat sessions
+  with a committed save and the published artifact file IDs. A purge
+  deletes their files.
+- Wanted (expires): when a call last asked for the sandbox. A stop that
+  saves gives way to it (cancel on resume).
+- Purge marks (expire): a deleted session or sandbox. A save in progress
+  does not commit for it.
 
 Writes are compare-and-set on the stored value (parallel tool calls write
 the same map). Keys without a TTL need a Redis eviction policy that never
@@ -29,6 +36,7 @@ from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     HarnessActivity,
+    IdSet,
     SessionInstanceTable,
     SessionSave,
 )
@@ -38,6 +46,24 @@ ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
 SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
 SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
 LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
+SAVED_SESSIONS_PREFIX = "sandbox_fc:saved_sessions:"
+ARTIFACTS_PREFIX = "sandbox_fc:artifacts:"
+WANTED_PREFIX = "sandbox_fc:wanted:"
+PURGED_SESSION_PREFIX = "sandbox_fc:purged_session:"
+PURGED_SANDBOX_PREFIX = "sandbox_fc:purged_sandbox:"
+SESSION_SAVE_LOCK_PREFIX = "sandbox_fc:session_save_lock:"
+# Longer than any save in progress (one session takes 35 min at most).
+PURGE_MARK_SECONDS = 24 * 3600
+WANTED_SECONDS = 600
+# Per-sandbox records that a sandbox purge deletes at its end (the
+# saved-session and artifact indexes empty as their files go).
+SANDBOX_STATE_PREFIXES = (
+    EXEC_SESSIONS_PREFIX,
+    ACTIVITY_PREFIX,
+    SESSION_INSTANCES_PREFIX,
+    LAST_ATTEMPT_PREFIX,
+    WANTED_PREFIX,
+)
 _CAS_TRIES = 16
 
 _M = TypeVar("_M", bound=BaseModel)
@@ -126,10 +152,13 @@ def set_mark(
     _update(cache, ACTIVITY_PREFIX + str(sandbox_id), HarnessActivity, change)
 
 
-def has_marks(cache: CacheBackend, sandbox_id: UUID) -> bool:
+def has_marks(cache: CacheBackend, sandbox_id: UUID, name: str | None = None) -> bool:
+    """An activity mark that has not expired (`name`: only that mark)."""
     activity = _read(cache, ACTIVITY_PREFIX + str(sandbox_id), HarnessActivity)
     now = time.time()
-    return any(exp > now for exp in activity.marks.values())
+    return any(
+        exp > now and (name is None or n == name) for n, exp in activity.marks.items()
+    )
 
 
 def sessions_on_instance(
@@ -155,6 +184,20 @@ def mark_session_on_instance(
     )
 
 
+def forget_session_on_instances(
+    cache: CacheBackend, sandbox_id: UUID, session_id: UUID
+) -> None:
+    def change(table: SessionInstanceTable) -> SessionInstanceTable | None:
+        sessions = {
+            sid: i for sid, i in table.sessions.items() if sid != str(session_id)
+        }
+        return SessionInstanceTable(sessions=sessions) if sessions else None
+
+    _update(
+        cache, SESSION_INSTANCES_PREFIX + str(sandbox_id), SessionInstanceTable, change
+    )
+
+
 def get_session_save(cache: CacheBackend, session_id: UUID) -> SessionSave | None:
     raw = cache.get(SESSION_SAVE_PREFIX + str(session_id))
     return None if raw is None else SessionSave.model_validate_json(raw)
@@ -162,6 +205,75 @@ def get_session_save(cache: CacheBackend, session_id: UUID) -> SessionSave | Non
 
 def set_session_save(cache: CacheBackend, session_id: UUID, save: SessionSave) -> None:
     cache.set(SESSION_SAVE_PREFIX + str(session_id), save.model_dump_json())
+
+
+def pop_session_save(cache: CacheBackend, session_id: UUID) -> SessionSave | None:
+    """Delete the save record and return it (None: there was none)."""
+    key = SESSION_SAVE_PREFIX + str(session_id)
+    for _ in range(_CAS_TRIES):
+        raw = cache.get(key)
+        if raw is None:
+            return None
+        if cache.delete_if_value(key, raw):
+            return SessionSave.model_validate_json(raw)
+    raise StateContentionError(key)
+
+
+def delete_session_save_if(
+    cache: CacheBackend, session_id: UUID, save: SessionSave
+) -> bool:
+    """Delete the save record only while it is still `save`."""
+    return cache.delete_if_value(
+        SESSION_SAVE_PREFIX + str(session_id), save.model_dump_json().encode()
+    )
+
+
+def get_ids(cache: CacheBackend, prefix: str, sandbox_id: UUID) -> list[str]:
+    return _read(cache, prefix + str(sandbox_id), IdSet).ids
+
+
+def add_id(cache: CacheBackend, prefix: str, sandbox_id: UUID, item: str) -> None:
+    def change(record: IdSet) -> IdSet:
+        return IdSet(ids=sorted({*record.ids, item}))
+
+    _update(cache, prefix + str(sandbox_id), IdSet, change)
+
+
+def remove_id(cache: CacheBackend, prefix: str, sandbox_id: UUID, item: str) -> None:
+    def change(record: IdSet) -> IdSet | None:
+        ids = [i for i in record.ids if i != item]
+        return IdSet(ids=ids) if ids else None
+
+    _update(cache, prefix + str(sandbox_id), IdSet, change)
+
+
+def note_wanted(cache: CacheBackend, sandbox_id: UUID) -> None:
+    """Record that a call asks for the sandbox now."""
+    cache.set(WANTED_PREFIX + str(sandbox_id), str(time.time()), ex=WANTED_SECONDS)
+
+
+def wanted_since(cache: CacheBackend, sandbox_id: UUID, since: float) -> bool:
+    raw = cache.get(WANTED_PREFIX + str(sandbox_id))
+    return raw is not None and float(raw) >= since
+
+
+def mark_purged(
+    cache: CacheBackend,
+    *,
+    sandbox_id: UUID | None = None,
+    session_id: UUID | None = None,
+) -> None:
+    if sandbox_id is not None:
+        cache.set(PURGED_SANDBOX_PREFIX + str(sandbox_id), "1", ex=PURGE_MARK_SECONDS)
+    if session_id is not None:
+        cache.set(PURGED_SESSION_PREFIX + str(session_id), "1", ex=PURGE_MARK_SECONDS)
+
+
+def is_purged(cache: CacheBackend, sandbox_id: UUID, session_id: UUID) -> bool:
+    return (
+        cache.get(PURGED_SANDBOX_PREFIX + str(sandbox_id)) is not None
+        or cache.get(PURGED_SESSION_PREFIX + str(session_id)) is not None
+    )
 
 
 def last_attempt(cache: CacheBackend, sandbox_id: UUID) -> int:

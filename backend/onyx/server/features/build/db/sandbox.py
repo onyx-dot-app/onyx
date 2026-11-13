@@ -504,3 +504,14 @@ def get_user_sandbox_blob_paths(db_session: Session, user_id: UUID) -> list[str]
             )
         )
     return paths
+
+
+def get_user_sandbox_ids(db_session: Session, user_id: UUID) -> list[UUID]:
+    return list(
+        db_session.scalars(select(Sandbox.id).where(Sandbox.user_id == user_id)).all()
+    )
+
+
+def get_all_sandbox_ids(db_session: Session) -> list[UUID]:
+    """Every sandbox of the current tenant."""
+    return list(db_session.scalars(select(Sandbox.id)).all())

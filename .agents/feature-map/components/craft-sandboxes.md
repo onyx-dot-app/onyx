@@ -327,6 +327,22 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   VM if it lost the lock. A session with no directory keeps its last save.
   A configuration error in the eviction
   policy turns idle eviction off; it never fails the node report.
+  On a draining node (NodeInfo drain state, read by each report) every VM
+  counts as idle, so it is saved and stopped once not busy. Each call
+  records "wanted" for the sandbox; a stop's save gives way to a call
+  within the placement lock wait (capture and upload are cancelled). The
+  end of a turn saves that session in the background
+  (`SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default 300, 0 = off). One
+  save per session runs at a time (non-blocking session lock; a stop that
+  finds it held keeps the VM).
+- Purge (`.../firecracker/purge.py`, delete hooks): a Craft session delete
+  (`SessionManager.delete_session`) deletes that session's save, its
+  directory on the running VM and its exec records; its artifacts stay. A
+  user delete (`delete_user_from_db`, `UserManager.delete`) and the
+  last-admin tenant delete stop the VM and delete every save, artifact and
+  record of the sandbox. A purge mark makes a save in progress drop its
+  archive instead of committing. Saves and artifacts are indexed per
+  sandbox in the tenant cache.
 
 ---
 

@@ -474,6 +474,24 @@ def list_live_nodes(shared_cache: CacheBackend, now: int) -> list[RegisteredNode
     ]
 
 
+_NODE_DRAINING_PREFIX = "sandbox_fc:node_draining:"
+# About three node reports: a node that stops reporting stops draining here.
+_NODE_DRAINING_TTL_SECONDS = 60
+
+
+def set_node_draining(shared_cache: CacheBackend, node_id: str, draining: bool) -> None:
+    """Record the drain state that the node's agent reported last."""
+    key = _NODE_DRAINING_PREFIX + node_id
+    if draining:
+        shared_cache.set(key, "1", ex=_NODE_DRAINING_TTL_SECONDS)
+    else:
+        shared_cache.delete(key)
+
+
+def is_node_draining(shared_cache: CacheBackend, node_id: str) -> bool:
+    return shared_cache.get(_NODE_DRAINING_PREFIX + node_id) is not None
+
+
 def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
     """Drop an expired node from the set, unless it registered again meanwhile."""
     try:
