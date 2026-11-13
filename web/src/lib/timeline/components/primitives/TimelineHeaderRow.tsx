@@ -17,7 +17,7 @@ export function TimelineHeaderRow({ left, children }: TimelineHeaderRowProps) {
     <div className="flex w-full h-(--timeline-header-row-height)">
       <div className="flex items-center justify-center w-(--timeline-rail-width) h-(--timeline-header-row-height)">
         {left && (
-          <div className="flex box-content size-(--timeline-header-icon-size) p-(--timeline-header-icon-padding)">
+          <div className="flex box-content size-(--spacing-block-24) p-(--padding-icon-2)">
             {left}
           </div>
         )}
@@ -51,7 +51,7 @@ export function RunHeaderRow({
     <TimelineHeaderRow left={left}>
       <div
         className={cn(
-          "flex flex-1 min-w-0 h-full items-center justify-between p-(--timeline-header-surface-padding) rounded-t-12 transition-colors duration-300",
+          "flex flex-1 min-w-0 h-full items-center justify-between p-(--spacing-inline-4) rounded-t-12 transition-colors duration-300",
           interactive && "hover:bg-background-tint-00",
           tinted && "bg-background-tint-00",
           roundedBottom && "rounded-b-12"

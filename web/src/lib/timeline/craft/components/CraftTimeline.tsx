@@ -1,6 +1,5 @@
 "use client";
 
-import { TIMELINE_HEADER_ICON_PX } from "@/lib/timeline/components/primitives/tokens";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Collapsible } from "@opal/components";
@@ -178,9 +177,7 @@ export default function CraftTimeline({
     <TimelineRoot>
       <RunHeaderRow
         left={
-          showAgentAvatar ? (
-            <FoldableLogo onyxBranded folded size={TIMELINE_HEADER_ICON_PX} />
-          ) : null
+          showAgentAvatar ? <FoldableLogo onyxBranded folded size={24} /> : null
         }
         interactive={foldable}
         tinted={isRunning || isOpen}
