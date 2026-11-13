@@ -396,10 +396,10 @@ The library preview of an external-app skill calls the same renderer
     runtime names and descriptions come from the frontmatter of the version
     the user runs. A custom skill with no plugin is hidden from everyone but
     an admin; an admin write makes its plugin from the legacy rows first
-    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete is refused
-    while the user's "My uploads" holds a plugin
-    (`db/users.py:delete_user_from_db__no_commit`); published plugins stay
-    with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
+    (`db/plugin.py:lock_skill_plugin__no_commit`). A user delete removes the
+    user's private integrations, then is refused while the user's "My
+    uploads" holds a plugin (`db/users.py:delete_user_from_db__no_commit`);
+    published plugins stay with no author. Migration `55bf66dd54dd` re-syncs every plugin from the
     skill rows once, before these reads, to fix rows that older code left
     stale; it copies `backfill_plugins_from_skills` instead of importing it.
     Reads of bundles,
