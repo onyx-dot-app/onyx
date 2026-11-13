@@ -89,7 +89,7 @@ follow the release notes for the downgrade first.
 
 {/* depends: save on drain. Update steps 4 and 5 when the API server saves and stops microVMs on a draining node. */}
 Running microVMs keep running during a drain. The API server does not move them to another node.
-Stop them after their sessions are saved.
+Let them stop after their sessions are saved.
 
 <Steps>
   <Step title="Set the manual drain flag">
@@ -114,8 +114,11 @@ Stop them after their sessions are saved.
 
     Wait until the microVMs stop by themselves:
     the API server saves a session and stops its microVM after it is idle (15 minutes by default).
-    Check with `agent List`. To stop a microVM at once and accept the data loss, run `agent Stop '{"sandbox_id": "<id>",
-    "attempt": <n>, "generation": <n>}'`.
+    Check with `agent List`. To stop a microVM at once and accept the data loss, run:
+
+    ```bash
+    agent Stop '{"sandbox_id": "<id>", "attempt": <n>, "generation": <n>}'
+    ```
   </Step>
 
   <Step title="Remove the node">
