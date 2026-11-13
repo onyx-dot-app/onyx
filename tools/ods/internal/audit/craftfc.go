@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -63,7 +64,7 @@ type CraftFCPins struct {
 var (
 	kernelTagRe   = regexp.MustCompile(`^microvm-kernel-((\d+)\.(\d+)\.\d+-[0-9.]+\.amzn2023)$`)
 	fcVersionRe   = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
-	alasTitleRe   = regexp.MustCompile(`^(ALAS2023-\d+-\d+) \(([a-z]+)\): (\S+)$`)
+	alasTitleRe   = regexp.MustCompile(`^(ALAS2023-\d+-\d+) \(([a-z]+)\): (.+)$`)
 	cveRe         = regexp.MustCompile(`CVE-\d{4}-\d+`)
 	rangeTokenRe  = regexp.MustCompile(`^(>=|<=|>|<|=)?\s*v?(\d+(?:\.\d+)*)$`)
 	nextLinkRe    = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)
@@ -200,7 +201,7 @@ func kernelFindings(client *http.Client, feedURL string, pins CraftFCPins) ([]Fi
 	var findings []Finding
 	for _, item := range feed.Items {
 		m := alasTitleRe.FindStringSubmatch(strings.TrimSpace(item.Title))
-		if m == nil || m[3] != pins.KernelPackage {
+		if m == nil || !slices.Contains(strings.Split(m[3], ", "), pins.KernelPackage) {
 			continue
 		}
 		page, _, err := httpGet(client, strings.TrimSpace(item.Link), nil)

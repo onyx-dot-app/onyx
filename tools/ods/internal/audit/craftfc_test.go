@@ -100,7 +100,7 @@ func craftFCFeeds(t *testing.T) *httptest.Server {
 	mux.HandleFunc("/alas.rss", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintf(w, `<?xml version="1.0"?><rss><channel>
 <item><title>ALAS2023-2026-0001 (important): kernel6.18</title><description>CVE-2026-1, CVE-2026-2</description><link>%[1]s/old.html</link></item>
-<item><title>ALAS2023-2026-0002 (critical): kernel6.18</title><description>CVE-2026-3</description><link>%[1]s/new.html</link></item>
+<item><title>ALAS2023-2026-0002 (critical): kernel6.18, kernel6.18-livepatch</title><description>CVE-2026-3</description><link>%[1]s/new.html</link></item>
 <item><title>ALAS2023-2026-0003 (critical): kernel6.12</title><description>CVE-2026-4</description><link>%[1]s/missing.html</link></item>
 </channel></rss>`, srv.URL)
 	})
