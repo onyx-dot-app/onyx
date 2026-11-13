@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import json
 import zipfile
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -57,6 +58,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
     make_user,
     make_user_credential,
+    set_plugin_created_at,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -568,6 +570,7 @@ def test_required_creation_preserves_same_name_personal_preference(
     personal = make_skill(
         db_session, name="required-creation-conflict", author_user_id=owner.id
     )
+    set_plugin_created_at(db_session, personal.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
         skill_id=personal.id, enabled=True, user=owner, db_session=db_session
     )

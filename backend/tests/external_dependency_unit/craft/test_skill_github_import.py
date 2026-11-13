@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User, UserSkillPreference
+from onyx.db.skill import set_skill_enabled_for_user
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.api import import_github_skills
 from onyx.server.features.skill.models import GitHubSkillsImportRequest
@@ -59,12 +60,8 @@ def test_import_creates_conflicting_skills_disabled_without_blocking_others(
         name=conflict_name,
         author_user_id=test_user.id,
     )
-    db_session.add(
-        UserSkillPreference(
-            user_id=test_user.id,
-            skill_id=existing.id,
-            name=existing.name,
-        )
+    set_skill_enabled_for_user(
+        skill_id=existing.id, enabled=True, user=test_user, db_session=db_session
     )
     db_session.commit()
     discovered = [
