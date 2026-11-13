@@ -62,7 +62,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100   # after a rest
 ```
 
 - `host agent failed` in the log: the agent stopped at start-up. The error names the failed
-  check (for example XFS reflink, cgroup v2, `/dev/kvm`, artifacts SHA256).
+  check (for example reflink or the loop store, cgroup v2, `/dev/kvm`, artifacts SHA256).
 - `/metrics has no token` in the log: the metrics token Secret is empty or missing. Compare
   `craft.hostAgent.metrics.authExistingSecret` (or the chart copy) with `auth.metricsAuth`.
 - The pod is Running and the log is clean: check the scrape target in Prometheus

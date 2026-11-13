@@ -35,6 +35,7 @@ import (
 	"github.com/onyx-dot-app/onyx/microvm/internal/imagegc"
 	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
 	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
+	"github.com/onyx-dot-app/onyx/microvm/internal/loopstore"
 	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
 	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
 	"github.com/onyx-dot-app/onyx/microvm/internal/nodereport"
@@ -111,12 +112,18 @@ type flags struct {
 	transferPart   int64
 	imageGCEvery   time.Duration
 	imageGCGrace   time.Duration
+	loopStore      string
+	loopStoreGiB   uint64
 }
 
 func main() {
 	var f flags
 	f.obs.register(flag.CommandLine)
-	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "XFS (reflink) data dir; must be the same path on the host and in the container")
+	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "data dir with reflink (XFS reflink=1), or see --loop-store; must be the same path on the host and in the container")
+	flag.StringVar(&f.loopStore, "loop-store", string(loopstore.Auto),
+		"auto: if the data dir has no reflink (ext4), mount a sparse XFS image <data-dir>/"+loopstore.ImageName+" on a loop device there; off: refuse to start (default $CRAFT_FC_LOOP_STORE or auto)")
+	flag.Uint64Var(&f.loopStoreGiB, "loop-store-gib", 0,
+		"size of a new loop store image; 0: 80% of the free space, 20 GiB to 4 TiB (default $CRAFT_FC_LOOP_STORE_GIB or 0); an existing image keeps its size")
 	flag.StringVar(&f.artifactsDir, "artifacts-dir", "/opt/craft-fc", "directory with the firecracker and jailer binaries")
 	flag.StringVar(&f.socket, "socket", "", "API Unix socket (default <data-dir>/run/host-agent.sock)")
 	flag.StringVar(&f.slice, "slice", "fcvms.slice", "host systemd slice for the VM scopes")
@@ -175,6 +182,10 @@ func main() {
 	flag.Parse()
 
 	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if err := loopStoreEnv(flag.CommandLine, os.LookupEnv); err != nil {
+		log.Error("host agent failed", "err", err)
+		os.Exit(1)
+	}
 	if err := run(f, log); err != nil {
 		log.Error("host agent failed", "err", err)
 		os.Exit(1)
@@ -186,7 +197,7 @@ func run(f flags, log *slog.Logger) error {
 		f.socket = filepath.Join(f.dataDir, "run", "host-agent.sock")
 	}
 	lay := jailer.Layout{ChrootBase: filepath.Join(f.dataDir, "jail")}
-	if err := preflight(f, lay); err != nil {
+	if err := preflight(f, lay, log); err != nil {
 		return fmt.Errorf("preflight: %w", err)
 	}
 	bins, err := binaries.Install(f.artifactsDir, filepath.Join(f.dataDir, "bin"),
@@ -734,7 +745,7 @@ func reportEnded(ended []agent.EndedVM) []nodereport.EndedVM {
 	return out
 }
 
-func preflight(f flags, lay jailer.Layout) error {
+func preflight(f flags, lay jailer.Layout, log *slog.Logger) error {
 	if os.Geteuid() != 0 {
 		return errors.New("the host agent must run as root")
 	}
@@ -743,6 +754,24 @@ func preflight(f flags, lay jailer.Layout) error {
 	}
 	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
 		return fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
+	}
+	mode, err := loopstore.ParseMode(f.loopStore)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(f.dataDir, 0o755); err != nil {
+		return err
+	}
+	// Before the subdirs: a loop store mount hides what is under it.
+	store, err := loopstore.Ensure(loopstore.Options{
+		DataDir: f.dataDir, Mode: mode, SizeGiB: f.loopStoreGiB, HostMountNS: f.hostMountNS, RootfsDir: f.rootfsDir, Log: log,
+	})
+	if err != nil {
+		return fmt.Errorf("data dir %s: %w", f.dataDir, err)
+	}
+	if store != nil {
+		log.Info("data dir is a loop store", "image", store.Image, "device", store.Device,
+			"gib", store.SizeBytes>>30, "created", store.Created)
 	}
 	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal", "managed"} {
 		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
@@ -753,13 +782,27 @@ func preflight(f flags, lay jailer.Layout) error {
 	if err := os.Chmod(lay.ChrootBase, 0o711); err != nil {
 		return err
 	}
-	if err := scratch.ProbeReflink(f.dataDir); err != nil {
-		return fmt.Errorf("data dir %s: %w", f.dataDir, err)
-	}
 	longest := lay.HostPath(strings.Repeat("x", 36), longestSock)
 	if len(longest) > jailer.MaxSockPath {
 		return fmt.Errorf("data dir %s is too long: VM socket paths would be %d bytes, the limit is %d",
 			f.dataDir, len(longest), jailer.MaxSockPath)
+	}
+	return nil
+}
+
+// loopStoreEnv applies $CRAFT_FC_LOOP_STORE and $CRAFT_FC_LOOP_STORE_GIB to
+// the loop store flags that the command line does not set.
+func loopStoreEnv(fs *flag.FlagSet, lookup func(string) (string, bool)) error {
+	set := map[string]bool{}
+	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
+	for name, env := range map[string]string{"loop-store": "CRAFT_FC_LOOP_STORE", "loop-store-gib": "CRAFT_FC_LOOP_STORE_GIB"} {
+		v, ok := lookup(env)
+		if !ok || v == "" || set[name] {
+			continue
+		}
+		if err := fs.Set(name, v); err != nil {
+			return fmt.Errorf("$%s: %w", env, err)
+		}
 	}
 	return nil
 }

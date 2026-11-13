@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"math"
 	"testing"
 	"time"
@@ -152,5 +153,39 @@ func TestAdvertiseAddress(t *testing.T) {
 		if got, err := advertiseAddress(c.f, c.podIP); err == nil {
 			t.Errorf("%s: got %q, want an error", name, got)
 		}
+	}
+}
+
+func TestLoopStoreEnv(t *testing.T) {
+	newFS := func() (*flag.FlagSet, *string, *uint64) {
+		fs := flag.NewFlagSet("t", flag.ContinueOnError)
+		mode := fs.String("loop-store", "auto", "")
+		gib := fs.Uint64("loop-store-gib", 0, "")
+		return fs, mode, gib
+	}
+	env := func(m map[string]string) func(string) (string, bool) {
+		return func(k string) (string, bool) { v, ok := m[k]; return v, ok }
+	}
+
+	fs, mode, gib := newFS()
+	if err := loopStoreEnv(fs, env(map[string]string{"CRAFT_FC_LOOP_STORE": "off", "CRAFT_FC_LOOP_STORE_GIB": "50"})); err != nil {
+		t.Fatal(err)
+	}
+	if *mode != "off" || *gib != 50 {
+		t.Errorf("env not applied: %q %d", *mode, *gib)
+	}
+
+	// The command line wins over the environment.
+	fs, _, gib = newFS()
+	if err := fs.Parse([]string{"--loop-store-gib=30"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := loopStoreEnv(fs, env(map[string]string{"CRAFT_FC_LOOP_STORE_GIB": "50"})); err != nil || *gib != 30 {
+		t.Errorf("flag overridden by env: %d %v", *gib, err)
+	}
+
+	fs, _, _ = newFS()
+	if err := loopStoreEnv(fs, env(map[string]string{"CRAFT_FC_LOOP_STORE_GIB": "lots"})); err == nil {
+		t.Error("a bad $CRAFT_FC_LOOP_STORE_GIB was accepted")
 	}
 }
