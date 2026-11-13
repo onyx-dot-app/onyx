@@ -157,7 +157,7 @@ func TestRunCraftFC(t *testing.T) {
 		t.Fatalf("findings = %v, want the newer kernel advisory and the Firecracker advisory on page 2", ids)
 	}
 	kernel := result.Findings[0]
-	if kernel.FixedIn != "6.18.56-126.188.amzn2023" || kernel.Severity != SeverityCritical || strings.Join(kernel.Aliases, ",") != "CVE-2026-3" {
+	if kernel.FixedIn != "6.18.56-126.188.amzn2023" || kernel.Severity != SeverityCritical || len(kernel.Aliases) != 0 || !strings.HasSuffix(kernel.Title, ": CVE-2026-3") {
 		t.Errorf("kernel finding = %+v", kernel)
 	}
 	if len(result.Blocking) != 1 || result.Blocking[0].ID != "ALAS2023-2026-0002" {
@@ -316,5 +316,31 @@ func TestRunCraftFCInputErrors(t *testing.T) {
 	pageMissing.ALASFeedURL = pages.URL + "/alas.rss"
 	if _, err := RunCraftFC(pageMissing); err == nil {
 		t.Error("expected an error when an advisory page cannot be read")
+	}
+}
+
+// An allowlist entry for one CVE of an advisory must not suppress the
+// advisory, which also fixes other CVEs.
+func TestRunCraftFCIgnoresOnlyTheAdvisoryID(t *testing.T) {
+	srv := craftFCFeeds(t)
+	allowlist := filepath.Join(t.TempDir(), "ignores.json")
+	if err := os.WriteFile(allowlist, []byte(`{"ignores":[{"id":"CVE-2026-3","reason":"one CVE only"},{"id":"CVE-2026-9","reason":"Firecracker CVE"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result, err := RunCraftFC(CraftFCOptions{
+		Dockerfile:               writeArtifactsDockerfile(t, testArtifactsDockerfile),
+		FirecrackerAdvisoriesURL: srv.URL + "/advisories",
+		ALASFeedURL:              srv.URL + "/alas.rss",
+		Format:                   "json",
+		FailOn:                   SeverityCritical,
+		IgnoreURL:                allowlist,
+		Stdout:                   &bytes.Buffer{},
+		Stderr:                   &bytes.Buffer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Findings) != 1 || result.Findings[0].ID != "ALAS2023-2026-0002" {
+		t.Fatalf("findings = %+v, want the kernel advisory kept and the Firecracker one suppressed by its CVE", result.Findings)
 	}
 }

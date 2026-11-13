@@ -362,7 +362,8 @@ publishes the host agent.
 1. Read the advisory. A guest escape (Firecracker, the jailer, or KVM in the host kernel) is
    urgent: ship a patch release. A guest kernel issue goes in the next monthly bump, because
    guest root is in the threat model.
-2. If the advisory does not apply to our use, suppress it with a reason and an expiry:
+2. If the advisory does not apply to our use, suppress its ID (`ALAS2023-...` or `GHSA-...`) with a
+   reason and an expiry. An ALAS ID covers all of its CVEs:
    `ods audit ignore add <ID> --ecosystem craft-fc --reason "<why>" --expires <YYYY-MM-DD>`.
 3. Else change the version. Follow "Change a version" in `deployment/craft-fc/README.md`: the
    newest `microvm-kernel-<series>.*` tag of `amazonlinux/linux`, or the fixed Firecracker

@@ -204,18 +204,21 @@ func kernelFindings(client *http.Client, feedURL string, pins CraftFCPins) ([]Fi
 		if compareNumeric(fixed[1], pins.KernelVersion) <= 0 {
 			continue
 		}
+		// The CVEs go in the title, not in Aliases: an advisory bundles
+		// independent CVEs, and an allowlist entry for one alias would
+		// suppress them all.
 		findings = append(findings, Finding{
 			ID:        m[1],
-			Aliases:   cveRe.FindAllString(item.Description, -1),
 			Ecosystem: EcosystemCraftFC,
 			Package:   pins.KernelPackage,
 			Version:   pins.KernelVersion,
 			Severity:  alasSeverity(m[2]),
-			Title:     fmt.Sprintf("%s fixed in %s %s", m[1], pins.KernelPackage, fixed[1]),
-			URL:       strings.TrimSpace(item.Link),
-			Source:    SourceCraftFC,
-			FixedIn:   fixed[1],
-			Manifest:  DefaultCraftFCDockerfile,
+			Title: fmt.Sprintf("fixed in %s %s: %s", pins.KernelPackage, fixed[1],
+				strings.Join(cveRe.FindAllString(item.Description, -1), ", ")),
+			URL:      strings.TrimSpace(item.Link),
+			Source:   SourceCraftFC,
+			FixedIn:  fixed[1],
+			Manifest: DefaultCraftFCDockerfile,
 		})
 	}
 	return findings, nil
