@@ -996,6 +996,14 @@ ods audit --format=sarif,text > audit.sarif
 ods audit --all-lockfiles --web --python
 ```
 
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Use `--sbom-only` to scan only these inventories, as browser PR checks do.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
 #### Checking a release branch before a tag
 
 `ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,
