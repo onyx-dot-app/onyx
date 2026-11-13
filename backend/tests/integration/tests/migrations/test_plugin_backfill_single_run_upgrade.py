@@ -19,9 +19,9 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-# Before the plugin tables, so both backfills write rows. After them, so only
-# the re-sync writes rows.
-START_REVISIONS = ("fdaeeca238a1", "cdec9dd9ca3d")
+# Two and one revisions before the plugin tables, so the per-revision checks run
+# before the plugin FKs exist. After them, so only the re-sync writes rows.
+START_REVISIONS = ("c0de5e7a91b2", "fdaeeca238a1", "cdec9dd9ca3d")
 
 
 @pytest.fixture(params=START_REVISIONS)
