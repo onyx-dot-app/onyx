@@ -3,6 +3,7 @@
 import { TIMELINE_HEADER_ICON_PX } from "@/lib/timeline/components/primitives/tokens";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Collapsible } from "@opal/components";
 import { SvgCircle, SvgCheckCircle, SvgStopCircle } from "@opal/icons";
 import { FoldableLogo } from "@/lib/app/components";
 import { StepContainer } from "@/lib/timeline/components/StepContainer";
@@ -64,14 +65,13 @@ function CraftTimelineStep({
         isFirstStep={position.isFirst}
         isLastStep={position.isLast}
         noPaddingRight
+        foldBody
       >
-        {isExpanded ? (
-          <ThinkingBody
-            content={payload.content}
-            displayContent={title ? remainingContent : payload.content}
-            isStreaming={payload.isStreaming}
-          />
-        ) : null}
+        <ThinkingBody
+          content={payload.content}
+          displayContent={title ? remainingContent : payload.content}
+          isStreaming={payload.isStreaming}
+        />
       </StepContainer>
     );
   }
@@ -111,8 +111,9 @@ function CraftTimelineStep({
       isFirstStep={position.isFirst}
       isLastStep={position.isLast}
       surfaceBackground={failed ? "error" : undefined}
+      foldBody
     >
-      {expandable && isExpanded ? renderToolCallBody(toolCall) : null}
+      {expandable ? renderToolCallBody(toolCall) : null}
     </StepContainer>
   );
 }
@@ -170,7 +171,8 @@ export default function CraftTimeline({
     }
   }, [isRunning, startedAt]);
 
-  const showEndRow = foldable && isOpen && !isRunning;
+  // The end row folds with the steps, so it does not depend on `isOpen`.
+  const showEndRow = foldable && !isRunning;
 
   return (
     <TimelineRoot>
@@ -209,30 +211,35 @@ export default function CraftTimeline({
           />
         )}
       </RunHeaderRow>
-      {isOpen && (
-        <TimelineSteps
-          groups={groups}
-          renderEntry={(entry, position) => (
-            <CraftTimelineStep
-              entry={entry}
-              position={{ ...position, isLast: position.isLast && !showEndRow }}
-              defaultExpanded={!foldable && entry.status === "error"}
-            />
+      <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+        <Collapsible.Content>
+          <TimelineSteps
+            groups={groups}
+            renderEntry={(entry, position) => (
+              <CraftTimelineStep
+                entry={entry}
+                position={{
+                  ...position,
+                  isLast: position.isLast && !showEndRow,
+                }}
+                defaultExpanded={!foldable && entry.status === "error"}
+              />
+            )}
+          />
+          {showEndRow && (
+            <StepContainer
+              stepIcon={isStopped ? SvgStopCircle : SvgCheckCircle}
+              header={tTimeline(
+                isStopped ? "stoppedStep.header" : "doneStep.header"
+              )}
+              isLastStep
+              isFirstStep={false}
+            >
+              {null}
+            </StepContainer>
           )}
-        />
-      )}
-      {showEndRow && (
-        <StepContainer
-          stepIcon={isStopped ? SvgStopCircle : SvgCheckCircle}
-          header={tTimeline(
-            isStopped ? "stoppedStep.header" : "doneStep.header"
-          )}
-          isLastStep
-          isFirstStep={false}
-        >
-          {null}
-        </StepContainer>
-      )}
+        </Collapsible.Content>
+      </Collapsible.Root>
     </TimelineRoot>
   );
 }

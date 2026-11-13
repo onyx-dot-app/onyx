@@ -10,6 +10,7 @@ import {
 import { TurnGroup } from "./transformers";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { TextLoader } from "@opal/loaders";
+import { Collapsible } from "@opal/components";
 import { useTimelineExpansion } from "@/lib/timeline/chat/hooks/useTimelineExpansion";
 import { useTimelineMetrics } from "@/lib/timeline/chat/hooks/useTimelineMetrics";
 import { useTimelineHeader } from "@/lib/timeline/chat/hooks/useTimelineHeader";
@@ -225,6 +226,18 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     lastStepIsResearchAgent,
     finalAnswerComing,
   });
+  const openState = useTimelineUIState({
+    stopPacketSeen,
+    hasPackets,
+    hasDisplayContent,
+    userStopped,
+    isExpanded: true,
+    lastStep,
+    lastStepSupportsCollapsedStreaming,
+    lastStepHasCollapsedContent,
+    lastStepIsResearchAgent,
+    finalAnswerComing,
+  });
 
   const headerIsInteractive = useMemo(() => {
     if (!canFold || isMemoryOnly) {
@@ -368,8 +381,8 @@ export const AgentTimeline = React.memo(function AgentTimeline({
       )}
 
       {/* Expanded timeline view */}
-      {isExpanded && (
-        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+      <Collapsible.Root open={isExpanded} onOpenChange={handleToggle}>
+        <Collapsible.Content>
           <ExpandedTimelineContent
             turnGroups={turnGroups}
             chatState={chatState}
@@ -377,13 +390,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             stopReason={stopReason}
             isSingleStep={isSingleStep}
             userStopped={userStopped}
-            // As in Craft, a single step has no Done row.
-            showDoneStep={showDoneStep && !isSingleStep}
-            showStoppedStep={showStoppedStep && !isSingleStep}
-            hasDoneIndicator={hasDoneIndicator && !isSingleStep}
+            // As in Craft, a single step has no Done row. The rows use the
+            // open state, so they stay while the fold closes.
+            showDoneStep={openState.showDoneStep && !isSingleStep}
+            showStoppedStep={openState.showStoppedStep && !isSingleStep}
+            hasDoneIndicator={openState.hasDoneIndicator && !isSingleStep}
           />
-        </div>
-      )}
+        </Collapsible.Content>
+      </Collapsible.Root>
     </TimelineRoot>
   );
 }, areAgentTimelinePropsEqual);

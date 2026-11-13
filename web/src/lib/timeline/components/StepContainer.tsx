@@ -45,6 +45,8 @@ export interface StepContainerProps {
   withRail?: boolean;
   /** Override the surface background variant */
   surfaceBackground?: TimelineSurfaceBackground;
+  /** Fold the body open and closed with `isExpanded`, animated. */
+  foldBody?: boolean;
 }
 
 /** Visual wrapper for timeline steps - icon, connector line, header, and content */
@@ -67,6 +69,7 @@ export function StepContainer({
   noPaddingRight = false,
   withRail = true,
   surfaceBackground,
+  foldBody = false,
 }: StepContainerProps) {
   const iconNode = StepIconComponent ? (
     <StepIconComponent
@@ -97,6 +100,7 @@ export function StepContainer({
         collapsedIcon={CollapsedIconComponent}
         noPaddingRight={noPaddingRight}
         surfaceBackground={surfaceBackground}
+        foldBody={foldBody}
       >
         {children}
       </TimelineStepContent>
