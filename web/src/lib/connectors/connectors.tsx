@@ -1106,6 +1106,56 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_sm: {
+    description: "connectors.jira_sm.description",
+    subtext: "connectors.jira_sm.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira_sm.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder: "connectors.jira_sm.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "tab",
+        name: "indexing_scope",
+        optional: true,
+        tabs: [
+          {
+            value: "project",
+            label:
+              "connectors.jira_sm.fields.indexing_scope.tabs.project.label",
+            fields: [
+              {
+                type: "text",
+                label: "connectors.jira_sm.fields.project_key.label",
+                name: "project_key",
+                description: "connectors.jira_sm.fields.project_key.description",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label:
+              "connectors.jira_sm.fields.indexing_scope.tabs.jql.label",
+            fields: [
+              {
+                type: "text",
+                label: "connectors.jira_sm.fields.jql_query.label",
+                name: "jql_query",
+                description: "connectors.jira_sm.fields.jql_query.description",
+              },
+            ],
+          },
+        ],
+        defaultTab: "project",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [
