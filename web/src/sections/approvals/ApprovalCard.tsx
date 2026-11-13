@@ -96,7 +96,11 @@ export default function ApprovalCard({
       <Section gap={1.5} alignItems="stretch" height="auto">
         {single
           ? action?.description && (
-              <Text font="secondary-body" color="text-03" maxLines={1}>
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="wrap-anywhere"
+              >
                 {action.description}
               </Text>
             )
@@ -105,7 +109,7 @@ export default function ApprovalCard({
                 key={item.id}
                 font="secondary-body"
                 color="text-04"
-                maxLines={1}
+                wordWrap="wrap-anywhere"
               >
                 {item.description
                   ? t("actionWithDescription", {
@@ -156,8 +160,12 @@ export default function ApprovalCard({
             <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
               <Collapsible.Trigger className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02">
                 <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
-                <span className="min-w-0 flex-1 truncate">
-                  <Text font="main-ui-muted" color="text-04">
+                <span className="min-w-0 flex-1">
+                  <Text
+                    font="main-ui-muted"
+                    color="text-04"
+                    wordWrap="wrap-anywhere"
+                  >
                     {t("header.required", { headline })}
                   </Text>
                 </span>

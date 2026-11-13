@@ -117,6 +117,31 @@ describe("pending", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("wraps long action text instead of cutting it", () => {
+    const description = `Calls ${"/very/long/path".repeat(20)}`;
+    const { unmount } = renderCard({
+      actions: [{ id: "send", name: "Send message", description }],
+    });
+    expect(screen.getByText(description)).not.toHaveClass("truncate");
+    const trigger = screen.getByRole("button", { name: header });
+    const headline = within(trigger).getByText(
+      "Approval requested: Send message in Slack"
+    );
+    expect(headline).not.toHaveClass("truncate");
+    expect(headline.parentElement).not.toHaveClass("truncate");
+    unmount();
+
+    renderCard({
+      actions: [
+        { id: "send", name: "Send message", description },
+        { id: "delete", name: "Delete message" },
+      ],
+    });
+    expect(screen.getByText(`Send message: ${description}`)).not.toHaveClass(
+      "truncate"
+    );
+  });
+
   it("disables the decisions while one is submitted", async () => {
     const user = setupUser();
     renderCard({ onDecide: () => new Promise<void>(() => {}) });

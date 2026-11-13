@@ -65,6 +65,7 @@ class ApprovalView(BaseModel):
     created_at: datetime
     decision: ApprovalDecision | None
     decided_at: datetime | None
+    decided_via: ApprovalDecidedVia | None
     target_kind: GatedAppKind | None = Field(
         default=None, validation_alias=AliasPath("gated_app", "kind"), exclude=True
     )

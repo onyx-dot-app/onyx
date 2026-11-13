@@ -24,6 +24,7 @@ const approval: ApprovalView = {
   expires_at: null,
   decision: null,
   decided_at: null,
+  decided_via: null,
   is_live: true,
 };
 test("a pending request shows its header, details, and decisions inside the comet border", () => {
@@ -54,13 +55,22 @@ test("a pending request shows its header, details, and decisions inside the come
 // Decision submission
 describe("Decision submission", () => {
   it("uses the shared decision endpoint for session approval", async () => {
+    jest.mocked(postApprovalDecision).mockResolvedValue({
+      ...approval,
+      decision: "APPROVED",
+      decided_via: "SESSION_GRANT",
+      is_live: false,
+    });
     const user = setupUser();
     render(<ApprovalCard approval={approval} />);
     await user.click(screen.getByRole("button", { name: /approve.*session/i }));
+    expect(postApprovalDecision).toHaveBeenCalledWith(
+      "request",
+      "approve_session"
+    );
     await waitFor(() =>
-      expect(postApprovalDecision).toHaveBeenCalledWith(
-        "request",
-        "approve_session"
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Approved for this session: Send message in Slack"
       )
     );
   });
