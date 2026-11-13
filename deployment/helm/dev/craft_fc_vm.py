@@ -174,7 +174,8 @@ def build_bundle(src: Path, mount_path: str = "/mnt/skills") -> Bundle:
     warnings: list[str] = []
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
         for name, path in _walk(src):
-            mode = path.lstat().st_mode
+            info_stat = path.lstat()
+            mode = info_stat.st_mode
             if stat.S_ISLNK(mode):
                 raise CommandError(f"{name}: symlinks are not allowed in a bundle")
             entries += 1
@@ -187,7 +188,12 @@ def build_bundle(src: Path, mount_path: str = "/mnt/skills") -> Bundle:
                 continue
             if not stat.S_ISREG(mode):
                 raise CommandError(f"{name}: only files and directories are allowed")
-            data = path.read_bytes()
+            # Check the size first so an oversized file is never loaded.
+            remaining = MAX_CONTENT_BYTES - content
+            if info_stat.st_size > remaining:
+                raise CommandError(f"content is over {MAX_CONTENT_BYTES >> 20} MiB")
+            with path.open("rb") as f:
+                data = f.read(remaining + 1)
             content += len(data)
             if content > MAX_CONTENT_BYTES:
                 raise CommandError(f"content is over {MAX_CONTENT_BYTES >> 20} MiB")

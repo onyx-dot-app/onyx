@@ -26,6 +26,11 @@ if SPEC is None or SPEC.loader is None:
     raise RuntimeError("Cannot load craft_fc_vm.py")
 vm = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(vm)
+HELPER_SPEC = importlib.util.spec_from_file_location("craft_fc_pod_helper", vm.HELPER)
+if HELPER_SPEC is None or HELPER_SPEC.loader is None:
+    raise RuntimeError("Cannot load craft_fc_pod_helper.py")
+helper = importlib.util.module_from_spec(HELPER_SPEC)
+HELPER_SPEC.loader.exec_module(helper)
 
 PROFILE = remote.parse_profile(
     {
@@ -122,6 +127,15 @@ class BundleTest(unittest.TestCase):
             vm.build_bundle(self.root / "empty")
         with self.assertRaisesRegex(vm.CommandError, "not a directory"):
             vm.build_bundle(self.root / "missing")
+
+    def test_oversized_file_is_refused_before_it_is_read(self) -> None:
+        src = self.tree("s", {"big": b"0123456789"})
+        with (
+            patch.object(vm, "MAX_CONTENT_BYTES", 8),
+            patch.object(Path, "open", side_effect=AssertionError("read")),
+            self.assertRaisesRegex(vm.CommandError, "content is over"),
+        ):
+            vm.build_bundle(src)
 
     def test_limits(self) -> None:
         src = self.tree("s", {"a": b"12345", "b": b"12345"})
@@ -241,6 +255,25 @@ class HelperProtocolTest(unittest.TestCase):
         with patch.object(vm, "helper_argv", lambda _t: argv(error, 3)):
             results = list(vm.run_helper(target, {"command_name": "vms"}))
         self.assertEqual(results[0]["code"], "NO_VM")
+
+    def test_multibyte_text_split_across_chunks(self) -> None:
+        seen: list[tuple[str, str]] = []
+        text = helper.StreamText(lambda stream, out: seen.append((stream, out)))
+        snow = "\u2603".encode()
+        text.feed("stdout", b"a" + snow[:1])
+        text.feed("stderr", b"e")
+        text.feed("stdout", snow[1:] + b"b")
+        text.feed("stdout", snow[:2])
+        text.flush()
+        self.assertEqual(
+            seen,
+            [
+                ("stdout", "a"),
+                ("stderr", "e"),
+                ("stdout", "\u2603b"),
+                ("stdout", "\ufffd"),
+            ],
+        )
 
     def test_helper_file_compiles(self) -> None:
         compile(vm.HELPER.read_bytes(), str(vm.HELPER), "exec")

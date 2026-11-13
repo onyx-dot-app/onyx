@@ -203,7 +203,7 @@ name: craft-dev
 kube:
   context: <kube context name>          # always passed with --context
   allowed_contexts: [<kube context name>] # --context or CRAFT_DEV_CONTEXT must be in this list
-  kubeconfig: ~/.kube/<file>.yaml       # optional; the local API always gets the kubeconfig the checks use
+  kubeconfig: ~/.kube/<file>.yaml       # optional; relative to this file; the local API gets the same file
   server: https://<eks endpoint>        # optional; refuse a context with another API server
 aws:
   profile: <aws sso profile>            # optional

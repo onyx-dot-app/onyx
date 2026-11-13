@@ -90,8 +90,9 @@ def parse_version(text: str) -> tuple[int, ...]:
     return tuple(int(part) for part in match.groups())
 
 
-def parse_profile(data: object) -> RemoteProfile:
-    """Validate a profile mapping; reject placeholders and unknown contexts."""
+def parse_profile(data: object, base: Path | None = None) -> RemoteProfile:
+    """Validate a profile mapping; reject placeholders and unknown contexts.
+    A relative kube.kubeconfig is relative to base, the profile file's directory."""
     if not isinstance(data, dict):
         raise ValueError("Profile must be a YAML mapping")
     data = cast(dict[str, Any], data)
@@ -126,7 +127,9 @@ def parse_profile(data: object) -> RemoteProfile:
         name=_text(data, "name", "profile", TARGET),
         context=context,
         allowed_contexts=tuple(allowed),
-        kubeconfig=Path(kubeconfig).expanduser() if kubeconfig else None,
+        kubeconfig=(base or Path.cwd()) / Path(kubeconfig).expanduser()
+        if kubeconfig
+        else None,
         server=_optional_text(kube, "server", "kube"),
         namespace=_text(namespaces, "app", "namespaces", "onyx"),
         sandbox_namespace=_text(namespaces, "sandbox", "namespaces", "onyx-sandboxes"),
@@ -182,7 +185,7 @@ def load_profile(root: Path, path: Path | None = None) -> RemoteProfile:
         raise ValueError(
             f"No {TARGET} profile at {path}; set {PROFILE_ENV} or pass --profile"
         )
-    return parse_profile(yaml.safe_load(path.read_text()))
+    return parse_profile(yaml.safe_load(path.read_text()), path.absolute().parent)
 
 
 def select_context(profile: RemoteProfile, requested: str | None) -> str:

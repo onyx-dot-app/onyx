@@ -8,6 +8,7 @@ Every result line starts with `RESULT_PREFIX`; other output is log noise.
 It acts only on the sandbox of the user named in the request.
 """
 
+import codecs
 import json
 import sys
 import time
@@ -204,6 +205,26 @@ class Target:
         return PlacedVm(node=node, vm=vm, created=False, sandboxd_key=key)
 
 
+class StreamText:
+    """UTF-8 text per output stream; a character split across chunks stays whole."""
+
+    def __init__(self, on_output: Callable[[str, str], None]) -> None:
+        self.on_output = on_output
+        self.decoders: dict[str, codecs.IncrementalDecoder] = {}
+
+    def feed(self, stream: str, data: bytes) -> None:
+        decoder = self.decoders.setdefault(
+            stream, codecs.getincrementaldecoder("utf-8")(errors="replace")
+        )
+        if out := decoder.decode(data):
+            self.on_output(stream, out)
+
+    def flush(self) -> None:
+        for stream, decoder in self.decoders.items():
+            if out := decoder.decode(b"", final=True):
+                self.on_output(stream, out)
+
+
 def _run(
     target: Target,
     placed: "PlacedVm",
@@ -217,11 +238,12 @@ def _run(
     touch_sandbox_vm(target.tenant_cache, placed)
     daemon = sandbox_daemon(target.factory(), placed)
     result: dict[str, Any] = {}
+    text = StreamText(on_output)
     for event in daemon.run(
         ExecCommand(argv=argv, cwd=cwd, deadline_seconds=EXEC_DEADLINE_SECONDS)
     ):
         if isinstance(event, ExecOutput):
-            on_output(event.stream.value.lower(), event.data.decode(errors="replace"))
+            text.feed(event.stream.value.lower(), event.data)
         elif isinstance(event, ExecGap):
             on_output("stderr", f"[{event.end - event.start} bytes dropped]\n")
         elif isinstance(event, ExecResult):
@@ -230,6 +252,7 @@ def _run(
                 "exit_code": event.exit_code,
                 "signal": event.signal,
             }
+    text.flush()
     return result
 
 

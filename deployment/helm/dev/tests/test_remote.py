@@ -117,6 +117,22 @@ class ProfileTests(unittest.TestCase):
         custom = parse_profile({**PROFILE, "agent": {"container": "agent"}})
         self.assertEqual(custom.agent_container, "agent")
 
+    def test_relative_kubeconfig_is_relative_to_the_profile_file(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            base = Path(directory).resolve()
+            (base / "profiles").mkdir()
+            (base / "work").mkdir()
+            data = {**PROFILE, "kube": {"context": "ctx-a", "kubeconfig": "kc.yaml"}}
+            (base / "profiles/p.yaml").write_text(json.dumps(data))
+            cwd = Path.cwd()
+            os.chdir(base / "work")
+            try:
+                profile = remote.load_profile(base, Path("../profiles/p.yaml"))
+            finally:
+                os.chdir(cwd)
+        assert profile.kubeconfig is not None
+        self.assertEqual(profile.kubeconfig.resolve(), base / "profiles/kc.yaml")
+
     def test_profile_rejects_placeholders_and_unlisted_contexts(self) -> None:
         for broken in (
             {**PROFILE, "kube": {"context": "<context>"}},
