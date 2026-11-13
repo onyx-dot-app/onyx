@@ -26,6 +26,7 @@ from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
 )
+from onyx.connectors.jira.source_operations import JiraApiError
 from onyx.connectors.jira_service_management.source_operations import (
     JiraServiceManagementSourceOperations,
 )
@@ -165,12 +166,28 @@ class _RequestReadCheck(_JsmCheck):
                 ]
             )
         issue_key = keys[0]
+        advisories: list[CheckAdvisory] = []
         try:
             gateway.get_request(issue_key=issue_key, fast=True)
             gateway.get_request_comments(issue_key=issue_key, fast=True)
             gateway.get_request_slas(issue_key=issue_key, fast=True)
+        except JiraApiError as e:
+            if getattr(e, "status_code", None) == 404 or "404" in str(e):
+                advisories.append(
+                    CheckAdvisory(
+                        message=(
+                            f"Sample issue '{issue_key}' has no customer request record; "
+                            "request-specific enrichment will be applied when available."
+                        )
+                    )
+                )
+            else:
+                raise
         except Exception:
-            pass
+            raise
+
+        if advisories:
+            return CheckOutput(advisories=advisories)
         return None
 
 
