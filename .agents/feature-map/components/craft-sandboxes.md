@@ -58,7 +58,9 @@ This component owns:
   in-guest egress relay inside each VM, and the node agent on each KVM node.
   The API server will reach a VM's guest daemon through the node agent: the
   agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
-  over mTLS and then vsock, without decoding it. Session saves in this
+  over mTLS and then vsock, without decoding it. The guest daemon runs as
+  root, but it runs each command as the sandbox user (uid 1000,
+  `--command-user`). Session saves in this
   runtime hold only `attachments/`, without dependencies
   (tar + zstd). The node agent moves the archive to and from object storage
   with presigned URLs from the API server.
@@ -297,7 +299,10 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - Session saves (`.../firecracker/session_saves.py`): the idle evictor
   (node reports, `get_eviction_policy`, 15 min) saves each session on the
   VM first, in the background: CaptureSession of the session's top-level
-  directories (without dependencies and caches), presigned upload, file
+  directories and files (without dependencies and caches; files go under
+  `.onyx-top-level` in the archive, which older daemons restore as a
+  directory; a later save sends that directory as a root, and the daemon
+  takes its files back as top-level files), presigned upload, file
   store finalize, commit of the new save in the cache, then deletion of the
   old archive. A busy sandbox (running command, turn, parked approval) or a
   failed save keeps the VM. A session's first use on a new VM instance

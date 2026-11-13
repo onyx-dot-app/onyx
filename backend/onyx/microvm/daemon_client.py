@@ -13,6 +13,7 @@ running, the daemon is unreachable) is a `HostAgentError`.
 
 import hashlib
 import secrets
+import threading
 from collections.abc import Generator, Iterator
 from datetime import datetime, timezone
 from enum import Enum
@@ -61,6 +62,10 @@ _ENTROPY_BYTES = 64
 _DEFAULT_EXEC_DEADLINE_SECONDS = 30 * 60.0
 # Run and Stream end with the result; the gRPC deadline only bounds a lost stream.
 _STREAM_MARGIN_SECONDS = 60.0
+# The agent resets a stream at its deadline with CANCELLED, and that reset can
+# arrive before the client's own deadline fires. A stream window therefore
+# ends on the client first, well before the deadline it sends.
+_WINDOW_MARGIN_SECONDS = 5.0
 # File transfers and zips of up to the daemon's --max-file-bytes (1 GiB).
 _TRANSFER_TIMEOUT_SECONDS = max(SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS, 600.0)
 # WriteFile/UploadFile data messages (the daemon accepts up to 4 MiB).
@@ -412,13 +417,17 @@ class SandboxDaemonClient:
         *,
         stdout_offset: int = 0,
         stderr_offset: int = 0,
-        timeout_seconds: float = _DEFAULT_EXEC_DEADLINE_SECONDS
-        + _STREAM_MARGIN_SECONDS,
+        window_seconds: float | None = None,
     ) -> Generator[ExecEvent, None, None]:
         """Stream an execution's output from the offsets, then its result.
         Works while it runs and after it ended. A gap event marks bytes the
         daemon no longer keeps. The call starts when the iterator is first
-        read."""
+        read. With `window_seconds`, the stream ends without a result when
+        the window passes; the command keeps running."""
+        if window_seconds is None:
+            timeout = _DEFAULT_EXEC_DEADLINE_SECONDS + _STREAM_MARGIN_SECONDS
+        else:
+            timeout = window_seconds + _WINDOW_MARGIN_SECONDS
         call: _ResponseStream[sandboxd_pb2.ExecEvent] = self._stub.Stream(
             sandboxd_pb2.StreamRequest(
                 execution_id=execution_id,
@@ -426,9 +435,30 @@ class SandboxDaemonClient:
                 stderr_offset=stderr_offset,
             ),
             metadata=self._authed(),
-            timeout=timeout_seconds,
+            timeout=timeout,
         )
-        yield from self._exec_events(call)
+        if window_seconds is None:
+            yield from self._exec_events(call)
+            return
+        window_ended = threading.Event()
+
+        def end_window() -> None:
+            window_ended.set()
+            call.cancel()
+
+        timer = threading.Timer(window_seconds, end_window)
+        timer.daemon = True
+        timer.start()
+        try:
+            yield from self._exec_events(call)
+        except HostAgentError as e:
+            ended = (
+                window_ended.is_set() and e.code is grpc.StatusCode.CANCELLED
+            ) or e.code is grpc.StatusCode.DEADLINE_EXCEEDED
+            if e.reached_agent or not ended:
+                raise
+        finally:
+            timer.cancel()
 
     def interact(
         self, execution_id: str, *, data: bytes = b"", close_stdin: bool = False

@@ -396,6 +396,25 @@ def test_an_empty_write_polls_until_the_command_ends(
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
 
 
+def test_a_stream_reset_at_the_agent_deadline_ends_the_yield_cleanly(
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    # The agent resets the stream (CANCELLED) just before the deadline the
+    # client sent: the client must end the yield first.
+    node.agent.stream_reset_lead_seconds = 0.2
+    ref = new_ref()
+    _, result = _run(sandbox.exec_command(ref, "cat", yield_time_ms=300))
+    session = result.exec_session_id
+    assert session is not None and result.completion is None
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
+
+    _, polled = _run(sandbox.write_stdin(ref, session, "hi", yield_time_ms=300))
+    assert polled.exec_session_id == session and polled.output == "hi"
+
+
 def test_a_character_split_between_polls_is_kept(
     monkeypatch: pytest.MonkeyPatch,
     client_factory: InsecureClientFactory,

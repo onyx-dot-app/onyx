@@ -48,7 +48,11 @@ trap cleanup EXIT
 
 uname -a
 "$artifacts/firecracker" --version
-bash "$repo/deployment/craft-runtime/check-rootfs.sh" "$1" "$work/images"
+# The daemon, init and harness tests kill the daemon, remount drives and read
+# root-only state: the test drive runs commands as root. The host agent KVM
+# lane checks the default (commands as the sandbox user).
+ROOTFS_DAEMON_CMD="/craft-fc/bin/guest-daemon --command-user=" \
+  bash "$repo/deployment/craft-runtime/check-rootfs.sh" "$1" "$work/images"
 cp "$artifacts/vmlinux" "$work/images/vmlinux"
 truncate -s 1G "$work/images/scratch-empty.ext4"
 mkfs.ext4 -q -F -m 0 "$work/images/scratch-empty.ext4"

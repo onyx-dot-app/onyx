@@ -297,7 +297,8 @@ At boot, init:
    fails the VM).
 5. Starts two services with only the `guest.env` environment:
    - the guest daemon (`DAEMON_CMD`, default `/craft-fc/bin/guest-daemon`,
-     vsock port 52), as root;
+     vsock port 52), as root. The daemon runs commands as the sandbox user
+     (`--command-user`, default `1000:1000`);
    - the egress relay, as uid 65534 with no extra groups, no capabilities and
      `no_new_privs` (`busybox nsenter -F -G -S`, then `busybox setpriv --nnp`).
      Busybox `setpriv` cannot clear the capability bounding set. With a
@@ -379,7 +380,8 @@ you change `craft-init`, `attach.sh` or the drive layout, boot the result on a
 KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
-- `apt-get install`, `pip install` and `npm install -g` work as root;
+- commands run as uid 1000; with `--daemon-cmd "/craft-fc/bin/guest-daemon --command-user="`
+  (commands as root), `apt-get install`, `pip install` and `npm install -g` work;
 - writes to `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` fail, also
   after `mount -o remount,rw`, and a program on them does not run (`noexec`);
 - with slot B attached: it is not mounted, and `MountManaged` of slot B

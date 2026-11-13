@@ -197,6 +197,7 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     sandbox = make_sandbox()
     sandbox.write_file(ref, "src/app.py", b"print(1)\n")
     sandbox.write_file(ref, "out/report.md", b"# Report\n")
+    sandbox.write_file(ref, "report.py", b"print(2)\n")
     sandbox.write_file(ref, "node_modules/x/index.js", b"dependency")
     sandbox.write_file(ref, ".pytest_cache/v/cache", b"cache")
     sandbox.write_file(ref, "env-3.12/pyvenv.cfg", b"home = /usr/bin\n")
@@ -209,7 +210,7 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
     save = harness_state.get_session_save(tenant_cache, ref.session_id)
     assert save is not None and save.file_id in node.agent.objects
-    assert save.roots == ["out", "src"]
+    assert save.roots == [".onyx-top-level", "out", "src"]
     assert get_sandbox_placement(tenant_cache, ref.sandbox_id) is None
     assert _session_files(node, ref) == {}
 
@@ -219,6 +220,7 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     assert _session_files(node, ref) == {
         "src/app.py": b"print(1)\n",
         "out/report.md": b"# Report\n",
+        "report.py": b"print(2)\n",
     }
     assert node.agent.create_calls == 2
     assert store.downloads == 1
@@ -226,6 +228,28 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     sandbox.read_file(ref, "out/report.md", max_bytes=100)
     collect_exec_result(sandbox.exec_command(ref, "echo hi"))
     assert store.downloads == 1
+
+
+def test_a_save_keeps_the_top_level_files_that_an_older_daemon_restored(
+    tenant_cache: CacheBackend,
+    make_sandbox: MakeSandbox,
+    node: RunningFakeAgent,
+    ref: HarnessSandboxRef,
+) -> None:
+    sandbox = make_sandbox()
+    # An older daemon restores the saved top-level files into .onyx-top-level.
+    sandbox.write_file(ref, ".onyx-top-level/report.py", b"print(2)\n")
+    sandbox.write_file(ref, "src/a.txt", b"one")
+    assert _sleep(sandbox, ref.sandbox_id) is VmStopOutcome.STOPPED
+    save = harness_state.get_session_save(tenant_cache, ref.session_id)
+    assert save is not None and save.roots == [".onyx-top-level", "src"]
+
+    other_pod = make_sandbox()
+    assert other_pod.read_file(ref, "report.py", max_bytes=100) == b"print(2)\n"
+    assert _session_files(node, ref) == {
+        "src/a.txt": b"one",
+        "report.py": b"print(2)\n",
+    }
 
 
 def test_a_new_save_replaces_the_old_one_and_deletes_its_archive(
