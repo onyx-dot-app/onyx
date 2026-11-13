@@ -19,6 +19,10 @@ import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { flushToolSelection } from "@/lib/tools/hooks";
 import type { PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { toast } from "@opal/layouts";
+import { PacketType } from "@/app/app/services/streamingModels";
+import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
 Element.prototype.scrollIntoView = jest.fn();
 
@@ -476,6 +480,88 @@ test("a failed submission keeps text typed while it was pending", async () => {
   await waitFor(() =>
     expect(textbox).toHaveTextContent(/^Keep this draft\s*more$/)
   );
+});
+
+/** Puts a request that waits for the user in the latest response. */
+function awaitToolApproval() {
+  const store = useChatSessionStore.getState();
+  const tree = new Map(store.sessions.get("session")!.messageTree);
+  tree.set(2, {
+    ...tree.get(2)!,
+    packets: [
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: {
+          type: PacketType.TOOL_APPROVAL_REQUEST,
+          approval_id: "approval-1",
+          tool_call_id: "call-1",
+          tool_name: "mcp__3__github__create_issue",
+          display_name: "Create issue",
+          arguments: {},
+          expires_at: "2099-01-01T00:00:00Z",
+        },
+      },
+    ],
+  });
+  store.updateSessionMessageTree("session", tree);
+}
+
+test.each(["input", "streaming"] as const)(
+  "a waiting tool approval keeps the %s draft and points at its card",
+  async (chatState) => {
+    useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+    const warning = jest.spyOn(toast, "warning");
+    awaitToolApproval();
+    const user = setupUser();
+    const inputProps = props(chatState);
+    render(<ChatInput {...inputProps} />);
+    const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+    await user.click(textbox);
+    await user.keyboard("{Enter}");
+
+    expect(inputProps.onSubmit).not.toHaveBeenCalled();
+    expect(textbox).toHaveTextContent("Keep this draft");
+    expect(mockClearDraft).not.toHaveBeenCalled();
+    expect(
+      fetchSpy.mock.calls.some(([, init]) => init?.method === "POST")
+    ).toBe(false);
+    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
+    expect(warning).toHaveBeenCalledWith(
+      "Approve or reject the pending tool calls first."
+    );
+  }
+);
+
+test("a server refusal for a waiting approval returns the text to the composer", async () => {
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  const warning = jest.spyOn(toast, "warning");
+  const error = jest.spyOn(toast, "error");
+  const user = setupUser();
+  fetchSpy.mockImplementation(async (_url, init) =>
+    init?.method === "POST"
+      ? new Response(
+          JSON.stringify({
+            error_code: APPROVAL_PENDING_ERROR_CODE,
+            detail: "Approve or reject the pending tool calls",
+          }),
+          { status: 409 }
+        )
+      : new Response(JSON.stringify(pending))
+  );
+  render(<ChatInput {...props("streaming")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+  await user.click(textbox);
+  await user.keyboard("{Enter}");
+
+  await waitFor(() => expect(textbox).toHaveTextContent("Keep this draft"));
+  expect(warning).toHaveBeenCalledWith(
+    "Approve or reject the pending tool calls first."
+  );
+  expect(error).not.toHaveBeenCalled();
+  // This tab has no card for the other tab's turn.
+  expect(useToolApprovalUi.getState().nudge).toBeNull();
 });
 
 test("a queued message waits for the chat's tool selection to save", async () => {

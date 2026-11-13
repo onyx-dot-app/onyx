@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
         "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
         "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
+      },
+      "pendingToolApproval": {
+        "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "작업 중"
+          },
+          "waitingForApproval": {
+            "label": "승인을 기다리는 중"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "이 채팅에서 승인",
+        "tooltip": "지금 승인하고 이 채팅의 나머지 동안 이 도구를 다시 묻지 않고 실행합니다"
+      },
       "approveOnce": {
         "ariaLabel": "이 작업을 한 번만 승인",
         "button": "한 번 승인"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "승인됨: {headline}",
         "closed": "더 이상 대기하지 않음: {headline}",
+        "disabled": "비활성화됨: {headline}",
         "expired": "시간 초과: {headline}",
         "rejected": "승인되지 않음: {headline}",
+        "approvedForChat": "이 채팅에서 승인됨: {headline}",
         "approvedForSession": "이 세션에서 승인됨: {headline}"
       },
       "submitError": "결정을 제출할 수 없습니다. 다시 시도하세요.",

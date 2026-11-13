@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
         "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente.",
         "stopSubagentsFailed": "No se pudieron detener los subagentes."
+      },
+      "pendingToolApproval": {
+        "toast": "Primero aprueba o rechaza las llamadas a herramientas pendientes."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "Trabajando"
+          },
+          "waitingForApproval": {
+            "label": "Esperando tu aprobación"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "Aprobar para este chat",
+        "tooltip": "Aprueba ahora y ejecuta esta herramienta sin volver a preguntar durante el resto de este chat"
+      },
       "approveOnce": {
         "ariaLabel": "Aprobar esta acción una vez",
         "button": "Aprobar una vez"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "Aprobado: {headline}",
         "closed": "Ya no espera: {headline}",
+        "disabled": "Desactivado: {headline}",
         "expired": "Tiempo agotado: {headline}",
         "rejected": "No aprobado: {headline}",
+        "approvedForChat": "Aprobado para este chat: {headline}",
         "approvedForSession": "Aprobado para esta sesión: {headline}"
       },
       "submitError": "No se pudo enviar tu decisión. Inténtalo de nuevo.",

@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
         "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
         "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approuvez ou refusez d'abord les appels d'outils en attente."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "En cours"
+          },
+          "waitingForApproval": {
+            "label": "En attente de votre approbation"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "Approuver pour ce chat",
+        "tooltip": "Approuver maintenant et exécuter cet outil sans redemander pendant le reste de ce chat"
+      },
       "approveOnce": {
         "ariaLabel": "Approuver cette action une fois",
         "button": "Approuver une fois"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "Approuvé : {headline}",
         "closed": "N'attend plus : {headline}",
+        "disabled": "Désactivé : {headline}",
         "expired": "Délai dépassé : {headline}",
         "rejected": "Non approuvé : {headline}",
+        "approvedForChat": "Approuvé pour ce chat : {headline}",
         "approvedForSession": "Approuvé pour cette session : {headline}"
       },
       "submitError": "Impossible d'envoyer votre décision. Réessayez.",

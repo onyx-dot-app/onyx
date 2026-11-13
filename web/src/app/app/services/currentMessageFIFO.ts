@@ -3,12 +3,15 @@ import {
   PacketType,
   sendMessage,
   SendMessageParams,
+  ApprovalPendingError,
 } from "@/app/app/services/lib";
 
 export class CurrentMessageFIFO {
   private stack: PacketType[] = [];
   isComplete: boolean = false;
   error: string | null = null;
+  /** The server refused the send because the chat waits for a tool approval. */
+  approvalPending = false;
   private resolveAdmission: (value: number | null) => void = () => {};
   private rejectAdmission: (reason: Error) => void = () => {};
   /** Accepted stream ID, or null if the server finishes without admission. */
@@ -64,6 +67,7 @@ export async function updateCurrentMessageFIFO(
     stack.complete();
   } catch (error: unknown) {
     stack.complete(error instanceof ChatSendRejectedError ? undefined : error);
+    stack.approvalPending = error instanceof ApprovalPendingError;
     if (error instanceof Error) {
       if (error.name === "AbortError") {
         console.debug("Stream aborted");

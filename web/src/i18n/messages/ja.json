@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
         "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
         "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
+      },
+      "pendingToolApproval": {
+        "toast": "先に保留中のツール呼び出しを承認または拒否してください。"
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "作業中"
+          },
+          "waitingForApproval": {
+            "label": "承認を待っています"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "このチャットで承認",
+        "tooltip": "今すぐ承認し、このチャットの残りの間はこのツールを確認なしで実行します"
+      },
       "approveOnce": {
         "ariaLabel": "このアクションを1回だけ承認",
         "button": "1回だけ承認"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "承認済み: {headline}",
         "closed": "承認待ちではありません: {headline}",
+        "disabled": "無効: {headline}",
         "expired": "タイムアウト: {headline}",
         "rejected": "未承認: {headline}",
+        "approvedForChat": "このチャットで承認済み: {headline}",
         "approvedForSession": "このセッションで承認済み: {headline}"
       },
       "submitError": "決定を送信できませんでした。もう一度お試しください。",

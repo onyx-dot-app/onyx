@@ -92,6 +92,8 @@ export interface AgentTimelineProps {
   toolProcessingDuration?: number;
   /** A code mode program works between tool calls; it has no step */
   codeModeWorking?: boolean;
+  /** A tool call in the latest turn waits for the user's approval */
+  awaitingApproval?: boolean;
 }
 
 /**
@@ -114,7 +116,8 @@ function areAgentTimelinePropsEqual(
     prev.chatState === next.chatState &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
-    prev.codeModeWorking === next.codeModeWorking
+    prev.codeModeWorking === next.codeModeWorking &&
+    prev.awaitingApproval === next.awaitingApproval
   );
 }
 
@@ -132,12 +135,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   generatedImageCount = 0,
   toolProcessingDuration,
   codeModeWorking = false,
+  awaitingApproval = false,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    codeModeWorking
+    codeModeWorking,
+    awaitingApproval
   );
 
   // Memoized metrics derived from turn groups
@@ -284,6 +289,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             onToggle={handleToggle}
             streamingStartTime={streamingStartTime}
             toolProcessingDuration={toolProcessingDuration}
+            awaitingApproval={awaitingApproval}
           />
         );
 
@@ -342,6 +348,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     processingDurationSeconds,
     generatedImageCount,
     toolProcessingDuration,
+    awaitingApproval,
   ]);
 
   // Empty state: no packets, still streaming, and not stopped

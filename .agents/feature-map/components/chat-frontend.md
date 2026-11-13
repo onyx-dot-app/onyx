@@ -52,6 +52,18 @@
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
+- **A tool call needs approval.** An approval card shows in the answer with
+  the tool's arguments and a deadline. The user approves once, approves for
+  the chat, or rejects; the card then becomes a one-line record of the
+  outcome, or of "No longer waiting" when the server returns 409 or 404. Once
+  the stop packet arrives, an undecided card reads as no longer waiting
+  (`lib/chat/toolApprovals.ts:toolApprovalStatus`).
+  While a card waits, the user can type but not send: the composer keeps
+  the draft, scrolls to the card, shakes it and shows a toast
+  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). A 409
+  `APPROVAL_PENDING` from the server, for example for a turn that
+  another tab started, gets the same treatment.
+  What each decision does is in [[mcp-and-custom-tools]].
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.

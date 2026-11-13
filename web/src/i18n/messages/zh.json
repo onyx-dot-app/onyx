@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
         "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
         "stopSubagentsFailed": "无法停止子代理。"
+      },
+      "pendingToolApproval": {
+        "toast": "请先批准或拒绝待处理的工具调用。"
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "处理中"
+          },
+          "waitingForApproval": {
+            "label": "正在等待你的批准"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "在此聊天中批准",
+        "tooltip": "立即批准，并在此聊天的剩余时间内运行此工具而不再询问"
+      },
       "approveOnce": {
         "ariaLabel": "仅批准此操作一次",
         "button": "批准一次"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "已批准：{headline}",
         "closed": "不再等待：{headline}",
+        "disabled": "已禁用：{headline}",
         "expired": "已超时：{headline}",
         "rejected": "未批准：{headline}",
+        "approvedForChat": "已在此聊天中批准：{headline}",
         "approvedForSession": "已在此会话中批准：{headline}"
       },
       "submitError": "无法提交你的决定。请重试。",

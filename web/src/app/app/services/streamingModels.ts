@@ -77,6 +77,10 @@ export enum PacketType {
   // stream their own tool packets at the same placement with sub_turn_index.
   CODE_MODE_START = "code_mode_start",
   CODE_MODE_DELTA = "code_mode_delta",
+
+  // Tool call approvals: the run waits for the user's decision on a request
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -526,6 +530,35 @@ export interface ToolCallDebug extends BaseObj {
   tool_args: Record<string, unknown>;
 }
 
+// Tool Approval Packets
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // ISO 8601 UTC; the server resolves the request when it passes
+  expires_at: string;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the
+  // tool. "disabled": an approval found the tool disabled, so the call did not
+  // run. "cancelled": the call stopped waiting because its run or cell stopped.
+  outcome:
+    | "approved"
+    | "approved_for_chat"
+    | "rejected"
+    | "expired"
+    | "disabled"
+    | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
   | UserMessage
@@ -541,6 +574,7 @@ export type ObjTypes =
   | ResearchAgentObj
   | CodingAgentObj
   | CodeModeObj
+  | ToolApprovalObj
   | PacketErrorObj
   | CitationObj;
 

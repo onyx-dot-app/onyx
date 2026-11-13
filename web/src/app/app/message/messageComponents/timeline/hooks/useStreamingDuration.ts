@@ -9,20 +9,41 @@ import { useState, useEffect, useRef } from "react";
  * @param isStreaming - Whether streaming is currently active
  * @param startTime - Timestamp when streaming started (from Date.now())
  * @param backendDuration - Duration from backend when available (freezes timer)
- * @returns Elapsed seconds since streaming started
+ * @param paused - The run waits for the user (an approval); waiting is not
+ *   working time, so the timer stops and resumes without counting it
+ * @returns Elapsed seconds since streaming started, less paused time
  */
 export function useStreamingDuration(
   isStreaming: boolean,
   startTime: number | undefined,
-  backendDuration?: number
+  backendDuration?: number,
+  paused = false
 ): number {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const rafRef = useRef<number | null>(null);
   const lastElapsedRef = useRef<number>(0);
+  const pausedMsRef = useRef(0);
+  const pauseStartedRef = useRef<number | null>(null);
 
   // Determine if we should run the live timer
   // Stop the timer when backend duration is available
-  const shouldRunTimer = isStreaming && backendDuration === undefined;
+  const shouldRunTimer =
+    isStreaming && backendDuration === undefined && !paused;
+
+  // Add each finished pause to the time the timer leaves out.
+  useEffect(() => {
+    if (paused) {
+      pauseStartedRef.current = Date.now();
+    } else if (pauseStartedRef.current !== null) {
+      pausedMsRef.current += Date.now() - pauseStartedRef.current;
+      pauseStartedRef.current = null;
+    }
+  }, [paused]);
+
+  // A new run starts with no paused time.
+  useEffect(() => {
+    pausedMsRef.current = 0;
+  }, [startTime]);
 
   useEffect(() => {
     if (!shouldRunTimer || !startTime) {
@@ -37,7 +58,9 @@ export function useStreamingDuration(
 
     const updateElapsed = () => {
       const now = Date.now();
-      const elapsed = Math.floor((now - startTime) / 1000);
+      const elapsed = Math.floor(
+        (now - startTime - pausedMsRef.current) / 1000
+      );
 
       // Only update state when seconds change to avoid unnecessary re-renders
       if (elapsed !== lastElapsedRef.current) {

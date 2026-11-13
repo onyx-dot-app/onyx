@@ -235,6 +235,7 @@ covers new files that match it.
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
 | `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps |
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
+| `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
 | `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
@@ -295,7 +296,6 @@ covers new files that match it.
 | Path | Component(s) |
 |---|---|
 | `web/src/app/craft/`, `web/src/providers/CraftStreamingProvider.tsx` | craft-frontend |
-| `web/src/sections/approvals/`, `web/src/lib/approvals/` | craft-frontend |
 | `web/src/app/craft/utils/parsePacket.ts`, `web/src/app/craft/utils/subagentRouting.ts`, `web/src/app/craft/utils/packetTypes.ts`, `web/src/app/craft/types/streamingTypes.ts` | craft-streaming |
 | `web/src/app/craft/components/output-panel/`, `web/src/app/craft/components/OutputPanel.tsx`, `web/src/lib/build/hooks.ts`, `web/src/lib/build/types.ts` | craft-frontend |
 | `web/src/app/craft/services/workspaceDirectorySnapshots.ts`, `web/src/app/craft/services/outputInventorySnapshots.ts`, `web/src/app/craft/services/outputThumbnailCache.ts`, `web/src/app/craft/services/workspaceFiles.ts`, `web/src/app/craft/services/outputPanelPreferences.ts`, `web/src/app/craft/services/filePreview.ts` | craft-frontend |
@@ -406,4 +406,4 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

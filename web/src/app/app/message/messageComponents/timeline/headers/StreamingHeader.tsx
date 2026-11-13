@@ -17,6 +17,8 @@ export interface StreamingHeaderProps {
   streamingStartTime?: number;
   /** Tool processing duration from backend (freezes timer when available) */
   toolProcessingDuration?: number;
+  /** The run waits for the user's approval; the timer does not count it. */
+  awaitingApproval?: boolean;
 }
 
 /** Header during streaming - shimmer text with current activity */
@@ -28,13 +30,15 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   onToggle,
   streamingStartTime,
   toolProcessingDuration,
+  awaitingApproval = false,
 }: StreamingHeaderProps) {
   const t = useTranslations("chat.messages.timeline");
   // Use backend duration when available, otherwise continue live timer
   const elapsedSeconds = useStreamingDuration(
     toolProcessingDuration === undefined, // Stop updating when we have backend duration
     streamingStartTime,
-    toolProcessingDuration
+    toolProcessingDuration,
+    awaitingApproval
   );
   const showElapsedTime =
     isExpanded && streamingStartTime && elapsedSeconds > 0;
