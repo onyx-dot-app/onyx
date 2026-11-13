@@ -1981,11 +1981,6 @@ def _execute_tools(run: Run) -> bool:
     return True
 
 
-def ends_run(results: Sequence[ToolResult]) -> bool:
-    """A step whose tool results all set `terminate` ends the run."""
-    return bool(results) and all(result.terminate for result in results)
-
-
 def _complete_step(run: Run) -> None:
     cancellation_signal = run.cancellation_signal
     after_step = run._after_step
@@ -1993,22 +1988,23 @@ def _complete_step(run: Run) -> None:
     progress = run._progress
     step = run._state.steps[progress.step_index]
     calls = step.message.tool_calls
-    terminated = ends_run(
-        [
-            execution.result
-            for call in calls
-            if (execution := step.tools.get(call.id)) is not None
-            and execution.result is not None
-        ]
-    )
-    if after_step is not None:
-        should_continue = after_step(
+    results = [
+        execution.result
+        for call in calls
+        if (execution := step.tools.get(call.id)) is not None
+        and execution.result is not None
+    ]
+    # A step whose tool results all set `terminate` ends the run.
+    terminated = bool(results) and all(result.terminate for result in results)
+    should_continue = (
+        after_step(
             _step_result(run, progress.options, progress.step_index).model_copy(
                 deep=True
             )
         )
-    else:
-        should_continue = bool(calls) and not terminated
+        if after_step is not None
+        else bool(calls)
+    ) and not terminated
     cancellation_signal.check()
     has_delegated_work = run.coordination is not None and bool(
         run.coordination.delegated_runs()

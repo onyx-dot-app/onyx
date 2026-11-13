@@ -15,7 +15,7 @@ from onyx.agents.models import (
     ToolCallContext,
     ToolResultAmendment,
 )
-from onyx.agents.runtime import Agent, RestorableFeature, ends_run
+from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     build_context_file_citation_mapping,
@@ -423,7 +423,7 @@ class ChatAgent(Agent, RestorableFeature):
         self._update_tool_context(result.tool_results)
         if not result.message.tool_calls or result.step.is_last:
             self._validate_answer(result)
-        return bool(result.message.tool_calls) and not ends_run(result.tool_results)
+        return bool(result.message.tool_calls)
 
     def _finalize_tool(
         self, _context: ToolCallContext, result: ToolResult

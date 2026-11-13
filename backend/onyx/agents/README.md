@@ -288,8 +288,8 @@ On restore, a call that a lost owner left running runs again, unless the tool se
 `interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
-arguments the model truncated. A step whose results all set `terminate=True` ends the run (`ends_run`), and its
-unread messages wait for the next run. Chat's `after_step` uses the same rule.
+arguments the model truncated. A step whose results all set `terminate=True` ends the run, whatever `after_step` returns,
+and its unread messages wait for the next run.
 A custom `after_step` function chooses whether to continue.
 
 ## Subagents
