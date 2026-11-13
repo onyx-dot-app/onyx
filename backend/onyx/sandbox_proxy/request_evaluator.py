@@ -14,6 +14,10 @@ from uuid import UUID
 
 from mitmproxy import http
 
+from onyx.db.action_policy import (
+    get_mcp_tool_default_policies,
+    mcp_tool_default_policy,
+)
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ActionPolicy, GatedAppKind
 from onyx.db.external_app import get_external_apps
@@ -44,10 +48,6 @@ logger = setup_logger()
 
 # action_type for an unclassifiable request to a matched MCP host (fail closed).
 MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
-
-# MCP tools default to ASK; a server's self-declared `readOnlyHint` never
-# auto-grants. Only an admin override relaxes a tool.
-MCP_TOOL_DEFAULT_POLICY = ActionPolicy.ASK
 
 
 class RequestEvaluator(Protocol):
@@ -192,7 +192,12 @@ class McpRequestEvaluator(RequestEvaluator):
                 classification = classify_mcp_request(request)
                 if classification.kind is McpRpcKind.PLUMBING:
                     return McpProtocolRequest(target=gated_target)
-                actions = _mcp_tool_actions(classification, server, request)
+                actions = _mcp_tool_actions(
+                    classification,
+                    server,
+                    request,
+                    get_mcp_tool_default_policies(db, server.id),
+                )
             except Exception:
                 logger.exception(
                     "mcp_evaluator_error tenant=%s server=%s host=%s; denying",
@@ -218,6 +223,7 @@ def _mcp_tool_actions(
     classification: McpRpcClassification,
     server: MCPServer,
     request: http.Request,
+    default_policies: dict[str, ActionPolicy],
 ) -> tuple[MatchedAction, ...]:
     """One MatchedAction per invoked tool; a single DENY when unclassifiable."""
     if classification.kind is McpRpcKind.UNCLASSIFIABLE:
@@ -245,7 +251,7 @@ def _mcp_tool_actions(
                 f"Call the “{tool_name}” tool on {server.name}."
                 + (f" This request invokes it {count} times." if count > 1 else "")
             ),
-            policy=MCP_TOOL_DEFAULT_POLICY,
+            policy=default_policies.get(tool_name, mcp_tool_default_policy(None)),
         )
         for tool_name, count in counts.items()
     )

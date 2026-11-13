@@ -59,6 +59,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewCheckGetattrCommand())
 	cmd.AddCommand(NewCheckLazyImportsCommand())
 	cmd.AddCommand(NewCherryPickCommand())
+	cmd.AddCommand(NewCraftDevCommand())
 	cmd.AddCommand(NewDBCommand())
 	cmd.AddCommand(NewDeployCommand())
 	cmd.AddCommand(NewOpenAPICommand())
@@ -85,7 +86,7 @@ func NewRootCommand() *cobra.Command {
 	cmd.AddCommand(NewInstallSkillCommand())
 	cmd.AddCommand(NewReleaseCommand())
 	groups := map[string][]string{
-		"local":       {"stack", "backend", "web", "desktop", "dev"},
+		"local":       {"stack", "backend", "web", "desktop", "dev", "craft-dev"},
 		"infra":       {"compose", "env", "logs", "pull", "db", "object-store"},
 		"quality":     {"test", "coverage", "type-coverage", "fmt", "lint", "check-getattr", "check-lazy-imports", "audit"},
 		"ci":          {"run-ci", "trace", "screenshot-diff"},

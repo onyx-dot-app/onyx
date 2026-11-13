@@ -1,3 +1,4 @@
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
 import type {
   SearchFiltersRequest,
@@ -51,6 +52,7 @@ export interface ToolSnapshot {
   default_enabled: boolean;
   default_chat_enabled?: boolean | null;
   user_enabled_in_chat?: boolean;
+  default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
