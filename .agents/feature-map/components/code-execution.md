@@ -728,10 +728,10 @@ health calls are not retried.
   (`backend/tests/external_dependency_unit/conftest.py`) to run in both modes. Web:
   the code mode cases in
   `web/src/app/app/message/messageComponents/AgentMessage.test.tsx`,
-  `web/src/app/app/message/messageComponents/timeline/transformers.test.ts`,
-  `web/src/app/app/message/messageComponents/timeline/hooks/useTimelineHeader.test.tsx`
+  `web/src/lib/timeline/chat/transformers.test.ts`,
+  `web/src/lib/timeline/chat/hooks/useTimelineHeader.test.tsx`
   and the code mode block of
-  `web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.test.ts`
+  `web/src/lib/timeline/chat/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
   as one direct call, with `wait_code` or at response end) and

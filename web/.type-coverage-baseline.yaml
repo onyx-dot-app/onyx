@@ -16,12 +16,12 @@ packages:
   src/app/admin: 96.9
   src/app/anonymous: 100
   src/app/api: 100
-  src/app/app: 99
+  src/app/app: 98.8
   src/app/auth: 98.8
   src/app/components: 100
   src/app/config: 100
   src/app/connector: 100
-  src/app/craft: 99.5
+  src/app/craft: 99.4
   src/app/ee: 95.6
   src/app/federated: 97
   src/app/mcp: 99.5
@@ -96,6 +96,7 @@ packages:
   src/lib/spendingLimits: 100
   src/lib/sso: 99.2
   src/lib/tiers: 100
+  src/lib/timeline: 99.4
   src/lib/tools: 99.1
   src/lib/tracing: 96.9
   src/lib/usage: 97.9

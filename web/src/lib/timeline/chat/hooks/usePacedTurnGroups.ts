@@ -1,0 +1,446 @@
+import { getToolKey } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import { useRef, useState, useEffect, useCallback, useMemo } from "react";
+import { PacketType } from "@/app/app/services/streamingModels";
+import { GroupedPacket } from "@/lib/timeline/chat/hooks/packetProcessor";
+import { TurnGroup, TransformedStep } from "@/lib/timeline/chat/transformers";
+
+// Delay between steps (ms)
+const PACING_DELAY_MS = 200;
+const NO_RESTORED_GROUPS: ReadonlyMap<string, number> = new Map();
+
+/**
+ * Tool START packet types used for categorizing steps
+ * These determine the "type" of a step for pacing purposes
+ */
+const TOOL_START_PACKET_TYPES = new Set<PacketType>([
+  PacketType.SEARCH_TOOL_START,
+  PacketType.FETCH_TOOL_START,
+  PacketType.PYTHON_TOOL_START,
+  PacketType.CUSTOM_TOOL_START,
+  PacketType.FILE_READER_START,
+  PacketType.REASONING_START,
+  PacketType.IMAGE_GENERATION_TOOL_START,
+  PacketType.DEEP_RESEARCH_PLAN_START,
+  PacketType.RESEARCH_AGENT_START,
+  PacketType.MEMORY_TOOL_START,
+  PacketType.MEMORY_TOOL_NO_ACCESS,
+]);
+
+/**
+ * Get the primary packet type from a step's packets (first START packet)
+ * Used to determine if a type transition occurred
+ */
+function getStepPacketType(step: TransformedStep): PacketType | null {
+  for (const packet of step.packets) {
+    if (TOOL_START_PACKET_TYPES.has(packet.obj.type as PacketType)) {
+      return packet.obj.type as PacketType;
+    }
+  }
+  return null;
+}
+
+/**
+ * Internal pacing state stored in ref (not triggering re-renders)
+ */
+interface PacingState {
+  // Tracking revealed content
+  revealedStepKeys: Set<string>;
+  lastRevealedPacketType: PacketType | null;
+
+  // Queued content
+  pendingSteps: TransformedStep[];
+
+  // Timer
+  pacingTimer: ReturnType<typeof setTimeout> | null;
+
+  // Flags
+  toolPacingComplete: boolean;
+  stopPacketSeen: boolean;
+
+  // Track nodeId for reset detection
+  nodeId: string | null;
+}
+
+function createInitialPacingState(nodeId: string): PacingState {
+  return {
+    revealedStepKeys: new Set(),
+    lastRevealedPacketType: null,
+    pendingSteps: [],
+    pacingTimer: null,
+    toolPacingComplete: false,
+    stopPacketSeen: false,
+    nodeId,
+  };
+}
+
+/**
+ * Hook that adds pacing delays between steps during streaming.
+ * Creates visual breathing room between agent activities.
+ *
+ * Architecture:
+ * - Pacing state in ref: no re-renders for internal tracking
+ * - useState only for revealTrigger: forces re-render when content should update
+ * - Timer-based delays: 200ms between all steps
+ *
+ * @param toolTurnGroups - Turn groups from packet processor
+ * @param displayGroups - Display content groups (MESSAGE_START/DELTA)
+ * @param stopPacketSeen - Whether STOP packet has been received
+ * @param nodeId - Message node ID for reset detection
+ * @param finalAnswerComing - Whether message content is streaming
+ */
+export function usePacedTurnGroups(
+  toolTurnGroups: TurnGroup[],
+  displayGroups: GroupedPacket[],
+  stopPacketSeen: boolean,
+  nodeId: number,
+  finalAnswerComing: boolean,
+  restoredGroups: ReadonlyMap<string, number> = NO_RESTORED_GROUPS
+): {
+  pacedTurnGroups: TurnGroup[];
+  pacedDisplayGroups: GroupedPacket[];
+  pacedFinalAnswerComing: boolean;
+} {
+  // Stable nodeId string for comparison
+  const nodeIdStr = String(nodeId);
+
+  // Ref-based pacing state (no re-renders)
+  const stateRef = useRef<PacingState>(createInitialPacingState(nodeIdStr));
+
+  // Track previous finalAnswerComing to detect tool-after-message transitions
+  const prevFinalAnswerComingRef = useRef(finalAnswerComing);
+
+  // Cache previous pacedTurnGroups to preserve referential equality
+  // for completed turn groups that haven't changed
+  const prevPacedRef = useRef<TurnGroup[]>([]);
+
+  // Trigger re-render when content should update
+  // Used in useMemo dependencies since state.revealedStepKeys is stored in a ref
+  const [revealTrigger, setRevealTrigger] = useState(0);
+  const [timerTrigger, setTimerTrigger] = useState(0);
+  const resetState = useMemo(
+    () => createInitialPacingState(nodeIdStr),
+    [nodeIdStr]
+  );
+  const hasNodeChanged = stateRef.current.nodeId !== nodeIdStr;
+  const state = hasNodeChanged ? resetState : stateRef.current;
+
+  // Bypass pacing for completed messages (old messages loaded from history)
+  // If stopPacketSeen is true on first render, return everything immediately
+  const shouldBypassPacing =
+    stopPacketSeen &&
+    state.revealedStepKeys.size === 0 &&
+    toolTurnGroups.length > 0;
+
+  // Handle revealing the next pending step
+  // Reveals ONE step per timer fire, always with delay between steps
+  const revealNextPendingStep = useCallback(() => {
+    const state = stateRef.current;
+
+    if (state.pendingSteps.length > 0) {
+      const stepToReveal = state.pendingSteps.shift()!;
+      state.revealedStepKeys.add(stepToReveal.key);
+      state.lastRevealedPacketType = getStepPacketType(stepToReveal);
+
+      // Schedule next step if more pending (always delay, regardless of type)
+      if (state.pendingSteps.length > 0) {
+        setTimerTrigger((t) => t + 1);
+        setRevealTrigger((t) => t + 1);
+        return;
+      }
+    }
+
+    // No more pending steps - pacing complete
+    state.toolPacingComplete = true;
+    state.pacingTimer = null;
+    setRevealTrigger((t) => t + 1);
+  }, []);
+
+  useEffect(() => {
+    if (!hasNodeChanged) {
+      return;
+    }
+
+    if (stateRef.current.pacingTimer) {
+      clearTimeout(stateRef.current.pacingTimer);
+    }
+
+    stateRef.current = resetState;
+    prevPacedRef.current = [];
+    prevFinalAnswerComingRef.current = finalAnswerComing;
+  }, [finalAnswerComing, hasNodeChanged, resetState]);
+
+  useEffect(() => {
+    const state = stateRef.current;
+
+    if (
+      shouldBypassPacing ||
+      state.pendingSteps.length === 0 ||
+      state.pacingTimer
+    ) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      if (stateRef.current.pacingTimer === timer) {
+        stateRef.current.pacingTimer = null;
+      }
+      revealNextPendingStep();
+    }, PACING_DELAY_MS);
+
+    state.pacingTimer = timer;
+
+    return () => {
+      clearTimeout(timer);
+      if (stateRef.current.pacingTimer === timer) {
+        stateRef.current.pacingTimer = null;
+      }
+    };
+  }, [revealNextPendingStep, shouldBypassPacing, timerTrigger]);
+
+  // Process incoming turn groups
+  useEffect(() => {
+    // Skip processing when bypassing pacing
+    if (shouldBypassPacing) return;
+
+    const state = stateRef.current;
+
+    // Restored steps are already visible; retain their actual completion state.
+    for (const turnGroup of toolTurnGroups) {
+      for (const step of turnGroup.steps) {
+        if (restoredGroups.has(step.groupKey)) {
+          state.revealedStepKeys.add(step.key);
+        }
+      }
+    }
+    state.pendingSteps = state.pendingSteps.filter(
+      (step) => !restoredGroups.has(step.groupKey)
+    );
+
+    // Detect tool-after-message transition: message was showing, now tools are starting
+    // Reset toolPacingComplete to hide display until new tools finish pacing
+    if (prevFinalAnswerComingRef.current && !finalAnswerComing) {
+      state.toolPacingComplete = false;
+    }
+    prevFinalAnswerComingRef.current = finalAnswerComing;
+
+    // Handle STOP packet - flush everything immediately
+    if (stopPacketSeen && !state.stopPacketSeen) {
+      state.stopPacketSeen = true;
+
+      // Clear any pending timer
+      if (state.pacingTimer) {
+        clearTimeout(state.pacingTimer);
+        state.pacingTimer = null;
+      }
+
+      // Reveal all pending steps immediately
+      for (const step of state.pendingSteps) {
+        state.revealedStepKeys.add(step.key);
+      }
+      state.pendingSteps = [];
+      state.toolPacingComplete = true;
+
+      setRevealTrigger((t) => t + 1);
+      return;
+    }
+
+    // Collect all steps from turn groups
+    const allSteps: TransformedStep[] = [];
+    for (const turnGroup of toolTurnGroups) {
+      for (const step of turnGroup.steps) {
+        allSteps.push(step);
+      }
+    }
+
+    // Find new steps (not yet revealed or pending)
+    const newSteps: TransformedStep[] = [];
+    const pendingKeys = new Set(state.pendingSteps.map((s) => s.key));
+
+    for (const step of allSteps) {
+      if (!state.revealedStepKeys.has(step.key) && !pendingKeys.has(step.key)) {
+        newSteps.push(step);
+      }
+    }
+
+    if (newSteps.length === 0) {
+      // If there are no tool steps at all, mark pacing complete immediately
+      // This allows tool-less responses to render their displayGroups
+      if (allSteps.length === 0 && !state.toolPacingComplete) {
+        state.toolPacingComplete = true;
+        setRevealTrigger((t) => t + 1);
+        return;
+      }
+
+      // Check if all steps are revealed (no pending, no new)
+      if (
+        state.pendingSteps.length === 0 &&
+        !state.pacingTimer &&
+        allSteps.length > 0
+      ) {
+        const allRevealed = allSteps.every((s) =>
+          state.revealedStepKeys.has(s.key)
+        );
+        if (allRevealed && !state.toolPacingComplete) {
+          state.toolPacingComplete = true;
+          setRevealTrigger((t) => t + 1);
+        }
+      }
+      return;
+    }
+
+    // Process new steps
+    for (const step of newSteps) {
+      const stepType = getStepPacketType(step);
+
+      // First step ever - reveal immediately
+      if (
+        state.revealedStepKeys.size === 0 &&
+        state.pendingSteps.length === 0
+      ) {
+        state.revealedStepKeys.add(step.key);
+        state.lastRevealedPacketType = stepType;
+        setRevealTrigger((t) => t + 1);
+        continue;
+      }
+
+      // All subsequent steps - queue for paced reveal
+      state.pendingSteps.push(step);
+
+      // Start timer if not already running
+      if (!state.pacingTimer && state.pendingSteps.length === 1) {
+        setTimerTrigger((t) => t + 1);
+      }
+    }
+
+    // Mark pacing incomplete while we have pending steps or timer
+    if (state.pendingSteps.length > 0 || state.pacingTimer) {
+      state.toolPacingComplete = false;
+    }
+  }, [
+    toolTurnGroups,
+    restoredGroups,
+    stopPacketSeen,
+    finalAnswerComing,
+    revealNextPendingStep,
+    shouldBypassPacing,
+    // Re-process after the node-change reset so the fresh state's first step
+    // reveals immediately even when the group identities are unchanged.
+    nodeIdStr,
+  ]);
+
+  // Build paced turn groups from revealed step keys
+  // Memoized to prevent unnecessary re-renders in downstream components
+  // revealTrigger is included because state.revealedStepKeys is stored in a ref
+  const pacedTurnGroups = useMemo(() => {
+    // Bypass: return all turn groups immediately
+    if (shouldBypassPacing) return toolTurnGroups;
+
+    const result: TurnGroup[] = [];
+    for (const turnGroup of toolTurnGroups) {
+      const revealedSteps = turnGroup.steps.filter(
+        (step) =>
+          state.revealedStepKeys.has(step.key) ||
+          restoredGroups.has(step.groupKey)
+      );
+      if (revealedSteps.length > 0) {
+        result.push({
+          turnIndex: turnGroup.turnIndex,
+          steps: revealedSteps,
+          isParallel: revealedSteps.length > 1,
+        });
+      }
+    }
+
+    // Stabilize: reuse previous TurnGroup objects when their content hasn't changed.
+    // This preserves referential equality for completed groups, preventing
+    // unnecessary re-renders in downstream components (e.g. SearchChipList).
+    // Packets are immutable stream objects, so a step whose last packet is the
+    // same object has the same content. A code mode call can get a new report
+    // with the same packet count, so the count alone does not tell.
+    const prev = hasNodeChanged ? [] : prevPacedRef.current;
+    if (prev.length === result.length) {
+      let allMatch = true;
+      for (let i = 0; i < result.length; i++) {
+        const oldGroup = prev[i]!;
+        const newGroup = result[i]!;
+        if (
+          oldGroup.turnIndex === newGroup.turnIndex &&
+          oldGroup.steps.length === newGroup.steps.length &&
+          oldGroup.steps.every((s, j) => {
+            const next = newGroup.steps[j]!;
+            return (
+              s === next ||
+              (s.key === next.key &&
+                s.streamPackets.length === next.streamPackets.length &&
+                s.streamPackets.at(-1) === next.streamPackets.at(-1))
+            );
+          })
+        ) {
+          // Reuse old object reference for this group
+          result[i] = oldGroup;
+        } else {
+          allMatch = false;
+        }
+      }
+      if (allMatch) {
+        // Every group matched — return the exact same array reference
+        return prev;
+      }
+    }
+
+    return result;
+  }, [
+    toolTurnGroups,
+    restoredGroups,
+    revealTrigger,
+    shouldBypassPacing,
+    hasNodeChanged,
+  ]);
+
+  useEffect(() => {
+    prevPacedRef.current = pacedTurnGroups;
+  }, [pacedTurnGroups]);
+
+  // Only return display groups when tool pacing is complete (or bypassing).
+  // Also bypass when stop packet is already seen (e.g. history reload of stopped messages)
+  // to avoid the display staying blank while waiting for pacing to complete.
+  const pacedDisplayGroups = useMemo(
+    () =>
+      shouldBypassPacing || state.toolPacingComplete || stopPacketSeen
+        ? displayGroups
+        : displayGroups.filter((group) =>
+            restoredGroups.has(getToolKey(group.turn_index, group.tab_index))
+          ),
+    [
+      state.toolPacingComplete,
+      restoredGroups,
+      displayGroups,
+      revealTrigger,
+      shouldBypassPacing,
+      stopPacketSeen,
+    ]
+  );
+
+  // Paced signals for header state consistency
+  // Only signal finalAnswerComing when tool pacing is complete (or bypassing)
+  const pacedFinalAnswerComing = useMemo(
+    () =>
+      (pacedDisplayGroups.length > 0 ||
+        shouldBypassPacing ||
+        state.toolPacingComplete) &&
+      finalAnswerComing,
+    [
+      state.toolPacingComplete,
+      pacedDisplayGroups,
+      finalAnswerComing,
+      revealTrigger,
+      shouldBypassPacing,
+    ]
+  );
+
+  return {
+    pacedTurnGroups,
+    pacedDisplayGroups,
+    pacedFinalAnswerComing,
+  };
+}

@@ -236,7 +236,7 @@ the sources.
 
 - `add-tool-renderer` **Add a renderer for a tool.** Copy
   `components/chat/renderers/ReasoningRenderer.tsx`, and port the web renderer
-  from `web/src/app/app/message/messageComponents/timeline/renderers/` to the
+  from `web/src/lib/timeline/chat/renderers/` to the
   render-prop contract in `components/chat/renderers/timelineContract.ts`.
   Return it from the matching `null` slot in
   `components/chat/renderers/findRenderer.ts`

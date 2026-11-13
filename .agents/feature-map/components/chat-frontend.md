@@ -200,7 +200,7 @@ calls do not hide them. An image call does not mark the
 answer as final; later search or image calls can continue the timeline.
 
 A group closes on its own parent-level `SECTION_END` or `ERROR`
-(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+(`lib/timeline/chat/packetHelpers.ts:isGroupEndPacket`,
 shared by `isToolComplete` and the packet processor); a new `turn_index` or a
 stop packet adds a parent-level `SECTION_END` to each open group. A stop
 packet also ends each open nested call, because no packet follows it. Parallel
@@ -210,13 +210,13 @@ carry the parent's key plus `sub_turn_index`, so they join the parent group,
 and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
 does not start the answer.
 The packet processor splits each group once
-(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+(`lib/timeline/chat/hooks/packetProcessor.ts:buildGroupsFromKeys`).
 `GroupedPacket.packets` holds only the group's own packets. The step-kind checks
-in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+in `lib/timeline/chat/packetHelpers.ts`,
 `findRenderer`, the header, and `isToolComplete` read only these, so a research
 step with a nested search is a research step, not a search step.
 `GroupedPacket.nestedCalls` holds the nested calls, made with
-`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+`lib/timeline/chat/packetHelpers.ts:nestedCallSnapshot`.
 Each `NestedCall` holds one call's packets placed at parent level, so the tool's
 own renderer reads it as a direct call. The snapshot reuses the object of each
 unchanged call, so memoized renderers of finished calls do not redraw.
@@ -245,12 +245,12 @@ The mobile app copies the group end and step-kind rules in
 
 **Code mode steps.** Code mode runs behind the scenes: the timeline shows the
 tool calls a program makes, not the program.
-`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+`lib/timeline/chat/transformers.ts:expandCodeModeSteps`
 turns each nested call of an `execute_code` or `wait_code` group into its own
 step, drawn by that tool's renderer as a direct call would be. The packet
 processor adds each nested packet to its call as the packet arrives, and after
 each processed batch builds `GroupedPacket.nestedCalls` for each group with
-`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+`lib/timeline/chat/packetHelpers.ts:nestedCallSnapshot`.
 It reuses the `NestedCall` object of each unchanged call, and
 `expandCodeModeSteps` reuses the step it made for that object, so memoized
 renderers of finished calls do not redraw. A call is its cell and
@@ -272,7 +272,7 @@ keyed by step (a parallel group by its first step), not by position, because a
 cell's new call can move later steps into another turn group. The rail
 primitives, `StepContainer` and that list (`TimelineSteps`) live in
 `web/src/lib/timeline/`, which Craft shares ([[craft-frontend]]).
-`web/src/app/app/message/messageComponents/timeline/transformers.ts:groupStepsByTurn`
+`web/src/lib/timeline/chat/transformers.ts:groupStepsByTurn`
 groups through
 `web/src/lib/timeline/entries.ts:groupTimelineEntries`. Concurrent calls of one program show as
 sequential steps, not parallel tabs: on replay the backend emits each call's
@@ -407,7 +407,7 @@ up its own branding.
 ## Contracts and traps
 
 1. `packet-list-append-only` **A message's packet list is append-only.**
-   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:processPackets`
+   `lib/timeline/chat/hooks/packetProcessor.ts:processPackets`
    resets only when the list gets shorter or the `nodeId` changes. Otherwise it
    processes only the packets past `nextPacketIndex`, so a list replaced with
    one of the same or greater length keeps the state built from the old
@@ -418,7 +418,7 @@ up its own branding.
    [[streaming-protocol]] lists the hand-mirrored places, including
    `findRenderer`. The web client keeps more hand-written sets that switch on
    `PacketType`, such as `app/app/services/packetUtils.ts:isToolPacket` and
-   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
+   `lib/timeline/chat/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
    To find all of them, run
    `git grep -l 'PacketType.FILE_READER_START' web/src`. Run it again for a
    type that behaves like the new one. Add the new type where a similar type
