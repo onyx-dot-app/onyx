@@ -313,6 +313,7 @@ def test_push_archive_sends_signed_mount_path_request() -> None:
     sandbox_id = _sandbox_id()
     mount_path = "/workspace/managed/skills"
     archive = b"skill archive"
+    archive_file = io.BytesIO(archive)
     sha256_hex = hashlib.sha256(archive).hexdigest()
     client_instance = MagicMock()
     client_instance.post.return_value = _resp(200, "ok")
@@ -327,7 +328,7 @@ def test_push_archive_sends_signed_mount_path_request() -> None:
         SidecarClient(host=lambda _sandbox_id: "sidecar.local").push_archive(
             sandbox_id=sandbox_id,
             mount_path=mount_path,
-            archive=archive,
+            archive_file=archive_file,
             sha256_hex=sha256_hex,
             operation_label="Push files",
             timeout_seconds=30.0,
@@ -338,8 +339,9 @@ def test_push_archive_sends_signed_mount_path_request() -> None:
     kwargs = client_instance.post.call_args.kwargs
     assert url == f"http://sidecar.local:8731{SIDECAR_PUSH_PATH}"
     assert kwargs["params"] == {"mount_path": mount_path}
-    assert kwargs["content"] == archive
+    assert b"".join(kwargs["content"]) == archive
     headers = cast(dict[str, str], kwargs["headers"])
+    assert headers["Content-Length"] == str(len(archive))
     assert headers["Content-Type"] == "application/gzip"
     assert headers["X-Bundle-Sha256"] == sha256_hex
     assert headers["X-Push-Timestamp"] == "1234567890"
@@ -544,17 +546,17 @@ def test_restartable_init_container_crashloop_waiting_is_fatal() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_bundle_over_100mib_rejected_before_send(
+def test_bundle_over_transport_cap_rejected_before_send(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Oversized FileSet raises FatalWriteError before httpx is invoked.
 
-    Patches _MAX_BUNDLE_BYTES down to keep the test fast while still asserting
+    Patches MAX_BUNDLE_BYTES down to keep the test fast while still asserting
     the size-cap behavior: ``_build_targz`` rejects oversized input. We also
     patch ``httpx.Client`` to a factory that fails if called, proving the
     rejection happens before any network attempt.
     """
-    monkeypatch.setattr(f"{_MANAGER_MODULE}._MAX_BUNDLE_BYTES", 1024)
+    monkeypatch.setattr(f"{_MANAGER_MODULE}.MAX_BUNDLE_BYTES", 1024)
 
     mgr = _make_manager()
     httpx_called = False
@@ -584,10 +586,12 @@ def test_tar_build_is_byte_for_byte_deterministic() -> None:
         "skill-b/SKILL.md": b"beta contents\n",
         "skill-a/nested/file.txt": b"nested\n",
     }
-    raw1, sha1 = _build_targz(files)
-    raw2, sha2 = _build_targz(files)
+    archive1 = io.BytesIO()
+    archive2 = io.BytesIO()
+    sha1 = _build_targz(files, archive1)
+    sha2 = _build_targz(files, archive2)
 
-    assert raw1 == raw2
+    assert archive1.getvalue() == archive2.getvalue()
     assert sha1 == sha2
 
 

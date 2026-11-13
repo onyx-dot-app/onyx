@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.49
+version: 0.9.50
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,12 +20,10 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: fixed
-      description: The sandbox proxy egress policy also allows DNS (kube-dns
-        and node-local-dns pods) and the release-namespace pods by selector,
-        and the pod sandbox DNS policy allows node-local-dns pods. This fixes
-        sandbox egress on GKE Dataplane V2, where ipBlock does not match pod
-        IPs. The cloud metadata range stays blocked.
+    - kind: changed
+      description: Raise the Craft sandbox sidecar ephemeral-storage limit from
+        2Gi to 6Gi. The sidecar now takes Skill pushes of up to 900 MiB and
+        writes them to disk, not to memory.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

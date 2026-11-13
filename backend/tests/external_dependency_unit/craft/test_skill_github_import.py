@@ -264,7 +264,7 @@ def test_import_applies_shared_access_before_publication(
         _delete_bundles(db_session, name)
 
 
-def test_import_with_policy_imports_skills_with_a_repeated_name(
+def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
     db_session: Session,
     test_user: User,
     initialize_file_store: None,  # noqa: ARG001
@@ -312,12 +312,11 @@ def test_import_with_policy_imports_skills_with_a_repeated_name(
     )
 
     try:
-        # The run-time name order decides which one a user gets.
-        assert [result.skill.name for result in response.imported] == [name, name]
-        assert {result.skill.installation_policy for result in response.imported} == {
+        assert [result.skill.name for result in response.imported] == [name]
+        assert response.imported[0].skill.installation_policy == (
             SkillInstallationPolicy.DEFAULT
-        }
-        assert response.not_imported == []
-        assert len(_delete_bundles(db_session, name)) == 2
+        )
+        assert [item.path for item in response.not_imported] == [paths[1]]
+        assert len(_delete_bundles(db_session, name)) == 1
     finally:
         _delete_bundles(db_session, name)

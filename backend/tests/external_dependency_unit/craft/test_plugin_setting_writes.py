@@ -372,3 +372,41 @@ def test_external_app_delete_and_disconnect(
     )
     assert group_setting == PluginInstallationPolicy.DEFAULT
     assert db_session.get(UserPluginPreference, (other.id, skill.id)) is None
+
+
+def test_group_setting_is_not_limited_by_the_automatic_name_index(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    """uq_skill_automatic_name sees only the organization-wide setting
+    (test_automatic_skill_name_conflicts). A group Required on a second skill
+    with the same name is allowed; the run-time name order picks one."""
+    admin = make_user(db_session, is_admin=True)
+    name = f"automatic-{uuid4().hex[:8]}"
+    first = make_skill(db_session, name=name, is_public=True)
+    second = make_skill(db_session, name=name, is_public=True)
+    group = make_group(db_session)
+
+    for change, skill in (
+        (
+            PluginAccessChange(
+                company_installation_policy=PluginInstallationPolicy.DEFAULT
+            ),
+            first,
+        ),
+        (
+            PluginAccessChange(
+                group_settings=(
+                    PluginGroupSetting(
+                        group_id=group.id,
+                        installation_policy=PluginInstallationPolicy.REQUIRED,
+                    ),
+                ),
+            ),
+            second,
+        ),
+    ):
+        result = apply_plugin_access_change__no_commit(
+            [skill.id], change, admin, db_session
+        )
+        assert result.failures == {}
