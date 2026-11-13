@@ -43,9 +43,13 @@ import type {
 } from "@/lib/skills/types";
 import {
   canChangeOrganizationAccess,
+  groupAccessRows,
+  groupSettingChanges,
   serializeSkillSharing,
+  type GroupSettingRow,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
+import SkillGroupAccess from "@/sections/modals/skills/SkillGroupAccess";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
 import {
   Button,
@@ -174,6 +178,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     useState<SkillInstallationPolicy | null>(null);
   const [initialPolicy, setInitialPolicy] =
     useState<SkillInstallationPolicy | null>(null);
+  const [groupSettings, setGroupSettings] = useState<GroupSettingRow[]>([]);
+  const [initialGroupSettings, setInitialGroupSettings] = useState<
+    GroupSettingRow[]
+  >([]);
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -199,6 +207,19 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     };
     setInstallationPolicy(skill.installation_policy);
     setInitialPolicy(skill.installation_policy);
+    // A shared group with no setting comes from the share draft, so its row
+    // goes away with its share.
+    const nextGroupSettings: GroupSettingRow[] = (
+      loadedSkill?.group_summaries ?? []
+    )
+      .filter((summary) => summary.installation_policy !== null)
+      .map((summary) => ({
+        group_id: summary.group_id,
+        group_name: summary.group_name,
+        choice: toPolicyChoice(summary.installation_policy),
+      }));
+    setGroupSettings(nextGroupSettings);
+    setInitialGroupSettings(nextGroupSettings);
     setDraftState(nextState);
     setInitialState(nextState);
     setStagedUsers([]);
@@ -207,7 +228,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setTransferTarget(null);
     setView("share");
     setHydrated(true);
-  }, [open, skill, hydrated, skillId, isValidating, initialTab]);
+  }, [open, skill, loadedSkill, hydrated, skillId, isValidating, initialTab]);
 
   const effectiveState = useMemo(() => {
     if (!draftState) return null;
@@ -228,6 +249,15 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
+  const canSetGroupSettings = props.mode === "edit" && isOrganizationManager;
+  const shownGroupRows = useMemo(
+    () => groupAccessRows(groupSettings, effectiveState?.groupShares ?? []),
+    [effectiveState, groupSettings]
+  );
+  const groupChanges = useMemo(
+    () => groupSettingChanges(initialGroupSettings, shownGroupRows),
+    [initialGroupSettings, shownGroupRows]
+  );
   const viewerLabel = permissionOptions.find(
     (option) => option.value === "VIEWER"
   )?.label;
@@ -246,7 +276,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     !!initialState &&
     (serializeDraftState(effectiveState) !==
       serializeDraftState(initialState) ||
-      installationPolicy !== initialPolicy);
+      installationPolicy !== initialPolicy ||
+      groupChanges.length > 0);
 
   const existingUserIds = useMemo(() => {
     const ids = new Set(draftState?.userShares.map((share) => share.user.id));
@@ -395,6 +426,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         return;
       }
       const payload = serializeSkillSharing(nextDraft, isOrganizationManager);
+      if (canSetGroupSettings && groupChanges.length > 0) {
+        payload.group_settings = groupChanges;
+      }
       const saved = await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       if (
@@ -557,6 +591,40 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               {policyCopy.description(installationPolicy)}
             </Text>
           </Section>
+        )}
+
+        {canSetGroupSettings && (
+          <SkillGroupAccess
+            rows={shownGroupRows}
+            company={
+              installationPolicy ??
+              loadedSkill?.default_installation_policy ??
+              null
+            }
+            groups={shareableGroupsData ?? []}
+            disabled={saving}
+            onChoice={(groupId, choice) => {
+              const row = shownGroupRows.find(
+                (shown) => shown.group_id === groupId
+              );
+              if (!row) return;
+              setGroupSettings((settings) => [
+                ...settings.filter((setting) => setting.group_id !== groupId),
+                { group_id: groupId, group_name: row.group_name, choice },
+              ]);
+            }}
+            onAdd={(group) =>
+              setGroupSettings((settings) => [
+                ...settings,
+                { group_id: group.id, group_name: group.name, choice: INHERIT },
+              ])
+            }
+            onRemove={(groupId) =>
+              setGroupSettings((settings) =>
+                settings.filter((setting) => setting.group_id !== groupId)
+              )
+            }
+          />
         )}
 
         {effectiveState.isPublic && (
