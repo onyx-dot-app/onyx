@@ -436,6 +436,21 @@ run "managed_redis_can_still_be_asked_for" {
   }
 }
 
+run "the_pod_sandbox_pool_reaches_the_aks_module" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = contains(module.aks.node_pool_names, "sandboxpod") && contains(module.aks.node_pool_names, "sandbox")
+    error_message = "The composition should pass the pod sandbox pool flag to the aks module."
+  }
+}
+
 run "no_sandbox_archive_storage_by_default" {
   command = plan
 

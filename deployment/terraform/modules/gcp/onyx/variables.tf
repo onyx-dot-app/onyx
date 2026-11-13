@@ -390,8 +390,14 @@ variable "enable_sandbox_node_pool" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the gcp module README for the node requirements."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. See \"Craft sandboxes on Firecracker\" in the gcp module README for the node requirements."
   default     = "pod"
+}
+
+variable "enable_craft_pod_sandbox_node_pool" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox pool next to the Firecracker pool, for pod sandboxes and the image prepuller. See \"Craft sandboxes on Firecracker\" in the gcp module README."
+  default     = false
 }
 
 variable "create_workload_namespace" {
