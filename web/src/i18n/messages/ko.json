@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Atlassian 서비스 데스크 및 ITSM"
         }
       }
     },
@@ -3312,6 +3315,7 @@
         "excludedChannels": "제외된 채널",
         "includeBotMessages": "봇 메시지 포함",
         "jiraProjectUrl": "Jira 프로젝트 URL",
+        "jiraSiteUrl": "Jira 사이트 URL",
         "multipleRepos": "여러 리포지토리",
         "pageId": "페이지 ID",
         "realm": "렐름",
@@ -4940,6 +4944,14 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "fields": {
+            "everything": {
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 Jira Service Management(서비스 데스크) 프로젝트의 모든 이슈를 색인화합니다. 범위를 줄이려면 다른 탭을 선택하세요."
             }
           }
         }
