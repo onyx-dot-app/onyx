@@ -85,7 +85,10 @@ jest.mock("@/lib/projects/hooks", () => ({
 jest.mock("@/lib/connectors/hooks", () => ({
   useAvailableSources: () => ({ isLoading: false }),
 }));
-const mockNoChatSkills = { skills: [], apps: [], mcpServers: [] };
+const mockNoChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  revalidate: async () => undefined,
+};
 jest.mock("@/lib/skills/hooks", () => ({
   ...jest.requireActual("@/lib/skills/hooks"),
   useChatSkills: () => mockNoChatSkills,

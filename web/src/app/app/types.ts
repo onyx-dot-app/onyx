@@ -6,7 +6,7 @@ import {
 import { Packet } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { ChatToolSelection } from "@/lib/tools/types";
-import type { Mention, RecordedMention } from "@/lib/chat/types";
+import type { ComposedMention, RecordedMention } from "@/lib/chat/types";
 
 export type FeedbackType = "like" | "dislike";
 
@@ -170,8 +170,9 @@ export interface Message {
   researchType?: ResearchType;
   query?: string | null;
   files: FileDescriptor[];
-  // What the user tagged in a question; the server's recorded mentions once known.
-  mentions?: Mention[];
+  // What the user tagged in a question, one per tile until the server's
+  // recorded mentions replace them.
+  mentions?: ComposedMention[];
   toolCall: ToolCallMetadata | null;
   // for rebuilding the message tree - these now use nodeId
   parentNodeId: number | null;

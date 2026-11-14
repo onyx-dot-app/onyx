@@ -3,7 +3,8 @@ import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
 import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { Mention, PendingChatMessage } from "@/lib/chat/types";
+import type { ComposedMention, PendingChatMessage } from "@/lib/chat/types";
+import { uniqueMentions } from "@/lib/chat/mentions";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
@@ -174,8 +175,8 @@ export interface LLMOverride {
 export interface SendMessageParams {
   message: string;
   fileDescriptors?: FileDescriptor[];
-  // What the user tagged in the message with `@`.
-  mentions?: Mention[];
+  // What the user tagged in the message with `@`, one per tile.
+  mentions?: ComposedMention[];
   parentMessageId: number | null;
   chatSessionId: string;
   filters: SearchFiltersRequest | null;
@@ -225,7 +226,7 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
-    mentions: mentions ?? [],
+    mentions: uniqueMentions(mentions ?? []),
     internal_search_filters: filters,
     deep_research: deepResearch ?? false,
     allowed_tool_ids: enabledToolIds,

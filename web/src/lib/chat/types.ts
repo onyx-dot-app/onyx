@@ -13,6 +13,10 @@ export interface SkillMention {
  * on `type`, and skills are the only kind. */
 export type Mention = SkillMention;
 
+/** The most distinct mentions one message can send. Mirrors
+ * `MAX_MENTIONS_PER_MESSAGE` in `backend/onyx/chat/mention_models.py`. */
+export const MAX_MENTIONS_PER_MESSAGE = 20;
+
 /** A picked skill at the version the user ran when its question was
  * accepted. */
 export interface RecordedSkillMention extends SkillMention {
@@ -88,7 +92,7 @@ export interface ChatSessionQueue {
   /**
    * A queued or interrupting message's turn starts as Deep Research when
    * `deepResearch` is set, with `llmOverride` as its model and the SKILL.md
-   * files of its mentioned skills before its question. A `send` gives its
+   * files of its mentioned skills after its question. A `send` gives its
    * mentions to the running response.
    */
   submit: (

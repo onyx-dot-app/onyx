@@ -750,7 +750,7 @@ test.describe("Skill Mentions", () => {
         },
         replies: [{ text: `Answered with the skills. ${nonce}` }],
       });
-      await chatPage.goto();
+      await chatPage.goto(undefined, { skills: true });
 
       await chatPage.inputBar.typeText(`use @${first.slice(0, -1)}`);
       await chatPage.inputBar.pickSkill(first, "click");
@@ -809,7 +809,7 @@ test.describe("Skill Mentions", () => {
         },
         replies: [{ text: `Answered with the skill. ${nonce}` }],
       });
-      await chatPage.goto();
+      await chatPage.goto(undefined, { skills: true });
 
       await chatPage.inputBar.typeText(`use @${name.slice(0, -1)}`);
       await chatPage.inputBar.pickSkill(name, "Enter");
@@ -843,7 +843,7 @@ test.describe("Skill Mentions", () => {
     const name = uniqueSkillName("mention-word");
     const skill = await createSkill(chatPage.page.request, name, "Unused.");
     try {
-      await chatPage.goto();
+      await chatPage.goto(undefined, { skills: true });
       await chatPage.inputBar.typeText(`@${name}xyz`);
       await expect(chatPage.inputBar.skillPicker).toBeHidden();
 
@@ -874,7 +874,7 @@ test.describe("Skill Mentions", () => {
     const name = uniqueSkillName("mention-click");
     const skill = await createSkill(chatPage.page.request, name, "Unused.");
     try {
-      await chatPage.goto();
+      await chatPage.goto(undefined, { skills: true });
       const typed = `@${name.slice(0, 6)}`;
       await chatPage.inputBar.typeText(typed);
       await expect(chatPage.inputBar.skillPicker).toBeVisible();

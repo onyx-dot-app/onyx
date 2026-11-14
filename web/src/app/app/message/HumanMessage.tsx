@@ -11,7 +11,11 @@ import { SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
 import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
-import type { ComposedMessage, Mention } from "@/lib/chat/types";
+import type {
+  ComposedMention,
+  ComposedMessage,
+  Mention,
+} from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
 
@@ -97,7 +101,7 @@ const MENTION_CHIP_ICONS: Record<Mention["type"], IconFunctionComponent> = {
 interface HumanMessageBubbleProps {
   content: string;
   // What the question mentioned; each `@name` shows as a chip.
-  mentions?: Mention[];
+  mentions?: ComposedMention[];
 }
 
 export function HumanMessageBubble({
@@ -164,7 +168,7 @@ interface HumanMessageProps {
   // Content and display
   content: string;
   files?: FileDescriptor[];
-  mentions?: Mention[];
+  mentions?: ComposedMention[];
 
   // Message navigation - nodeId for tree position, messageId for editing
   nodeId: number;

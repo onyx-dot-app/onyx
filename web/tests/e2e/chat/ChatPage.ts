@@ -5,7 +5,12 @@
  * individual tests remain declarative.
  */
 
-import { type Page, type Locator, expect } from "@playwright/test";
+import {
+  type Page,
+  type Locator,
+  type Response,
+  expect,
+} from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
@@ -99,14 +104,28 @@ export class ChatPage {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
 
-  async goto(sessionId?: string): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
+    const skillsLoaded = skills && this.chatSkillsResponse();
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skillsLoaded) expect((await skillsLoaded).ok()).toBe(true);
   }
 
-  async reload(): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async reload({ skills = false } = {}): Promise<void> {
+    const skillsLoaded = skills && this.chatSkillsResponse();
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skillsLoaded) expect((await skillsLoaded).ok()).toBe(true);
+  }
+
+  private chatSkillsResponse(): Promise<Response> {
+    return this.page.waitForResponse(
+      (response) => new URL(response.url()).pathname === "/api/skills/chat"
+    );
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
@@ -459,10 +478,12 @@ export class ChatPage {
     await expect(this.humanMessage(index)).toContainText(text);
   }
 
+  /** The skill chips of question bubble `index`, counting the bubbles of
+   * messages that a running response accepted. */
   skillMentionChips(index = 0): Locator {
-    return this.humanMessage(index).locator(
-      '[data-testid="mention-chip"][data-mention-type="skill"]'
-    );
+    return this.humanMessageBubbles
+      .nth(index)
+      .locator('[data-testid="mention-chip"][data-mention-type="skill"]');
   }
 
   async expectNoHumanMessages(): Promise<void> {

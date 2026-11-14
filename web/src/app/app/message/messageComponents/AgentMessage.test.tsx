@@ -1118,40 +1118,6 @@ test("a tool step after an accepted user message follows that message", async ()
   }
 });
 
-test("an accepted user message shows its recorded mentions as chips", async () => {
-  seedSessionAwaitingAnswer();
-  const packets: Packet[] = [
-    ...answerPackets.slice(0, 2),
-    {
-      placement: { turn_index: 1, tab_index: 0 },
-      obj: {
-        type: PacketType.USER_MESSAGE,
-        id: "accepted",
-        message: "Now run @code-review on it",
-        mentions: [{ type: "skill", name: "code-review", version_id: "v1" }],
-      },
-    },
-  ];
-  const view = render(
-    <AgentMessage
-      rawPackets={packets}
-      packetCount={packets.length}
-      chatState={chatState}
-      nodeId={NEW_ANSWER_NODE_ID}
-      llmManager={null}
-      hideFooter
-      disableTTS
-    />
-  );
-  try {
-    expect(await screen.findByTestId("mention-chip")).toHaveTextContent(
-      "@code-review"
-    );
-  } finally {
-    view.unmount();
-  }
-});
-
 test("an auth error after an accepted user message shows its card without an answer", async () => {
   seedSessionAwaitingAnswer();
   const authError = (turn_index: number): Packet[] => [

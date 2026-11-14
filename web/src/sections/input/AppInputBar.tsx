@@ -35,6 +35,7 @@ import type {
   PendingChatMessage,
   UnsentMessage,
 } from "@/lib/chat/types";
+import { MAX_MENTIONS_PER_MESSAGE } from "@/lib/chat/types";
 import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
@@ -236,6 +237,19 @@ const AppInputBar = React.memo(
       [message, mentions]
     );
     const chatSkills = useChatSkills();
+    // At the limit of distinct mentions, the `@` menu offers only the skills
+    // already picked; a menu with no match stays closed.
+    const mentionEntries = useMemo(() => {
+      const picked = new Set(mentions.map((mention) => mention.name));
+      return picked.size < MAX_MENTIONS_PER_MESSAGE
+        ? chatSkills.entries
+        : {
+            ...chatSkills.entries,
+            skills: chatSkills.entries.skills.filter((skill) =>
+              picked.has(skill.name)
+            ),
+          };
+    }, [chatSkills.entries, mentions]);
     const insertMention = useCallback(
       (entry: PickerEntry, token: CaretText) => {
         // Each mention kind maps its picker entry kind; chat mentions skills.
@@ -247,10 +261,13 @@ const AppInputBar = React.memo(
     // While open, the mention picker wins over the `/` prompt shortcuts popover.
     const mentionPicker = useEntryPicker({
       trigger: MENTION_TRIGGER,
-      entries: chatSkills,
+      entries: mentionEntries,
       filter: filterMentionEntries,
       onSelect: insertMention,
     });
+    useEffect(() => {
+      if (mentionPicker.open) void chatSkills.revalidate();
+    }, [mentionPicker.open, chatSkills.revalidate]);
 
     // Clearing or replacing the input in code fires no input event.
     useEffect(() => {

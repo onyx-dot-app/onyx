@@ -4,9 +4,15 @@ import { UserChatPreferencesPage } from "@tests/e2e/pages/UserChatPreferencesPag
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import {
   addMockLlmConversation,
+  getMockLlmConversationRequests,
   mockLlmNonce,
   releaseMockLlmGate,
 } from "@tests/e2e/utils/mockLlm";
+import {
+  createSkill,
+  deleteSkill,
+  uniqueSkillName,
+} from "@tests/e2e/utils/skills";
 
 const pendingTest = test.extend<{
   providerHeartbeat: boolean;
@@ -131,24 +137,79 @@ pendingTest(
 
 pendingTest(
   "withdraws pending messages before editing and resubmitting them",
-  async ({ chatPage, heldResponse }) => {
-    await chatPage.inputBar.submitPending("Discard this");
-    await chatPage.inputBar.submitPending("Edit this");
-    await chatPage.inputBar.discardPending(0);
-    await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
-    await chatPage.inputBar.editPending(0);
-    await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
-    await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
-    await chatPage.reload();
-    await chatPage.expectHumanMessage(heldResponse.question);
-    await expect(chatPage.inputBar.textbox).toHaveText("Edit this");
-    await chatPage.inputBar.submitPending("Edited instruction");
-    await releaseMockLlmGate(heldResponse.gateId);
-    await chatPage.expectSavedTurns([
-      heldResponse.question,
-      "Edited instruction",
-    ]);
-    await chatPage.expectCompleteAnswers(2);
+  async ({ page, chatPage, heldResponse }) => {
+    const name = uniqueSkillName("withdrawn");
+    const skill = await createSkill(page.request, name, "Withdrawn skill.");
+    try {
+      // The composer fetched the user's skills before this one existed.
+      await chatPage.reload({ skills: true });
+      await expect(chatPage.scrollContainer).toContainText("Working on");
+      await chatPage.inputBar.submitPending("Discard this");
+      await chatPage.inputBar.typeText(`Edit this @${name.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      await chatPage.inputBar.queue();
+      await expect(chatPage.inputBar.textbox).toHaveText("");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(2);
+      await chatPage.inputBar.discardPending(0);
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+      await chatPage.inputBar.editPending(0);
+      await expect(chatPage.inputBar.textbox).toHaveText(`Edit this @${name}`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(0);
+      await chatPage.reload();
+      await chatPage.expectHumanMessage(heldResponse.question);
+      await expect(chatPage.inputBar.textbox).toHaveText(`Edit this @${name}`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+      await chatPage.inputBar.submitPending("Edited instruction");
+      await releaseMockLlmGate(heldResponse.gateId);
+      await chatPage.expectSavedTurns([
+        heldResponse.question,
+        "Edited instruction",
+      ]);
+      await chatPage.expectCompleteAnswers(2);
+    } finally {
+      await deleteSkill(page.request, skill.id);
+    }
+  }
+);
+
+pendingTest(
+  "a pick sent into a running response follows its message and keeps its chip",
+  async ({ page, chatPage, heldResponse }) => {
+    const name = uniqueSkillName("held");
+    const instructions = `Held skill ${heldResponse.gateId}.`;
+    const skill = await createSkill(page.request, name, instructions);
+    try {
+      // The composer fetched the user's skills before this one existed.
+      await chatPage.reload({ skills: true });
+      await expect(chatPage.scrollContainer).toContainText("Working on");
+      await chatPage.inputBar.typeText(`Follow up using @${name.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      await expect(chatPage.inputBar.pendingMessageHint).toHaveText(
+        /Send.*Queue/
+      );
+      await chatPage.inputBar.send();
+      await expect(chatPage.inputBar.textbox).toHaveText("");
+      await expect(chatPage.inputBar.queuedMessages).toHaveCount(1);
+      await releaseMockLlmGate(heldResponse.gateId);
+      await chatPage.expectAnswerParagraph(
+        "The additional instruction was received."
+      );
+      await chatPage.expectSavedTurns([heldResponse.question]);
+      await expect(chatPage.skillMentionChips(1)).toHaveText([`@${name}`]);
+      const [, next] = await getMockLlmConversationRequests(
+        heldResponse.gateId
+      );
+      const text = next!.messages.map((message) => message.content).join("\n");
+      expect(
+        text.indexOf(`<skill>\n<name>${name}</name>\n${instructions}\n</skill>`)
+      ).toBeGreaterThan(text.lastIndexOf("Follow up using"));
+      await chatPage.reload();
+      await expect(chatPage.skillMentionChips(1)).toHaveText([`@${name}`]);
+      await expect(chatPage.skillMentionChips(0)).toHaveCount(0);
+    } finally {
+      await deleteSkill(page.request, skill.id);
+    }
   }
 );
 

@@ -6,8 +6,14 @@ import {
   MOCK_LLM_DEFAULT_MODEL,
   MOCK_LLM_MODELS,
   addMockLlmConversation,
+  getMockLlmConversationRequests,
   mockLlmNonce,
 } from "@tests/e2e/utils/mockLlm";
+import {
+  createSkill,
+  deleteSkill,
+  uniqueSkillName,
+} from "@tests/e2e/utils/skills";
 
 test.describe("Message Edit and Regenerate Tests @code-mode", () => {
   test.beforeEach(async ({ page }) => {
@@ -106,6 +112,48 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
     await expect(switcherSpan).toBeVisible({ timeout: 5000 });
     await expect(switcherSpan).toContainText("2/3");
     await expect(chat.aiMessage()).toContainText("Six.");
+  });
+
+  test("an edit that keeps a picked skill's text resends its mention", async ({
+    page,
+  }) => {
+    const chat = new ChatPage(page);
+    const nonce = mockLlmNonce();
+    const name = uniqueSkillName("edited");
+    const instructions = `Edited skill ${nonce}.`;
+    const skill = await createSkill(page.request, name, instructions);
+    try {
+      await addMockLlmConversation({
+        name: nonce,
+        conditions: { prompt_contains: [nonce] },
+        replies: [{ text: "First answer." }, { text: "Edited answer." }],
+      });
+      // The composer fetched the user's skills before this one existed.
+      await chat.goto(undefined, { skills: true });
+      await chat.inputBar.typeText(
+        `Review ${nonce} with @${name.slice(0, -1)}`
+      );
+      await chat.inputBar.pickSkill(name, "Enter");
+      await chat.inputBar.send();
+      await chat.expectAnswerParagraph("First answer.");
+      await chat.inputBar.expectIdle();
+
+      await chat.editHumanMessage(`Review again ${nonce} with @${name}`);
+      await chat.submitHumanMessageEdit();
+      await chat.expectAnswerParagraph("Edited answer.");
+      await chat.expectHumanMessage(`Review again ${nonce} with @${name}`);
+      await expect(chat.skillMentionChips(0)).toHaveText([`@${name}`]);
+      const [, edited] = await getMockLlmConversationRequests(nonce);
+      const text = edited!.messages
+        .map((message) => message.content)
+        .join("\n");
+      expect(text).toContain("Review again");
+      expect(text).toContain(
+        `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`
+      );
+    } finally {
+      await deleteSkill(page.request, skill.id);
+    }
   });
 
   test("Message regeneration with model selection", async ({ page }) => {

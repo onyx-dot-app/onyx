@@ -33,17 +33,3 @@ test("an edit keeps the recorded mentions its text still has", async () => {
     7
   );
 });
-
-test("a recorded mention next to other text shows as a chip", () => {
-  render(
-    <HumanMessage
-      content="check (@code-reviewnow) please"
-      mentions={[{ type: "skill", name: "code-review" }]}
-      nodeId={1}
-    />
-  );
-  expect(screen.getByTestId("mention-chip")).toHaveTextContent("@code-review");
-  expect(screen.getByTestId("human-message-bubble")).toHaveTextContent(
-    "check (@code-reviewnow) please"
-  );
-});

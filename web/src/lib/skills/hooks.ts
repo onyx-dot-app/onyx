@@ -46,16 +46,24 @@ export function usePublishAction(): PublishAction {
   return "publish";
 }
 
-/** The custom skills that the user's chat agents get (`GET /api/skills/chat`),
- * as `@` picker sections, sorted by name. */
-export function useChatSkills(): PickerSections {
+export interface ChatSkillEntries {
+  /** The skills as `@` picker sections, sorted by name. */
+  entries: PickerSections;
+  /** Fetches the skills again. A window focus does not, so the `@` menu
+   * calls this when it opens. */
+  revalidate: () => Promise<ChatSkill[] | undefined>;
+}
+
+/** The custom skills that the user's chat agents get (`GET /api/skills/chat`). */
+export function useChatSkills(): ChatSkillEntries {
   const { user } = useUser();
-  const { data } = useSWR<ChatSkill[]>(
+  const { data, mutate } = useSWR<ChatSkill[]>(
     user ? SWR_KEYS.chatSkills : null,
-    errorHandlingFetcher
+    errorHandlingFetcher,
+    { revalidateOnFocus: false }
   );
-  return useMemo(
-    () => ({
+  const entries = useMemo(
+    (): PickerSections => ({
       skills: (data ?? []).map(
         (skill): PickerSkill => ({
           kind: "skill",
@@ -69,6 +77,7 @@ export function useChatSkills(): PickerSections {
     }),
     [data]
   );
+  return { entries, revalidate: mutate };
 }
 
 interface UseEntryPickerOptions {

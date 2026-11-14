@@ -28,7 +28,10 @@ import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
 import { draftKey } from "@/hooks/useDraft";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
-import type { ComposedMessage } from "@/lib/chat/types";
+import {
+  MAX_MENTIONS_PER_MESSAGE,
+  type ComposedMessage,
+} from "@/lib/chat/types";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -38,11 +41,22 @@ jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser, isAdmin: false }),
 }));
 const NO_SKILLS: PickerSections = { skills: [], apps: [], mcpServers: [] };
-let mockChatSkills = NO_SKILLS;
-jest.mock("@/lib/skills/hooks", () => ({
-  ...jest.requireActual("@/lib/skills/hooks"),
-  useChatSkills: () => mockChatSkills,
-}));
+// Null uses the real hook, which fetches the skills.
+let mockChatSkills: PickerSections | null = NO_SKILLS;
+const mockRevalidateChatSkills = async () => undefined;
+jest.mock("@/lib/skills/hooks", () => {
+  const actual =
+    jest.requireActual<typeof import("@/lib/skills/hooks")>(
+      "@/lib/skills/hooks"
+    );
+  return {
+    ...actual,
+    useChatSkills: () =>
+      mockChatSkills === null
+        ? actual.useChatSkills()
+        : { entries: mockChatSkills, revalidate: mockRevalidateChatSkills },
+  };
+});
 let mockIncognitoEnabled = false;
 jest.mock("@/providers/IncognitoProvider", () => ({
   useIncognito: () => ({ incognitoEnabled: mockIncognitoEnabled }),
@@ -399,6 +413,80 @@ describe("`@` skill mentions", () => {
       "@code-review"
     );
     await user.type(input, "x");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  test("fetches the chat skills again when it opens, not on a window focus", async () => {
+    mockChatSkills = null;
+    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              name: "code-review",
+              description: "Review code",
+              version_id: "v1",
+            },
+          ])
+        )
+    );
+    try {
+      const skillFetches = () =>
+        fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
+          .length;
+      render(<Composer plugins={[]} />, {
+        swrConfig: { focusThrottleInterval: 0 },
+      });
+      await waitFor(() => expect(skillFetches()).toBe(1));
+
+      await act(async () => {
+        window.dispatchEvent(new Event("focus"));
+      });
+      expect(skillFetches()).toBe(1);
+
+      const user = setupUser();
+      await user.type(screen.getByRole("textbox"), "use @co");
+      await screen.findByTestId("skill-picker-popover");
+      await waitFor(() => expect(skillFetches()).toBe(2));
+      await user.keyboard("d");
+      expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
+      expect(skillFetches()).toBe(2);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("at the mention limit, it offers only the skills already picked", async () => {
+    const names = Array.from(
+      { length: MAX_MENTIONS_PER_MESSAGE + 1 },
+      (_, index) => `skill-${String(index).padStart(2, "0")}`
+    );
+    mockChatSkills = {
+      ...NO_SKILLS,
+      skills: names.map((name) => ({
+        kind: "skill",
+        slug: name,
+        name,
+        description: name,
+      })),
+    };
+    const picked = names.slice(0, MAX_MENTIONS_PER_MESSAGE);
+    const inputBarRef = createRef<AppInputBarHandle>();
+    render(<Composer plugins={[]} inputBarRef={inputBarRef} />);
+    act(() =>
+      inputBarRef.current?.restore({
+        message: picked.map((name) => `@${name}`).join(" "),
+        mentions: picked.map((name) => ({ type: "skill", name })),
+        files: [],
+      })
+    );
+    expect(skillTiles()).toHaveLength(MAX_MENTIONS_PER_MESSAGE);
+
+    const user = setupUser();
+    await user.keyboard(" @skill-");
+    await screen.findByTestId("skill-picker-row-skill-00");
+    expect(screen.queryByTestId("skill-picker-row-skill-20")).toBeNull();
+    await user.keyboard("2");
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 

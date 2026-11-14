@@ -173,8 +173,8 @@ export function QueryControllerProvider({
   const submit = useCallback(
     async (
       submitQuery: string,
-      onChat: (query: string) => void,
-      { filters, chatOnly = false }: SubmitQueryOptions = {}
+      onChat: () => void,
+      { chatOnly = false }: SubmitQueryOptions = {}
     ): Promise<void> => {
       setQuery(submitQuery);
       setError(null);
@@ -197,7 +197,7 @@ export function QueryControllerProvider({
         setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        onChat();
         return;
       }
 
@@ -205,7 +205,7 @@ export function QueryControllerProvider({
       if (currentAppMode === "search") {
         setState({ phase: "searching" });
         try {
-          await performSearch(submitQuery, filters);
+          await performSearch(submitQuery);
         } catch (err) {
           if (err instanceof Error && err.name === "AbortError") return;
           throw err;
@@ -221,14 +221,14 @@ export function QueryControllerProvider({
 
         if (result === "search") {
           setState({ phase: "searching" });
-          await performSearch(submitQuery, filters);
+          await performSearch(submitQuery);
           setState({ phase: "search-results" });
           appModeRef.current = "search";
         } else {
           setState({ phase: "chat" });
           setSearchResults([]);
           setLlmSelectedDocIds(null);
-          onChat(submitQuery);
+          onChat();
         }
       } catch (error) {
         if (error instanceof Error && error.name === "AbortError") {
@@ -238,7 +238,7 @@ export function QueryControllerProvider({
         setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);
-        onChat(submitQuery);
+        onChat();
       }
     },
     [

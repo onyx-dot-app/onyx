@@ -64,8 +64,8 @@ export function placeMentions(
   return placed.sort((a, b) => a.index - b.index);
 }
 
-/** The mentions the server gets: each one once, in order, without its
- * place in the text. */
+/** The mentions a request sends: each one once, in order, without its
+ * place in the text. The send and pending-message requests call it. */
 export function uniqueMentions(
   mentions: readonly ComposedMention[]
 ): Mention[] {

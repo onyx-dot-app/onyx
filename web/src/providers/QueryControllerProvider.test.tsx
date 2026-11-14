@@ -53,5 +53,4 @@ test("a chat-only query in search mode leaves the search results for chat", asyn
   );
   expect(screen.getByLabelText("Query phase")).toHaveTextContent("chat:0");
   expect(onChat).toHaveBeenCalledTimes(1);
-  expect(onChat).toHaveBeenCalledWith("use @code-review");
 });
