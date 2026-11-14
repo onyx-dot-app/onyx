@@ -30,7 +30,6 @@ fail() {
 	echo "FAIL  $1: $2"
 	fails=$((fails + 1))
 }
-info() { echo "INFO  $1: $2"; }
 die() {
 	echo "error: $*" >&2
 	exit 2
@@ -134,23 +133,20 @@ check_data_dir() {
 		return
 	fi
 	fstype=$(stat -f -c %T "$DATA_DIR" 2>/dev/null || echo unknown)
-	if [ "$fstype" = "xfs" ]; then
-		if ! probe=$(mktemp -d "$DATA_DIR/reflink-probe.XXXXXX" 2>/dev/null); then
-			fail data-dir "$DATA_DIR is not writable. Run as root."
-			return
-		fi
-		head -c 65536 /dev/zero >"$probe/a"
-		if cp --reflink=always "$probe/a" "$probe/b" 2>/dev/null; then
-			pass data-dir "$DATA_DIR is XFS with reflink"
-		else
-			fail data-dir "$DATA_DIR is XFS without reflink. Make the file system again with 'mkfs.xfs -m reflink=1'."
-		fi
-		rm -rf "$probe"
-	elif [ -e /dev/loop-control ]; then
-		info data-dir "$DATA_DIR is '$fstype'. The host agent makes an XFS loop file in it."
-	else
-		fail data-dir "$DATA_DIR is '$fstype' and /dev/loop-control does not exist. Load the loop module, or mount an XFS disk (apply --xfs-device)."
+	if ! probe=$(mktemp -d "$DATA_DIR/reflink-probe.XXXXXX" 2>/dev/null); then
+		fail data-dir "$DATA_DIR is not writable. Run as root."
+		return
 	fi
+	head -c 65536 /dev/zero >"$probe/a"
+	if cp --reflink=always "$probe/a" "$probe/b" 2>/dev/null; then
+		pass data-dir "$DATA_DIR is $fstype with reflink"
+	elif [ -e /dev/loop-control ]; then
+		# Same result as the chart preflight check: the agent makes a loop store.
+		warn data-dir "$DATA_DIR is '$fstype' without reflink. The host agent makes a sparse XFS loop store ($DATA_DIR/.craft-fc-store.img). An XFS disk with reflink (apply --xfs-device) is faster."
+	else
+		fail data-dir "$DATA_DIR is '$fstype' without reflink and /dev/loop-control does not exist. Load the loop module (apply loads it), or mount an XFS disk with reflink (apply --xfs-device)."
+	fi
+	rm -rf "$probe"
 	avail_kib=$(df -Pk "$DATA_DIR" | awk 'NR == 2 {print $4}')
 	if [ $((avail_kib / 1048576)) -ge "$MIN_FREE_DISK_GIB" ]; then
 		pass free-disk "$((avail_kib / 1048576)) GiB free in $DATA_DIR"

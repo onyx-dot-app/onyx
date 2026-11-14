@@ -16,13 +16,15 @@ somewhere else, and a data dir that is not empty (a mount would hide its files).
 data dir, it checks that the disk is XFS and adds the missing fstab entry. It refuses an fstab entry that mounts
 another disk at the data dir, or that has `noauto`. It cannot turn on cgroup v2 or VT-x: `check` names the fix.
 
-Without `--xfs-device`, a data dir on ext4 needs a host agent with the XFS loop store (Onyx releases with the
-`craft.hostAgent.loopStore` chart values). It then makes its own XFS loop file there. Older host agents need an XFS
-data dir with reflink: use `--xfs-device`.
+Without reflink in the data dir (ext4, or XFS made without `reflink=1`), `check` prints a `WARN` when
+`/dev/loop-control` exists, the same result as the chart preflight check. The host agent then makes its own sparse XFS
+loop store (`<data dir>/.craft-fc-store.img`). Without `/dev/loop-control`, `check` fails. An XFS disk with reflink
+(`--xfs-device`) is faster than the loop store.
 
 ## Tests
 
 The script was run in a privileged `debian:trixie-slim` container with `xfsprogs` and `e2fsprogs`: `check`, `apply
 --dry-run`, `apply --xfs-device` on a loop device (format, fstab line, mount, second run makes no change), a refused
 ext4 device, a hand-mounted XFS disk and a hand-mounted ext4 disk, conflicting and `noauto` fstab entries, and
-`label --dry-run`. Run `shellcheck craft-fc-node-prep.sh` after a change.
+`label --dry-run`. The data dir check: XFS with reflink passes; XFS without reflink and ext4 warn with
+`/dev/loop-control` and fail without it. Run `shellcheck craft-fc-node-prep.sh` after a change.
