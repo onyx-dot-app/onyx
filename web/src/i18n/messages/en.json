@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management service desk tickets"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "Mailboxes",
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management content to index. You can index every ticket or limit indexing to a specific project or JQL query.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Everything"
+                },
+                "project": {
+                  "label": "Project"
+                },
+                "jql": {
+                  "label": "JQL Query"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexes every ticket the account can read",
+              "description": "Onyx indexes all tickets the selected account can read. To index fewer, choose another tab."
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of a specific project to index (e.g., 'PROJ')."
+            },
+            "jql_query": {
+              "label": "JQL Query",
+              "description": "A custom JQL query to filter Jira Service Management tickets.\n\nIMPORTANT: Do not include any time-based filters in the JQL query as that will conflict with the connector's logic. Additionally, do not include ORDER BY clauses.\n\nSee Atlassian's [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) for more details on syntax."
+            },
+            "comment_email_blacklist": {
+              "label": "Comment Email Blacklist",
+              "description": "This is generally useful to ignore certain bots. Add user emails which comments should NOT be indexed."
             }
           }
         }

@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management Service-Desk-Tickets"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "Postfächer",
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Konfigurieren Sie, welche Jira Service Management-Inhalte indiziert werden sollen. Sie können alle Tickets indizieren oder die Indizierung auf ein bestimmtes Projekt oder eine JQL-Abfrage beschränken.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Website-URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Alles"
+                },
+                "project": {
+                  "label": "Projekt"
+                },
+                "jql": {
+                  "label": "JQL-Abfrage"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indiziert jedes Ticket, das das Konto lesen kann",
+              "description": "Onyx indiziert alle Tickets, die das ausgewählte Konto lesen kann. Um die Auswahl einzugrenzen, wählen Sie einen anderen Tab."
+            },
+            "project_key": {
+              "label": "Projektschlüssel",
+              "description": "Der Schlüssel eines bestimmten zu indizierenden Projekts (z. B. 'IT')."
+            },
+            "jql_query": {
+              "label": "JQL-Abfrage",
+              "description": "Eine benutzerdefinierte JQL-Abfrage zum Filtern von Jira Service Management-Tickets.\n\nWICHTIG: Fügen Sie keine zeitbasierten Filter in die JQL-Abfrage ein, da dies mit der Logik des Connectors in Konflikt gerät. Verwenden Sie außerdem keine ORDER BY-Klauseln.\n\nWeitere Details zur Syntax finden Sie in der [JQL-Dokumentation von Atlassian](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)."
+            },
+            "comment_email_blacklist": {
+              "label": "E-Mail-Ausschlussliste für Kommentare",
+              "description": "Dies ist hilfreich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Benutzern hinzu, deren Kommentare NICHT indiziert werden sollen."
             }
           }
         }

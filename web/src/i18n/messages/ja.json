@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management サービスデスクのチケット"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "メールボックス",
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクタの設定",
+          "subtext": "インデックスを作成する Jira Service Management のコンテンツを設定します。すべてのチケットを対象にするか、特定のプロジェクトや JQL クエリに限定できます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが閲覧できるすべてのチケットをインデックス化",
+              "description": "選択したアカウントが読み取れるすべてのチケットを Onyx がインデックス化します。範囲を絞るには別のタブを選択してください。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックス化する特定プロジェクトのキー（例: 'IT'）。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "Jira Service Management のチケットを絞り込むカスタム JQL クエリ。\n\n重要: コネクタのロジックと競合するため、JQL クエリに時間ベースのフィルターや ORDER BY 句を含めないでください。\n\n構文の詳細は [Atlassian の JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) をご覧ください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメント除外メールアドレスリスト",
+              "description": "ボットのコメントなどを無視したい場合に便利です。コメントをインデックス化しないユーザーのメールアドレスを追加してください。"
             }
           }
         }
