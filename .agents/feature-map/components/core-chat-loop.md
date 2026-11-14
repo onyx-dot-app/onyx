@@ -117,8 +117,8 @@ _stream_chat_turn               ChatTurnExecution.run                ChatTurnExe
   prepare_chat_turn (DB, files)   starts one response thread           create_chat_agent: construct_tools,
   -> ChatTurnSetup                  per model                            ChatAgent or DeepResearchAgent
   start_chat_turn                 wake >= every 250 ms: Stop;          load_chat_branch (session check)
-    clear_stop, admission.publish   admission every 5 s; owner         ChatRunStore (content kept) or
-    publish IDs to ChatDelivery     leases every 10 s (content kept)     persistence view; register saved agents
+    clear_stop, buffer open,        admission every 5 s; owner         ChatRunStore (content kept) or
+    admission.publish, ID lines     leases every 10 s (content kept)     persistence view; register saved agents
     start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
   yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
                                     admission.release, delivery.finish RunStore.save -> ChatResponsePersistence

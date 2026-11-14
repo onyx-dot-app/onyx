@@ -140,6 +140,8 @@ def start_chat_turn(
         try:
             turn._auto_filters = load_settings().auto_detect_search_filters is not False
             clear_stop(setup.chat_session_id, setup.cache, stream_id=setup.stream_id)
+            # A published stream ID always has a buffer that resume can serve.
+            stream_buffer.open()
             # Stop must identify this response before the client receives its IDs.
             setup.admission.publish(setup.stream_id)
         except Exception as error:

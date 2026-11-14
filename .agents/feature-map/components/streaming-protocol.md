@@ -323,7 +323,11 @@ its background task end ([[#pure-asgi-middleware]]).
     `server/query_and_chat/chat_backend.py:resume_chat_stream` reads once
     before the response starts and returns 404 for a gap at the requested
     cursor, so a 200 stream always starts with a `StreamCursor` line and only
-    a 404 means "do not resume this stream again". A later gap ends the
+    a 404 means "do not resume this stream again". For that to hold,
+    `chat/execution.py:start_chat_turn` saves the empty buffer
+    (`StreamBufferWriter.open`) before `ChatTurnAdmission.publish` makes the
+    stream ID visible, so a missing buffer always means expired or deleted. A
+    failed open makes the run non-resumable (truncated). A later gap ends the
     stream without the stop packet; a resume from its last cursor then gets
     output or 404, and after a 404 the client refetches the session. A capped read can say `done` with
     chunks still pending: read until `blocks` is empty. The cursor counts chunks,

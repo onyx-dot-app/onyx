@@ -105,6 +105,20 @@ class StreamBufferWriter:
     def truncated(self) -> bool:
         return self._meta.truncated
 
+    def open(self) -> None:
+        """Save the empty buffer, so a resume of the published stream finds it
+        before the first flush. A cache failure makes the run non-resumable."""
+        try:
+            self._write_meta(CHAT_STREAM_BUFFER_TTL_S)
+        except Exception:
+            logger.exception(
+                "stream buffer open failed for session %s stream %d; "
+                "run continues non-resumable",
+                self._chat_session_id,
+                self._stream_id,
+            )
+            self._meta.truncated = True
+
     def append_line(self, line: str) -> None:
         if self._meta.truncated or self._meta.done:
             return

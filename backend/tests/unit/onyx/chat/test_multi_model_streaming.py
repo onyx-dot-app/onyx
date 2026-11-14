@@ -53,7 +53,12 @@ from onyx.chat.process_message import (
     gather_stream_full,
 )
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.stream_buffer import ChatStream, StreamBufferWriter
+from onyx.chat.stream_buffer import (
+    ChatStream,
+    StreamBufferWriter,
+    StreamChunkRead,
+    read_stream_chunks,
+)
 from onyx.configs.constants import MessageType
 from onyx.db.chat import set_preferred_response
 from onyx.db.enums import IncognitoRecordMode
@@ -99,6 +104,7 @@ from onyx.utils.threadpool_concurrency import (
 )
 from onyx.utils.variable_functionality import global_version
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
+from tests.unit.fakes import FakeCache
 from tests.unit.onyx.agents.fakes import (
     FakeModelClient,
     FakeRunOwnership,
@@ -643,6 +649,34 @@ class TestRunModels:
         stop_obj = stops[0].obj
         assert isinstance(stop_obj, OverallStop)
         assert stop_obj.stop_reason == "finished"
+
+    def test_a_published_stream_id_has_a_buffer_to_resume(self) -> None:
+        """A resume that reads the stream ID as soon as it is published finds
+        the empty buffer, not a missing one."""
+        setup = _make_setup(n_models=1)
+        setup.cache = setup.admission.cache = FakeCache()
+        setup.stream_id = 7
+        at_publish: list[StreamChunkRead | None] = []
+        setup.admission.publish.side_effect = lambda stream_id: at_publish.append(
+            read_stream_chunks(setup.cache, setup.chat_session_id, stream_id, 0)
+        )
+
+        with (
+            patch_execution(),
+            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch("onyx.chat.history_store.save_chat_response_to_db"),
+            patch(
+                "onyx.chat.execution.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+        ):
+            _collect_chat_turn(setup)
+
+        assert at_publish == [
+            StreamChunkRead(
+                blocks=[], next_cursor=0, chunk_count=0, done=False, gap=False
+            )
+        ]
 
     def test_idle_gap_emits_chat_heartbeat(self) -> None:
         """Idle gaps in the drain loop emit ChatHeartbeat packets."""
