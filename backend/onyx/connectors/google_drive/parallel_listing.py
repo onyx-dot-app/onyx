@@ -99,6 +99,10 @@ MAX_FRONTIER_IDS = 2000
 # One call lists for about this long, or this many files, and then drains.
 CALL_BUDGET_SECONDS = 60.0
 CALL_BUDGET_FILES = 50_000
+# The file budget of one inline call, where the caller converts each file to a
+# document in the same call. It caps the documents one call converts. Keep it
+# at least LISTING_PAGE_SIZE, or a call cannot take a full page.
+INLINE_CALL_BUDGET_FILES = 2 * LISTING_PAGE_SIZE
 # How long the consumer waits for a file before it checks the budget.
 _OUTPUT_POLL_SECONDS = 0.1
 
@@ -333,6 +337,11 @@ class ParallelDriveLister:
         ],
         # Whether to emit a file, and the dedup claim. Called under the lock.
         admit_file: Callable[[GoogleDriveFileType, bool], bool],
+        # The caller converts each file before it reads the next. One page is
+        # in flight, and the call stops before a page could pass
+        # INLINE_CALL_BUDGET_FILES, so the files that wait for conversion
+        # stay few.
+        inline: bool = False,
     ) -> None:
         if checkpoint.listing is None:
             raise ValueError("The checkpoint has no listing state")
@@ -346,6 +355,8 @@ class ParallelDriveLister:
         self._check_impersonation = check_impersonation
         self._impersonation_failed = impersonation_failed
         self._admit_file = admit_file
+        self._inline = inline
+        self._budget_files = INLINE_CALL_BUDGET_FILES if inline else CALL_BUDGET_FILES
 
         # Guards the state, the checkpoint fields this class writes, and the
         # fields below.
@@ -359,6 +370,7 @@ class ParallelDriveLister:
             AdaptiveConcurrency(
                 self._observer,
                 initial=self._state.concurrency_limit or ADAPTIVE_INITIAL_WORKERS,
+                maximum=1 if inline else ADAPTIVE_MAX_WORKERS,
             )
         )
 
@@ -388,7 +400,9 @@ class ParallelDriveLister:
             # flight, so no thread writes the checkpoint after this returns.
             self._pool.drain()
             wait_for_futures([pool_run])
-            self._state.concurrency_limit = self._pool.limit
+            if not self._inline:
+                # The limit of one worker says nothing of what Drive allows.
+                self._state.concurrency_limit = self._pool.limit
         pool_run.result()
 
     def _run_pool(self) -> None:
@@ -404,7 +418,15 @@ class ParallelDriveLister:
         for file in files:
             self._output.put(file)
         self._emitted += len(files)
-        if self._emitted >= CALL_BUDGET_FILES:
+        if self._inline:
+            # The one page in flight is the one that emits here, so the call
+            # stops before the next page could pass the budget.
+            spent = self._emitted > 0 and (
+                self._emitted + LISTING_PAGE_SIZE > self._budget_files
+            )
+        else:
+            spent = self._emitted >= self._budget_files
+        if spent:
             self._pool.drain()
 
     # --- Planning a partition -------------------------------------------------

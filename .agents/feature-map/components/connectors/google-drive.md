@@ -48,18 +48,21 @@ can apply before a run reads the credential. It is a credential-derived binding
 field, and `GoogleDriveCredentialBinding.validate_credential` rejects a
 credential of the other kind.
 
-**Crawl.** The service-account crawl walks phases for the whole domain
+**Crawl.** Indexing, the stub listing, pruning and permission sync share one
+listing (`GoogleDriveConnector._fetch_drive_items`). For a service account
+with no requested folders it is the shard engine (see **Shard engine**). The
+serial crawl lists the rest. A service account with requested folders (or a
+requested drive id that is a folder) walks phases for the whole domain
 (`DriveRetrievalPhase`): inventory, shared drives, My Drives, requested
 targets, external shares. Shared drives run before My Drives, so later phases
 drop any file from a drive already covered. This stops shortcuts from producing
 duplicates. The phase state holds partition keys and page tokens, so it grows
 with drives and users. Only the dedup set grows with files
-([[#dedup-set-capped]]). The OAuth crawl walks
-stages for its one user (`DriveRetrievalStage`). Indexing and the slim
-listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
+([[#dedup-set-capped]]). The OAuth crawl walks stages for its one user
+(`DriveRetrievalStage`).
 
 **Checkpointed slim listing.**
-`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one pass of the
+`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
 slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
 `DriveListingPayload` (the user who listed the file).
 
@@ -72,17 +75,29 @@ sync), so pruning removes documents of files that indexing skips. Conversion
 runs it first. `_post_download_skip_reason` covers what only the content shows
 (export over the size cap, Forms API off, no text).
 
-**Parallel listing.** For a service account with no requested folders, that
-call runs `connectors/google_drive/parallel_listing.py:ParallelDriveLister`.
+**Shard engine.** `connectors/google_drive/parallel_listing.py:ParallelDriveLister`.
 Every partition (shared drive, My Drive, files shared with a user) lists in one
 `AdaptiveTaskPool`, one page per task, at `pageSize=1000`. A partition with
-many pages splits into `modifiedTime` shards by probe and split
+many files splits into `modifiedTime` shards by probe and split
 (`plan_split`): the sub-ranges are query filters, so no step depends on page
-order. `GoogleDriveCheckpoint.listing` (`DriveListingState`) holds the open
-shards, the coverage sets, the learned worker limit and the count of stubs by
-`DocumentTypeLabel`. One lock guards each page step, and a call drains the pool
-before it returns, so the checkpoint covers exactly what the call yielded. The
-OAuth flow and a connector with requested folders use the serial crawl.
+order. The split thresholds count files, not pages, because permission fields
+shrink a page to about 100 files. Each page checks the split again, and the
+estimate takes the larger of the page density and the density of the pages the
+shard kept. `GoogleDriveCheckpoint.listing` (`DriveListingState`) holds the
+open shards, the coverage sets, the learned worker limit and the count of the
+files that pass the metadata check, by `DocumentTypeLabel`. One lock guards
+each page step, and a call drains the pool before it returns, so the
+checkpoint covers exactly what the call yielded. The entry points:
+- `load_from_checkpoint` converts inline: one page in flight, and a call stops
+  before it passes `INLINE_CALL_BUDGET_FILES`.
+- `retrieve_slim_docs_from_checkpoint`: full concurrency, stubs only.
+- Pruning and permission sync loop the calls in their task. Permission sync
+  stores the state through `on_checkpoint`. Pruning lists the time since the
+  window end once more at the end, because a file edited during the listing
+  moves past the end.
+
+A service account checkpoint of the serial crawl (`phase_progress` or a stage)
+is dropped: the attempt lists again from its window start.
 
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
@@ -138,6 +153,11 @@ discovery document with its root URL replaced, so batch requests follow too.
 6. `config-needs-scope` **A config needs at least one scope.** The constructor
    (`connectors/google_drive/connector.py:GoogleDriveConnector.__init__`) raises `ConnectorValidationError` when every toggle and every specific
    request is empty.
+7. `prune-lists-late-edits` **A prune lists the edits made during its
+   listing.** The shard engine lists the window `[start, end)`. A file edited
+   during the listing moves past the end, and a prune would read it as
+   deleted. So `_retrieve_all_slim_docs_impl` with `for_pruning` lists the time
+   since the end once more before it ends.
 
 ---
 

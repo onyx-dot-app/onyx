@@ -749,7 +749,7 @@ def convert_drive_item_to_document(
     return first_error
 
 
-def _drive_file_size(file: GoogleDriveFileType) -> int | None:
+def drive_file_size(file: GoogleDriveFileType) -> int | None:
     """Byte size from the file listing, None when the listing has none."""
     size_str = file.get("size")
     if not size_str:
@@ -883,7 +883,7 @@ def _convert_drive_item_to_document(
             return None
         sections = extraction.sections
         staged_file_id = extraction.staged_file_id
-        size_bytes = _drive_file_size(file)
+        size_bytes = drive_file_size(file)
 
         doc_id = onyx_document_id_from_drive_file(file)
         external_access = (
@@ -1032,7 +1032,7 @@ def drive_file_skip_reason(
         return "a shortcut or folder is not a document"
     if exclude_domain_link_only and has_link_only_permission(file):
         return "only a link gives access, and such files are excluded"
-    size_bytes = _drive_file_size(file)
+    size_bytes = drive_file_size(file)
     if size_bytes is not None and size_bytes > size_threshold:
         return f"{size_bytes} bytes is over the size threshold of {size_threshold}"
     handler = _mime_handler(mime_type, file_name)
@@ -1070,6 +1070,6 @@ def build_slim_document_stub(
             else None
         ),
         mime_type=file.get("mimeType") or None,
-        size_bytes=_drive_file_size(file),
+        size_bytes=drive_file_size(file),
         listing_payload=DriveListingPayload(retriever_email=retriever_email),
     )

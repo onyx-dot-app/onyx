@@ -348,7 +348,8 @@ class DriveListingState(BaseModel):
     listed_owners: set[str] = set()
     # The worker limit the last call ended with. The next call starts from it.
     concurrency_limit: int | None = None
-    # Running count of the stubs the listing yielded.
+    # Running count of the files the listing yielded that pass the metadata
+    # check.
     docs_by_type: dict[DocumentTypeLabel, int] = {}
     # Bytes per type. Only files that Drive lists with a size add to it.
     bytes_by_type: dict[DocumentTypeLabel, int] = {}
@@ -390,8 +391,8 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # --- Phased retrieval state, used by the service account flow. Sized by
-    # drives and users, never by documents.
+    # --- Phased retrieval state, used by the serial service account listing
+    # (requested folders). Sized by drives and users, never by documents.
 
     # None until the first phased run; a checkpoint written by the per-user
     # stage loop also has None here and restarts at INVENTORY.
@@ -418,9 +419,9 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # listing would delete every document indexed from them.
     unreachable_target_ids: set[str] = set()
 
-    # State of the parallel sharded listing. None until the checkpointed slim
-    # listing of a service account starts. The phased retrieval does not use
-    # it.
+    # State of the shard engine, which lists a service account with no
+    # requested folders. None for the serial listing (OAuth and requested
+    # folders). A service account checkpoint of the serial listing is dropped.
     listing: DriveListingState | None = None
 
     # Hierarchy node raw IDs that have already been yielded.
