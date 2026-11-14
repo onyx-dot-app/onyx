@@ -60,6 +60,19 @@ def run_jobs() -> None:
         "--queues=docprocessing,port",
     ]
 
+    cmd_worker_docconversion = [
+        "celery",
+        "-A",
+        "onyx.background.celery.versioned_apps.docconversion",
+        "worker",
+        "--pool=threads",
+        "--concurrency=2",
+        "--prefetch-multiplier=1",
+        "--loglevel=INFO",
+        "--hostname=docconversion@%n",
+        "--queues=docconversion",
+    ]
+
     cmd_worker_docfetching = [
         "celery",
         "-A",
@@ -142,6 +155,7 @@ def run_jobs() -> None:
         ("LIGHT", cmd_worker_light),
         ("DOCPROCESSING", cmd_worker_docprocessing),
         ("DOCFETCHING", cmd_worker_docfetching),
+        ("DOCCONVERSION", cmd_worker_docconversion),
         ("HEAVY", cmd_worker_heavy),
         ("MONITORING", cmd_worker_monitoring),
         ("USER_FILE_PROCESSING", cmd_worker_user_file_processing),
