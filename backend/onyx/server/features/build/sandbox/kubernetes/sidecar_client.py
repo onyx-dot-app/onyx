@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import hashlib
+import os
 import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -78,6 +79,11 @@ class _IteratorReader:
 
     def readable(self) -> bool:
         return True
+
+
+def _iter_file(archive_file: IO[bytes]) -> Iterator[bytes]:
+    archive_file.seek(0)
+    return iter(lambda: archive_file.read(_SIDECAR_CHUNK_SIZE), b"")
 
 
 def get_push_key_pair() -> tuple[Ed25519PrivateKey, str]:
@@ -254,14 +260,10 @@ class SidecarClient:
         operation_label: str,
         timeout_seconds: float = BULK_TRANSFER_TIMEOUT_SECONDS,
     ) -> None:
-        def body() -> Iterator[bytes]:
-            archive_file.seek(0)
-            return iter(lambda: archive_file.read(_SIDECAR_CHUNK_SIZE), b"")
-
         self._post(
             endpoint_path=endpoint_path,
             signing_path=endpoint_path,
-            body=body,
+            body=lambda: _iter_file(archive_file),
             sha256_hex=sha256_hex,
             content_type="application/gzip",
             operation_label=operation_label,
@@ -299,15 +301,16 @@ class SidecarClient:
         *,
         sandbox_id: UUID,
         mount_path: str,
-        archive: bytes,
+        archive_file: IO[bytes],
         sha256_hex: str,
         operation_label: str,
         timeout_seconds: float,
     ) -> None:
+        archive_size = archive_file.seek(0, os.SEEK_END)
         self._post(
             endpoint_path=SIDECAR_PUSH_PATH,
             signing_path=mount_path,
-            body=lambda: archive,
+            body=lambda: _iter_file(archive_file),
             sha256_hex=sha256_hex,
             content_type="application/gzip",
             operation_label=operation_label,
@@ -316,7 +319,11 @@ class SidecarClient:
             retry_until_deadline=False,
             sandbox_id=sandbox_id,
             params={"mount_path": mount_path},
-            headers={"X-Bundle-Sha256": sha256_hex},
+            # Lets the daemon refuse an oversized push before it reads the body.
+            headers={
+                "Content-Length": str(archive_size),
+                "X-Bundle-Sha256": sha256_hex,
+            },
         )
 
     def _post(

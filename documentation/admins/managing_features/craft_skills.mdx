@@ -361,7 +361,10 @@ If the Skills do not fit, Onyx leaves out whole Skills. It never loads part of a
 4. **Installed by default** Skills.
 
 In each group, the Skill that the user got most recently stays first.
-Onyx applies this order at session start and when it sends changed Skills to a running session.
+Onyx applies this order at session start and when it sends changed Skills to a running session. In rare cases,
+a Skill whose counted size fits still does not load. It shows in the same list.
+
+A running session gets changed Skills at once, not at its next message. A turn that is running can read the new files.
 
 To see which users are past 500 MB or 5,000 files, call `GET /api/skills/users-over-limit`.
 You need the organization-wide `manage:plugins` permission. The response lists each user with their size, file count,

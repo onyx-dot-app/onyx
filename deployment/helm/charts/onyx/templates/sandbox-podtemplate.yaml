@@ -116,9 +116,14 @@ template:
           - { name: sandbox-ca-bundle, mountPath: /etc/ssl/sandbox, readOnly: true }
         resources:
           # Snapshot tar/stream runs through this sidecar, so give it headroom.
-          # Restore buffers the downloaded archive (<=100MB cap) in /tmp.
+          # Pushes stream to disk, so memory stays flat as pushes grow. The pod
+          # storage limit is the sum of container limits and includes emptyDirs.
+          # One push at a time (sandbox_daemon/server.py), each <= 900 MiB of files:
+          # 1 archive in /tmp (<= 964 MiB) + 4 trees in managed (live and incoming
+          # skills, live and previous user_library), each <= ~1 GiB with 4 KiB
+          # blocks: about 5 GiB, plus 1 GiB for snapshot and history restores.
           requests: { cpu: "100m", memory: "256Mi", ephemeral-storage: "512Mi" }
-          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "2Gi" }
+          limits: { cpu: "1", memory: "1Gi", ephemeral-storage: "6Gi" }
         securityContext:
           allowPrivilegeEscalation: false
           readOnlyRootFilesystem: false
