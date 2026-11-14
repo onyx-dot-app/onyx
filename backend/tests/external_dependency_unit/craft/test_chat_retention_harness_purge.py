@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.ttl_management import tasks as ttl_tasks
@@ -117,7 +118,17 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         assert send_task.call_args.kwargs["queue"] == OnyxCeleryQueues.SANDBOX
         assert send_task.call_args.kwargs["expires"] is not None
         sweep = build_tasks.purge_expired_harness_sessions_task.run
-        sweep(**send_task.call_args.kwargs["kwargs"])
+        with patch(
+            "onyx.background.celery.tasks.build.tasks.load_settings",
+            return_value=Settings(maximum_chat_retention_days=_RETENTION_DAYS),
+        ):
+            sweep(**send_task.call_args.kwargs["kwargs"])
+        # Retention turned off while the sweep waited in the queue.
+        with patch(
+            "onyx.background.celery.tasks.build.tasks.load_settings",
+            return_value=Settings(maximum_chat_retention_days=None),
+        ):
+            sweep(**send_task.call_args.kwargs["kwargs"])
 
         assert sorted(purged) == sorted(
             [(sandbox_id, old_build), (sandbox_id, expired_chat), (sandbox_id, orphan)]
@@ -155,6 +166,49 @@ def test_retention_purges_nothing_when_firecracker_is_off(
 
         send_task.assert_not_called()
         assert purged == []
+    finally:
+        db_session.rollback()
+        if sandbox_id is not None:
+            tenant_cache.delete(SAVED_SESSIONS_PREFIX + str(sandbox_id))
+        _delete_user(db_session, user_id)
+
+
+def test_a_session_used_again_during_the_sweep_keeps_its_save(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", True)
+    tenant_cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    user = make_user(db_session, standard_account=True)
+    user_id = user.id
+    sandbox_id: UUID | None = None
+    try:
+        sandbox_id = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING).id
+        sessions = [
+            _build_session(db_session, user, age_days=_RETENTION_DAYS + 10)
+            for _ in range(2)
+        ]
+        for session_id in sessions:
+            add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
+        purged: list[UUID] = []
+
+        def purge_and_resume_the_other(_sandbox_id: UUID, session_id: UUID) -> None:
+            purged.append(session_id)
+            db_session.execute(
+                update(BuildSession)
+                .where(BuildSession.id.in_(sessions), BuildSession.id != session_id)
+                .values(last_activity_at=datetime.now(tz=timezone.utc))
+            )
+            db_session.commit()
+
+        monkeypatch.setattr(
+            purge_module, "purge_harness_session", purge_and_resume_the_other
+        )
+
+        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=100)
+
+        assert len(purged) == 1
     finally:
         db_session.rollback()
         if sandbox_id is not None:

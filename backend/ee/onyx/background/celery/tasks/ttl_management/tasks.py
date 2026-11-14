@@ -54,15 +54,13 @@ def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -
     )
 
 
-def _send_harness_retention_purge(
-    task: Task, retention_limit_days: float, tenant_id: str
-) -> None:
+def _send_harness_retention_purge(task: Task, tenant_id: str) -> None:
     """Once per chain, after its deletes commit. The sandbox queue runs on a
     worker that can call the Firecracker host agents."""
     try:
         task.app.send_task(
             OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
-            kwargs={"retention_days": retention_limit_days, "tenant_id": tenant_id},
+            kwargs={"tenant_id": tenant_id},
             queue=OnyxCeleryQueues.SANDBOX,
             priority=OnyxCeleryPriority.LOW,
             expires=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
@@ -168,7 +166,7 @@ def perform_ttl_management_task(
             raise
     else:
         if HARNESS_PURGE_ENABLED:
-            _send_harness_retention_purge(self, retention_limit_days, tenant_id)
+            _send_harness_retention_purge(self, tenant_id)
         _release_chain_if_owned(redis_client, chain_token)
 
 

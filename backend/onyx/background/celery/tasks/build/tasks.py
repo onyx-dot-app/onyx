@@ -40,6 +40,7 @@ from onyx.server.features.build.timeouts import (
     SANDBOX_CLEANUP_DEADLINE_SECONDS as TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
+from onyx.server.settings.store import load_settings
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -88,12 +89,14 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 )
 def purge_expired_harness_sessions_task(
     self: Task,  # noqa: ARG001
-    retention_days: float,
     *,
     tenant_id: str,  # noqa: ARG001
 ) -> None:
     """Firecracker session saves that chat retention no longer keeps. Sent
-    by the EE chat retention chain."""
+    by the EE chat retention chain; uses the window set now."""
+    retention_days = load_settings().maximum_chat_retention_days
+    if retention_days is None:
+        return
     purge_expired_harness_sessions(retention_days, HARNESS_RETENTION_PURGE_BATCH_SIZE)
 
 

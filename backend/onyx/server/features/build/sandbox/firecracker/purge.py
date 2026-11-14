@@ -108,6 +108,14 @@ def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
     # Random order: saves whose purge keeps failing cannot block the rest.
     random.shuffle(expired)
     for sandbox_id, session_id in expired[:limit]:
+        # A session used again since the scan keeps its save.
+        try:
+            with get_session_with_current_tenant() as db_session:
+                if get_retained_session_ids(db_session, [session_id], cutoff):
+                    continue
+        except Exception:
+            logger.exception("sandbox_fc_retention_check_failed session=%s", session_id)
+            continue
         purge_harness_session(sandbox_id, session_id)
 
 
