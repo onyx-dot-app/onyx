@@ -13,7 +13,11 @@ from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
 from onyx.db.models import BuildSession, Skill, User
 from onyx.server.features.build.db.build_session import session_runtime_stale
 from onyx.server.features.build.sandbox.models import FatalWriteError
-from onyx.skills.push import compute_skill_runtime_hash, push_skills_for_users
+from onyx.skills.push import (
+    UserSkillsPayload,
+    compute_skill_runtime_hash,
+    push_skills_for_users,
+)
 from tests.common.craft.stubs import StubSandboxManager
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
 
@@ -155,9 +159,10 @@ def test_connectable_app_change_pushes_and_hashes_self_heal(
     monkeypatch.setattr("onyx.skills.push.get_sandbox_manager", lambda: stub)
     monkeypatch.setattr(
         "onyx.skills.push.build_user_skills_payload",
-        lambda user, session: (
-            connectable_apps_sections[user.id],
-            files_for(user, session),
+        lambda user, session: UserSkillsPayload(
+            connectable_apps_section=connectable_apps_sections[user.id],
+            files=files_for(user, session),
+            omissions=(),
         ),
     )
 

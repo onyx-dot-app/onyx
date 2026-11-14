@@ -339,7 +339,8 @@ Onyx refuses a change by a user who is within both limits when the change puts t
 | An admin changes an installation policy, a share, **Default Access**, or publishes, approves, or transfers a Skill | Always allowed. |
 | A user connects an App, or joins a group | Always allowed. |
 
-A change that is always allowed can put users past the limit.
+A change that is always allowed can put users past the limit. Their sessions then leave out the Skills that do not fit.
+See [Skills in a session](#skills-in-a-session).
 
 The API returns HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `usage`,
 your size and file count after the change, and `max_bytes` and `max_files`.
@@ -347,6 +348,25 @@ In an upload of many Skills or a GitHub import, each refused Skill shows the rea
 
 A user who is already past a limit is not refused. That user can still upload, turn on, or enlarge Skills,
 and can turn off Skills.
+
+### Skills in a session
+
+A user who is past 500 MB still gets every Skill that fits in the sandbox: 900 MB and 10,000 files.
+If the Skills do not fit, Onyx leaves out whole Skills. It never loads part of a Skill. Onyx keeps Skills in this order:
+
+1. Built-in Skills.
+2. **Required** Skills.
+3. Skills that the user turned on.
+   An **Installed by default** Skill that the user turned off and on again is in this group.
+4. **Installed by default** Skills.
+
+In each group, the Skill that the user got most recently stays first.
+Onyx applies this order at session start and when it sends changed Skills to a running session.
+
+To see which users are past 500 MB or 5,000 files, call `GET /api/skills/users-over-limit`.
+You need the organization-wide `manage:plugins` permission. The response lists each user with their size, file count,
+and `skills_not_loaded`, the number of their Skills that the last push to their sandbox left out.
+It is 0 when the user has no sandbox. A settings change shows in this number after the next push.
 
 ## Maintain a Skill
 

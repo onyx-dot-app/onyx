@@ -1393,29 +1393,15 @@ def _apply_to_plugin__no_commit(
     if is_set(change.company_installation_policy):
         policy = change.company_installation_policy
         if skill is not None:
-            try:
-                with db_session.begin_nested():
-                    # Mirror for old pods during a rolling deploy and for a
-                    # downgrade. The legacy column has no NOT_AVAILABLE and no
-                    # "no setting", so both write AVAILABLE (lossy); then
-                    # uq_skill_automatic_name does not count them.
-                    skill.installation_policy = (
-                        SkillInstallationPolicy(policy.value)
-                        if policy
-                        in (
-                            PluginInstallationPolicy.DEFAULT,
-                            PluginInstallationPolicy.REQUIRED,
-                        )
-                        else SkillInstallationPolicy.AVAILABLE
-                    )
-                    db_session.flush()
-            except IntegrityError as exc:
-                if not is_unique_violation(exc, "uq_skill_automatic_name"):
-                    raise
-                raise OnyxError(
-                    OnyxErrorCode.SKILL_NAME_CONFLICT,
-                    "Another automatically installed skill already uses this name.",
-                ) from exc
+            # Mirror for old pods during a rolling deploy and for a downgrade.
+            # The legacy column has no NOT_AVAILABLE and no "no setting", so
+            # both write AVAILABLE (lossy).
+            skill.installation_policy = (
+                SkillInstallationPolicy(policy.value)
+                if policy
+                in (PluginInstallationPolicy.DEFAULT, PluginInstallationPolicy.REQUIRED)
+                else SkillInstallationPolicy.AVAILABLE
+            )
         plugin.installation_policy = policy
         db_session.flush()
 
