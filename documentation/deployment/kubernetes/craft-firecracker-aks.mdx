@@ -251,6 +251,18 @@ If the API server logs `An Azure user delegation SAS needs a role with generateU
 the identity has no role, or the role is at the container scope.
 A new role assignment can take a few minutes to start working.
 
+## Remove a test installation
+
+The `postgres` module guards the PostgreSQL server and database with `prevent_destroy`,
+so `terraform destroy` stops with an error. This protects production data. To remove a test installation,
+delete its resource group, then delete the local Terraform state:
+
+```bash
+az group delete --name <resource-group> --yes
+```
+
+Azure also deletes the node resource group of the cluster (`MC_...`). Check with `az group exists --name <name>`.
+
 ## Azure security findings
 
 Microsoft Defender for Containers can report findings when the host agent starts.
