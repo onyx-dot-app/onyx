@@ -108,3 +108,14 @@ test("a nudged approval shows the hidden panel that holds it", () => {
 
   expect(screen.getByTestId("panel-Model 0").dataset.hidden).toBe("false");
 });
+
+test("a nudged approval whose reveal switches the row to the carousel shows its panel", () => {
+  renderView(900, false);
+  fireEvent.click(screen.getByText("Hide Model 0"));
+  expect(screen.getByTestId("panel-Model 0").dataset.current).toBe("false");
+
+  act(() => useToolApprovalUi.getState().nudgeApproval("approval"));
+
+  expect(screen.getByTestId("panel-Model 0").dataset.hidden).toBe("false");
+  expect(screen.getByTestId("panel-Model 0").dataset.current).toBe("true");
+});

@@ -597,7 +597,9 @@ export default function MultiModelResponseView({
       setHiddenPanels(next);
       onHiddenPanelsChange?.(next);
     }
+    // Revealing a panel can switch a row to the carousel on this render.
     if (showNarrowCarousel) navToCarouselPos(position);
+    else setCarouselPos(position);
   }, [
     nudge,
     readOnly,
