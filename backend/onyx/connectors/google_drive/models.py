@@ -256,6 +256,10 @@ class DriveListingState(BaseModel):
     # True after open_window_end: shards that start from now on have no
     # upper bound.
     open_end: bool = False
+    # Requested folder id -> shared drive id, for a folder that no usable
+    # user can walk and that a full listing of its drive covers. If that
+    # listing fails, the folder is unreachable.
+    folders_covered_by_drive: dict[str, str] = {}
     # Each user who saw a child of an unlisted parent, once. UnlistedParent
     # keeps indexes into this list, so a folder that many users see costs a
     # few bytes for each of them.
