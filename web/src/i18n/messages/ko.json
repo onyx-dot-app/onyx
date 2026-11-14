@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 서비스 데스크 티켓"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "사서함",
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "인덱싱할 Jira Service Management 콘텐츠를 구성합니다. 모든 티켓을 인덱싱하거나 특정 프로젝트 또는 JQL 쿼리로 범위를 제한할 수 있습니다.",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "jql": {
+                  "label": "JQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "계정이 읽을 수 있는 모든 서비스 데스크 티켓을 인덱싱합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 서비스 데스크 티켓을 인덱싱합니다. 다른 프로젝트 유형의 티켓을 인덱싱하려면 다른 탭을 선택하세요."
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "인덱싱할 특정 프로젝트의 키(예: 'IT')입니다."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "Jira Service Management 티켓을 필터링하기 위한 사용자 지정 JQL 쿼리입니다.\n\n중요: 커넥터 로직과 충돌하므로 JQL 쿼리에 시간 기반 필터나 ORDER BY 절을 포함하지 마세요.\n\n구문에 대한 자세한 내용은 [Atlassian JQL 문서](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)를 참조하세요."
+            },
+            "comment_email_blacklist": {
+              "label": "댓글 제외 이메일 목록",
+              "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자 이메일을 추가하세요."
             }
           }
         }

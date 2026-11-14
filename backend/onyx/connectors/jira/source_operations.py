@@ -174,6 +174,15 @@ def _bulk_fetch_batch(
         return left + right
 
 
+# The Service Desk API lives outside the versioned Jira REST root
+# (``{server}/rest/servicedeskapi/...``), so the SDK default
+# ``{server}/rest/{rest_path}/{rest_api_version}/{path}`` cannot reach it.
+# For scoped (OAuth 2.0) tokens the client server is already the
+# ``api.atlassian.com/ex/jira/{cloudId}`` gateway, under which the Service
+# Desk API is exposed as well.
+_SERVICEDESK_BASE_URL = "{server}/rest/servicedeskapi/{path}"
+
+
 class JiraSourceOperations(SourceOperations):
     source = DocumentSource.JIRA
     sdk_modules = ("jira",)
@@ -465,6 +474,65 @@ class JiraSourceOperations(SourceOperations):
                     "maxResults": max_results,
                 },
             )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested="JSM portal enrichment is exercised by the Jira Service "
+        "Management connector's unit tests, not by a capability check.",
+    )
+    def get_service_desk_request(
+        self, *, issue_key: str, fast: bool = True
+    ) -> dict[str, Any] | None:
+        """Returns the Jira Service Management customer-request view of an
+        issue (``servicedeskapi/request``), or ``None`` when the issue is not
+        a service desk request or JSM is not reachable with this credential.
+        Best effort by design: enrichment must never fail an indexing run."""
+        try:
+            with _translate_errors(fast=fast):
+                return self._client(fast=fast)._get_json(
+                    f"request/{issue_key}",
+                    # Without the expand the response carries only
+                    # requestTypeId, not the requestType object.
+                    params={"expand": "requestType"},
+                    base=_SERVICEDESK_BASE_URL,
+                )
+        # JiraCloudIdError (tenant_info without a cloud id) and ValueError
+        # (tenant_info answer that is not JSON) come from the cloud-id lookup
+        # inside _api_url, which _translate_errors does not convert.
+        except (
+            JiraApiError,
+            JiraCloudIdError,
+            ValueError,
+            JIRAError,
+            requests.RequestException,
+        ):
+            return None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested="JSM SLA enrichment is exercised by the Jira Service "
+        "Management connector's unit tests, not by a capability check.",
+    )
+    def get_service_desk_sla(
+        self, *, issue_key: str, fast: bool = True
+    ) -> dict[str, Any] | None:
+        """Returns the SLA information of a service desk request
+        (``servicedeskapi/request/{key}/sla``), or ``None`` when unavailable."""
+        try:
+            with _translate_errors(fast=fast):
+                return self._client(fast=fast)._get_json(
+                    f"request/{issue_key}/sla", base=_SERVICEDESK_BASE_URL
+                )
+        except (
+            JiraApiError,
+            JiraCloudIdError,
+            ValueError,
+            JIRAError,
+            requests.RequestException,
+        ):
+            return None
 
 
 def is_cloud_gateway(gateway: JiraSourceOperations) -> bool:

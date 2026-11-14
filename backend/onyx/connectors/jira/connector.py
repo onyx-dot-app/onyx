@@ -4,7 +4,7 @@ import os
 import re
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, ClassVar
 
 from more_itertools import chunked
 from typing_extensions import override
@@ -472,6 +472,7 @@ class JiraConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    connector_source: ClassVar[DocumentSource] = DocumentSource.JIRA
 
     def __init__(
         self,
@@ -979,6 +980,14 @@ class JiraConnector(
             # if we didn't retrieve a full batch, we're done
             checkpoint.has_more = current_offset - starting_offset == page_size
 
+    def _include_issue_in_slim_listing(self, issue: dict[str, Any]) -> bool:  # noqa: ARG002
+        """Whether an issue from the slim JQL search belongs in this
+        connector's slim-document listing. Pruning diffs this listing against
+        the indexed set, so subclasses that filter issues during indexing
+        must apply the same filter here or stale documents are never pruned.
+        Defaults to including everything (plain Jira behavior)."""
+        return True
+
     def retrieve_all_slim_docs(
         self,
         start: SecondsSinceUnixEpoch | None = None,
@@ -1037,12 +1046,20 @@ class JiraConnector(
                 nextPageToken=checkpoint.cursor,
                 ids_done=checkpoint.ids_done,
             ):
+                # Count every issue the search returned so the page-size check
+                # in update_checkpoint_for_next_run reflects the search page,
+                # not the number of issues kept after filtering below.
+                current_offset += 1
+
                 # Get project info
                 project = get_issue_field(issue, _FIELD_PROJECT)
                 project_key = project[_FIELD_KEY] if project else None
                 project_name = project.get("name") if project else None
 
                 if not project_key:
+                    continue
+
+                if not self._include_issue_in_slim_listing(issue):
                     continue
 
                 # Yield hierarchy nodes BEFORE the slim document (parent-before-child)
@@ -1093,7 +1110,6 @@ class JiraConnector(
                         doc_created_at=time_str_to_utc(created) if created else None,
                     )
                 )
-                current_offset += 1
                 if len(slim_doc_batch) >= JIRA_SLIM_PAGE_SIZE:
                     yield slim_doc_batch
                     slim_doc_batch = []
