@@ -23,7 +23,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 )
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
+    DriveListingState,
     GDriveMimeType,
     GoogleDriveCheckpoint,
     ImpersonationError,
@@ -44,11 +44,14 @@ _DOC_CONVERSION_MODULE = "onyx.connectors.google_drive.doc_conversion"
 _CONN_MODULE = "onyx.connectors.google_drive.connector"
 
 
+def _done_listing() -> DriveListingState:
+    """A listing with no partition left to list."""
+    return DriveListingState(window_t0=0, window_t1=0)
+
+
 def _make_done_checkpoint() -> GoogleDriveCheckpoint:
     return GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.DONE,
-        completion_map=ThreadSafeDict(),
+        listing=_done_listing(),
         retrieved_drive_file_ids=set(),
         has_more=False,
     )
@@ -168,7 +171,7 @@ class TestRetrieveAllSlimDocs:
             ) as mock_extract:
                 list(connector.retrieve_all_slim_docs())
 
-        mock_extract.assert_not_called()  # loop exits immediately since checkpoint is DONE
+        mock_extract.assert_not_called()  # loop exits immediately since the listing is done
 
     def test_calls_extract_with_include_permissions_false_non_done_checkpoint(
         self,
@@ -180,19 +183,16 @@ class TestRetrieveAllSlimDocs:
             parent_hierarchy_raw_node_id=None,
             doc_created_at=None,
         )
-        # Checkpoint starts at START, _extract advances it to DONE
+        # The checkpoint starts with no listing, and _extract finishes one
         with patch.object(connector, "build_dummy_checkpoint") as mock_build:
             start_checkpoint = GoogleDriveCheckpoint(
-                retrieved_folder_and_drive_ids=set(),
-                completion_stage=DriveRetrievalStage.START,
-                completion_map=ThreadSafeDict(),
                 retrieved_drive_file_ids=set(),
                 has_more=False,
             )
             mock_build.return_value = start_checkpoint
 
             def _advance_checkpoint(**_kwargs: object) -> object:
-                start_checkpoint.completion_stage = DriveRetrievalStage.DONE
+                start_checkpoint.listing = _done_listing()
                 yield [slim_doc]
 
             with patch.object(
@@ -215,9 +215,6 @@ class TestRetrieveAllSlimDocs:
             doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
-            retrieved_folder_and_drive_ids=set(),
-            completion_stage=DriveRetrievalStage.START,
-            completion_map=ThreadSafeDict(),
             retrieved_drive_file_ids=set(),
             has_more=False,
         )
@@ -227,7 +224,7 @@ class TestRetrieveAllSlimDocs:
         ):
 
             def _advance_and_yield(**_kwargs: object) -> object:
-                start_checkpoint.completion_stage = DriveRetrievalStage.DONE
+                start_checkpoint.listing = _done_listing()
                 yield [slim_doc]
 
             with patch.object(
@@ -251,9 +248,6 @@ class TestRetrieveAllSlimDocsPermSync:
             doc_created_at=None,
         )
         start_checkpoint = GoogleDriveCheckpoint(
-            retrieved_folder_and_drive_ids=set(),
-            completion_stage=DriveRetrievalStage.START,
-            completion_map=ThreadSafeDict(),
             retrieved_drive_file_ids=set(),
             has_more=False,
         )
@@ -263,7 +257,7 @@ class TestRetrieveAllSlimDocsPermSync:
         ):
 
             def _advance_and_yield(**_kwargs: object) -> object:
-                start_checkpoint.completion_stage = DriveRetrievalStage.DONE
+                start_checkpoint.listing = _done_listing()
                 yield [slim_doc]
 
             with patch.object(
@@ -292,14 +286,13 @@ class TestSlimPoolWidth:
                 "mimeType": GDriveMimeType.DOC.value,
             },
             user_email=_ADMIN_EMAIL,
-            completion_stage=DriveRetrievalStage.DONE,
         )
         with (
             patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_WORKERS", 64),
             patch.object(
                 connector, "_fetch_drive_items", return_value=(f for f in [retrieved])
             ),
-            patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+            patch.object(connector, "_listed_folder_nodes", return_value=[]),
             patch(
                 f"{_CONN_MODULE}.run_functions_tuples_in_parallel", return_value=[]
             ) as mock_parallel,
@@ -420,142 +413,8 @@ class TestFailedFolderIdsByEmail:
         assert len(failed_map) == 0
 
 
-class TestOrphanedPathBackfill:
-    def _make_failed_map(
-        self, entries: dict[str, set[str]]
-    ) -> ThreadSafeDict[str, ThreadSafeSet[str]]:
-        return ThreadSafeDict({k: ThreadSafeSet(v) for k, v in entries.items()})
-
-    def _make_file(self, parent_id: str) -> MagicMock:
-        file = MagicMock()
-        file.user_email = "retriever@example.com"
-        file.drive_file = {"parents": [parent_id]}
-        return file
-
-    def test_backfills_intermediate_folders_into_failed_map(self) -> None:
-        """When a walk dead-ends at a confirmed orphan, all intermediate folder
-        IDs must be added to failed_folder_ids_by_email for both emails so
-        future files short-circuit via _get_folder_metadata's cache check."""
-        connector = _make_connector()
-
-        # Chain: folderA -> folderB -> folderC (confirmed orphan)
-        failed_map = self._make_failed_map(
-            {
-                "retriever@example.com": {"folderC"},
-                "admin@example.com": {"folderC"},
-            }
-        )
-
-        folder_a = {"id": "folderA", "name": "A", "parents": ["folderB"]}
-        folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
-
-        def mock_get_folder(
-            _ops: GoogleDriveSourceOperations,
-            _user_email: str,
-            folder_id: str,
-            _field_type: DriveFileFieldType,
-        ) -> dict | None:
-            if folder_id == "folderA":
-                return folder_a
-            if folder_id == "folderB":
-                return folder_b
-            return None
-
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_folder_metadata",
-                side_effect=mock_get_folder,
-            ),
-        ):
-            connector._get_new_ancestors_for_files(
-                files=[self._make_file("folderA")],
-                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
-                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
-                failed_folder_ids_by_email=failed_map,
-            )
-
-        # Both emails confirmed folderC as orphan, so both get the backfill
-        for email in ("retriever@example.com", "admin@example.com"):
-            cached = failed_map.get(email, ThreadSafeSet())
-            assert "folderA" in cached
-            assert "folderB" in cached
-            assert "folderC" in cached
-
-    def test_backfills_only_for_confirming_email(self) -> None:
-        """Only the email that confirmed the orphan gets the path backfilled."""
-        connector = _make_connector()
-
-        # Only retriever confirmed folderC as orphan; admin has no entry
-        failed_map = self._make_failed_map({"retriever@example.com": {"folderC"}})
-
-        folder_a = {"id": "folderA", "name": "A", "parents": ["folderB"]}
-        folder_b = {"id": "folderB", "name": "B", "parents": ["folderC"]}
-
-        def mock_get_folder(
-            _ops: GoogleDriveSourceOperations,
-            _user_email: str,
-            folder_id: str,
-            _field_type: DriveFileFieldType,
-        ) -> dict | None:
-            if folder_id == "folderA":
-                return folder_a
-            if folder_id == "folderB":
-                return folder_b
-            return None
-
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_folder_metadata",
-                side_effect=mock_get_folder,
-            ),
-        ):
-            connector._get_new_ancestors_for_files(
-                files=[self._make_file("folderA")],
-                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
-                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
-                failed_folder_ids_by_email=failed_map,
-            )
-
-        retriever_cached = failed_map.get("retriever@example.com", ThreadSafeSet())
-        assert "folderA" in retriever_cached
-        assert "folderB" in retriever_cached
-
-        # admin did not confirm the orphan — must not get the backfill
-        assert failed_map.get("admin@example.com") is None
-
-    def test_short_circuits_on_backfilled_intermediate(self) -> None:
-        """A second file whose parent is already in failed_folder_ids_by_email
-        must not trigger any folder metadata API calls."""
-        connector = _make_connector()
-
-        # folderA already in the failed map from a previous walk
-        failed_map = self._make_failed_map(
-            {
-                "retriever@example.com": {"folderA"},
-                "admin@example.com": {"folderA"},
-            }
-        )
-
-        with (
-            patch(
-                "onyx.connectors.google_drive.connector.get_folder_metadata"
-            ) as mock_api,
-        ):
-            connector._get_new_ancestors_for_files(
-                files=[self._make_file("folderA")],
-                seen_hierarchy_node_raw_ids=ThreadSafeSet(),
-                fully_walked_hierarchy_node_raw_ids=ThreadSafeSet(),
-                failed_folder_ids_by_email=failed_map,
-            )
-
-        mock_api.assert_not_called()
-
-
 def _make_checkpoint_with_user(user_email: str) -> GoogleDriveCheckpoint:
     return GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.START,
-        completion_map=ThreadSafeDict(),
         retrieved_drive_file_ids=set(),
         has_more=False,
         user_emails=[user_email, _ADMIN_EMAIL],
@@ -641,7 +500,7 @@ def _passes_with_no_files(checkpoint: GoogleDriveCheckpoint, num_passes: int) ->
         nonlocal calls
         calls += 1
         if calls >= num_passes:
-            checkpoint.completion_stage = DriveRetrievalStage.DONE
+            checkpoint.listing = _done_listing()
         yield from ()
 
     return _pass
@@ -651,7 +510,7 @@ class TestSlimWalkProgress:
     def test_every_pass_reports_progress_even_without_files(self) -> None:
         connector = _make_connector()
         checkpoint = _make_done_checkpoint()
-        checkpoint.completion_stage = DriveRetrievalStage.START
+        checkpoint.listing = None
         callback = MagicMock()
         callback.should_stop.return_value = False
 
@@ -672,7 +531,7 @@ class TestSlimWalkProgress:
     def test_stop_signal_between_passes_raises(self) -> None:
         connector = _make_connector()
         checkpoint = _make_done_checkpoint()
-        checkpoint.completion_stage = DriveRetrievalStage.START
+        checkpoint.listing = None
         callback = MagicMock()
         callback.should_stop.return_value = True
 

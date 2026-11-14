@@ -2,8 +2,8 @@
 
 > The Google Drive connector indexes files from shared drives, My Drives,
 > folders and files shared with a user, as one OAuth user or as a service
-> account that impersonates every user in the domain. Its checkpoint is a staged
-> crawl, not a cursor.
+> account that impersonates every user in the domain. Its checkpoint holds the
+> open shards of one sharded listing, not a cursor.
 
 **Verified against:** `a4e97fcea1` (2026-10-29)
 **Edition:** CE. EE syncs file permissions and Google groups
@@ -28,7 +28,7 @@ visible to no user, the prune refuses to run.
 ## Scope
 
 This document holds the Google Drive rules: the two credential kinds, the
-staged crawl, document ids and URL candidates, and the prune guards. It also
+sharded listing, document ids and URL candidates, and the prune guards. It also
 covers the shared Google helpers, which the Gmail connector and the Google OAuth
 endpoints use too, so a change there reaches them. Its neighbours own:
 - [[connectors]]: the interfaces, binding, gateway and prune contracts.
@@ -49,17 +49,11 @@ field, and `GoogleDriveCredentialBinding.validate_credential` rejects a
 credential of the other kind.
 
 **Crawl.** Indexing, the stub listing, pruning and permission sync share one
-listing (`GoogleDriveConnector._fetch_drive_items`). With no requested
-folders it is the shard engine (see **Shard engine**), for a service account
-and for OAuth. The serial crawl lists the rest. A service account with requested folders (or a
-requested drive id that is a folder) walks phases for the whole domain
-(`DriveRetrievalPhase`): inventory, shared drives, My Drives, requested
-targets, external shares. Shared drives run before My Drives, so later phases
-drop any file from a drive already covered. This stops shortcuts from producing
-duplicates. The phase state holds partition keys and page tokens, so it grows
-with drives and users. Only the dedup set grows with files
-([[#dedup-set-capped]]). OAuth with requested folders walks stages for its
-one user (`DriveRetrievalStage`).
+listing, the shard engine (see **Shard engine**), for a service account and
+for OAuth. `GoogleDriveConnector._plan_listing` plans it on the first call of
+an attempt, and `_fetch_drive_items` runs one call. The listing state grows
+with drives, users and open shards. Only the dedup set grows with files
+([[#dedup-set-capped]]).
 
 **Checkpointed slim listing.**
 `GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
@@ -76,7 +70,8 @@ runs it first. `_post_download_skip_reason` covers what only the content shows
 (export over the size cap, Forms API off, no text).
 
 **Shard engine.** `connectors/google_drive/parallel_listing.py:ParallelDriveLister`.
-Every partition (shared drive, My Drive, files shared with a user) lists in one
+Every partition (shared drive, My Drive, files shared with a user, requested
+folder) lists in one
 `AdaptiveTaskPool`, one page per task, at `pageSize=1000`. A partition with
 many files splits into `modifiedTime` shards by probe and split
 (`plan_split`): the sub-ranges are query filters, so no step depends on page
@@ -97,6 +92,15 @@ checkpoint covers exactly what the call yielded. The entry points:
   later. A file edited during the listing moves past the end, and pruning
   would read it as deleted.
 
+A requested folder (`shared_folder_urls`, or a requested drive id that is a
+folder) is a folder subtree partition. Its walk lists one folder at a time with
+`'<id>' in parents`: one `SUBTREE` shard lists the folder's files in the time
+range and all its subfolders and shortcuts, and each subfolder becomes a new
+shard. A folder with more than one page becomes a `FILES` shard, which splits
+by time, and a `FOLDERS` shard. The walk follows shortcuts to folders and stops
+at a shortcut back up its path (`shortcut_path`). A folder in a shared drive
+that an organizer lists in full is not walked.
+
 OAuth uses the same partition kinds with the OAuth user as the only principal:
 its member shared drives (from its own `drives.list`), its own files, and the
 files shared with it, as the include settings select. With all three, that is
@@ -109,11 +113,12 @@ become hierarchy nodes. A parent that no folder listing returned goes into
 `DriveListingState.unresolved_parent_emails`. When the listing is done, those
 parents are read one tree level at a time, each once, up to a folder already
 yielded or a drive root. A document that arrives before its folder gets a STUB
-parent in docfetching. The serial crawl and reindex walk the ancestors of each
-file batch (`_get_new_ancestors_for_files`).
+parent in docfetching. A folder subtree gets no `FOLDERS` shard: the folders it
+walks are the nodes. `reindex` reads the parents of its files the same way.
 
-A checkpoint of the serial crawl (`phase_progress` or a stage), for a service
-account or OAuth, is dropped: the attempt lists again from its window start.
+A checkpoint with no listing state starts the listing again from the window
+start. A checkpoint of the serial crawl that came before (`phase_progress`,
+`completion_map`) parses with those keys ignored, so it does the same.
 
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
@@ -124,8 +129,10 @@ URL, because the URL often does not say the file type.
 `DRIVE_CONVERSION_WORKERS` threads (`BoundedParallelRunner`, default 32,
 `GOOGLE_DRIVE_CONVERSION_WORKERS`) while the listing goes on. A call converts
 everything it lists before it returns, so the order does not change what the
-checkpoint records. A file's parent node is yielded before the file is
-submitted, so nodes still precede their documents.
+checkpoint records. Files go to the pool round-robin by the user who listed
+them (`_interleave_by_user`), so conversions spread over per-user quotas. A
+file does not wait for its folder: docfetching gives a document a STUB parent
+until the folder's node arrives.
 
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates

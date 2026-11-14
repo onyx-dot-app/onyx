@@ -116,7 +116,6 @@ def run_benchmark(
     report_every: float,
     include_permissions: bool,
     conversion_workers: int | None = None,
-    partitions_per_checkpoint: int | None = None,
     profile_path: str | None = None,
 ) -> dict[str, Any]:
     if "onyx.configs.app_configs" in sys.modules:
@@ -139,8 +138,7 @@ def run_benchmark(
 
     if conversion_workers is not None:
         drive_connector.DRIVE_CONVERSION_WORKERS = conversion_workers
-    if partitions_per_checkpoint is not None:
-        drive_connector.PARTITIONS_PER_CHECKPOINT = partitions_per_checkpoint
+        drive_connector.DRIVE_CONVERSION_MAX_IN_FLIGHT = 2 * conversion_workers
 
     client = httpx.Client(base_url=mock_url, timeout=30)
     key = client.get("/_mock/service-account-key").json()
@@ -258,7 +256,6 @@ def run_benchmark(
         "hierarchy_nodes": hierarchy_nodes,
         "connector_calls": connector_calls,
         "conversion_workers": drive_connector.DRIVE_CONVERSION_WORKERS,
-        "partitions_per_checkpoint": drive_connector.PARTITIONS_PER_CHECKPOINT,
         # CPU seconds of this process (its threads share one GIL) and of the
         # PDF subprocesses, over the run.
         "process_cpu_seconds": round(process_cpu, 1),
@@ -352,11 +349,6 @@ def main() -> None:
         type=int,
         help="Files the connector converts at once (DRIVE_CONVERSION_WORKERS)",
     )
-    parser.add_argument(
-        "--partitions-per-checkpoint",
-        type=int,
-        help="Drives or users one connector call lists (PARTITIONS_PER_CHECKPOINT)",
-    )
     parser.add_argument("--profile", help="Write merged cProfile stats here")
     parser.add_argument(
         "--perm-sync",
@@ -389,7 +381,6 @@ def main() -> None:
             report_every=args.report_every,
             include_permissions=args.perm_sync,
             conversion_workers=args.conversion_workers,
-            partitions_per_checkpoint=args.partitions_per_checkpoint,
             profile_path=args.profile,
         )
     finally:

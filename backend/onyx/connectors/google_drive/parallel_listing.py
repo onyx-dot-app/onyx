@@ -55,7 +55,6 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.models import (
     DriveListingState,
-    DriveRetrievalStage,
     GDriveMimeType,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
@@ -998,20 +997,17 @@ class ParallelDriveLister:
     ) -> RetrievedDriveFile:
         if shard.partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
             return RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.FOLDER_FILES,
                 drive_file=file,
                 user_email=shard.principal,
                 parent_id=shard.folder_id,
             )
         if shard.partition.kind is ListingPartitionKind.SHARED_DRIVE:
             return RetrievedDriveFile(
-                completion_stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
                 drive_file=file,
                 user_email=shard.principal,
                 parent_id=shard.partition.key,
             )
         return RetrievedDriveFile(
-            completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
             drive_file=file,
             user_email=shard.principal,
         )

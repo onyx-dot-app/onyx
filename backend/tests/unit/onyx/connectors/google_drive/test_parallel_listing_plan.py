@@ -15,7 +15,6 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.models import (
     DriveListingState,
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
     ListingPartition,
@@ -31,7 +30,6 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import DocumentTypeLabel
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 _DRIVE = ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key="drive_1")
 _DAY = 86_400_000
@@ -171,9 +169,6 @@ def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
     """A lister of the window [_WINDOW_T0, _WINDOW_T1) where the My Drive of
     b@x.com has begun. ``admit_file`` records each dedup claim."""
     checkpoint = GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.START,
-        completion_map=ThreadSafeDict(),
         has_more=True,
         listing=DriveListingState(
             window_t0=_WINDOW_T0, window_t1=_WINDOW_T1, listed_owners={"b@x.com"}

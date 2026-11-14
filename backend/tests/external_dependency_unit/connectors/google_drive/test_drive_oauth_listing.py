@@ -18,11 +18,9 @@ from scripts.benchmark_google_drive_connector import start_mock_server
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     ListingPartitionKind,
     ListingShard,
-    StageCompletion,
 )
 from onyx.connectors.google_drive.source_operations import (
     DriveCorpus,
@@ -30,7 +28,6 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveRefreshError,
 )
 from onyx.connectors.models import HierarchyNode, SlimDocumentStub
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
     _file_id,
@@ -278,21 +275,23 @@ def test_every_entry_point_lists_the_same_files(mock_drive: MockDrive) -> None:
 
 
 def _old_oauth_checkpoint(connector: GoogleDriveConnector) -> GoogleDriveCheckpoint:
-    """A checkpoint of main's serial OAuth listing, in its first stage, with
-    a page token and claims that would make a new listing drop files."""
-    old = connector.build_dummy_checkpoint()
-    old.completion_stage = DriveRetrievalStage.OAUTH_FILES
-    old.completion_map = ThreadSafeDict(
-        {
-            _EMAIL: StageCompletion(
-                stage=DriveRetrievalStage.OAUTH_FILES,
-                completed_until=time.time() - 60,
-                current_folder_or_drive_id=None,
-                next_page_token="token-from-the-serial-listing",
-            )
-        }
-    )
-    return connector.validate_checkpoint_json(old.model_dump_json())
+    """A checkpoint of main's serial OAuth listing, in its JSON format, in
+    its first stage with a page token."""
+    old = {
+        "has_more": True,
+        "retrieved_folder_and_drive_ids": [],
+        "completion_stage": "oauth_files",
+        "completion_map": {
+            _EMAIL: {
+                "stage": "oauth_files",
+                "completed_until": time.time() - 60,
+                "current_folder_or_drive_id": None,
+                "next_page_token": "token-from-the-serial-listing",
+            }
+        },
+        "retrieved_drive_file_ids": [],
+    }
+    return connector.validate_checkpoint_json(json.dumps(old))
 
 
 @pytest.mark.usefixtures("small_calls")
@@ -324,7 +323,7 @@ def test_old_oauth_checkpoint_is_dropped(mock_drive: MockDrive) -> None:
             break
 
     _assert_exact("stubs", ids, _user_corpus(mock_drive.url).all_drives)
-    assert checkpoint.completion_map._dict == {}
+    assert "completion_map" not in checkpoint.model_dump()
     assert checkpoint.listing is not None and checkpoint.listing.is_done
 
 

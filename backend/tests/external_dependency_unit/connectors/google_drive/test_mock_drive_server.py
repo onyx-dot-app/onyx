@@ -4,7 +4,6 @@ validation, tokens and query aliases."""
 import base64
 import json
 
-from onyx.connectors.google_drive.file_retrieval import files_only
 from onyx.connectors.google_drive.source_operations import DriveCorpus
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 
@@ -63,16 +62,17 @@ def test_root_alias_lists_the_my_drive_root(mock_drive: MockDrive) -> None:
     admin = connector.primary_admin_email
     root_id = connector.ops.get_root_folder_id(user_email=admin)
 
-    children = list(
-        files_only(
-            connector.ops.list_files(
-                variant=DriveCorpus.USER,
-                user_email=admin,
-                query="'root' in parents and trashed = false",
-                fields="nextPageToken, files(id, parents)",
-            )
+    # A listing with no page limit yields no page token.
+    children = [
+        child
+        for child in connector.ops.list_files(
+            variant=DriveCorpus.USER,
+            user_email=admin,
+            query="'root' in parents and trashed = false",
+            fields="nextPageToken, files(id, parents)",
         )
-    )
+        if not isinstance(child, str)
+    ]
 
     assert children
     assert all(root_id in child["parents"] for child in children)

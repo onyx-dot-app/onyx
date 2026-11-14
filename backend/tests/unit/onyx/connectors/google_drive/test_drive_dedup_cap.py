@@ -6,20 +6,15 @@ drop the duplicate. It must never grow without limit, because the checkpoint is
 re-serialized on every connector yield.
 """
 
-from collections.abc import Iterator
 from typing import Any
 from unittest.mock import patch
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
-from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
-    StageCompletion,
 )
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 _USER = "user@example.com"
 _MOD = "onyx.connectors.google_drive.connector"
@@ -32,51 +27,23 @@ def _file(file_id: str) -> RetrievedDriveFile:
         "modifiedTime": "2024-06-01T00:00:00Z",
         "webViewLink": f"https://docs.google.com/document/d/{file_id}/edit",
     }
-    return RetrievedDriveFile(
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
-        drive_file=drive_file,
-        user_email=_USER,
-    )
+    return RetrievedDriveFile(drive_file=drive_file, user_email=_USER)
 
 
 def _checkpoint() -> GoogleDriveCheckpoint:
-    return GoogleDriveCheckpoint(
-        has_more=True,
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
-        completion_map=ThreadSafeDict(
-            {
-                _USER: StageCompletion(
-                    stage=DriveRetrievalStage.MY_DRIVE_FILES,
-                    completed_until=0,
-                )
-            }
-        ),
-    )
+    return GoogleDriveCheckpoint(has_more=True)
 
 
 def _drain(
     checkpoint: GoogleDriveCheckpoint, files: list[RetrievedDriveFile]
 ) -> list[RetrievedDriveFile]:
-    connector = GoogleDriveConnector(include_my_drives=True)
-
-    def retrieval_method(
-        field_type: DriveFileFieldType,  # noqa: ARG001
-        checkpoint: GoogleDriveCheckpoint,  # noqa: ARG001
-        start: float | None = None,  # noqa: ARG001
-        end: float | None = None,  # noqa: ARG001
-    ) -> Iterator[RetrievedDriveFile]:
-        yield from files
-
-    return list(
-        connector._checkpointed_retrieval(
-            retrieval_method=retrieval_method,
-            field_type=DriveFileFieldType.STANDARD,
-            checkpoint=checkpoint,
-            start=None,
-            end=None,
-        )
-    )
+    """The files a listing emits when none has an exact partition: each one
+    goes through the dedup claim."""
+    return [
+        file
+        for file in files
+        if GoogleDriveConnector._claim_file(checkpoint, file.drive_file)
+    ]
 
 
 def test_dedup_key_is_the_drive_file_id() -> None:
@@ -135,12 +102,7 @@ def test_old_checkpoint_field_name_is_not_reused() -> None:
     Pydantic ignores the unknown field, so the run restarts dedup from empty
     instead of comparing ids against URLs and re-yielding everything.
     """
-    old = GoogleDriveCheckpoint(
-        has_more=True,
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
-        completion_map=ThreadSafeDict(),
-    ).model_dump()
+    old = GoogleDriveCheckpoint(has_more=True).model_dump()
     old["all_retrieved_file_ids"] = {"https://docs.google.com/document/d/abc123/edit"}
 
     restored = GoogleDriveCheckpoint.model_validate(old)
