@@ -96,9 +96,10 @@ restore / resumeStream / decision with no stream    widget.ts
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
   ├─ after its stop → waitForSessionIdle; a new stream id → follow from 0
-  └─ idle with a response unfinished or an acknowledged answer not shown →
-       GET /chat/get-chat-session/{id}, replay its saved packets; on failure
-       it stays unfinished for the next load
+  └─ idle with a response unfinished, an acknowledged answer not shown, or a
+       question with no answer after it → GET /chat/get-chat-session/{id},
+       replay the saved answers (by parent_message for questions; a question
+       with none is removed); on failure it stays unfinished for the next load
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The

@@ -594,10 +594,10 @@ export class OnyxChatWidget extends LitElement {
       this.streamingStatus = "";
       this.messages = [...this.messages, userMessage];
 
-      // Get parent message ID (last assistant message with a numeric ID from backend)
+      // The parent is the latest saved message, the one with a numeric ID
       const parentMessage = [...this.messages]
         .reverse()
-        .find((m) => m.role === "assistant" && typeof m.id === "number");
+        .find((m) => typeof m.id === "number");
       const parentMessageId =
         parentMessage && typeof parentMessage.id === "number"
           ? parentMessage.id
@@ -789,8 +789,17 @@ export class OnyxChatWidget extends LitElement {
       // The response ended before this widget saw it end: there was no
       // replay (a 404, e.g. the run finished while the page was closed), or
       // the replay buffer ended early. The server's saved copy finishes the
-      // response. On a failure the snapshot stays unfinished, so the next
+      // response, and answers or removes a saved question with no answer
+      // after it. On a failure the snapshot stays unfinished, so the next
       // load tries again.
+      const unanswered = this.messages
+        .filter(
+          (message, index) =>
+            message.role === "user" &&
+            this.messages[index + 1]?.role !== "assistant"
+        )
+        .map((message) => message.id)
+        .filter((id): id is number => typeof id === "number");
       const recoverIds = this.messages
         .filter((message) => message.isStreaming)
         .map((message) => message.id)
@@ -804,6 +813,7 @@ export class OnyxChatWidget extends LitElement {
       if (
         stillOurs() &&
         (recoverIds.length > 0 ||
+          unanswered.length > 0 ||
           this.messages.some((message) => message.isStreaming))
       ) {
         const session = await this.apiService.getChatSession(
@@ -814,6 +824,18 @@ export class OnyxChatWidget extends LitElement {
         const assistants = session.messages.filter(
           (message) => message.message_type === "assistant"
         );
+        for (const questionId of unanswered) {
+          const answer = assistants.find(
+            (message) => message.parent_message === questionId
+          );
+          if (!answer) {
+            this.messages = this.messages.filter(
+              (message) => message.id !== questionId
+            );
+          } else if (!recoverIds.includes(answer.message_id)) {
+            recoverIds.push(answer.message_id);
+          }
+        }
         for (const assistantMessageId of recoverIds) {
           const index = assistants.findIndex(
             (message) => message.message_id === assistantMessageId
@@ -1005,7 +1027,18 @@ export class OnyxChatWidget extends LitElement {
             ...this.messages.slice(existingIndex + 1),
           ];
         } else {
-          this.messages = [...this.messages, currentMessage];
+          // A new answer follows its question.
+          const questionIndex = this.messages.findIndex(
+            (m) => m.id === follow.userMessageId
+          );
+          this.messages =
+            questionIndex >= 0
+              ? [
+                  ...this.messages.slice(0, questionIndex + 1),
+                  currentMessage,
+                  ...this.messages.slice(questionIndex + 1),
+                ]
+              : [...this.messages, currentMessage];
         }
 
         // Clear streaming state when message is complete. Persist then, and

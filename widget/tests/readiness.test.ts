@@ -296,7 +296,13 @@ describe("widget readiness", () => {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
     });
     api.resumeStream = mock(async function* () {});
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+      ],
+      packets: [[]],
+    }));
     await widget["sendMessage"]();
     expect(widget["messages"]).toHaveLength(1);
     expect(widget["messages"][0]).toMatchObject({ id: 1, content: "retry me" });
@@ -322,7 +328,7 @@ describe("widget readiness", () => {
     api.getChatSession = mock(async () => ({
       messages: [
         { message_id: 1, message_type: "user" },
-        { message_id: 2, message_type: "assistant" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
       ],
       packets: [
         [

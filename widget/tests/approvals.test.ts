@@ -670,6 +670,113 @@ describe("widget while a request waits", () => {
     expect(saved.messages.map((m: ChatMessage) => m.id)).toEqual([6, 7]);
   });
 
+  /** Restores a stored transcript whose last question has no answer. */
+  async function restoreUnanswered(session: unknown) {
+    const { stored, restore } = fakeSessionStorage();
+    const messages: ChatMessage[] = [
+      { id: 1, role: "user", content: "first", timestamp: 0 },
+      { id: 2, role: "assistant", content: "first answer", timestamp: 0 },
+      { id: 3, role: "user", content: "second", timestamp: 0 },
+    ];
+    stored.set(
+      "onyx-widget-session",
+      JSON.stringify({
+        sessionId: "session",
+        messages,
+        timestamp: Date.now(),
+        identity: "shared",
+      })
+    );
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/status"))
+        return Response.json({ is_processing: false });
+      if (url.includes("/get-chat-session/")) return Response.json(session);
+      return new Response("none", { status: 404 });
+    }) as typeof fetch;
+    const widget = restoredWidget();
+    widget["messages"] = [];
+    widget["currentIdentity"] = async () => "shared";
+    try {
+      widget["restoreSession"]();
+      while (!widget["sessionRestored"]) await Bun.sleep(1);
+      await Bun.sleep(1);
+      while (widget["isStreaming"]) await Bun.sleep(1);
+    } finally {
+      restore();
+    }
+    const saved = JSON.parse(stored.get("onyx-widget-session") ?? "null");
+    return {
+      shown: widget["messages"].map((m) => [m.id, m.content]),
+      saved: saved.messages.map((m: ChatMessage) => [m.id, m.content]),
+    };
+  }
+
+  it("answers a stored question from the saved session when its replay is gone", async () => {
+    const { shown, saved } = await restoreUnanswered({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+        { message_id: 3, message_type: "user", parent_message: 2 },
+        { message_id: 4, message_type: "assistant", parent_message: 3 },
+      ],
+      packets: [
+        [],
+        [
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "second answer" } },
+          { obj: { type: "stop" } },
+        ],
+      ],
+    });
+    const expected = [
+      [1, "first"],
+      [2, "first answer"],
+      [3, "second"],
+      [4, "second answer"],
+    ];
+    expect(shown).toEqual(expected);
+    expect(saved).toEqual(expected);
+  });
+
+  it("removes a stored question the saved session has no answer for", async () => {
+    const { shown, saved } = await restoreUnanswered({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+      ],
+      packets: [[]],
+    });
+    const expected = [
+      [1, "first"],
+      [2, "first answer"],
+    ];
+    expect(shown).toEqual(expected);
+    expect(saved).toEqual(expected);
+  });
+
+  it("sends under the latest saved message", async () => {
+    const widget = restoredWidget();
+    widget["chatSessionId"] = "session";
+    widget["messages"] = [
+      { id: 1, role: "user", content: "first", timestamp: 0 },
+      { id: 2, role: "assistant", content: "first answer", timestamp: 0 },
+      { id: 3, role: "user", content: "second", timestamp: 0 },
+    ];
+    widget["inputValue"] = "third";
+    const api = widget["apiService"];
+    api.waitForSessionIdle = mock(async () => null);
+    api.streamMessage = mock(async function* (): AsyncGenerator<Packet> {
+      yield { obj: { type: "stop" } };
+    });
+
+    await widget["sendMessage"]();
+
+    expect(api.streamMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ parentMessageId: 3 })
+    );
+  });
+
   it("keeps a restored response unfinished when the saved session cannot load", async () => {
     const { stored, restore } = fakeSessionStorage();
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
