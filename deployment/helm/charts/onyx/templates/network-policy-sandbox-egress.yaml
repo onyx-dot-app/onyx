@@ -56,14 +56,17 @@ spec:
         values: ["false"]
   policyTypes: [Egress]
   egress:
-    # kube-dns (firewall bootstrap only).
+    # kube-dns and NodeLocal DNSCache pods (firewall bootstrap only). GKE answers DNS
+    # from node-local-dns pods, so the kube-dns selector alone does not match there.
     - to:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: kube-system
           podSelector:
-            matchLabels:
-              k8s-app: kube-dns
+            matchExpressions:
+              - key: k8s-app
+                operator: In
+                values: [kube-dns, node-local-dns]
       ports:
         - protocol: UDP
           port: 53

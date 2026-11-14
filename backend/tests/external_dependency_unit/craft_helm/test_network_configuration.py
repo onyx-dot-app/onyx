@@ -131,3 +131,61 @@ def test_default_proxy_preserves_ipv4_without_runtime_egress_flag() -> None:
     assert env["SANDBOX_PROXY_ALLOW_GLOBAL_CLIENTS"] == "false"
     assert env["SANDBOX_PROXY_INTERNAL_CIDRS"] == ""
     assert "SANDBOX_PROXY_EGRESS_ALLOW_IPV6" not in env
+
+
+_CLUSTER_DNS_PEER: dict[str, Any] = {
+    "namespaceSelector": {
+        "matchLabels": {"kubernetes.io/metadata.name": "kube-system"}
+    },
+    "podSelector": {
+        "matchExpressions": [
+            {
+                "key": "k8s-app",
+                "operator": "In",
+                "values": ["kube-dns", "node-local-dns"],
+            }
+        ]
+    },
+}
+_DNS_PORTS: list[dict[str, Any]] = [
+    {"protocol": "UDP", "port": 53},
+    {"protocol": "TCP", "port": 53},
+]
+
+
+def _network_policy(name_suffix: str) -> dict[str, Any]:
+    result = render_chart()
+    assert result.returncode == 0, result.stderr
+    return next(
+        resource
+        for resource in yaml.safe_load_all(result.stdout)
+        if resource
+        and resource["kind"] == "NetworkPolicy"
+        and resource["metadata"]["name"].endswith(name_suffix)
+    )
+
+
+def test_proxy_egress_allows_dns_and_release_pods_by_selector() -> None:
+    """Cilium (GKE Dataplane V2) does not match pod IPs with ipBlock."""
+    rules = _network_policy("sandbox-proxy-egress")["spec"]["egress"]
+    assert {
+        "to": [{"ipBlock": {"cidr": "0.0.0.0/0", "except": ["169.254.0.0/16"]}}]
+    } in rules
+    assert {"to": [_CLUSTER_DNS_PEER], "ports": _DNS_PORTS} in rules
+    assert {
+        "to": [
+            {
+                "namespaceSelector": {
+                    "matchLabels": {"kubernetes.io/metadata.name": "onyx"}
+                },
+                "podSelector": {},
+            }
+        ]
+    } in rules
+    # No selector rule may open the metadata range.
+    assert all("ipBlock" not in peer for rule in rules[1:] for peer in rule["to"])
+
+
+def test_sandbox_bootstrap_dns_allows_node_local_dns_pods() -> None:
+    rules = _network_policy("sandbox-bootstrap-dns")["spec"]["egress"]
+    assert rules[0] == {"to": [_CLUSTER_DNS_PEER], "ports": _DNS_PORTS}
