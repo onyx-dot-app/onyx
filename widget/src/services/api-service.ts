@@ -4,6 +4,7 @@
 
 import {
   ApprovalDecisionResponse,
+  ChatSessionDetail,
   Packet,
   CreateSessionRequest,
   CreateSessionResponse,
@@ -218,6 +219,30 @@ export class ApiService {
     if (response.status === 404) return;
     if (!response.ok) throw await apiErrorFrom(response);
     yield* this.parseSSEStream(response);
+  }
+
+  /** The session's saved messages, with a replay packet list for each response. */
+  async getChatSession(
+    chatSessionId: string,
+    signal: AbortSignal
+  ): Promise<ChatSessionDetail> {
+    const response = await this.fetchWithRetry(
+      `${this.backendUrl}/chat/get-chat-session/${encodeURIComponent(chatSessionId)}`,
+      async () => ({ headers: await this.getHeaders(), signal })
+    );
+    if (!response.ok) throw await apiErrorFrom(response);
+    const body: unknown = await response.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("messages" in body) ||
+      !Array.isArray(body.messages) ||
+      !("packets" in body) ||
+      !Array.isArray(body.packets)
+    ) {
+      throw new Error("Invalid chat session response");
+    }
+    return body as ChatSessionDetail;
   }
 
   /**

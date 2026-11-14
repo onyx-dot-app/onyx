@@ -195,6 +195,13 @@ export interface ChatSession {
   messages: Message[];
 }
 
+/** The fields of `/chat/get-chat-session` that the widget reads. */
+export interface ChatSessionDetail {
+  messages: { message_id: number; message_type: string }[];
+  // One replay packet list for each assistant message, in message order
+  packets: Packet[][];
+}
+
 export interface SendMessageRequest {
   message: string;
   chat_session_id?: string;
