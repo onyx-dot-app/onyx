@@ -649,3 +649,23 @@ func TestResponseStartedAfterTheStopIsFollowed(t *testing.T) {
 		t.Fatal("the new response's request cannot be decided")
 	}
 }
+
+func TestFailedStatusAfterAStreamIdentifiedItselfKeepsPolling(t *testing.T) {
+	ended := 7
+	client := &followingClient{}
+	client.sent = make(chan models.StreamEvent)
+	m, ch := streamingModel(client)
+	session := followedSession
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: ended})
+	m = receive(t, m, ch, models.StopEvent{})
+	updated, _ := m.handleStreamDone(StreamDoneMsg{Channel: ch})
+	m = updated.(Model)
+
+	// A retryable status failure reports no stream.
+	updated, cmd := m.Update(sessionReadyMsg{sessionID: followedSession, channel: m.streamCh, err: &api.OnyxAPIError{StatusCode: 503, Detail: "unavailable"}})
+	m = updated.(Model)
+	if cmd == nil || !m.isStreaming {
+		t.Fatal("a failed status check stopped the readiness loop")
+	}
+}
