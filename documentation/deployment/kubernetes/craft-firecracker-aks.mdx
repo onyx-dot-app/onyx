@@ -18,13 +18,32 @@ configure Helm as the overview page shows.
 | Network | A network policy engine, for example Azure Network Policy Manager, Calico, or Cilium | |
 
 Ubuntu 24.04 node images set `vm.max_map_count` to `1048576`, so no sysctl change is necessary.
+The Ubuntu 24.04 node image has kernel 6.8. Onyx does not test this host kernel,
+so the preflight check prints a `WARN kernel` line for it.
+
+Some subscriptions cannot use every VM size in every region. Before you apply, run:
+
+```bash
+az vm list-skus -l <region> --size Standard_D8ds \
+  --query "[].{name:name,restriction:restrictions[0].reasonCode}" -o table
+az vm list-usage -l <region> -o table
+```
+
+A size with `NotAvailableForSubscription` cannot be used: select another size of the same family, for example v7.
+Also check the regional vCPU quota. Onyx with Craft on Firecracker needs about 36 vCPUs:
+two or three 8-vCPU system nodes, one 8-vCPU Firecracker node, and one 4-vCPU pod sandbox node.
+New subscriptions often have a limit of 10 vCPUs for each region. Request more quota before you apply.
 
 The Ubuntu root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
 so you do not need a data disk. Size the OS disk for the loop store: 200 GB or more.
 
 ## Option 1: Onyx Terraform modules
 
-The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deployment/cloud/azure) for the full module.
+The `azure/onyx` module makes the AKS cluster, the Firecracker sandbox pool, the pod sandbox pool, PostgreSQL,
+the storage account, and the workload identity.
+For all module inputs and the Helm values that connect Onyx to these resources,
+see the [Azure module
+README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md).
 
 <Steps>
   <Step title="Set the sandbox pool variables">
@@ -39,8 +58,15 @@ The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deploym
       craft_sandbox_runtime     = "firecracker"
       sandbox_node_vm_size      = "Standard_D8ds_v5"
       sandbox_node_disk_size_gb = 200
+      network_policy            = "cilium" # without it, AKS enforces no NetworkPolicy
     }
     ```
+
+    Set `network_policy`. The module default is no enforcement, and then AKS does not enforce the chart NetworkPolicies.
+    The sandbox NetworkPolicies must be enforced:
+    they keep sandbox egress on the sandbox proxy and let only Onyx reach the host agent.
+    `cilium` needs the default overlay network mode. On an existing cluster,
+    read `terraform plan` before you change `network_policy`: the change can replace the cluster.
 
     With `craft_sandbox_runtime = "firecracker"`,
     the `aks` module sets the sandbox pool OS to `Ubuntu2404` and adds the label `onyx.app/kvm=true` and the taint
@@ -76,6 +102,45 @@ The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deploym
     as [Add Firecracker to an existing
     installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
     Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Connect Onyx to the module outputs">
+    Make a values file for the module outputs. Use `terraform output` for the names.
+    The [Azure module
+    README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md#installing-the-onyx-helm-chart-after-terraform)
+    gives the full list of components that need the pod label.
+
+    ```yaml onyx-values.yaml
+    serviceAccount:
+      create: false
+      name: onyx-workload-access
+    # Add the same podLabels to celery_beat and to each celery_worker_* component.
+    api:
+      podLabels:
+        azure.workload.identity/use: "true"
+    postgresql:
+      enabled: false
+    configMap:
+      POSTGRES_HOST: "<postgres_host>"
+      POSTGRES_DB: "<postgres_db_name>"
+    auth:
+      postgresql:
+        values:
+          username: "<postgres_username>"
+          password: "<postgres_password>"
+      userauth:
+        enabled: true
+        values:
+          user_auth_secret: "<openssl rand -hex 32>"
+      opensearch:
+        values:
+          opensearch_admin_password: "<strong password>"
+    ```
+
+    Onyx does not start without `auth.userauth`: the API server stops with `USER_AUTH_SECRET is empty`.
+    Helm refuses to render the chart without the OpenSearch password. Keep this file private,
+    or put the values in your own Secrets with `existingSecret`.
+    Then add the file store values in [Azure Blob Storage file store](#azure-blob-storage-file-store).
   </Step>
 
   <Step title="Configure Helm">
@@ -140,7 +205,13 @@ shared key access can stay off.
       enabled: false
     objectStore:
       enabled: false
+    auth:
+      objectstorage:
+        enabled: false   # no bundled object store, so no S3 keys
     ```
+
+    Without `auth.objectstorage.enabled: false`,
+    Helm refuses to render the chart and asks for `auth.objectstorage.values.rootPassword`.
   </Step>
 
   <Step title="Set up the workload identity">
