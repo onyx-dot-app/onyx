@@ -1,0 +1,50 @@
+---
+title: "Outline"
+description: "Access documents from Outline"
+---
+
+## How it works
+
+Onyx indexes the **documents** and **collections** in your Outline workspace that the API token can read.
+Each document and each collection becomes one searchable document in Onyx.
+
+Onyx pulls new and changed documents on the connector's **Refresh Every** schedule. The default is **30 minutes**.
+Onyx works with Outline Cloud at `https://app.getoutline.com` and with self-hosted Outline.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create an API token">
+    In Outline, open **Settings**, go to the API section, create a new API key, and copy its value.
+    Onyx reads documents as the user who owns the key, so use an account that can see every collection you want indexed.
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Outline**. Under **Authentication Account**,
+    select **Create New**. Enter a **Display Name**. In **Outline Base URL**,
+    enter `https://app.getoutline.com` or the URL of your self-hosted Outline.
+    Paste the key into **API Token** and select **Create**.
+  </Step>
+
+  <Step title="Configure the connector">
+    Under **Connector Settings**, give the connector a **Display Name**. In **Outline Base URL**,
+    enter the same URL as in the account. Onyx uses it to build the link for each document.
+
+    Under **Document Access**, choose who can see the indexed documents.
+    **Everyone in Your Organization** shows them to all Onyx users.
+    **Specific Groups** limits them to the Onyx user groups you pick. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    The Outline connector does not sync Outline permissions.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to save the connector and start indexing.
+    Open **Admin Panel → Indexing Status** and select the connector to follow the first indexing run.
+  </Step>
+</Steps>

@@ -1,0 +1,129 @@
+---
+title: "FAQ"
+description: "Frequently asked questions about using Onyx"
+icon: "comments-question"
+---
+
+## General Questions
+
+<AccordionGroup>
+  <Accordion title="What kind of questions can I ask Onyx?">
+    You can ask Onyx about knowledge from [connected applications](/overview/core_features/internal_search),
+    general world knowledge known to the LLM,
+    or anything on the web (if your admin has configured [Web Search](/overview/core_features/web_search)).
+    Onyx can also run Python code, generate images, and use [Plugins](/overview/core_features/plugins)
+    to work in your team's applications.
+  </Accordion>
+
+  <Accordion title="What is the difference between Chat and Search?">
+    Use the **Chat / Search** toggle at the top of the page.
+    **Chat** gives you a conversation with an AI Agent that answers with citations.
+    **Search** gives you a ranked list of documents from your connected sources, without an AI answer.
+    Search appears only after your admin has connected at least one source.
+  </Accordion>
+
+  <Accordion title="How is my private data being processed?">
+    See the [Security](/security/architecture/system_description) section to learn more.
+  </Accordion>
+
+  <Accordion title="Can I keep a conversation out of my history?">
+    Yes. Click **Incognito Chat** at the top of a new chat. An incognito chat does not appear in your Recents,
+    and Onyx does not use it to update your memories.
+  </Accordion>
+
+  <Accordion title="Which editions of Onyx exist?">
+    The **Community Edition** is free and open source. **Business** and **Enterprise** add features such as Craft, SSO,
+    permission sync, and usage analytics. **Onyx Cloud** is hosted by Onyx.
+    See the [Enterprise Edition](/admins/getting_started/enterprise_edition) page for details.
+  </Accordion>
+
+  <Accordion title="Why does Onyx always use prompt caching?">
+    Onyx marks stable chat history for prompt caching, including earlier messages and tool results.
+    Supported providers can reuse this prefix across model calls to reduce repeated processing.
+    Shared context and image messages can also be reused when the provider supports caching.
+    Cache reuse depends on the provider and model.
+
+    Onyx retains earlier action results so follow-up questions can use the same evidence.
+    As a conversation approaches the model’s context limit, Onyx tries to summarize older history to make room.
+    If the summary fails or does not fit, Onyx removes older history from the model’s context instead.
+    This changes the cached prefix, but the new prefix can be reused on later calls.
+    Cached input still occupies space in the model’s context window.
+
+    Onyx keeps prompt caching enabled to reduce the total cost of conversations and agents that repeatedly use the same
+    context. A tool step usually sends earlier context back to the model along with new results.
+    Caching lets those repeated input tokens cost less.
+
+    Some providers charge more to write a cache than to process ordinary input.
+    A single model call with no cache hit or later reuse can therefore cost more. The premium applies to cache writes,
+    not the whole bill.
+
+    For example,
+    Claude Haiku 4.5 charges 1.25 times the input rate for five-minute cache writes and 0.1 times for reads.
+    These [Anthropic cache rates](https://platform.claude.com/docs/en/build-with-claude/prompt-caching#pricing)
+    were checked on November 6, 2026.
+
+    The following calculations assume one unchanged prefix, one initial write, and cache hits on every later call.
+
+    | Model calls using the prefix | Prefix input cost versus processing it each time |
+    | --- | --- |
+    | 1 | 25% higher |
+    | 2 | 32.5% lower |
+    | 5 | 67% lower |
+    | 10 | 78.5% lower |
+
+    One successful reuse already pays back the initial write premium in this example. Savings scale with tokens reused,
+    so long workflows can offset many short requests that never reuse their cache. For example,
+    suppose five calls each include the same 100,000-token prefix. With one write and four cache hits,
+    the saving covers the write premium on 268 isolated 5,000-token requests.
+    This comparison uses the same rates and excludes output tokens and other charges.
+
+    Generating the final answer still costs the normal output rate.
+    A long answer reduces the percentage saved on the total bill, but does not remove savings on input processing.
+    Expired caches, changed context, or large new inputs can reduce savings or cause a net increase.
+    Prompts below a provider's minimum cache size may receive no caching benefit or write charge.
+    Actual savings depend on the model, rates, and successful reuse.
+  </Accordion>
+
+  <Accordion title="Can I run Onyx offline?">
+    Yes, but Onyx needs an LLM to function. You can air gap the entire system if you run a local LLM.
+    We strongly recommend a recent, non-quantized LLM for the best experience.
+  </Accordion>
+</AccordionGroup>
+
+## Technical Issues
+
+<AccordionGroup>
+  <Accordion title="Why is my Onyx deployment not coming up?">
+    The most common cause is a deployment with too few resources.
+    See the [Resourcing](/deployment/getting_started/resourcing) page to check.
+  </Accordion>
+
+  <Accordion title="Responses are really slow, is this expected?">
+    No. If responses are slow, check these causes:
+    - The LLM is slow, has low throughput, or does not support streaming.
+    - You configured local models that are not the default, but the system has no GPU.
+    This usually comes from a local reranking or embedding model.
+    - A high **Reasoning Level** or **Deep Research** is on. Both take longer by design.
+  </Accordion>
+</AccordionGroup>
+
+## Knowledge and Search
+
+<AccordionGroup>
+  <Accordion title="Why can't Onyx find information that I know exists?">
+    For an internal document, the connector may not have finished indexing, or the access controls may be wrong.
+    When permissions are unclear, Onyx always defaults to the least permissive option.
+    The most common cause is a [connector](/admins/connectors/overview) that is not configured correctly.
+  </Accordion>
+
+  <Accordion title="Does Onyx keep its knowledge up to date?">
+    Connectors fetch updates on a schedule. The default refresh frequency is 30 minutes.
+    An admin can set the refresh frequency for each connector. Documents, metadata,
+    and access permissions all receive updates.
+  </Accordion>
+
+  <Accordion title="Why is Onyx refusing to search the internet?">
+    An admin must configure Web Search before you can use it. This requires a supported search provider,
+    such as Google or Exa. A content provider for reading pages is optional, because Onyx includes a built-in one.
+  </Accordion>
+</AccordionGroup>
