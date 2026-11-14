@@ -4,6 +4,82 @@ entries:
   - annotations:
       artifacthub.io/changes: |
         - kind: changed
+          description: With craft.sandboxRuntime=firecracker, the host agent image,
+            the root drive (craft.hostAgent.rootfs.version) and SANDBOX_FC_TEMPLATE
+            follow the pinned global.version. A floating tag such as latest fails
+            the render.
+        - kind: added
+          description: With craft.sandboxRuntime=firecracker and no existingSecret,
+            the chart makes the host agent mTLS CA and certificates and keeps them
+            on upgrade. A new set restarts the agent clients.
+        - kind: changed
+          description: The Firecracker preflight checks craft.hostAgent.dataDir by
+            default and gives WARN, not FAIL, without reflink (the host agent then
+            makes an XFS loop store). New value craft.hostAgent.loopStore.sizeGiB.
+        - kind: fixed
+          description: With the bundled in-cluster object store, the Firecracker
+            host agent accepts its plain HTTP presigned URLs, and S3_ENDPOINT_URL
+            uses the store's FQDN (new value global.clusterDomain), so the agent
+            resolves the presigned URL host from its own namespace.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-11-14T01:38:51.905682153Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.10
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 184fd5e490401062e9df58c7de10bbc60b5308984a8a9a8813ad030eb4c99d68
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.45/onyx-0.9.45.tgz
+    version: 0.9.45
+  - annotations:
+      artifacthub.io/changes: |
+        - kind: changed
           description: Craft Firecracker alerts link to the operations page on
             docs.onyx.app. CraftFcTemplateUnusable also fires when a node has no
             usable template from its root drive. Refusal and session transfer
@@ -11614,4 +11690,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-11-14T00:19:01.530346915Z"
+generated: "2026-11-14T01:38:51.905994033Z"
