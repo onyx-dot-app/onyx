@@ -1,0 +1,37 @@
+---
+title: "Status & Usage"
+description: "System health and LLM usage tracking"
+icon: "chart-line"
+---
+
+Two pages under **Admin → Statistics**.
+
+## Status
+
+**Admin → Status** reports backend liveness and the depth of every background work queue, refreshing every few seconds.
+Background work is split across dedicated queues — document reconciliation, trigger evaluations, co-edit checkpointing,
+the two Auto Organize lanes, and lightweight maintenance — so one backlog can't starve the others.
+Each queue shows its pending work against a capacity limit, broken down into ready, scheduled, and in-flight counts.
+
+The queues are worth watching because **background worker failures are silent rather than loud**.
+If workers aren't running, the application still serves pages normally while a surprising amount stops happening:
+
+- Triggers never fire, on updates or on a schedule
+- Auto Organize sweeps don't run and approved cleanups aren't applied
+- Documents pushed from Onyx are never reconciled into pages
+- Search indexing falls behind, so new content isn't findable
+- Co-edit sessions stop committing, and readers see stale content
+
+None of that surfaces as an error in the UI. Check here first when something "just isn't happening".
+
+## Usage Tracking
+
+**Admin → Usage Tracking** sends LLM exchanges to a [Braintrust](https://www.braintrust.dev)
+project for inspection — messages, available tools, tool calls and results, model output, and token usage.
+
+Tracing only fires when a project and API key are both saved **and** the toggle is on, so it's opt-in twice over.
+
+<Note>
+  This ships prompts and model outputs to a third-party service. Wiki content appears in those payloads,
+  so treat it as a data-sharing decision rather than a debugging flag.
+</Note>

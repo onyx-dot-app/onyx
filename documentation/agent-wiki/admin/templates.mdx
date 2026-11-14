@@ -1,0 +1,36 @@
+---
+title: "Document Templates"
+description: "Named starting points for new pages"
+icon: "file-lines"
+---
+
+Templates are named starting points users pick when creating a page — a project brief, a meeting record, a runbook.
+Manage them under **Admin → Wiki Templates**.
+
+## Templates carry policy, not just text
+
+Beyond the body, each template can set a default [update policy](/agent-wiki/using/update_policies)
+applied to every page created from it: auto-update on or off, update instructions,
+and whether [Auto Organize](/agent-wiki/automate/auto_organize) may manage the page without asking.
+
+This is more useful than it first appears. A "Meeting Notes" template can ship with automatic updates **off**,
+so records of what was said never get rewritten later — without anyone remembering to set that per page.
+A "Service Runbook" template can ship with instructions like *"keep the escalation table intact"* already attached.
+
+Getting the posture right at creation is far more reliable than auditing it afterwards.
+
+## The Blank template
+
+Every page starts from a template.
+Creating one without picking anything uses the built-in **Blank** template — an empty body with auto-update off.
+It's system-managed, so it can't be renamed or deleted, and it doesn't appear in the admin list;
+there's nothing about it to configure.
+
+## Templates and agents
+
+Agents connected over [MCP](/agent-wiki/automate/mcp) can list templates and create pages from them,
+so a page an agent creates inherits the same defaults as one a person creates.
+
+This also feeds [Auto Organize](/agent-wiki/automate/auto_organize):
+a page still byte-identical to the template it came from is detectable as an unfilled skeleton,
+and gets proposed for cleanup rather than lingering forever.

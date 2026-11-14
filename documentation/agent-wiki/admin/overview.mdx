@@ -1,0 +1,31 @@
+---
+title: "Admin Overview"
+description: "What lives in the Agent Wiki admin console"
+icon: "user-shield"
+---
+
+The admin console is where organization-wide settings live. Everything here affects all users;
+personal preferences are under [Account Settings](/agent-wiki/using/account_settings) instead.
+
+The first account created on a new instance is promoted to admin automatically.
+
+## What's in it
+
+| Section | Purpose |
+| --- | --- |
+| [Language Models](/agent-wiki/admin/language_models) | Provider credentials and the model agents use |
+| [Web Search](/agent-wiki/admin/web_search) | Lets agents search the web and read pages |
+| [Document Templates](/agent-wiki/admin/templates) | Named starting points for new pages |
+| [Auto Organize](/agent-wiki/automate/auto_organize) | Structural cleanup sweeps and the master switch |
+| [Onyx Integration](/agent-wiki/admin/onyx_integration) | Push documents from Onyx into the wiki |
+| [Users & Groups](/agent-wiki/admin/users_and_groups) | Accounts, access requests, permission groups |
+| [Slack App and Outbound Email](/agent-wiki/admin/notifications) | Delivery channels for triggers and notifications |
+| [Status & Usage](/agent-wiki/admin/status) | System health and LLM usage tracking |
+
+## Start here on a new instance
+
+Configure a language model first. Agents, triggers, and Auto Organize all stay idle until a provider is saved,
+so almost nothing works before it — and the symptom is silence rather than an error.
+
+After that, the useful order is whatever your rollout needs: templates and Auto Organize shape how the wiki stays tidy,
+Slack and email decide how people hear about changes, and groups matter once more than a few people have accounts.
