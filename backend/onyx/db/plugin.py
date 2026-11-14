@@ -42,6 +42,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
+    Integration,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -626,18 +627,23 @@ def _move_plugin__no_commit(
     # "rename" then picks the next free name again.
     for attempt in range(1, _RENAME_ATTEMPTS + 1):
         name = preferred
-        name_taken = (
-            db_session.scalar(
-                select(Plugin.id).where(
-                    Plugin.marketplace_id == marketplace_id,
-                    Plugin.name == name,
-                    Plugin.id != plugin.id,
-                )
+        holder_id = db_session.scalar(
+            select(Plugin.id).where(
+                Plugin.marketplace_id == marketplace_id,
+                Plugin.name == name,
+                Plugin.id != plugin.id,
             )
-            is not None
         )
-        if name_taken:
-            if on_name_clash == "raise":
+        if holder_id is not None:
+            # The home plugin of an integration holds no skill, so its name
+            # does not clash with a skill name; the label takes a free name.
+            holder_is_integration = (
+                db_session.scalar(
+                    select(Integration.id).where(Integration.plugin_id == holder_id)
+                )
+                is not None
+            )
+            if on_name_clash == "raise" and not holder_is_integration:
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name))
             name = free_plugin_name(marketplace_id, name, db_session)
         try:
@@ -651,6 +657,33 @@ def _move_plugin__no_commit(
                 raise
             if on_name_clash == "raise" or attempt == _RENAME_ATTEMPTS:
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
+
+
+def release_private_integrations__no_commit(user_id: UUID, db_session: Session) -> None:
+    """Before a user delete: move each private integration of the user to the
+    Organization library as NOT_AVAILABLE. Its shares keep the same people, as
+    when its owner was deleted before integrations existed."""
+    plugins = db_session.scalars(
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+            Plugin.id.in_(select(Integration.plugin_id)),
+        )
+        .order_by(Plugin.id)
+        .with_for_update(of=Plugin)
+    ).all()
+    if not plugins:
+        return
+    library_id = get_or_create_organization_library__no_commit(db_session)
+    for plugin in plugins:
+        plugin.name = free_plugin_name(library_id, plugin.name, db_session)
+        plugin.marketplace_id = library_id
+        plugin.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
+        plugin.published_version_id = plugin.current_version_id
+        plugin.pending_version_id = None
+        db_session.flush()
 
 
 def publish_plugin__no_commit(

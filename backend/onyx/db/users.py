@@ -963,6 +963,10 @@ def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
 ) -> None:
+    # onyx.db.plugin imports this module through onyx.db.user_group.
+    from onyx.db.plugin import release_private_integrations__no_commit
+
+    release_private_integrations__no_commit(user_to_delete.id, db_session)
     # A private plugin lives in its owner's "My uploads". Published plugins stay
     # in the Organization library with no author.
     if (

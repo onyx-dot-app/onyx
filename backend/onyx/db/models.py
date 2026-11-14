@@ -109,6 +109,11 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
     IndexReclaimStatus,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationConnectionStatus,
+    IntegrationKind,
     LLMModelFlowType,
     MarketplaceKind,
     MCPAuthenticationPerformer,
@@ -3645,6 +3650,15 @@ class ApprovalRequest(Base):
     gated_app_id: Mapped[int] = mapped_column(
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=False
     )
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_approval_request_integration_id",
+        ),
+        nullable=True,
+    )
     # The action that the request asks to run, such as an MCP tool name. It
     # keys the action policy and session grants.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
@@ -5076,6 +5090,9 @@ class Assistant__UserSpecificConfig(Base):
     disabled_tool_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False
     )
+    disabled_plugin_ids: Mapped[list[UUID]] = mapped_column(
+        postgresql.ARRAY(PGUUID(as_uuid=True)), nullable=False, server_default="{}"
+    )
 
 
 AllowedAnswerFilters = (
@@ -5951,6 +5968,272 @@ class UserPluginPreference(Base):
     )
 
     __table_args__ = (Index("ix_user_plugin_preference_plugin_id", "plugin_id"),)
+
+
+class Integration(Base):
+    """A connection from Onyx to one service: an MCP server or an app. Its
+    home plugin gives its owner, scope and access."""
+
+    __tablename__ = "integration"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[IntegrationKind] = mapped_column(
+        Enum(
+            IntegrationKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    config: Mapped[dict[str, Any]] = mapped_column(
+        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+    # The tool list of an MCP server. NULL for an app.
+    actions: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    actions_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    auth_mode: Mapped[IntegrationAuthMode] = mapped_column(
+        Enum(
+            IntegrationAuthMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    auth_method: Mapped[IntegrationAuthMethod | None] = mapped_column(
+        Enum(
+            IntegrationAuthMethod,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    oauth_client_id: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    oauth_client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    oauth_settings: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    credential_fields: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    header_template: Mapped[dict[str, str] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    users_can_save_always_allow: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # The old tool id of an integration made from a custom tool, so the public
+    # API inputs that take tool ids still work. Not a foreign key: tool ids and
+    # integration ids are different sequences.
+    legacy_tool_id: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, unique=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint("kind IN ('mcp_server', 'app')", name="ck_integration_kind"),
+        CheckConstraint(
+            "auth_mode IN ('none', 'shared', 'individual')",
+            name="ck_integration_auth_mode",
+        ),
+        CheckConstraint(
+            "auth_method IN ('oauth2', 'api_key', 'onyx_login', 'managed')",
+            name="ck_integration_auth_method",
+        ),
+    )
+
+
+class IntegrationConnection(Base):
+    """One credential on one integration, for one user or (no user_id) for
+    the organization."""
+
+    __tablename__ = "integration_connection"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    secret: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    status: Mapped[IntegrationConnectionStatus] = mapped_column(
+        Enum(
+            IntegrationConnectionStatus,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=IntegrationConnectionStatus.CONNECTED,
+        server_default=IntegrationConnectionStatus.CONNECTED.value,
+    )
+    status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('connected', 'needs_reconnect')",
+            name="ck_integration_connection_status",
+        ),
+        Index(
+            "uq_integration_connection_organization",
+            "integration_id",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_connection_user",
+            "user_id",
+            "integration_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+
+class IntegrationActionPolicy(Base):
+    """The admin value (no user_id) or the saved choice of one user for one
+    action. The row with the empty action is the default for each action with
+    no row of its own."""
+
+    __tablename__ = "integration_action_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    policy: Mapped[IntegrationActionPolicyValue] = mapped_column(
+        Enum(
+            IntegrationActionPolicyValue,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "policy IN ('allow', 'auto', 'ask', 'blocked')",
+            name="ck_integration_action_policy_policy",
+        ),
+        Index(
+            "uq_integration_action_policy_admin",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_action_policy_user",
+            "user_id",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+
+# action_settings of an agent or task link: {"default": <value>, "actions":
+# {<action name>: <value>}}, each value inherit, allow, ask or blocked. A
+# missing key is inherit.
+
+
+class Persona__Plugin(Base):
+    __tablename__ = "persona__plugin"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_settings: Mapped[dict[str, Any]] = mapped_column(
+        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    __table_args__ = (Index("ix_persona__plugin_plugin_id", "plugin_id"),)
+
+
+class ScheduledTask__Plugin(Base):
+    __tablename__ = "scheduled_task__plugin"
+
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    action_settings: Mapped[dict[str, Any]] = mapped_column(
+        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    __table_args__ = (Index("ix_scheduled_task__plugin_plugin_id", "plugin_id"),)
 
 
 """
@@ -7820,6 +8103,15 @@ class ActionReceipt(Base):
         ForeignKey("gated_app.id", ondelete="SET NULL"),
         nullable=True,
     )
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_receipt_integration_id",
+        ),
+        nullable=True,
+    )
     # The approval that authorized this action, when it went through one.
     approval_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
@@ -7982,6 +8274,15 @@ class ActionApproval(Base):
     gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("gated_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_approval_integration_id",
+        ),
         nullable=True,
     )
     gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")

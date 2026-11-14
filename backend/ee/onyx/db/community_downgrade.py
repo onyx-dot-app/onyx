@@ -266,6 +266,21 @@ def _make_group_shared_resources_public__no_commit(
             plugin_id,
             published_name,
         )
+    # A plugin with no skill row, such as the home plugin of an integration.
+    other_plugin_ids: Sequence[UUID] = db_session.scalars(
+        select(Plugin.id)
+        .where(
+            Plugin.id.in_(shared_plugin_ids),
+            Plugin.marketplace_id != library_id,
+            ~select(Skill.id).where(Skill.id == Plugin.id).exists(),
+        )
+        .order_by(Plugin.id)
+    ).all()
+    for plugin_id in other_plugin_ids:
+        publish_plugin__no_commit(plugin_id, "rename", db_session)
+        logger.info(
+            "Community downgrade published plugin %s to the organization", plugin_id
+        )
 
 
 def _add_to_default_group__no_commit(
