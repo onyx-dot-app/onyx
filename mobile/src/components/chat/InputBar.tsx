@@ -38,8 +38,6 @@ interface InputBarProps {
   onSend: () => void;
   onStop: () => void;
   chatState: ChatState;
-  // A turn waits for approval decisions; Stop replaces Send, which the waiting turn blocks.
-  awaitingApproval: boolean;
   attachments: UseComposerDraft;
 }
 
@@ -49,7 +47,6 @@ export function InputBar({
   onSend,
   onStop,
   chatState,
-  awaitingApproval,
   attachments,
 }: InputBarProps) {
   const insets = useSafeAreaInsets();
@@ -139,7 +136,7 @@ export function InputBar({
 
           <View className="min-w-0 flex-row items-center gap-4">
             <ModelSelector />
-            {isBusy || awaitingApproval ? (
+            {isBusy ? (
               <Button
                 prominence="tertiary"
                 icon={SvgStop}

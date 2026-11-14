@@ -81,7 +81,6 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     chatState,
     submit,
     stop,
-    awaitingApproval,
     isHydrating,
     conversationPersonaId,
   } = useChatController(sessionId, personaId, projectId);
@@ -161,7 +160,6 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         onSend={() => sendWithAttachments()}
         onStop={stop}
         chatState={chatState}
-        awaitingApproval={awaitingApproval}
         attachments={draft}
       />
     </Animated.View>
