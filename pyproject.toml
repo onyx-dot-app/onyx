@@ -188,7 +188,7 @@ ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
 
 # Enterprise Edition features
-ee = ["posthog==3.7.4"]
+ee = ["posthog==7.86.0"]
 
 # Locust load-test runtime (the tools/loadtest/ project). Kept OUT of default-groups
 # so a normal `uv sync` doesn't pull locust's heavy gevent/flask/socketio tree.
