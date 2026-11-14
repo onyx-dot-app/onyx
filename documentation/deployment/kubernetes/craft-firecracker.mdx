@@ -65,8 +65,6 @@ For the isolation design, see [Firecracker isolation](/security/architecture/cra
   AMD and Arm nodes are not supported.
 </Note>
 
-{/* depends: chart PR (--transfer-allow-http with the bundled object store; File store row) */}
-
 | Item | Requirement |
 | --- | --- |
 | Onyx | A full Onyx Helm deployment with Craft on Kubernetes. See [Craft on Kubernetes](/deployment/local/craft_kubernetes). |
@@ -164,9 +162,8 @@ The host agent clones microVM disks with reflink copies. The data directory need
   The node kernel needs the `loop` driver and XFS support.
 
 The default size of a new loop store is the free space of the node disk minus 1/5 of the disk size,
-from 20 GiB to 4 TiB. If this size is less than 20 GiB, the host agent refuses to start. {/* depends:
-chart PR (loopStore.sizeGiB value) */} To choose another size, set `craft.hostAgent.loopStore.sizeGiB`.
-A loop store that exists keeps its size.
+from 20 GiB to 4 TiB. If this size is less than 20 GiB, the host agent refuses to start. To choose another size,
+set `craft.hostAgent.loopStore.sizeGiB`. A loop store that exists keeps its size.
 
 A dedicated XFS data disk with reflink gives better disk performance than the loop store. To use one,
 mount it at the data directory before the host agent starts. To make the host agent refuse to start without reflink,
@@ -220,7 +217,6 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
       "$(cat sandbox-node-registration.txt)" > craft-fc-secrets.yaml
     ```
 
-    {/* depends: chart PR (preflight scratchHostPath defaults to dataDir) */}
     The preflight check tests the file system and free disk of `craft.hostAgent.dataDir`.
 
     The chart copies the registration value into the host agent namespace. To keep the value in your own Secret instead,
@@ -247,12 +243,10 @@ With `craft.sandboxRuntime: firecracker`, the chart:
 - deploys the host agent DaemonSet in `craft.hostAgent.namespace` with Pod Security `privileged`;
 - lets only the API server, the heavy worker, and the Scheduled Task worker reach the agent port (7443);
 - lets the host agent pods reach the sandbox proxy;
-- makes the mutual TLS certificates for the host agent and its clients. {/* depends: chart PR (certs) */}
-  See [Certificates](#certificates).
+- makes the mutual TLS certificates for the host agent and its clients. See [Certificates](#certificates).
 
 ### Versions
 
-{/* depends: chart PR (tags derived from global.version) */}
 The chart takes the Firecracker image tags from the Onyx version (`global.version`, without a `-dev` suffix).
 `global.version` must be a pinned Onyx release tag. With `latest`, `edge`, or `beta`, Helm refuses to render the chart.
 For Onyx `v5.2.0`, the chart uses:
@@ -288,11 +282,11 @@ Most deployments keep the defaults. These settings change often:
 
 ### Certificates
 
-{/* depends: chart PR (certs) */} By default, the chart makes a private CA, the host agent certificate,
-and the client certificate. It keeps them in two Secrets:
+By default, the chart makes a private CA, the host agent certificate, and the client certificate.
+It keeps them in two Secrets:
 `<release>-craft-fc-host-agent-tls` in the host agent namespace and `<release>-craft-fc-host-agent-client-tls` in the
-release namespace. The certificates are valid for 10 years. The chart renews them automatically in their last 30 days.
-To rotate them,
+release namespace. The certificates are valid for 10 years.
+The chart renews them at the first upgrade in their last 30 days. To rotate them,
 see [Rotate the certificates](/deployment/kubernetes/craft-firecracker-operations#rotate-the-certificates).
 
 <Warning>
@@ -330,8 +324,7 @@ craft:
 ```
 
 **Certificates.** The host agent accepts TLS 1.3 only, and both sides check the peer certificate. Make two Secrets,
-and set both `existingSecret` values. Set both or neither. {/* depends: chart PR (certs) */}
-
+and set both `existingSecret` values. Set both or neither.
 | Secret | Namespace | Keys | Content |
 | --- | --- | --- | --- |
 | `craft.hostAgent.tls.existingSecret` | Host agent namespace | `tls.crt`, `tls.key`, `ca.crt` | The host agent server certificate (extended key usage `serverAuth`, a DNS SAN), and the CA that signs the client certificates |
@@ -468,7 +461,7 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
     - `auth.sandboxNodeRegistration.enabled` is not `true`, or it has no value and no existing Secret.
     - `sandboxPod.tolerations` tolerates the `onyx.app/kvm` taint.
     - `craft.hostAgent.namespace` is the release namespace or the sandbox namespace.
-    - {/* depends: chart PR */} `global.version` is `latest`, `edge`, or `beta`. Use a pinned Onyx release tag.
+    - `global.version` is `latest`, `edge`, or `beta`. Use a pinned Onyx release tag.
     - `craft.hostAgent.rootfs.image.tag` is set without `configMap.SANDBOX_FC_TEMPLATE`.
     - Only one of `craft.hostAgent.tls.existingSecret` and `craft.hostAgent.client.existingSecret` is set.
   </Accordion>

@@ -44,8 +44,7 @@ agent NodeInfo   # memory, microVM count, templates, drain state
 agent List       # microVMs on the node
 ```
 
-{/* depends: chart PR (certs) */} With the chart-made certificates,
-`SECRET` is `<release>-craft-fc-host-agent-client-tls`,
+With the chart-made certificates, `SECRET` is `<release>-craft-fc-host-agent-client-tls`,
 and `SERVER_NAME` is a DNS SAN of the host agent certificate (`openssl x509 -noout -ext subjectAltName` on its `tls.crt`
 shows it). With your own certificates,
 `SECRET` is `craft.hostAgent.client.existingSecret` and `SERVER_NAME` is `craft.hostAgent.client.tlsServerName`.
@@ -129,8 +128,8 @@ To put the node back, run `kubectl $K uncordon <node>` and `agent SetDrain '{"dr
 The host agent reads its certificate files again on the next connection after they change, so it needs no restart.
 The API server and the workers read their client certificate at start.
 
-{/* depends: chart PR (certs) */} For the chart-made certificates, delete both Secrets and upgrade.
-The chart makes new certificates, and the clients restart by themselves:
+For the chart-made certificates, delete both Secrets and upgrade. The chart makes new certificates,
+and the clients restart by themselves:
 
 ```bash
 kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-tls
@@ -174,10 +173,16 @@ The registration value lets host agents register their node signing keys. Change
 
 <Steps>
   <Step title="Write the new value">
-    If the chart makes the Secrets, change `auth.sandboxNodeRegistration.values` in your private values file.
-    The chart then writes the new value in both namespaces. Do not edit these Secrets directly. With `existingSecret`,
-    update your Secret in the release namespace. With `registrationExistingSecret`,
-    also update your Secret in the host agent namespace. Then run `helm upgrade`.
+    Change the value in both namespaces. Each namespace has its own source:
+
+    | Namespace | You set | Change |
+    | --- | --- | --- |
+    | Release | `auth.sandboxNodeRegistration.existingSecret` | Your Secret |
+    | Release | No `existingSecret` | `auth.sandboxNodeRegistration.values` in your private values file |
+    | Host agent | `craft.hostAgent.registrationExistingSecret` | Your Secret |
+    | Host agent | No `registrationExistingSecret` | Nothing. The chart copies `auth.sandboxNodeRegistration.values`. |
+
+    Do not edit the Secrets that the chart makes. Then run `helm upgrade`.
   </Step>
 
   <Step title="Restart the API server, then the host agents">

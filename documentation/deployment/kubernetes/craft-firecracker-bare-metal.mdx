@@ -90,18 +90,21 @@ It never erases a disk.
       --node-taint workload=sandbox:NoSchedule --node-taint onyx.app/kvm=true:NoSchedule
     ```
 
-    On a node that already joined, list its pods. Delete the pods that are not DaemonSet pods,
-    so that they start on another node:
+    On a node that already joined, move its other pods before microVMs run on it.
+    `kubectl drain` respects PodDisruptionBudgets and keeps the DaemonSet pods:
 
     ```bash
     kubectl get pods -A -o wide --field-selector spec.nodeName=<kvm-node>
+    kubectl drain <kvm-node> --ignore-daemonsets
+    kubectl uncordon <kvm-node>
     ```
+
+    If `drain` stops on a pod with local data or without a controller, move that pod yourself.
   </Step>
 </Steps>
 
 ## Configure the file store
 
-{/* depends: chart PR (--transfer-allow-http with the bundled object store) */}
 The object store that the Onyx chart bundles works as it is. Its traffic stays inside the cluster and uses HTTP.
 When the bundled store is on and `FILE_STORE_BACKEND` is `s3` (the default),
 the chart lets the host agent accept HTTP presigned URLs. If the DNS domain of your cluster is not `cluster.local`,
