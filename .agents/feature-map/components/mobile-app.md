@@ -114,7 +114,10 @@ aborts locally and never sends an unscoped Stop.
 `GET /chat/chat-session/{id}/status` until `is_processing` is `false`. Only
 then does the chat state return to `input`. A resumed stream in
 `hooks/useChatSessionController.ts` also waits for idle before it loads the
-saved history.
+saved history. A connection that drops after the server accepts a turn does
+not end the run, so the send hands the session to `recoverChatSession`. It
+replays the run through resume-stream, which keeps a waiting approval card
+on screen.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

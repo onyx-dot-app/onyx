@@ -30,7 +30,8 @@ import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 import { toast } from "@/hooks/useToast";
 
-async function recoverChatSession(
+// Reattaches to a live run, then settles from the saved session once the server is idle.
+export async function recoverChatSession(
   sessionId: string,
   runId: number | null,
   serverUrl: string | null,
@@ -62,15 +63,15 @@ async function recoverChatSession(
         sessionId,
         node.type === "error" ? "settling" : "streaming",
       );
-    // clear the reserved placeholder so it doesn't render above the replayed stream. The timer
-    // restarts from here: this client never saw the run's true start (web shows no timer at all here).
-    if (node.type === "assistant") {
-      store.getState().patchNode(sessionId, nodeId, {
-        message: "",
-        packets: [],
-        streamingStartedAt: Date.now(),
-      });
+    // A client that never saw the run's start times it from here (web shows no timer at all here).
+    if (node.type === "assistant" && node.streamingStartedAt === undefined) {
+      store
+        .getState()
+        .patchNode(sessionId, nodeId, { streamingStartedAt: Date.now() });
     }
+    // The replay starts at the run's first packet, so it replaces what this client holds (the
+    // reserved placeholder, or the output before a lost connection) once it delivers.
+    let replaced = false;
 
     // writes are safe only while this session stays focused and unaborted
     const stillCurrent = () =>
@@ -93,7 +94,10 @@ async function recoverChatSession(
         pending = [];
         return;
       }
-      const updated = { ...target, packets: [...target.packets, ...pending] };
+      const updated = replaced
+        ? { ...target, packets: [...target.packets, ...pending] }
+        : { ...target, message: "", packets: pending };
+      replaced = true;
       pending = [];
       store
         .getState()

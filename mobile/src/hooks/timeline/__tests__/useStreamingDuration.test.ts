@@ -8,7 +8,10 @@ import {
 } from "@jest/globals";
 import { act, renderHook } from "@testing-library/react-native";
 
-import { useStreamingDuration } from "@/hooks/timeline/useStreamingDuration";
+import {
+  type ExcludedWait,
+  useStreamingDuration,
+} from "@/hooks/timeline/useStreamingDuration";
 
 // Modern fake timers mock Date.now() too, so elapsed advances with the fake clock as the poll fires.
 describe("useStreamingDuration", () => {
@@ -91,19 +94,20 @@ describe("useStreamingDuration", () => {
 
   it("does not count the time a run waits for the user", () => {
     const start = Date.now();
-    const { result, rerender } = renderHook(
-      ({ paused }: { paused: boolean }) =>
-        useStreamingDuration(true, start, undefined, paused),
-      { initialProps: { paused: false } },
+    const wait: { current: ExcludedWait } = {
+      current: { totalMs: 0, since: null },
+    };
+    const { result } = renderHook(() =>
+      useStreamingDuration(true, start, undefined, wait),
     );
     act(() => jest.advanceTimersByTime(2000));
     expect(result.current).toBe(2);
 
-    rerender({ paused: true });
+    wait.current = { totalMs: 0, since: Date.now() };
     act(() => jest.advanceTimersByTime(10_000));
     expect(result.current).toBe(2);
 
-    rerender({ paused: false });
+    wait.current = { totalMs: 10_000, since: null };
     act(() => jest.advanceTimersByTime(1000));
     expect(result.current).toBe(3);
   });

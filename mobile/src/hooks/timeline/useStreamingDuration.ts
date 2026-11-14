@@ -2,40 +2,31 @@
 // RAF loop swapped for a setInterval poll — deterministic under jest fake timers, and RN gains
 // nothing from RAF here.
 
-import { useEffect, useRef, useState } from "react";
+import { type RefObject, useEffect, useState } from "react";
 
 // Poll faster than 1s so the whole-second boundary stays crisp (web's RAF was ~16ms).
 const DURATION_TICK_MS = 250;
+
+// Time a stream spends waiting for the user (an approval), which the timer does not count.
+export interface ExcludedWait {
+  // Finished waits, in ms.
+  totalMs: number;
+  // Epoch ms the current wait started; null while the run works.
+  since: number | null;
+}
 
 export function useStreamingDuration(
   isStreaming: boolean,
   startTime: number | undefined,
   backendDuration?: number,
-  // The run waits for the user (an approval); the timer stops and resumes without counting the wait.
-  paused = false,
+  // Read on each tick, so a wait holds the value without re-rendering the owner.
+  excludedWait?: RefObject<ExcludedWait>,
 ): number {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [trackedStart, setTrackedStart] = useState(startTime);
-  const pausedMsRef = useRef(0);
-  const pauseStartedRef = useRef<number | null>(null);
 
   // A backend duration freezes the timer, so don't run it once one is present.
-  const shouldRunTimer =
-    isStreaming && backendDuration === undefined && !paused;
-
-  useEffect(() => {
-    if (paused) {
-      pauseStartedRef.current = Date.now();
-    } else if (pauseStartedRef.current !== null) {
-      pausedMsRef.current += Date.now() - pauseStartedRef.current;
-      pauseStartedRef.current = null;
-    }
-  }, [paused]);
-
-  // A new stream starts with no paused time.
-  useEffect(() => {
-    pausedMsRef.current = 0;
-  }, [startTime]);
+  const shouldRunTimer = isStreaming && backendDuration === undefined;
 
   // A new startTime is a new stream: reset now (adjust-state-during-render) so we never carry the
   // previous stream's elapsed — including when the timer isn't running and the effect won't reconcile.
@@ -50,8 +41,9 @@ export function useStreamingDuration(
     }
 
     const updateElapsed = () => {
+      const wait = excludedWait?.current;
       const elapsed = Math.floor(
-        (Date.now() - startTime - pausedMsRef.current) / 1000,
+        ((wait?.since ?? Date.now()) - startTime - (wait?.totalMs ?? 0)) / 1000,
       );
       setElapsedSeconds((prev) => (prev === elapsed ? prev : elapsed));
     };
@@ -59,12 +51,12 @@ export function useStreamingDuration(
     updateElapsed();
     const intervalId = setInterval(updateElapsed, DURATION_TICK_MS);
     return () => clearInterval(intervalId);
-  }, [shouldRunTimer, startTime]);
+  }, [shouldRunTimer, startTime, excludedWait]);
 
   if (backendDuration !== undefined) {
     return backendDuration;
   }
-  // No start time → 0; a paused timer (startTime unchanged) keeps its last value.
+  // No start time → 0; a stopped timer (startTime unchanged) keeps its last value.
   if (!startTime) {
     return 0;
   }

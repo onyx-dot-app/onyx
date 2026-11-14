@@ -143,7 +143,8 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set) => ({
   nudge: () => set((state) => ({ nudgeSeq: state.nudgeSeq + 1 })),
 }));
 
-// The first request of the latest turn that still waits for this user.
+// The first request of the latest turn that still waits for this user. A failed response's run
+// has ended, so its requests wait for nothing; the server's send check expires them.
 export function findPendingToolApprovalId(
   tree: MessageTreeState | undefined,
 ): string | null {
@@ -152,6 +153,7 @@ export function findPendingToolApprovalId(
   const lastUser = chain.findLastIndex((message) => message.type === "user");
   const { localStatuses } = useToolApprovalUi.getState();
   for (const response of chain.slice(lastUser + 1)) {
+    if (response.type === "error") continue;
     const { entries, stopped } = readToolApprovals(response.packets);
     const pending = entries.find(
       (entry) =>
