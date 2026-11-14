@@ -54,7 +54,7 @@ During a run, the agent emits typed `AgentEvent` values to `on_event`:
 | Event types | What they report |
 | --- | --- |
 | `agent_start`, `agent_end` | The run starts or ends. The end event includes its outcome. |
-| `input_required`, `agent_suspended` | A call awaits identified input, or execution releases its workers at a supported boundary. |
+| `input_required`, `input_ended`, `agent_suspended` | A call awaits identified input, the call stops waiting (with the applied answer, or none when its run or scope stopped), or execution releases its workers at a supported boundary. |
 | `message_start`, `message_update`, `message_end` | An assistant message starts, receives content updates, or ends with its accepted content and outcome. |
 | `tool_start`, `tool_update`, `tool_end` | A tool call starts, reports progress, or returns a result. |
 | `tool_result_amended` | A finish or suspend hook set the final result of a call of this run. |
@@ -153,6 +153,7 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 `StepInput.received_inputs` contains submitted instructions and unread background results.
+`StepInput.input_wait_seconds` is the time this run's calls have spent waiting for input, such as the user's approval, so a feature can leave it out of its own timing.
 The runtime accepts them before the next model call, including when no preparation callback exists.
 A feature can return `PreparedStep.input_messages` to transform their content, for example to remap citations.
 Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
@@ -220,16 +221,34 @@ Two optional tool callbacks cover interception and enrichment:
 
 | Callback | Contract |
 | --- | --- |
-| `before_tool_call` | Return a `ToolResult` to skip execution, `PendingToolInput` to await approval, or `None` to proceed. |
+| `before_tool_call` | Return a `ToolResult` to skip execution, `PendingToolInput` to await input, or `None` to proceed. |
 | `after_tool_call` | Enrich an already accepted result. Failure preserves that result and fails the run. |
 
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
-A tool that calls other tools for the model, such as a code mode program, gets `before_tool_call` as `ToolInvocation.before_call` and applies it to each of those calls.
-Such a call cannot wait for approval, so a `PendingToolInput` decision makes it fail.
-A hook that raises fails the run, as for a direct call: `before_call` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
+A tool that calls other tools for the model, such as a code mode program, gets `ToolInvocation.nested_calls`, a `NestedCallGate`.
+`NestedCallGate.decide` applies `before_tool_call`, then the approval gate below, to each of those calls.
+For a `PendingToolInput` decision, the tool can block the call with `NestedCallGate.wait_for_input`, which returns `None` to run an approved call or the result that replaces it.
+The run publishes `input_required` with the outer call as `tool_call` and the blocked call as `nested_call`.
+`run.submit()` answers it like any other request; the request is not saved with the run.
+Cancellation of the run, or of the signal the tool passes for the waiting call, unblocks it with `AgentCancelled`.
+A run that ends publishes `input_ended` without an answer for each request still open, nested or direct, before `agent_end`; the waiting call can wake later.
+While it waits, the outer call keeps running, so the run does not suspend.
+Code mode passes the cell's stop signal. While the program waits only for such calls, the wait counts toward neither its lifetime nor its yield time.
+A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
 For example, deep research normalizes a child report's citations before returning the parent tool result.
+
+Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
+The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
+`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
+`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, or any call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
+The run reports that answer in `input_ended`. A direct call that the answer denies keeps the denial as its result, so the model sees it in later runs.
+The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
+Without `ToolApprovals`, such a call returns an error result.
+`Run.has_event_listeners` tells the application whether a listener receives the run's events, directly or through a foreground ancestor; a run that no one watches cannot show a request.
+`Run.input_wait_seconds` totals the time the run's calls spent waiting for input.
+The tool activity bound does not count that time either.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
 That callback can replace the result; its failure preserves the raw result and fails the run.
@@ -276,7 +295,7 @@ Shared retrieval uses the tool's existing combined-result limits.
 Retrieval tools declare `merge_list_argument` using their query or URL parameter name.
 Tools with a per-call item cap also set `merge_list_limit`; larger groups execute separately.
 `Tool.bind` supplies the merger to the SDK, which does not inspect search fields.
-Steps with a `before_tool_call` hook and calls waiting for input execute individually.
+Steps with a `before_tool_call` hook, calls that require approval, and calls waiting for input execute individually.
 Batch results are recorded together before checkpoint capture; resumed runs skip completed calls.
 Prompt assembly replaces exact repeated passages within a step with references to earlier results.
 
@@ -484,11 +503,14 @@ The runtime finishes in-flight tools and callbacks before releasing its workers.
 It can suspend during the tool phase with unanswered calls, or before the next step after its feature hooks finish.
 Snapshots taken during provider I/O or arbitrary callbacks support inspection only.
 
-`before_tool_call` can return `PendingToolInput(mode=InputMode.EXECUTE)` to gate an action.
+`before_tool_call` or `ToolApprovals` can return `PendingToolInput(mode=InputMode.EXECUTE)` to gate an action.
 A question tool returns `PendingToolInput(mode=InputMode.RESULT)` to request its result from the caller.
 Each request has a unique `request_id` within its run.
 Submit a matching `HumanToolAnswer` through `run.submit()`; answers can arrive while sibling tools are still running.
+`PendingToolInput.expires_at` tells the client when the application stops waiting for an answer.
+A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
+The run publishes `input_ended` with the call and its answer when it applies the answer.
 Repeated identical answers do not repeat actions; conflicting answers fail.
 
 `run.wait_until_settled(timeout=...)` waits for suspension or terminal output.

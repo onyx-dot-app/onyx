@@ -2,7 +2,7 @@ import threading
 import time
 import tracemalloc
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack, contextmanager, nullcontext
 from functools import partial
 from pathlib import Path
@@ -18,6 +18,7 @@ from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode.models import (
     MAX_CPU_SECONDS,
     ExternalCall,
+    PendingCall,
     ProgramCompleted,
     ProgramStopped,
     ProgramSuspended,
@@ -42,6 +43,7 @@ from onyx.tools.tool_implementations.code_mode.store import (
     STORE_STUBS,
     ProgramStore,
 )
+from onyx.utils.timing import PausableClock
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.unit.onyx.tools.code_mode.fakes import until
 
@@ -172,6 +174,8 @@ def run(
         cancellation=cancellation or CancellationSignal(),
         on_print=on_print,
         on_yield=on_yield,
+        on_blocked=lambda _blocked, _wake: True,
+        clock=PausableClock(),
         **({"pool": lambda: pool} if pool is not None else {}),
     )
     return Ran(
@@ -845,6 +849,8 @@ def test_a_dump_that_cannot_fit_is_skipped(monkeypatch: pytest.MonkeyPatch) -> N
         cancellation=CancellationSignal(),
         on_print=lambda _text: None,
         on_yield=lambda: None,
+        on_blocked=lambda _blocked, _wake: True,
+        clock=PausableClock(),
     )
     # A fake snapshot: skip the isinstance validation.
     waiting = ProgramWaiting.model_construct(state=cast(FunctionSnapshot, Snapshot()))
@@ -1621,3 +1627,95 @@ def test_type_checker_notes_stay_within_the_output_limit() -> None:
     # The last diagnostic is kept.
     assert "main.py:60:" in result.type_check_notes
     assert len(result.type_check_notes) < LIMITS.max_output_chars + 100
+
+
+@pytest.mark.parametrize("paused", [True, False])
+def test_a_call_that_pauses_the_clock_does_not_use_up_the_lifetime(
+    paused: bool,
+) -> None:
+    clock = PausableClock()
+
+    def wait_for_person(_call: ExternalCall) -> object:
+        clock.set_paused(paused)
+        time.sleep(1.5)
+        clock.set_paused(False)
+        return "done"
+
+    result = execute_program(
+        "print(await slow(seconds=0))\n",
+        stubs=STUBS,
+        function_names=FUNCTIONS,
+        plain_functions={},
+        async_functions={},
+        handler=wait_for_person,
+        limits=LIMITS.model_copy(update={"lifetime_seconds": 1}),
+        cancellation=CancellationSignal(),
+        on_print=lambda _text: None,
+        on_yield=lambda: None,
+        on_blocked=lambda _blocked, _wake: True,
+        clock=clock,
+    )
+
+    assert result.status == ("completed" if paused else "timed_out"), result
+
+
+def test_a_program_that_may_not_continue_yet_can_give_up_its_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """After its calls end, a program that waited for tool calls only keeps
+    waiting until its caller lets it continue, and gives up its worker on
+    demand meanwhile."""
+    reports: list[bool] = []
+    wakes: list[Callable[[], None]] = []
+    may_continue = threading.Event()
+
+    def on_blocked(blocked: bool, wake: Callable[[], None]) -> bool:
+        reports.append(blocked)
+        wakes.append(wake)
+        return blocked or may_continue.is_set()
+
+    demanded = threading.Event()
+    monkeypatch.setattr(
+        sandbox._worker_demand, "gives_up", lambda _wake: demanded.is_set()
+    )
+    run_state = sandbox._Run(
+        limits=LIMITS,
+        function_names=FUNCTIONS,
+        plain_functions={},
+        async_functions={},
+        handler=lambda _call: None,
+        cancellation=CancellationSignal(),
+        on_print=lambda _text: None,
+        on_yield=lambda: None,
+        on_blocked=on_blocked,
+        clock=PausableClock(),
+    )
+    call = Future[object]()
+    call.add_done_callback(lambda _future: run_state.wake.set())
+    run_state.calls[0] = PendingCall(
+        external=ExternalCall(index=0, function_name="slow", kwargs={}),
+        future=call,
+    )
+    with ThreadPoolExecutor(1) as executor:
+        waited = executor.submit(run_state.wait_for_any, [0], yield_worker=True)
+        until(lambda: reports == [True])
+
+        call.set_result("done")
+        until(lambda: reports[1:2] == [False])
+        assert not waited.done()
+
+        demanded.set()
+        run_state.wake.set()
+        # The worker is given up while the program may not continue.
+        assert waited.result(timeout=10) is False
+        assert run_state.blocked
+
+        demanded.clear()
+        asked = len(reports)
+        resumed = executor.submit(run_state.wait_for_any, [0])
+        until(lambda: len(reports) > asked)
+        assert not resumed.done()
+        may_continue.set()
+        wakes[-1]()
+        assert resumed.result(timeout=10) is True
+    assert not run_state.blocked
