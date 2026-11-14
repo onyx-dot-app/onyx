@@ -1,0 +1,275 @@
+---
+title: "Firecracker on Google GKE"
+description: "Prepare GKE Standard node pools for Craft Firecracker sandboxes"
+icon: "google"
+---
+
+This guide prepares Google Kubernetes Engine (GKE) for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+Use the Onyx Terraform modules, or prepare the node pools of your own GKE cluster. After the nodes are ready,
+configure Helm as the overview page shows.
+
+## Node requirements on GKE
+
+| Item | Allowed | Not allowed |
+| --- | --- | --- |
+| Cluster | GKE Standard | GKE Autopilot. It blocks privileged pods and nested virtualization. |
+| Machine type | Intel `n2` and `c3`. The Onyx module default is `n2-standard-8`. | AMD (`n2d`, `c2d`, `c3d`, `t2d`), Arm (`t2a`), `e2` |
+| Node image | `COS_CONTAINERD` | |
+| Pool | A pool with nested virtualization | gVisor (GKE Sandbox) pools. A gVisor pod gets no `/dev/kvm`. |
+| Network | Dataplane V2, which enforces NetworkPolicy | |
+
+Use kube-dns as the cluster DNS provider. With Cloud DNS, NodeLocal DNSCache answers on 169.254.20.10,
+and the sandbox proxy policy blocks that range.
+
+The COS root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
+so you do not need a data disk. Keep a boot disk of 200 GB or more for the loop store.
+
+COS nodes run a host kernel that Onyx does not test (6.12),
+so a `WARN kernel` line in the preflight results is expected.
+The `WARN filesystem` line for the ext4 root disk is also expected.
+
+<Note>
+  If your network inspects TLS, `kubectl` can fail to reach the public endpoint of the cluster.
+  Use the DNS endpoint of the cluster instead:
+  `gcloud container clusters update <cluster> --location=<region> --enable-dns-access`,
+  then `gcloud container clusters get-credentials <cluster> --location=<region> --dns-endpoint`.
+</Note>
+
+<Warning>
+  {/* depends: #17842 (proxy egress fix, chart 0.9.49). Remove this Warning when the release ships. */}
+  On GKE Dataplane V2,
+  the sandbox proxy egress NetworkPolicy of the chart blocks DNS and in-cluster traffic from the sandbox proxy.
+  Dataplane V2 does not match pod IP addresses with `ipBlock` rules, and NodeLocal DNSCache pods answer DNS.
+  Then microVM egress fails: `curl` in the sandbox hangs,
+  and the sandbox proxy logs `Temporary failure in name resolution`. With Onyx chart versions before 0.9.49,
+  apply this extra NetworkPolicy in the release namespace. NetworkPolicies add up, so it only adds the missing paths.
+
+  ```yaml sandbox-proxy-dns.yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: sandbox-proxy-dns-and-cluster
+    namespace: onyx
+  spec:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/instance: onyx
+        app.kubernetes.io/component: sandbox-proxy
+    policyTypes: [Egress]
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchExpressions:
+                - key: k8s-app
+                  operator: In
+                  values: [kube-dns, node-local-dns]
+        ports:
+          - { protocol: UDP, port: 53 }
+          - { protocol: TCP, port: 53 }
+      - to:
+          - podSelector: {}   # pods in the release namespace, for example the API server
+  ```
+
+  ```bash
+  kubectl -n onyx apply -f sandbox-proxy-dns.yaml
+  ```
+
+  Change `onyx` to your release name and namespace.
+</Warning>
+
+## Option 1: Onyx Terraform modules
+
+The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/deployment/cloud/gcp) for the full module.
+
+<Steps>
+  <Step title="Set the sandbox pool variables">
+    {/* depends: terraform module tag (tf-gcp) with craft_sandbox_runtime */}
+
+    ```hcl main.tf
+    module "onyx" {
+      source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/gcp/onyx?ref=<tag>"
+      # ... your existing settings
+
+      enable_sandbox_node_pool = true
+      craft_sandbox_runtime    = "firecracker"
+    }
+    ```
+
+    With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+
+    - turns on nested virtualization for the sandbox pool;
+    - sets `vm.max_map_count` to `1048576` (COS uses `65530`);
+    - adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+    - keeps Shielded VM secure boot on;
+    - makes a Google service account for the Onyx workloads, so that the API server can sign
+    Cloud Storage URLs. See [Signed Cloud Storage URLs](#signed-cloud-storage-urls).
+
+    The module refuses a blocked machine type, and gVisor with Firecracker on the same pool.
+  </Step>
+
+  <Step title="Add the pod sandbox pool">
+    Add `enable_craft_pod_sandbox_node_pool = true` to the module block.
+    It needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
+    The module then adds the pool `sandboxpod` (`n2-standard-4`, 1 to 2 nodes, boot disk `sandbox_node_disk_size_gb`).
+    The pool has the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`,
+    and no KVM label or taint. The chart default `sandboxPod` values select this pool,
+    so you need no chart change for it.
+
+    A tainted pool starts with 0 nodes. The cluster autoscaler adds a node when the first pod sandbox needs one.
+    The image prepuller is a DaemonSet, and DaemonSet pods do not make the autoscaler add a node.
+    The `gcp/onyx` module uses the default size for this pool.
+  </Step>
+
+  <Step title="Apply">
+    ```bash
+    terraform init -upgrade
+    terraform plan
+    terraform apply
+    ```
+
+    GCP turns on nested virtualization only when it creates a pool. On an existing cluster,
+    a change to `craft_sandbox_runtime` replaces the sandbox pool, and every sandbox on it stops.
+    On an existing cluster, deploy the chart with Firecracker before you apply,
+    as [Add Firecracker to an existing
+    installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
+    Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Add the first Firecracker node">
+    {/* depends: GKE pool PR #17823 (Firecracker and pod sandbox pools start with one node) */} The host agent,
+    the preflight check, and the image prepuller are DaemonSets.
+    DaemonSet pods never make the cluster autoscaler add a node, so an empty tainted pool stays empty.
+    Do this step only for a pool that has no nodes:
+
+    ```bash
+    kubectl get nodes -l onyx.app/kvm=true          # Firecracker pool
+    gcloud container node-pools list --cluster=<cluster> --location=<region>   # names start with sandbox-
+    gcloud container clusters resize <cluster> --node-pool=<pool> --num-nodes=1 --location=<region>
+    ```
+
+    Do not resize a pool that already has nodes. A resize to fewer nodes removes nodes and stops the microVMs on them.
+  </Step>
+
+  <Step title="Configure Helm">
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Option 2: Your own GKE cluster
+
+The cluster must enforce NetworkPolicy,
+for example with GKE Dataplane V2 (`--enable-dataplane-v2` when you create the cluster).
+
+<Steps>
+  <Step title="Make the Firecracker node pool">
+    Nested virtualization can be set only when you create a pool:
+
+    ```bash
+    gcloud container node-pools create craft-fc \
+      --cluster=<cluster> --location=<region> \
+      --machine-type=n2-standard-8 \
+      --image-type=COS_CONTAINERD \
+      --disk-size=200 \
+      --enable-nested-virtualization \
+      --system-config-from-file=craft-fc-sysctl.yaml \
+      --node-labels=onyx.app/workload=sandbox,onyx.app/kvm=true \
+      --node-taints=workload=sandbox:NoSchedule,onyx.app/kvm=true:NoSchedule \
+      --num-nodes=1
+    ```
+
+    ```yaml craft-fc-sysctl.yaml
+    linuxConfig:
+      sysctl:
+        vm.max_map_count: "1048576"
+    ```
+  </Step>
+
+  <Step title="Make the pod sandbox node pool">
+    ```bash
+    gcloud container node-pools create craft-pod-sandbox \
+      --cluster=<cluster> --location=<region> \
+      --machine-type=n2-standard-4 \
+      --node-labels=onyx.app/workload=sandbox \
+      --node-taints=workload=sandbox:NoSchedule \
+      --num-nodes=1
+    ```
+  </Step>
+
+  <Step title="Allow signed Cloud Storage URLs">
+    Follow [Signed Cloud Storage URLs](#signed-cloud-storage-urls).
+  </Step>
+
+  <Step title="Configure Helm">
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Signed Cloud Storage URLs
+
+The host agent uploads and downloads session files with signed Cloud Storage URLs. Without a key file,
+the API server signs URLs through the IAM `signBlob` API. That API needs a Google service account:
+a direct Workload Identity principal has none.
+
+With `craft_sandbox_runtime = "firecracker"`, the `gke` module:
+
+- makes a Google service account (`<cluster name>-workload`, shortened with a hash for long cluster names);
+- maps the Kubernetes service account `onyx-workload-access` to it, with the `iam.gke.io/gcp-service-account`
+  annotation and `roles/iam.workloadIdentityUser`;
+- grants the account `roles/iam.serviceAccountTokenCreator` on itself.
+
+The `workload_google_service_account_email` output names the account. The file store bucket grant moves to this account.
+Grants that you gave to the old `principal://` member on other resources do not move.
+Grant them again to the new member.
+
+If the chart makes the Kubernetes service account (the `gke` module input `create_workload_service_account = false`),
+add the annotation in your Helm values:
+
+```yaml
+serviceAccount:
+  annotations:
+    iam.gke.io/gcp-service-account: <workload_google_service_account_email>
+```
+
+On your own cluster, turn on the IAM Service Account Credentials API first. The `gcp/onyx` module does this for you:
+
+```bash
+gcloud services enable iamcredentials.googleapis.com --project=<project>
+```
+
+Then make the same setup:
+a Google service account with `roles/iam.serviceAccountTokenCreator` on itself and read and write access to the file
+store bucket (for example `roles/storage.objectUser`), mapped to the Onyx Kubernetes service account.
+Write access alone, for example `roles/storage.objectCreator`, is not sufficient: session restores need read access.
+
+The mapping needs Workload Identity Federation for GKE on the cluster (`--workload-pool=<project>.svc.id.goog`)
+and the GKE metadata server (`--workload-metadata=GKE_METADATA`)
+on the node pools that run the API server and the workers.
+The two sandbox pools do not change these settings on your other pools.
+See the Google Cloud guide [Use Workload Identity Federation for
+GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).
+
+## Remove a test installation
+
+`terraform destroy` can fail on `google_service_networking_connection` with `Producer services (e.g. CloudSQL,
+Cloud Memstore, etc.) are still using this connection`, also after Cloud SQL and Memorystore are gone.
+Delete the peering, remove the connection from the state, and run `terraform destroy` again:
+
+```bash
+gcloud compute networks peerings delete servicenetworking-googleapis-com --network=<vpc> --project=<project>
+terraform state list | grep google_service_networking_connection
+terraform state rm '<address from the previous command>'
+terraform destroy
+```
+
+## Google Cloud security findings
+
+Security Command Center can report findings when the host agent starts.
+The host agent is a privileged DaemonSet with `hostPID` and a `hostPath` mount, by design.
+Scope a mute rule to your cluster and the host agent namespace (`onyx-sandbox-runtime` by default).

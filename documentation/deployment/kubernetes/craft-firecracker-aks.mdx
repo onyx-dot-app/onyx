@@ -1,0 +1,287 @@
+---
+title: "Firecracker on Azure AKS"
+description: "Prepare AKS node pools for Craft Firecracker sandboxes"
+icon: "microsoft"
+---
+
+This guide prepares Azure Kubernetes Service (AKS) for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+Use the Onyx Terraform modules, or prepare the node pools of your own AKS cluster. After the nodes are ready,
+configure Helm as the overview page shows.
+
+## Node requirements on AKS
+
+| Item | Allowed | Not allowed |
+| --- | --- | --- |
+| VM size | Intel D or E series, v5 to v7, for example `Standard_D8ds_v5` or `Standard_D8ds_v7` | Sizes with `a` (AMD) or `p` (Arm) in the name, v4 and older |
+| OS | `Ubuntu2404` | |
+| Pool | A normal node pool | Pod Sandboxing (Kata) pools. Their pods get no `/dev/kvm`. |
+| Network | A network policy engine, for example Azure Network Policy Manager, Calico, or Cilium | |
+
+Ubuntu 24.04 node images set `vm.max_map_count` to `1048576`, so no sysctl change is necessary.
+The Ubuntu 24.04 node image has kernel 6.8. Onyx does not test this host kernel,
+so the preflight check prints a `WARN kernel` line for it.
+
+Some subscriptions cannot use every VM size in every region. Before you apply, run:
+
+```bash
+az vm list-skus --all -l <region> --size Standard_D8ds \
+  --query "[].{name:name,restriction:restrictions[0].reasonCode}" -o table
+az vm list-usage -l <region> -o table
+```
+
+A size with `NotAvailableForSubscription` cannot be used: select another size of the same family, for example v7.
+Also check the regional vCPU quota. Onyx with Craft on Firecracker needs about 36 vCPUs:
+two or three 8-vCPU system nodes, one 8-vCPU Firecracker node, and one 4-vCPU pod sandbox node.
+New subscriptions often have a limit of 10 vCPUs for each region. Request more quota before you apply.
+
+The Ubuntu root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
+so you do not need a data disk. Size the OS disk for the loop store: 200 GB or more.
+
+## Option 1: Onyx Terraform modules
+
+The `azure/onyx` module makes the AKS cluster, the Firecracker sandbox pool, the pod sandbox pool, PostgreSQL,
+the storage account, and the workload identity.
+For all module inputs and the Helm values that connect Onyx to these resources,
+see the [Azure module
+README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md).
+
+<Steps>
+  <Step title="Set the sandbox pool variables">
+    {/* depends: terraform module tag (tf-azure) with craft_sandbox_runtime */}
+
+    ```hcl main.tf
+    module "onyx" {
+      source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/azure/onyx?ref=<tag>"
+      # ... your existing settings
+
+      enable_sandbox_node_pool  = true
+      craft_sandbox_runtime     = "firecracker"
+      sandbox_node_vm_size      = "Standard_D8ds_v5"
+      sandbox_node_disk_size_gb = 200
+      network_policy            = "cilium" # without it, AKS enforces no NetworkPolicy
+    }
+    ```
+
+    Set `network_policy`. The module default is no enforcement, and then AKS does not enforce the chart NetworkPolicies.
+    The sandbox NetworkPolicies must be enforced:
+    they keep sandbox egress on the sandbox proxy and let only Onyx reach the host agent.
+    `cilium` needs the default overlay network mode. On an existing cluster,
+    read `terraform plan` before you change `network_policy`: the change can replace the cluster.
+
+    With `craft_sandbox_runtime = "firecracker"`,
+    the `aks` module sets the sandbox pool OS to `Ubuntu2404` and adds the label `onyx.app/kvm=true` and the taint
+    `onyx.app/kvm=true:NoSchedule`. The module refuses a blocked VM size.
+    `Ubuntu2404` needs the `azurerm` provider 4.67 or later.
+  </Step>
+
+  <Step title="Add the pod sandbox pool">
+    Add the pod sandbox pool variables to the module block.
+    The pool needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`:
+
+    ```hcl
+    enable_craft_pod_sandbox_node_pool = true
+    craft_pod_sandbox_node_vm_size     = "Standard_D4ds_v5" # default
+    craft_pod_sandbox_node_min_count   = 1                  # default
+    craft_pod_sandbox_node_max_count   = 2                  # default
+    ```
+
+    The module adds the pool `sandboxpod` with the OS disk `sandbox_node_disk_size_gb`,
+    the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`, and no KVM label or taint.
+    The chart default `sandboxPod` values select this pool, so you need no chart change for it.
+  </Step>
+
+  <Step title="Apply">
+    ```bash
+    terraform init -upgrade
+    terraform plan
+    terraform apply
+    ```
+
+    On an existing cluster, a change to `craft_sandbox_runtime` changes the pool OS. AKS replaces the sandbox nodes,
+    and every sandbox on them stops. On an existing cluster, deploy the chart with Firecracker before you apply,
+    as [Add Firecracker to an existing
+    installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
+    Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Connect Onyx to the module outputs">
+    Make a values file for the module outputs. Use `terraform output` for the names.
+    The [Azure module
+    README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modules/azure/README.md#installing-the-onyx-helm-chart-after-terraform)
+    gives the full list of components that need the pod label.
+
+    ```yaml onyx-values.yaml
+    serviceAccount:
+      create: false
+      name: onyx-workload-access
+    # Add the same podLabels to celery_beat and to each celery_worker_* component.
+    api:
+      podLabels:
+        azure.workload.identity/use: "true"
+    postgresql:
+      enabled: false
+    configMap:
+      POSTGRES_HOST: "<postgres_host>"
+      POSTGRES_DB: "<postgres_db_name>"
+    auth:
+      postgresql:
+        values:
+          username: "<postgres_username>"
+          password: "<postgres_password>"
+      userauth:
+        enabled: true
+        values:
+          user_auth_secret: "<openssl rand -hex 32>"
+      opensearch:
+        values:
+          opensearch_admin_password: "<strong password>"
+    ```
+
+    Onyx does not start without `auth.userauth`: the API server stops with `USER_AUTH_SECRET is empty`.
+    Helm refuses to render the chart without the OpenSearch password.
+    See also [Base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values). Keep this file private,
+    or put the values in your own Secrets with `existingSecret`.
+    Then add the file store values in [Azure Blob Storage file store](#azure-blob-storage-file-store).
+  </Step>
+
+  <Step title="Configure Helm">
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Option 2: Your own AKS cluster
+
+<Steps>
+  <Step title="Make the Firecracker node pool">
+    ```bash
+    az aks nodepool add \
+      --resource-group <resource-group> --cluster-name <cluster> \
+      --name craftfc \
+      --node-vm-size Standard_D8ds_v5 \
+      --os-sku Ubuntu2404 \
+      --node-osdisk-size 200 \
+      --labels onyx.app/workload=sandbox onyx.app/kvm=true \
+      --node-taints workload=sandbox:NoSchedule,onyx.app/kvm=true:NoSchedule \
+      --node-count 1
+    ```
+  </Step>
+
+  <Step title="Make the pod sandbox node pool">
+    ```bash
+    az aks nodepool add \
+      --resource-group <resource-group> --cluster-name <cluster> \
+      --name craftpod \
+      --node-vm-size Standard_D4ds_v5 \
+      --labels onyx.app/workload=sandbox \
+      --node-taints workload=sandbox:NoSchedule \
+      --node-count 1
+    ```
+  </Step>
+
+  <Step title="Allow Azure Blob presigned URLs">
+    Follow [Azure Blob Storage file store](#azure-blob-storage-file-store).
+  </Step>
+
+  <Step title="Configure Helm">
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+  </Step>
+</Steps>
+
+## Azure Blob Storage file store
+
+The host agent uploads and downloads session files with presigned Azure Blob URLs (SAS).
+The API server signs user delegation SAS URLs with its workload identity. Do not set an account key:
+shared key access can stay off.
+
+<Steps>
+  <Step title="Set the file store values">
+    ```yaml
+    configMap:
+      FILE_STORE_BACKEND: "azure"
+      AZURE_STORAGE_ACCOUNT_NAME: "<storage account>"   # or AZURE_STORAGE_ACCOUNT_URL
+      AZURE_FILE_STORE_CONTAINER_NAME: "<container>"
+    minio:
+      enabled: false
+    objectStore:
+      enabled: false
+    auth:
+      objectstorage:
+        enabled: false   # no bundled object store, so no S3 keys
+    ```
+
+    Without `auth.objectstorage.enabled: false`,
+    Helm refuses to render the chart and asks for `auth.objectstorage.values.rootPassword`.
+  </Step>
+
+  <Step title="Set up the workload identity">
+    Every installation needs the pod label `azure.workload.identity/use:
+    "true"` on the API server and on each Celery worker, under their `podLabels` values.
+    The `azure/onyx` module cannot set it. Without the label, the pods get no token, and the Blob Storage calls fail.
+
+    The `azure/onyx` module does the other parts of this step for you. On your own cluster:
+
+    - Turn on the OIDC issuer and Workload Identity on the cluster
+    (`az aks update --enable-oidc-issuer --enable-workload-identity`).
+    - Make a user-assigned managed identity and federate it to the Onyx service account
+    (default `onyx-workload-access` in the namespace `onyx`).
+    - Make that service account with the annotation `azure.workload.identity/client-id: <identity client ID>`.
+    Use the same namespace and name in the federated credential subject
+    (`system:serviceaccount:onyx:onyx-workload-access`).
+    - Set `serviceAccount.create: false` and `serviceAccount.name` to that service account in your Helm values.
+  </Step>
+
+  <Step title="Grant the storage role">
+    Grant the identity **Storage Blob Data Contributor** at the storage account scope.
+    A role at the container scope does not allow user delegation SAS. **Storage Blob Delegator** is not necessary.
+  </Step>
+
+  <Step title="Open the network path">
+    KVM nodes must reach `https://<storage account>.blob.core.windows.net`. If the storage account has network rules,
+    allow the AKS node subnet.
+  </Step>
+</Steps>
+
+A presigned URL is valid for 15 minutes at most. One session save on Azure is 5000 MiB at most.
+
+If the API server logs `An Azure user delegation SAS needs a role with generateUserDelegationKey`,
+the identity has no role, or the role is at the container scope.
+A new role assignment can take a few minutes to start working.
+
+## Remove a test installation
+
+The `postgres` module guards the PostgreSQL server and database with `prevent_destroy`,
+so `terraform destroy` stops with an error. This protects production data.
+
+<Warning>
+  Delete the resource group only if the module made it for the test installation (`create_resource_group = true`,
+  the default) and nothing else uses it. The command deletes every resource in the group.
+</Warning>
+
+For a dedicated resource group, delete the group, then delete the local Terraform state:
+
+```bash
+az group delete --name <resource-group> --yes
+```
+
+Azure also deletes the node resource group of the cluster (`MC_...`). Check with `az group exists --name <name>`.
+
+For a shared resource group (`create_resource_group = false`), remove only the Onyx resources.
+Delete the PostgreSQL server first, because its subnet cannot be deleted while the server uses it.
+Then remove the server and database from the Terraform state, and destroy the other resources:
+
+```bash
+az postgres flexible-server delete --resource-group <resource-group> --name <server> --yes
+terraform state list | grep -E 'azurerm_postgresql_flexible_server(_database)?\.this'
+terraform state rm '<server address>' '<database address>'
+terraform destroy
+```
+
+## Azure security findings
+
+Microsoft Defender for Containers can report findings when the host agent starts.
+The host agent is a privileged DaemonSet with `hostPID` and a `hostPath` mount, by design.
+Scope a suppression rule to your cluster and the host agent namespace (`onyx-sandbox-runtime` by default).

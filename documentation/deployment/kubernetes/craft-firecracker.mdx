@@ -1,0 +1,537 @@
+---
+title: "Craft on Firecracker"
+description: "Run Craft sandboxes as Firecracker microVMs on Kubernetes nodes with KVM"
+icon: "microchip"
+---
+
+With the Firecracker runtime, Onyx runs Craft sandboxes as Firecracker microVMs.
+Each microVM has its own guest kernel and no network card.
+A host agent DaemonSet on nodes with KVM starts and stops the microVMs. The Onyx Helm chart deploys the host agent,
+its Secrets, and its network rules.
+
+This page gives the requirements, Helm values, and checks for all platforms.
+The platform guides add the steps for each cloud and for your own hardware.
+
+<CardGroup cols={2}>
+  <Card title="Amazon EKS" icon="aws" href="/deployment/kubernetes/craft-firecracker-eks">
+    Terraform or your own EKS cluster.
+  </Card>
+
+  <Card title="Google GKE" icon="google" href="/deployment/kubernetes/craft-firecracker-gke">
+    GKE Standard with nested virtualization.
+  </Card>
+
+  <Card title="Azure AKS" icon="microsoft" href="/deployment/kubernetes/craft-firecracker-aks">
+    AKS with Intel v5 to v7 VM sizes.
+  </Card>
+
+  <Card title="Bare-metal Kubernetes" icon="server" href="/deployment/kubernetes/craft-firecracker-bare-metal">
+    k3s, RKE2, or kubeadm on your own Intel KVM hosts.
+  </Card>
+
+  <Card title="Operations" icon="wrench" href="/deployment/kubernetes/craft-firecracker-operations">
+    Upgrades, drains, certificates, alerts, and runbooks.
+  </Card>
+
+  <Card title="Monitoring" icon="chart-line" href="/deployment/kubernetes/craft-firecracker-monitoring">
+    Metrics, the Grafana dashboard, and alert rules.
+  </Card>
+
+  <Card title="Sizing and images" icon="ruler" href="/deployment/kubernetes/craft-firecracker-sizing">
+    Node sizing and the image list for private registries.
+  </Card>
+</CardGroup>
+
+## How the Firecracker runtime works
+
+| Part | What it does |
+| --- | --- |
+| **Host agent** | A privileged DaemonSet in its own namespace (default `onyx-sandbox-runtime`), one pod on each KVM node. It starts each microVM from a node template, relays microVM egress, and moves session files. |
+| **Root drive** | The microVM file system. An init container copies it to the node, and the host agent builds the node template from it at start. |
+| **API server and workers** | Place each sandbox on a KVM node and call the host agent over mutual TLS on port 7443. |
+| **Sandbox proxy** | Receives all microVM egress from the host agent. It applies the same policies and credential injection as for pod sandboxes. |
+| **File store** | Keeps session files while a microVM is stopped. The host agent uploads and downloads them with presigned URLs. It has no storage credentials. |
+
+{/* depends: harness release (D8). State here which Craft sessions run on microVMs and which stay on pods. */}
+The Firecracker runtime does not replace pod sandboxes. Craft sessions that use pod sandboxes keep running as pods,
+so a deployment with Firecracker needs two sandbox node pools.
+
+For the isolation design, see [Firecracker isolation](/security/architecture/craft#firecracker-isolation).
+
+## Requirements
+
+<Note>
+  Craft requires a Business or Enterprise license. Firecracker sandboxes need Intel x86_64 nodes with KVM.
+  AMD and Arm nodes are not supported.
+</Note>
+
+| Item | Requirement |
+| --- | --- |
+| Onyx | A full Onyx Helm deployment with Craft on Kubernetes. See [Craft on Kubernetes](/deployment/local/craft_kubernetes). |
+| Kubernetes | 1.33 or later. Privileged pods with `hostPID` must be allowed in the host agent namespace. |
+| CPU | Intel x86_64 with VT-x. `/dev/kvm` must exist on the node: bare metal, or a VM size with nested virtualization. |
+| Node OS | Linux with cgroup v2 and systemd. Onyx tests host kernel 6.18. The preflight check also accepts 5.10 and 6.1. |
+| Sysctl | `vm.max_map_count` of `1048576` or more on KVM nodes. |
+| Data directory | `craft.hostAgent.dataDir` (default `/var/lib/craft-fc`) on the node. See [Data directory](#data-directory). |
+| Disk | At least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free. |
+| Capacity | On-demand nodes. A spot reclaim stops every microVM on the node. |
+| File store | The object store that the chart bundles, S3, an S3-compatible store, Google Cloud Storage, or Azure Blob Storage. KVM nodes must reach it. An external store must use HTTPS. With `FILE_STORE_BACKEND=postgres`, Craft cannot save sessions. |
+| Network | A CNI that enforces Kubernetes NetworkPolicy. |
+
+On Azure Blob Storage, the API server signs URLs with its workload identity.
+See the [AKS guide](/deployment/kubernetes/craft-firecracker-aks).
+
+### Node pools
+
+Create two sandbox node pools. Kubelet does not count microVM memory,
+so the scheduler must keep other pods off the KVM nodes.
+
+| Pool | Labels | Taints | Runs |
+| --- | --- | --- | --- |
+| **Firecracker** | `onyx.app/workload=sandbox`, `onyx.app/kvm=true` | `workload=sandbox:NoSchedule`, `onyx.app/kvm=true:NoSchedule` | The host agent and the preflight check |
+| **Pod sandbox** | `onyx.app/workload=sandbox` | `workload=sandbox:NoSchedule` | Pod sandboxes and the sandbox image prepuller |
+
+<Note>
+  {/* depends: #17840 (scale-down guard, chart 0.9.48) */} The cluster autoscaler does not see microVMs:
+  they are not pods. The host agent blocks scale-down while microVMs run.
+  It sets `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` on its node,
+  and removes it when the node has had no microVMs for 10 minutes (`craft.hostAgent.scaleDownGuard.grace`).
+  This works with the GKE, AKS, and EKS cluster autoscalers. Karpenter does not read this annotation: with Karpenter,
+  use a fixed-size Firecracker pool.
+  See [Cluster autoscaler](/deployment/kubernetes/craft-firecracker-operations#cluster-autoscaler).
+</Note>
+
+Only the host agent and the preflight check tolerate the `onyx.app/kvm` taint.
+The chart refuses a `sandboxPod.tolerations` value that tolerates it.
+
+The Onyx Terraform modules make both pools. To prepare nodes yourself, use these commands:
+
+```bash
+# Firecracker nodes: taint first, so that no pod sandbox lands on the node
+kubectl taint node <kvm-node> workload=sandbox:NoSchedule onyx.app/kvm=true:NoSchedule
+kubectl label node <kvm-node> onyx.app/workload=sandbox onyx.app/kvm=true
+
+# Pod sandbox nodes
+kubectl taint node <pod-node> workload=sandbox:NoSchedule
+kubectl label node <pod-node> onyx.app/workload=sandbox
+```
+
+The [node preparation script](/deployment/kubernetes/craft-firecracker-bare-metal#prepare-the-nodes)
+checks the node and sets the labels and taints.
+
+### Base chart values
+
+A new Onyx install needs the base chart Secrets before the first start. Without `auth.userauth`,
+the API server stops with `USER_AUTH_SECRET is empty`. Without the OpenSearch password,
+or the object store keys when the chart runs the bundled object store, Helm refuses to render the chart.
+Put the values in your Onyx values file (`onyx-values.yaml`), and keep that file private.
+Do not put them in `craft-fc-secrets.yaml`: the command in [Configure Helm](#configure-helm) overwrites that file.
+
+```yaml
+auth:
+  userauth:
+    enabled: true
+    values:
+      user_auth_secret: "<openssl rand -hex 32>"
+  opensearch:
+    values:
+      opensearch_admin_password: "<uppercase, lowercase, digit, and special character>"
+  # Only with the bundled object store. rootUser and rootPassword must match the S3 keys.
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "<access key>"
+      rootUser: "<access key>"
+      s3_aws_secret_access_key: "<secret key>"
+      rootPassword: "<secret key>"
+```
+
+With an external file store that uses workload identity, set `auth.objectstorage.enabled: false` instead.
+For all base Secrets, and for `existingSecret` with your own Secrets,
+see [Security Hardening](/deployment/production/security#credentials). An existing install already has these values.
+
+### Data directory
+
+The host agent keeps node templates, microVM disks, and session file transfers in `craft.hostAgent.dataDir`.
+The path is the same on the node and in the container. Keep the path short:
+the agent checks the length of the Unix socket paths under it.
+
+The host agent clones microVM disks with reflink copies. The data directory needs one of these:
+
+- **XFS with reflink.** Amazon Linux 2023 root disks have this. A data disk made with `mkfs.xfs -m reflink=1` also has it.
+- **Any other file system, such as ext4.** The host agent makes its own XFS loop store. You do no manual step.
+  At its first start, the host agent makes the sparse file `<data directory>/.craft-fc-store.img`,
+  attaches it to a loop device, and mounts it at the data directory. After a restart or a node reboot,
+  the host agent mounts the same file again. It never formats a file that exists.
+  The node kernel needs the `loop` driver and XFS support.
+
+The default size of a new loop store is the free space of the node disk minus 1/5 of the disk size,
+from 20 GiB to 4 TiB. If this size is less than 20 GiB, the host agent refuses to start. To choose another size,
+set `craft.hostAgent.loopStore.sizeGiB`. A loop store that exists keeps its size.
+
+A dedicated XFS data disk with reflink gives better disk performance than the loop store. To use one,
+mount it at the data directory before the host agent starts. To make the host agent refuse to start without reflink,
+instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extraArgs`.
+
+## Configure Helm
+
+<Steps>
+  <Step title="Prepare Craft on Kubernetes">
+    Follow [Craft on Kubernetes](/deployment/local/craft_kubernetes) first,
+    and set the [base chart values](#base-chart-values) for a new install. Firecracker uses the same `ENABLE_CRAFT`,
+    `SANDBOX_BACKEND`, sandbox push Secret, and sandbox proxy.
+  </Step>
+
+  <Step title="Create the node registration value">
+    Host agents send a shared registration value when they register their node signing key.
+    The API server refuses every registration until the value is set. Make a random value:
+
+    ```bash
+    umask 077   # make the files readable only by you
+    openssl rand -base64 48 | tr -d '\n' > sandbox-node-registration.txt
+    ```
+
+    Keep this file private. You use it in the next step.
+  </Step>
+
+  <Step title="Add the Firecracker values">
+    Merge these values into your Onyx values file. The registration value goes in a separate,
+    private values file that you pass on each upgrade:
+
+    ```yaml craft-fc-values.yaml
+    configMap:
+      ENABLE_CRAFT: "true"
+      SANDBOX_BACKEND: "kubernetes"
+
+    auth:
+      sandboxPushSecret:
+        enabled: true
+        existingSecret: "onyx-sandbox-push-secret"
+      sandboxNodeRegistration:
+        enabled: true
+
+    craft:
+      sandboxRuntime: firecracker
+      firecrackerPreflight:
+        enabled: true
+    ```
+
+    ```bash
+    printf 'auth:\n  sandboxNodeRegistration:\n    values:\n      sandbox_node_registration_secret: "%s"\n' \
+      "$(cat sandbox-node-registration.txt)" > craft-fc-secrets.yaml
+    ```
+
+    The preflight check tests the file system and free disk of `craft.hostAgent.dataDir`.
+
+    The chart copies the registration value into the host agent namespace. To keep the value in your own Secret instead,
+    see [Use your own Secrets](#use-your-own-secrets).
+  </Step>
+
+  <Step title="Install or upgrade Onyx">
+    ```bash
+    helm upgrade --install onyx onyx/onyx \
+      --namespace onyx \
+      --create-namespace \
+      --values onyx-values.yaml \
+      --values craft-fc-values.yaml \
+      --values craft-fc-secrets.yaml
+    ```
+
+    The first start on each node copies the root drive (about 4 GiB) and builds the node template.
+  </Step>
+</Steps>
+
+With `craft.sandboxRuntime: firecracker`, the chart:
+
+- sets `SANDBOX_RUNTIME=firecracker` on the backend and the sandbox proxy;
+- deploys the host agent DaemonSet in `craft.hostAgent.namespace` with Pod Security `privileged`;
+- lets only the API server, the heavy worker, and the Scheduled Task worker reach the agent port (7443);
+- lets the host agent pods reach the sandbox proxy;
+- makes the mutual TLS certificates for the host agent and its clients. See [Certificates](#certificates).
+
+### Versions
+
+The chart takes the Firecracker image tags from the Onyx version (`global.version`, without a `-dev` suffix).
+`global.version` must be a pinned Onyx release tag. With `latest`, `edge`, or `beta`, Helm refuses to render the chart.
+For Onyx `v5.2.0`, the chart uses:
+
+| Item | Value |
+| --- | --- |
+| Host agent image | `onyxdotapp/craft-fc-host-agent:v5.2.0` |
+| Root drive image | `onyxdotapp/craft-fc-artifacts:rootfs-v5.2.0` |
+| `SANDBOX_FC_TEMPLATE` | `v5.2.0` |
+
+Keep these defaults. The API server, the host agent, and the root drive of one release work together.
+To use another root drive, set `craft.hostAgent.rootfs.version`. It sets the root drive tag (`rootfs-<version>`)
+and `SANDBOX_FC_TEMPLATE` together. `craft.hostAgent.image.tag` overrides the host agent tag,
+for example for a hotfix image. If you set `craft.hostAgent.rootfs.image.tag` directly,
+also set `configMap.SANDBOX_FC_TEMPLATE` to the version of that root drive. To pull the images from your own registry,
+see [Sizing and images](/deployment/kubernetes/craft-firecracker-sizing#mirror-the-images).
+
+### Host agent settings
+
+Most deployments keep the defaults. These settings change often:
+
+| Value | Default | When to change it |
+| --- | --- | --- |
+| `craft.hostAgent.maxVms` | `60` | Most microVMs per node. Keep `60` on nested virtualization. On bare metal, raise it or set `0` (no limit). |
+| `craft.hostAgent.dataDir` | `/var/lib/craft-fc` | Set it to the mount point of a dedicated XFS disk. |
+| `craft.hostAgent.loopStore.sizeGiB` | The free disk minus 1/5 of the disk, 20 GiB to 4 TiB | Only on nodes without reflink, to set the size of a new XFS loop store. |
+| `craft.hostAgent.namespace` | `onyx-sandbox-runtime` | It must differ from the release namespace and `configMap.SANDBOX_NAMESPACE`. |
+| `craft.hostAgent.createNamespace` | `true` | Set `false` to make the namespace yourself. Give it the label `pod-security.kubernetes.io/enforce: privileged`. |
+| `craft.hostAgent.imagePullSecrets` | `[]` | Pull Secrets for a private registry. They must exist in the host agent namespace. |
+| `craft.hostAgent.nodeSelector` | the sandbox selector plus `onyx.app/kvm=true` | Only if your KVM nodes use other labels. |
+| `craft.hostAgent.apiServerUrl` | the in-cluster API server URL | Keep the default. The host agent must reach the API server without a login page or a web application firewall. |
+| `craft.hostAgent.resources` | 250m CPU, 256Mi memory request, 1Gi memory limit | microVMs run outside these limits, in a host systemd slice. |
+
+### Certificates
+
+By default, the chart makes a private CA, the host agent certificate, and the client certificate.
+It keeps them in two Secrets:
+`<release>-craft-fc-host-agent-tls` in the host agent namespace and `<release>-craft-fc-host-agent-client-tls` in the
+release namespace. The certificates are valid for 10 years.
+The chart renews them at the first upgrade in their last 30 days. To rotate them,
+see [Rotate the certificates](/deployment/kubernetes/craft-firecracker-operations#rotate-the-certificates).
+
+<Warning>
+  The chart reads the existing Secrets from the cluster at each upgrade.
+  Tools that render the chart without cluster access, for example Argo CD or `helm template`,
+  make new certificates at each render. With these tools, use your own certificates:
+  see [Use your own Secrets](#use-your-own-secrets).
+</Warning>
+
+### Use your own Secrets
+
+Use this path to keep secret values out of Helm values, for example with External Secrets Operator or cert-manager.
+
+**Registration value.** Create the same Secret in the release namespace and in the host agent namespace.
+Make the host agent namespace before the install, because the Secret must exist before the agent pods start:
+
+```bash
+kubectl create namespace onyx-sandbox-runtime
+kubectl label namespace onyx-sandbox-runtime pod-security.kubernetes.io/enforce=privileged
+for ns in onyx onyx-sandbox-runtime; do
+  kubectl -n "$ns" create secret generic craft-fc-node-registration \
+    --from-file=sandbox_node_registration_secret=sandbox-node-registration.txt
+done
+```
+
+```yaml
+auth:
+  sandboxNodeRegistration:
+    enabled: true
+    existingSecret: craft-fc-node-registration
+craft:
+  hostAgent:
+    createNamespace: false
+    registrationExistingSecret: craft-fc-node-registration
+```
+
+**Certificates.** The host agent accepts TLS 1.3 only, and both sides check the peer certificate. Make two Secrets,
+and set both `existingSecret` values. Set both or neither.
+| Secret | Namespace | Keys | Content |
+| --- | --- | --- | --- |
+| `craft.hostAgent.tls.existingSecret` | Host agent namespace | `tls.crt`, `tls.key`, `ca.crt` | The host agent server certificate (extended key usage `serverAuth`, a DNS SAN), and the CA that signs the client certificates |
+| `craft.hostAgent.client.existingSecret` | Release namespace | `tls.crt`, `tls.key`, `ca.crt` | The client certificate (extended key usage `clientAuth`), and the CA that signs the host agent certificates |
+
+```yaml
+craft:
+  hostAgent:
+    tls:
+      existingSecret: craft-fc-host-agent-tls
+    client:
+      existingSecret: craft-fc-host-agent-client-tls
+      tlsServerName: craft-fc-host-agent.onyx-sandbox-runtime.svc
+    clientAllowedSans: craft-fc-client.onyx.svc
+```
+
+The clients connect to host agent pod IPs. Set `client.tlsServerName` to a DNS SAN of the host agent certificate.
+With the chart-made certificates, `client.tlsServerName` is optional.
+Set `clientAllowedSans` to accept only client certificates with one of these SANs. {/* depends: #17839 */}
+When it is empty with the chart-made certificates, the chart sets it to the chart's client certificate name.
+When it is empty with `existingSecret`, the host agent accepts every client certificate that its CA signed. Set it,
+so that an agent certificate from the same CA cannot call the other agents.
+
+## Verify the deployment
+
+<Steps>
+  <Step title="Read the preflight results">
+    ```bash
+    kubectl -n onyx logs --prefix --tail=-1 \
+      -l app.kubernetes.io/component=craft-fc-preflight | grep -E 'RESULT|FAIL|WARN'
+    ```
+
+    Each KVM node must print `RESULT: PASS`. A `WARN filesystem` line on an ext4 node is expected:
+    the host agent makes its XFS loop store there.
+    A `WARN kernel` line is expected on a host kernel that Onyx does not test,
+    for example 6.12 on GKE COS nodes and 6.8 on AKS Ubuntu 24.04 nodes. Turn the preflight off after the check:
+    set `craft.firecrackerPreflight.enabled: false` and upgrade.
+  </Step>
+
+  <Step title="Check the host agent">
+    ```bash
+    kubectl -n onyx-sandbox-runtime rollout status ds/onyx-craft-fc-host-agent --timeout=10m
+    kubectl -n onyx-sandbox-runtime logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 \
+      | grep -E 'host agent ready|template ready|node signing key regist|"level":"ERROR"'
+    ```
+
+    Each agent must log `template ready` and `node signing key registered`. After a host agent restart,
+    `template ready` can come about 10 seconds after `host agent ready`,
+    with `"built":false` (the template exists from an earlier start).
+    The DaemonSet name is `<fullname>-craft-fc-host-agent` (`onyx-craft-fc-host-agent` for the release `onyx`).
+  </Step>
+
+  <Step title="Check the registration on the API server">
+    ```bash
+    kubectl -n onyx logs -l app=api-server --prefix --tail=-1 | grep sandbox_node_signing_key_registered
+    ```
+
+    The `key_id` must be the same as in the host agent log.
+  </Step>
+
+  <Step title="Run a Craft session">
+    {/* depends: harness release (D8). Name the session type that runs on a microVM. */} As a Craft user,
+    start a session and send a prompt that creates a file. Then confirm that a host agent started a microVM:
+
+    ```bash
+    kubectl -n onyx-sandbox-runtime logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 --since=10m \
+      | grep '"method":"Create"'
+    ```
+
+    The audit line must show `"result":"OK"`.
+  </Step>
+</Steps>
+
+## Add Firecracker to an existing installation
+
+Onyx needs no data migration for Firecracker. Pod sandboxes, their snapshots, and their idle timeout do not change.
+Do the steps in this order, so that no pod sandbox lands on a KVM node:
+
+<Steps>
+  <Step title="Deploy the chart with Firecracker">
+    Set the values in [Configure Helm](#configure-helm) and upgrade.
+    The host agent and the preflight check then tolerate the `onyx.app/kvm` taint before it exists.
+    Until a node has the `onyx.app/kvm=true` label, the host agent DaemonSet has no pods.
+  </Step>
+
+  <Step title="Add the pod sandbox pool">
+    If your current sandbox pool becomes the Firecracker pool, add a pod sandbox pool.
+    Wait until the sandbox image prepuller runs on the new nodes.
+    The Onyx Terraform modules accept the pod sandbox pool only together with the Firecracker runtime.
+    Your platform guide gives the order for them.
+  </Step>
+
+  <Step title="Make the KVM nodes">
+    Turn on KVM for the Firecracker pool and add the `onyx.app/kvm` label and taint.
+    Some platforms replace the nodes for this change. The running pod sandboxes on those nodes stop.
+    See your platform guide.
+  </Step>
+
+  <Step title="Remove pod workloads from the KVM nodes">
+    `NoSchedule` does not evict running pods. Let the pod sandboxes on KVM nodes finish,
+    then delete the prepuller pod on each KVM node. This command must show no sandbox or prepuller pod:
+
+    ```bash
+    kubectl -n onyx-sandboxes get pods -o wide --field-selector spec.nodeName=<kvm-node>
+    ```
+  </Step>
+
+  <Step title="Check pod sessions">
+    Users reopen their Craft sessions.
+    A session whose pod stopped during the node change starts a new pod on the pod sandbox pool and restores the last
+    snapshot of the session. Changes after that snapshot are lost,
+    and a session without a snapshot starts with a new workspace.
+    Plan the node change for a time when few sessions are active, and tell users to stop their work before it.
+  </Step>
+</Steps>
+
+### Turn Firecracker off
+
+<Warning>
+  microVMs run outside the host agent pod. If you remove the host agent while microVMs run,
+  they keep running and nothing manages them. Drain each KVM node first.
+</Warning>
+
+<Steps>
+  <Step title="Drain the KVM nodes">
+    Follow [Drain a node](/deployment/kubernetes/craft-firecracker-operations#drain-a-node) for each KVM node.
+  </Step>
+
+  <Step title="Change the runtime">
+    Set `craft.sandboxRuntime: pod` and upgrade. The chart removes the host agent, its network rules,
+    and `SANDBOX_RUNTIME`. Pod sandboxes continue to work.
+  </Step>
+</Steps>
+
+If `craft.firecrackerPreflight.enabled` is `true`, the preflight DaemonSet and its NetworkPolicy stay.
+Set it to `false`. The chart deletes the host agent namespace that it made, with the chart-made certificates.
+When you turn Firecracker on again, the chart makes new certificates.
+
+Session files that the host agent saved stay in the file store, and they restore when you turn Firecracker on again.
+Sessions that need a microVM cannot start until you turn Firecracker on again.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Helm rejects the Firecracker values">
+    Read the render error. It names the value. Common causes:
+
+    - `auth.sandboxNodeRegistration.enabled` is not `true`, or it has no value and no existing Secret.
+    - `sandboxPod.tolerations` tolerates the `onyx.app/kvm` taint.
+    - `craft.hostAgent.namespace` is the release namespace or the sandbox namespace.
+    - `global.version` is `latest`, `edge`, or `beta`. Use a pinned Onyx release tag.
+    - `craft.hostAgent.rootfs.image.tag` is set without `configMap.SANDBOX_FC_TEMPLATE`.
+    - Only one of `craft.hostAgent.tls.existingSecret` and `craft.hostAgent.client.existingSecret` is set.
+  </Accordion>
+
+  <Accordion title="No host agent pod on a KVM node">
+    Run `kubectl get nodes -l onyx.app/kvm=true`. The node needs the labels and taints in [Node pools](#node-pools).
+    Then run `kubectl -n onyx-sandbox-runtime get events --sort-by=.lastTimestamp`.
+    An `Init:` state means the root drive init container cannot pull its image or copy the drive.
+  </Accordion>
+
+  <Accordion title="The host agent stops at start-up">
+    The log line `host agent failed` names the failed check:
+
+    - `/dev/kvm`: the node has no KVM. Use bare metal or a VM size with nested virtualization.
+    - cgroup v2: use a node image with the unified cgroup hierarchy.
+    - reflink or loop store: the data directory has no reflink, and the host agent cannot make its loop store.
+    The error names the cause: too little free disk, no `/dev/loop-control`, no XFS in the node kernel,
+    or `--loop-store=off`.
+  </Accordion>
+
+  <Accordion title="Sessions fail with TEMPLATE_MISSING">
+    The node has no template for `SANDBOX_FC_TEMPLATE`. Read the host agent log for `template build at start-up failed`.
+    See [CraftFcTemplateUnusable](/deployment/kubernetes/craft-firecracker-operations#craftfctemplateunusable).
+  </Accordion>
+
+  <Accordion title="The API server cannot reach the host agent">
+    A TLS error that names the server name means that `craft.hostAgent.client.tlsServerName` is not a DNS SAN of the
+    host agent certificate. A connection timeout means that a NetworkPolicy blocks port 7443. Only the API server,
+    heavy worker, and Scheduled Task worker pods may connect.
+  </Accordion>
+
+  <Accordion title="Node registration fails">
+    The host agent logs `node signing key registration failed`.
+    The registration value in the host agent namespace must be the same as `auth.sandboxNodeRegistration` in the release
+    namespace.
+  </Accordion>
+
+  <Accordion title="microVM egress fails">
+    Read the sandbox proxy log for `identity_signed_rejected`. The `reason` field explains the rejection:
+    `unknown_signing_key` means that the node is not registered,
+    and `not_placed` means that the API server has no placement record for the sandbox.
+    Also see [CraftFcRelayErrors](/deployment/kubernetes/craft-firecracker-operations#craftfcrelayerrors).
+  </Accordion>
+
+  <Accordion title="Sessions fail with CAPACITY errors">
+    `CAPACITY_MEMORY`, `CAPACITY_DISK`, or `CAPACITY_VM_SLOTS` means that all KVM nodes are full. Add nodes.
+    See [CraftFcAdmissionRefusals](/deployment/kubernetes/craft-firecracker-operations#craftfcadmissionrefusals).
+  </Accordion>
+
+  <Accordion title="Session files are not saved">
+    The file store must support presigned URLs, and KVM nodes must reach it. An external store must use HTTPS.
+    `FILE_STORE_BACKEND=postgres` does not support presigned URLs.
+    See
+    [CraftFcSessionTransferFailures](/deployment/kubernetes/craft-firecracker-operations#craftfcsessiontransferfailures).
+  </Accordion>
+</AccordionGroup>

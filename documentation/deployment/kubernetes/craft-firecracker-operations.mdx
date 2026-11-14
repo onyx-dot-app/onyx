@@ -1,0 +1,595 @@
+---
+title: "Firecracker Operations"
+description: "Upgrade, drain, rotate, purge, monitor, and troubleshoot Craft Firecracker sandboxes"
+icon: "wrench"
+---
+
+This page is for operators who run [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+It gives the procedures for upgrades, node drains, secret rotation, and data purge, and one runbook for each alert.
+
+The examples use the default names. Change them to match your install:
+
+```bash
+CTX=<kube context>                # always pass --context
+NS=onyx-sandbox-runtime           # craft.hostAgent.namespace
+REL=onyx                          # release namespace
+DS=onyx-craft-fc-host-agent       # <fullname>-craft-fc-host-agent
+K="--context $CTX"
+pod_on() { kubectl $K -n $NS get pod -l app.kubernetes.io/component=craft-fc-host-agent \
+  --field-selector spec.nodeName="$1" -o name; }
+```
+
+## Call the host agent API
+
+Some procedures call the host agent gRPC API on port 7443 (`craft.hostAgent.listenPort`) with mutual TLS.
+Use the client certificate of the API server and `grpcurl`. The host agent has no gRPC reflection,
+so give `grpcurl` the proto file from the Onyx repository (`microvm/proto/hostagent/v1/hostagent.proto`,
+at the tag of your Onyx version).
+
+```bash
+SECRET=<client certificate Secret in the release namespace>
+SERVER_NAME=<DNS SAN of the host agent certificate>
+D=$(mktemp -d)
+for k in tls.crt tls.key ca.crt; do
+  kubectl $K -n $REL get secret "$SECRET" -o jsonpath="{.data.${k//./\\.}}" | base64 -d > "$D/$k"
+done
+kubectl $K -n $NS port-forward "$(pod_on <node>)" 7443:7443 &
+agent() {  # agent <Method> [JSON body]
+  local body=${2:-'{}'}
+  grpcurl -cert "$D/tls.crt" -key "$D/tls.key" -cacert "$D/ca.crt" -authority "$SERVER_NAME" \
+    -import-path microvm/proto -proto hostagent/v1/hostagent.proto \
+    -d "$body" localhost:7443 "craft.hostagent.v1.HostAgent/$1"
+}
+agent NodeInfo   # memory, microVM count, templates, drain state
+agent List       # microVMs on the node
+```
+
+With the chart-made certificates, `SECRET` is `<release>-craft-fc-host-agent-client-tls`,
+and `SERVER_NAME` is a DNS SAN of the host agent certificate (`openssl x509 -noout -ext subjectAltName` on its `tls.crt`
+shows it). With your own certificates,
+`SECRET` is `craft.hostAgent.client.existingSecret` and `SERVER_NAME` is `craft.hostAgent.client.tlsServerName`.
+Delete `$D` and stop the port-forward when you are done.
+
+## Upgrade Onyx
+
+The host agent, the root drive, and the template name follow the Onyx version. A normal Onyx upgrade upgrades them.
+
+<Steps>
+  <Step title="Upgrade with Helm">
+    ```bash
+    helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml --values craft-fc-values.yaml \
+      --values craft-fc-secrets.yaml --version <chart version>
+    ```
+
+    The host agent DaemonSet replaces one pod at a time.
+  </Step>
+
+  <Step title="Let the host agents restart">
+    Running microVMs continue to run while their host agent restarts.
+    The new host agent adopts them (`recovered VMs` in its log).
+    New calls to that node fail for a few seconds during the restart, and the API server retries them.
+  </Step>
+
+  <Step title="Let the nodes build the new template">
+    With a new root drive, the init container copies the drive (about 4 GiB) and the host agent builds a new template.
+    New sessions use the new template. Running microVMs keep the old one.
+    The host agent removes an unused template after 6 hours.
+
+    ```bash
+    kubectl $K -n $NS logs -l app.kubernetes.io/component=craft-fc-host-agent --prefix --tail=-1 | grep -E 'template (ready|build)'
+    ```
+  </Step>
+</Steps>
+
+To roll back, use `helm rollback`. If the new release ran a database migration,
+follow the release notes for the downgrade first.
+
+## Drain a node
+
+When a node drains, the API server saves the sessions of each microVM on the node and stops the microVM.
+You do not stop microVMs by hand. The API server does not move a running microVM.
+The next request for the sandbox starts a new microVM on another node and restores the saved sessions.
+
+<Steps>
+  <Step title="Set the manual drain flag">
+    `agent SetDrain '{"drain": true}'`. The flag stays set across host agent restarts.
+    It closes the gap while the host agent reads the node taints after a restart.
+  </Step>
+
+  <Step title="Cordon the node">
+    `kubectl $K cordon <node>`. With `craft.hostAgent.drainWatch.enabled` (the default),
+    the host agent sees the taint within 10 seconds.
+  </Step>
+
+  <Step title="Confirm that new microVMs go to other nodes">
+    New microVMs on this node now get `NODE_DRAINING`, and the API server places them on other nodes.
+  </Step>
+
+  <Step title="Let the API server save and stop the microVMs">
+    The host agent reports the drain state to the API server every 20 seconds. On a draining node,
+    the API server does not wait for the idle timeout: it saves and stops each microVM at once.
+    A microVM that runs a command stays until the command ends.
+    A microVM that had a call in the last minute stops about one minute later. Check with `agent List`.
+    With only one KVM node, sessions cannot start until you uncordon it.
+
+    <Warning>
+      Do not use `agent Stop` to empty the node. A direct `agent Stop` does not save the session first,
+      and the changes after the last save are lost.
+    </Warning>
+  </Step>
+
+  <Step title="Remove the node">
+    Wait until `agent NodeInfo` shows `drain.state` `DRAIN_STATE_DRAINED`. Then remove or repair the node.
+  </Step>
+</Steps>
+
+To put the node back, run `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
+
+## Cluster autoscaler
+
+{/* depends: #17840 (scale-down guard, chart 0.9.48) */} The host agent blocks scale-down while microVMs run.
+It also drains a node that the autoscaler taints with `ToBeDeletedByClusterAutoscaler`.
+To remove a node that runs microVMs, [drain it](#drain-a-node) first.
+The host agent removes the annotation after the grace period, and then the autoscaler can remove the node.
+
+If you set `craft.hostAgent.scaleDownGuard.enabled=false`, remove a left-over annotation by hand:
+
+```bash
+kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled- \
+  onyx.app/craft-fc-scale-down-guard-
+```
+
+## Rotate the certificates
+
+The host agent reads its certificate files again on the next connection after they change, so it needs no restart.
+The API server and the workers read their client certificate at start.
+
+For the chart-made certificates, delete both Secrets and upgrade. The chart makes new certificates,
+and the clients restart by themselves:
+
+```bash
+kubectl $K -n $NS delete secret onyx-craft-fc-host-agent-tls
+kubectl $K -n $REL delete secret onyx-craft-fc-host-agent-client-tls
+helm upgrade onyx onyx/onyx -n onyx --kube-context "$CTX" --values onyx-values.yaml \
+  --values craft-fc-values.yaml --values craft-fc-secrets.yaml --version <chart version>
+```
+
+The Secret names start with the release name (`onyx` here). New calls to the host agents fail until the upgrade ends.
+
+For your own certificates (`existingSecret`):
+
+<Steps>
+  <Step title="Trust the new CA on both sides">
+    If the CA changes, first put the old and the new CA in `ca.crt` of both Secrets. Restart the API server,
+    the heavy worker, and the Scheduled Task worker.
+  </Step>
+
+  <Step title="Replace the leaf certificates">
+    Write the new `tls.crt` and `tls.key` in both Secrets. Keep the DNS SAN that `client.tlsServerName` names,
+    and a SAN that `clientAllowedSans` accepts.
+  </Step>
+
+  <Step title="Restart the clients">
+    ```bash
+    kubectl $K -n $REL rollout restart deploy/onyx-api-server deploy/onyx-celery-worker-heavy \
+      deploy/onyx-celery-worker-scheduled-tasks
+    ```
+  </Step>
+
+  <Step title="Remove the old CA">
+    After all clients use the new certificate, remove the old CA from `ca.crt` of both Secrets.
+    Then restart the API server, the heavy worker, and the Scheduled Task worker again. Until this restart,
+    the clients still trust the old CA.
+  </Step>
+</Steps>
+
+## Rotate the registration value
+
+The registration value lets host agents register their node signing keys. Change it in both namespaces:
+
+<Steps>
+  <Step title="Write the new value">
+    Change the value in both namespaces. Each namespace has its own source:
+
+    | Namespace | You set | Change |
+    | --- | --- | --- |
+    | Release | `auth.sandboxNodeRegistration.existingSecret` | Your Secret |
+    | Release | No `existingSecret` | `auth.sandboxNodeRegistration.values` in your private values file |
+    | Host agent | `craft.hostAgent.registrationExistingSecret` | Your Secret |
+    | Host agent | No `registrationExistingSecret` | Nothing. The chart copies `auth.sandboxNodeRegistration.values`. |
+
+    Do not edit the Secrets that the chart makes. Then run `helm upgrade`.
+  </Step>
+
+  <Step title="Restart the API server, then the host agents">
+    ```bash
+    kubectl $K -n $REL rollout restart deploy/onyx-api-server
+    kubectl $K -n $NS rollout restart ds/$DS
+    ```
+
+    The host agents adopt their running microVMs after the restart.
+  </Step>
+
+  <Step title="Check the registration">
+    Each host agent must log `node signing key registered`.
+  </Step>
+</Steps>
+
+## Session saves
+
+The API server saves the session files of a microVM to the file store at these times:
+
+| When | Setting |
+| --- | --- |
+| At the end of a turn, if the last save of that session is older than the interval. The save runs in the background and does not delay the user. | `SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default `300`. `0` turns off turn-end saves. |
+| Before it stops an idle microVM. | `SANDBOX_FC_IDLE_TIMEOUT_SECONDS`, default `900`. |
+| Before it stops a microVM on a draining node. See [Drain a node](#drain-a-node). | None |
+
+Set the values in `configMap` of your Onyx values file. A session archive can be at most 1 GiB.
+If a node stops without a drain, for example after a spot reclaim or a hardware failure,
+the changes after the last save of each session are lost.
+
+## Purge data
+
+| Data | Where it is | How it is removed |
+| --- | --- | --- |
+| A microVM disk | The node data directory | `agent Stop` removes the microVM directory, its disk, and its egress identity. A record without user data stays for 24 hours. |
+| Session file transfers | The node data directory | The host agent deletes a transfer file after a successful upload, after 15 minutes, and at each start. |
+| Saved session files | The file store | The API server owns them. The host agent has no storage credentials. See [Delete user data](#delete-user-data). |
+| All data of a node | The node data directory | Drain the node and remove it from the cluster. Then erase `craft.hostAgent.dataDir` on the host, or destroy the node disk. Deleting the Kubernetes node object alone does not erase the disk. |
+
+### Delete user data
+
+The API server deletes the Firecracker data of a session or a user when you delete them in Onyx:
+
+- **Craft session delete.** The API server deletes the saves of the session from the file store,
+  and the session directory on the running microVM. It cancels the commands of the session.
+  The artifacts that the session published stay.
+- **User delete.** The API server stops the microVM of the user. The host agent removes the microVM disk.
+  The API server deletes all saves and published artifacts of the user's sandbox from the file store.
+- **Chat retention.** {/* depends: #17841 */} When a session had no activity for the retention window
+  (`maximum_chat_retention_days`), chat retention also deletes its saves from the file store.
+
+A save that is in progress during the delete does not commit, and the API server deletes its archive.
+If a delete step fails,
+the API server logs `sandbox_fc_session_purge_failed` or `sandbox_fc_sandbox_purge_failed` and continues with the other
+steps. If a microVM stop fails, the API server still removes the sandbox record.
+It then stops the microVM as an orphan at the next node report of the host agent.
+
+Onyx deletes only the current object of a save. If the file store keeps deleted objects or old versions,
+a purged save stays recoverable for that time. Examples are S3 versioning,
+Google Cloud Storage soft delete and object versioning, and Azure Blob soft delete and blob versioning.
+The Onyx Azure `storage` module turns on both by default: blob soft delete for 7 days (`blob_soft_delete_days`),
+and blob versions for 90 days (`enable_versioning`, `noncurrent_expiration_days`). To remove saves at once,
+delete the soft-deleted objects and the old versions too.
+Turning off soft delete alone is not sufficient while versioning is on.
+
+## Monitoring
+
+The chart includes Prometheus metrics, a Grafana dashboard, and alert rules for the host agent. All are off by default.
+To turn them on and verify them, see [Firecracker Monitoring](/deployment/kubernetes/craft-firecracker-monitoring).
+
+Each alert links to its runbook below:
+
+| Alert | Impact |
+| --- | --- |
+| [CraftFcHostAgentDown](#craftfchostagentdown) | No new microVMs and no egress on one node |
+| [CraftFcHostAgentPodsMissing](#craftfchostagentpodsmissing) | A KVM node takes no new microVMs |
+| [CraftFcNodeReportsStale](#craftfcnodereportsstale) | The API server places no new microVMs on one node |
+| [CraftFcCreateFailures](#craftfccreatefailures) | microVM starts fail on one node |
+| [CraftFcAdmissionRefusals](#craftfcadmissionrefusals) | A node is full or cannot admit microVMs |
+| [CraftFcSessionTransferFailures](#craftfcsessiontransferfailures) | Session saves or restores fail |
+| [CraftFcRelayErrors](#craftfcrelayerrors) | microVM egress fails |
+| [CraftFcNodeMemoryLow](#craftfcnodememorylow) | A node is near its memory limit |
+| [CraftFcTemplateUnusable](#craftfctemplateunusable) | A node cannot start microVMs for a template |
+
+### Logs
+
+The host agent writes its own log and one audit line for each API call (`kind=audit`) to stderr.
+It writes the serial console and Firecracker log of each microVM to stdout (`kind=guest_log`, with `sandbox_id`).
+Your cluster log pipeline collects both. The audit line has `method`, `caller`, `sandbox_id`, `result`, and `reason`.
+It never has request bodies or keys.
+
+## Alert runbooks
+
+### CraftFcHostAgentDown
+
+**Meaning.** Prometheus cannot scrape the host agent on one node for 5 minutes. The host agent is down,
+restarts in a loop, or refuses the metrics token (401). While the host agent is down,
+the API server cannot place microVMs on the node, and the microVMs on the node have no egress.
+Running microVMs continue to run.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS get pods -o wide -l app.kubernetes.io/component=craft-fc-host-agent
+kubectl $K -n $NS describe "$(pod_on <node>)"
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=200 | grep -E '"level":"(ERROR|WARN)"|host agent'
+kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100
+```
+
+- `host agent failed`: the host agent stopped at start. The error names the failed check, for example reflink,
+  cgroup v2, `/dev/kvm`, or the artifact checksums.
+- `/metrics has no token`: the metrics token Secret in the host agent namespace is empty or missing.
+- The pod runs and the log is clean: check the scrape target in Prometheus (**Status → Targets**) for 401 or a timeout.
+
+**Fix.**
+
+- Fix the cause that the log names, then delete the pod. The DaemonSet makes a new pod, and the new host agent adopts
+  the running microVMs (`recovered VMs` in the log).
+- For a 401 with a token, make the token in the host agent namespace match `auth.metricsAuth`. The host agent reads
+  the token file on each scrape, so it needs no restart.
+- For a 401 with no token, set `auth.metricsAuth` and upgrade. Do not set `DISABLE_METRICS_AUTH: "true"` to fix a 401:
+  it also removes the auth of the API server metrics.
+
+**Contact Onyx support** when the host agent does not start after one restart,
+or when `recovered VMs` shows `unresponsive` microVMs.
+
+### CraftFcHostAgentPodsMissing
+
+**Meaning.** The host agent DaemonSet has fewer available pods than it wants for 15 minutes.
+A KVM node without a ready host agent takes no new microVMs.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS get ds $DS
+kubectl $K -n $NS get pods -o wide -l app.kubernetes.io/component=craft-fc-host-agent
+kubectl $K get nodes -l onyx.app/kvm=true
+kubectl $K -n $NS get events --sort-by=.lastTimestamp | tail -20
+```
+
+- `Pending`: the node has too few resources, or a taint has no toleration.
+- `Init:`: the root drive init container cannot pull its image or copy the drive.
+- `ImagePullBackOff`: the image tag or the pull Secret in the host agent namespace is wrong.
+
+**Fix.** Fix the image, the pull Secret, the toleration, or the node resources. Then delete the failed pod.
+
+**Contact Onyx support** when a node with `onyx.app/kvm=true` gets no host agent pod after the fix.
+
+### CraftFcNodeReportsStale
+
+{/* depends: #17824 (CraftFcNodeReportsStale alert, chart 0.9.46) */}
+
+**Meaning.** The host agent on one node answers scrapes,
+but for 5 minutes the API server has not accepted a node state report from it in the last 300 seconds
+(`craft.hostAgent.alerts.nodeReportStaleSeconds`). If the node had an accepted report before,
+the API server places no new microVMs on the node after `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default 180 seconds).
+The next wake of a sandbox on the node starts it on another node. The microVMs on the node continue to run.
+`CraftFcHostAgentDown` does not fire.
+
+The alert also fires when the host agent has no accepted report since it started.
+The alert then shows an age of about 56 years.
+The host agent sends reports only after its node key registration succeeds.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=300 | grep -E 'node state report|node signing key'
+kubectl $K -n $REL logs -l app=api-server --prefix --tail=500 \
+  | grep -E 'sandbox_fc_node_report_rejected|sandbox_node_signing_key_registered'
+```
+
+The dashboard panel "Time since last accepted report / key registration" shows both values for each node.
+
+- `node signing key registration failed` with `HTTP 401`: the registration value of the host agent is not the same as the value of the API server. This usually comes after a rotation. The registered key expires 1 hour after the last good registration. Then the reports also get `HTTP 401`, so this alert fires about 1 hour after a wrong rotation.
+- `node state report failed` with `HTTP 401`, and `sandbox_fc_node_report_rejected` in the API server log: the API server does not know the node key, for example after a Redis flush. The host agent registers again only every 20 minutes.
+- `HTTP 409` (`node has no registered agent_address`): the API server has no address for the host agent. The host agent sends it again at its next registration.
+- An error with no HTTP status: the host agent cannot reach `craft.hostAgent.apiServerUrl` (DNS, NetworkPolicy, ingress, or WAF).
+- `HTTP 5xx`: find the error in the API server log.
+
+**Fix.**
+
+- For a wrong registration value, do the steps in [Rotate the registration value](#rotate-the-registration-value)
+  with the correct value.
+- For an unknown node key, delete the host agent pod. The new pod registers at once and adopts its running microVMs.
+- For a network error, fix the path to the API server, or set `craft.hostAgent.apiServerUrl` to the in-cluster URL of the API server Service.
+
+The alert clears when the API server accepts reports again. After many failures,
+the host agent waits up to 2 minutes between reports, so the first accepted report can come 2 minutes after the fix.
+
+**Contact Onyx support** when the reports are still rejected after the host agent logs `node signing key registered`.
+
+### CraftFcCreateFailures
+
+**Meaning.** More than 20% (and at least 3) of the admitted microVM starts on one node failed in 15 minutes,
+for 10 minutes. The start failed after admission: in the jailer, Firecracker, the snapshot restore, the journal write,
+or the guest key install.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --since=30m | grep '"method":"Create"' | grep -v '"result":"OK"' | tail -20
+agent NodeInfo
+```
+
+The `reason` field of the audit line gives the cause.
+The dashboard panel "Admission refusals and failures by reason" shows the reasons over time.
+
+- `VMM_FAILED`: Firecracker or the restore failed. Read the `kind=guest_log` lines of that `sandbox_id`.
+- `SANDBOX_IN_DOUBT`: see [Clear a sandbox in doubt](#clear-a-sandbox-in-doubt).
+- `GUEST_KEY_REJECTED` or `GUEST_UNREACHABLE`: the guest did not accept its key or did not answer. The template can be
+  bad: see [Rebuild a template](#rebuild-a-template).
+
+**Fix.** If one node fails and other nodes do not, [drain that node](#drain-a-node) and restart its host agent.
+If all nodes fail after an upgrade, roll back the upgrade.
+
+**Contact Onyx support** when the failures continue on a new node or after a rollback.
+
+### CraftFcAdmissionRefusals
+
+**Meaning.** One node refused 10 or more microVM starts for one node-side reason in 15 minutes, for 15 minutes.
+The API server then tries the next node, so users see slow starts, or no start when all nodes are full.
+
+| Reason | Cause |
+| --- | --- |
+| `CAPACITY_MEMORY` | Available memory is less than the starting microVMs, the new microVM, and the 2 GiB reserve |
+| `CAPACITY_DISK` | The data directory has less than 10 GiB free |
+| `CAPACITY_VM_SLOTS` | The node runs `craft.hostAgent.maxVms` microVMs, or has no free jailer user ID |
+| `EGRESS_CA_UNAVAILABLE` | The host agent cannot read the sandbox proxy CA ConfigMap |
+| `SANDBOX_IN_DOUBT` | The host agent keeps a Firecracker process that it cannot verify |
+
+**Check.**
+
+```bash
+agent NodeInfo
+kubectl $K -n $NS logs "$(pod_on <node>)" --since=30m | grep -E 'CAPACITY_|EGRESS_CA|IN_DOUBT' | tail -10
+```
+
+The refusal message gives the numbers, for example `mem_available_mib` and `mem_needed_mib`.
+The dashboard row "Node memory and disk" shows the trend.
+
+**Fix.**
+
+- Capacity on all nodes: add KVM nodes.
+- Capacity on one node: look for microVMs that should have stopped (`agent List`). Stop the microVMs that the API
+  server does not know.
+- `CAPACITY_DISK`: look for large files in `<data directory>/captures` and old templates in
+  `<data directory>/templates`. The host agent removes unused templates and images after 6 hours.
+- `EGRESS_CA_UNAVAILABLE`: check the sandbox proxy CA ConfigMap (default `sandbox-proxy-ca-bundle` in the sandbox
+  namespace) and the Role `<DS>-egress-ca-read`.
+- `CAPACITY_VM_SLOTS` with few microVMs, or `SANDBOX_IN_DOUBT`: see [Clear a sandbox in doubt](#clear-a-sandbox-in-doubt).
+
+**Contact Onyx support** when the node has free memory and disk but still refuses,
+or when the refusals continue after more nodes join.
+
+### CraftFcSessionTransferFailures
+
+**Meaning.** Three or more session save or restore calls on one node failed in 30 minutes.
+Session saves can be late or lost, and a user can get an old session state.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --since=1h \
+  | grep -E '"method":"(CaptureSession|UploadCapture|RestoreSession)"' | grep -v '"result":"OK"' | tail -20
+```
+
+| Reason | Cause |
+| --- | --- |
+| `TRANSFER_FAILED` | A network error, or a non-2xx status from the file store |
+| `ARCHIVE_MISMATCH` | The size or SHA-256 does not match what the API server signed |
+| `CAPTURE_TOO_LARGE` | The session archive is larger than 1 GiB |
+| `CAPTURE_NOT_FOUND` | The transfer file expired after 15 minutes, or the host agent restarted |
+| `CAPACITY_DISK` | No disk space for the transfer file |
+
+**Fix.**
+
+- `TRANSFER_FAILED` on all nodes: check the file store (bucket, endpoint, URL expiry) and the egress from the nodes to it.
+  An external store must use HTTPS.
+- `ARCHIVE_MISMATCH` or `CAPTURE_NOT_FOUND`: the API server repeats the save. Look for a version mismatch between the API
+  server and the host agent.
+- `CAPTURE_TOO_LARGE`: the session is too large for the limit.
+
+**Contact Onyx support** at once when restores fail: users can lose work.
+
+### CraftFcRelayErrors
+
+**Meaning.** More than 10% (and at least 10) of the egress connections on one node failed in 10 minutes, for 10 minutes.
+`upstream_failed`: the sandbox proxy did not answer. `over_cap`: a microVM opened more than 256 connections.
+
+**Check.**
+
+```bash
+kubectl $K -n $REL get pods -l app.kubernetes.io/component=sandbox-proxy -o wide
+kubectl $K -n $REL logs -l app.kubernetes.io/component=sandbox-proxy --prefix --since=30m | grep -iE 'error|reject' | tail -20
+kubectl $K -n $NS logs "$(pod_on <node>)" --since=30m | grep -E 'signing key regist|"level":"ERROR"' | tail -10
+```
+
+The dashboard panel "Relay connections by result" shows which result grows.
+
+**Fix.**
+
+- `upstream_failed` on all nodes: the sandbox proxy is down or full. Fix it or add replicas.
+- `upstream_failed` on one node: check the NetworkPolicy from the host agent namespace to the proxy port, and that the
+  node key is registered (`node signing key registered`).
+- `over_cap` from one microVM: a user program opens too many connections. The limit protects the node.
+
+**Contact Onyx support** when the proxy is healthy and the node key is registered, but the errors continue.
+
+### CraftFcNodeMemoryLow
+
+**Meaning.** One node has less than 10% of its memory available for 15 minutes.
+New microVMs on the node get `CAPACITY_MEMORY`. The kernel can stop a microVM when it runs out of memory.
+
+**Check.**
+
+```bash
+agent NodeInfo   # mem_available_mib, mem_reserve_mib, mem_starting_mib
+agent List
+kubectl $K top node <node>
+```
+
+Compare "Guest memory allocated vs node memory" on the dashboard.
+
+**Fix.**
+
+- Add KVM nodes.
+- [Drain the node](#drain-a-node) if one node stays full and other nodes have space.
+- Stop the microVMs that the API server does not know.
+
+**Contact Onyx support** when the kernel stops microVMs on the node (`EXITED` in `agent List`),
+or when processes other than microVMs use the memory.
+
+### CraftFcTemplateUnusable
+
+**Meaning.** For 15 minutes, a node had no usable template,
+refused microVM starts with `TEMPLATE_MISSING` or `TEMPLATE_INCOMPATIBLE`, or failed a template build.
+The node cannot start microVMs for that template.
+The API server places no new microVMs on a node without a usable template.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" | grep -E 'template (ready|build|GC)'
+agent NodeInfo   # templates on the node
+```
+
+- `template build at start-up failed`: the root drive is missing or wrong, the build timed out, or the egress CA
+  does not fit.
+- `TEMPLATE_INCOMPATIBLE`: the message names what changed, for example the Firecracker version, CPU model, host kernel,
+  guest kernel, or CA.
+
+**Fix.** See [Rebuild a template](#rebuild-a-template).
+
+**Contact Onyx support** when a new build fails on a node of the same type as nodes that work.
+
+## Procedures
+
+### Rebuild a template
+
+The host agent builds its template from the root drive at start. It does not build a valid template again.
+
+- New root drive: upgrade Onyx, or set `craft.hostAgent.rootfs.image.tag`. The init container copies the drive and the
+  host agent builds the template at start.
+- Same root drive, bad template: delete the host agent pod. At start, the host agent checks the template and builds it
+  again if the check fails. It does not rebuild a template that a microVM uses.
+- On demand: `agent BuildTemplate`. A draining node refuses a build.
+- The log line `template ready` shows the result.
+
+### Clear a sandbox in doubt
+
+`SANDBOX_IN_DOUBT` means that the host agent keeps a Firecracker process that it cannot verify.
+The host agent never stops a process that it is not sure of.
+
+<Steps>
+  <Step title="Repeat the call">
+    Repeat the start or stop. The host agent scans the processes again first. If the process is gone, the doubt clears.
+  </Step>
+
+  <Step title="Read the journal record">
+    Read the journal record of the sandbox on the node: `<data directory>/journal/<sandbox_id>.json`.
+  </Step>
+
+  <Step title="Remove the record">
+    If the process is not a microVM that a user needs, remove the journal record and restart the host agent.
+    The host agent then stops the process as an orphan.
+  </Step>
+</Steps>
+
+Contact Onyx support before you remove a record of a microVM that a user can still use.
+
+### Restore a user session
+
+The API server owns session saves and restores. There is no operator command to restore a session by hand.
+If a user lost a session, contact Onyx support with the sandbox ID and the time.
