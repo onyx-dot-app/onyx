@@ -337,9 +337,30 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
   not kill on doubt. If the host cgroup tree cannot be read, the agent does not start. An `nsenter
   --cgroup` wrapper is not needed. The agent does not `setns` itself: a cgroup namespace switch applies
   to one thread only, and Go runs on many threads.
-- The data dir must be on XFS with reflink (the agent checks this at start-up). It must be mounted at
-  the same path in the container and on the host, because the jailer runs in the host mount namespace.
+- The data dir needs reflink copies. It must be mounted at the same path in the container and on the
+  host, because the jailer runs in the host mount namespace (the agent compares the two at start-up).
   The path must be short enough for Unix socket paths (the agent checks this too).
+- Loop store (`--loop-store`, default `auto`, or `$CRAFT_FC_LOOP_STORE`): if the data dir has no
+  reflink (ext4 roots on GKE COS and AKS Ubuntu), the agent makes a sparse image
+  `<data-dir>/.craft-fc-store.img` with `mkfs.xfs -m reflink=1`, attaches it to a loop device (direct
+  I/O, auto-clear) and mounts it at the data dir, in the host mount namespace and in its own one (the
+  default hostPath propagation does not show a later host mount in the container). All paths
+  (journal, templates, jail) stay the same. After an agent restart the mount is still there (if the
+  host lost it, the agent mounts it again). After a node reboot the agent attaches and mounts the same
+  image again; it never formats an existing image. A root drive that the init container put in
+  `--rootfs-dir` on the node disk is copied into the store through a private mount before the data
+  dir mount (the node copy stays, so the init container finds it current after a reboot).
+  - Size of a new image: `--loop-store-gib` (or `$CRAFT_FC_LOOP_STORE_GIB`); 0 (default) is the free
+    space less 1/5 of the disk, 20 GiB to 4 TiB. An existing image keeps its size.
+  - The image is sparse. At start and every hour the agent trims the store (FITRIM), so deleted files give their
+    blocks back to the node disk. The free space for `--min-free-disk-gib` and the capture spool is
+    the smaller of the store's free space and the node disk's free space above 10% of its size (the
+    kubelet hard eviction threshold).
+  - Needs `/dev/loop-control` (loop driver), XFS in the node kernel, `mount` on the host, and
+    `mkfs.xfs` (xfsprogs) in the agent image. Without one of them the agent does not start and names
+    the missing part.
+  - An XFS disk with reflink mounted at the data dir needs no store and stays the faster option (one
+    file system layer less). `--loop-store=off` refuses to start without reflink.
 - `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 and the guest kernel `vmlinux` (the
   `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
   and copies them to `<data-dir>/bin/<version>/`.
@@ -360,7 +381,7 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 
   | Metric | Type | Labels |
   |---|---|---|
-  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed |
+  | `craft_fc_host_agent_create_duration_seconds` | histogram | `result`: created, existing, refused, failed, canceled (caller cancel or deadline) |
   | `craft_fc_host_agent_admissions_total` | counter | `result`: admitted, refused (stopped before admission passed), failed (the start failed after admission); `reason`: ErrorReason |
   | `craft_fc_host_agent_vms` | gauge | `state`: starting, running, exited |
   | `craft_fc_host_agent_vm_memory_allocated_bytes`, `_vm_vcpus_allocated` | gauge | |
@@ -600,9 +621,8 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
   (`FAILED_PRECONDITION`); create the VM on another node. A repeat Create of a VM that runs here still
   returns it. It also refuses a template build that must boot a template VM (`BuildTemplate` and the
   start-up build) with `NODE_DRAINING`; a template that is already on the node is still returned.
-- Running VMs keep running. Automatic evacuation by the api_server is planned, not built.
-  Until then, save the data you need, `Stop` each VM from `List`, and wait for `NodeInfo.drain.state`
-  `DRAINED` before you take the node down.
+- Running VMs keep running. The api_server saves the session of each VM on a draining node, then
+  stops the VM. Wait for `NodeInfo.drain.state` `DRAINED` before you take the node down.
 - `NodeInfo.drain`: `state` (`ACTIVE`, `DRAINING` while VMs are starting or running, while the agent
   keeps Firecracker processes in doubt or runs a template build VM, and while no process scan worked;
   `DRAINED` when none of these is left), `manual`, `taints`, `since`, `watch_error`. While draining,
