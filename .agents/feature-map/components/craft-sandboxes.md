@@ -93,6 +93,13 @@ Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` conv
 `craft-runtime` tag with no egress CA and publishes
 `onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
 it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
+`global.version` release tag) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
+`craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
+(the chart fails without it); the operator keeps those two aligned. Without
+`existingSecret` values, the chart makes the agent mTLS CA and certificates and
+keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
 The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
 `SetKey`; the guest daemon installs it at `Init`. So one drive and one template
 key serve every deployment CA.
