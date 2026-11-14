@@ -434,6 +434,11 @@ Do the steps in this order, so that no pod sandbox lands on a KVM node:
     kubectl -n onyx-sandboxes get pods -o wide --field-selector spec.nodeName=<kvm-node>
     ```
   </Step>
+
+  <Step title="Check pod sessions">
+    Users reopen their Craft sessions.
+    A session whose pod stopped during the node change starts a new pod on the pod sandbox pool and restores its files.
+  </Step>
 </Steps>
 
 ### Turn Firecracker off
@@ -454,7 +459,11 @@ Do the steps in this order, so that no pod sandbox lands on a KVM node:
   </Step>
 </Steps>
 
-Session files that the host agent saved stay in the file store.
+If `craft.firecrackerPreflight.enabled` is `true`, the preflight DaemonSet and its NetworkPolicy stay.
+Set it to `false`. The chart deletes the host agent namespace that it made, with the chart-made certificates.
+When you turn Firecracker on again, the chart makes new certificates.
+
+Session files that the host agent saved stay in the file store, and they restore when you turn Firecracker on again.
 Sessions that need a microVM cannot start until you turn Firecracker on again.
 
 ## Troubleshooting

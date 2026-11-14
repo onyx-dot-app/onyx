@@ -108,7 +108,9 @@ The next request for the sandbox starts a new microVM on another node and restor
   <Step title="Let the API server save and stop the microVMs">
     The host agent reports the drain state to the API server every 20 seconds. On a draining node,
     the API server does not wait for the idle timeout: it saves and stops each microVM at once.
-    A microVM that runs a command stays until the command ends. Check with `agent List`.
+    A microVM that runs a command stays until the command ends.
+    A microVM that had a call in the last minute stops about one minute later. Check with `agent List`.
+    With only one KVM node, sessions cannot start until you uncordon it.
 
     <Warning>
       Do not use `agent Stop` to empty the node. A direct `agent Stop` does not save the session first,

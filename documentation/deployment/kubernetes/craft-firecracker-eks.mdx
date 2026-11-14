@@ -14,7 +14,7 @@ configure Helm as the overview page shows.
 | --- | --- | --- |
 | Nested virtualization | Intel `c8i`, `m8i`, `r8i`, and their `-flex` types | `m7i` and older Intel types, Graviton (`g`), AMD (`a`) |
 | Bare metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal` types, `a1.metal`, `mac*.metal` |
-| AMI | Amazon Linux 2023 (`AL2023_x86_64_STANDARD`) with kernel 6.18 | Other AMIs are not tested |
+| AMI | Amazon Linux 2023 (`AL2023_x86_64_STANDARD`). The EKS 1.33 AMI has kernel 6.12: the preflight check prints `WARN kernel` for it, and the host agent works. | Other AMIs are not tested |
 | Capacity | On-demand | Spot |
 | Root volume | gp3. Onyx tests 6000 IOPS and 500 MiB/s for the KVM nodes. | |
 
@@ -35,6 +35,7 @@ See [Terraform](/deployment/local/terraform) for the full module.
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=<tag>"
       # ... your existing settings
 
+      manage_core_addons                 = true # new clusters only
       enable_network_policy              = true
       enable_craft                       = true
       craft_sandbox_runtime              = "firecracker"
@@ -49,6 +50,10 @@ See [Terraform](/deployment/local/terraform) for the full module.
       craft_pod_sandbox_node_max_size       = 2
     }
     ```
+
+    {/* depends: #17838 (manage_core_addons) */} On a new cluster, set `manage_core_addons = true`.
+    The EKS module v21 makes a cluster without vpc-cni, kube-proxy, and CoreDNS,
+    and the nodes do not become Ready without them. Keep `false` on an existing cluster.
 
     With `craft_sandbox_runtime = "firecracker"`, the module:
 
@@ -150,6 +155,13 @@ On a cluster that already runs pod sandboxes, do the steps in this order:
     Set `craft_sandbox_runtime = "firecracker"` and `enable_craft_pod_sandbox_node_group = true`,
     with the instance types from [Option 1](#option-1-onyx-terraform-modules).
     The module accepts the pod sandbox node group only with the Firecracker runtime, so set both in the same change.
+
+    If NetworkPolicy enforcement is off, also set `enable_network_policy = true`,
+    and set `vpc_cni_addon_version` to the version that runs now:
+
+    ```bash
+    kubectl -n kube-system get ds aws-node -o jsonpath='{.spec.template.spec.containers[0].image}'
+    ```
   </Step>
 
   <Step title="Apply the pod sandbox node group first">
@@ -160,11 +172,20 @@ On a cluster that already runs pod sandboxes, do the steps in this order:
       -target='module.onyx.module.eks.module.eks.module.eks_managed_node_group["sandbox_pod"]'
     kubectl -n onyx-sandboxes get pods -o wide -l app.kubernetes.io/component=sandbox-image-prepuller
     ```
+
+    The address is for the `aws/onyx` module. If you call `aws/eks` directly,
+    use `-target='module.<name>.module.eks.module.eks_managed_node_group["sandbox_pod"]'`.
   </Step>
 
   <Step title="Apply the Firecracker node group">
     Run `terraform apply` without a target. EKS replaces the sandbox nodes with nodes that have nested virtualization,
     the KVM label, and the KVM taint. Plan this step for a quiet time: the pod sandboxes on the old nodes stop.
+
+    The node replacement takes 20 to 30 minutes. EKS starts new nodes before it drains the old ones.
+    The plan also shows in-place updates of IAM roles and policies with values known after apply. This is expected.
+
+    If the apply stops with an error during the node group update, run `terraform apply` again:
+    it sets the KVM label and taint. Until then, the new nodes have no KVM taint.
   </Step>
 
   <Step title="Check the KVM nodes">
