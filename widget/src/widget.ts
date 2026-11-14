@@ -542,8 +542,11 @@ export class OnyxChatWidget extends LitElement {
       this.abortController === controller && !controller.signal.aborted;
     let sentSessionId: string | undefined;
     let acknowledged = false;
-    // The server's id for the answer, from the acknowledgement
+    // The server's id for the answer, from the acknowledgement; it is also
+    // the id of the response's stream
     let reservedAssistantId: number | null = null;
+    // A stream another client started while this one was saved
+    let nextStream: number | null = null;
     const follow = newFollow(null);
     // Set when the response runs on without this stream: the server reports a
     // waiting request this widget does not show, or the stream ended first.
@@ -647,16 +650,19 @@ export class OnyxChatWidget extends LitElement {
     } finally {
       // A waiting response keeps the session busy until the user decides.
       if (stillOurs() && sentSessionId && !reattach) {
+        const sentStream = reservedAssistantId;
         try {
-          await this.apiService.waitForSessionIdle(
+          const next = await this.apiService.waitForSessionIdle(
             sentSessionId,
             controller.signal,
             () => {
               if (stillOurs())
                 this.streamingStatus =
                   "Waiting to confirm that this conversation is ready.";
-            }
+            },
+            (id) => sentStream !== null && id !== sentStream
           );
+          if (stillOurs() && typeof next === "number") nextStream = next;
         } catch (error) {
           if (
             stillOurs() &&
@@ -676,8 +682,12 @@ export class OnyxChatWidget extends LitElement {
         this.abortController = undefined;
       }
     }
-    if (reattach && sentSessionId && this.abortController === undefined) {
-      await this.resumeStream(sentSessionId, reservedAssistantId);
+    if (
+      (reattach || nextStream !== null) &&
+      sentSessionId &&
+      this.abortController === undefined
+    ) {
+      await this.resumeStream(sentSessionId, reservedAssistantId, nextStream);
     }
   }
 
@@ -687,11 +697,13 @@ export class OnyxChatWidget extends LitElement {
    * A stream that ends before the response does is attached again from its
    * last cursor while the session still runs it; a new stream is followed
    * from its start. `reservedAssistantId` names an answer that this widget
-   * has not shown yet.
+   * has not shown yet. `startStreamId` names the stream to follow from its
+   * start, else the current one.
    */
   private async resumeStream(
     sessionId: string,
-    reservedAssistantId: number | null = null
+    reservedAssistantId: number | null = null,
+    startStreamId: number | null = null
   ) {
     if (this.abortController) return;
     const controller = new AbortController();
@@ -707,7 +719,7 @@ export class OnyxChatWidget extends LitElement {
     try {
       const identity = await this.currentIdentity();
       if (!stillOurs()) return;
-      let follow = newFollow(null);
+      let follow = newFollow(startStreamId);
       // A stream without a replay buffer is never requested again.
       let streamWithoutBuffer: number | null = null;
       while (true) {
@@ -740,13 +752,20 @@ export class OnyxChatWidget extends LitElement {
         }
         if (!stillOurs()) return;
         if (follow.ended) {
-          // The server can still save the turn after its stream ends.
-          await this.apiService.waitForSessionIdle(
+          // The server can still save the turn after its stream ends, and
+          // another client can start a new response meanwhile.
+          const ended = follow.streamId;
+          const next = await this.apiService.waitForSessionIdle(
             sessionId,
             controller.signal,
-            onUnconfirmed
+            onUnconfirmed,
+            (id) =>
+              ended !== null && id !== ended && id !== streamWithoutBuffer
           );
-          break;
+          if (!stillOurs()) return;
+          if (typeof next !== "number") break;
+          follow = newFollow(next);
+          continue;
         }
         // Only a 404 means the buffer is gone; other ends are retried. Before
         // the first cursor the stream id is unknown, so the first stream the

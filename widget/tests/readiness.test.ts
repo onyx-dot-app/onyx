@@ -522,6 +522,126 @@ describe("widget readiness", () => {
       });
     });
 
+    it("follows a new response that starts while the ended one is saved", async () => {
+      const { widget, api } = followingWidget();
+      const attempts: unknown[] = [];
+      let pendingOnNewStream: string | undefined;
+      api.resumeStream = mock(async function* (
+        _session: string,
+        _signal: AbortSignal,
+        from: { streamId: number; cursor: number } | null = null
+      ): AsyncGenerator<Packet | StreamCursor, ResumeEnd> {
+        attempts.push(from);
+        if (from === null) {
+          yield {
+            obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+          };
+          yield { stream_id: 5, next_cursor: 1, replay_complete: true };
+          yield { obj: { type: "message_start" } };
+          yield { obj: { type: "message_delta", content: "First" } };
+          yield { obj: { type: "stop" } };
+          return "ended";
+        }
+        yield {
+          obj: { user_message_id: 3, reserved_assistant_message_id: 4 },
+        };
+        yield {
+          obj: { type: "user_message", id: "sdk-3", message: "Other tab" },
+        };
+        yield { obj: approval("b") };
+        pendingOnNewStream = widget["pendingApproval"]?.request.approval_id;
+        yield { stream_id: 6, next_cursor: 3, replay_complete: true };
+        yield { obj: { type: "stop" } };
+        return "ended";
+      });
+      const offered: boolean[] = [];
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => {
+          if (attempts.length > 1) return null;
+          // Stream 5 still saves; another client started stream 6.
+          offered.push(attachable(5));
+          return attachable(6) ? 6 : null;
+        }
+      );
+
+      await widget["resumeStream"]("session");
+
+      expect(offered).toEqual([false]);
+      expect(attempts).toEqual([null, { streamId: 6, cursor: 0 }]);
+      expect(pendingOnNewStream).toBe("b");
+      expect(widget["messages"].map((m) => [m.id, m.content])).toEqual([
+        [2, "First"],
+        [3, "Other tab"],
+        [4, ""],
+      ]);
+    });
+
+    it("follows a new response that starts while a sent one is saved", async () => {
+      const { widget, api } = followingWidget();
+      widget["inputValue"] = "send it";
+      api.createChatSession = mock(async () => "session");
+      api.streamMessage = mock(async function* (): AsyncGenerator<Packet> {
+        yield {
+          obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+        };
+        yield { obj: { type: "message_start" } };
+        yield { obj: { type: "message_delta", content: "First" } };
+        yield { obj: { type: "stop" } };
+      });
+      const attempts: unknown[] = [];
+      let pendingOnNewStream: string | undefined;
+      api.resumeStream = mock(async function* (
+        _session: string,
+        _signal: AbortSignal,
+        from: { streamId: number; cursor: number } | null = null
+      ): AsyncGenerator<Packet | StreamCursor, ResumeEnd> {
+        attempts.push(from);
+        yield {
+          obj: { user_message_id: 3, reserved_assistant_message_id: 4 },
+        };
+        yield {
+          obj: { type: "user_message", id: "sdk-3", message: "Other tab" },
+        };
+        yield { obj: approval("b") };
+        pendingOnNewStream = widget["pendingApproval"]?.request.approval_id;
+        yield { stream_id: 4, next_cursor: 3, replay_complete: true };
+        yield { obj: { type: "stop" } };
+        return "ended";
+      });
+      const offered: boolean[] = [];
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => {
+          if (attempts.length > 0) return null;
+          // The sent response's stream 2 still saves; another client
+          // started stream 4.
+          offered.push(attachable(2));
+          return attachable(4) ? 4 : null;
+        }
+      );
+
+      await widget["sendMessage"]();
+
+      expect(offered).toEqual([false]);
+      expect(attempts).toEqual([{ streamId: 4, cursor: 0 }]);
+      expect(pendingOnNewStream).toBe("b");
+      expect(widget["messages"].map((m) => [m.id, m.content])).toEqual([
+        [1, "send it"],
+        [2, "First"],
+        [3, "Other tab"],
+        [4, ""],
+      ]);
+    });
+
     const approval = (id: string) => ({
       type: "tool_approval_request" as const,
       approval_id: id,

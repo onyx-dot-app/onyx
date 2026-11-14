@@ -85,7 +85,8 @@ send → ApiService                                   services/api-service.ts
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
-  ├─ finally: waitForSessionIdle again, then enable Send
+  ├─ finally: waitForSessionIdle again, then enable Send; a stream id other
+  │    than the reserved assistant id (the sent stream's id) → resumeStream
   └─ stream ended before its response, or 409 APPROVAL_PENDING → resumeStream
 restore / resumeStream / decision with no stream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (cursor lines track stream_id
@@ -94,6 +95,7 @@ restore / resumeStream / decision with no stream    widget.ts
   │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
+  ├─ after its stop → waitForSessionIdle; a new stream id → follow from 0
   └─ idle with a response unfinished or an acknowledged answer not shown →
        GET /chat/get-chat-session/{id}, replay its saved packets; on failure
        it stays unfinished for the next load
