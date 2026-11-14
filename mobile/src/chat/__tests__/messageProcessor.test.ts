@@ -41,6 +41,22 @@ describe("messageProcessor", () => {
     ]);
   });
 
+  it("rebuilds when a replay replaces the packets at the same length", () => {
+    let state = processPackets(createInitialState(1), [
+      makeMessageStartPacket([]),
+      makeStopPacket(),
+    ]);
+    expect(state.stopPacketSeen).toBe(true);
+
+    state = processPackets(state, [
+      makeMessageStartPacket([]),
+      makePacket({ type: PacketType.MESSAGE_DELTA, content: "more" }),
+    ]);
+
+    expect(state.stopPacketSeen).toBe(false);
+    expect(state.isComplete).toBe(false);
+  });
+
   it("marks complete on stop", () => {
     let state = createInitialState(1);
     expect(state.isComplete).toBe(false);

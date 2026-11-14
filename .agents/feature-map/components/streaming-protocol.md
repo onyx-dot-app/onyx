@@ -287,8 +287,11 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/services/lib.tsx:resumeStream` keeps them, because its
    caller uses them as liveness ticks, and also yields `StreamCursor` lines. A
    new consumer of `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees
-   both. Mobile resumes without `stream_id` and skips `StreamCursor` lines
-   because they have no `obj`.
+   both. `mobile/src/api/chat/stream.ts:resumeChatMessage` sends `stream_id`
+   and yields `StreamCursor` lines, which
+   `mobile/src/hooks/useChatSessionController.ts:recoverChatSession` uses to
+   commit packets and to reattach from the last cursor; only a 404 stops it
+   from requesting that stream again ([[#buffer-gap-ends-resume]]).
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool
@@ -405,8 +408,10 @@ its background task end ([[#pure-asgi-middleware]]).
     finish between polls. An automatic reply's
     `MessageResponseIDInfo` has no `user_message_id`; session history returns
     its hidden parent with `message_type: "agent_results"`.
-    Other clients wait for the session to become idle:
-    `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
+    Other clients wait for the session to become idle. Mobile's
+    `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle` also reports
+    `current_stream`, so mobile follows a stream that runs instead of its
+    send ([[mobile-app]]). The others are
     `cli/internal/api/client.go:IsChatSessionProcessing` and
     `widget/src/services/api-service.ts`. The CLI and widget stop with an error
     when an older server has no status endpoint. An old client in the field
