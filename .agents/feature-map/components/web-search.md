@@ -187,7 +187,7 @@ change on tool behaviour, such as partial results or the indexed fallback.
    as both tools do ([[tools-framework#parallel-by-default]]; [[citations]]
    owns the rule).
 8. `query-cleaning-not-security` **Query cleaning is not a security boundary.**
-   `tools/tool_implementations/web_search/web_search_tool.py:_sanitize_query`
+   `tools/tool_implementations/web_search/models.py:WebSearchArguments.sanitize_queries`
    strips control characters that models sometimes emit. It does not protect the
    provider API.
 
