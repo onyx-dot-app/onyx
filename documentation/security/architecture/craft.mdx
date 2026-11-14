@@ -119,6 +119,8 @@ The host agent writes an audit line for each call. The line has no request body 
 - Session files go to the file store through presigned URLs, each for one object and one method. The nodes have no
   storage credentials.
 - Onyx does not save microVM memory of user sessions. Session saves contain files only.
+- When you delete a Craft session or a user, Onyx deletes the session saves from the file store. See
+  [Delete user data](/deployment/kubernetes/craft-firecracker-operations#delete-user-data).
 
 ### The host agent is privileged
 
