@@ -60,7 +60,7 @@ SLA summary) is available only when the Service Desk API is enabled on the insta
   <Step title="Choose what to index">
     Select one indexing mode:
 
-    - **Everything** indexes the tickets of every service desk project the connector account can access. Issues from other Jira project types (software, business) are skipped.
+    - **Everything** indexes the tickets of every service desk project the connector account can access. Issues without a `projectTypeKey` (or where the project type cannot be resolved) may also be indexed; to guarantee indexing is restricted strictly to service desk projects, select an explicit project scope or custom JQL.
     - **Project** indexes one service desk project. Enter its project key, such as `IT`.
     - **JQL Query** indexes tickets that match a custom JQL query. A JQL scope can span project types; issues from non-service-desk projects index with the regular Jira fields only, without portal metadata.
     Do not include time filters or an `ORDER BY` clause.

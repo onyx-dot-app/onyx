@@ -1,5 +1,4 @@
 import copy
-import dataclasses
 import json
 import os
 import re
@@ -532,29 +531,11 @@ class JiraConnector(
         # Use different cache keys for prefixed vs unprefixed to avoid mixing
         cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
         if cache_key not in self._project_permissions_cache:
-            perms = get_project_permissions(
+            self._project_permissions_cache[cache_key] = get_project_permissions(
                 source_operations=self.source_operations,
                 jira_project=project_key,
                 add_prefix=add_prefix,
             )
-            if (
-                add_prefix
-                and self.connector_source != DocumentSource.JIRA
-                and getattr(perms, "external_user_group_ids", None)
-            ):
-                target_prefix = f"{self.connector_source.value}_"
-                normalized_groups = {
-                    (
-                        f"{target_prefix}{gid[len('jira_'):]}"
-                        if gid.startswith("jira_")
-                        else gid
-                    )
-                    for gid in perms.external_user_group_ids
-                }
-                perms = dataclasses.replace(
-                    perms, external_user_group_ids=normalized_groups
-                )
-            self._project_permissions_cache[cache_key] = perms
         return self._project_permissions_cache[cache_key]
 
     def _is_epic(self, issue: JiraIssue) -> bool:
