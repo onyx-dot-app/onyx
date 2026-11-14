@@ -301,3 +301,51 @@ def test_pruning_lists_files_edited_during_the_listing(
 
     assert edited
     assert {_file_id(doc_id) for doc_id in pruning} == expected
+
+
+def test_pruning_lists_files_edited_during_its_last_pass(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every file is edited during the first pass, and again during the pass
+    that lists the edits of the first pass. The last pass has no upper bound,
+    so pruning still lists every file."""
+    monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", _PAGE_SIZE)
+    mock_drive = own_mock_drive
+    expected = mock_drive.content_file_ids()
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+    lock = threading.Lock()
+    first_window_end: list[int] = []
+    edits: list[str] = []
+
+    def touch_every_file() -> None:
+        # The mock gives the edit the current time, after any bound that
+        # the listing set before.
+        time.sleep(0.01)
+        edits.extend(
+            mock_drive.client.post(
+                "/_mock/corpus/touch", json={"count": len(expected)}
+            ).json()["file_ids"]
+        )
+
+    def edit_during_each_pass(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> object:
+        # Before the first page of each pass, so no page token spans an edit.
+        with lock:
+            if not first_window_end:
+                first_window_end.append(self._state.window_t1)
+                touch_every_file()
+            elif shard.t0 >= first_window_end[0] and len(first_window_end) == 1:
+                first_window_end.append(shard.t0)
+                touch_every_file()
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", edit_during_each_pass
+    )
+
+    pruning = _slim_ids(mock_drive.build_connector().retrieve_all_slim_docs())
+
+    assert len(first_window_end) == 2, "the last pass did not run"
+    assert set(edits) == expected
+    assert {_file_id(doc_id) for doc_id in pruning} == expected

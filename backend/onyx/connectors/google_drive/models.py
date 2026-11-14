@@ -324,6 +324,9 @@ class ListingShard(BaseModel):
     # Lists only the files of this owner. Set on a shared-with-user shard
     # that lists again the files of an owner whose My Drive partition failed.
     owner_filter: str | None = None
+    # True when the shard has no upper bound: it lists every file modified at
+    # t0 or later, and t1 is not used. Such a shard does not split.
+    open_end: bool = False
 
 
 class DriveListingState(BaseModel):
@@ -353,6 +356,9 @@ class DriveListingState(BaseModel):
     docs_by_type: dict[DocumentTypeLabel, int] = {}
     # Bytes per type. Only files that Drive lists with a size add to it.
     bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    # True after open_window_end: shards that start from now on have no
+    # upper bound.
+    open_end: bool = False
 
     @property
     def is_done(self) -> bool:

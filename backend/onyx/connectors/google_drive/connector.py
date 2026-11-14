@@ -76,6 +76,7 @@ from onyx.connectors.google_drive.parallel_listing import (
     ParallelDriveLister,
     drive_document_type,
     extend_window,
+    open_window_end,
     window_ms,
 )
 from onyx.connectors.google_drive.source_operations import (
@@ -2573,17 +2574,17 @@ class GoogleDriveConnector(
             self._retrieved_folder_and_drive_ids = (
                 checkpoint.retrieved_folder_and_drive_ids
             )
-            call_end = end
             # The shard engine lists [start, end). Pruning reads a missing
             # file as deleted, but a file edited during the listing moves past
-            # the end. So pruning lists the time since the end once more.
-            catch_up = for_pruning and end is None
+            # the end. So pruning ends with a pass with no upper bound, and
+            # the listing is complete only after that pass.
+            last_pass = for_pruning and end is None
             while True:
                 while checkpoint.completion_stage != DriveRetrievalStage.DONE:
                     yield from self._extract_slim_docs_from_google_drive(
                         checkpoint=checkpoint,
                         start=start,
-                        end=call_end,
+                        end=end,
                         callback=callback,
                         include_permissions=include_permissions,
                     )
@@ -2597,11 +2598,11 @@ class GoogleDriveConnector(
                     # A pass ends after a budget or a partition even when every
                     # file was filtered or none changed, so it counts as progress
                     _stop_or_report_progress(callback, "_retrieve_all_slim_docs_impl")
-                if not catch_up or checkpoint.listing is None:
+                if not last_pass or checkpoint.listing is None:
                     break
-                catch_up = False
+                last_pass = False
+                open_window_end(checkpoint.listing)
                 checkpoint.completion_stage = DriveRetrievalStage.START
-                call_end = time.time()
             if for_pruning and checkpoint.unreachable_target_ids:
                 # Pruning deletes whatever this listing lacks, which for an
                 # unreachable target is every document indexed from it.
