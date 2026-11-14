@@ -6,9 +6,12 @@ import socket
 import ssl
 from collections.abc import Callable
 
+import httplib2
 import pytest
+from googleapiclient.errors import HttpError
 
 from onyx.connectors.google_utils import google_utils
+from onyx.utils.threadpool_concurrency import PUSHBACK_OBSERVER, PushbackObserver
 
 
 class _Request:
@@ -118,3 +121,25 @@ def test_access_probe_reraises_when_retries_exhausted(
     with pytest.raises(type(transient_error)):
         google_utils.execute_access_probe(_Request(execute))
     assert attempts["count"] == _PROBE_CONNECTION_TRIES
+
+
+def test_access_probe_records_server_errors_as_pushback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(google_utils.time, "sleep", lambda _seconds: None)
+    attempts = {"count": 0}
+
+    def execute() -> dict[str, str]:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise HttpError(resp=httplib2.Response({"status": 500}), content=b"")
+        return {"id": "drive"}
+
+    observer = PushbackObserver()
+    token = PUSHBACK_OBSERVER.set(observer)
+    try:
+        assert google_utils.execute_access_probe(_Request(execute)) == {"id": "drive"}
+    finally:
+        PUSHBACK_OBSERVER.reset(token)
+
+    assert observer.take_hits() == 1
