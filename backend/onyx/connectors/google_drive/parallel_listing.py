@@ -31,6 +31,7 @@ from enum import Enum
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.file_retrieval import (
     RESOLVED_FROM_SHORTCUT_KEY,
+    TARGET_MODIFIED_TIME_KEY,
     DriveFileFieldType,
     get_fields_for_file_type,
     owner_email,
@@ -177,7 +178,10 @@ def _iso(ms: int) -> str:
 
 
 def _modified_ms(file: GoogleDriveFileType) -> int | None:
-    raw = file.get(GoogleFields.MODIFIED_TIME.value)
+    return _iso_ms(file.get(GoogleFields.MODIFIED_TIME.value))
+
+
+def _iso_ms(raw: object) -> int | None:
     if not isinstance(raw, str):
         return None
     try:
@@ -757,9 +761,13 @@ class ParallelDriveLister:
         return self._admit_file(file, exact)
 
     def _in_window(self, file: GoogleDriveFileType) -> bool:
-        """Whether the file's modifiedTime is in the listing window, so the
-        listing of its own partition returns it. The caller holds the lock."""
+        """Whether the file's own modifiedTime is in the listing window, so
+        the listing of its own partition returns it. A shortcut target has
+        the shortcut's time in modifiedTime, so its own time is read from
+        TARGET_MODIFIED_TIME_KEY. The caller holds the lock."""
         modified = _modified_ms(file)
+        if RESOLVED_FROM_SHORTCUT_KEY in file and TARGET_MODIFIED_TIME_KEY in file:
+            modified = _iso_ms(file[TARGET_MODIFIED_TIME_KEY])
         if modified is None:
             return False
         state = self._state
