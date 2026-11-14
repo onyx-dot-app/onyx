@@ -608,9 +608,15 @@ variable "enable_network_policy" {
   default     = false
 }
 
+variable "manage_core_addons" {
+  type        = bool
+  description = "Install vpc-cni, kube-proxy and CoreDNS as EKS addons. Set true for a new cluster: the upstream EKS module v21 creates no default addons, so without them the nodes never become Ready. Keep false on a cluster that already runs these components: true adopts them as EKS addons."
+  default     = false
+}
+
 variable "vpc_cni_addon_version" {
   type        = string
-  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (aws eks describe-addon --addon-name vpc-cni) to avoid an unintended CNI upgrade on adoption."
+  description = "VPC CNI addon version to pin when enable_network_policy or manage_core_addons is true. Set to the cluster's currently-running version (aws eks describe-addon --addon-name vpc-cni) to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }
 

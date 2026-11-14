@@ -258,6 +258,7 @@ Inputs (common):
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
+- `manage_core_addons` (default false): set true for a new cluster. See "Core addons on new clusters" under `eks`
 - Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
 - `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
   session archives. See "Sandbox archive bucket" below
@@ -283,6 +284,18 @@ Key inputs include:
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
 - `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
+- `manage_core_addons` (default false). See below
+
+#### Core addons on new clusters
+
+Set `manage_core_addons = true` when you create a new cluster. The upstream EKS module v21 creates a cluster
+without vpc-cni, kube-proxy, and CoreDNS, so without this the nodes never become Ready
+("cni plugin not initialized"). With `true`, the module installs the three as EKS addons, and installs
+vpc-cni before the node groups. `vpc_cni_addon_version` pins the vpc-cni version.
+
+Keep `false` on a cluster that already runs these components (for example a cluster made with module v20).
+On such a cluster, `true` adopts the running components as EKS addons and can change their settings.
+`enable_network_policy` alone still adopts only vpc-cni, as before.
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version

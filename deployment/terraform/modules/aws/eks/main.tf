@@ -14,6 +14,40 @@ moved {
 }
 
 locals {
+  vpc_cni_addon = merge(
+    {
+      # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
+      addon_version = var.vpc_cni_addon_version
+      most_recent   = false
+      # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
+      # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "PRESERVE"
+    },
+    var.enable_network_policy ? {
+      configuration_values = jsonencode({
+        enableNetworkPolicy = "true"
+      })
+    } : {},
+  )
+
+  # Upstream v21 creates a cluster without the default vpc-cni, kube-proxy and
+  # CoreDNS. manage_core_addons installs them as EKS addons; the CNI goes in
+  # before the node groups, or the nodes never become Ready.
+  # enable_network_policy alone keeps adopting only the CNI, as before, so
+  # existing clusters plan no change. The cloud cluster has legacy
+  # NetworkPolicies of unknown effect, so enforcement stays opt-in.
+  cluster_addons = merge(
+    var.enable_network_policy && !var.manage_core_addons ? {
+      vpc-cni = local.vpc_cni_addon
+    } : {},
+    var.manage_core_addons ? {
+      vpc-cni    = merge(local.vpc_cni_addon, { before_compute = true })
+      kube-proxy = { resolve_conflicts_on_create = "OVERWRITE" }
+      coredns    = { resolve_conflicts_on_create = "OVERWRITE" }
+    } : {},
+  )
+
   # Upstream v21 changed these node group defaults. Pin the v20 values so the
   # upgrade does not roll nodes, change AMIs or resize groups. A node group can
   # still override any of them.
@@ -309,23 +343,7 @@ module "eks" {
   enabled_log_types                      = var.cluster_enabled_log_types
   cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
 
-  # Opt-in per cluster: adopts the VPC CNI addon and turns on NetworkPolicy
-  # enforcement. Off by default so existing clusters' NetworkPolicies stay
-  # inert (the cloud cluster has legacy policies of unknown effect).
-  addons = var.enable_network_policy ? {
-    vpc-cni = {
-      # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
-      addon_version = var.vpc_cni_addon_version
-      most_recent   = false
-      # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
-      # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
-      resolve_conflicts_on_create = "OVERWRITE"
-      resolve_conflicts_on_update = "PRESERVE"
-      configuration_values = jsonencode({
-        enableNetworkPolicy = "true"
-      })
-    }
-  } : {}
+  addons = local.cluster_addons
 
   eks_managed_node_groups = {
     for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups, local.craft_pod_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
