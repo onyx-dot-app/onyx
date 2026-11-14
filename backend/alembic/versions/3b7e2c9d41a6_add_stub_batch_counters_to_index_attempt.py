@@ -1,11 +1,10 @@
 """add stub batch counters to index_attempt
 
 Counters for the conversion stage: stub batches stored by the lister, sent
-to conversion, and converted into document batches. It also merges the two
-heads on main (fdaeeca238a1 and c7bf5721733e).
+to conversion, and converted into document batches.
 
 Revision ID: 3b7e2c9d41a6
-Revises: fdaeeca238a1, c7bf5721733e
+Revises: 414dfccc5e24
 Create Date: 2026-11-10 16:00:00.000000
 
 """
@@ -16,7 +15,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "3b7e2c9d41a6"
-down_revision = ("fdaeeca238a1", "c7bf5721733e")
+down_revision = "414dfccc5e24"
 branch_labels = None
 depends_on = None
 
