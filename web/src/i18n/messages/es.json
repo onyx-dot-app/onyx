@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Gestor de issues de Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Gestión de servicios de TI y mesa de ayuda"
+        },
         "productboard": {
           "description": "Gestión de producto"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "Lista negra de correos de comentarios",
               "description": "Suele ser útil para ignorar ciertos bots. Añade los correos de los usuarios cuyos comentarios NO deben indexarse."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurar conector de Jira Service Management",
+          "fields": {
+            "jsm_base_url": {
+              "label": "URL del sitio",
+              "placeholder": "https://tu-dominio.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "ID de Service Desk",
+              "description": "ID opcional de un portal de servicio específico para indexar (p. ej., '1'). Déjalo vacío para indexar todos."
+            },
+            "request_type_id": {
+              "label": "ID de tipo de solicitud",
+              "description": "ID opcional de un tipo de solicitud específico para indexar (requiere ID de Service Desk)."
+            },
+            "batch_size": {
+              "label": "Tamaño de lote",
+              "description": "Número de solicitudes de clientes generadas por lote de indexación (predeterminado: 100)."
             }
           }
         },

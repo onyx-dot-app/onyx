@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Gestion des services informatiques et centre d'assistance"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
               "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "fields": {
+            "jsm_base_url": {
+              "label": "URL du site",
+              "placeholder": "https://votre-domaine.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "ID du bureau de service",
+              "description": "ID facultatif d'un bureau de service spécifique à indexer (par ex. '1'). Laissez vide pour tout indexer."
+            },
+            "request_type_id": {
+              "label": "ID du type de demande",
+              "description": "ID facultatif d'un type de demande spécifique à indexer (nécessite l'ID du bureau de service)."
+            },
+            "batch_size": {
+              "label": "Taille du lot",
+              "description": "Nombre de demandes clients produites par lot d'indexation (par défaut : 100)."
             }
           }
         },

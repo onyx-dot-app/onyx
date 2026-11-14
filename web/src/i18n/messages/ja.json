@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "ITサービス管理・ヘルプデスク"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",
               "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "fields": {
+            "jsm_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "サービスデスク ID",
+              "description": "インデックス対象の特定のサービスデスク ID（例: '1'）。空欄の場合はすべてのサービスデスクをインデックスします。"
+            },
+            "request_type_id": {
+              "label": "リクエストタイプ ID",
+              "description": "インデックス対象の特定のリクエストタイプ ID（サービスデスク ID が必要です）。"
+            },
+            "batch_size": {
+              "label": "バッチサイズ",
+              "description": "インデックス作成バッチあたりに出力されるカスタマーリクエスト数（デフォルト: 100）。"
             }
           }
         },

@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian-Issue-Tracker"
         },
+        "jiraServiceManagement": {
+          "description": "IT-Service-Management & Helpdesk"
+        },
         "productboard": {
           "description": "Produktmanagement"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management-Konnektor konfigurieren",
+          "fields": {
+            "jsm_base_url": {
+              "label": "Website-URL",
+              "placeholder": "https://ihre-domain.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "Service Desk-ID",
+              "description": "Optionale ID eines bestimmten Service Desks zum Indexieren (z. B. '1'). Leer lassen, um alle zu indexieren."
+            },
+            "request_type_id": {
+              "label": "Anfragetyp-ID",
+              "description": "Optionale ID eines bestimmten Anfragetyps zum Indexieren (erfordert Service Desk-ID)."
+            },
+            "batch_size": {
+              "label": "Batch-Größe",
+              "description": "Anzahl der Kundenanfragen, die pro Indexierungs-Batch ausgegeben werden (Standard: 100)."
             }
           }
         },

@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 问题跟踪"
         },
+        "jiraServiceManagement": {
+          "description": "IT 服务管理与服务台"
+        },
         "productboard": {
           "description": "产品管理"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "评论邮箱黑名单",
               "description": "通常用于忽略某些机器人。添加不应索引其评论的用户邮箱。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "fields": {
+            "jsm_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "服务台 ID",
+              "description": "要索引的特定服务台的可选 ID（例如 '1'）。留空以索引所有服务台。"
+            },
+            "request_type_id": {
+              "label": "请求类型 ID",
+              "description": "要索引的特定请求类型的可选 ID（需要服务台 ID）。"
+            },
+            "batch_size": {
+              "label": "批量大小",
+              "description": "每个索引批次生成的客户请求数量（默认：100）。"
             }
           }
         },

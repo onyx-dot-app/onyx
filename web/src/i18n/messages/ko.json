@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "IT 서비스 관리 및 헬프 데스크"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -4249,6 +4252,27 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "fields": {
+            "jsm_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "service_desk_id": {
+              "label": "서비스 데스크 ID",
+              "description": "인덱싱할 특정 서비스 데스크의 선택적 ID(예: '1'). 모든 서비스 데스크를 인덱싱하려면 비워 두세요."
+            },
+            "request_type_id": {
+              "label": "요청 유형 ID",
+              "description": "인덱싱할 특정 요청 유형의 선택적 ID(서비스 데스크 ID 필요)."
+            },
+            "batch_size": {
+              "label": "배치 크기",
+              "description": "인덱싱 배치당 생성되는 고객 요청 수입니다(기본값: 100)."
             }
           }
         },

@@ -85,6 +85,13 @@ export interface JiraConfig {
   jql_query?: string;
 }
 
+export interface JiraServiceManagementConfig {
+  jsm_base_url: string;
+  service_desk_id?: string;
+  request_type_id?: string;
+  batch_size?: number;
+}
+
 export interface SalesforceConfig {
   requested_objects?: string[];
 }
