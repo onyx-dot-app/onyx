@@ -893,17 +893,40 @@ def persist_stub_hierarchy_nodes_for_cc_pair(
 ) -> list[HierarchyNode]:
     """The nodes for these raw ids, with a STUB for each one that is not
     stored yet. A document whose parent arrives later points at the STUB, and
-    the STUB becomes the real node when the parent is upserted. Commits the
-    stubs and their cc_pair links together, as
-    ``persist_hierarchy_nodes_for_cc_pair`` does."""
-    nodes: list[HierarchyNode] = []
-    for raw_node_id in sorted(set(raw_node_ids)):
-        node = get_hierarchy_node_by_raw_id(db_session, raw_node_id, source)
-        if node is None:
-            node = _create_stub_hierarchy_node(
-                db_session, raw_node_id, source, source_node_id
+    the STUB becomes the real node when the parent is upserted. One insert
+    for the missing STUBs, one read, and one insert for the cc_pair links,
+    committed together."""
+    raw_ids = sorted(set(raw_node_ids))
+    if not raw_ids:
+        return []
+    # Sorted, so concurrent workers insert in the same order. A node that
+    # another worker inserted first is kept as it is.
+    db_session.execute(
+        pg_insert(HierarchyNode)
+        .values(
+            [
+                {
+                    "raw_node_id": raw_id,
+                    "display_name": "__stub__",
+                    "link": None,
+                    "source": source,
+                    "node_type": HierarchyNodeType.STUB,
+                    "parent_id": source_node_id,
+                    "is_public": False,
+                }
+                for raw_id in raw_ids
+            ]
+        )
+        .on_conflict_do_nothing(index_elements=["raw_node_id", "source"])
+    )
+    nodes = list(
+        db_session.execute(
+            select(HierarchyNode).where(
+                HierarchyNode.source == source,
+                HierarchyNode.raw_node_id.in_(raw_ids),
             )
-        nodes.append(node)
+        ).scalars()
+    )
     upsert_hierarchy_node_cc_pair_entries(
         db_session=db_session,
         hierarchy_node_ids=[node.id for node in nodes],
@@ -913,6 +936,40 @@ def persist_stub_hierarchy_nodes_for_cc_pair(
     )
     db_session.commit()
     return nodes
+
+
+def link_cached_stub_nodes_for_cc_pair(
+    db_session: Session,
+    node_ids: list[int],
+    connector_id: int,
+    credential_id: int,
+) -> set[int]:
+    """Links the cc_pair to each STUB among ``node_ids``, which came from the
+    hierarchy cache. Without the link, another pair's STUB cleanup would
+    remove a STUB that this pair's documents use. The key-share lock makes a
+    concurrent cleanup wait for this commit, or this read wait for its
+    delete. Returns the ids that no longer exist."""
+    if not node_ids:
+        return set()
+    rows = db_session.execute(
+        select(HierarchyNode.id, HierarchyNode.node_type)
+        .where(HierarchyNode.id.in_(node_ids))
+        .order_by(HierarchyNode.id)
+        .with_for_update(key_share=True)
+    ).all()
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[
+            node_id
+            for node_id, node_type in rows
+            if node_type == HierarchyNodeType.STUB
+        ],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    db_session.commit()
+    return set(node_ids) - {node_id for node_id, _ in rows}
 
 
 _STUB_CLEANUP_BATCH_SIZE = 1000
@@ -930,33 +987,55 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
 
     The documents and nodes under each STUB move to the source root, so they
     stay in the tree. A STUB that another cc_pair also links to stays: that
-    pair's attempt can still fill it. Commits in batches. Returns the raw ids
-    of the removed STUBs, for the hierarchy cache."""
+    pair's attempt can still fill it. Each batch locks its STUBs and checks
+    them again before it moves anything, so a STUB that a concurrent attempt
+    fills or links keeps its children. Commits in batches. Returns the raw
+    ids of the removed STUBs, for the hierarchy cache."""
     source_node = get_source_hierarchy_node(db_session, source)
     if source_node is None:
         return []
     link = HierarchyNodeByConnectorCredentialPair
     other_link = aliased(HierarchyNodeByConnectorCredentialPair)
-    stubs = db_session.execute(
-        select(HierarchyNode.id, HierarchyNode.raw_node_id)
-        .join(link, link.hierarchy_node_id == HierarchyNode.id)
-        .where(
-            link.connector_id == connector_id,
-            link.credential_id == credential_id,
-            HierarchyNode.source == source,
-            HierarchyNode.node_type == HierarchyNodeType.STUB,
-            ~exists().where(
-                other_link.hierarchy_node_id == HierarchyNode.id,
-                or_(
-                    other_link.connector_id != connector_id,
-                    other_link.credential_id != credential_id,
-                ),
-            ),
+    only_this_pair = ~exists().where(
+        other_link.hierarchy_node_id == HierarchyNode.id,
+        or_(
+            other_link.connector_id != connector_id,
+            other_link.credential_id != credential_id,
+        ),
+    )
+    candidate_ids = (
+        db_session.execute(
+            select(HierarchyNode.id)
+            .join(link, link.hierarchy_node_id == HierarchyNode.id)
+            .where(
+                link.connector_id == connector_id,
+                link.credential_id == credential_id,
+                HierarchyNode.source == source,
+                HierarchyNode.node_type == HierarchyNodeType.STUB,
+                only_this_pair,
+            )
+            .order_by(HierarchyNode.id)
         )
-    ).all()
+        .scalars()
+        .all()
+    )
     removed: list[str] = []
-    for batch in batch_generator(stubs, _STUB_CLEANUP_BATCH_SIZE):
-        stub_ids = [row[0] for row in batch]
+    for batch in batch_generator(candidate_ids, _STUB_CLEANUP_BATCH_SIZE):
+        stub_ids = list(
+            db_session.execute(
+                select(HierarchyNode.id)
+                .where(
+                    HierarchyNode.id.in_(batch),
+                    HierarchyNode.node_type == HierarchyNodeType.STUB,
+                    only_this_pair,
+                )
+                .order_by(HierarchyNode.id)
+                .with_for_update(of=HierarchyNode)
+            ).scalars()
+        )
+        if not stub_ids:
+            db_session.commit()
+            continue
         db_session.execute(
             update(Document)
             .where(Document.parent_hierarchy_node_id.in_(stub_ids))
@@ -967,13 +1046,10 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
             .where(HierarchyNode.parent_id.in_(stub_ids))
             .values(parent_id=source_node.id)
         )
-        # Only a node that is still a STUB. The cc_pair links go with it.
+        # The cc_pair links go with the nodes.
         deleted = db_session.execute(
             delete(HierarchyNode)
-            .where(
-                HierarchyNode.id.in_(stub_ids),
-                HierarchyNode.node_type == HierarchyNodeType.STUB,
-            )
+            .where(HierarchyNode.id.in_(stub_ids))
             .returning(HierarchyNode.raw_node_id)
         ).scalars()
         removed.extend(deleted)

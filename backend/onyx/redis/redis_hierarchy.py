@@ -27,6 +27,7 @@ from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import ensure_source_node_exists as db_ensure_source_node_exists
 from onyx.db.hierarchy import (
     get_all_hierarchy_nodes_for_source,
+    link_cached_stub_nodes_for_cc_pair,
     persist_stub_hierarchy_nodes_for_cc_pair,
 )
 from onyx.redis.tenant_redis_client import TenantRedisClient
@@ -551,7 +552,8 @@ def resolve_parent_node_ids(
     """Maps each raw parent id to its node id. A parent that is in neither
     the cache nor the database gets a STUB node, so the document does not
     fall back to the source root. The STUB is filled in when the parent
-    node arrives."""
+    node arrives. A STUB found in the cache gets this cc_pair's link too, so
+    another pair's cleanup keeps it."""
     resolved: dict[str, int] = {}
     missing: list[str] = []
     for raw_id in set(raw_parent_ids):
@@ -560,6 +562,18 @@ def resolve_parent_node_ids(
             resolved[raw_id] = node_id
         else:
             missing.append(raw_id)
+    gone = link_cached_stub_nodes_for_cc_pair(
+        db_session=db_session,
+        node_ids=list(set(resolved.values())),
+        connector_id=connector_id,
+        credential_id=credential_id,
+    )
+    if gone:
+        # A cleanup removed these nodes after they were cached.
+        for raw_id, node_id in list(resolved.items()):
+            if node_id in gone:
+                del resolved[raw_id]
+                missing.append(raw_id)
     if not missing:
         return resolved
     nodes = persist_stub_hierarchy_nodes_for_cc_pair(
