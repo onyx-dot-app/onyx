@@ -2153,14 +2153,26 @@ craft:
     terminationGracePeriodSeconds: 30
     # Drain: the agent reads its own Node and refuses new VMs while the Node
     # has one of these taint keys (kubectl cordon and kubectl drain set
-    # node.kubernetes.io/unschedulable). The api_server then saves and
-    # stops the VMs on the node. The chart gives the agent a ServiceAccount
-    # with "get" on nodes. false: no RBAC; only the manual drain (SetDrain).
+    # node.kubernetes.io/unschedulable; the cluster autoscaler sets
+    # ToBeDeletedByClusterAutoscaler and does not cordon). The api_server
+    # then saves and stops the VMs on the node. The chart gives the agent a
+    # ServiceAccount with "get" on nodes. false: no RBAC; only the manual
+    # drain (SetDrain).
     drainWatch:
       enabled: true
       # Comma-separated taint keys.
-      taints: "node.kubernetes.io/unschedulable"
+      taints: "node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler"
       pollInterval: 10s
+    # Scale-down guard: VMs are not pods, so the cluster autoscaler (GKE,
+    # AKS, EKS cluster-autoscaler) sees a node with VMs as empty. While the
+    # node runs VMs, the agent sets the Node annotation
+    # cluster-autoscaler.kubernetes.io/scale-down-disabled=true. It removes
+    # the annotation when the node has had no VMs for grace. The agent never
+    # removes an annotation that it did not set. The chart gives the agent
+    # "get" and "patch" on nodes. false: no patch RBAC.
+    scaleDownGuard:
+      enabled: true
+      grace: 10m
     # Root drive of the VMs. An init container copies the drive into
     # <dataDir>/rootfs and the agent builds its node template from it at
     # start (--rootfs-dir).

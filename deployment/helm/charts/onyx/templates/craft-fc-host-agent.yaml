@@ -30,8 +30,12 @@ Agent flags and node requirements: microvm/README.md.
   the agent listener (NetworkPolicy below). Agent
   pods may reach the sandbox-proxy port (sandbox-proxy/networkpolicy.yaml).
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
-  ServiceAccount that may only "get" nodes, and refuses new VMs while the
+  ServiceAccount that may "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
+- Scale-down guard (craft.hostAgent.scaleDownGuard): while the node runs
+  VMs, the agent sets cluster-autoscaler.kubernetes.io/scale-down-disabled
+  on its own Node ("patch" on nodes), so the cluster autoscaler does not
+  remove the node.
 - Root drive (craft.hostAgent.rootfs): an init container copies the drive
   of onyxdotapp/craft-fc-artifacts:rootfs-<version> into <dataDir>/rootfs
   (skipped when it is current), and the agent builds its template from it
@@ -97,6 +101,8 @@ cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
 {{- end }}
 {{- $drain := $agent.drainWatch | default dict }}
 {{- $watchDrain := ne (toString $drain.enabled) "false" }}
+{{- $guard := $agent.scaleDownGuard | default dict }}
+{{- $guardScale := ne (toString $guard.enabled) "false" }}
 {{- $rootfs := $agent.rootfs | default dict }}
 {{- $rootfsImage := $rootfs.image | default dict }}
 {{- $rootfsTag := $rootfsImage.tag }}
@@ -112,7 +118,7 @@ cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
 {{- $caNs := $egressCA.namespace | default $sandboxNs }}
 {{- $caConfigMap := $egressCA.configMapName | default (.Values.configMap.SANDBOX_PROXY_CA_CONFIGMAP | default "sandbox-proxy-ca-bundle") }}
 {{- $caKey := $egressCA.key | default "ca.crt" }}
-{{- $serviceAccount := or $watchDrain $readCA }}
+{{- $serviceAccount := or $watchDrain $readCA $guardScale }}
 {{- $tolerations := include "onyx.craftKvmNodeTolerations" (dict "ctx" . "tolerations" $agent.tolerations) | fromYamlArray }}
 {{- $metrics := $agent.metrics | default dict }}
 {{- $metricsPort := $metrics.port | default 9464 }}
@@ -260,7 +266,7 @@ subjects:
     namespace: {{ $ns }}
 ---
 {{- end }}
-{{- if $watchDrain }}
+{{- if or $watchDrain $guardScale }}
 {{- /* Cluster-scoped: RBAC cannot limit "get" to the pod's own Node. Node objects hold no secrets. */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -285,6 +291,39 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: {{ $ns }}-{{ $name }}-node-read
+subjects:
+  - kind: ServiceAccount
+    name: {{ $name }}
+    namespace: {{ $ns }}
+---
+{{- end }}
+{{- if $guardScale }}
+{{- /* Cluster-scoped like node-read: RBAC cannot limit "patch" to the pod's
+own Node. The agent patches only its own Node (NODE_NAME), and only its
+scale-down annotations. */}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+rules:
+  - apiGroups: [""]
+    resources: [nodes]
+    verbs: [patch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ $ns }}-{{ $name }}-node-annotate
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ $ns }}-{{ $name }}-node-annotate
 subjects:
   - kind: ServiceAccount
     name: {{ $name }}
@@ -344,7 +383,8 @@ spec:
       hostPID: true
       {{- if $serviceAccount }}
       serviceAccountName: {{ $name }}
-      # The agent reads its own Node (drain taints) and the egress CA ConfigMap.
+      # The agent reads its own Node (drain taints), annotates it (scale-down
+      # guard) and reads the egress CA ConfigMap.
       automountServiceAccountToken: true
       {{- else }}
       automountServiceAccountToken: false
@@ -405,8 +445,12 @@ spec:
             - --api-server-url={{ $agent.apiServerUrl | default (include "onyx.sandboxApiUrl" .) }}
             {{- if $watchDrain }}
             - --watch-node-drain
-            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
+            - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler" }}
             - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
+            {{- end }}
+            {{- if $guardScale }}
+            - --scale-down-guard
+            - --scale-down-guard-grace={{ $guard.grace | default "10m" }}
             {{- end }}
             - --rootfs-dir={{ $rootfsDir }}
             {{- if $bundledStore }}
