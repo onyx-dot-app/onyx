@@ -2036,16 +2036,17 @@ craft:
     # /dev/kvm otherwise.
     kvmDeviceResource: ""
     # Node directory on the filesystem that will hold sandbox data. The
-    # filesystem type, XFS reflink and free disk checks run here.
-    scratchHostPath: /var/lib/onyx-craft-fc-preflight
+    # reflink and free disk checks run here. Empty = craft.hostAgent.dataDir.
+    scratchHostPath: ""
     # Free disk below this is a WARN.
     minFreeDiskGi: 50
   # How Craft sandboxes run: "pod" (default) or "firecracker". Mirrors the
   # Terraform craft_sandbox_runtime of the sandbox node pool. "firecracker"
   # sets SANDBOX_RUNTIME=firecracker for the backend and sandbox-proxy, deploys
   # the host agent below, and lets the agent pods reach sandbox-proxy. Needs
-  # ENABLE_CRAFT and auth.sandboxNodeRegistration. Not usable yet: the backend
-  # Firecracker sandbox manager is not released.
+  # ENABLE_CRAFT, auth.sandboxNodeRegistration and a pinned global.version
+  # (an Onyx release tag such as v5.2.0, not "latest"): the agent image and
+  # the root drive follow it.
   sandboxRuntime: pod
   # Craft Firecracker host agent: a privileged DaemonSet with hostPID on the
   # Firecracker sandbox nodes. Rendered only with sandboxRuntime=firecracker.
@@ -2058,7 +2059,7 @@ craft:
     createNamespace: true
     image:
       repository: onyxdotapp/craft-fc-host-agent
-      # Required. No default until the image is published.
+      # Empty = the Onyx release tag (global.version without "-dev").
       tag: ""
       pullPolicy: IfNotPresent
     # Pull secrets for a private agent image, for example [{name: regcred}].
@@ -2072,8 +2073,17 @@ craft:
     # always adds the onyx.app/kvm=true:NoSchedule toleration (the taint that
     # Terraform puts on Firecracker nodes).
     tolerations: []
-    # Same path on the node and in the container. Must be on XFS with reflink.
+    # Same path on the node and in the container. On a filesystem without
+    # reflink (for example ext4), the agent makes a sparse XFS loop store
+    # (<dataDir>/.craft-fc-store.img) and mounts it at dataDir; the node
+    # kernel needs the loop driver and XFS. An XFS disk with reflink at
+    # dataDir is faster.
     dataDir: /var/lib/craft-fc
+    loopStore:
+      # Size of a new loop store image (CRAFT_FC_LOOP_STORE_GIB). Empty = the
+      # agent default: the free space less 1/5 of the disk, 20 GiB to 4 TiB.
+      # An existing image keeps its size.
+      sizeGiB: ""
     # Jailer UID/GID range, one per VM. Keep it clear of node users.
     uidBase: 1000000
     uidCount: 65536
@@ -2093,26 +2103,36 @@ craft:
     # metal, raise it or set 0 (no cap).
     maxVms: 60
     # Comma-separated DNS or URI SANs; the client certificate must have one.
-    # Empty = any certificate that tls ca.crt signed.
+    # Empty = any certificate that the client CA (tls ca.crt) signed.
     clientAllowedSans: ""
     # host:port the agent clients dial, sent with the node key registration.
     # Empty = the pod IP and listenPort.
     advertiseAddress: ""
     # Empty = the in-cluster api_server URL (the sandbox callback URL).
     apiServerUrl: ""
+    # mTLS between the agents and their clients. With both existingSecret
+    # values empty, the chart makes a CA, the agent certificate and the client
+    # certificate (10 years), and keeps them on upgrade with Helm lookup. It
+    # makes a new set when the agent DNS names change, a Secret is gone, or
+    # the set is in its last 30 days, and then restarts the api_server and the
+    # heavy and scheduled-tasks workers. Renders without cluster access (helm
+    # template, Argo CD) make a new set each time: use existingSecret there.
+    # Set both, or neither.
     tls:
-      # Required. A Secret in the agent namespace with tls.crt and tls.key (the
-      # agent certificate) and ca.crt (the CA of the api_server client
-      # certificates). The chart does not make certificates.
+      # A Secret in the agent namespace with tls.crt and tls.key (the agent
+      # certificate) and ca.crt (the CA of the client certificates).
       existingSecret: ""
     # The agent clients: api_server, and the heavy and scheduled-tasks workers.
     client:
-      # Required. A Secret in the release namespace with tls.crt and tls.key
-      # (the client certificate, signed by the CA in tls ca.crt) and ca.crt
-      # (the CA of the agent certificates).
+      # A Secret in the release namespace with tls.crt and tls.key (the client
+      # certificate, signed by the CA in tls ca.crt) and ca.crt (the CA of the
+      # agent certificates).
       existingSecret: ""
       # Name to verify in the agent certificate. The clients dial pod IPs, so
-      # set this unless the agent certificates carry the pod IPs.
+      # set this unless the agent certificates carry the pod IPs. Empty with
+      # chart-made certificates = the agent Service name
+      # (<release>-craft-fc-host-agent.<namespace>.svc); a value here is added
+      # to the chart-made certificate.
       tlsServerName: ""
     # Secret in the agent namespace with the registration key: the key name
     # in auth.sandboxNodeRegistration.secretKeys.SANDBOX_NODE_REGISTRATION_SECRET
@@ -2139,14 +2159,19 @@ craft:
       # Comma-separated taint keys.
       taints: "node.kubernetes.io/unschedulable"
       pollInterval: 10s
-    # Root drive of the VMs. With a tag, an init container copies
-    # the drive into <dataDir>/rootfs and the agent builds its node template
-    # from it at start (--rootfs-dir). Empty tag = no template, and Create
-    # fails with TEMPLATE_MISSING. Publish a tag with
-    # .github/workflows/craft-fc-rootfs.yml, for example rootfs-0.1.0. Pin it.
+    # Root drive of the VMs. An init container copies the drive into
+    # <dataDir>/rootfs and the agent builds its node template from it at
+    # start (--rootfs-dir).
     rootfs:
+      # Tag of the craft-runtime image that the drive was built from. The
+      # chart pulls the drive rootfs-<version> and sets
+      # configMap.SANDBOX_FC_TEMPLATE to <version>. Empty = the Onyx release
+      # tag (global.version without "-dev").
+      version: ""
       image:
         repository: onyxdotapp/craft-fc-artifacts
+        # Empty = rootfs-<version>. If you set it, also set
+        # configMap.SANDBOX_FC_TEMPLATE to the source image tag of that drive.
         tag: ""
         pullPolicy: IfNotPresent
       # The init container copies about 4 GiB once per drive version.

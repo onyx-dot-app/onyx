@@ -196,13 +196,12 @@ pod unready, so `helm upgrade --wait` does not stop.
 | `cgroup` | cgroup v2 | Use a node image with the unified cgroup hierarchy |
 | `kernel` | 5.10, 6.1 or 6.18 (WARN only) | Use AL2023 with kernel 6.18 |
 | `max-map-count` | `vm.max_map_count` >= 1048576 | Set the sysctl on the node pool |
-| `filesystem` | `scratchHostPath` is writable, and is XFS with reflink (WARN if not) | Free space or fix permissions; without reflink, the host agent makes a sparse XFS loop store in its data dir |
+| `filesystem` | `scratchHostPath` is writable and has reflink (WARN without reflink) | Free space or fix permissions. Without reflink (for example ext4), the host agent makes a sparse XFS loop store, which needs the loop driver and XFS in the node kernel. An XFS disk with reflink is faster |
 | `free-disk` | At least `minFreeDiskGi` free (WARN only) | Use a larger root disk |
 
 The filesystem and disk checks run in `scratchHostPath`
-(default `/var/lib/onyx-craft-fc-preflight`). The chart creates this directory
-on the node. Set it to a directory on the filesystem that will hold sandbox
-data.
+(default: `craft.hostAgent.dataDir`, `/var/lib/craft-fc`). The chart creates
+this directory on the node.
 
 The pod is privileged by default. A non-privileged container cannot open
 `/dev/kvm`, because the container device cgroup blocks it. If the cluster runs
@@ -220,11 +219,11 @@ to use a different image. The image must have a POSIX shell, awk, grep and GNU c
 `stat -f`, `mktemp`).
 Remove the DaemonSet after the check: set `enabled: false` and upgrade.
 
-### Craft Firecracker runtime (not usable yet)
+### Craft Firecracker runtime
 
 `craft.sandboxRuntime` selects how Craft sandboxes run: `pod` (default) or
 `firecracker`. It mirrors the Terraform `craft_sandbox_runtime` of the sandbox
-node pool. Keep `pod`: the backend Firecracker sandbox manager is not released.
+node pool.
 
 With `firecracker`, the chart:
 
@@ -242,35 +241,81 @@ With `firecracker`, the chart:
 - lets only the agent clients (api_server, heavy and scheduled-tasks workers)
   reach the agent port, and lets the agent pods reach the sandbox-proxy port;
 - gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
-  node key (`craft.hostAgent.advertiseAddress` overrides it).
+  node key (`craft.hostAgent.advertiseAddress` overrides it);
+- lets the agent move session saves over plain HTTP (`--transfer-allow-http`)
+  only when the file store is the bundled in-cluster object store
+  (`objectStore` or `minio` enabled, `FILE_STORE_BACKEND` `s3`). That traffic
+  stays inside the cluster. With an external store, the agent accepts only
+  HTTPS presigned URLs.
 
-The agent needs a TLS Secret in the agent namespace. It holds the agent
-certificate (`tls.crt`, `tls.key`) and the CA of the api_server client
-certificates (`ca.crt`). The chart does not make certificates. Until the Secret
-exists, the agent pods stay in `ContainerCreating`.
+#### Versions
 
-The agent clients need a second Secret, in the release namespace
-(`craft.hostAgent.client.existingSecret`). It holds the client certificate
-(`tls.crt`, `tls.key`, signed by the CA in the agent `ca.crt`) and the CA of the
-agent certificates (`ca.crt`). The chart mounts it in the api_server, heavy and
-scheduled-tasks pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
+The agent image and the root drive follow the Onyx release tag:
+`global.version`, without a `-dev` suffix. Set `global.version` to a release
+tag, for example `v5.2.0`. The chart refuses `latest`, `edge` and `beta`,
+because no root drive is published for a floating tag.
+
+| Value | Default |
+|---|---|
+| `craft.hostAgent.image.tag` | the release tag |
+| `craft.hostAgent.rootfs.version` | the release tag |
+| `craft.hostAgent.rootfs.image.tag` | `rootfs-<rootfs.version>` |
+| `configMap.SANDBOX_FC_TEMPLATE` | `<rootfs.version>` |
+
+`rootfs.version` is the tag of the `craft-runtime` image that the root drive
+was built from. Harness sessions use the node template of that tag
+(`SANDBOX_FC_TEMPLATE`). Change `rootfs.version` to move the drive and the
+template together. If you set `rootfs.image.tag`, also set
+`configMap.SANDBOX_FC_TEMPLATE` to the source image tag of that drive.
+
+#### mTLS certificates
+
+The agents and their clients use mutual TLS. By default the chart makes one
+CA, an agent certificate and a client certificate (valid 10 years):
+
+- `<release>-craft-fc-host-agent-tls` in the agent namespace: the agent
+  certificate (`tls.crt`, `tls.key`) and the CA (`ca.crt`).
+- `<release>-craft-fc-host-agent-client-tls` in the release namespace: the
+  client certificate and the CA.
+
+The agent certificate has the DNS names
+`<release>-craft-fc-host-agent.<agent namespace>.svc` (and `.svc.cluster.local`),
+and the clients verify the first one
+(`SANDBOX_FC_AGENT_TLS_SERVER_NAME`). If you set
+`craft.hostAgent.client.tlsServerName`, the chart adds it to the certificate.
+
+On `helm upgrade`, the chart reads the two Secrets (Helm `lookup`) and keeps
+the certificates. It makes a new set when a Secret is gone, the two CAs differ,
+the DNS names change, or the set is in its last 30 days. To rotate, delete both
+Secrets and run `helm upgrade`. The agent loads new files without a restart.
+The api_server and the heavy and scheduled-tasks workers load the client
+certificate once, so a new set also restarts them (pod annotation
+`onyx.app/craft-fc-cert-revision`). `helm template` and Argo CD render without
+cluster access, so `lookup` finds nothing and each render makes a new set. Use
+your own Secrets there.
+
+To use your own PKI (for example cert-manager), set both Secrets:
+
+- `craft.hostAgent.tls.existingSecret`, in the agent namespace: the agent
+  certificate (`tls.crt`, `tls.key`) and the CA of the client certificates
+  (`ca.crt`). Until the Secret exists, the agent pods stay in
+  `ContainerCreating`.
+- `craft.hostAgent.client.existingSecret`, in the release namespace: the
+  client certificate (`tls.crt`, `tls.key`) and the CA of the agent
+  certificates (`ca.crt`).
+
+The chart mounts the client Secret in the api_server, heavy and scheduled-tasks
+pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
 `SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
-dial agent pod IPs. If the agent certificates do not carry the pod IPs, set
-`craft.hostAgent.client.tlsServerName` (`SANDBOX_FC_AGENT_TLS_SERVER_NAME`) to
-a DNS name in the agent certificate. To accept only some client certificates,
-set `craft.hostAgent.clientAllowedSans`.
+dial agent pod IPs. If your agent certificates do not carry the pod IPs, set
+`craft.hostAgent.client.tlsServerName` to a DNS name in the agent certificate.
+To accept only some client certificates, set `craft.hostAgent.clientAllowedSans`.
 
 ```yaml
+global:
+  version: "v5.2.0"
 craft:
   sandboxRuntime: firecracker
-  hostAgent:
-    image:
-      tag: "<host agent version>"
-    tls:
-      existingSecret: craft-fc-host-agent-tls
-    client:
-      existingSecret: craft-fc-agent-client-tls
-      tlsServerName: craft-fc-host-agent
 auth:
   sandboxNodeRegistration:
     enabled: true
@@ -291,15 +336,16 @@ To manage the agent namespace yourself, set `craft.hostAgent.createNamespace:
 false` and give the namespace the label
 `pod-security.kubernetes.io/enforce: privileged`.
 The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
-needs reflink copies. On XFS with reflink (for example the AL2023 root on
-EKS, or an XFS data disk) the agent uses it directly. On other file systems
-(the ext4 roots of GKE COS and AKS Ubuntu) the agent makes a sparse XFS image
-`<dataDir>/.craft-fc-store.img` (the free disk space less 1/5 of the disk, at least 20 GiB)
-and mounts it at the data dir on a loop device. To set the image size, add
-`--loop-store-gib=<GiB>` to `craft.hostAgent.extraArgs`. To refuse a data dir
-without reflink, add `--loop-store=off`. The preflight above checks
-`craft.firecrackerPreflight.scratchHostPath`, not the data dir. Set
-`scratchHostPath` to the same path as `dataDir` for the check.
+needs reflink. On XFS with reflink (for example the AL2023 root on EKS, or an
+XFS data disk, `mkfs.xfs -m reflink=1`) the agent uses it directly; this is
+the fastest. On other file systems (the ext4 roots of GKE COS and AKS Ubuntu)
+the agent makes a sparse XFS image `<dataDir>/.craft-fc-store.img` and mounts
+it at the data dir on a loop device. The node kernel needs the loop driver and
+XFS. A new image takes the free disk space less 1/5 of the disk (20 GiB to
+4 TiB); set `craft.hostAgent.loopStore.sizeGiB` to choose the size. An existing
+image keeps its size. To refuse a data dir without reflink, add
+`--loop-store=off` to `craft.hostAgent.extraArgs`. The preflight checks the
+data dir by default.
 
 To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
 (port `craft.hostAgent.metrics.port`, default 9464). With

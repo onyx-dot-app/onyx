@@ -12,6 +12,9 @@ data:
   {{- $firecracker := eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
   {{- if $firecracker }}
   SANDBOX_RUNTIME: "firecracker"
+  {{- if not (index .Values.configMap "SANDBOX_FC_TEMPLATE") }}
+  SANDBOX_FC_TEMPLATE: {{ include "onyx.craftFcRootfsVersion" . | quote }}
+  {{- end }}
   {{- end }}
   INTERNAL_URL: "http://{{ include "onyx.resourceName" (list . "api-service") }}:{{ .Values.api.service.servicePort | default 8080 }}"
   {{- if .Values.postgresql.enabled }}
