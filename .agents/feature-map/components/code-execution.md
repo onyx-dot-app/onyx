@@ -355,10 +355,12 @@ health calls are not retried.
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
     (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
     and does not start. A program that waits for input, as defined for the
-    lifetime above, does not count. Its work resumes only when the cell takes
-    a slot again: a call waits for a free one (`CodeCell._wait_for_slot`), and
-    the program keeps waiting in the sandbox, where it can still give up its
-    worker (`CodeCell._on_program_blocked`). A new program that finds no free worker for
+    lifetime above, does not count. Its code resumes only when the cell takes
+    a slot again: the program keeps waiting in the sandbox, where it can still
+    give up its worker (`CodeCell._on_program_blocked`). A call that the user
+    answers does not wait for a slot. It runs on the tool call thread that it
+    holds, and the lifetime runs while it does, so a full slot budget cannot
+    hold the threads that other cells' calls need. A new program that finds no free worker for
     `CHECKOUT_TIMEOUT_SECONDS` gets `BUSY_MESSAGE`; a resumed program waits for
     a worker up to its lifetime. A program that waits (an `await` on
     unfinished tool calls or sleeps, or a synchronous `time.sleep`) keeps its

@@ -311,7 +311,7 @@ class _RunningCells:
     """The process-wide budget of running cells (MAX_RUNNING_CELLS)."""
 
     def __init__(self, limit: int) -> None:
-        self._freed = threading.Condition()
+        self._lock = threading.Lock()
         self._limit = limit
         self._running = 0
         # Called once at the next release.
@@ -319,36 +319,23 @@ class _RunningCells:
 
     def acquire(self) -> bool:
         """Take a slot if one is free."""
-        with self._freed:
+        with self._lock:
             if self._running >= self._limit:
                 return False
             self._running += 1
             metrics.CELLS_RUNNING.set(self._running)
             return True
 
-    def wait_until_free(self, cancellation: CancellationSignal) -> None:
-        """Block until a slot is free or `cancellation` is cancelled."""
-
-        def wake() -> None:
-            with self._freed:
-                self._freed.notify_all()
-
-        with cancellation.on_cancel(wake), self._freed:
-            self._freed.wait_for(
-                lambda: self._running < self._limit or cancellation.cancelled
-            )
-
     def wake_when_free(self, wake: Callable[[], None]) -> None:
         """Call `wake` once, when a slot is next released."""
-        with self._freed:
+        with self._lock:
             self._wakes.add(wake)
 
     def release(self, tenant_id: str, held_seconds: float) -> None:
         """Free a slot that a cell of `tenant_id` held for `held_seconds`."""
-        with self._freed:
+        with self._lock:
             self._running -= 1
             metrics.CELLS_RUNNING.set(self._running)
-            self._freed.notify_all()
             wakes, self._wakes = self._wakes, set()
         for wake in wakes:
             wake()
@@ -607,9 +594,9 @@ class CodeCell:
         self._awaiting_input = 0
         # The program waits for tool calls only; see `execute_program`.
         self._program_blocked = False
-        # Stands still while the cell holds no running-cell slot, e.g. while
-        # the program waits for input, so waiting uses up neither the
-        # program's lifetime nor an observation's yield time.
+        # Stands still while the cell holds no running-cell slot and runs no
+        # call, e.g. while the program waits for input, so waiting uses up
+        # neither the program's lifetime nor an observation's yield time.
         self._clock = PausableClock()
         # When the cell took its running-cell slot; None while the program
         # waits for input, while it waits for a free slot after that, and once
@@ -1155,8 +1142,6 @@ class CodeCell:
             self._emit(CodeModeCallStarted(call=started))
             self._update_waiting()
         try:
-            # A call can start while the program waits for input.
-            self._wait_for_slot()
             return self._run_call(function, started, arguments, context, source)
         except AgentCancelled as error:
             # The program sees an error; the cell's end records the call as
@@ -1203,10 +1188,13 @@ class CodeCell:
         """Hold the running-cell slot unless the program waits for input: it
         waits for tool calls only, and each call that runs waits for input. So
         waiting programs do not use up the budget, while any other work of the
-        program, such as a call, a sleep or its code, still counts. Pause the
-        cell's clock while it holds no slot. Work that resumes takes a slot
-        only when one is free; see `_wait_for_slot` and `_on_program_blocked`.
-        The caller holds the lock."""
+        program, such as a call, a sleep or its code, still counts. The cell
+        takes a slot back only when one is free. Until then its program waits
+        in the sandbox (`_on_program_blocked`), while a call that resumes runs
+        on its tool call thread: that thread waits for no slot, so a full
+        budget cannot hold the threads that other cells' calls need. The
+        cell's clock runs while it holds a slot or a call of it runs without
+        waiting for input. The caller holds the lock."""
         running_calls = sum(record.thread_alive for record in self._calls.values())
         waits_for_input = (
             self._program_blocked and 0 < self._awaiting_input == running_calls
@@ -1218,7 +1206,9 @@ class CodeCell:
         elif not holds_slot and self._slot_since is not None:
             _running_cells.release(self._tenant_id, time.monotonic() - self._slot_since)
             self._slot_since = None
-        self._clock.set_paused(self._slot_since is None)
+        self._clock.set_paused(
+            self._slot_since is None and running_calls <= self._awaiting_input
+        )
         self._changed.notify_all()
 
     def _decided_result(
@@ -1242,22 +1232,9 @@ class CodeCell:
             with self._lock:
                 self._awaiting_input -= 1
                 self._update_waiting()
-        self._wait_for_slot()
         # A call whose program stopped while it waited does not run.
         self._stopping.check()
         return result
-
-    def _wait_for_slot(self) -> None:
-        """Block a call of the program that resumes until its cell holds a
-        running-cell slot again, or the program stops. The program itself
-        waits in the sandbox instead; see `_on_program_blocked`."""
-        while True:
-            with self._lock:
-                if self._slot_since is not None or self._stopping.cancelled:
-                    return
-            _running_cells.wait_until_free(self._stopping)
-            with self._lock:
-                self._update_waiting()
 
     def _run_call(
         self,

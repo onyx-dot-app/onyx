@@ -971,11 +971,20 @@ class Run:
     def _withdraw_approval(self, request: PendingToolInput) -> HumanToolAnswer | None:
         """End a request of the approval gate whose call stopped waiting without
         an answer; returns the answer of a decision saved first, or None. Call
-        without the execution lock: the gate saves how the request ended."""
+        without the execution lock: the gate saves how the request ended. A
+        gate that fails is logged, so the run and the call still end."""
         approvals = self.approvals
         if not request.approval or approvals is None:
             return None
-        return approvals.withdraw_approval(request.request_id)
+        try:
+            return approvals.withdraw_approval(request.request_id)
+        except Exception:
+            logger.exception(
+                "Run %s could not withdraw approval request %s",
+                self.id,
+                request.request_id,
+            )
+            return None
 
     def _input_ended(
         self,

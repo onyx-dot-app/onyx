@@ -2,6 +2,7 @@
 
 import threading
 import time
+from collections.abc import Callable
 from functools import partial
 
 import pytest
@@ -9,6 +10,7 @@ from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
 from onyx.agents.events import InputEndedEvent
+from onyx.agents.models import RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
@@ -18,6 +20,7 @@ from onyx.agents.tools import (
     PendingToolInput,
     ToolInvocation,
 )
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
@@ -79,6 +82,7 @@ def _run(
     calls: list[ToolCall],
     tools: list[AgentTool],
     approvals: ToolApprovals | None,
+    before_tool_call: Callable[[ToolCallContext], Outcome] | None = None,
 ) -> Run:
     replies = iter(
         [
@@ -90,6 +94,7 @@ def _run(
         FakeModelClient(lambda *_: next(replies)),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
+        before_tool_call=before_tool_call,
     ).start(max_steps=2, coordinator=AgentCoordinator(approvals=approvals))
 
 
@@ -104,6 +109,43 @@ def _recording_tool(
         definition=ToolDefinition(name=name, description="", parameters={}),
         execute=execute,
         approval_required=[name] if approval_required else [],
+    )
+
+
+def _until_pending(run: Run, request_id: str) -> None:
+    deadline = time.monotonic() + 5
+    while request_id not in {request.request_id for request in run.pending_inputs}:
+        assert run.snapshot().failure is None
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+
+def _program_tool(executed: list[str], *, cancel_wait: bool = False) -> AgentTool:
+    """A tool that makes one `send` call for the model and waits for its
+    decision; with `cancel_wait`, the call's own scope stops the wait."""
+
+    def program(invocation: ToolInvocation) -> ToolResult:
+        gate = invocation.nested_calls
+        assert gate is not None
+        inner = ToolCall(id="inner-call", name="send", arguments={})
+        decision = gate.decide(inner)
+        assert isinstance(decision, PendingToolInput)
+        if cancel_wait:
+            stopped = CancellationSignal()
+            stopped.cancel()
+            with pytest.raises(AgentCancelled):
+                gate.wait_for_input(inner, decision, stopped)
+            return ToolResult(content="program stopped waiting")
+        result = gate.wait_for_input(inner, decision, invocation.cancellation)
+        if result is not None:
+            return result
+        executed.append(inner.id)
+        return ToolResult(content="send ran")
+
+    return AgentTool(
+        definition=ToolDefinition(name="program", description="", parameters={}),
+        execute=program,
+        approval_required=["send"],
     )
 
 
@@ -313,3 +355,102 @@ def test_a_cancelled_run_ends_its_requests_with_the_gates_answers(
     assert ends == [ended]
     saved = run.snapshot().steps[0].tools["send-1"].result
     assert (saved.text if saved is not None else None) == result
+
+
+@pytest.mark.parametrize("nested", [False, True], ids=["direct", "program_call"])
+def test_a_failed_withdrawal_still_ends_the_request_and_the_run(nested: bool) -> None:
+    class FailingApprovals(Approvals):
+        def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
+            super().withdraw_approval(request_id)
+            raise RuntimeError("approval store unavailable")
+
+    approvals = FailingApprovals({"send": _request("send-request")})
+    run = _run(
+        [ToolCall(id="call", name="program" if nested else "send", arguments={})],
+        [
+            _program_tool([], cancel_wait=True)
+            if nested
+            else _recording_tool("send", [], approval_required=True)
+        ],
+        approvals,
+    )
+    ends: list[str] = []
+    run.subscribe(
+        lambda event: (
+            ends.append(event.request.request_id)
+            if isinstance(event, InputEndedEvent)
+            else None
+        )
+    )
+    try:
+        if nested:
+            # The program's wait stops while the run continues.
+            assert run.result(timeout=5).output.text == "done"
+            assert _results(run) == {"call": "program stopped waiting"}
+        else:
+            _until_pending(run, "send-request")
+            run.cancel()
+            assert run.wait_for_idle(5)
+            assert run.snapshot().status == RunStatus.CANCELLED
+        assert approvals.withdrawn == ["send-request"]
+        assert ends == ["send-request"]
+        if nested:
+            assert run.pending_inputs == []
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(5)
+
+
+@pytest.mark.parametrize(
+    "gate_asks", [False, True], ids=["gate_denies", "gate_asks_and_user_approves"]
+)
+@pytest.mark.parametrize("nested", [False, True], ids=["direct", "program_call"])
+def test_an_approved_hook_request_still_needs_the_approval_gate(
+    nested: bool, gate_asks: bool
+) -> None:
+    hooked: list[str] = []
+
+    def before_tool_call(context: ToolCallContext) -> Outcome:
+        if context.call.name != "send":
+            return None
+        hooked.append(context.call.id)
+        return _request(f"{context.call.id}-hook")
+
+    executed: list[str] = []
+    approvals = Approvals(
+        {
+            "send": _request("send-request")
+            if gate_asks
+            else ToolResult(content="denied by policy", is_error=True)
+        }
+    )
+    run = _run(
+        [ToolCall(id="call", name="program" if nested else "send", arguments={})],
+        [
+            _program_tool(executed)
+            if nested
+            else _recording_tool("send", executed, approval_required=True)
+        ],
+        approvals,
+        before_tool_call,
+    )
+    inner = "inner-call" if nested else "call"
+    try:
+        _until_pending(run, f"{inner}-hook")
+        run.submit(_approve(f"{inner}-hook"))
+        if gate_asks:
+            _until_pending(run, "send-request")
+            assert executed == []
+            run.submit(_approve("send-request"))
+
+        assert run.result(timeout=5).output.text == "done"
+        assert run.wait_for_idle(5)
+        # The hook decides once; the gate decides after its request is approved.
+        assert (hooked, approvals.requested) == ([inner], [inner])
+        assert executed == ([inner] if gate_asks else [])
+        assert _results(run) == {
+            "call": "send ran" if gate_asks else "denied by policy"
+        }
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(5)

@@ -1,6 +1,7 @@
 """A program's call that waits for approval frees the cell's slot and stops with it."""
 
 import threading
+import time
 from concurrent.futures import CancelledError, Future
 
 import pytest
@@ -40,9 +41,13 @@ class Program(NestedCallGate):
 
         # `hold(value=...)` returns once the test sets this; no approval gates it.
         self.hold = threading.Event()
+        # A `send` call that runs returns once this is set.
+        self.send_returns = threading.Event()
+        self.send_returns.set()
 
         def send(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
             self.sent.append(str(invocation.arguments["value"]))
+            assert self.send_returns.wait(10)
             return ToolResult(content=f'"sent {invocation.arguments["value"]}"')
 
         def hold(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
@@ -164,7 +169,7 @@ def test_a_waiting_call_frees_the_slot_and_takes_it_back_to_finish() -> None:
     until(lambda: _running() == 0)
 
 
-def test_an_approved_call_waits_for_a_free_slot_when_the_budget_is_full() -> None:
+def test_an_approved_call_runs_when_the_budget_is_full_and_its_program_waits() -> None:
     program = Program()
     observed = program.start("print(await send(value='a'))\n", yield_time_ms=60_000)
     until(lambda: program.waiting(1))
@@ -175,16 +180,27 @@ def test_an_approved_call_waits_for_a_free_slot_when_the_budget_is_full() -> Non
     )
     assert _details(blocker.result(timeout=10)).status == "running"
     cell = program.cells._cells[1]
+    program.send_returns.clear()
 
     program.approve(0)
 
-    def approval_applied() -> bool:
-        with cell._lock:
-            return cell._awaiting_input == 0
+    # The approved call runs on its thread without waiting for a slot, and its
+    # run time counts toward the program's lifetime. It starts well within the
+    # blocker's lifetime, whose end would free the slot.
+    until(lambda: program.sent == ["a"], timeout=3)
+    paused = cell._clock.paused_seconds
+    time.sleep(0.2)
+    assert cell._clock.paused_seconds == paused
+    program.send_returns.set()
 
-    until(approval_applied)
-    # The approved call does not run over the budget.
-    assert (program.sent, _running()) == ([], 1)
+    def call_ended() -> bool:
+        with cell._lock:
+            return not cell._calls[0].thread_alive
+
+    until(call_ended)
+    # The program continues only once its cell holds a slot.
+    assert _running() == 1
+    assert not observed.done()
     assert program.wait_code(cell_id=2, terminate=True).status == "terminated"
 
     finished = _details(observed.result(timeout=10))

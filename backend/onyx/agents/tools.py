@@ -190,9 +190,11 @@ class NestedCallGate(Protocol):
         cancellation: CancellationSignal,
     ) -> ToolResult | None:
         """Block the call until the run receives an answer to `request`: None
-        to run the approved call, or the result that replaces it. Raises
-        AgentCancelled when the run, or `cancellation`, the waiting call's own
-        scope, is cancelled."""
+        to run the approved call, or the result that replaces it. After the
+        user approves the hook's request, a call that requires approval also
+        waits for the approval gate. Raises AgentCancelled when the run, or
+        `cancellation`, the waiting call's own scope, is cancelled, and
+        BeforeToolCallFailed when the approval gate raises."""
         ...
 
 
