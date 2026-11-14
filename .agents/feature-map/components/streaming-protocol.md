@@ -127,20 +127,27 @@ agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
 come from the runtime's `input_required` and `input_ended` events
 (`chat/renderer.py:ToolRenderer.consume`) at the call's placement, only for
 requests that `ToolApprovals` opened (`PendingToolInput.approval`).
-`tool_approval_resolved` carries an `outcome`: `approved`,
+`tool_approval_resolved` carries an `outcome`
+(`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
-earlier one), `rejected`, `expired`, `disabled` (an approval of a tool that the
-policy now disables, or a request deleted with its tool's server), or `cancelled` for a call that stopped waiting. The
+earlier one), `rejected` (also a user Stop), `expired`, `disabled` (an approval
+of a tool that the policy now disables, or a request deleted with its tool's
+server), or `cancelled` for a call that stopped waiting without a decision. The
 request's `expires_at` is the row's `created_at` plus the timeout
 (`PendingToolInput.expires_at`). A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
-`agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`); a turn-level
-Stop drops packets after it, so clients close open requests on the `stop`
-packet. For a code mode program's call, the events carry `nested_call`, and
+`agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
+of a decision saved first. A turn-level Stop drops packets after it, except
+`tool_approval_resolved` (`chat/execution.py:ChatTurnExecution._publish`), so
+each request's resolution precedes the `stop` packet; a client that cuts the
+stream at Stop records its waiting requests as rejected. For a code mode
+program's call, the events carry `nested_call`, and
 the packet sits on the `execute_code` or `wait_code` card with the nested
 call's name and arguments. Every client gets them
 ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
-the widget and the CLI mirror them, and saved-session replay never sends them. `ToolCallArgumentDelta` streams the code of the tools in
+the widget and the CLI mirror them. Saved-session replay sends the same pair
+for each request of an ended response from its `approval_request` row
+([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`; the configured reasoning
 tool streams as reasoning packets instead

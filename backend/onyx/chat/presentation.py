@@ -1,6 +1,7 @@
 """Attach chat metadata to agent output and build saved response summaries."""
 
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 
 from pydantic import BaseModel
 
@@ -36,6 +37,7 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    SavedToolApproval,
     ToolHistorySnapshot,
     ToolReplayData,
 )
@@ -44,9 +46,11 @@ from onyx.chat.renderer import (
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    approval_outcome,
     tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT, ended_answer
 from onyx.chat.tool_results import (
     restored_result_details,
     tool_result_parts,
@@ -61,6 +65,8 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
     UserMessagePacket,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -74,6 +80,10 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NO_APPROVALS: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = MappingProxyType(
+    {}
+)
 
 
 def _message_identity(message: AssistantMessage) -> str:
@@ -529,9 +539,13 @@ def replay_response(
     layout: ResponseLayout | None = None,
     parent: Placement | None = None,
     default_mode: PresentationMode = PresentationMode.ANSWER,
+    *,
+    approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
+    `approvals` holds the response's approval requests by run ID and tool call
+    ID; each shows in its call's card as the stream showed it once decided.
     The session response carries the saved message error separately. Stop packets
     close rendering; they do not classify execution success or failure.
     """
@@ -584,6 +598,28 @@ def replay_response(
                 execution.display_name if execution is not None else None,
             )
             packets.extend(renderer_of_call.start())
+            for approval in approvals.get((response.run_id, call.id), ()):
+                approval_id = str(approval.id)
+                packets.extend(
+                    Packet(placement=tool_placement, obj=obj)
+                    for obj in (
+                        ToolApprovalRequest(
+                            approval_id=approval_id,
+                            tool_call_id=call.id,
+                            tool_name=approval.tool_name,
+                            display_name=approval.display_name,
+                            # A call that a program made is not saved.
+                            arguments=tool_arguments_for_display(call)
+                            if approval.tool_name == call.name
+                            else {},
+                            expires_at=approval.created_at + TOOL_APPROVAL_TIMEOUT,
+                        ),
+                        ToolApprovalResolved(
+                            approval_id=approval_id,
+                            outcome=approval_outcome(ended_answer(approval)),
+                        ),
+                    )
+                )
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (
@@ -607,6 +643,7 @@ def replay_response(
                         layout,
                         tool_placement,
                         child_mode,
+                        approvals=approvals,
                     )
                 )
             packets.extend(renderer_of_call.complete(result))

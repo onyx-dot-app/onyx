@@ -14,9 +14,6 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ApprovalRequest, ChatSession
 
-# A decided request's decision, how it was made, and its action ID.
-type SavedDecision = tuple[ApprovalDecision, ApprovalDecidedVia | None, str]
-
 
 def lock_session_grants__no_commit(db_session: Session, chat_session_id: UUID) -> None:
     """Serialize session grants with new requests of the chat until commit, so
@@ -36,6 +33,9 @@ def create_approval_request__no_commit(
     chat_message_id: int,
     gated_app_id: int,
     action_id: str,
+    tool_call_id: str,
+    tool_name: str,
+    display_name: str,
 ) -> tuple[UUID, datetime.datetime]:
     """Returns the request's ID and its creation time on the database clock."""
     approval_id, created_at = db_session.execute(
@@ -45,6 +45,9 @@ def create_approval_request__no_commit(
             chat_message_id=chat_message_id,
             gated_app_id=gated_app_id,
             action_id=action_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            display_name=display_name,
         )
         .returning(ApprovalRequest.id, ApprovalRequest.created_at)
     ).one()
@@ -142,13 +145,12 @@ def settle_approval_requests__no_commit(
     approval_ids: Collection[UUID],
     *,
     timeout: datetime.timedelta,
-) -> dict[UUID, SavedDecision | None]:
+) -> dict[UUID, ApprovalRequest | None]:
     """Expire the pending requests older than `timeout`, then return the
-    decisions of the decided ones, how they were made, and their action IDs.
-    A request whose row no longer exists maps to None: deleting its tool's
-    server, chat, or response deletes it, and nothing can decide it. The
-    decision API's conditional update and this one decide whether a decision
-    or the expiry wins."""
+    decided ones by ID. A request whose row no longer exists maps to None:
+    deleting its tool's server, chat, or response deletes it, and nothing can
+    decide it. The decision API's conditional update and this one decide
+    whether a decision or the expiry wins."""
     db_session.execute(
         update(ApprovalRequest)
         .where(
@@ -159,36 +161,32 @@ def settle_approval_requests__no_commit(
         .values(decision=ApprovalDecision.EXPIRED, decided_at=func.now())
     )
     saved = {
-        approval_id: (decision, decided_via, action_id)
-        for approval_id, decision, decided_via, action_id in db_session.execute(
-            select(
-                ApprovalRequest.id,
-                ApprovalRequest.decision,
-                ApprovalRequest.decided_via,
-                ApprovalRequest.action_id,
-            ).where(ApprovalRequest.id.in_(approval_ids))
-        ).tuples()
+        row.id: row
+        for row in db_session.scalars(
+            select(ApprovalRequest)
+            .where(ApprovalRequest.id.in_(approval_ids))
+            .execution_options(populate_existing=True)
+        )
     }
-    settled: dict[UUID, SavedDecision | None] = {}
+    settled: dict[UUID, ApprovalRequest | None] = {}
     for approval_id in approval_ids:
         row = saved.get(approval_id)
-        if row is None:
-            settled[approval_id] = None
-            continue
-        decision, decided_via, action_id = row
-        if decision is not None:
-            settled[approval_id] = (decision, decided_via, action_id)
+        if row is None or row.decision is not None:
+            settled[approval_id] = row
     return settled
 
 
-def expire_approval_requests__no_commit(
+def close_pending_approval_requests__no_commit(
     db_session: Session,
+    decision: ApprovalDecision,
+    decided_via: ApprovalDecidedVia | None,
     *,
     approval_ids: Collection[UUID] | None = None,
     chat_message_id: int | None = None,
 ) -> list[UUID]:
-    """Expire the given requests, or a response's requests, that are still
-    pending; returns the expired IDs."""
+    """Decide the given requests, or a response's requests, that are still
+    pending: EXPIRED when nothing waits for them anymore, or the user's
+    rejection when the user stops the response. Returns the decided IDs."""
     return list(
         db_session.scalars(
             update(ApprovalRequest)
@@ -198,9 +196,22 @@ def expire_approval_requests__no_commit(
                 if approval_ids is not None
                 else ApprovalRequest.chat_message_id == chat_message_id,
             )
-            .values(decision=ApprovalDecision.EXPIRED, decided_at=func.now())
+            .values(decision=decision, decided_via=decided_via, decided_at=func.now())
             .returning(ApprovalRequest.id)
         ).all()
+    )
+
+
+def get_response_approval_requests(
+    db_session: Session, chat_message_ids: Collection[int]
+) -> list[ApprovalRequest]:
+    """The requests of these responses, in the order they were made."""
+    return list(
+        db_session.scalars(
+            select(ApprovalRequest)
+            .where(ApprovalRequest.chat_message_id.in_(chat_message_ids))
+            .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
+        )
     )
 
 

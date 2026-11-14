@@ -563,7 +563,11 @@ def translate_assistant_message_to_packets(
     if execution is not None:
         replay = read_response_replay_data(execution, db_session)
         return replay_response(
-            execution.response, replay.tools, execution.presentation, replay.documents
+            execution.response,
+            replay.tools,
+            execution.presentation,
+            replay.documents,
+            approvals=replay.approvals,
         )
     packet_list: list[Packet] = []
 

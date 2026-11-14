@@ -23,7 +23,7 @@ from onyx.db.discord_bot import (
     get_or_create_discord_service_api_key,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ActionPolicy, ApprovalDecision
+from onyx.db.enums import ActionPolicy, ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ApprovalRequest, GatedApp, User
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.server.query_and_chat.models import (
@@ -31,8 +31,10 @@ from onyx.server.query_and_chat.models import (
     MessageOrigin,
     SendMessageRequest,
 )
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
+    PacketObj,
     ToolApprovalOutcome,
     ToolApprovalRequest,
     ToolApprovalResolved,
@@ -190,6 +192,25 @@ def _of_type[T](packets: list[Packet], kind: type[T]) -> list[T]:
     return [packet.obj for packet in packets if isinstance(packet.obj, kind)]
 
 
+def _saved_approval_packets(
+    user: DATestUser, chat_session_id: UUID
+) -> list[tuple[Placement, PacketObj]]:
+    """The approval packets of the chat's saved responses, as a reload gets
+    them. Like the stream's, their placements have the response's model index."""
+    detail = client.get(
+        f"{API_SERVER_URL}/chat/get-chat-session/{chat_session_id}",
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+    detail.raise_for_status()
+    return [
+        (packet.placement.model_copy(update={"model_index": 0}), packet.obj)
+        for response in detail.json()["packets"]
+        for packet in map(Packet.model_validate, response)
+        if isinstance(packet.obj, (ToolApprovalRequest, ToolApprovalResolved))
+    ]
+
+
 @pytest.mark.parametrize(
     "decision, outcome",
     [("approve_once", "approved"), ("reject", "rejected")],
@@ -318,7 +339,19 @@ def test_a_call_waits_for_the_users_decision(
     if outcome == "approved":
         assert f"Hello, {name}!" in tool_result
     else:
-        assert "The user rejected this" in tool_result
+        assert (
+            tool_result
+            == f"The user rejected this {hello.name} call, so it did not run."
+        )
+
+    # A reload shows the request's record where the stream showed it.
+    assert _saved_approval_packets(admin_user, chat_session_id) == [
+        (request_packet.placement, request),
+        (
+            request_packet.placement,
+            ToolApprovalResolved(approval_id=request.approval_id, outcome=outcome),
+        ),
+    ]
 
 
 def test_approving_a_tool_that_an_admin_disabled_meanwhile_reports_it_disabled(
@@ -361,7 +394,9 @@ def test_approving_a_tool_that_an_admin_disabled_meanwhile_reports_it_disabled(
     ] == ["disabled"]
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
     assert tool_result is not None
-    assert "The hello tool is disabled" in tool_result and "Hello" not in tool_result
+    assert (
+        tool_result == f"The {hello.name} tool is disabled, so this call did not run."
+    )
 
 
 def test_a_disabled_tool_is_not_offered_to_the_model(
@@ -567,29 +602,29 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     assert first_answer["processing_duration_seconds"] < held_seconds
 
 
-def test_stopping_a_waiting_chat_ends_its_request(
+def test_stopping_a_waiting_chat_rejects_its_request(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
 ) -> None:
-    """A stopped response no longer waits, so its request cannot be decided."""
+    """A Stop rejects the request that waits, as the user's Reject does: the
+    card, the saved record, a reload and the model's next turn show it."""
     hello = _hello(connected_mcp_server, CALL_ID, "team")
+    rejected = f"The user rejected this {hello.name} call, so it did not run."
     mock_llm.conversation(
         "chat",
         Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        # The next turn's request: the stopped turn asks no more.
         Reply(
-            text="Done.",
+            text="Understood.",
             conditions=RequestConditions(has_results_for=[CALL_ID]),
-            required=False,
         ),
     )
     chat_session_id = new_chat()
-    approval_ids: list[str] = []
 
-    def stop(_packet: Packet, request: ToolApprovalRequest) -> None:
-        approval_ids.append(request.approval_id)
+    def stop(_packet: Packet, _request: ToolApprovalRequest) -> None:
         client.post(
             f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
             headers=admin_user.headers,
@@ -598,17 +633,40 @@ def test_stopping_a_waiting_chat_ends_its_request(
 
     packets = _stream(streaming_api, admin_user, _request(chat_session_id), stop)
 
-    # The stream ends with the stop packet; it closes the card if the
-    # "cancelled" end of the request did not come first.
-    types = [packet.obj.type for packet in packets]
-    assert "stop" in types[types.index("tool_approval_request") :]
-    assert _of_type(packets, ToolApprovalResolved) in (
-        [],
-        [ToolApprovalResolved(approval_id=approval_ids[0], outcome="cancelled")],
+    [request_packet] = [
+        packet for packet in packets if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+    request = request_packet.obj
+    assert isinstance(request, ToolApprovalRequest)
+    resolved = Packet(
+        placement=request_packet.placement,
+        obj=ToolApprovalResolved(approval_id=request.approval_id, outcome="rejected"),
     )
-    decided = _decide(admin_user, approval_ids[0], "approve_once")
-    assert decided.status_code == 409
-    assert mock_llm.requests_in("chat")[-1].tool_result(CALL_ID) is None
+    # The card shows the rejection before the stream stops.
+    types = [packet.obj.type for packet in packets]
+    assert packets.index(resolved) < types.index(
+        "stop", types.index("tool_approval_request")
+    )
+    with get_session_with_current_tenant() as db_session:
+        saved = db_session.get_one(ApprovalRequest, UUID(request.approval_id))
+        assert (saved.decision, saved.decided_via) == (
+            ApprovalDecision.REJECTED,
+            ApprovalDecidedVia.USER,
+        )
+    assert _decide(admin_user, request.approval_id, "approve_once").status_code == 409
+    assert _saved_approval_packets(admin_user, chat_session_id) == [
+        (request_packet.placement, request),
+        (resolved.placement, resolved.obj),
+    ]
+
+    answer = ChatSessionManager.send_message(
+        chat_session_id=chat_session_id,
+        message="Never mind.",
+        user_performing_action=admin_user,
+    )
+
+    assert answer.error is None and answer.full_message == "Understood."
+    assert mock_llm.requests_in("chat")[-1].tool_result(CALL_ID) == rejected
 
 
 def test_an_always_tool_runs_at_once(
@@ -869,6 +927,9 @@ def test_a_request_whose_response_has_no_owner_expires_when_used(
                 )
             ).one(),
             action_id="hello",
+            tool_call_id=CALL_ID,
+            tool_name="hello",
+            display_name="hello",
         )
         db_session.commit()
 

@@ -83,7 +83,7 @@ from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.action_policy import current_action_policy
 from onyx.db.approval_request import (
-    expire_approval_requests__no_commit,
+    close_pending_approval_requests__no_commit,
     get_approval_request_for_user,
     record_approval_decision__no_commit,
     responses_waiting_for_approval,
@@ -901,7 +901,12 @@ def _expire_ownerless_approvals(
     ownerless = ownerless_response_ids(cache, response_ids)
     if ownerless:
         for response_id in ownerless:
-            expire_approval_requests__no_commit(db_session, chat_message_id=response_id)
+            close_pending_approval_requests__no_commit(
+                db_session,
+                ApprovalDecision.EXPIRED,
+                None,
+                chat_message_id=response_id,
+            )
         db_session.commit()
     return ownerless
 

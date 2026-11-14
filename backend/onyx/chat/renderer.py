@@ -12,7 +12,7 @@ from onyx.agents.events import (
     ToolStartEvent,
     ToolUpdateEvent,
 )
-from onyx.agents.tools import InputDecision
+from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.models import (
     CitationMode,
@@ -475,6 +475,19 @@ class MessageRenderer:
         return result
 
 
+def approval_outcome(answer: HumanToolAnswer | None) -> packets.ToolApprovalOutcome:
+    """How an approval request ended, from the answer it gave its call; a
+    request without an answer stopped waiting."""
+    if answer is None:
+        return "cancelled"
+    if answer.standing:
+        return "approved_for_chat"
+    if answer.decision == InputDecision.APPROVE:
+        return "approved"
+    denial = answer.result.metadata if answer.result else None
+    return denial.outcome if isinstance(denial, ToolApprovalDenial) else "rejected"
+
+
 class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
@@ -532,19 +545,9 @@ class ToolRenderer:
                 expires_at=event.request.expires_at,
             )
         else:
-            answer = event.answer
-            denial = answer.result.metadata if answer and answer.result else None
             obj = packets.ToolApprovalResolved(
                 approval_id=event.request.request_id,
-                outcome="cancelled"
-                if answer is None
-                else "approved_for_chat"
-                if answer.standing
-                else "approved"
-                if answer.decision == InputDecision.APPROVE
-                else denial.outcome
-                if isinstance(denial, ToolApprovalDenial)
-                else "rejected",
+                outcome=approval_outcome(event.answer),
             )
         return [packets.Packet(placement=self.placement, obj=obj)]
 

@@ -36,7 +36,7 @@ from onyx.agents.models import (
     cancellation_failure,
 )
 from onyx.agents.runtime import Agent, AgentBusy, Run, RunNotTransferable
-from onyx.agents.tools import PendingToolInput
+from onyx.agents.tools import HumanToolAnswer, PendingToolInput
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
@@ -49,6 +49,7 @@ from onyx.chat.models import (
     ResponseStatus,
     SavedAgentContext,
     SavedResponse,
+    SavedToolApproval,
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
@@ -57,12 +58,13 @@ from onyx.chat.tool_approvals import (
     TOOL_APPROVAL_TIMEOUT,
     ApprovalBlocker,
     approval_waits_ending,
+    ended_answer,
     open_tool_approval,
     tool_answer,
 )
 from onyx.configs.constants import MessageType
 from onyx.db.approval_request import (
-    expire_approval_requests__no_commit,
+    close_pending_approval_requests__no_commit,
     settle_approval_requests__no_commit,
 )
 from onyx.db.chat import get_selected_branch, session_ancestors
@@ -103,6 +105,7 @@ from onyx.db.chat_subagents import (
     read_agent_completions,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import User
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
@@ -346,6 +349,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._approval_scopes: dict[str, ToolApprovalScope] = {
             tool.name: tool.approval for tool in tools if tool.approval is not None
         }
+        # The approval records of calls name their tools' display names.
+        self._display_names = {tool.name: tool.display_name for tool in tools}
         self._next_approval_read = 0.0
         # Result follow-ups use the step limit of this store's chat agent.
         self._follow_up_steps = follow_up_steps
@@ -1093,7 +1098,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             owned.lease.released = True
         if self._approval_scopes:
             # No call of the run waits anymore, so its requests cannot be approved.
-            self._expire_approvals(chat_message_id=response_id)
+            try:
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    close_pending_approval_requests__no_commit(
+                        session,
+                        ApprovalDecision.EXPIRED,
+                        None,
+                        chat_message_id=response_id,
+                    )
+                    session.commit()
+            except Exception:
+                logger.exception("Could not expire tool approvals that ended")
         try:
             with _ownership_lock(self.cache, response_id):
                 if self._owner(response_id) == owned.lease.owner:
@@ -1212,14 +1227,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._dispatch_messages()
 
     def request_approval(
-        self, run: Run, call: ToolCall
+        self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
+        call = nested_call or tool_call
         return open_tool_approval(
             tenant_id=self.tenant_id,
             chat_session_id=self.chat_session_id,
             response_id=int(run.id),
             user_id=self._user.id,
-            call_name=call.name,
+            tool_call_id=tool_call.id,
+            tool_name=call.name,
+            display_name=self._display_names.get(call.name, call.name),
             scope=self._approval_scopes[call.name],
             # Only the chat's signed-in owner can decide. Chat subscribes only
             # the response presenter, so a run without listeners has no card
@@ -1233,24 +1251,52 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             else ApprovalBlocker.UNWATCHED_RUN,
         )
 
-    def withdraw_approval(self, request_id: str) -> None:
-        self._expire_approvals(approval_ids=[UUID(request_id)])
-
-    def _expire_approvals(
-        self,
-        *,
-        approval_ids: Collection[UUID] | None = None,
-        chat_message_id: int | None = None,
-    ) -> None:
-        """Expire requests that no call waits on anymore."""
+    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
+        approval_id = UUID(request_id)
         try:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                expire_approval_requests__no_commit(
-                    session, approval_ids=approval_ids, chat_message_id=chat_message_id
+                close_pending_approval_requests__no_commit(
+                    session,
+                    ApprovalDecision.EXPIRED,
+                    None,
+                    approval_ids=[approval_id],
+                )
+                row = settle_approval_requests__no_commit(
+                    session, [approval_id], timeout=TOOL_APPROVAL_TIMEOUT
+                ).get(approval_id)
+                # A deleted request has no decision; its call just stops waiting.
+                ended = SavedToolApproval.model_validate(row) if row else None
+                session.commit()
+        except Exception:
+            logger.exception("Could not end a tool approval request")
+            return None
+        return ended_answer(ended) if ended is not None else None
+
+    def reject_waiting_approvals(self) -> None:
+        """Save the user's Stop as the rejection of the approval requests that
+        the owned runs wait on. The runs then end, and their requests end with
+        the rejection (`withdraw_approval`). A decision saved first wins."""
+        with self._lock:
+            runs = [owned.run for owned in self._owned.values()]
+        approval_ids = [
+            UUID(request.request_id)
+            for run in runs
+            for request in run.pending_inputs
+            if request.approval
+        ]
+        if not approval_ids:
+            return
+        try:
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                close_pending_approval_requests__no_commit(
+                    session,
+                    ApprovalDecision.REJECTED,
+                    ApprovalDecidedVia.USER,
+                    approval_ids=approval_ids,
                 )
                 session.commit()
         except Exception:
-            logger.exception("Could not expire tool approvals that ended")
+            logger.exception("Could not reject the tool approvals of a Stop")
 
     def _deliver_tool_decisions(
         self,
@@ -1288,16 +1334,23 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             return
         try:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                decisions = settle_approval_requests__no_commit(
-                    session, to_read, timeout=TOOL_APPROVAL_TIMEOUT
-                )
+                decided = {
+                    approval_id: (
+                        SavedToolApproval.model_validate(approval)
+                        if approval is not None
+                        else None
+                    )
+                    for approval_id, approval in settle_approval_requests__no_commit(
+                        session, to_read, timeout=TOOL_APPROVAL_TIMEOUT
+                    ).items()
+                }
                 session.commit()
         except Exception:
             logger.exception("Could not read tool approval decisions; will retry")
             return
-        for approval_id, saved in decisions.items():
+        for approval_id, approval in decided.items():
             try:
-                runs[waiting[approval_id]].submit(tool_answer(approval_id, saved))
+                runs[waiting[approval_id]].submit(tool_answer(approval_id, approval))
             except Exception:
                 logger.exception("Could not deliver a tool approval decision")
 

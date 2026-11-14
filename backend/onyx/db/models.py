@@ -3648,6 +3648,14 @@ class ApprovalRequest(Base):
     # The action that the request asks to run, such as an MCP tool name. It
     # keys the action policy and session grants.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call of the response's step whose card shows the request: the call
+    # that waits, or the call whose tool, such as a program, made it. Places
+    # the request's record when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The name and display name of the tool of the call that waits, for the
+    # request's record and the result the model sees.
+    tool_name: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -63,6 +63,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     StreamingError,
+    ToolApprovalResolved,
 )
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
@@ -251,7 +252,11 @@ class ChatTurnExecution:
             clear_status_then_finish()
 
     def _publish(self, packet: Packet) -> None:
-        if not self.cancellation.cancelled:
+        # A resolution reports a saved decision, such as the rejection of a
+        # Stop, so the request's card shows it after the turn stops.
+        if not self.cancellation.cancelled or isinstance(
+            packet.obj, ToolApprovalResolved
+        ):
             self.delivery.publish(packet)
             if isinstance(packet.obj, OverallStop):
                 with self._lock:
@@ -626,6 +631,9 @@ class ChatTurnExecution:
                     stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
+                    # Before the runs stop, so their requests end rejected.
+                    for store in stores:
+                        store.reject_waiting_approvals()
                     self.cancellation.cancel()
             except Exception:
                 logger.exception("Failed to read chat Stop request; will retry")

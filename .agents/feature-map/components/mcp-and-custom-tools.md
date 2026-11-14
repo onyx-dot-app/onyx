@@ -212,15 +212,26 @@ ChatRunStore._deliver_tool_decisions
   (that read also expires overdue rows, up to that interval late)
   -> Run.submit(tool_answer) -> input_ended (answer) -> tool_approval_resolved
      (a SESSION_GRANT decision is a standing answer -> "approved_for_chat")
-  a call that stops waiting, or a run that ends -> input_ended (no answer)
-     -> resolved "cancelled", row expired (withdraw by ID; release by response)
+user Stop: chat/execution.py:ChatTurnExecution._poll_control
+  -> ChatRunStore.reject_waiting_approvals   REJECTED by USER where decision IS NULL
+  -> then cancels the turn
+a call that stops waiting, or a run that ends
+  -> ToolApprovals.withdraw_approval = ChatRunStore.withdraw_approval
+     expires the row if it still waits; returns the answer of a decision saved
+     first (chat/tool_approvals.py:ended_answer), e.g. the Stop's rejection
+  -> input_ended (that answer, or none -> "cancelled"); a direct call that the
+     answer denies keeps the denial as its result
+  ChatRunStore.release expires what is left by response
+session load: db/chat_response.py:read_response_replay_data (ended responses)
+  -> chat/presentation.py:replay_response   request + resolved on the call's card
 ```
 
 A decision row is the only channel between the API pod that takes the
 decision and the pod that owns the run. The `approval_request` row holds the
 session, the waiting response (`chat_message_id`), the `GatedApp`, the action
-ID and the decision; the card's name and arguments come from the stream
-packet, not the table. Craft's proxy keeps its own `action_approval` table
+ID, the decision, and for the saved record the step's call that shows the card
+(`tool_call_id`), the tool name and its display name. The arguments come from
+the stream packet, not the table. Craft's proxy keeps its own `action_approval` table
 ([[craft-external-apps]]). The table, the decision route and the card are
 general, so future sandbox-proxy network approvals can reuse them. An
 "approve_session" decision is a session grant: it also approves the action's
@@ -358,7 +369,7 @@ calls run with no row unless the policy is now DENY.
     of every waiting request, and lists them all in
     `ChatFullResponse.pending_tool_approvals`. Closing the stream leaves the
     turn running. Requests that open later reach the caller through the resume
-    stream. The Slack and Discord bots cannot show requests yet, so
+    stream. The Slack and Discord bots do not ask for approval, so
     their turns build no approval scope (`ChatTurnSetup.ask_for_approval`,
     `construct_tools(ask_for_approval=...)`); Disabled tools stay unbuilt.
     Only server-side callers set it: the Slack handler and evals pass it to
@@ -388,7 +399,16 @@ calls run with no row unless the policy is now DENY.
     responses before the lifespan shutdown) calls
     `chat/tool_approvals.py:end_approval_waits`; the next control poll cancels
     runs that wait, their cards close as `cancelled`, and their streams end.
-    The lifespan resets the flag at startup. An approval of a tool whose
+    The lifespan resets the flag at startup. A user Stop (the chat's stream
+    Stop key, read by `chat/execution.py:ChatTurnExecution._poll_control`)
+    first calls `ChatRunStore.reject_waiting_approvals`, which saves
+    `REJECTED` by `USER` under the same `decision IS NULL` condition as the
+    decision route, so a decision that races the Stop keeps whichever saved
+    first. The runs then end, `withdraw_approval` returns the saved decision's
+    answer, the card's outcome is `rejected`, and the call's saved result is
+    the rejection text that the model reads in the next turn. A cancelled turn
+    still sends `tool_approval_resolved` (`ChatTurnExecution._publish`). An
+    approval of a tool whose
     current policy (`db/action_policy.py:current_action_policy`, also used by
     the session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
@@ -402,7 +422,21 @@ calls run with no row unless the policy is now DENY.
     (`HumanToolAnswer.standing`). `chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`
     is 10 minutes, well below `CHAT_EXECUTION_TIMEOUT_S`, so one wait cannot
     use up the turn. Several waits in a row can still reach the turn deadline.
-17. `program-call-waits-in-cell` **A program's Ask call waits inside its
+17. `chat-approval-records-replay` **A saved response shows the records its
+    stream showed.** `db/chat_response.py:read_response_replay_data` loads the
+    `approval_request` rows of an ended response and its child runs, and
+    `chat/presentation.py:replay_response` sends a `tool_approval_request` and a
+    `tool_approval_resolved` for each, after the start of the card of the
+    row's `tool_call_id`, in the order the requests opened. The outcome comes
+    from the same mapping as the stream: `chat/tool_approvals.py:ended_answer`
+    then `chat/renderer.py:approval_outcome`. An `EXPIRED` row that ended
+    before its deadline was withdrawn, so it replays as `cancelled`; a row
+    still undecided in an ended response also replays as `cancelled`. A
+    running response replays no records; its stream, through resume-stream,
+    shows them, and a waiting card stays decidable. A program's call is not
+    saved, so its replayed request has empty arguments and the program call's
+    ID.
+18. `program-call-waits-in-cell` **A program's Ask call waits inside its
     cell.** MCP tools stay program functions in code mode.
     `tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`
     asks `ToolInvocation.nested_calls` (`agents/tools.py:NestedCallGate`) and
@@ -412,13 +446,13 @@ calls run with no row unless the policy is now DENY.
     `MAX_RUNNING_CELLS` (`CodeCell._update_waiting`). `execute_code` and `wait_code` keep
     waiting instead of returning, so the model spends no steps. The request is
     not saved with the run, and the events carry `nested_call`.
-18. `policy-fixed-per-turn` **The policy is read once per turn.**
+19. `policy-fixed-per-turn` **The policy is read once per turn.**
     `tools/tool_constructor.py:_construct_tools_impl` resolves every MCP tool's
     policy when it builds the turn's tools. A change applies from the next
     message; within the turn, only a session grant rechecks for DENY
     (`chat/tool_approvals.py:open_tool_approval`), and the decision route
     rejects an approval of a now-disabled tool.
-19. `waiting-approval-blocks-send` **A chat that waits for an approval starts
+20. `waiting-approval-blocks-send` **A chat that waits for an approval starts
     no user turn.** `server/query_and_chat/chat_backend.py:_reject_while_approval_waits`
     rejects `send-chat-message` and the pending-message submit and interrupt
     routes with `APPROVAL_PENDING` (409) while the user's chat has a pending

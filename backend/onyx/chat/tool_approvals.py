@@ -5,7 +5,9 @@ asks carries a `ToolApprovalScope`, and the runtime gates its calls. The run's
 store opens each request here (`ChatRunStore.request_approval`). The user
 decides through the decision API, which saves the decision and wakes the
 response's owner; the owner's control poll reads the decision and answers the
-waiting call.
+waiting call. The user's Stop saves a rejection of the requests that wait
+(`ChatRunStore.reject_waiting_approvals`). A saved request gives the same
+answer to its call, and to its record in the saved response.
 """
 
 import datetime
@@ -19,14 +21,13 @@ from onyx.agents.tools import (
     InputMode,
     PendingToolInput,
 )
-from onyx.chat.models import ToolApprovalDenial
+from onyx.chat.models import SavedToolApproval, ToolApprovalDenial
 from onyx.db.action_policy import (
     current_action_policy,
     get_gated_app_id,
     get_or_create_gated_app_id,
 )
 from onyx.db.approval_request import (
-    SavedDecision,
     create_approval_request__no_commit,
     has_session_grant,
     lock_session_grants__no_commit,
@@ -51,20 +52,21 @@ class ApprovalBlocker(str, Enum):
     SERVER_STOPPING = "server_stopping"
 
 
+# What the model sees for a call that needs approval and cannot wait for it.
 _CANNOT_ASK_MESSAGES = {
     ApprovalBlocker.SIGNED_OUT: (
-        "The {name} tool needs the user's approval, and this conversation cannot "
-        "ask for it because the user is not signed in. Tell the user to sign in "
-        "to Onyx and make this request again."
+        "The {name} call needs the user's approval, and the user must sign in "
+        "to Onyx to approve it, so it did not run."
     ),
     ApprovalBlocker.UNWATCHED_RUN: (
-        "The {name} tool needs the user's approval, and this agent cannot ask for "
-        "it. Report this to the agent that started you. Do not retry the call."
+        "The {name} call needs the user's approval, and only the agent that "
+        "started you can ask the user for it, so it did not run. Ask that agent "
+        "to handle this request. Do not retry this call until that agent "
+        "confirms that the blocker is resolved."
     ),
     ApprovalBlocker.SERVER_STOPPING: (
-        "The {name} tool needs the user's approval, and the server is restarting, "
-        "so this call did not run. Do not retry it. Tell the user to make this "
-        "request again in a moment."
+        "The {name} call needs the user's approval, and the server is "
+        "restarting, so it did not run."
     ),
 }
 
@@ -92,12 +94,17 @@ def open_tool_approval(
     chat_session_id: UUID,
     response_id: int,
     user_id: UUID,
-    call_name: str,
+    tool_call_id: str,
+    tool_name: str,
+    display_name: str,
     scope: ToolApprovalScope,
     blocker: ApprovalBlocker | None,
 ) -> PendingToolInput | ToolResult | None:
     """A request for the call to wait for, an error result for a call that
-    cannot run or wait, or None when a session grant approves the action."""
+    cannot run or wait, or None when a session grant approves the action.
+
+    `tool_call_id` is the call of the response's step that the request
+    belongs to: the call that waits, or the call whose tool made it."""
     with get_session_with_tenant(tenant_id=tenant_id) as db_session:
         lock_session_grants__no_commit(db_session, chat_session_id)
         gated_app_id = get_gated_app_id(db_session, scope.app_kind, scope.target_id)
@@ -115,10 +122,10 @@ def open_tool_approval(
                 != ActionPolicy.DENY
             ):
                 return None
-            return _disabled_result(scope.action_id)
+            return _disabled_result(tool_name)
         if blocker is not None:
             return ToolResult(
-                content=_CANNOT_ASK_MESSAGES[blocker].format(name=call_name),
+                content=_CANNOT_ASK_MESSAGES[blocker].format(name=tool_name),
                 is_error=True,
             )
         approval_id, created_at = create_approval_request__no_commit(
@@ -128,78 +135,83 @@ def open_tool_approval(
             gated_app_id=gated_app_id
             or get_or_create_gated_app_id(db_session, scope.app_kind, scope.target_id),
             action_id=scope.action_id,
+            tool_call_id=tool_call_id,
+            tool_name=tool_name,
+            display_name=display_name,
         )
         db_session.commit()
     return PendingToolInput(
         request_id=str(approval_id),
-        prompt=f"Allow {call_name} to run?",
+        prompt=f"Allow {tool_name} to run?",
         mode=InputMode.EXECUTE,
         expires_at=created_at + TOOL_APPROVAL_TIMEOUT,
     )
 
 
-def _disabled_result(action_id: str) -> ToolResult:
+def _disabled_result(tool_name: str) -> ToolResult:
     """The result of a call whose action the policies now disable."""
     return ToolResult(
-        content=(
-            f"The {action_id} tool is disabled, so this call did not run. Do not retry "
-            "it. Tell the user."
-        ),
+        content=f"The {tool_name} tool is disabled, so this call did not run.",
         is_error=True,
         metadata=ToolApprovalDenial(outcome="disabled"),
     )
 
 
 def tool_answer(
-    approval_id: UUID,
-    saved: SavedDecision | None,
+    approval_id: UUID, approval: SavedToolApproval | None
 ) -> HumanToolAnswer:
-    """The answer that a saved decision, with how it was made and the action
-    ID, gives the waiting call. None is a request whose row was deleted, such
-    as with its tool's server."""
-    if saved is None:
+    """The answer that a decided request gives the call that waits for it.
+    None is a request whose row was deleted, such as with its tool's server."""
+    request_id = str(approval_id)
+    if approval is None:
         return HumanToolAnswer(
-            request_id=str(approval_id),
+            request_id=request_id,
             decision=InputDecision.DENY,
             result=ToolResult(
-                content=(
-                    "This tool is no longer available, so this call did not run. "
-                    "Do not retry it. Tell the user."
-                ),
+                content="This tool is no longer available, so this call did not run.",
                 is_error=True,
                 metadata=ToolApprovalDenial(outcome="disabled"),
             ),
         )
-    decision, decided_via, action_id = saved
-    if decision == ApprovalDecision.APPROVED:
+    name = approval.tool_name
+    if approval.decision == ApprovalDecision.APPROVED:
         return HumanToolAnswer(
-            request_id=str(approval_id),
+            request_id=request_id,
             decision=InputDecision.APPROVE,
-            standing=decided_via == ApprovalDecidedVia.SESSION_GRANT,
+            standing=approval.decided_via == ApprovalDecidedVia.SESSION_GRANT,
         )
-    if decided_via == ApprovalDecidedVia.POLICY:
-        result = _disabled_result(action_id)
-    elif decision == ApprovalDecision.REJECTED:
+    if approval.decided_via == ApprovalDecidedVia.POLICY:
+        result = _disabled_result(name)
+    elif approval.decision == ApprovalDecision.REJECTED:
         result = ToolResult(
-            content=(
-                "The user rejected this call, so it did not run. Do not retry it "
-                "or get the same result another way. Tell the user, and ask how "
-                "to continue."
-            ),
+            content=f"The user rejected this {name} call, so it did not run.",
             is_error=True,
             metadata=ToolApprovalDenial(outcome="rejected"),
         )
     else:
         result = ToolResult(
             content=(
-                "The user did not answer the approval request for this call in "
-                "time, so it did not run. Do not assume the user refused. Tell "
-                "the user that the action needs their approval, and do not retry "
-                "it in this response."
+                f"The approval request for this {name} call expired before the "
+                "user answered, so it did not run."
             ),
             is_error=True,
             metadata=ToolApprovalDenial(outcome="expired"),
         )
     return HumanToolAnswer(
-        request_id=str(approval_id), decision=InputDecision.DENY, result=result
+        request_id=request_id, decision=InputDecision.DENY, result=result
     )
+
+
+def ended_answer(approval: SavedToolApproval) -> HumanToolAnswer | None:
+    """How a request ended for its call: the answer of its decision, or None
+    when it was not decided, or expired before its deadline because its call
+    stopped waiting."""
+    if approval.decision is None or (
+        approval.decision == ApprovalDecision.EXPIRED
+        and (
+            approval.decided_at is None
+            or approval.decided_at < approval.created_at + TOOL_APPROVAL_TIMEOUT
+        )
+    ):
+        return None
+    return tool_answer(approval.id, approval)

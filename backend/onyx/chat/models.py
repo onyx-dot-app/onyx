@@ -1,4 +1,5 @@
 from collections.abc import Iterator
+from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -32,7 +33,7 @@ from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.db.enums import IncognitoRecordMode
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, IncognitoRecordMode
 from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
@@ -874,8 +875,30 @@ class ToolReplayData(BaseModel):
     search_docs: list[SearchDoc] = Field(default_factory=list)
 
 
+class SavedToolApproval(BaseModel):
+    """A saved approval request of a chat tool call (`approval_request`)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    # The response, by message ID, and the call of its step that the request
+    # belongs to.
+    chat_message_id: int
+    tool_call_id: str
+    tool_name: str
+    display_name: str
+    created_at: datetime
+    decision: ApprovalDecision | None
+    decided_via: ApprovalDecidedVia | None
+    decided_at: datetime | None
+
+
 class ResponseReplayData(BaseModel):
-    """Detached source documents and tool identities for response replay."""
+    """Detached source documents, tool identities and approval requests for
+    response replay."""
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
+    # The approval requests of an ended response, in the order they were
+    # made, by response run ID and tool call ID.
+    approvals: dict[tuple[str, str], list[SavedToolApproval]]
