@@ -14,6 +14,7 @@ raise: a failure is logged. The heavy client stack loads only when enabled.
 """
 
 import random
+import time
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -73,10 +74,13 @@ def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
             logger.exception("sandbox_fc_sandbox_purge_failed sandbox=%s", sandbox_id)
 
 
-def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
+def purge_expired_harness_sessions(
+    retention_days: float, limit: int, deadline: float
+) -> None:
     """Purge at most `limit` saved sessions whose chat session is gone or
-    whose build session had no activity in `retention_days`. The next run
-    takes the rest. Run after the retention deletes commit."""
+    whose build session had no activity in `retention_days`, until
+    `deadline` (monotonic). The next run takes the rest. Run after the
+    retention deletes commit."""
     if not HARNESS_PURGE_ENABLED:
         return
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
@@ -89,6 +93,7 @@ def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
         )
         from onyx.server.features.build.sandbox.firecracker.harness_state import (
             SAVED_SESSIONS_PREFIX,
+            clear_session_purge_mark,
             get_ids,
         )
 
@@ -96,6 +101,8 @@ def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
         expired: list[tuple[UUID, UUID]] = []
         with get_session_with_current_tenant() as db_session:
             for sandbox_id in get_all_sandbox_ids(db_session):
+                if time.monotonic() >= deadline:
+                    break
                 saved = [
                     UUID(i)
                     for i in get_ids(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id)
@@ -108,6 +115,8 @@ def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
     # Random order: saves whose purge keeps failing cannot block the rest.
     random.shuffle(expired)
     for sandbox_id, session_id in expired[:limit]:
+        if time.monotonic() >= deadline:
+            return
         # A session used again since the scan keeps its save.
         try:
             with get_session_with_current_tenant() as db_session:
@@ -117,6 +126,15 @@ def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
             logger.exception("sandbox_fc_retention_check_failed session=%s", session_id)
             continue
         purge_harness_session(sandbox_id, session_id)
+        # Unlike a delete, the session can be opened again: let it save new
+        # work. The session was idle for the whole window, so no save of it
+        # is in flight.
+        try:
+            clear_session_purge_mark(tenant_cache, session_id)
+        except Exception:
+            logger.exception(
+                "sandbox_fc_purge_mark_clear_failed session=%s", session_id
+            )
 
 
 def purge_harness_sandboxes_in_background(targets: dict[UUID, list[UUID]]) -> None:

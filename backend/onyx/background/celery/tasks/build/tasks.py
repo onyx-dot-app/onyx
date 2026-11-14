@@ -97,7 +97,11 @@ def purge_expired_harness_sessions_task(
     retention_days = load_settings().maximum_chat_retention_days
     if retention_days is None:
         return
-    purge_expired_harness_sessions(retention_days, HARNESS_RETENTION_PURGE_BATCH_SIZE)
+    purge_expired_harness_sessions(
+        retention_days,
+        HARNESS_RETENTION_PURGE_BATCH_SIZE,
+        time.monotonic() + TIMEOUT_SECONDS,
+    )
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

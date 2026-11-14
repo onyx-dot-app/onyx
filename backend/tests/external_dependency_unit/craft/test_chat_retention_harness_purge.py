@@ -3,6 +3,7 @@ retention no longer keeps."""
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
@@ -23,6 +24,8 @@ from onyx.server.features.build.sandbox.firecracker import purge as purge_module
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
     SAVED_SESSIONS_PREFIX,
     add_id,
+    is_purged,
+    mark_purged,
 )
 from onyx.server.settings.models import Settings
 from shared_configs.contextvars import get_current_tenant_id
@@ -52,12 +55,14 @@ def _delete_user(db_session: Session, user_id: UUID) -> None:
 
 
 def _record_purges(monkeypatch: pytest.MonkeyPatch) -> list[tuple[UUID, UUID]]:
+    """Records each purge and writes its purge mark, as the real purge does."""
     purged: list[tuple[UUID, UUID]] = []
-    monkeypatch.setattr(
-        purge_module,
-        "purge_harness_session",
-        lambda sandbox_id, session_id: purged.append((sandbox_id, session_id)),
-    )
+
+    def purge(sandbox_id: UUID, session_id: UUID) -> None:
+        purged.append((sandbox_id, session_id))
+        mark_purged(get_cache_backend(), session_id=session_id)
+
+    monkeypatch.setattr(purge_module, "purge_harness_session", purge)
     return purged
 
 
@@ -133,10 +138,20 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         assert sorted(purged) == sorted(
             [(sandbox_id, old_build), (sandbox_id, expired_chat), (sandbox_id, orphan)]
         )
+        # A build session opened again later can save new work.
+        assert not is_purged(tenant_cache, sandbox_id, old_build)
 
         purged.clear()
-        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=2)
+        purge_module.purge_expired_harness_sessions(
+            _RETENTION_DAYS, limit=2, deadline=time.monotonic() + 60
+        )
         assert len(purged) == 2
+
+        purged.clear()
+        purge_module.purge_expired_harness_sessions(
+            _RETENTION_DAYS, limit=100, deadline=time.monotonic()
+        )
+        assert purged == []
     finally:
         db_session.rollback()
         if sandbox_id is not None:
@@ -162,7 +177,9 @@ def test_retention_purges_nothing_when_firecracker_is_off(
         add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(uuid4()))
 
         send_task = _run_chain_end(tenant_id, [])
-        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=100)
+        purge_module.purge_expired_harness_sessions(
+            _RETENTION_DAYS, limit=100, deadline=time.monotonic() + 60
+        )
 
         send_task.assert_not_called()
         assert purged == []
@@ -206,7 +223,9 @@ def test_a_session_used_again_during_the_sweep_keeps_its_save(
             purge_module, "purge_harness_session", purge_and_resume_the_other
         )
 
-        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=100)
+        purge_module.purge_expired_harness_sessions(
+            _RETENTION_DAYS, limit=100, deadline=time.monotonic() + 60
+        )
 
         assert len(purged) == 1
     finally:
