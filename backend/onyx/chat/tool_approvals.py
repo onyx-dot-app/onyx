@@ -26,6 +26,7 @@ from onyx.db.action_policy import (
     get_or_create_gated_app_id,
 )
 from onyx.db.approval_request import (
+    SavedDecision,
     create_approval_request__no_commit,
     has_session_grant,
     lock_session_grants__no_commit,
@@ -151,11 +152,25 @@ def _disabled_result(action_id: str) -> ToolResult:
 
 def tool_answer(
     approval_id: UUID,
-    decision: ApprovalDecision,
-    decided_via: ApprovalDecidedVia | None,
-    action_id: str,
+    saved: SavedDecision | None,
 ) -> HumanToolAnswer:
-    """The answer a saved decision gives the waiting call."""
+    """The answer that a saved decision, with how it was made and the action
+    ID, gives the waiting call. None is a request whose row was deleted, such
+    as with its tool's server."""
+    if saved is None:
+        return HumanToolAnswer(
+            request_id=str(approval_id),
+            decision=InputDecision.DENY,
+            result=ToolResult(
+                content=(
+                    "This tool is no longer available, so this call did not run. "
+                    "Do not retry it. Tell the user."
+                ),
+                is_error=True,
+                metadata=ToolApprovalDenial(outcome="disabled"),
+            ),
+        )
+    decision, decided_via, action_id = saved
     if decision == ApprovalDecision.APPROVED:
         return HumanToolAnswer(
             request_id=str(approval_id),

@@ -318,7 +318,7 @@ def handle_regular_answer(
                 user=onyx_user,
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
-                # TODO(Slack approval buttons): Slack cannot show approval
+                # TODO(wenxi-onyx): Slack cannot show approval
                 # requests yet, so its turns run the tools that would ask.
                 ask_for_approval=False,
             )

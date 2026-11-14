@@ -609,6 +609,27 @@ def test_the_owner_reads_a_decision_when_woken_or_at_the_fallback_read(
     ]
 
 
+def test_deleting_the_server_ends_the_wait_of_its_calls(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    owned = _direct_call(chat, owned_runs)
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    [request] = owned.run.pending_inputs
+
+    # Deletes the server's app identity and its requests.
+    db_session.execute(delete(MCPServer).where(MCPServer.id == chat.server.id))
+    db_session.commit()
+    with pytest.raises(OnyxError) as missing:
+        chat.decide(db_session, request.request_id, ApprovalChoice.APPROVE_ONCE)
+    assert missing.value.error_code == OnyxErrorCode.NOT_FOUND
+    # The fallback read finds that the request is gone.
+    owned.owner._next_approval_read = 0.0
+    owned.owner.poll_control()
+
+    assert owned.run.result(timeout=10).output.text == "done"
+    assert "no longer available" in owned.first_result("send")
+
+
 def test_a_non_streaming_response_returns_with_every_request_that_waits(
     db_session: Session, chat: ApprovalChat
 ) -> None:

@@ -392,7 +392,9 @@ calls run with no row unless the policy is now DENY.
     current policy (`db/action_policy.py:current_action_policy`, also used by
     the session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
-    outcome is `disabled`. While the response runs, an approval of a row that
+    outcome is `disabled`. Deleting the tool's server deletes its rows; the
+    owner's next read (`db/approval_request.py:settle_approval_requests__no_commit`)
+    answers a call whose row is gone as `disabled`. While the response runs, an approval of a row that
     is already approved returns 200 with the row's `decided_via`. An
     `approve_session` on a row the user approved once upgrades it to a session
     grant and approves the waiting sibling requests; every request that a grant
