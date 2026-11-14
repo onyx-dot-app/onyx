@@ -643,8 +643,9 @@ func (m *Manager) ScaleDownHolds() int {
 	if need && m.adopter != nil && m.guardScan.CompareAndSwap(false, true) {
 		done := make(chan struct{})
 		go func() {
-			defer m.guardScan.Store(false)
+			// Clear the flag first, so a caller that wakes on done can scan.
 			defer close(done)
+			defer m.guardScan.Store(false)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 			if err := m.rescan(ctx); err != nil {
