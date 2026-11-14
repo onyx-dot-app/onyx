@@ -1150,7 +1150,9 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
     user_message: UserMessage,
     failure_point: str,
 ) -> None:
-    owner = store(branch)
+    # The test is the control thread, so a background poll cannot race the
+    # dispatch that the child's release leaves pending.
+    owner = unpolled_store(branch)
     coordinator = AgentCoordinator()
     view = owner.bind(
         coordinator,
@@ -1216,6 +1218,8 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
         assert len(responses) == len(questions) == 1
         assert all(row.response_status == RunStatus.COMPLETE for row in responses)
         assert questions[0].parent_message_id is None
+        assert owner.has_owned_work
+        owner.poll_control()
         assert not owner.has_owned_work
     finally:
         assert coordinator.close(timeout=10)
