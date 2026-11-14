@@ -8,7 +8,7 @@
 #   Onyx tag as the image tag (for example v5.3.0). The chart defaults to it.
 # A publish first audits the image (OS packages and Go modules), the guest
 # kernel and Firecracker pins (ods audit craft-fc). The build job also runs
-# govulncheck on the Go module (report only).
+# govulncheck on the Go module and fails on a reachable vulnerability.
 #
 # The image copies /craft-fc/ from onyxdotapp/craft-fc-artifacts. Until that tag
 # is published (craft-fc-artifacts.yml), the build job builds
@@ -168,13 +168,10 @@ jobs:
           go-version-file: ${{ env.AGENT_DIR }}/go.mod
           cache: false
 
-      # Report only: a Go fix needs a new agent build and the KVM tests.
+      # Fails on a vulnerability that the code reaches. Same pin as release-cli.yml.
       - name: Scan the Go module with govulncheck
         working-directory: ${{ env.AGENT_DIR }}
-        run: |
-          if ! go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...; then
-            echo "::warning::govulncheck reports vulnerabilities in ${AGENT_DIR}. See the step log."
-          fi
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
 
   publish:
     needs:
