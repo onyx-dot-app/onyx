@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/exitcodes"
 	"github.com/onyx-dot-app/onyx/cli/internal/iostreams"
@@ -279,5 +281,203 @@ func TestAsk_RejectsUnknownApproveValue(t *testing.T) {
 	ios, _, _ := pipedIOS()
 	if code := exitCode(runApprovalAsk(t, ios, "--approve=always")); code != exitcodes.BadRequest {
 		t.Fatalf("exit code = %d, want %d", code, exitcodes.BadRequest)
+	}
+}
+
+// syncBuffer is an output buffer that a test reads while ask writes to it.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+const askPrompt = "[y] approve once / [a] approve for session / [N] reject"
+
+// waitForPrompts waits until stderr shows n prompts.
+func waitForPrompts(t *testing.T, errOut *syncBuffer, n int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for strings.Count(errOut.String(), askPrompt) < n {
+		if time.Now().After(deadline) {
+			t.Fatalf("stderr does not show %d prompts: %q", n, errOut.String())
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// parallelApprovalRun drives a fake server whose response requests several
+// approvals. script writes the stream; decisions records "id:decision".
+type parallelApprovalRun struct {
+	decisions chan string
+}
+
+func newParallelApprovalServer(t *testing.T, script func(send func(event string, obj map[string]any), decisions <-chan string)) *parallelApprovalRun {
+	t.Helper()
+	run := &parallelApprovalRun{decisions: make(chan string, 8)}
+	// The script sees each decision once; the test reads the copy in run.
+	scriptDecisions := make(chan string, 8)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
+		fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
+		w.(http.Flusher).Flush()
+		script(func(event string, obj map[string]any) {
+			fmt.Fprintln(w, streamLine(event, obj))
+			w.(http.Flusher).Flush()
+		}, scriptDecisions)
+	})
+	mux.HandleFunc("POST /api/chat/approvals/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Decision string `json:"decision"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		decision := r.PathValue("id") + ":" + body.Decision
+		run.decisions <- decision
+		scriptDecisions <- decision
+		fmt.Fprintf(w, `{"approval_id":%q,"decision":"APPROVED","decided_via":"USER"}`, r.PathValue("id"))
+	})
+	mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {})
+	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"is_processing":false}`)
+	})
+	mux.HandleFunc("/api/chat/rename-chat-session", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"new_name":"Title"}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	testutil.IsolateConfig(t, srv.URL)
+	t.Setenv("CI", "")
+	return run
+}
+
+func requestEvent(id string) map[string]any {
+	return map[string]any{"approval_id": id, "tool_call_id": "call-" + id, "tool_name": "tool_" + id, "display_name": "Tool " + id}
+}
+
+// interactiveIOS is a terminal whose answers the test types.
+func interactiveIOS(t *testing.T) (*iostreams.IOStreams, *io.PipeWriter, *syncBuffer) {
+	t.Helper()
+	answers, typed := io.Pipe()
+	t.Cleanup(func() { _ = typed.Close() })
+	errOut := &syncBuffer{}
+	return &iostreams.IOStreams{In: answers, Out: &syncBuffer{}, ErrOut: errOut, IsStdinTTY: true, IsStderrTTY: true}, typed, errOut
+}
+
+func TestAsk_LateAnswerDoesNotDecideTheNextRequest(t *testing.T) {
+	aShown := make(chan struct{})
+	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
+		send("tool_approval_request", requestEvent("a1"))
+		<-aShown
+		// a1 times out while the user types its answer.
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "expired"})
+		send("tool_approval_request", requestEvent("a2"))
+		<-decisions
+		send("tool_approval_resolved", map[string]any{"approval_id": "a2", "outcome": "rejected"})
+		send("stop", nil)
+	})
+	ios, typed, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	close(aShown)
+	waitForPrompts(t, errOut, 2)
+	// The answer meant for a1 arrives after a2's prompt shows.
+	go func() { _, _ = io.WriteString(typed, "a\n") }()
+	waitForPrompts(t, errOut, 3)
+	go func() { _, _ = io.WriteString(typed, "n\n") }()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := <-run.decisions; got != "a2:reject" {
+		t.Fatalf("decision = %q, want a2:reject from a2's own prompt", got)
+	}
+}
+
+func TestAsk_QueuedInputDoesNotAnswerTheNextPrompt(t *testing.T) {
+	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
+		send("tool_approval_request", requestEvent("a1"))
+		<-decisions
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "approved"})
+		send("tool_approval_request", requestEvent("a2"))
+		<-decisions
+		send("tool_approval_resolved", map[string]any{"approval_id": "a2", "outcome": "rejected"})
+		send("stop", nil)
+	})
+	ios, typed, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	go func() { _, _ = io.WriteString(typed, "y\ny\n") }()
+	waitForPrompts(t, errOut, 2)
+	go func() { _, _ = io.WriteString(typed, "n\n") }()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	for _, want := range []string{"a1:approve_once", "a2:reject"} {
+		if got := <-run.decisions; got != want {
+			t.Fatalf("decision = %q, want %q", got, want)
+		}
+	}
+}
+
+func TestAsk_NoPromptForARequestResolvedWhileAnotherWaited(t *testing.T) {
+	aShown := make(chan struct{})
+	bQueued := make(chan struct{})
+	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
+		send("tool_approval_request", requestEvent("a1"))
+		<-aShown
+		// Another client decides a2 while a1's prompt waits.
+		send("tool_approval_request", requestEvent("a2"))
+		send("tool_approval_resolved", map[string]any{"approval_id": "a2", "outcome": "approved"})
+		close(bQueued)
+		<-decisions
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "approved"})
+		send("message_delta", map[string]any{"content": "done"})
+		send("stop", nil)
+	})
+	ios, typed, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	close(aShown)
+	<-bQueued
+	// Let ask take a2's events off the stream before a1's answer arrives.
+	time.Sleep(200 * time.Millisecond)
+	_, _ = io.WriteString(typed, "y\n")
+	_ = typed.Close()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := <-run.decisions; got != "a1:approve_once" {
+		t.Fatalf("decision = %q", got)
+	}
+	select {
+	case got := <-run.decisions:
+		t.Fatalf("sent %q for a request another client resolved", got)
+	default:
+	}
+	stderr := errOut.String()
+	if n := strings.Count(stderr, askPrompt); n != 1 {
+		t.Fatalf("prompts = %d, want 1: %q", n, stderr)
+	}
+	if !strings.Contains(stderr, "Approved: Tool a2") {
+		t.Fatalf("a2's outcome is not reported: %q", stderr)
 	}
 }

@@ -147,9 +147,11 @@ func (c *Client) stream(
 			return
 		}
 
+		// The idle timer keeps running until the scanner loop, so it also bounds
+		// the read of an error body.
 		resp, err := c.streamHTTPClient.Do(req)
-		idle.Stop()
 		if err != nil {
+			idle.Stop()
 			if ctx.Err() != nil {
 				return // cancelled
 			}

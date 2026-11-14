@@ -50,6 +50,10 @@ type Model struct {
 	// approvals holds the tool approval requests whose outcome the server has
 	// not reported yet, oldest first.
 	approvals []approvalCard
+	// replayIncomplete marks a followed response whose replay has not
+	// reached its stop packet. When its run ends, the session loads again
+	// from its saved messages.
+	replayIncomplete bool
 
 	// Configure state
 	configState *configState
@@ -121,6 +125,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.viewport.setWidth(msg.Width)
+		m.renderApprovals()
 		m.status.setWidth(msg.Width)
 		m.input.textInput.SetWidth(msg.Width - 4)
 		if !m.splashShown {
@@ -181,6 +186,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.viewport.addWarning("Waiting to confirm conversation readiness.")
 			}
 			return m, checkSessionReady(m.client, msg.sessionID, msg.channel)
+		}
+		if m.replayIncomplete {
+			m, _ = m.finishStream(nil)
+			return cmdResume(m, msg.sessionID)
 		}
 		return m.finishStream(nil)
 
@@ -457,6 +466,7 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 	}
 	m.streamID = nil
 	m.settling = false
+	m.replayIncomplete = false
 	m.isStreaming = true
 	m.readinessUnconfirmed = false
 	m.agentStarted = false
@@ -473,9 +483,11 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 // request that waits for approval can be decided here.
 func (m Model) followRunningResponse() (Model, tea.Cmd) {
 	sessionID := *m.chatSessionID
-	return m.startStream(func(ctx context.Context) <-chan models.StreamEvent {
+	m, cmd := m.startStream(func(ctx context.Context) <-chan models.StreamEvent {
 		return m.client.ResumeChatStream(ctx, sessionID)
 	})
+	m.replayIncomplete = true
+	return m, cmd
 }
 
 func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
@@ -566,6 +578,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 
 	case models.StopEvent:
 		// Delivery completion does not confirm the save. Drain the stream.
+		m.replayIncomplete = false
 
 	case models.ErrorEvent:
 		if m.input.textInput.Value() == "" {
@@ -845,21 +858,18 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m.agentID = *detail.AgentID
 	}
 
-	// A running response replays from its start, so its saved part is skipped.
-	messages := detail.Messages
-	if last := len(messages) - 1; msg.Running && last >= 0 && messages[last].MessageType == "assistant" {
-		messages = messages[:last]
-	}
-
 	// Replay messages
-	for _, chatMsg := range messages {
+	for _, chatMsg := range detail.Messages {
 		switch chatMsg.MessageType {
 		case "user":
 			m.viewport.addUserMessage(chatMsg.Message)
 		case "assistant":
+			// A replay of a running response replaces its saved copy.
 			m.viewport.startAgent()
+			m.viewport.showResponse(chatMsg.MessageID)
 			m.viewport.appendToken(chatMsg.Message)
 			m.viewport.finishAgent()
+			m.viewport.endResponse()
 		}
 	}
 

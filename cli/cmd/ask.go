@@ -103,12 +103,16 @@ with code 10.`,
 			// A person answers approval prompts on a terminal. Scripts, agents,
 			// CI and --json get the --approve answer instead and never block.
 			var promptReader *bufio.Reader
+			// The terminal behind promptReader, when it is a file.
+			var promptTerminal *os.File
 			if !askJSON && !cmd.Flags().Changed("approve") && ios.IsStderrTTY && os.Getenv("CI") == "" {
 				if ios.IsStdinTTY {
 					promptReader = bufio.NewReader(ios.In)
+					promptTerminal, _ = ios.In.(*os.File)
 				} else if tty, err := os.Open("/dev/tty"); err == nil {
 					defer func() { _ = tty.Close() }()
 					promptReader = bufio.NewReader(tty)
+					promptTerminal = tty
 				}
 			}
 
@@ -143,29 +147,38 @@ with code 10.`,
 			asked := map[string]string{}
 			// Events that arrived while a prompt waited, handled after it.
 			var deferred []models.StreamEvent
+			// Requests that the server ended while a prompt waited.
+			ended := map[string]bool{}
 			// One reader serves every prompt and reads a line only when a prompt
 			// asks for one, so a prompt that the stream ended leaves no reader
-			// behind. A line read before a prompt showed answers an earlier one.
+			// behind. Each line answers only the request whose prompt asked for
+			// it, and only input typed after that prompt showed.
 			type promptLine struct {
-				text string
-				at   time.Time
+				approvalID string
+				text       string
 			}
 			var promptLines chan promptLine
-			readLine := make(chan struct{}, 1)
+			// The approval id of the prompt that asks for a line.
+			readLine := make(chan string, 1)
 			reading := false
 			if promptReader != nil {
 				promptLines = make(chan promptLine)
 				go func() {
 					for {
+						var approvalID string
 						select {
-						case <-readLine:
+						case approvalID = <-readLine:
 						case <-ctx.Done():
 							return
+						}
+						_, _ = promptReader.Discard(promptReader.Buffered())
+						if promptTerminal != nil {
+							iostreams.DiscardPendingInput(promptTerminal)
 						}
 						// At end of input every prompt reads "", which rejects.
 						line, _ := promptReader.ReadString('\n')
 						select {
-						case promptLines <- promptLine{strings.ToLower(strings.TrimSpace(line)), time.Now()}:
+						case promptLines <- promptLine{approvalID, strings.ToLower(strings.TrimSpace(line))}:
 						case <-ctx.Done():
 							return
 						}
@@ -194,12 +207,16 @@ with code 10.`,
 				asked[req.ApprovalID] = title
 				decision := approveDecision
 				if promptLines != nil {
-					fmt.Fprint(ios.ErrOut, "[y] approve once / [a] approve for session / [N] reject: ")
-					shownAt := time.Now()
+					if ended[req.ApprovalID] {
+						// The outer loop reports the queued resolution.
+						return nil
+					}
+					const promptText = "[y] approve once / [a] approve for session / [N] reject: "
+					fmt.Fprint(ios.ErrOut, promptText)
 				prompt:
 					for {
 						if !reading {
-							readLine <- struct{}{}
+							readLine <- req.ApprovalID
 							reading = true
 						}
 						select {
@@ -212,14 +229,19 @@ with code 10.`,
 								return nil
 							}
 							deferred = append(deferred, event)
+							if resolved, isResolved := event.(models.ToolApprovalResolvedEvent); isResolved {
+								ended[resolved.ApprovalID] = true
+							}
 							// The server ended the request, e.g. at its deadline.
-							if resolved, isResolved := event.(models.ToolApprovalResolvedEvent); isResolved && resolved.ApprovalID == req.ApprovalID {
+							if ended[req.ApprovalID] {
 								fmt.Fprintln(ios.ErrOut)
 								return nil
 							}
 						case line := <-promptLines:
 							reading = false
-							if line.at.Before(shownAt) {
+							if line.approvalID != req.ApprovalID {
+								// The line answers a prompt that the server ended.
+								fmt.Fprint(ios.ErrOut, promptText)
 								continue
 							}
 							switch line.text {

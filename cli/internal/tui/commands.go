@@ -329,8 +329,10 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 		if err != nil {
 			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr)}
 		}
-		running, err := client.IsChatSessionProcessing(context.Background(), detail.ChatSessionID)
-		return SessionResumedMsg{Detail: detail, Running: err == nil && running}
+		// A failed status query counts as running. Following a session that
+		// runs nothing ends at once, and its readiness check reports the failure.
+		running, _ := client.IsChatSessionProcessing(context.Background(), detail.ChatSessionID)
+		return SessionResumedMsg{Detail: detail, Running: running}
 	}
 }
 

@@ -306,6 +306,11 @@ func TestApprovalCardStripsHostileContent(t *testing.T) {
 			rendered = e.rendered
 		}
 	}
+	for _, injected := range []string{"\x1b]52;", "\x1b]8;", "\x1b[2J", "\x07", "\r"} {
+		if strings.Contains(rendered, injected) {
+			t.Fatalf("card keeps the injected sequence %q: %q", injected, rendered)
+		}
+	}
 	plain := stripANSI(rendered)
 	if strings.ContainsAny(plain, "\x1b\x07\r") {
 		t.Fatalf("card keeps control characters: %q", plain)
@@ -322,6 +327,10 @@ type resumingClient struct {
 	resumed []string
 	// sent answers SendMessageStream.
 	sent chan models.StreamEvent
+	// saved answers GetChatSession.
+	saved *models.ChatSessionDetailResponse
+	// statusErr fails IsChatSessionProcessing.
+	statusErr error
 }
 
 func (c *resumingClient) SendMessageStream(context.Context, string, *string, int, *int, []models.FileDescriptorPayload, *models.LLMOverride) <-chan models.StreamEvent {
@@ -402,7 +411,7 @@ func TestApprovalPendingReplayReplacesTheShownResponse(t *testing.T) {
 	if shown != 1 || cards != 1 {
 		t.Fatalf("the response shows %d times and its request %d times", shown, cards)
 	}
-	if last := m.viewport.entries[len(m.viewport.entries)-1]; last.kind != entryAgent {
+	if last := m.viewport.entries[len(m.viewport.entries)-1]; last.responseID != 7 {
 		t.Fatalf("the replayed response is not last: %q", last.content)
 	}
 }
@@ -425,6 +434,8 @@ func TestResumingARunningSessionShowsItsWaitingRequest(t *testing.T) {
 	if len(client.resumed) != 1 || client.resumed[0] != "session-1" || !m.isStreaming {
 		t.Fatalf("did not follow the running response: resumed=%v", client.resumed)
 	}
+	// The replay of the response replaces its saved copy.
+	m = receive(t, m, client.running, models.MessageIDEvent{ReservedAgentMessageID: 2})
 	for _, e := range m.viewport.entries {
 		if strings.Contains(e.content, "partial") {
 			t.Fatal("the running response shows twice")
@@ -433,5 +444,94 @@ func TestResumingARunningSessionShowsItsWaitingRequest(t *testing.T) {
 	m = receive(t, m, client.running, approvalRequest("a1"))
 	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
 		t.Fatal("the waiting request cannot be decided")
+	}
+}
+
+func (c *resumingClient) GetChatSession(_ context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
+	return c.saved, nil
+}
+
+func (c *resumingClient) IsChatSessionProcessing(context.Context, string) (bool, error) {
+	// Like the API client, a failed query reports a running session.
+	return c.statusErr != nil, c.statusErr
+}
+
+func TestResumeFollowsTheSessionWhenItsStatusIsUnknown(t *testing.T) {
+	const sessionID = "11111111-2222-3333-4444-555555555555"
+	client := &resumingClient{
+		saved:     &models.ChatSessionDetailResponse{ChatSessionID: sessionID},
+		statusErr: errors.New("connection reset"),
+	}
+	_, cmd := cmdResume(NewModel(config.DefaultConfig(), client), sessionID)
+	if msg := cmd().(SessionResumedMsg); !msg.Running {
+		t.Fatal("a failed status query skips the stream that shows a waiting request")
+	}
+}
+
+func TestResumeKeepsTheSavedResponseWhenReplayIsUnavailable(t *testing.T) {
+	// The run ends before the replay starts, so the replay has no events.
+	running := make(chan models.StreamEvent)
+	close(running)
+	client := &resumingClient{running: running}
+	const sessionID = "11111111-2222-3333-4444-555555555555"
+	m := NewModel(config.DefaultConfig(), client)
+	question := models.ChatMessageDetail{MessageID: 1, MessageType: "user", Message: "file a ticket"}
+	updated, _ := m.Update(SessionResumedMsg{
+		Detail: &models.ChatSessionDetailResponse{
+			ChatSessionID: sessionID,
+			Messages:      []models.ChatMessageDetail{question, {MessageID: 2, MessageType: "assistant", Message: "Filing"}},
+		},
+		Running: true,
+	})
+	m = updated.(Model)
+	updated, _ = m.Update(StreamDoneMsg{Channel: m.streamCh})
+	m = updated.(Model)
+	updated, cmd := m.Update(sessionReadyMsg{sessionID: sessionID, channel: m.streamCh})
+	m = updated.(Model)
+	if m.isStreaming || !strings.Contains(stripANSI(m.viewport.view(20)), "Filing") {
+		t.Fatalf("the saved response is gone:\n%s", stripANSI(m.viewport.view(20)))
+	}
+
+	// The session loads again with the finished response.
+	if cmd == nil {
+		t.Fatal("the session was not loaded again")
+	}
+	client.saved = &models.ChatSessionDetailResponse{
+		ChatSessionID: sessionID,
+		Messages:      []models.ChatMessageDetail{question, {MessageID: 2, MessageType: "assistant", Message: "Filed ENG-1."}},
+	}
+	updated, _ = m.Update(cmd())
+	view := stripANSI(updated.(Model).viewport.view(20))
+	if !strings.Contains(view, "Filed ENG-1.") || strings.Contains(view, "Filing") {
+		t.Fatalf("view does not show the saved response:\n%s", view)
+	}
+}
+
+func TestApprovalCardFollowsTheStreamedText(t *testing.T) {
+	m, ch := streamingModel(&decidingClient{})
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageDeltaEvent{Content: strings.Repeat("streamed line\n\n", 30)})
+	m = receive(t, m, ch, approvalRequest("a1"))
+	if view := stripANSI(m.viewport.view(5)); !strings.Contains(view, "esc stop the response") {
+		t.Fatalf("the card is hidden above the streamed text:\n%s", view)
+	}
+	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "after the decision"})
+	if view := stripANSI(m.viewport.view(5)); !strings.Contains(view, "after the decision") {
+		t.Fatalf("text after the card does not show:\n%s", view)
+	}
+}
+
+func TestResizeRedrawsApprovalCards(t *testing.T) {
+	m, ch := streamingModel(&decidingClient{})
+	m.viewport.setWidth(30)
+	request := approvalRequest("a1")
+	request.Arguments = map[string]any{"title": "A title that is longer than a narrow terminal"}
+	m = receive(t, m, ch, request)
+	if strings.Contains(approvalEntry(t, m, "a1"), "narrow terminal") {
+		t.Fatal("the narrow card is not truncated")
+	}
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	if card := approvalEntry(t, updated.(Model), "a1"); !strings.Contains(card, "longer than a narrow terminal") {
+		t.Fatalf("the card keeps its old width:\n%s", card)
 	}
 }
