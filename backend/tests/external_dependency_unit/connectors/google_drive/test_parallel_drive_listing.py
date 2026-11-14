@@ -20,7 +20,10 @@ from onyx.connectors.google_drive.models import (
     ListingShard,
 )
 from onyx.connectors.google_drive.parallel_listing import drive_document_type
-from onyx.connectors.google_drive.source_operations import GoogleDriveRefreshError
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveRefreshError,
+)
 from onyx.connectors.models import SlimDocumentStub
 from onyx.utils import threadpool_concurrency
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
@@ -434,6 +437,55 @@ def test_a_split_on_a_later_page_emits_each_file_once(
 
 
 @pytest.mark.usefixtures("small_pages")
+def test_a_nested_split_at_the_same_time_emits_each_file_once(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sub-range that starts inside a burst skips the burst files its
+    parent kept. If the sub-range splits again on a later page at that same
+    time, its first sub-range must skip those files too."""
+    # Narrow sub-ranges, so a sub-range can split again.
+    monkeypatch.setattr(parallel_listing, "MIN_SHARD_MS", 1)
+    own_mock_drive.set_corpus(_SHARDED_CORPUS)
+    for _ in range(2):
+        own_mock_drive.client.post(
+            "/_mock/corpus/touch", json={"count": 1500}
+        ).raise_for_status()
+        time.sleep(2.5)
+    expected = own_mock_drive.content_file_ids()
+
+    nested_splits = 0
+    try_split = parallel_listing.ParallelDriveLister._try_split
+
+    def split_only_on_later_burst_pages(
+        self: parallel_listing.ParallelDriveLister,
+        shard: ListingShard,
+        files: list[GoogleDriveFileType],
+    ) -> object:
+        """Stands in for the shard cap: refuses each split until the shard is
+        on a later page whose files all have the burst's time."""
+        nonlocal nested_splits
+        times = {file.get("modifiedTime") for file in files}
+        in_burst = len(times) == 1 and bool(shard.frontier_ids)
+        if shard.page_token is None or not in_burst:
+            return parallel_listing._SplitRefusal.SHARD_CAP
+        page_ms = parallel_listing._modified_ms(files[0])
+        result = try_split(self, shard, files)
+        if shard.skip_ids and page_ms == shard.t0 and isinstance(result, list):
+            nested_splits += bool(result)
+        return result
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister,
+        "_try_split",
+        split_only_on_later_burst_pages,
+    )
+    listing = list_with_resume(own_mock_drive.build_connector())
+
+    assert nested_splits > 0, "no sub-range split again at its own start"
+    _assert_full_corpus(listing, expected)
+
+
+@pytest.mark.usefixtures("small_pages")
 def test_a_new_window_start_lists_every_file_again(
     own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -477,12 +529,23 @@ def test_a_new_window_start_lists_every_file_again(
     assert set(listed) == expected
 
 
+def _denied_page() -> GoogleDriveHttpError:
+    return GoogleDriveHttpError(
+        status_code=403,
+        reasons=("insufficientFilePermissions",),
+        access_denied=True,
+        message="The user does not have sufficient permissions",
+    )
+
+
+@pytest.mark.parametrize("denied", [False, True], ids=["impersonation", "denied"])
 def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
-    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch, denied: bool
 ) -> None:
     """A shared-with-user listing drops a file whose owner's My Drive
     partition began, because that partition lists it. If that partition then
-    fails, the file must still come from a shared-with-user listing."""
+    fails, the file must still come from a shared-with-user listing. A page
+    that Drive denies fails the partition too, with a reported failure."""
     own_mock_drive.set_corpus(_SHARDED_CORPUS)
 
     lock = threading.Lock()
@@ -509,6 +572,8 @@ def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
                     if last and time.monotonic() - last > 1.0:
                         break
                     time.sleep(0.05)
+                if denied:
+                    raise _denied_page()
                 raise GoogleDriveRefreshError("the user can no longer be impersonated")
         files, next_token = fetch_page(self, shard)
         if kind is ListingPartitionKind.SHARED_WITH_USER:
@@ -538,6 +603,32 @@ def test_files_shared_by_an_owner_whose_my_drive_fails_are_still_listed(
         f"{len(missing)} of {len(shared_by_victim)} files that the failed owner "
         "shared were not listed"
     )
+    if denied:
+        assert listing.failures, "the denied listing was not reported"
+
+
+def test_a_denied_page_fails_pruning(
+    mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Pruning deletes what the listing lacks. A page that Drive denies must
+    fail the pruning listing, not end that partition as if it were empty."""
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def deny_one_my_drive(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
+            raise _denied_page()
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", deny_one_my_drive
+    )
+    connector = mock_drive.build_connector()
+
+    with pytest.raises(GoogleDriveHttpError):
+        for _batch in connector.retrieve_all_slim_docs():
+            pass
 
 
 def _modified_ms(mock_drive: MockDrive, file_id: str) -> int:

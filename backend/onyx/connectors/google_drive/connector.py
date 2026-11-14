@@ -2794,6 +2794,31 @@ class GoogleDriveConnector(
         ) -> list[RetrievedDriveFile]:
             return list(self._impersonation_failed(email, error, checkpoint))
 
+        def listing_denied(
+            partition: ListingPartition, email: str, error: GoogleDriveHttpError
+        ) -> list[RetrievedDriveFile]:
+            logger.warning(
+                "Drive denied the %s listing of %s as %s: %s",
+                partition.kind.value,
+                partition.key,
+                email,
+                error,
+            )
+            shared_drive = partition.kind is ListingPartitionKind.SHARED_DRIVE
+            return [
+                RetrievedDriveFile(
+                    completion_stage=(
+                        DriveRetrievalStage.SHARED_DRIVE_FILES
+                        if shared_drive
+                        else DriveRetrievalStage.MY_DRIVE_FILES
+                    ),
+                    drive_file={},
+                    user_email=email,
+                    parent_id=partition.key if shared_drive else None,
+                    error=error,
+                )
+            ]
+
         def admit_file(drive_file: GoogleDriveFileType, exact: bool) -> bool:
             return self._admit_file(checkpoint, drive_file, exact)
 
@@ -2811,6 +2836,7 @@ class GoogleDriveConnector(
             choose_drive_principal=choose_drive_principal,
             check_impersonation=check_impersonation,
             impersonation_failed=impersonation_failed,
+            listing_denied=listing_denied,
             admit_file=admit_file,
             inline=inline,
         )

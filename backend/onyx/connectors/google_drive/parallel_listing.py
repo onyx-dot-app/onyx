@@ -337,6 +337,11 @@ class ParallelDriveLister:
         impersonation_failed: Callable[
             [str, GoogleDriveRefreshError], list[RetrievedDriveFile]
         ],
+        # Records that Drive denied a page of a partition (403 or 404).
+        # Returns the failures to report.
+        listing_denied: Callable[
+            [ListingPartition, str, GoogleDriveHttpError], list[RetrievedDriveFile]
+        ],
         # Whether to emit a file, and the dedup claim. Called under the lock.
         admit_file: Callable[[GoogleDriveFileType, bool], bool],
         # The caller converts each file before it reads the next. One page is
@@ -356,6 +361,7 @@ class ParallelDriveLister:
         self._choose_drive_principal = choose_drive_principal
         self._check_impersonation = check_impersonation
         self._impersonation_failed = impersonation_failed
+        self._listing_denied = listing_denied
         self._admit_file = admit_file
         self._inline = inline
         self._budget_files = INLINE_CALL_BUDGET_FILES if inline else CALL_BUDGET_FILES
@@ -573,7 +579,15 @@ class ParallelDriveLister:
             try:
                 return self._list_one_page(shard.model_copy())
             except GoogleDriveRefreshError as error:
-                return self._partition_failed(shard, error)
+                failures = self._impersonation_failed(shard.principal, error)
+                return self._partition_failed(shard, failures, list_again=True)
+            except GoogleDriveHttpError as error:
+                if not error.access_denied:
+                    raise
+                # An empty page would read as deleted files, and the partition
+                # would count as listed. Report the partition as failed.
+                failures = self._listing_denied(shard.partition, shard.principal, error)
+                return self._partition_failed(shard, failures, list_again=False)
 
         return run
 
@@ -649,7 +663,6 @@ class ParallelDriveLister:
             page_token=shard.page_token,
             page_size=LISTING_PAGE_SIZE,
             max_num_pages=1,
-            continue_on_404_or_403=True,
         ):
             if isinstance(item, str):
                 next_token = item
@@ -711,9 +724,15 @@ class ParallelDriveLister:
         via_shortcut = RESOLVED_FROM_SHORTCUT_KEY in file
         file_drive_id = file.get("driveId")
         owner = owner_email(file)
+        # A shortcut target that changed before the window is outside every
+        # listing's range, so no other listing covers it.
+        listable = not via_shortcut or self._in_window(file)
 
         if kind is ListingPartitionKind.SHARED_WITH_USER:
-            if file_drive_id in state.listed_drive_ids or owner in state.listed_owners:
+            covered = (
+                file_drive_id in state.listed_drive_ids or owner in state.listed_owners
+            )
+            if covered and listable:
                 return False
             return self._admit_file(file, False)
 
@@ -725,16 +744,28 @@ class ParallelDriveLister:
             covered_elsewhere = not own and (
                 file_drive_id in state.listed_drive_ids or owner in state.listed_owners
             )
-        # A shortcut to a file of this partition: the listing has the file.
-        if via_shortcut and own:
+        # A shortcut to a file of this partition in the window: the listing
+        # has the file.
+        if via_shortcut and own and listable:
             return False
         # A shortcut target can be emitted twice, here and by its own exact
         # partition. Accepted: a drop here can lose a file that only a changed
         # shortcut reaches in an incremental run.
         exact = shard.exact and own and not via_shortcut
-        if not exact and covered_elsewhere:
+        if not exact and covered_elsewhere and listable:
             return False
         return self._admit_file(file, exact)
+
+    def _in_window(self, file: GoogleDriveFileType) -> bool:
+        """Whether the file's modifiedTime is in the listing window, so the
+        listing of its own partition returns it. The caller holds the lock."""
+        modified = _modified_ms(file)
+        if modified is None:
+            return False
+        state = self._state
+        return modified >= state.window_t0 and (
+            state.open_end or modified < state.window_t1
+        )
 
     # --- Splitting ------------------------------------------------------------
 
@@ -764,7 +795,14 @@ class ParallelDriveLister:
                 return _SplitRefusal.OUT_OF_ORDER
             if boundary == shard.frontier_ms and shard.frontier_overflow:
                 return _SplitRefusal.FRONTIER_OVERFLOW
-            skip_ids = shard.frontier_ids if boundary == shard.frontier_ms else []
+            # A first sub-range that starts where this shard starts keeps the
+            # ids this shard inherited: its pages dropped them, so they are
+            # not in the frontier.
+            inherited = shard.skip_ids if boundary <= shard.t0 else []
+            kept = shard.frontier_ids if boundary == shard.frontier_ms else []
+            skip_ids = list(dict.fromkeys([*inherited, *kept]))
+            if len(skip_ids) > MAX_FRONTIER_IDS:
+                return _SplitRefusal.FRONTIER_OVERFLOW
             shard = shard.model_copy(update={"t0": max(shard.t0, boundary)})
         if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
             return _SplitRefusal.DENSITY
@@ -849,12 +887,16 @@ class ParallelDriveLister:
     # --- Failure --------------------------------------------------------------
 
     def _partition_failed(
-        self, shard: ListingShard, error: GoogleDriveRefreshError
+        self,
+        shard: ListingShard,
+        failures: list[RetrievedDriveFile],
+        list_again: bool,
     ) -> list[AdaptiveTask]:
-        """The service account can no longer act as the shard's user. Closes
-        every shard of the partition. A shared drive goes back to pending, to
-        list again from its start as another member."""
-        failures = self._impersonation_failed(shard.principal, error)
+        """The shard's partition cannot list: the service account can no
+        longer act as its user, or Drive denied a page. Closes every shard of
+        the partition and reports ``failures``. With ``list_again``, a shared
+        drive goes back to pending, to list again from its start as another
+        member. Otherwise the drive is incomplete."""
         partition = shard.partition
         with self._lock:
             state = self._state
@@ -874,9 +916,15 @@ class ParallelDriveLister:
             ]
             self._emit(failures)
             if partition.kind is ListingPartitionKind.SHARED_DRIVE:
-                state.listed_drive_ids.discard(partition.key)
-                self._checkpoint.organizer_email_by_drive_id.pop(partition.key, None)
-                state.pending_partitions.insert(0, partition)
+                drive_id = partition.key
+                state.listed_drive_ids.discard(drive_id)
+                self._checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
+                if list_again:
+                    state.pending_partitions.insert(0, partition)
+                else:
+                    self._checkpoint.incomplete_drive_ids.add(drive_id)
+                    if drive_id in self._requested_shared_drive_ids:
+                        self._checkpoint.unreachable_target_ids.add(drive_id)
             elif partition.kind is ListingPartitionKind.MY_DRIVE:
                 # Files of this owner are no longer covered, so a shared-with
                 # listing that starts later keeps them.

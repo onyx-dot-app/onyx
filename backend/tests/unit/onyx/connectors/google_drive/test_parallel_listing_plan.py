@@ -2,11 +2,21 @@
 cover the whole shard with no overlap, wherever the files are, because the
 sub-ranges are the only record of what is still to list."""
 
+from datetime import datetime, timezone
+from typing import cast
+
 import pytest
 
 from onyx.connectors.google_drive import parallel_listing
+from onyx.connectors.google_drive.file_retrieval import (
+    RESOLVED_FROM_SHORTCUT_KEY,
+    DriveFileFieldType,
+)
 from onyx.connectors.google_drive.models import (
     DriveListingState,
+    DriveRetrievalStage,
+    GoogleDriveCheckpoint,
+    GoogleDriveFileType,
     ListingPartition,
     ListingPartitionKind,
     ListingShard,
@@ -16,7 +26,11 @@ from onyx.connectors.google_drive.parallel_listing import (
     plan_split,
     window_ms,
 )
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 from onyx.connectors.models import DocumentTypeLabel
+from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 _DRIVE = ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key="drive_1")
 _DAY = 86_400_000
@@ -142,3 +156,93 @@ def test_a_later_window_end_adds_a_shard_for_each_started_partition() -> None:
     }
     # The state still reads back from JSON.
     assert DriveListingState.model_validate_json(state.model_dump_json()) == state
+
+
+_OWNER_A = ListingPartition(kind=ListingPartitionKind.MY_DRIVE, key="a@x.com")
+_SHARED_WITH_A = ListingPartition(
+    kind=ListingPartitionKind.SHARED_WITH_USER, key="a@x.com"
+)
+_WINDOW_T0 = 10 * _DAY
+_WINDOW_T1 = 20 * _DAY
+
+
+def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
+    """A lister of the window [_WINDOW_T0, _WINDOW_T1) where the My Drive of
+    b@x.com has begun. ``admit_file`` records each dedup claim."""
+    checkpoint = GoogleDriveCheckpoint(
+        retrieved_folder_and_drive_ids=set(),
+        completion_stage=DriveRetrievalStage.START,
+        completion_map=ThreadSafeDict(),
+        has_more=True,
+        listing=DriveListingState(
+            window_t0=_WINDOW_T0, window_t1=_WINDOW_T1, listed_owners={"b@x.com"}
+        ),
+    )
+
+    def admit_file(file: GoogleDriveFileType, _exact: bool) -> bool:
+        admitted.append(file["id"])
+        return True
+
+    return parallel_listing.ParallelDriveLister(
+        ops=cast(GoogleDriveSourceOperations, None),
+        checkpoint=checkpoint,
+        field_type=DriveFileFieldType.STANDARD,
+        requested_shared_drive_ids=(),
+        choose_drive_principal=lambda _drive, _busy: (None, False),
+        check_impersonation=lambda _email: (True, []),
+        impersonation_failed=lambda _email, _error: [],
+        listing_denied=lambda _partition, _email, _error: [],
+        admit_file=admit_file,
+    )
+
+
+def _shortcut_target(file_id: str, owner: str, modified_ms: int) -> GoogleDriveFileType:
+    stamp = datetime.fromtimestamp(modified_ms / 1000, tz=timezone.utc)
+    return {
+        "id": file_id,
+        "owners": [{"emailAddress": owner}],
+        "modifiedTime": stamp.isoformat(),
+        RESOLVED_FROM_SHORTCUT_KEY: "shortcut",
+    }
+
+
+@pytest.mark.parametrize("partition", [_OWNER_A, _SHARED_WITH_A])
+def test_a_shortcut_target_older_than_the_window_is_emitted(
+    partition: ListingPartition,
+) -> None:
+    """The target's owner is listed, but only for files changed in the
+    window. A target that changed before it comes only through the
+    shortcut."""
+    admitted: list[str] = []
+    lister = _lister(admitted)
+    shard = ListingShard(
+        id=1, partition=partition, principal="a@x.com", t0=_WINDOW_T0, t1=_WINDOW_T1
+    )
+
+    old = _shortcut_target("old", "b@x.com", _WINDOW_T0 - _DAY)
+    recent = _shortcut_target("recent", "b@x.com", _WINDOW_T0 + _DAY)
+
+    assert lister._admit(shard, old)
+    # The owner's listing returns this one.
+    assert not lister._admit(shard, recent)
+    assert admitted == ["old"]
+
+
+def test_a_shortcut_to_an_own_old_file_is_emitted() -> None:
+    admitted: list[str] = []
+    lister = _lister(admitted)
+    shard = ListingShard(
+        id=1,
+        partition=_OWNER_A,
+        principal="a@x.com",
+        t0=_WINDOW_T0,
+        t1=_WINDOW_T1,
+        exact=True,
+    )
+
+    old = _shortcut_target("old", "a@x.com", _WINDOW_T0 - _DAY)
+    recent = _shortcut_target("recent", "a@x.com", _WINDOW_T0 + _DAY)
+
+    assert lister._admit(shard, old)
+    assert not lister._admit(shard, recent)
+    assert admitted == ["old"]
