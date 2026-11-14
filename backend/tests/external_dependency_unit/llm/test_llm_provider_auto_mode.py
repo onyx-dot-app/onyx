@@ -381,3 +381,52 @@ def test_auto_update_provider_created_without_models_stores_image_support(
     flows = _flows(db_session, provider_name)
     assert LLMModelFlowType.VISION in flows["gpt-4o"]
     assert LLMModelFlowType.VISION not in flows["gpt-3.5-turbo"]
+
+
+def test_vision_default_repair_ignores_another_providers_flow(
+    db_session: Session, provider_name: str
+) -> None:
+    other_name = f"{provider_name}-other"
+    try:
+        other = _create_provider(
+            db_session,
+            other_name,
+            LlmProviderNames.OPENAI,
+            is_auto_mode=False,
+            models={"gpt-a": True},
+        )
+        provider = _create_provider(
+            db_session,
+            provider_name,
+            LlmProviderNames.OPENAI,
+            is_auto_mode=True,
+            models={"gpt-a": True},
+        )
+        # The catalog does not know this model. Only the other provider stores
+        # VISION for it.
+        for llm_provider_id, flows in (
+            (other.id, [LLMModelFlowType.CHAT, LLMModelFlowType.VISION]),
+            (provider.id, [LLMModelFlowType.CHAT]),
+        ):
+            insert_new_model_configuration__no_commit(
+                db_session=db_session,
+                llm_provider_id=llm_provider_id,
+                model_name="unknown-image-model",
+                supported_flows=flows,
+                is_visible=True,
+                max_input_tokens=None,
+                display_name=None,
+            )
+        db_session.commit()
+
+        with pytest.raises(ValueError, match="not a valid model"):
+            update_default_vision_provider(
+                provider.id, "unknown-image-model", db_session
+            )
+        db_session.rollback()
+        assert _flows(db_session, provider_name)["unknown-image-model"] == {
+            LLMModelFlowType.CHAT
+        }
+    finally:
+        db_session.rollback()
+        _cleanup_provider(db_session, other_name)

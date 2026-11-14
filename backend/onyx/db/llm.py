@@ -39,6 +39,7 @@ from onyx.llm.constants import (
 from onyx.llm.model_capabilities import (
     catalog_model_supports_image_input,
     get_max_input_tokens,
+    model_identity_names,
 )
 from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.models import ReasoningEffort
@@ -1591,7 +1592,8 @@ def update_default_vision_provider(
         )
 
     # Older auto-update syncs stored image-capable models without the VISION
-    # flow. The check above accepts them, so add the missing flow.
+    # flow. Add it when the catalog marks the model as image-capable. The check
+    # above can also match a row of another provider with the same type.
     model_config = db_session.scalar(
         select(ModelConfiguration).where(
             ModelConfiguration.llm_provider_id == provider_id,
@@ -1601,6 +1603,10 @@ def update_default_vision_provider(
     if (
         model_config is not None
         and LLMModelFlowType.VISION not in model_config.llm_model_flow_types
+        and any(
+            catalog_model_supports_image_input(name, provider.provider)
+            for name in model_identity_names(vision_model, provider.deployment_name)
+        )
     ):
         create_new_flow_mapping__no_commit(
             db_session=db_session,
