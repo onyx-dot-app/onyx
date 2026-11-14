@@ -13,7 +13,7 @@ from onyx.agents.events import (
     InputEndedEvent,
     InputRequiredEvent,
 )
-from onyx.agents.runtime import Agent, Run
+from onyx.agents.runtime import Agent, Run, RunFailed
 from onyx.agents.tools import (
     AgentTool,
     HumanToolAnswer,
@@ -78,7 +78,6 @@ class ProgramRun:
             )
             request = gate.decide(NESTED)
             assert isinstance(request, PendingToolInput)
-            self.waiting.set()
             try:
                 result = gate.wait_for_input(NESTED, request, self.scope)
             except AgentCancelled:
@@ -113,10 +112,16 @@ class ProgramRun:
             ],
         ).start(
             max_steps=2,
-            on_event=self.events.append,
+            on_event=self._on_event,
             coordinator=AgentCoordinator(approvals=self.approvals),
         )
         assert self.waiting.wait(5)
+
+    def _on_event(self, event: AgentEvent) -> None:
+        self.events.append(event)
+        # Published once the run holds the request, so `submit` can answer it.
+        if isinstance(event, InputRequiredEvent):
+            self.waiting.set()
 
     def program_result(self) -> str:
         result = self.run.snapshot().steps[0].tools["program"].result
@@ -259,3 +264,86 @@ def test_an_answer_that_arrives_after_the_wait_stopped_is_ignored() -> None:
     finally:
         program.run.cancel()
         assert program.run.wait_for_idle(5)
+
+
+def test_a_repeated_answer_to_an_ended_nested_request_is_accepted() -> None:
+    approve = HumanToolAnswer(request_id="approval", decision=InputDecision.APPROVE)
+    program = ProgramRun()
+    try:
+        program.run.submit(approve)
+        assert program.run.result(timeout=5).output.text == "done"
+        assert program.run.wait_for_idle(5)
+
+        program.run.submit(approve.model_copy(deep=True))
+
+        with pytest.raises(ValueError, match="Conflicting answer"):
+            program.run.submit(
+                HumanToolAnswer(request_id="approval", decision=InputDecision.DENY)
+            )
+        assert program.program_result() == "approved"
+        ended = [e for e in program.events if isinstance(e, InputEndedEvent)]
+        assert [e.answer for e in ended] == [approve]
+    finally:
+        program.run.cancel()
+        assert program.run.wait_for_idle(5)
+
+
+def test_a_direct_request_cannot_reuse_an_open_nested_request_id() -> None:
+    nested_open = threading.Event()
+
+    class SharedIdApprovals(Approvals):
+        def request_approval(self, run: Run, call: ToolCall) -> PendingToolInput:
+            if call.id == "direct":
+                # The direct call asks once the program's call waits.
+                assert nested_open.wait(5)
+            return super().request_approval(run, call)
+
+    def program(invocation: ToolInvocation) -> ToolResult:
+        gate = invocation.nested_calls
+        assert gate is not None
+        request = gate.decide(NESTED)
+        assert isinstance(request, PendingToolInput)
+        gate.wait_for_input(NESTED, request, invocation.cancellation)
+        return ToolResult(content="approved")
+
+    replies = iter(
+        [
+            AssistantMessage(
+                content=[
+                    ToolCall(id="program", name="program", arguments={}),
+                    ToolCall(id="direct", name="send", arguments={}),
+                ]
+            ),
+            AssistantMessage(content=[TextContent(text="done")]),
+        ]
+    )
+    run = Agent(
+        FakeModelClient(lambda *_: next(replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="program", description="", parameters={}
+                ),
+                execute=program,
+                approval_required=[NESTED.name],
+            ),
+            AgentTool(
+                definition=ToolDefinition(name="send", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="sent"),
+                approval_required=["send"],
+            ),
+        ],
+    ).start(
+        max_steps=2,
+        on_event=lambda event: (
+            nested_open.set() if isinstance(event, InputRequiredEvent) else None
+        ),
+        coordinator=AgentCoordinator(approvals=SharedIdApprovals()),
+    )
+    try:
+        with pytest.raises(RunFailed):
+            run.result(timeout=5)
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(5)

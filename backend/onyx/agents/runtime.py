@@ -5,7 +5,7 @@ import json
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import CancelledError, Future
+from concurrent.futures import CancelledError, Future, InvalidStateError
 from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
@@ -554,6 +554,9 @@ class Run:
         self._nested_inputs: dict[
             str, tuple[InputRequiredEvent, Future[HumanToolAnswer]]
         ] = {}
+        # Answers applied to those requests, kept for the run's lifetime so a
+        # repeated answer is accepted and a conflicting one fails.
+        self._nested_answers: dict[str, HumanToolAnswer] = {}
         # Stands still while a call waits for input; see wait_for_tool_activity.
         self._input_wait_clock = PausableClock()
         self._llm: LLM | None = None
@@ -676,19 +679,22 @@ class Run:
         with self._execution_condition:
             if self._released:
                 raise RunReleased("Run was released; deliver input through its run ID")
+            if (applied := self._nested_answers.get(answer.request_id)) is not None:
+                if applied != answer:
+                    raise ValueError("Conflicting answer for request")
+                return
             if (nested := self._nested_inputs.get(answer.request_id)) is not None:
                 required, waiter = nested
                 if (required.request.mode == InputMode.RESULT) != (
                     answer.decision == InputDecision.RESULT
                 ):
                     raise ValueError("Answer does not match the request mode")
-                if waiter.cancelled():
+                try:
+                    waiter.set_result(answer.model_copy(deep=True))
+                except InvalidStateError:
                     # The call stopped waiting; its end removes the request.
                     return
-                if not waiter.done():
-                    waiter.set_result(answer.model_copy(deep=True))
-                elif waiter.result() != answer:
-                    raise ValueError("Conflicting answer for request")
+                self._nested_answers[answer.request_id] = answer.model_copy(deep=True)
                 return
             progress = self._state.progress
             if progress is None:
@@ -870,20 +876,29 @@ class Run:
                 if isinstance(pending, PendingToolInput)
                 else None
             )
-            if isinstance(pending, PendingToolInput) and (
-                pending.request_id in self._progress.human_tool_answers
-                or any(
-                    isinstance(existing, PendingToolInput)
-                    and existing.request_id == pending.request_id
-                    for existing in self._progress.pending_tool_calls.values()
-                )
-            ):
-                raise ValueError("Input request IDs must be unique within a run")
+            if isinstance(pending, PendingToolInput):
+                self._check_new_request_id(pending.request_id)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
             self._state.revision += 1
             self._track_input_wait()
             if event is not None and self.is_accepting and self.event_delivery:
                 self.event_delivery.publish(event)
+
+    def _check_new_request_id(self, request_id: str) -> None:
+        """Reject a request ID that an open or answered request of this run,
+        direct or nested, already uses. Call under the execution lock."""
+        progress = self._progress
+        if (
+            request_id in self._nested_inputs
+            or request_id in self._nested_answers
+            or request_id in progress.human_tool_answers
+            or any(
+                isinstance(existing, PendingToolInput)
+                and existing.request_id == request_id
+                for existing in progress.pending_tool_calls.values()
+            )
+        ):
+            raise ValueError("Input request IDs must be unique within a run")
 
     def await_nested_input(
         self, required: InputRequiredEvent, cancellation: CancellationSignal
@@ -896,16 +911,7 @@ class Run:
         waiter = Future[HumanToolAnswer]()
         with self.execution_lock:
             self.cancellation_signal.check()
-            if (
-                request.request_id in self._nested_inputs
-                or request.request_id in self._progress.human_tool_answers
-                or any(
-                    isinstance(existing, PendingToolInput)
-                    and existing.request_id == request.request_id
-                    for existing in self._progress.pending_tool_calls.values()
-                )
-            ):
-                raise ValueError("Input request IDs must be unique within a run")
+            self._check_new_request_id(request.request_id)
             self._nested_inputs[request.request_id] = (
                 required.model_copy(deep=True),
                 waiter,
@@ -984,7 +990,8 @@ class Run:
                     )
                 )
         self._nested_inputs.clear()
-        self._track_input_wait()
+        # Requests of direct calls stay recorded, but nothing waits after the end.
+        self._input_wait_clock.set_paused(False)
         progress = self._state.progress
         if progress is None or not progress.pending_tool_calls:
             return

@@ -233,7 +233,7 @@ The run publishes `input_required` with the outer call as `tool_call` and the bl
 Cancellation of the run, or of the signal the tool passes for the waiting call, unblocks it with `AgentCancelled`.
 A run that ends publishes `input_ended` without an answer for each request still open, nested or direct, before `agent_end`; the waiting call can wake later.
 While it waits, the outer call keeps running, so the run does not suspend.
-Code mode passes the cell's stop signal, and does not count the wait toward the program's lifetime or yield time.
+Code mode passes the cell's stop signal. While the program waits only for such calls, the wait counts toward neither its lifetime nor its yield time.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
@@ -294,7 +294,7 @@ Shared retrieval uses the tool's existing combined-result limits.
 Retrieval tools declare `merge_list_argument` using their query or URL parameter name.
 Tools with a per-call item cap also set `merge_list_limit`; larger groups execute separately.
 `Tool.bind` supplies the merger to the SDK, which does not inspect search fields.
-Steps with a `before_tool_call` hook and calls waiting for input execute individually.
+Steps with a `before_tool_call` hook, calls that require approval, and calls waiting for input execute individually.
 Batch results are recorded together before checkpoint capture; resumed runs skip completed calls.
 Prompt assembly replaces exact repeated passages within a step with references to earlier results.
 

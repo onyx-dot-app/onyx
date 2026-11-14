@@ -729,6 +729,7 @@ class _Run:
         cancellation: CancellationSignal,
         on_print: Callable[[str], None],
         on_yield: Callable[[], None],
+        on_blocked: Callable[[bool, Callable[[], None]], bool],
         clock: PausableClock,
     ) -> None:
         self.limits = limits
@@ -764,6 +765,9 @@ class _Run:
             on_print(text)
 
         self.print_callback = print_callback
+        self.on_blocked = on_blocked
+        # The program waits for tool calls only, as last reported to `on_blocked`.
+        self.blocked = False
         # The clock starts when the first worker is checked out, so time spent
         # queueing for a worker does not count.
         self.started: float | None = None
@@ -974,10 +978,25 @@ class _Run:
                 self.start_queued()
                 pending = [i for i in call_ids if not self._finished(i)]
                 now = time.monotonic()
+                ended = False
                 if len(pending) < len(call_ids):
                     batch_end = min(batch_end, now + batch_seconds)
-                    if not pending or now >= batch_end:
+                    ended = not pending or now >= batch_end
+                if ended:
+                    # A program that waited for tool calls only continues once
+                    # the caller lets it; until then it waits here, where it
+                    # can give up its worker.
+                    if not self.blocked or self.on_blocked(False, self.wake.set):
+                        self.blocked = False
                         return True
+                elif (
+                    pending
+                    and not self.blocked
+                    and all(i in self.calls for i in pending)
+                ):
+                    # Tool calls alone can wake the program, not a sleep's end.
+                    self.blocked = True
+                    self.on_blocked(True, self.wake.set)
                 if yield_worker and _worker_demand.gives_up(self.wake.set):
                     return False
                 # A sleep's end sets no event.
@@ -986,7 +1005,9 @@ class _Run:
                     default=math.inf,
                 )
                 timeout = min(
-                    wakeup - now, batch_end - now, self.deadline - self.clock.now()
+                    wakeup - now,
+                    math.inf if ended else batch_end - now,
+                    self.deadline - self.clock.now(),
                 )
                 self.wake.wait(None if math.isinf(timeout) else max(0.0, timeout))
 
@@ -1314,6 +1335,7 @@ def execute_program(
     limits: SandboxLimits,
     on_print: Callable[[str], None],
     on_yield: Callable[[], None],
+    on_blocked: Callable[[bool, Callable[[], None]], bool],
     clock: PausableClock,
     pool: Callable[[], Monty] = sandbox_pool,
 ) -> SandboxResult:
@@ -1322,8 +1344,14 @@ def execute_program(
     `stubs` types the program's functions and includes PRELUDE_STUBS.
     `cancellation` stops the program at once, also while it computes or waits.
     `on_print` receives the printed text and `on_yield` each yield_control() call,
-    both on the driver thread. The program's lifetime runs on `clock`. Nothing carries over from earlier programs; plain
-    functions such as load() give a program outside state.
+    both on the driver thread. `on_blocked(True, wake)`, also on the driver
+    thread, reports that the program starts to wait for unfinished tool calls
+    only. Before it continues, `on_blocked(False, wake)` returns whether it
+    may. When it may not, the caller calls `wake` once it may, and the program
+    keeps waiting and can give up its worker. The program's lifetime runs on
+    `clock`. Nothing carries
+    over from earlier programs; plain functions such as load() give a program
+    outside state.
     The program waits at each await on unfinished tool calls or sleeps, and at
     each synchronous sleep. It keeps its worker while it waits, until another
     program waits for one; then it is dumped, its worker returned to the pool, and
@@ -1341,6 +1369,7 @@ def execute_program(
         cancellation=cancellation,
         on_print=on_print,
         on_yield=on_yield,
+        on_blocked=on_blocked,
         clock=clock,
     )
 
