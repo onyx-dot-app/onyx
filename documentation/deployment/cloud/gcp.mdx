@@ -352,6 +352,10 @@ The `l7_*` outputs are `null` when `enable_l7_ingress = false`.
     gcloud container clusters get-credentials "$(terraform output -raw cluster_name)" \
       --location "$(terraform output -raw location)" --project my-project
     ```
+
+    If your network inspects TLS, the IP endpoint fails with `x509: certificate signed by unknown authority`.
+    Turn on the DNS endpoint (`gcloud container clusters update <cluster> --location <location> --enable-dns-access`),
+    and add `--dns-endpoint` to `get-credentials`.
   </Step>
 
   <Step title="Install cert-manager (only for Let's Encrypt)">
@@ -865,6 +869,11 @@ The default GPU pool has one node with one GPU, so give the GPU to one model ser
   [`gcs` backend](https://developer.hashicorp.com/terraform/language/backend/gcs).
 - **Existing network.** With `create_network = false`, the network must already have a Private Service Access
   connection. If not, Cloud SQL and Memorystore fail to create.
+- **Destroy.** `terraform destroy` can fail on `google_service_networking_connection` with
+  `Producer services ... are still using this connection`, also after Cloud SQL and Memorystore are gone.
+  Run `gcloud compute networks peerings delete servicenetworking-googleapis-com --network <vpc>`,
+  remove the connection with `terraform state rm` (find the address with `terraform state list`),
+  and run `terraform destroy` again.
 - **Database connections.** `postgres_max_connections` defaults to `500`. Make it larger if you add many API or
   worker replicas. A change restarts the instance.
 
