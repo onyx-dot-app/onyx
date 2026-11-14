@@ -35,7 +35,9 @@ annotations:
         makes an XFS loop store). New value craft.hostAgent.loopStore.sizeGiB.
     - kind: fixed
       description: With the bundled in-cluster object store, the Firecracker
-        host agent accepts its plain HTTP presigned URLs, so session saves work.
+        host agent accepts its plain HTTP presigned URLs, and S3_ENDPOINT_URL
+        uses the store's FQDN (new value global.clusterDomain), so the agent
+        resolves the presigned URL host from its own namespace.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it

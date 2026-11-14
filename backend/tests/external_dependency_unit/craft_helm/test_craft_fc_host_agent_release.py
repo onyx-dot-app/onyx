@@ -411,3 +411,71 @@ def test_plain_http_transfers_only_for_the_bundled_store(
 ) -> None:
     args = _pod_spec(_render([*_RELEASE, *extra]))["containers"][0]["args"]
     assert ("--transfer-allow-http" in args) is allow_http
+
+
+_OBJECT_STORE_ONLY = [
+    "--set",
+    "minio.enabled=false",
+    "--set",
+    "objectStore.enabled=true",
+]
+_MINIO_ONLY = ["--set", "minio.enabled=true", "--set", "objectStore.enabled=false"]
+
+
+@pytest.mark.parametrize(
+    ("extra", "endpoint", "legacy"),
+    [
+        (
+            [],
+            "http://onyx-object-store.onyx.svc.cluster.local:8333",
+            "http://onyx-minio.onyx.svc.cluster.local:9000",
+        ),
+        (
+            _OBJECT_STORE_ONLY,
+            "http://onyx-object-store.onyx.svc.cluster.local:8333",
+            None,
+        ),
+        (_MINIO_ONLY, "http://onyx-minio.onyx.svc.cluster.local:9000", None),
+        (
+            [*_OBJECT_STORE_ONLY, "--set-string", "global.clusterDomain=corp.internal"],
+            "http://onyx-object-store.onyx.svc.corp.internal:8333",
+            None,
+        ),
+    ],
+)
+def test_bundled_store_endpoint_resolves_from_the_agent_namespace(
+    extra: list[str], endpoint: str, legacy: str | None
+) -> None:
+    # The host agent uploads to the presigned URL host from its own namespace.
+    data = _configmap_data([*_RELEASE, *extra])
+    assert data["S3_ENDPOINT_URL"] == endpoint
+    assert data.get("S3_LEGACY_ENDPOINT_URL") == legacy
+
+
+@pytest.mark.parametrize(
+    ("extra", "endpoint"),
+    [
+        # Pod runtime: the short Service name, as before.
+        (_OBJECT_STORE_ONLY, "http://onyx-object-store:8333"),
+        (_MINIO_ONLY, "http://onyx-minio:9000"),
+    ],
+)
+def test_bundled_store_endpoint_without_firecracker_is_unchanged(
+    extra: list[str], endpoint: str
+) -> None:
+    assert _configmap_data(extra)["S3_ENDPOINT_URL"] == endpoint
+
+
+def test_external_store_endpoint_is_unchanged_with_firecracker() -> None:
+    data = _configmap_data(
+        [
+            *_RELEASE,
+            "--set",
+            "minio.enabled=false",
+            "--set",
+            "objectStore.enabled=false",
+            "--set-string",
+            "configMap.S3_ENDPOINT_URL=https://s3.example.internal",
+        ]
+    )
+    assert data["S3_ENDPOINT_URL"] == "https://s3.example.internal"

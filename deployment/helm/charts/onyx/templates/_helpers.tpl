@@ -442,7 +442,7 @@ only on the cluster state, so the client pods use it too.
 {{- define "onyx.craftFcAgentCerts.names" -}}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") -}}
 {{- $ns := include "onyx.craftHostAgentNamespace" . -}}
-{{- toYaml (uniq (list (include "onyx.craftFcAgentClient.tlsServerName" .) (printf "%s.%s.svc" $name $ns) (printf "%s.%s.svc.cluster.local" $name $ns))) -}}
+{{- toYaml (uniq (list (include "onyx.craftFcAgentClient.tlsServerName" .) (printf "%s.%s.svc" $name $ns) (printf "%s.%s.svc.%s" $name $ns (include "onyx.clusterDomain" .)))) -}}
 {{- end }}
 
 {{- define "onyx.craftFcAgentCerts.stored" -}}
@@ -532,11 +532,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 
 {{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
 {{- define "onyx.sandboxApiUrl" -}}
-{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s:%v" (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "api-service")))) (.Values.api.service.servicePort | default 8080)) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}
-{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "sandbox-proxy")))) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyPort" -}}
@@ -931,10 +931,40 @@ so the templates must not depend on values.yaml for these keys.
 {{- toYaml $merged -}}
 {{- end }}
 
+{{- define "onyx.clusterDomain" -}}
+{{- .Values.global.clusterDomain | default "cluster.local" -}}
+{{- end }}
+
+{{/* <service>.<release namespace>.svc.<cluster domain> */}}
+{{- define "onyx.serviceFqdn" -}}
+{{- $ctx := index . 0 -}}
+{{- printf "%s.%s.svc.%s" (index . 1) $ctx.Release.Namespace (include "onyx.clusterDomain" $ctx) -}}
+{{- end }}
+
+{{/*
+Host of a bundled store Service in S3_ENDPOINT_URL. Firecracker host agents
+upload to the presigned URL host from their own namespace, so with Firecracker
+it is the FQDN; otherwise the short name.
+*/}}
+{{- define "onyx.bundledStoreHost" -}}
+{{- $ctx := index . 0 -}}
+{{- if eq (include "onyx.craftSandboxRuntime" $ctx) "firecracker" -}}
+{{- include "onyx.serviceFqdn" (list $ctx (index . 1)) -}}
+{{- else -}}
+{{- index . 1 -}}
+{{- end -}}
+{{- end }}
+
 {{/* The bundled object store's Service name and S3 endpoint. */}}
 {{- define "onyx.objectStore.endpoint" -}}
 {{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
 {{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
+{{- end }}
+
+{{/* S3_ENDPOINT_URL of the bundled object store. */}}
+{{- define "onyx.objectStore.s3Endpoint" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- printf "http://%s:%v" (include "onyx.bundledStoreHost" (list . (include "onyx.resourceName" (list . "object-store")))) $objectStore.service.port -}}
 {{- end }}
 
 {{/*

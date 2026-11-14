@@ -18,6 +18,8 @@ global:
   pullPolicy: "IfNotPresent"
   # Host for all Onyx components
   host: "0.0.0.0"
+  # DNS domain of the cluster, for the in-cluster service names the chart writes.
+  clusterDomain: "cluster.local"
 
 # -- Custom (private/internal) CA certificates for outbound TLS.
 # When enabled, every pod that makes outbound TLS connections mounts the

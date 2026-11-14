@@ -246,7 +246,10 @@ With `firecracker`, the chart:
   only when the file store is the bundled in-cluster object store
   (`objectStore` or `minio` enabled, `FILE_STORE_BACKEND` `s3`). That traffic
   stays inside the cluster. With an external store, the agent accepts only
-  HTTPS presigned URLs.
+  HTTPS presigned URLs;
+- sets the bundled store's `S3_ENDPOINT_URL` to its FQDN
+  (`<service>.<namespace>.svc.<global.clusterDomain>`), because the agent
+  resolves the presigned URL host from its own namespace.
 
 #### Versions
 
