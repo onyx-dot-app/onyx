@@ -246,12 +246,15 @@ downloaded file with
 5. `checkpoint-compatible` **A checkpoint must round-trip through
    `validate_checkpoint_json`, and the dummy checkpoint must have
    `has_more=True`.** Otherwise the docfetching loop never starts. Saved
-   checkpoints of in-flight attempts outlive a deploy: a change to a
-   checkpoint's fields makes them unreadable, and
+   checkpoints of in-flight attempts outlive a deploy. A new field with no
+   default, or a type that a saved value does not fit, makes them unreadable, and
    `background/indexing/checkpointing_utils.py:get_latest_valid_checkpoint`
    then logs the error and starts the attempt over from the dummy checkpoint.
-   Accept the old shape with a field alias, as
-   `connectors/sharepoint/connector.py:SharepointConnectorCheckpoint` does.
+   A renamed field loses its saved value. Accept the old shape with a field
+   alias, as `connectors/sharepoint/connector.py:SharepointConnectorCheckpoint`
+   does. Give a new field a default that keeps a resumed old checkpoint correct:
+   `connectors/github/connector.py:GithubConnectorCheckpoint` defaults
+   `touched_file_dates` to `None`, and a resumed poll then dates no file.
 6. `honor-time-window` **Honor the `start` and `end` window.** A poll or
    checkpointed connector that ignores it re-reads everything or misses
    changes. The event drain is the exception: its queue holds exactly the

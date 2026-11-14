@@ -279,6 +279,37 @@ def test_repository_listing_stops_at_the_limit() -> None:
     assert request.call_count == 1
 
 
+def test_commit_listing_stops_at_the_limit() -> None:
+    """A poll reads at most ``limit`` of the latest commits since its start."""
+    gateway, request = _gateway()
+    request.return_value = (
+        _link("https://api.github.com/repos/o/r/commits?page=2"),
+        [
+            {"sha": sha, "commit": {"committer": {"date": "2024-06-01T09:00:00Z"}}}
+            for sha in ("c3", "c2", "c1")
+        ],
+    )
+
+    commits = gateway.list_commits(
+        repo_full_name="o/r",
+        ref="main",
+        since=datetime(2024, 6, 1, tzinfo=timezone.utc),
+        limit=2,
+    )
+
+    committed_at = datetime(2024, 6, 1, 9, tzinfo=timezone.utc)
+    assert [(commit.sha, commit.committed_at) for commit in commits] == [
+        ("c3", committed_at),
+        ("c2", committed_at),
+    ]
+    assert request.call_count == 1
+    assert request.call_args.kwargs["parameters"] == {
+        "sha": "main",
+        "since": "2024-06-01T00:00:00Z",
+        "per_page": 100,
+    }
+
+
 # --- plain data ---
 
 

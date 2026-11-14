@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Generic, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import AliasPath, BaseModel, ConfigDict, Field
 
 _ORGANIZATION_OWNER_TYPE = "Organization"
 
@@ -216,6 +216,19 @@ class GitHubGitTree(BaseModel):
     # True when GitHub cut the recursive listing (more than 100,000 entries
     # or 7 MB).
     truncated: bool = False
+
+
+class GitHubCommitRef(BaseModel):
+    # Validates a raw commit listing item, so a malformed one raises a
+    # ValidationError.
+    model_config = ConfigDict(validate_by_name=True)
+
+    sha: str
+    # The committer date: when the commit landed on the branch, also for a
+    # pull request merged on GitHub. None when GitHub sends none.
+    committed_at: datetime | None = Field(
+        default=None, validation_alias=AliasPath("commit", "committer", "date")
+    )
 
 
 class GitHubFileContent(BaseModel):

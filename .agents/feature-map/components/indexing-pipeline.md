@@ -110,10 +110,14 @@ so the next poll re-indexes it ([[document-index#swap-clears-what-future-missed]
 a document a FUTURE attempt failed on needs Retry, and a load-only connector a
 manual run, since no poll fetches those.
 `force_update` turns both off, for the per-document retry and the tabular
-re-chunk migration. After the write, the hash is stamped only if the settings
+re-chunk migration. A document written without `doc_updated_at` takes the
+stored one, so a write that an ACL change or a FUTURE attempt forces keeps the
+date in the chunks. After the write, the hash is stamped only if the settings
 the batch wrote into are still PRESENT at commit, read under a share lock
 (`indexing/indexing_pipeline.py:_written_settings_are_present`), so a batch
 that lands after a swap wrote into a retired index and leaves the row alone.
+`post_index` does not write the copied date back to the row, where it could
+overwrite a newer date another run stored meanwhile.
 
 **The write.** The enricher bakes access, document sets, boost, cc-pair IDs and
 hierarchy ancestors into each chunk. A later permission change reaches the index

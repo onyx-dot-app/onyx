@@ -53,6 +53,7 @@ from onyx.indexing.indexing_pipeline import (
     filter_documents,
     get_docs_to_update,
     index_doc_batch,
+    index_doc_batch_prepare,
     index_doc_batch_with_handler,
     process_image_sections,
     run_indexing_pipeline,
@@ -1879,6 +1880,75 @@ def test_get_docs_to_update_secondary_build_ignores_content_hash_gate() -> None:
     assert len(future_docs) == 1
     assert future_docs[0].id == "doc1"
     assert "doc1" in future_hashes
+
+
+def test_stored_date_reaches_the_chunks_but_is_not_written_back() -> None:
+    """The stored date an undated document carries is for its chunks only.
+    Writing it back to the row could overwrite a newer date that another run
+    stored after this batch read the row. A connector's date is still written."""
+    stored_at = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    dated_at = datetime(2024, 2, 1, tzinfo=timezone.utc)
+    undated = _doc_with_text("Title", "unchanged content")
+    undated.id = "undated"
+    undated.doc_updated_at = None
+    dated = _doc_with_text("Title", "changed content")
+    dated.id = "dated"
+    dated.doc_updated_at = dated_at
+    db_docs = [
+        _make_db_doc(doc_id, doc_updated_at=stored_at)
+        for doc_id in ("undated", "dated")
+    ]
+    for db_doc in db_docs:
+        db_doc.boost = 0
+
+    pipeline = "onyx.indexing.indexing_pipeline"
+    with (
+        patch(f"{pipeline}.get_documents_by_ids", return_value=db_docs),
+        patch(f"{pipeline}.upsert_document_by_connector_credential_pair"),
+        patch(f"{pipeline}.link_hierarchy_nodes_to_documents"),
+    ):
+        context = index_doc_batch_prepare(
+            documents=[undated, dated],
+            index_attempt_metadata=MagicMock(),
+            db_session=MagicMock(),
+            ignore_time_skip=True,
+            index_to_secondary=True,
+            skip_document_row_writes=True,
+        )
+    assert context is not None
+    assert {d.id: d.doc_updated_at for d in context.updatable_docs} == {
+        "undated": stored_at,
+        "dated": dated_at,
+    }
+
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=True,
+            failed_document_ids=set(),
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {
+        "dated": dated_at
+    }
 
 
 def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:

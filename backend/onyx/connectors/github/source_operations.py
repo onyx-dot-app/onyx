@@ -34,6 +34,7 @@ from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.connectors.exceptions import SourceApiError
 from onyx.connectors.github.models import (
     GitHubBranch,
+    GitHubCommitRef,
     GitHubCursorItem,
     GitHubFileContent,
     GitHubGitTree,
@@ -53,6 +54,7 @@ from onyx.connectors.source_operations import (
     SourceOperations,
     source_operation,
 )
+from onyx.utils.datetime import utc_iso_timestamp
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -78,6 +80,12 @@ _ALL_CAPABILITIES = frozenset(CredentialCapability)
 _CURSOR_FALLBACK = (
     "Used only when GitHub refuses offset pages for a large listing; it reads "
     "the same endpoint as the offset listing that the checks probe."
+)
+_COMMITS_FALLBACK = (
+    "Read only by an incremental poll of repository files, to date the files "
+    "that changed. On a GitHub API, HTTP or validation error the poll keeps the "
+    "dates it has and still reads every file from the tree listing that the "
+    "checks probe."
 )
 
 
@@ -647,6 +655,51 @@ class GitHubSourceOperations(SourceOperations):
             ],
             truncated=bool(data.get("truncated")),
         )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=_COMMITS_FALLBACK,
+    )
+    @_translated
+    def list_commits(
+        self,
+        *,
+        repo_full_name: str,
+        ref: str,
+        since: datetime,
+        limit: int,
+    ) -> list[GitHubCommitRef]:
+        """A branch's commits with a committer date from ``since``, newest
+        first (``GET /repos/{repo}/commits``). ``limit`` stops the listing
+        early."""
+        commits: list[GitHubCommitRef] = []
+        for raw, _next_url in self._paginate(
+            f"/repos/{repo_full_name}/commits",
+            {"sha": ref, "since": utc_iso_timestamp(since)},
+        ):
+            commits.append(GitHubCommitRef.model_validate(raw))
+            if len(commits) >= limit:
+                break
+        return commits
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=_COMMITS_FALLBACK,
+    )
+    @_translated
+    def get_commit_files(self, *, repo_full_name: str, sha: str) -> list[str]:
+        """The paths one commit added, modified or removed, a renamed file at
+        its new path (``GET /repos/{repo}/commits/{sha}``). Only the first
+        page: GitHub lists up to 300 files per page and links the rest."""
+        _headers, data = self._get(f"/repos/{repo_full_name}/commits/{_quote(sha)}")
+        files: list[Any] = data.get("files") or []
+        return [
+            str(file["filename"])
+            for file in files
+            if isinstance(file, dict) and file.get("filename")
+        ]
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

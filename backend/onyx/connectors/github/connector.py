@@ -9,7 +9,9 @@ from io import BytesIO
 from typing import Any, TypeVar
 from urllib.parse import unquote
 
+import requests
 from pydantic import BaseModel
+from pydantic import ValidationError as PydanticValidationError
 from typing_extensions import override
 
 from onyx.access.models import ExternalAccess
@@ -68,6 +70,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import file_io_to_text, is_text_file
+from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -124,6 +127,11 @@ GITHUB_PATH_DENYLIST = {
 GITHUB_MAX_FILE_SIZE_BYTES = 1_000_000
 # Number of files emitted per checkpoint batch in the FILES stage.
 FILE_BATCH_SIZE = 100
+# A poll dates the files changed by at most this many of the latest commits
+# since its window start (one read per commit).
+MAX_POLL_COMMITS = 100
+
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 
 _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
@@ -579,6 +587,7 @@ def _convert_file_to_document(
     content_text: str,
     repo_external_access: ExternalAccess | None,
     branch: str,
+    doc_updated_at: datetime | None,
 ) -> Document:
     repo_full_name = repo.full_name
     parts = repo_full_name.split("/", 1)
@@ -587,12 +596,6 @@ def _convert_file_to_document(
 
     html_url = f"{repo.html_url}/blob/{branch}/{path}"
     _, extension = os.path.splitext(path)
-
-    # NOTE: GitHub's tree API does not expose per-file modification times without
-    # additional per-file commit-history calls. repo.pushed_at is the closest
-    # proxy available without extra API requests, but it reflects any push to
-    # any branch, so every file in the repo shares the same timestamp.
-    updated_at = repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
 
     doc_metadata = {
         "repo": repo_full_name,
@@ -609,7 +612,7 @@ def _convert_file_to_document(
         source=DocumentSource.GITHUB,
         external_access=repo_external_access,
         semantic_identifier=path,
-        doc_updated_at=updated_at,
+        doc_updated_at=doc_updated_at,
         doc_metadata=doc_metadata,
         metadata={
             "object_type": "File",
@@ -641,6 +644,9 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
     # Branch file_paths was listed from; a resumed checkpoint whose branch no
     # longer matches (connector edited, default branch changed) is re-listed.
     file_paths_branch: str | None = None
+    # On a poll, the file_paths that commits since the window start changed,
+    # each with the date of the latest such commit.
+    touched_file_dates: dict[str, datetime] | None = None
 
     # Used for the fallback cursor-based pagination strategy
     num_retrieved: int
@@ -648,14 +654,16 @@ class GithubConnectorCheckpoint(ConnectorCheckpoint):
 
     def reset(self) -> None:
         """
-        Resets curr_page, num_retrieved, cursor_url, file_paths, and
-        file_paths_branch to their initial values (0, 0, None, None, None)
+        Resets curr_page, num_retrieved, cursor_url, file_paths,
+        file_paths_branch and touched_file_dates to their initial values
+        (0, 0, None, None, None, None)
         """
         self.curr_page = 0
         self.num_retrieved = 0
         self.cursor_url = None
         self.file_paths = None
         self.file_paths_branch = None
+        self.touched_file_dates = None
 
 
 def make_cursor_url_callback(
@@ -983,6 +991,7 @@ class GithubConnector(
         path: str,
         branch: str,
         repo_external_access: ExternalAccess | None,
+        doc_updated_at: datetime | None,
         reindex: bool = False,
     ) -> Document | ConnectorFailure:
         """Fetch one repo file and convert it, or describe why it failed.
@@ -1012,7 +1021,7 @@ class GithubConnector(
                     failure_message=f"Skipping non-text/undecodable file: {path}",
                 )
             return _convert_file_to_document(
-                repo, path, content_text, repo_external_access, branch
+                repo, path, content_text, repo_external_access, branch, doc_updated_at
             )
         except Exception as e:
             if reindex and _fails_the_whole_run(e):
@@ -1028,6 +1037,60 @@ class GithubConnector(
                 exception=e,
             )
 
+    def _list_touched_files(
+        self, repo: GitHubRepository, branch: str, start: datetime
+    ) -> dict[str, datetime]:
+        """The paths that commits on ``branch`` since ``start`` changed, each
+        with the committer date of the latest of those commits.
+
+        Best effort: on an error it keeps what it collected, and a path it
+        misses (a commit past MAX_POLL_COMMITS or with no date, a file past the
+        first page of a large commit) gets no date.
+
+        There is no upper bound: the file read is the branch head, so a commit
+        after the window end gives the date of the content read, and the next
+        poll gives the same date again.
+        """
+        touched: dict[str, datetime] = {}
+        try:
+            commits = self._call_rate_limited(
+                partial(
+                    self.source_operations.list_commits,
+                    repo_full_name=repo.full_name,
+                    ref=branch,
+                    since=start,
+                    limit=MAX_POLL_COMMITS,
+                )
+            )
+            for commit in commits:
+                if commit.committed_at is None:
+                    continue
+                committed_at = datetime_to_utc(commit.committed_at)
+                paths = self._call_rate_limited(
+                    partial(
+                        self.source_operations.get_commit_files,
+                        repo_full_name=repo.full_name,
+                        sha=commit.sha,
+                    )
+                )
+                for path in paths:
+                    if path not in touched or touched[path] < committed_at:
+                        touched[path] = committed_at
+        except (
+            GitHubApiError,
+            PydanticValidationError,
+            requests.RequestException,
+        ) as e:
+            # Includes a rate limit that outlasted the retries.
+            logger.warning(
+                "Could not list all commits of repo %s since %s; dating %s files: %s",
+                repo.full_name,
+                start,
+                len(touched),
+                e,
+            )
+        return touched
+
     def _fetch_repo_files(
         self,
         repo: GitHubRepository,
@@ -1042,6 +1105,15 @@ class GithubConnector(
         filtered file list, applying the pushed_at gate and surfacing tree
         truncation as a failure. Returns True if more file batches remain (the
         caller should return the checkpoint to resume), False once drained.
+
+        Every run reads every listed file. The date decides how the indexing
+        pipeline compares a file to its indexed copy: a date newer than the
+        stored one re-embeds it, otherwise the content hash decides. A full
+        index dates every file with repo.pushed_at. On a poll,
+        pushed_at would move with any push to any branch and re-embed every
+        file, so a file that commits since the window start changed gets the
+        latest such commit's date, which stays the same across polls, and any
+        other file gets no date.
         """
         branch = self._resolve_branch(repo)
         branch_changed = (
@@ -1053,12 +1125,15 @@ class GithubConnector(
             # discard it so paths and content come from the same branch.
             checkpoint.file_paths = None
             checkpoint.file_paths_branch = None
+            checkpoint.touched_file_dates = None
             checkpoint.curr_page = 0
 
+        # A full index (also the first run) starts at the epoch; slim listing
+        # for pruning passes no start.
+        poll_start = start if start is not None and start > _EPOCH else None
+        pushed_at = _utc(repo.pushed_at)
+
         if checkpoint.file_paths is None:
-            pushed_at = (
-                repo.pushed_at.replace(tzinfo=timezone.utc) if repo.pushed_at else None
-            )
             # After a branch change the new branch was never indexed, so the
             # pushed_at freshness gate must not skip the re-listing.
             if (
@@ -1074,6 +1149,11 @@ class GithubConnector(
             else:
                 logger.info("Listing files for repo: %s", repo.name)
                 paths, truncated = self._list_indexable_files(repo)
+                if poll_start is not None and paths:
+                    touched = self._list_touched_files(repo, branch, poll_start)
+                    checkpoint.touched_file_dates = {
+                        path: touched[path] for path in paths if path in touched
+                    }
                 checkpoint.file_paths = paths
                 checkpoint.file_paths_branch = branch
                 logger.info(
@@ -1097,6 +1177,7 @@ class GithubConnector(
         page = checkpoint.curr_page
         batch = file_paths[page * FILE_BATCH_SIZE : (page + 1) * FILE_BATCH_SIZE]
         checkpoint.curr_page += 1
+        touched_dates = checkpoint.touched_file_dates or {}
 
         for path in batch:
             if is_slim:
@@ -1109,7 +1190,15 @@ class GithubConnector(
                     metadata={},
                 )
                 continue
-            yield self._file_to_document(repo, path, branch, repo_external_access)
+            yield self._file_to_document(
+                repo,
+                path,
+                branch,
+                repo_external_access,
+                doc_updated_at=(
+                    touched_dates.get(path) if poll_start is not None else pushed_at
+                ),
+            )
 
         # True if more file batches remain for this repo.
         return (page + 1) * FILE_BATCH_SIZE < len(file_paths)
@@ -1394,9 +1483,8 @@ class GithubConnector(
         # The non-updated issues since last poll will be shortcut-ed and not embedded
         adjusted_start_datetime = start_datetime - timedelta(hours=3)
 
-        epoch = datetime.fromtimestamp(0, tz=timezone.utc)
-        if adjusted_start_datetime < epoch:
-            adjusted_start_datetime = epoch
+        if adjusted_start_datetime < _EPOCH:
+            adjusted_start_datetime = _EPOCH
 
         return self._fetch_from_github(
             checkpoint,
@@ -1565,7 +1653,12 @@ class GithubConnector(
                     doc_id, f"File '{path}' is not a file type the connector indexes."
                 )
             return self._file_to_document(
-                repo, path, branch, repo_external_access, reindex=True
+                repo,
+                path,
+                branch,
+                repo_external_access,
+                doc_updated_at=_utc(repo.pushed_at),
+                reindex=True,
             )
 
         if parsed.number is None:
