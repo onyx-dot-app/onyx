@@ -76,6 +76,7 @@ from onyx.db.scoped_permissions import (
     managed_group_member_ids_subquery,
     scoped_group_ids_subquery,
 )
+from onyx.skills.models import SkillUsage
 
 # user__user_group.user_id is typed nullable but never NULL in a join.
 UserIdExpr = (
@@ -334,11 +335,15 @@ class UserPluginState(BaseModel):
     # The user's choice under the setting, before the name order.
     enabled: bool
     # Enabled, the version is not invalid, and the app it needs, if any, is
-    # ready for the user.
+    # ready for the user. Only these plugins count for the skill limits.
     can_run: bool
     created_at: datetime
     # Names from the plugin_skill rows of the version the user runs, by path.
     skill_names: tuple[str, ...]
+    # Recorded size of the version the user runs; a NULL size or file count
+    # is 0. None when both are NULL: a backfilled version before the repair
+    # task measures it, or a version with no bundle.
+    usage: SkillUsage | None
 
     @property
     def name_rank(self) -> SkillNameRank:
@@ -493,10 +498,12 @@ def load_user_plugin_states(
     user_ids: Iterable[UUID],
     db_session: Session,
     plugin_ids: Iterable[UUID] | None = None,
+    *,
+    runnable_only: bool = False,
 ) -> list[UserPluginState]:
     """The state of each plugin each user can see (only those of
     ``plugin_ids``, when given), in one query, then one query for app
-    connections."""
+    connections. ``runnable_only`` keeps only the plugins that can run."""
     users = sorted(set(user_ids))
     if not users:
         return []
@@ -504,6 +511,7 @@ def load_user_plugin_states(
     if plugins is not None and not plugins:
         return []
     pairs = _user_plugin_pairs(User.__table__.c.id.in_(users), plugins)
+    enabled = _enabled_in_pairs(pairs)
     skill_names = (
         select(
             func.array_agg(
@@ -516,7 +524,7 @@ def load_user_plugin_states(
         .correlate(pairs)
         .scalar_subquery()
     )
-    rows = db_session.execute(
+    stmt = (
         select(
             pairs.c.user_id,
             pairs.c.plugin_id,
@@ -526,9 +534,11 @@ def load_user_plugin_states(
             pairs.c.version_id,
             PluginVersion.bundle_file_id,
             PluginVersion.is_valid,
-            _enabled_in_pairs(pairs).label("enabled"),
+            enabled.label("enabled"),
             pairs.c.created_at,
             skill_names.label("skill_names"),
+            PluginVersion.unpacked_size_bytes,
+            PluginVersion.file_count,
         )
         .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
         .outerjoin(
@@ -539,31 +549,61 @@ def load_user_plugin_states(
             ),
         )
         .order_by(pairs.c.user_id, pairs.c.plugin_id)
-    ).all()
+    )
+    if runnable_only:
+        stmt = stmt.where(enabled, PluginVersion.is_valid.is_not(False))
+    rows = db_session.execute(stmt).all()
     apps = app_dependency_states(
         {row.user_id for row in rows},
         db_session,
         {row.plugin_id for row in rows if row.enabled},
     )
-    return [
-        UserPluginState(
-            user_id=row.user_id,
-            plugin_id=row.plugin_id,
-            installation_policy=_POLICY_OF_RANK[row.rank],
-            published=bool(row.published),
-            is_author=bool(row.is_author),
-            version_id=row.version_id,
-            bundle_file_id=row.bundle_file_id,
-            version_is_valid=row.is_valid,
-            enabled=bool(row.enabled),
-            can_run=bool(row.enabled)
+    states: list[UserPluginState] = []
+    for row in rows:
+        can_run = (
+            bool(row.enabled)
             and row.is_valid is not False
-            and not waits_for_app(apps.get((row.user_id, row.plugin_id))),
-            created_at=row.created_at,
-            skill_names=tuple(row.skill_names or ()),
+            and not waits_for_app(apps.get((row.user_id, row.plugin_id)))
         )
-        for row in rows
-    ]
+        if runnable_only and not can_run:
+            continue
+        states.append(
+            UserPluginState(
+                user_id=row.user_id,
+                plugin_id=row.plugin_id,
+                installation_policy=_POLICY_OF_RANK[row.rank],
+                published=bool(row.published),
+                is_author=bool(row.is_author),
+                version_id=row.version_id,
+                bundle_file_id=row.bundle_file_id,
+                version_is_valid=row.is_valid,
+                enabled=bool(row.enabled),
+                can_run=can_run,
+                created_at=row.created_at,
+                skill_names=tuple(row.skill_names or ()),
+                usage=(
+                    None
+                    if row.unpacked_size_bytes is None and row.file_count is None
+                    else SkillUsage(
+                        bytes=row.unpacked_size_bytes or 0, files=row.file_count or 0
+                    )
+                ),
+            )
+        )
+    return states
+
+
+def skill_usage_by_user(states: Iterable[UserPluginState]) -> dict[UUID, SkillUsage]:
+    """Usage of the plugins each user can run, before the name order. A
+    version with no recorded size counts as 0. Built-in skills are not
+    plugins and are not counted."""
+    usage: dict[UUID, SkillUsage] = {}
+    for state in states:
+        if state.can_run:
+            usage[state.user_id] = usage.get(state.user_id, SkillUsage()) + (
+                state.usage or SkillUsage()
+            )
+    return usage
 
 
 def visible_plugin_ids(user_id: UUID) -> Select[tuple[UUID]]:

@@ -20,7 +20,8 @@ or external app is a single ``_REGISTRY`` entry plus its on-disk
 ``builtin/<skill_id>/`` directory.
 """
 
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Iterator
+from functools import cache
 from pathlib import Path
 from typing import Final, Literal
 
@@ -31,11 +32,24 @@ from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import SKILL_NAME_PATTERN
+from onyx.skills.models import SKILL_NAME_PATTERN, SkillUsage
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
 BUILTIN_SKILLS_PATH: Final[Path] = Path(__file__).parent / "builtin"
+
+
+def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
+    """Yield source files, excluding hidden paths and Python caches."""
+    for path in sorted(source_dir.rglob("*")):
+        if not path.is_file():
+            continue
+        if any(
+            part == "__pycache__" or part.startswith(".")
+            for part in path.relative_to(source_dir).parts
+        ):
+            continue
+        yield path
 
 
 def _always_available(_: Session) -> bool:
@@ -219,6 +233,22 @@ EXTERNAL_APP_BUILT_IN_SKILL_IDS: Final[dict[ExternalAppType, str]] = (
 EXTERNAL_APP_SKILL_ID_TO_APP_TYPE: Final[dict[str, ExternalAppType]] = {
     skill_id: app_type for app_type, skill_id in EXTERNAL_APP_BUILT_IN_SKILL_IDS.items()
 }
+
+
+@cache
+def built_in_skills_usage() -> SkillUsage:
+    """Size and file count of every built-in skill's packaged sources, read
+    once on first use. The write limit counts all of them for every user. A
+    template stands for the SKILL.md rendered from it."""
+    paths = [
+        path
+        for definition in BUILT_IN_SKILLS.values()
+        for path in iter_builtin_skill_files(definition.source_dir)
+    ]
+    return SkillUsage(
+        bytes=sum(path.stat().st_size for path in paths), files=len(paths)
+    )
+
 
 # Named handles so callers avoid bare identity literals.
 COMPANY_SEARCH: Final[BuiltInSkillDefinition] = BUILT_IN_SKILLS["company-search"]

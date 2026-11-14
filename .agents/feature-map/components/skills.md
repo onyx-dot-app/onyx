@@ -159,12 +159,12 @@ and the name order (`_user_skill_selection`), app readiness, bundle validity
 required skill still needs a ready app and a valid bundle.
 
 **Enablement.** `db/plugin_access.py:load_user_plugin_states` is the one rule
-for API responses, toggles and the runtime gate. One query gives, for many
-users and plugins, the install setting, visibility, the version the user
-runs, its skill names, whether it can run (valid version, ready app) and the
-user's choice under the setting: required is on, default is on until an
-opt-out, available is on after an opt-in, a hidden plugin is off and its
-saved choice stays. Built-ins are on.
+for API responses, toggles, the write limit and the runtime gate. One query
+gives, for many users and plugins, the install setting, visibility, the
+version the user runs, its skill names, whether it can run (valid version,
+ready app), its recorded size and the user's choice under the setting:
+required is on, default is on until an opt-out, available is on after an
+opt-in, a hidden plugin is off and its saved choice stays. Built-ins are on.
 `db/skill.py:_user_skill_selection` reads it for one user.
 
 **Name order.** When two enabled skills of a user have one name,
@@ -252,7 +252,7 @@ The library preview of an external-app skill calls the same renderer
    legacy choice per user and name; `db/skill.py:_write_legacy_choice__no_commit`
    skips a legacy row it refuses, because reads use `user_plugin_preference`.
    A toggle conflicts only with skills the user can see. Every write that
-   enables a preference first takes `db/skill.py:_lock_user_skill_preferences`,
+   enables a preference first takes `db/skill_limit.py:lock_user_skill_preferences`,
    a `FOR NO KEY UPDATE` lock on the user row. The lock orders concurrent
    enables of one name, so the second one gets `SKILL_NAME_CONFLICT`. The
    lock does not block the `FOR KEY SHARE` locks that foreign-key checks take,
@@ -560,6 +560,23 @@ The library preview of an external-app skill calls the same renderer
     holds **Default Access**, saved with
     `PUT /skills/organization-library/default-access`, and **Sharing**, saved
     as `plugin_sharing`.
+25. `write-skill-limit` **A user's own write never moves that user past 500
+    MB or 5,000 files of skills.** Limits are `skills/limits.py` constants. A
+    user's total is the recorded size (`plugin_version.unpacked_size_bytes`,
+    `file_count`) of the version the user runs, for each plugin on for the user
+    that can run (`db/plugin_access.py:skill_usage_by_user`), plus the built-ins
+    (`skills/built_in.py:built_in_skills_usage`, read once on first use).
+    `db/skill_limit.py:check_skill_limit` takes the user row lock (`lock_user_skill_preferences`), measures the user
+    before and after the write, and refuses an under -> over move with 413
+    `SKILL_LIMIT_EXCEEDED` (`skill_limit`: `usage`, `max_bytes`, `max_files`).
+    It covers toggle on, auto-enable of an upload, create (with its own share
+    or publish, which can turn the skill on for the author), upload, import
+    and editor create, and bundle save, restore and replace. A bundle save
+    ingests with no lock; `db/skill.py:replace_skill_bundle` then takes the
+    user lock and the skill row, the toggle's order. Admin changes
+    (settings, shares, Default access, publish, approve, transfer), app connect
+    and group membership are never checked. A user already over is not
+    refused.
 
 ---
 

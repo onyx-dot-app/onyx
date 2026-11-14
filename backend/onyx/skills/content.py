@@ -1,7 +1,5 @@
 """Helpers for reading skill source content."""
 
-from collections.abc import Iterator
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -20,19 +18,6 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.models import CustomSkillBundleContents
 from onyx.skills.validation import read_stored_bundle_bytes
-
-
-def iter_builtin_skill_files(source_dir: Path) -> Iterator[Path]:
-    """Yield source files, excluding hidden paths and Python caches."""
-    for path in sorted(source_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        if any(
-            part == "__pycache__" or part.startswith(".")
-            for part in path.relative_to(source_dir).parts
-        ):
-            continue
-        yield path
 
 
 def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
