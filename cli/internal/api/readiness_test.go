@@ -61,8 +61,8 @@ func TestReadinessFailsClosed(t *testing.T) {
 		t.Run(body, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { fmt.Fprint(w, body) }))
 			defer server.Close()
-			processing, err := testutil.NewClient(server.URL).IsChatSessionProcessing(t.Context(), "session")
-			if !processing {
+			status, err := testutil.NewClient(server.URL).ChatSessionStatus(t.Context(), "session")
+			if !status.IsProcessing {
 				t.Fatalf("unconfirmed response declared idle: %s (%v)", body, err)
 			}
 		})

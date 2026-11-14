@@ -67,7 +67,19 @@ func ParseStreamLine(line string) models.StreamEvent {
 		}
 	}
 
-	// Case 4: Packet with placement + obj
+	// Case 4: StreamCursor of a replayed response
+	if _, ok := data["next_cursor"]; ok {
+		if _, hasPlacement := data["placement"]; !hasPlacement {
+			replayComplete, _ := data["replay_complete"].(bool)
+			return models.StreamCursorEvent{
+				StreamID:       jsonInt(data["stream_id"]),
+				NextCursor:     jsonInt(data["next_cursor"]),
+				ReplayComplete: replayComplete,
+			}
+		}
+	}
+
+	// Case 5: Packet with placement + obj
 	if rawPlacement, ok := data["placement"]; ok {
 		if rawObj, ok := data["obj"]; ok {
 			placement := parsePlacement(rawPlacement)

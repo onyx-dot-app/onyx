@@ -50,10 +50,25 @@ type Model struct {
 	// approvals holds the tool approval requests whose outcome the server has
 	// not reported yet, oldest first.
 	approvals []approvalCard
-	// replayIncomplete marks a followed response whose replay has not
-	// reached its stop packet. When its run ends, the session loads again
-	// from its saved messages.
-	replayIncomplete bool
+	// following marks a stream that follows a running response of the
+	// session instead of a new message.
+	following bool
+	// stopReceived marks a stream that delivered the response's stop packet.
+	stopReceived bool
+	// stopRequested marks a response that the user stopped.
+	stopRequested bool
+	// resumeCursor continues the followed response streamID after its last
+	// complete batch.
+	resumeCursor *int
+	// streamAnswered marks a stream that delivered a cursor packet or an
+	// error. A resume stream that ends without either has no buffer.
+	streamAnswered bool
+	// unbufferedStreamID is a response whose stream has no buffer. It is not
+	// requested again.
+	unbufferedStreamID *int
+	// reloading keeps input blocked while the session loads again to show
+	// its response from the saved messages and the stream's start.
+	reloading bool
 
 	// Configure state
 	configState *configState
@@ -180,15 +195,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.addError("Cannot confirm conversation readiness: " + msg.err.Error())
 			return m, nil
 		}
-		if msg.err != nil || msg.processing {
+		if msg.err != nil || msg.status.IsProcessing {
+			running := msg.status.StreamID
+			// A message that the server did not accept owns no running response.
+			owned := m.following || m.streamID != nil
+			if msg.err == nil && running != nil && owned && !m.stopReceived && !m.stopRequested &&
+				(m.unbufferedStreamID == nil || *m.unbufferedStreamID != *running) {
+				if m.streamID != nil && *m.streamID == *running && m.resumeCursor != nil {
+					// Continue after the last complete batch, so no event repeats.
+					m.settling = false
+					m.streamAnswered = false
+					if m.streamCancel != nil {
+						m.streamCancel()
+					}
+					ctx, cancel := context.WithCancel(context.Background())
+					m.streamCancel = cancel
+					m.streamCh = m.client.ResumeChatStream(ctx, msg.sessionID, running, *m.resumeCursor)
+					return m, WaitForStreamEvent(m.streamCh)
+				}
+				// Show the running response from its start over the saved session.
+				m.reloading = true
+				return cmdResume(m, msg.sessionID)
+			}
 			if msg.err != nil && !m.readinessUnconfirmed {
 				m.readinessUnconfirmed = true
 				m.viewport.addWarning("Waiting to confirm conversation readiness.")
 			}
 			return m, checkSessionReady(m.client, msg.sessionID, msg.channel)
 		}
-		if m.replayIncomplete {
-			m, _ = m.finishStream(nil)
+		if m.following && !m.stopReceived {
+			m.reloading = true
 			return cmdResume(m, msg.sessionID)
 		}
 		return m.finishStream(nil)
@@ -429,6 +465,8 @@ func (m Model) cancelStream() (Model, tea.Cmd) {
 			m.approvals[i].decided = approval.OutcomeLabel(models.ApprovalOutcomeRejected)
 		}
 	}
+	// While a stream is open, its API owner sends Stop once the stream names
+	// its response; after the stream ends, this client sends it.
 	if m.settling && m.streamID != nil && m.chatSessionID != nil {
 		sessionID, streamID := *m.chatSessionID, *m.streamID
 		go func() {
@@ -437,6 +475,7 @@ func (m Model) cancelStream() (Model, tea.Cmd) {
 			m.client.StopChatSession(ctx, sessionID, streamID)
 		}()
 	}
+	m.stopRequested = true
 	if m.streamCancel != nil {
 		m.streamCancel()
 	}
@@ -473,7 +512,11 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 	}
 	m.streamID = nil
 	m.settling = false
-	m.replayIncomplete = false
+	m.following = false
+	m.stopReceived = false
+	m.stopRequested = false
+	m.resumeCursor = nil
+	m.streamAnswered = false
 	m.isStreaming = true
 	m.readinessUnconfirmed = false
 	m.agentStarted = false
@@ -486,14 +529,16 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 	return m, WaitForStreamEvent(m.streamCh)
 }
 
-// followRunningResponse shows the session's running response again, so a
-// request that waits for approval can be decided here.
-func (m Model) followRunningResponse() (Model, tea.Cmd) {
+// followRunningResponse shows the session's running response again from its
+// start, so a request that waits for approval can be decided here. A nil
+// streamID follows whichever response runs.
+func (m Model) followRunningResponse(streamID *int) (Model, tea.Cmd) {
 	sessionID := *m.chatSessionID
 	m, cmd := m.startStream(func(ctx context.Context) <-chan models.StreamEvent {
-		return m.client.ResumeChatStream(ctx, sessionID)
+		return m.client.ResumeChatStream(ctx, sessionID, streamID, 0)
 	})
-	m.replayIncomplete = true
+	m.following = true
+	m.streamID = streamID
 	return m, cmd
 }
 
@@ -585,9 +630,19 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 
 	case models.StopEvent:
 		// Delivery completion does not confirm the save. Drain the stream.
-		m.replayIncomplete = false
+		m.stopReceived = true
+
+	case models.StreamCursorEvent:
+		m.streamAnswered = true
+		if m.streamID == nil {
+			m.streamID = &e.StreamID
+		}
+		if *m.streamID == e.StreamID {
+			m.resumeCursor = &e.NextCursor
+		}
 
 	case models.ErrorEvent:
+		m.streamAnswered = true
 		if m.input.textInput.Value() == "" {
 			m.input.textInput.SetValue(m.submittedMessage)
 		}
@@ -603,17 +658,17 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		}
 		m.viewport.addWarning("A tool call in this session waits for approval. Approve or reject it below, then send again.")
 		m.viewport.startAgent()
-		return m.followRunningResponse()
+		return m.followRunningResponse(nil)
 	}
 
 	return m, WaitForStreamEvent(m.streamCh)
 }
 
 type sessionReadyMsg struct {
-	sessionID  string
-	channel    <-chan models.StreamEvent
-	processing bool
-	err        error
+	sessionID string
+	channel   <-chan models.StreamEvent
+	status    models.ChatSessionStatus
+	err       error
 }
 
 func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan models.StreamEvent) tea.Cmd {
@@ -621,8 +676,8 @@ func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan mo
 		time.Sleep(time.Second)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
-		return sessionReadyMsg{sessionID, channel, processing, err}
+		status, err := client.ChatSessionStatus(ctx, sessionID)
+		return sessionReadyMsg{sessionID, channel, status, err}
 	}
 }
 
@@ -632,6 +687,9 @@ func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.chatSessionID == nil {
 		return m.finishStream(msg.Err)
+	}
+	if m.following && !m.streamAnswered && m.streamID != nil {
+		m.unbufferedStreamID = m.streamID
 	}
 	m.settling = true
 	return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
@@ -661,6 +719,7 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 	m.streamCh = nil
 	m.streamID = nil
 	m.settling = false
+	m.reloading = false
 
 	// Auto-rename new sessions
 	if m.needsRename && m.chatSessionID != nil {
@@ -838,12 +897,18 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) {
 	if msg.Err != nil {
 		m.viewport.addError("Could not load session: " + msg.Err.Error())
+		if m.reloading {
+			return m.finishStream(nil)
+		}
 		return m, nil
 	}
 
 	if m.isStreaming && m.chatSessionID != nil && *m.chatSessionID == msg.Detail.ChatSessionID {
-		// The current stream owns newer messages than this saved snapshot.
-		return m, nil
+		if !m.reloading {
+			// The current stream owns newer messages than this saved snapshot.
+			return m, nil
+		}
+		m, _ = m.finishStream(nil)
 	}
 
 	// Cancel any in-progress stream before replacing the session
@@ -891,9 +956,9 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		desc = *detail.Description
 	}
 	m.viewport.addInfo("Resumed session: " + desc)
-	if msg.Running {
+	if msg.Status.IsProcessing {
 		m.viewport.startAgent()
-		return m.followRunningResponse()
+		return m.followRunningResponse(msg.Status.StreamID)
 	}
 	return m, nil
 }

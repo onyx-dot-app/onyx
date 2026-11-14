@@ -115,10 +115,11 @@ func TestResumeReplaysTheRunningResponse(t *testing.T) {
 		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"tool_approval_request","approval_id":"a1","tool_name":"lookup"}}`)
 		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":1,"replay_complete":true}`)
 		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"stop"}}`)
+		fmt.Fprintln(w, `{"stream_id":2,"next_cursor":2,"replay_complete":true}`)
 	}))
 	defer server.Close()
 
-	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1"))
+	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0))
 
 	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=0" {
 		t.Fatalf("path = %q", path)
@@ -126,8 +127,36 @@ func TestResumeReplaysTheRunningResponse(t *testing.T) {
 	if _, ok := events[1].(models.ToolApprovalRequestEvent); !ok {
 		t.Fatalf("events = %#v", events)
 	}
-	if _, ok := events[len(events)-1].(models.StopEvent); !ok {
-		t.Fatalf("last event = %T, want StopEvent", events[len(events)-1])
+	if _, ok := events[len(events)-2].(models.StopEvent); !ok {
+		t.Fatalf("event = %T, want StopEvent", events[len(events)-2])
+	}
+}
+
+func TestResumeFromCursorDropsTheCutBatch(t *testing.T) {
+	var path string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path = r.URL.RequestURI()
+		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"kept"}}`)
+		fmt.Fprintln(w, `{"stream_id":7,"next_cursor":4,"replay_complete":true}`)
+		// The connection ends inside the next batch.
+		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"cut"}}`)
+	}))
+	defer server.Close()
+
+	streamID := 7
+	events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", &streamID, 3))
+
+	if path != "/api/chat/chat-session/session-1/resume-stream?cursor=3&stream_id=7" {
+		t.Fatalf("path = %q", path)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %#v, want the complete batch only", events)
+	}
+	if e, ok := events[0].(models.MessageDeltaEvent); !ok || e.Content != "kept" {
+		t.Fatalf("events = %#v", events)
+	}
+	if e, ok := events[1].(models.StreamCursorEvent); !ok || e.NextCursor != 4 {
+		t.Fatalf("events = %#v", events)
 	}
 }
 
@@ -137,7 +166,7 @@ func TestResumeEndsQuietlyWhenNothingRuns(t *testing.T) {
 	}))
 	defer server.Close()
 
-	if events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1")); len(events) != 0 {
+	if events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0)); len(events) != 0 {
 		t.Fatalf("events = %#v", events)
 	}
 }

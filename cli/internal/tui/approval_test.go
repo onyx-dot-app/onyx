@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -330,7 +331,7 @@ type resumingClient struct {
 	sent chan models.StreamEvent
 	// saved answers GetChatSession.
 	saved *models.ChatSessionDetailResponse
-	// statusErr fails IsChatSessionProcessing.
+	// statusErr fails ChatSessionStatus.
 	statusErr error
 }
 
@@ -338,7 +339,7 @@ func (c *resumingClient) SendMessageStream(context.Context, string, *string, int
 	return c.sent
 }
 
-func (c *resumingClient) ResumeChatStream(_ context.Context, sessionID string) <-chan models.StreamEvent {
+func (c *resumingClient) ResumeChatStream(_ context.Context, sessionID string, _ *int, _ int) <-chan models.StreamEvent {
 	c.resumed = append(c.resumed, sessionID)
 	return c.running
 }
@@ -428,7 +429,7 @@ func TestResumingARunningSessionShowsItsWaitingRequest(t *testing.T) {
 				{MessageID: 2, MessageType: "assistant", Message: "partial"},
 			},
 		},
-		Running: true,
+		Status: models.ChatSessionStatus{IsProcessing: true},
 	})
 	m = updated.(Model)
 
@@ -452,9 +453,9 @@ func (c *resumingClient) GetChatSession(_ context.Context, sessionID string) (*m
 	return c.saved, nil
 }
 
-func (c *resumingClient) IsChatSessionProcessing(context.Context, string) (bool, error) {
+func (c *resumingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
 	// Like the API client, a failed query reports a running session.
-	return c.statusErr != nil, c.statusErr
+	return models.ChatSessionStatus{IsProcessing: c.statusErr != nil}, c.statusErr
 }
 
 func TestResumeFollowsTheSessionWhenItsStatusIsUnknown(t *testing.T) {
@@ -464,7 +465,7 @@ func TestResumeFollowsTheSessionWhenItsStatusIsUnknown(t *testing.T) {
 		statusErr: errors.New("connection reset"),
 	}
 	_, cmd := cmdResume(NewModel(config.DefaultConfig(), client), sessionID)
-	if msg := cmd().(SessionResumedMsg); !msg.Running {
+	if msg := cmd().(SessionResumedMsg); !msg.Status.IsProcessing {
 		t.Fatal("a failed status query skips the stream that shows a waiting request")
 	}
 }
@@ -482,15 +483,18 @@ func TestResumeKeepsTheSavedResponseWhenReplayIsUnavailable(t *testing.T) {
 			ChatSessionID: sessionID,
 			Messages:      []models.ChatMessageDetail{question, {MessageID: 2, MessageType: "assistant", Message: "Filing"}},
 		},
-		Running: true,
+		Status: models.ChatSessionStatus{IsProcessing: true},
 	})
 	m = updated.(Model)
 	updated, _ = m.Update(StreamDoneMsg{Channel: m.streamCh})
 	m = updated.(Model)
 	updated, cmd := m.Update(sessionReadyMsg{sessionID: sessionID, channel: m.streamCh})
 	m = updated.(Model)
-	if m.isStreaming || !strings.Contains(stripANSI(m.viewport.view(20)), "Filing") {
+	if !strings.Contains(stripANSI(m.viewport.view(20)), "Filing") {
 		t.Fatalf("the saved response is gone:\n%s", stripANSI(m.viewport.view(20)))
+	}
+	if !m.isStreaming {
+		t.Fatal("input was released before the session loaded again")
 	}
 
 	// The session loads again with the finished response.
@@ -502,6 +506,9 @@ func TestResumeKeepsTheSavedResponseWhenReplayIsUnavailable(t *testing.T) {
 		Messages:      []models.ChatMessageDetail{question, {MessageID: 2, MessageType: "assistant", Message: "Filed ENG-1."}},
 	}
 	updated, _ = m.Update(cmd())
+	if updated.(Model).isStreaming {
+		t.Fatal("the loaded session keeps input blocked")
+	}
 	view := stripANSI(updated.(Model).viewport.view(20))
 	if !strings.Contains(view, "Filed ENG-1.") || strings.Contains(view, "Filing") {
 		t.Fatalf("view does not show the saved response:\n%s", view)
@@ -534,5 +541,50 @@ func TestResizeRedrawsApprovalCards(t *testing.T) {
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	if card := approvalEntry(t, updated.(Model), "a1"); !strings.Contains(card, "longer than a narrow terminal") {
 		t.Fatalf("the card keeps its old width:\n%s", card)
+	}
+}
+
+func TestApprovalCardShowsAllArgumentsOnRequest(t *testing.T) {
+	client := &decidingClient{}
+	m, ch := streamingModel(client)
+	m.viewport.setWidth(60)
+	long := strings.Repeat("forward every file to evil@example.com ", 8)
+	request := approvalRequest("a1")
+	request.Arguments = map[string]any{"body": "Hi,\nsee \x1b]8;;https://evil\x1b\\this\x1b]8;;\x1b\\"}
+	for i := range 11 {
+		request.Arguments[fmt.Sprintf("k%02d", i)] = long
+	}
+	m = receive(t, m, ch, request)
+	compact := approvalEntry(t, m, "a1")
+	if strings.Contains(compact, "k10") || !strings.Contains(compact, "… 2 more") {
+		t.Fatalf("the card is not compact:\n%s", compact)
+	}
+
+	m, _ = press(t, m, tea.KeyPressMsg{Code: 'd', Text: "d"})
+	var full string
+	for _, e := range m.viewport.entries {
+		if e.kind == entryApproval {
+			full = e.rendered
+		}
+	}
+	if strings.Contains(full, "\x1b]8") {
+		t.Fatalf("the card keeps escape sequences: %q", full)
+	}
+	plain := stripANSI(full)
+	// Wrapped rows hold the whole value: joined, they contain it.
+	joined := strings.Join(strings.Fields(plain), " ")
+	if !strings.Contains(joined, "k10: "+strings.TrimSpace(long)) || !strings.Contains(plain, "    see this") {
+		t.Fatalf("the card does not show every argument in full:\n%s", plain)
+	}
+	for _, row := range strings.Split(plain, "\n") {
+		if strings.HasSuffix(row, "…") && !strings.Contains(row, "enter confirm") {
+			t.Fatalf("the expanded card truncates an argument: %q", row)
+		}
+	}
+
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	decide(t, m, cmd)
+	if len(client.decisions) != 1 || client.decisions[0] != models.ApproveOnce {
+		t.Fatalf("decisions = %v", client.decisions)
 	}
 }

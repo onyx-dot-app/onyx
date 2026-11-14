@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -32,31 +33,54 @@ func Title(req models.ToolApprovalRequestEvent) string {
 }
 
 // Arguments returns one "key: value" line per argument, sorted by key.
-// Long values and long argument lists are truncated.
+// Long values and long argument lists are truncated; AllArguments shows them.
 func Arguments(args map[string]any) []string {
-	keys := make([]string, 0, len(args))
-	for key := range args {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
+	keys := sortedKeys(args)
 	lines := make([]string, 0, min(len(keys), maxArguments+1))
 	for i, key := range keys {
 		if i == maxArguments {
 			lines = append(lines, fmt.Sprintf("… %d more", len(keys)-maxArguments))
 			break
 		}
-		value, ok := args[key].(string)
-		if !ok {
-			encoded, err := json.Marshal(args[key])
-			if err != nil {
-				encoded = []byte("?")
-			}
-			value = string(encoded)
-		}
-		lines = append(lines, truncate(sanitize.Line(key), maxKeyRunes)+": "+truncate(sanitize.Line(value), maxValueRunes))
+		lines = append(lines, truncate(sanitize.Line(key), maxKeyRunes)+": "+truncate(sanitize.Line(argumentText(args[key])), maxValueRunes))
 	}
 	return lines
+}
+
+// AllArguments returns every argument in full, sorted by key. A value keeps
+// its line breaks, and its later lines are indented under its key.
+func AllArguments(args map[string]any) []string {
+	var lines []string
+	for _, key := range sortedKeys(args) {
+		value := strings.ReplaceAll(sanitize.Terminal(argumentText(args[key])), "\t", "    ")
+		valueLines := strings.Split(value, "\n")
+		lines = append(lines, sanitize.Line(key)+": "+valueLines[0])
+		for _, line := range valueLines[1:] {
+			lines = append(lines, "  "+line)
+		}
+	}
+	return lines
+}
+
+func sortedKeys(args map[string]any) []string {
+	keys := make([]string, 0, len(args))
+	for key := range args {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// argumentText is a string argument as is and any other value as JSON.
+func argumentText(value any) string {
+	if text, ok := value.(string); ok {
+		return text
+	}
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		return "?"
+	}
+	return string(encoded)
 }
 
 // Deadline shows when the server ends the request, or "" when the server

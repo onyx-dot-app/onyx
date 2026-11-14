@@ -19,10 +19,10 @@ type SessionsLoadedMsg struct {
 // SessionResumedMsg carries a loaded session detail.
 type SessionResumedMsg struct {
 	Detail *models.ChatSessionDetailResponse
-	// Running reports a response that still runs, such as one that waits for
+	// Status reports a response that still runs, such as one that waits for
 	// an approval.
-	Running bool
-	Err     error
+	Status models.ChatSessionStatus
+	Err    error
 }
 
 // FileUploadedMsg carries an uploaded file descriptor.

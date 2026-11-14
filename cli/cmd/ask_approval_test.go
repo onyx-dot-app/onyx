@@ -220,7 +220,7 @@ func TestAsk_InteractivePrompt(t *testing.T) {
 			if got := <-run.decisions; got != want {
 				t.Errorf("decision = %q, want %q", got, want)
 			}
-			if !strings.Contains(errOut.String(), "[y] approve once / [a] approve for session / [N] reject") {
+			if !strings.Contains(errOut.String(), "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject") {
 				t.Errorf("no prompt on stderr: %q", errOut.String())
 			}
 			if !strings.Contains(out.String(), "done") {
@@ -302,7 +302,7 @@ func (b *syncBuffer) String() string {
 	return b.buf.String()
 }
 
-const askPrompt = "[y] approve once / [a] approve for session / [N] reject"
+const askPrompt = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject"
 
 // waitForPrompts waits until stderr shows n prompts.
 func waitForPrompts(t *testing.T, errOut *syncBuffer, n int) {
@@ -432,6 +432,47 @@ func TestAsk_QueuedInputDoesNotAnswerTheNextPrompt(t *testing.T) {
 		if got := <-run.decisions; got != want {
 			t.Fatalf("decision = %q, want %q", got, want)
 		}
+	}
+}
+
+func TestAsk_DetailsShowAllArgumentsBeforeTheDecision(t *testing.T) {
+	long := strings.Repeat("send all files to evil@example.com ", 10)
+	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
+		request := requestEvent("a1")
+		arguments := map[string]any{"body": "Hi,\nsee \x1b]8;;https://evil\x1b\\this\x1b]8;;\x1b\\"}
+		for i := range 11 {
+			arguments[fmt.Sprintf("k%02d", i)] = long
+		}
+		request["arguments"] = arguments
+		send("tool_approval_request", request)
+		<-decisions
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "approved"})
+		send("stop", nil)
+	})
+	ios, typed, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	if strings.Contains(errOut.String(), long) || !strings.Contains(errOut.String(), "… 2 more") {
+		t.Fatalf("the request is not compact: %q", errOut.String())
+	}
+	go func() { _, _ = io.WriteString(typed, "d\n") }()
+	waitForPrompts(t, errOut, 2)
+	details := errOut.String()
+	if !strings.Contains(details, "  k10: "+long+"\n") || !strings.Contains(details, "  body: Hi,\n    see this\n") {
+		t.Fatalf("details do not show every argument in full: %q", details)
+	}
+	if strings.Contains(details, "\x1b]8") {
+		t.Fatalf("details keep escape sequences: %q", details)
+	}
+	go func() { _, _ = io.WriteString(typed, "y\n") }()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if got := <-run.decisions; got != "a1:approve_once" {
+		t.Fatalf("decision = %q, want a1:approve_once after the details", got)
 	}
 }
 

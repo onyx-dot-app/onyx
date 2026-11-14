@@ -61,6 +61,13 @@ func TestMessageIDInfo(t *testing.T) {
 	}
 }
 
+func TestStreamCursor(t *testing.T) {
+	event := ParseStreamLine(`{"stream_id":7,"next_cursor":3,"replay_complete":true}`)
+	if e, ok := event.(models.StreamCursorEvent); !ok || e != (models.StreamCursorEvent{StreamID: 7, NextCursor: 3, ReplayComplete: true}) {
+		t.Fatalf("got %#v", event)
+	}
+}
+
 func TestMessageIDInfoNullUserID(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
 		"user_message_id":               nil,

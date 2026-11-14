@@ -24,6 +24,8 @@ type approvalCard struct {
 	// decided labels the outcome of this client's decision. The card shows it
 	// until the server reports the outcome, which replaces it.
 	decided string
+	// expanded shows every argument in full instead of the compact list.
+	expanded bool
 }
 
 var approvalActions = []struct {
@@ -50,8 +52,18 @@ func renderApprovalCard(card approvalCard, active bool, width int) string {
 		return approvalRecord(card.request, card.decided)
 	}
 	lines := []string{warnStyle.Render("● Approval requested: " + approval.Title(card.request))}
-	for _, arg := range approval.Arguments(card.request.Arguments) {
-		lines = append(lines, "    "+arg)
+	if card.expanded {
+		// Wrap instead of truncating, so no part of a value is hidden.
+		wrapAt := max(width-5, 16)
+		for _, arg := range approval.AllArguments(card.request.Arguments) {
+			for _, row := range strings.Split(ansi.Wrap(arg, wrapAt, ""), "\n") {
+				lines = append(lines, "    "+row)
+			}
+		}
+	} else {
+		for _, arg := range approval.Arguments(card.request.Arguments) {
+			lines = append(lines, "    "+arg)
+		}
 	}
 	if deadline := approval.Deadline(card.request.ExpiresAt); deadline != "" {
 		lines = append(lines, dimInfoStyle.Render("    "+deadline))
@@ -75,7 +87,11 @@ func renderApprovalCard(card approvalCard, active bool, width int) string {
 				lines = append(lines, "    "+row)
 			}
 		}
-		lines = append(lines, dimInfoStyle.Render("    ↑↓ select • enter confirm • y/a/n • esc stop the response"))
+		details := "d show all"
+		if card.expanded {
+			details = "d show less"
+		}
+		lines = append(lines, dimInfoStyle.Render("    ↑↓ select • enter confirm • y/a/n • "+details+" • esc stop the response"))
 	}
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], max(width-1, 20), "…")
@@ -155,7 +171,7 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 }
 
 // handleApprovalKey applies a key to the active card. It reports false for
-// keys the card does not use, and for y/a/n/Enter while the input holds a
+// keys the card does not use, and for y/a/n/d/Enter while the input holds a
 // draft, so the draft is never lost and typing never decides by accident.
 func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	index := m.activeApproval()
@@ -181,9 +197,14 @@ func (m Model) handleApprovalKey(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
 	if m.input.textInput.Value() != "" {
 		return m, nil, false
 	}
-	if key == "enter" {
+	switch key {
+	case "enter":
 		m, cmd := m.decideApproval(index, approvalActions[card.selected].decision)
 		return m, cmd, true
+	case "d":
+		card.expanded = !card.expanded
+		m.renderApprovals()
+		return m, nil, true
 	}
 	for _, action := range approvalActions {
 		if key == action.key {

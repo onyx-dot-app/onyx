@@ -51,6 +51,31 @@ func TestArgumentsCapCount(t *testing.T) {
 	}
 }
 
+func TestAllArgumentsShowEveryValueInFull(t *testing.T) {
+	args := map[string]any{
+		"body":   "Hi,\n\tsee \x1b]8;;https://evil\x1b\\this\x1b]8;;\x1b\\\rnow",
+		"nested": map[string]any{"k": 1},
+	}
+	long := strings.Repeat("x", 500)
+	for i := range maxArguments + 3 {
+		args[fmt.Sprintf("k%02d", i)] = long
+	}
+	lines := AllArguments(args)
+	joined := strings.Join(lines, "\n")
+	if strings.ContainsAny(joined, "\x1b\x07\r") {
+		t.Fatalf("arguments keep control characters: %q", joined)
+	}
+	if lines[0] != "body: Hi," || lines[1] != "      see thisnow" {
+		t.Fatalf("multi-line value = %q", lines[:2])
+	}
+	if len(lines) != 2+maxArguments+3+1 || lines[2] != "k00: "+long || lines[len(lines)-2] != "k12: "+long {
+		t.Fatalf("an argument or value is cut: %q", lines)
+	}
+	if lines[len(lines)-1] != `nested: {"k":1}` {
+		t.Fatalf("last line = %q", lines[len(lines)-1])
+	}
+}
+
 func TestTitleFallsBack(t *testing.T) {
 	if got := Title(models.ToolApprovalRequestEvent{DisplayName: "Create\x1b[2J issue\n"}); got != "Create issue " {
 		t.Errorf("Title = %q", got)

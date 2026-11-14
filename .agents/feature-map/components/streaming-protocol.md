@@ -292,6 +292,9 @@ its background task end ([[#pure-asgi-middleware]]).
    `mobile/src/hooks/useChatSessionController.ts:recoverChatSession` uses to
    commit packets and to reattach from the last cursor; only a 404 stops it
    from requesting that stream again ([[#buffer-gap-ends-resume]]).
+   `cli/internal/api/stream.go:ResumeChatStream` delivers events only in
+   complete batches, each ending with its `StreamCursor` line, so the CLI chat
+   can continue from the last cursor without a repeated packet.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool
@@ -414,8 +417,10 @@ its background task end ([[#pure-asgi-middleware]]).
     stream that runs instead of its send. Its idle result counts
     `has_startable_input` as background work and reloads when the chat does
     not show `latest_response_id` ([[mobile-app]]). The others are
-    `cli/internal/api/client.go:IsChatSessionProcessing` and
-    `widget/src/services/api-service.ts`. The CLI and widget stop with an error
+    `cli/internal/api/client.go:ChatSessionStatus` and
+    `widget/src/services/api-service.ts`. The CLI chat also reads
+    `current_stream` to follow a response whose stream it lost or that started
+    after a 404 from `resume-stream`. The CLI and widget stop with an error
     when an older server has no status endpoint. An old client in the field
     that sends as soon as the stream closes can meet the `CONFLICT` error.
 13. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware

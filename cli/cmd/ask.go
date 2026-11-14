@@ -49,7 +49,7 @@ automatically truncated to --max-output bytes and the full response is saved
 to a temp file. Set --max-output 0 to disable truncation.
 
 Some tool calls need your approval before they run. On a terminal, ask
-prompts for each one. Without a terminal, or with --json, it never waits:
+prompts for each one; answer d to show all arguments in full. Without a terminal, or with --json, it never waits:
 --approve sets the answer. The default, fail, rejects the tool call and exits
 with code 10.`,
 		Args: cobra.MaximumNArgs(1),
@@ -109,7 +109,7 @@ with code 10.`,
 				if ios.IsStdinTTY {
 					promptReader = bufio.NewReader(ios.In)
 					promptTerminal, _ = ios.In.(*os.File)
-				} else if tty, err := os.Open("/dev/tty"); err == nil {
+				} else if tty, err := iostreams.OpenTerminalInput(); err == nil {
 					defer func() { _ = tty.Close() }()
 					promptReader = bufio.NewReader(tty)
 					promptTerminal = tty
@@ -211,7 +211,7 @@ with code 10.`,
 						// The outer loop reports the queued resolution.
 						return nil
 					}
-					const promptText = "[y] approve once / [a] approve for session / [N] reject: "
+					const promptText = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject: "
 					fmt.Fprint(ios.ErrOut, promptText)
 				prompt:
 					for {
@@ -245,6 +245,13 @@ with code 10.`,
 								continue
 							}
 							switch line.text {
+							case "d":
+								fmt.Fprintf(ios.ErrOut, "All arguments of %s:\n", title)
+								for _, arg := range approval.AllArguments(req.Arguments) {
+									fmt.Fprintf(ios.ErrOut, "  %s\n", arg)
+								}
+								fmt.Fprint(ios.ErrOut, promptText)
+								continue
 							case "y", "yes":
 								decision = models.ApproveOnce
 							case "a":

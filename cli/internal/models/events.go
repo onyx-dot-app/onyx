@@ -30,6 +30,7 @@ const (
 	EventIntermediateReportDt = "intermediate_report_delta"
 	EventToolApprovalRequest  = "tool_approval_request"
 	EventToolApprovalResolved = "tool_approval_resolved"
+	EventStreamCursor         = "stream_cursor"
 	EventUnknown              = "unknown"
 )
 
@@ -221,6 +222,16 @@ type ToolApprovalResolvedEvent struct {
 }
 
 func (e ToolApprovalResolvedEvent) EventType() string { return EventToolApprovalResolved }
+
+// StreamCursorEvent ends a complete batch of a replayed response. A request
+// for the same stream from NextCursor continues after the batch.
+type StreamCursorEvent struct {
+	StreamID       int  `json:"stream_id"`
+	NextCursor     int  `json:"next_cursor"`
+	ReplayComplete bool `json:"replay_complete"`
+}
+
+func (e StreamCursorEvent) EventType() string { return EventStreamCursor }
 
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {

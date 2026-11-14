@@ -4,9 +4,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"context"
 	"errors"
+	"fmt"
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/testutil"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -193,5 +198,263 @@ func TestRepeatedCtrlDExitsWhileReadinessIsUnconfirmed(t *testing.T) {
 	}
 	if !m.isStreaming {
 		t.Fatal("quit must not mark the server idle")
+	}
+}
+
+type resumeRequest struct {
+	streamID *int
+	cursor   int
+}
+
+// followingClient serves resume streams in order and a fixed session status.
+type followingClient struct {
+	decidingClient
+	sent     chan models.StreamEvent
+	status   models.ChatSessionStatus
+	saved    *models.ChatSessionDetailResponse
+	streams  []chan models.StreamEvent
+	requests []resumeRequest
+}
+
+func (c *followingClient) ResumeChatStream(_ context.Context, _ string, streamID *int, cursor int) <-chan models.StreamEvent {
+	c.requests = append(c.requests, resumeRequest{streamID, cursor})
+	if len(c.streams) == 0 {
+		// No buffer: the API client ends a 404 without events.
+		closed := make(chan models.StreamEvent)
+		close(closed)
+		return closed
+	}
+	stream := c.streams[0]
+	c.streams = c.streams[1:]
+	return stream
+}
+
+func (c *followingClient) SendMessageStream(context.Context, string, *string, int, *int, []models.FileDescriptorPayload, *models.LLMOverride) <-chan models.StreamEvent {
+	return c.sent
+}
+
+func (c *followingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
+	return c.status, nil
+}
+
+func (c *followingClient) GetChatSession(context.Context, string) (*models.ChatSessionDetailResponse, error) {
+	return c.saved, nil
+}
+
+const followedSession = "11111111-2222-3333-4444-555555555555"
+
+// endStream delivers the end of the current stream and the session status
+// that the readiness check reads next.
+func endStream(t *testing.T, m Model, status models.ChatSessionStatus) (Model, tea.Cmd) {
+	t.Helper()
+	ch := m.streamCh
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: followedSession, channel: ch, status: status})
+	return updated.(Model), cmd
+}
+
+func TestResumeDuringPreparationFollowsTheStreamOnceItStarts(t *testing.T) {
+	streamID := 7
+	started := make(chan models.StreamEvent)
+	client := &followingClient{saved: &models.ChatSessionDetailResponse{ChatSessionID: followedSession}}
+	m := NewModel(config.DefaultConfig(), client)
+	// The turn prepares: it runs, but its stream does not exist yet.
+	updated, _ := m.Update(SessionResumedMsg{Detail: client.saved, Status: models.ChatSessionStatus{IsProcessing: true}})
+	m = updated.(Model)
+	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true})
+	if cmd == nil || !m.isStreaming || len(client.requests) != 1 {
+		t.Fatalf("a preparing turn must keep the readiness check: requests=%v", client.requests)
+	}
+
+	// The stream starts: the chat loads the session and follows it.
+	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	client.streams = []chan models.StreamEvent{started}
+	m, cmd = endStream(t, m, client.status)
+	if cmd == nil {
+		t.Fatal("the started stream is not followed")
+	}
+	resumed, ok := cmd().(SessionResumedMsg)
+	if !ok {
+		t.Fatal("the started stream is not followed")
+	}
+	updated, _ = m.Update(resumed)
+	m = updated.(Model)
+	if len(client.requests) != 2 || client.requests[1].streamID == nil || *client.requests[1].streamID != streamID || client.requests[1].cursor != 0 {
+		t.Fatalf("requests = %+v, want stream 7 from cursor 0", client.requests)
+	}
+	m = receive(t, m, started, approvalRequest("a1"))
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
+		t.Fatal("the request of the started stream cannot be decided")
+	}
+}
+
+func TestDroppedFollowContinuesFromItsCursor(t *testing.T) {
+	streamID := 7
+	first, second := make(chan models.StreamEvent), make(chan models.StreamEvent)
+	client := &followingClient{streams: []chan models.StreamEvent{first, second}}
+	m := NewModel(config.DefaultConfig(), client)
+	updated, _ := m.Update(SessionResumedMsg{
+		Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession},
+		Status: models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID},
+	})
+	m = updated.(Model)
+	m = receive(t, m, first, models.MessageDeltaEvent{Content: "Filing the ticket."})
+	m = receive(t, m, first, models.StreamCursorEvent{StreamID: streamID, NextCursor: 4})
+
+	// The connection drops while the response still runs.
+	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	if len(client.requests) != 2 || client.requests[1].streamID == nil || *client.requests[1].streamID != streamID || client.requests[1].cursor != 4 {
+		t.Fatalf("requests = %+v, want stream 7 from cursor 4", client.requests)
+	}
+	if m.streamCh != second || !m.isStreaming {
+		t.Fatal("the response is not followed again")
+	}
+	m = receive(t, m, second, approvalRequest("a1"))
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
+		t.Fatal("a request raised after the drop cannot be decided")
+	}
+	if view := stripANSI(m.viewport.view(20)); strings.Count(view, "Filing the ticket.") != 1 {
+		t.Fatalf("the response does not show once:\n%s", view)
+	}
+}
+
+func TestStreamWithoutBufferIsNotRequestedAgain(t *testing.T) {
+	streamID := 7
+	client := &followingClient{}
+	m := NewModel(config.DefaultConfig(), client)
+	running := models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	updated, _ := m.Update(SessionResumedMsg{Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession}, Status: running})
+	m = updated.(Model)
+	m, cmd := endStream(t, m, running)
+	if cmd == nil || !m.isStreaming || len(client.requests) != 1 {
+		t.Fatalf("a stream without a buffer was requested again: %+v", client.requests)
+	}
+	if _, polled := cmd().(sessionReadyMsg); !polled {
+		t.Fatal("the readiness check stopped")
+	}
+}
+
+func TestStoppedFollowIsNotFollowedAgain(t *testing.T) {
+	streamID := 7
+	stream := make(chan models.StreamEvent)
+	client := &followingClient{streams: []chan models.StreamEvent{stream}}
+	m := NewModel(config.DefaultConfig(), client)
+	running := models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	updated, _ := m.Update(SessionResumedMsg{Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession}, Status: running})
+	m = updated.(Model)
+	m = receive(t, m, stream, models.StreamCursorEvent{StreamID: streamID, NextCursor: 1})
+	m, _ = m.cancelStream()
+	m, _ = endStream(t, m, running)
+	if len(client.requests) != 1 || !m.isStreaming {
+		t.Fatalf("a stopped response was followed again: %+v", client.requests)
+	}
+}
+
+func TestRejectedMessageDoesNotFollowAnotherResponse(t *testing.T) {
+	streamID := 7
+	client := &followingClient{}
+	m, ch := streamingModel(client)
+	session := followedSession
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.ErrorEvent{Error: "HTTP 400: bad request", StatusCode: 400})
+	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	if cmd == nil || !m.isStreaming || len(client.requests) != 0 {
+		t.Fatalf("a rejected message followed another response: %+v", client.requests)
+	}
+	if _, polled := cmd().(sessionReadyMsg); !polled {
+		t.Fatal("the readiness check stopped")
+	}
+}
+
+func TestStopAfterReattachReachesTheServer(t *testing.T) {
+	stopped := make(chan string, 2)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat/chat-session/"+followedSession+"/resume-stream", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("cursor") != "4" || r.URL.Query().Get("stream_id") != "7" {
+			http.Error(w, "unexpected cursor", http.StatusBadRequest)
+			return
+		}
+		fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"more"}}`)
+		fmt.Fprintln(w, `{"stream_id":7,"next_cursor":5,"replay_complete":true}`)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	})
+	mux.HandleFunc("/api/chat/stop-chat-session/"+followedSession, func(w http.ResponseWriter, r *http.Request) {
+		stopped <- r.URL.Query().Get("stream_id")
+	})
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	streamID, cursor := 7, 4
+	m := NewModel(config.DefaultConfig(), testutil.NewClient(server.URL))
+	session := followedSession
+	ended := make(chan models.StreamEvent)
+	close(ended)
+	m.chatSessionID = &session
+	m.isStreaming = true
+	m.following = true
+	m.streamID = &streamID
+	m.resumeCursor = &cursor
+	m.streamAnswered = true
+	m.streamCh = ended
+	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	for {
+		event, ok := <-m.streamCh
+		if !ok {
+			t.Fatal("the reattached stream ended")
+		}
+		if e, failed := event.(models.ErrorEvent); failed {
+			t.Fatalf("the reattached stream failed: %s", e.Error)
+		}
+		updated, _ := m.handleStreamEvent(StreamEventMsg{Channel: m.streamCh, Event: event})
+		m = updated.(Model)
+		if _, isCursor := event.(models.StreamCursorEvent); isCursor {
+			break
+		}
+	}
+	if *m.resumeCursor != 5 {
+		t.Fatalf("cursor = %d, want 5", *m.resumeCursor)
+	}
+
+	m, _ = m.cancelStream()
+	select {
+	case id := <-stopped:
+		if id != "7" {
+			t.Fatalf("Stop stream_id = %q, want 7", id)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Stop did not reach the server")
+	}
+	for range m.streamCh {
+	}
+	if len(stopped) != 0 {
+		t.Fatal("Stop was sent twice")
+	}
+}
+
+func TestDroppedResponseKeepsInputBlockedUntilTheSessionLoads(t *testing.T) {
+	streamID := 7
+	running := make(chan models.StreamEvent)
+	client := &followingClient{streams: []chan models.StreamEvent{running}}
+	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
+	client.sent = make(chan models.StreamEvent)
+	m, ch := streamingModel(client)
+	session := followedSession
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: streamID})
+	// The send stream drops while its response runs.
+	m, cmd := endStream(t, m, client.status)
+	if cmd == nil || !m.isStreaming {
+		t.Fatal("input was released before the session loaded again")
+	}
+	m, sendCmd := m.sendMessage("next question")
+	if sendCmd != nil {
+		t.Fatal("a message was sent while the session loads again")
+	}
+	updated, _ := m.Update(cmd())
+	m = updated.(Model)
+	if m.streamCh != running || !m.isStreaming || len(client.requests) != 1 || *client.requests[0].streamID != streamID {
+		t.Fatalf("the running response is not followed: %+v", client.requests)
 	}
 }

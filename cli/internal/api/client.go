@@ -433,35 +433,44 @@ func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision
 	return result, err
 }
 
-// IsChatSessionProcessing confirms whether the server still owns the session.
-func (c *Client) IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error) {
+// ChatSessionStatus confirms whether the server still owns the session. A
+// failed query reports a running session.
+func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error) {
 	var status struct {
-		IsProcessing *bool `json:"is_processing"`
+		IsProcessing  *bool `json:"is_processing"`
+		CurrentStream *struct {
+			StreamID int `json:"stream_id"`
+		} `json:"current_stream"`
 	}
+	unknown := models.ChatSessionStatus{IsProcessing: true}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
 		var apiErr *OnyxAPIError
 		if errors.As(err, &apiErr) && (apiErr.StatusCode == http.StatusNotFound || apiErr.StatusCode == http.StatusMethodNotAllowed) {
-			return true, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
+			return unknown, fmt.Errorf("session or readiness endpoint unavailable; use a server with the chat readiness API: %w", err)
 		}
-		return true, err
+		return unknown, err
 	}
 	if status.IsProcessing == nil {
-		return true, fmt.Errorf("invalid chat readiness response")
+		return unknown, fmt.Errorf("invalid chat readiness response")
 	}
-	return *status.IsProcessing, nil
+	result := models.ChatSessionStatus{IsProcessing: *status.IsProcessing}
+	if status.CurrentStream != nil {
+		result.StreamID = &status.CurrentStream.StreamID
+	}
+	return result, nil
 }
 
 // WaitForChatSessionIdle keeps completion separate from delivery.
 func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID string) error {
 	for {
-		processing, err := client.IsChatSessionProcessing(ctx, sessionID)
+		status, err := client.ChatSessionStatus(ctx, sessionID)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
 		if err != nil && !IsRetryableReadinessError(err) {
 			return err
 		}
-		if err == nil && !processing {
+		if err == nil && !status.IsProcessing {
 			return nil
 		}
 		select {
@@ -483,10 +492,10 @@ type ClientAPI interface {
 	UploadFile(ctx context.Context, filePath string) (*models.FileDescriptorPayload, error)
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string, streamID int)
-	IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error)
+	ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error)
 	DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
-	ResumeChatStream(ctx context.Context, sessionID string) <-chan models.StreamEvent
+	ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

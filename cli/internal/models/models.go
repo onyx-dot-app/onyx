@@ -46,6 +46,13 @@ type ChatSessionDetailResponse struct {
 	Messages      []ChatMessageDetail `json:"messages"`
 }
 
+// ChatSessionStatus reports whether the server still runs a response of a
+// session. StreamID names the running response that has a stream, or is nil.
+type ChatSessionStatus struct {
+	IsProcessing bool
+	StreamID     *int
+}
+
 // ChatFileType represents a file type for uploads.
 type ChatFileType string
 

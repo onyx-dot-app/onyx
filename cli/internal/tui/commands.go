@@ -331,8 +331,8 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 		}
 		// A failed status query counts as running. Following a session that
 		// runs nothing ends at once, and its readiness check reports the failure.
-		running, _ := client.IsChatSessionProcessing(context.Background(), detail.ChatSessionID)
-		return SessionResumedMsg{Detail: detail, Running: running}
+		status, _ := client.ChatSessionStatus(context.Background(), detail.ChatSessionID)
+		return SessionResumedMsg{Detail: detail, Status: status}
 	}
 }
 
