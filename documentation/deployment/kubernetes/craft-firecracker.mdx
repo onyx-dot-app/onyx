@@ -123,7 +123,8 @@ checks the node and sets the labels and taints.
 A new Onyx install needs the base chart Secrets before the first start. Without `auth.userauth`,
 the API server stops with `USER_AUTH_SECRET is empty`. Without the OpenSearch password,
 or the object store keys when the chart runs the bundled object store, Helm refuses to render the chart.
-Put the values in a private values file, for example `craft-fc-secrets.yaml`:
+Put the values in your Onyx values file (`onyx-values.yaml`), and keep that file private.
+Do not put them in `craft-fc-secrets.yaml`: the command in [Configure Helm](#configure-helm) overwrites that file.
 
 ```yaml
 auth:
