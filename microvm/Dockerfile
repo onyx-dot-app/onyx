@@ -30,7 +30,7 @@ ARG ARTIFACTS_IMAGE=${BASE_IMAGE_REGISTRY}/onyxdotapp/craft-fc-artifacts:${ARTIF
 # A named build context "artifacts" (a local Dockerfile.artifacts build) replaces this stage.
 FROM ${ARTIFACTS_IMAGE} AS artifacts
 
-FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/library/golang:1.27.1-alpine@sha256:8a5910f31396cd4d89662f56c68b3ae31d374308270a1c3bd96672ee5ed43414 AS builder
+FROM --platform=$BUILDPLATFORM ${BASE_IMAGE_REGISTRY}/library/golang:1.27.4-alpine@sha256:0a5f7fe796599ff487605987432e7619ae45beeb2fba4c2ce0b907879932aebf AS builder
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
