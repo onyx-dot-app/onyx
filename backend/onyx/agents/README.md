@@ -241,8 +241,9 @@ For example, deep research normalizes a child report's citations before returnin
 
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
-`ToolApprovals.request_approval(run, call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call.
-`ToolApprovals.withdraw_approval(request_id)` reports a nested call that stopped waiting without an answer; requests of direct calls end when the run store releases the run.
+`ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
+`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, or any call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
+The run reports that answer in `input_ended`. A direct call that the answer denies keeps the denial as its result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
 Without `ToolApprovals`, such a call returns an error result.
 `Run.has_event_listeners` tells the application whether a listener receives the run's events, directly or through a foreground ancestor; a run that no one watches cannot show a request.

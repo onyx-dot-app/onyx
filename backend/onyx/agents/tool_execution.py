@@ -19,7 +19,6 @@ from onyx.agents.tools import (
     AgentTool,
     BeforeToolCallFailed,
     ChildRunWait,
-    HumanToolAnswer,
     InputDecision,
     InputMode,
     NestedCallGate,
@@ -41,7 +40,6 @@ from onyx.llm.models import (
 from onyx.utils.logger import setup_logger
 
 if TYPE_CHECKING:
-    from onyx.agents.agent_coordination import ToolApprovals
     from onyx.agents.runtime import Run
 
 logger = setup_logger()
@@ -108,31 +106,30 @@ class ToolBatch:
             messages=[_tool_view(item) for item in self.context_messages],
         )
 
-    @property
-    def approvals(self) -> "ToolApprovals | None":
-        coordination = self.run.coordination
-        return coordination.coordinator.approvals if coordination is not None else None
-
-    def decide_call(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
-        """The decision on a call of this step, or on a call that one of its tools
-        makes for the model, such as a program's: the run's before_tool_call
-        hook, then the user's approval when the call requires it."""
+    def decide_call(
+        self, tool_call: ToolCall, nested_call: ToolCall | None
+    ) -> ToolResult | PendingToolInput | None:
+        """The decision on `tool_call`, a call of this step, or on `nested_call`,
+        a call that its tool makes for the model, such as a program's: the
+        run's before_tool_call hook, then the user's approval when the call
+        requires it."""
+        call = nested_call or tool_call
         if self.run.before_tool_call is not None:
             decision = self.run.before_tool_call(self._context(call))
             if decision is not None:
                 return decision
         if call.name not in self.run.approval_required:
             return None
-        approvals = self.approvals
+        approvals = self.run.approvals
         if approvals is None:
             return ToolResult(
                 content=(
-                    f"The {call.name} tool needs the user's approval, and this "
-                    "run cannot ask for it. Do not retry the call."
+                    f"The {call.name} call needs the user's approval, and this "
+                    "run cannot ask for it, so it did not run."
                 ),
                 is_error=True,
             )
-        decision = approvals.request_approval(self.run, call)
+        decision = approvals.request_approval(self.run, tool_call, nested_call)
         if isinstance(decision, PendingToolInput):
             return decision.model_copy(update={"approval": True})
         return decision
@@ -374,7 +371,7 @@ class ToolBatch:
                 is_error=True,
             )
         if not approved and children is None:
-            decision = self.decide_call(call)
+            decision = self.decide_call(call, None)
             if decision is not None:
                 return decision
         cancellation_signal.check()
@@ -463,7 +460,7 @@ class _NestedCallGate(NestedCallGate):
 
     def decide(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
         try:
-            return self._batch.decide_call(call)
+            return self._batch.decide_call(self._call, call)
         except Exception as error:
             # As when the hook raises for a direct call: the run fails.
             raise BeforeToolCallFailed(error) from error
@@ -475,24 +472,17 @@ class _NestedCallGate(NestedCallGate):
         cancellation: CancellationSignal,
     ) -> ToolResult | None:
         batch = self._batch
-        answer: HumanToolAnswer | None = None
-        try:
-            answer = batch.run.await_nested_input(
-                InputRequiredEvent(
-                    **batch.run.event_context,
-                    message_id=batch.message_id,
-                    step_index=batch.step.index,
-                    tool_call=self._call,
-                    nested_call=call,
-                    request=request,
-                ),
-                cancellation,
-            )
-        finally:
-            approvals = batch.approvals
-            if answer is None and request.approval and approvals is not None:
-                # The run may continue, so its end does not end the request.
-                approvals.withdraw_approval(request.request_id)
+        answer = batch.run.await_nested_input(
+            InputRequiredEvent(
+                **batch.run.event_context,
+                message_id=batch.message_id,
+                step_index=batch.step.index,
+                tool_call=self._call,
+                nested_call=call,
+                request=request,
+            ),
+            cancellation,
+        )
         if answer.decision == InputDecision.APPROVE:
             return None
         return answer.result or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True)
