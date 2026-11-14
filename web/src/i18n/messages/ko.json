@@ -3107,7 +3107,15 @@
           "close": "닫기",
           "count": "({count})"
         },
-        "showing": "<mono>{total}</mono>개 중 <mono>{from}</mono>~<mono>{to}</mono>개 표시"
+        "showing": "<mono>{total}</mono>개 중 <mono>{from}</mono>~<mono>{to}</mono>개 표시",
+        "progress": {
+          "listed": "목록 조회됨",
+          "converted": "변환됨",
+          "indexed": "인덱싱됨",
+          "listedSoFar": "{count, plural, other {지금까지 문서 #개 목록 조회}}",
+          "skipped": "{count, plural, other {변경되지 않은 문서 #개 건너뜀}}",
+          "eta": "약 {duration} 남음"
+        }
       },
       "activity": {
         "search": {

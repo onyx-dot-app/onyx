@@ -3107,7 +3107,15 @@
           "close": "閉じる",
           "count": "({count})"
         },
-        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示"
+        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示",
+        "progress": {
+          "listed": "一覧取得済み",
+          "converted": "変換済み",
+          "indexed": "インデックス済み",
+          "listedSoFar": "{count, plural, other {これまでに # 件のドキュメントを一覧取得}}",
+          "skipped": "{count, plural, other {変更のないドキュメント # 件をスキップ}}",
+          "eta": "残り約 {duration}"
+        }
       },
       "activity": {
         "search": {
