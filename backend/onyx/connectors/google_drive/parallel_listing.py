@@ -339,9 +339,12 @@ class FolderTargetPlan(BaseModel):
     # The users to list the folder as. Empty when no user can see it. More
     # than one when no user is sure to see the whole subtree.
     principals: list[str] = []
-    # True when the folder is in a shared drive that a complete listing
-    # covers. Then the folder needs no listing of its own.
-    covered: bool = False
+    # The shared drive of the folder, when a complete listing covers that
+    # drive. The folder is walked all the same: the walk drops the files that
+    # the drive listing covers, and it follows the folder shortcuts, which
+    # the drive listing does not. If no user can walk the folder, the drive
+    # listing is its only cover.
+    covered_drive_id: str | None = None
 
 
 class _SplitRefusal(Enum):
@@ -587,24 +590,27 @@ class ParallelDriveLister:
         plan = self._plan_folder_target(folder_id, covered)
         usable: list[str] = []
         failures: list[RetrievedDriveFile] = []
-        if not plan.covered:
-            for email in plan.principals:
-                with self._lock:
-                    checked = email.lower() in self._state.listed_owners
-                ok = True
-                if not checked:
-                    ok, user_failures = self._check_impersonation(email)
-                    failures.extend(user_failures)
-                if ok:
-                    usable.append(email)
+        for email in plan.principals:
+            with self._lock:
+                checked = email.lower() in self._state.listed_owners
+            ok = True
+            if not checked:
+                ok, user_failures = self._check_impersonation(email)
+                failures.extend(user_failures)
+            if ok:
+                usable.append(email)
         with self._lock:
             self._emit(failures)
             self._finish_planning(partition)
-            if plan.covered:
+            if not usable and plan.covered_drive_id is not None:
                 logger.info(
-                    "Requested folder %s is in a shared drive that is listed in full",
+                    "Requested folder %s has no usable user; the full listing "
+                    "of shared drive %s covers it",
                     folder_id,
+                    plan.covered_drive_id,
                 )
+                # If that listing fails, nothing covers the folder.
+                self._state.folders_covered_by_drive[folder_id] = plan.covered_drive_id
                 return []
             if not usable:
                 logger.warning(
@@ -763,6 +769,12 @@ class ParallelDriveLister:
                 target = self._resolve_file(shard.principal, file)
                 if target is not None:
                     resolved.append(target)
+            if shard.owner_filter is not None:
+                # The query also returns the shortcuts of other owners. Keep
+                # the files and the targets of this owner.
+                resolved = [
+                    file for file in resolved if owner_email(file) == shard.owner_filter
+                ]
 
         with self._lock:
             live = self._state.shards.get(shard.id)
@@ -987,7 +999,7 @@ class ParallelDriveLister:
             # The user's My Drive partition lists the user's own files.
             query += " and not 'me' in owners"
             if shard.owner_filter is not None:
-                query += f" and '{_quoted(shard.owner_filter)}' in owners"
+                query += f" and {_owner_or_shortcut(shard.owner_filter)}"
         if folders:
             return query
         return f"{query} and {_time_range(shard, t0, t1)}"
@@ -1253,6 +1265,15 @@ class ParallelDriveLister:
                 drive_id = partition.key
                 state.listed_drive_ids.discard(drive_id)
                 self._checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
+                # A requested folder that no user can walk had only this
+                # drive's full listing as its cover.
+                for folder_id in [
+                    folder_id
+                    for folder_id, cover in state.folders_covered_by_drive.items()
+                    if cover == drive_id
+                ]:
+                    del state.folders_covered_by_drive[folder_id]
+                    self._checkpoint.unreachable_target_ids.add(folder_id)
                 if list_again:
                     state.pending_partitions.insert(0, partition)
                 else:
@@ -1388,8 +1409,15 @@ def _walk_query(shard: ListingShard, t0: int, t1: int) -> str:
         return f"{query} and ({_FOLDER_OR_SHORTCUT} or ({time_range}))"
     query = f"{query} and mimeType != '{DRIVE_FOLDER_TYPE}' and {time_range}"
     if shard.owner_filter is not None:
-        query += f" and '{_quoted(shard.owner_filter)}' in owners"
+        query += f" and {_owner_or_shortcut(shard.owner_filter)}"
     return query
+
+
+def _owner_or_shortcut(owner: str) -> str:
+    """The files of ``owner``, and every shortcut. A shortcut of another
+    owner can point to a file of ``owner``, so the listing resolves each
+    shortcut and then keeps the targets of ``owner``."""
+    return f"('{_quoted(owner)}' in owners or mimeType = '{DRIVE_SHORTCUT_TYPE}')"
 
 
 def _in_range(shard: ListingShard, file: GoogleDriveFileType) -> bool:

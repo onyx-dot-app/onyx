@@ -145,7 +145,6 @@ def test_a_link_only_folder_is_a_node_only_as_a_parent() -> None:
 
 def _file_under(parent_id: str, user_email: str) -> RetrievedDriveFile:
     return RetrievedDriveFile(
-        completion_stage=DriveRetrievalStage.MY_DRIVE_FILES,
         drive_file={"id": f"file_of_{user_email}", "parents": [parent_id]},
         user_email=user_email,
     )

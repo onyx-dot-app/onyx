@@ -289,10 +289,12 @@ def test_folders_with_a_shared_drive_and_a_my_drive(
     drive_index: int,
     covered: bool,
 ) -> None:
-    """A requested folder in a requested shared drive is walked only when no
-    organizer lists the drive in full, as in the serial crawl. A requested
-    folder in a requested My Drive is walked, and the walk drops the files
-    that the owner's listing yields. No file is listed twice."""
+    """A requested folder in a requested shared drive is walked, also when an
+    organizer lists the drive in full: the walk follows the folder shortcuts,
+    which the drive listing does not, and it does not depend on that listing
+    staying complete. A requested folder in a requested My Drive is walked.
+    Each walk drops the files that the other listing yields. No file is
+    listed twice."""
     own_mock_drive.set_corpus(
         {
             **_BASE_CORPUS,
@@ -336,7 +338,7 @@ def test_folders_with_a_shared_drive_and_a_my_drive(
     final = stubs.checkpoints[-1]
     assert in_my_drive_root in walked
     assert (drive_id in final.incomplete_drive_ids) is not covered
-    assert (in_drive_root in walked) is not covered
+    assert in_drive_root in walked
     assert final.unreachable_target_ids == set()
 
 

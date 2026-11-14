@@ -1286,7 +1286,7 @@ class GoogleDriveConnector(
             window_t0=0,
             window_t1=0,
             unresolved_parent_emails={
-                parent_id: retrieved.user_email
+                parent_id: [retrieved.user_email]
                 for retrieved in retrieved_files
                 if (parent_id := _get_parent_id_from_file(retrieved.drive_file))
             },
@@ -1950,6 +1950,12 @@ class GoogleDriveConnector(
         def plan_folder_target(
             folder_id: str, covered_drive_ids: Collection[str]
         ) -> FolderTargetPlan:
+            def covered_drive(metadata: GoogleDriveFileType) -> str | None:
+                drive_id = metadata.get("driveId")
+                if isinstance(drive_id, str) and drive_id in covered_drive_ids:
+                    return drive_id
+                return None
+
             if not self._is_service_account:
                 # The OAuth user is the only principal.
                 metadata = self.ops.probe_target(
@@ -1957,19 +1963,19 @@ class GoogleDriveConnector(
                 )
                 if metadata is None:
                     return FolderTargetPlan()
-                if metadata.get("driveId") in covered_drive_ids:
-                    return FolderTargetPlan(covered=True)
-                return FolderTargetPlan(principals=[self.primary_admin_email])
+                return FolderTargetPlan(
+                    principals=[self.primary_admin_email],
+                    covered_drive_id=covered_drive(metadata),
+                )
             found = self._find_target_viewer(folder_id, checkpoint)
             if found is None:
                 return FolderTargetPlan()
             viewer, metadata = found
-            if metadata.get("driveId") in covered_drive_ids:
-                return FolderTargetPlan(covered=True)
             return FolderTargetPlan(
                 principals=self._target_principals(
                     folder_id, viewer, metadata, checkpoint
-                )
+                ),
+                covered_drive_id=covered_drive(metadata),
             )
 
         lister = ParallelDriveLister(
