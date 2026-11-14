@@ -750,18 +750,6 @@ export const widgetStyles = css`
     font-size: var(--onyx-font-size-secondary);
   }
 
-  .approval-args .arg-full,
-  .approval-args dd.expanded .arg-preview,
-  .approval-args .arg-less,
-  .approval-args dd.expanded .arg-more {
-    display: none;
-  }
-
-  .approval-args dd.expanded .arg-full,
-  .approval-args dd.expanded .arg-less {
-    display: inline;
-  }
-
   .arg-toggle {
     display: block;
     margin-left: auto;

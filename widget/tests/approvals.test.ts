@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { ApiError, ApiService } from "../src/services/api-service";
 import {
   APPROVAL_PENDING_ERROR_CODE,
@@ -6,13 +6,17 @@ import {
   approvalDeadline,
   approvalRecord,
   approvalStatus,
+  ARGUMENT_ROWS_SHOWN,
   argumentRows,
-  boundArguments,
   decidedStatus,
   findPendingApproval,
 } from "../src/services/approvals";
 import { processPacket } from "../src/services/stream-parser";
-import type { Packet, ToolApprovalRequest } from "../src/types/api-types";
+import type {
+  Packet,
+  StreamCursor,
+  ToolApprovalRequest,
+} from "../src/types/api-types";
 import type { ChatMessage } from "../src/types/widget-types";
 import { OnyxChatWidget } from "../src/widget";
 
@@ -174,51 +178,69 @@ describe("approval status", () => {
   });
 });
 
+/** The text a template shows, without its markup or event handlers. */
+function shownText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(shownText).join("");
+  if (typeof value === "string" || typeof value === "number")
+    return String(value);
+  if (typeof value === "object" && value !== null && "values" in value)
+    return shownText((value as { values: unknown[] }).values);
+  return "";
+}
+
 describe("approval arguments from the model", () => {
-  it("are stored within size, value-count and depth limits", () => {
-    const deep: Record<string, unknown> = {};
-    let level = deep;
-    for (let depth = 0; depth < 20; depth += 1) {
-      level.next = {};
-      level = level.next as Record<string, unknown>;
-    }
+  it("are kept in full and shown collapsed until the user expands them", () => {
+    const body = "x".repeat(50_000);
+    const items = Array.from({ length: 5_000 }, (_, i) => i);
     const message = processPacket(
       {
         obj: {
           ...request("a"),
-          arguments: {
-            body: "x".repeat(50_000),
-            items: Array.from({ length: 5_000 }, (_, i) => i),
-            deep,
-            ["__proto__"]: "kept as data",
-          },
+          arguments: { body, items, ["__proto__"]: "kept as data" },
         },
       },
       null
     ).message!;
     const args = message.approvals![0]!.request.arguments;
-    const text = JSON.stringify(args);
-
-    expect(text.length).toBeLessThan(10_000);
-    expect(args.body).toBe(`${"x".repeat(2_000)}…`);
-    expect(args.items).toEqual([
-      ...Array.from({ length: 50 }, (_, i) => i),
-      "…",
-    ]);
-    expect(text).toContain('"next":"…"');
+    expect(args.body).toBe(body);
+    expect(args.items).toEqual(items);
     expect(Object.hasOwn(args, "__proto__")).toBe(true);
     expect(Object.getPrototypeOf(args)).toBe(Object.prototype);
-    expect(argumentRows(args).map((row) => row.key)).toEqual([
-      "body",
-      "items",
-      "deep",
-      "__proto__",
-    ]);
+
+    const widget = new OnyxChatWidget();
+    const card = () =>
+      shownText(widget["renderApproval"](message.approvals![0]!, "pending"));
+    expect(card().length).toBeLessThan(2_000);
+    expect(card()).toContain("Show more");
+
+    widget["toggleExpanded"](JSON.stringify(["a", "body"]));
+    expect(card()).toContain(body);
+    expect(card()).toContain("Show less");
+    expect(card()).not.toContain(items.join(", "));
   });
 
-  it("are stored unchanged within the limits", () => {
-    const args = { to: "a@example.com", cc: ["b", "c"], meta: { n: 1 } };
-    expect(boundArguments(args)).toEqual(args);
+  it("show a bounded number of rows until the user shows all", () => {
+    const args = Object.fromEntries(
+      Array.from({ length: ARGUMENT_ROWS_SHOWN + 5 }, (_, i) => [`k${i}`, i])
+    );
+    const approval: ApprovalEntry = {
+      request: { ...request("a"), arguments: args },
+      outcome: null,
+    };
+    const widget = new OnyxChatWidget();
+    const card = () => shownText(widget["renderApproval"](approval, "pending"));
+    const last = `k${ARGUMENT_ROWS_SHOWN + 4}`;
+    expect(card()).not.toContain(last);
+    expect(card()).toContain(`Show all ${ARGUMENT_ROWS_SHOWN + 5} arguments`);
+
+    widget["toggleExpanded"](JSON.stringify(["a"]));
+    expect(card()).toContain(last);
+  });
+
+  it("preview a large JSON value by lines and characters", () => {
+    const [row] = argumentRows({ nested: { text: "y".repeat(5_000) } });
+    expect(row!.text).toContain("y".repeat(5_000));
+    expect(row!.preview!.length).toBeLessThan(1_100);
   });
 });
 
@@ -268,7 +290,7 @@ describe("approval decisions", () => {
     await expect(api.submitApprovalDecision("a", "reject")).rejects.toThrow();
   });
 
-  it("replays a running response and skips its replay positions", async () => {
+  it("replays a running response with its cursors", async () => {
     const urls: string[] = [];
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
       urls.push(String(input));
@@ -281,27 +303,41 @@ describe("approval decisions", () => {
       );
     }) as typeof fetch;
     const api = new ApiService("https://onyx.test/api", async () => "key");
-    const packets: Packet[] = [];
+    const packets: (Packet | StreamCursor)[] = [];
     for await (const packet of api.resumeStream(
       "s",
       new AbortController().signal
     )) {
       packets.push(packet);
     }
+    for await (const _ of api.resumeStream("s", new AbortController().signal, {
+      streamId: 1,
+      cursor: 2,
+    })) {
+      // drained
+    }
     expect(urls).toEqual([
       "https://onyx.test/api/chat/chat-session/s/resume-stream?cursor=0",
+      "https://onyx.test/api/chat/chat-session/s/resume-stream?stream_id=1&cursor=2",
     ]);
-    expect(packets.map((packet) => packet.obj)).toEqual([request("a")]);
+    expect(packets).toEqual([
+      { stream_id: 1, next_cursor: 2, replay_complete: true },
+      { placement: { turn_index: 0 }, obj: request("a") },
+    ]);
   });
 
-  it("ends a resume without packets when nothing runs", async () => {
-    globalThis.fetch = mock(
-      async () => new Response("none", { status: 404 })
-    ) as typeof fetch;
-    const api = new ApiService("https://onyx.test/api", async () => "key");
-    const stream = api.resumeStream("s", new AbortController().signal);
-    expect((await stream.next()).done).toBe(true);
-  });
+  it.each([401, 403, 404])(
+    "ends a resume without packets when the stream cannot be replayed (%s)",
+    async (status) => {
+      globalThis.fetch = mock(
+        async () => new Response("none", { status })
+      ) as typeof fetch;
+      const api = new ApiService("https://onyx.test/api", async () => "key");
+      const stream = api.resumeStream("s", new AbortController().signal);
+      expect((await stream.next()).done).toBe(true);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    }
+  );
 
   it("surfaces the pending-approval code of a blocked send", async () => {
     globalThis.fetch = mock(async () =>
@@ -328,6 +364,10 @@ describe("widget while a request waits", () => {
     widget["chatSessionId"] = "session";
     widget["isStreaming"] = true;
     widget["messages"] = [streamingMessage([entry("a"), entry("b")])];
+    // A decision with no stream attached follows the run again.
+    api.resumeStream = mock(async function* (): AsyncGenerator<Packet> {});
+    api.waitForSessionIdle = mock(async () => null);
+    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
     return { widget, api };
   }
 
@@ -449,7 +489,11 @@ describe("widget while a request waits", () => {
     expect(widget["inputValue"]).toBe("blocked");
     expect(widget["error"]).toContain("waits for your decision");
     // The waiting request shows again, so the user can decide it.
-    expect(api.resumeStream).toHaveBeenCalledWith("session", expect.anything());
+    expect(api.resumeStream).toHaveBeenCalledWith(
+      "session",
+      expect.anything(),
+      null
+    );
     expect(pending?.request.approval_id).toBe("a");
     expect(widget["messages"].map((message) => message.id)).toEqual([2]);
   });
@@ -584,19 +628,63 @@ describe("widget while a request waits", () => {
     expect(stored.has("onyx-widget-session")).toBe(false);
   });
 
-  it("keeps a restored request pending when the resume fails", async () => {
-    const widget = restoredWidget();
-    widget["apiService"].resumeStream = mock(
-      async function* (): AsyncGenerator<Packet> {
-        throw new TypeError("Failed to fetch");
-      }
+  it("keeps a restored request pending when the resume fails, and follows the run after a decision", async () => {
+    const setTimer = globalThis.setTimeout;
+    spyOn(globalThis, "setTimeout").mockImplementation(
+      (callback, delay, ...args) =>
+        setTimer(callback, delay === 1_000 ? 0 : delay, ...args)
     );
+    const widget = restoredWidget();
+    const api = widget["apiService"];
+    api.resumeStream = mock(async function* (): AsyncGenerator<Packet> {
+      throw new TypeError("Failed to fetch");
+    });
+    api.waitForSessionIdle = mock(async () => {
+      throw new Error("Cannot reach the server");
+    });
 
     await widget["resumeStream"]("session");
 
-    expect(widget["error"]).toBe("Failed to fetch");
+    expect(widget["error"]).toBe("Cannot reach the server");
     expect(widget["isStreaming"]).toBe(false);
+    expect(widget["abortController"]).toBeUndefined();
     expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+
+    widget["chatSessionId"] = "session";
+    api.submitApprovalDecision = mock(async () => ({
+      decision: "APPROVED" as const,
+      decided_via: "USER",
+    }));
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor
+    > {
+      yield { obj: { user_message_id: 6, reserved_assistant_message_id: 7 } };
+      yield { obj: request("a") };
+      yield {
+        obj: {
+          type: "tool_approval_resolved",
+          approval_id: "a",
+          outcome: "approved",
+        },
+      };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Sent." } };
+      yield { obj: { type: "stop" } };
+      yield { stream_id: 4, next_cursor: 6, replay_complete: true };
+    });
+    api.waitForSessionIdle = mock(async () => null);
+
+    await widget["decideApproval"](request("a"), "approve_once");
+    while (widget["isStreaming"] || !api.waitForSessionIdle.mock.calls.length)
+      await Bun.sleep(1);
+
+    expect(api.resumeStream).toHaveBeenCalledTimes(1);
+    expect(widget["messages"].at(-1)).toMatchObject({
+      id: 7,
+      content: "Sent.",
+      isStreaming: false,
+      approvals: [{ outcome: "approved" }],
+    });
   });
 
   it("resumes a running response that no saved message records", async () => {
@@ -631,7 +719,11 @@ describe("widget while a request waits", () => {
       restore();
     }
 
-    expect(api.resumeStream).toHaveBeenCalledWith("session", expect.anything());
+    expect(api.resumeStream).toHaveBeenCalledWith(
+      "session",
+      expect.anything(),
+      null
+    );
     expect(pending?.request.approval_id).toBe("a");
   });
 
@@ -662,7 +754,11 @@ describe("widget while a request waits", () => {
 
     await widget["sendMessage"]();
 
-    expect(api.resumeStream).toHaveBeenCalledWith("session", expect.anything());
+    expect(api.resumeStream).toHaveBeenCalledWith(
+      "session",
+      expect.anything(),
+      null
+    );
     expect(widget["messages"].at(-1)).toMatchObject({
       id: 2,
       isStreaming: false,

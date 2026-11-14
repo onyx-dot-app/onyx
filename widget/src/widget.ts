@@ -13,6 +13,7 @@ import {
   Packet,
   SearchDocument,
   ResolvedCitation,
+  StreamCursor,
   ToolApprovalRequest,
 } from "./types/api-types";
 import {
@@ -22,7 +23,12 @@ import {
 } from "./config/config";
 import { theme } from "./styles/theme";
 import { widgetStyles } from "./styles/widget-styles";
-import { ApiError, ApiService } from "./services/api-service";
+import {
+  ApiError,
+  ApiService,
+  READINESS_POLL_INTERVAL_MS,
+  pause,
+} from "./services/api-service";
 import {
   APPROVAL_PENDING_ERROR_CODE,
   ApprovalDecision,
@@ -31,6 +37,8 @@ import {
   approvalDeadline,
   approvalRecord,
   approvalStatus,
+  ARGUMENT_ROWS_SHOWN,
+  ArgumentRow,
   argumentRows,
   decidedStatus,
   findPendingApproval,
@@ -39,6 +47,32 @@ import {
 import { MessageIDs, processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
+
+/** What a followed stream applied, and where a reattach continues from. */
+interface StreamFollow {
+  message: ChatMessage | null;
+  assistantMessageId: number | null;
+  streamId: number | null;
+  cursor: number;
+  // The message as of `cursor`; packets after it arrive again on a reattach
+  messageAtCursor: ChatMessage | null;
+  // The current attempt delivered a cursor, so the stream has a buffer
+  cursorSeen: boolean;
+  // The response's stop or error arrived
+  ended: boolean;
+}
+
+function newFollow(streamId: number | null): StreamFollow {
+  return {
+    message: null,
+    assistantMessageId: null,
+    streamId,
+    cursor: 0,
+    messageAtCursor: null,
+    cursorSeen: false,
+    ended: false,
+  };
+}
 
 const ICON_LOADER = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M8 1.5v2M8 12.5v2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M1.5 8h2M12.5 8h2M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/></svg>`;
 const ICON_CHECK = html`<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5.5 8l2 2 3-4"/></svg>`;
@@ -83,6 +117,9 @@ export class OnyxChatWidget extends LitElement {
   @state() private failedApprovals = new Set<string>();
   // Decisions from this widget, by approval id, until the stream resolves them
   @state() private localApprovalStatuses = new Map<string, ApprovalStatus>();
+  // Expanded argument values, as `[approval id, key]` JSON, and cards that
+  // show all their rows, as `[approval id]` JSON
+  @state() private expandedArguments: ReadonlySet<string> = new Set();
 
   private config!: WidgetConfig;
   private apiService!: ApiService;
@@ -91,6 +128,8 @@ export class OnyxChatWidget extends LitElement {
   // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
   private documentMap = new Map<string, SearchDocument>();
   private citationMap = new Map<number, string>();
+  // Rows of each request's arguments, built once instead of on each render
+  private argumentRowCache = new WeakMap<ToolApprovalRequest, ArgumentRow[]>();
 
   constructor() {
     super();
@@ -268,6 +307,7 @@ export class OnyxChatWidget extends LitElement {
     this.submittingApprovals = new Set();
     this.failedApprovals = new Set();
     this.localApprovalStatuses = new Map();
+    this.expandedArguments = new Set();
     this.documentMap.clear();
     this.citationMap.clear();
     clearSession();
@@ -469,6 +509,10 @@ export class OnyxChatWidget extends LitElement {
       id,
       status
     );
+    // The run goes on after the decision; follow it when no stream does.
+    if (this.abortController === undefined && this.chatSessionId) {
+      void this.resumeStream(this.chatSessionId);
+    }
     // The focused button is gone, so focus moves on.
     if (!this.isConnected) return;
     await this.updateComplete;
@@ -497,6 +541,9 @@ export class OnyxChatWidget extends LitElement {
       this.abortController === controller && !controller.signal.aborted;
     let sentSessionId: string | undefined;
     let acknowledged = false;
+    // The server's id for the answer, from the acknowledgement
+    let reservedAssistantId: number | null = null;
+    const follow = newFollow(null);
     // Set when the response runs on without this stream: the server reports a
     // waiting request this widget does not show, or the stream ended first.
     let reattach = false;
@@ -564,8 +611,10 @@ export class OnyxChatWidget extends LitElement {
         sentSessionId,
         identity,
         stillOurs,
-        ({ userMessageId }) => {
+        follow,
+        ({ userMessageId, assistantMessageId }) => {
           acknowledged = true;
+          reservedAssistantId = assistantMessageId;
           if (userMessageId === null) return;
           // Create new array to trigger reactivity
           this.messages = this.messages.map((m) =>
@@ -573,7 +622,7 @@ export class OnyxChatWidget extends LitElement {
           );
         }
       );
-      reattach = this.messages.some((m) => m.isStreaming);
+      reattach = acknowledged && !follow.ended;
     } catch (err: unknown) {
       if (!stillOurs()) return;
       console.error("Failed to send message:", err);
@@ -581,7 +630,7 @@ export class OnyxChatWidget extends LitElement {
         const blocked =
           err instanceof ApiError &&
           err.errorCode === APPROVAL_PENDING_ERROR_CODE;
-        reattach = blocked || acknowledged;
+        reattach = blocked || (acknowledged && !follow.ended);
         this.error = blocked
           ? "This chat waits for your decision on a tool request. Your message was not sent."
           : err instanceof Error
@@ -627,48 +676,117 @@ export class OnyxChatWidget extends LitElement {
       }
     }
     if (reattach && sentSessionId && this.abortController === undefined) {
-      await this.resumeStream(sentSessionId);
+      await this.resumeStream(sentSessionId, reservedAssistantId);
     }
   }
 
   /**
-   * Shows the session's running response again, so a request that waits for a
+   * Follows the session's running response, so a request that waits for a
    * decision can be decided after a reload, a blocked send, or a lost stream.
+   * A stream that ends before the response does is attached again from its
+   * last cursor while the session still runs it; a new stream is followed
+   * from its start. `reservedAssistantId` names an answer that this widget
+   * has not shown yet.
    */
-  private async resumeStream(sessionId: string) {
+  private async resumeStream(
+    sessionId: string,
+    reservedAssistantId: number | null = null
+  ) {
     if (this.abortController) return;
     const controller = new AbortController();
     this.abortController = controller;
     const stillOurs = () =>
       this.abortController === controller && !controller.signal.aborted;
+    const onUnconfirmed = () => {
+      if (stillOurs())
+        this.streamingStatus =
+          "Waiting to confirm that this conversation is ready.";
+    };
     this.isStreaming = true;
     try {
       const identity = await this.currentIdentity();
       if (!stillOurs()) return;
-      await this.followStream(
-        this.apiService.resumeStream(sessionId, controller.signal),
-        sessionId,
-        identity,
-        stillOurs,
-        () => {}
-      );
-      if (!stillOurs()) return;
-      // The server can still save the turn after its stream ends.
-      await this.apiService.waitForSessionIdle(
-        sessionId,
-        controller.signal,
-        () => {
-          if (stillOurs())
-            this.streamingStatus =
-              "Waiting to confirm that this conversation is ready.";
+      let follow = newFollow(null);
+      // A stream without a replay buffer is never requested again.
+      let streamWithoutBuffer: number | null = null;
+      while (true) {
+        const { streamId, cursor } = follow;
+        follow.cursorSeen = false;
+        let dropped = false;
+        try {
+          await this.followStream(
+            this.apiService.resumeStream(
+              sessionId,
+              controller.signal,
+              streamId === null ? null : { streamId, cursor }
+            ),
+            sessionId,
+            identity,
+            stillOurs,
+            follow,
+            () => {}
+          );
+        } catch (err: unknown) {
+          if (
+            !stillOurs() ||
+            follow.ended ||
+            (err instanceof Error && err.name === "AbortError")
+          )
+            throw err;
+          console.warn("The response stream ended early:", err);
+          dropped = true;
         }
-      );
-      // The replay ended before the response did: there was no replay (a 404,
-      // e.g. the run finished while the page was closed), or the replay
-      // buffer ended early. The server's saved copy finishes the response.
-      // On a failure the snapshot stays unfinished, so the next load tries
-      // again.
-      if (stillOurs() && this.messages.some((message) => message.isStreaming)) {
+        if (!stillOurs()) return;
+        if (follow.ended) {
+          // The server can still save the turn after its stream ends.
+          await this.apiService.waitForSessionIdle(
+            sessionId,
+            controller.signal,
+            onUnconfirmed
+          );
+          break;
+        }
+        // A 4xx, or a stream that ended without a cursor: its buffer is gone.
+        // Before the first cursor the stream id is unknown, so the first
+        // stream the status reports gets one attempt.
+        if (!dropped && !follow.cursorSeen) {
+          streamWithoutBuffer = follow.streamId;
+        }
+        await pause(READINESS_POLL_INTERVAL_MS, controller.signal);
+        const next = await this.apiService.waitForSessionIdle(
+          sessionId,
+          controller.signal,
+          onUnconfirmed,
+          (id) => id !== streamWithoutBuffer
+        );
+        if (!stillOurs()) return;
+        if (typeof next !== "number") break;
+        if (next === follow.streamId) {
+          follow.message = follow.messageAtCursor;
+        } else {
+          follow = newFollow(next);
+        }
+      }
+      // The response ended before this widget saw it end: there was no
+      // replay (a 404, e.g. the run finished while the page was closed), or
+      // the replay buffer ended early. The server's saved copy finishes the
+      // response. On a failure the snapshot stays unfinished, so the next
+      // load tries again.
+      const recoverIds = this.messages
+        .filter((message) => message.isStreaming)
+        .map((message) => message.id)
+        .filter((id): id is number => typeof id === "number");
+      if (
+        reservedAssistantId !== null &&
+        !this.messages.some((message) => message.id === reservedAssistantId)
+      ) {
+        recoverIds.push(reservedAssistantId);
+      }
+      if (
+        stillOurs() &&
+        (recoverIds.length > 0 ||
+          this.messages.some((message) => message.isStreaming))
+      ) {
         const session = await this.apiService.getChatSession(
           sessionId,
           controller.signal
@@ -677,11 +795,10 @@ export class OnyxChatWidget extends LitElement {
         const assistantIds = session.messages
           .filter((message) => message.message_type === "assistant")
           .map((message) => message.message_id);
-        for (const message of this.messages) {
-          if (!message.isStreaming || typeof message.id !== "number") continue;
-          const replay = session.packets[assistantIds.indexOf(message.id)];
+        for (const assistantMessageId of recoverIds) {
+          const replay =
+            session.packets[assistantIds.indexOf(assistantMessageId)];
           if (!replay) continue;
-          const assistantMessageId = message.id;
           await this.followStream(
             (async function* (): AsyncGenerator<Packet, void, unknown> {
               yield {
@@ -695,6 +812,7 @@ export class OnyxChatWidget extends LitElement {
             sessionId,
             identity,
             stillOurs,
+            newFollow(null),
             () => {}
           );
           if (!stillOurs()) return;
@@ -722,24 +840,37 @@ export class OnyxChatWidget extends LitElement {
 
   /** Applies a response stream to the transcript and persists it. */
   private async followStream(
-    packets: AsyncGenerator<Packet, void, unknown>,
+    packets: AsyncGenerator<Packet | StreamCursor, void, unknown>,
     sessionId: string,
     identity: string,
     stillOurs: () => boolean,
+    follow: StreamFollow,
     onMessageIds: (ids: MessageIDs) => void
   ) {
-    let currentMessage: ChatMessage | null = null;
-    let assistantMessageId: number | null = null;
-
     for await (const packet of packets) {
       if (!stillOurs()) return;
-      const result = processPacket(packet, currentMessage);
+      if ("next_cursor" in packet) {
+        follow.streamId = packet.stream_id;
+        follow.cursor = packet.next_cursor;
+        follow.messageAtCursor = follow.message;
+        follow.cursorSeen = true;
+        continue;
+      }
+      if (
+        "type" in packet.obj &&
+        (packet.obj.type === "stop" ||
+          packet.obj.type === "overall_stop" ||
+          packet.obj.type === "error")
+      ) {
+        follow.ended = true;
+      }
+      const result = processPacket(packet, follow.message);
 
       // Capture message IDs from backend
       if (result.messageIds) {
         onMessageIds(result.messageIds);
         // Store assistant message ID to apply when message is created
-        assistantMessageId = result.messageIds.assistantMessageId;
+        follow.assistantMessageId = result.messageIds.assistantMessageId;
       }
 
       // Update status if provided
@@ -779,19 +910,19 @@ export class OnyxChatWidget extends LitElement {
         if (
           result.message.isStreaming &&
           result.message.content === "" &&
-          currentMessage === null
+          follow.message === null
         ) {
           this.citationMap.clear();
         }
 
-        currentMessage = result.message;
+        let currentMessage = result.message;
 
         // Apply the backend message ID if we have it and message doesn't have a numeric ID yet
         if (
-          assistantMessageId !== null &&
+          follow.assistantMessageId !== null &&
           typeof currentMessage.id !== "number"
         ) {
-          currentMessage.id = assistantMessageId;
+          currentMessage.id = follow.assistantMessageId;
         }
 
         // When message is complete, resolve citations and attach to message
@@ -810,9 +941,11 @@ export class OnyxChatWidget extends LitElement {
           currentMessage = { ...currentMessage, citations: resolved };
         }
 
+        follow.message = currentMessage;
+
         // Update or add message
         const existingIndex = this.messages.findIndex(
-          (m) => m.id === currentMessage?.id
+          (m) => m.id === currentMessage.id
         );
         if (existingIndex >= 0) {
           this.messages = [
@@ -1043,7 +1176,14 @@ export class OnyxChatWidget extends LitElement {
     const title = `Approval requested: ${name}`;
     const submitting = this.submittingApprovals.has(request.approval_id);
     const deadline = approvalDeadline(request.expires_at);
-    const rows = argumentRows(request.arguments);
+    let rows = this.argumentRowCache.get(request);
+    if (!rows) {
+      rows = argumentRows(request.arguments);
+      this.argumentRowCache.set(request, rows);
+    }
+    const allRowsId = JSON.stringify([request.approval_id]);
+    const allRows = this.expandedArguments.has(allRowsId);
+    const shownRows = allRows ? rows : rows.slice(0, ARGUMENT_ROWS_SHOWN);
 
     return html`
       <div class="approval" data-approval-id=${request.approval_id}>
@@ -1077,32 +1217,55 @@ export class OnyxChatWidget extends LitElement {
                     rows.length === 0
                       ? html`<p class="approval-empty">No payload.</p>`
                       : html`<dl class="approval-args">
-                          ${rows.map(
-                            (row) => html`
-                              <dt title=${row.key}>${row.key}</dt>
-                              <dd class=${row.mono ? "mono" : ""}>
-                                ${
-                                  row.preview === null
-                                    ? html`<span class="arg-value"
-                                        >${row.text}</span
-                                      >`
-                                    : html`<span class="arg-value arg-preview"
-                                          >${row.preview}</span
-                                        ><span class="arg-value arg-full"
-                                          >${row.text}</span
-                                        ><button
+                            ${shownRows.map((row) => {
+                              const id = JSON.stringify([
+                                request.approval_id,
+                                row.key,
+                              ]);
+                              const expanded = this.expandedArguments.has(id);
+                              return html`
+                                <dt title=${row.key}>${row.key}</dt>
+                                <dd class=${row.mono ? "mono" : ""}>
+                                  <span class="arg-value"
+                                    >${
+                                      row.preview === null || expanded
+                                        ? row.text
+                                        : row.preview
+                                    }</span
+                                  >${
+                                    row.preview === null
+                                      ? ""
+                                      : html`<button
                                           class="arg-toggle"
-                                          aria-expanded="false"
-                                          @click=${this.toggleArgument}
+                                          aria-expanded=${expanded}
+                                          @click=${() =>
+                                            this.toggleExpanded(id)}
                                         >
-                                          <span class="arg-more">Show more</span
-                                          ><span class="arg-less">Show less</span>
+                                          ${
+                                            expanded ? "Show less" : "Show more"
+                                          }
                                         </button>`
-                                }
-                              </dd>
-                            `
-                          )}
-                        </dl>`
+                                  }
+                                </dd>
+                              `;
+                            })}
+                          </dl>
+                          ${
+                            rows.length > ARGUMENT_ROWS_SHOWN
+                              ? html`<button
+                                  class="arg-toggle"
+                                  aria-expanded=${allRows}
+                                  @click=${() =>
+                                    this.toggleExpanded(allRowsId)}
+                                >
+                                  ${
+                                    allRows
+                                      ? "Show fewer arguments"
+                                      : `Show all ${rows.length} arguments`
+                                  }
+                                </button>`
+                              : ""
+                          }`
                   }
                   ${
                     this.failedApprovals.has(request.approval_id)
@@ -1144,11 +1307,11 @@ export class OnyxChatWidget extends LitElement {
     `;
   }
 
-  /** Expands or collapses a long argument value. */
-  private toggleArgument(e: Event): void {
-    const button = e.currentTarget as HTMLElement;
-    const expanded = button.closest("dd")?.classList.toggle("expanded");
-    button.setAttribute("aria-expanded", String(Boolean(expanded)));
+  /** Expands or collapses a long argument value or a card's rows. */
+  private toggleExpanded(id: string): void {
+    const expanded = new Set(this.expandedArguments);
+    if (!expanded.delete(id)) expanded.add(id);
+    this.expandedArguments = expanded;
   }
 
   /** Shown under the composer while a request waits for the user. */

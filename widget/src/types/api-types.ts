@@ -7,6 +7,13 @@ export interface Packet {
   obj: PacketType;
 }
 
+/** A resumed stream's position after the packets before it. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
+}
+
 export type PacketType =
   | MessageResponseIDInfo
   | MessageStart

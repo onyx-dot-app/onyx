@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
 import { ApiService } from "../src/services/api-service";
+import type { Packet, StreamCursor } from "../src/types/api-types";
 import { OnyxChatWidget } from "../src/widget";
 
 const originalFetch = globalThis.fetch;
@@ -290,6 +291,8 @@ describe("widget readiness", () => {
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
     });
+    api.resumeStream = mock(async function* () {});
+    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
     await widget["sendMessage"]();
     expect(widget["messages"]).toHaveLength(1);
     expect(widget["messages"][0]).toMatchObject({ id: 1, content: "retry me" });
@@ -312,15 +315,53 @@ describe("widget readiness", () => {
     api.resumeStream = mock(async function* () {
       errorDuringResume = widget["error"];
     });
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant" },
+      ],
+      packets: [
+        [
+          { obj: { type: "message_start" as const } },
+          { obj: { type: "message_delta" as const, content: "Saved answer" } },
+          { obj: { type: "stop" as const } },
+        ],
+      ],
+    }));
+    const stored = new Map<string, string>();
+    globalThis.sessionStorage = {
+      getItem: (key: string) => stored.get(key) ?? null,
+      setItem: (key: string, value: string) => void stored.set(key, value),
+      removeItem: (key: string) => void stored.delete(key),
+    } as Storage;
     widget["apiService"] = api;
-    await widget["sendMessage"]();
-    expect(api.resumeStream).toHaveBeenCalledWith("session", expect.anything());
+    try {
+      await widget["sendMessage"]();
+    } finally {
+      Reflect.deleteProperty(globalThis, "sessionStorage");
+    }
+    expect(api.resumeStream).toHaveBeenCalledWith(
+      "session",
+      expect.anything(),
+      null
+    );
     expect(errorDuringResume).toBe("delivery failed");
-    expect(widget["messages"]).toHaveLength(1);
+    expect(widget["messages"]).toHaveLength(2);
     expect(widget["messages"][0]).toMatchObject({
       id: 1,
       content: "accepted question",
     });
+    expect(widget["messages"][1]).toMatchObject({
+      id: 2,
+      role: "assistant",
+      content: "Saved answer",
+      isStreaming: false,
+    });
+    const saved = JSON.parse(stored.get("onyx-widget-session") ?? "null");
+    expect(saved.messages.map((m: { content: string }) => m.content)).toEqual([
+      "accepted question",
+      "Saved answer",
+    ]);
     expect(widget["inputValue"]).toBe("");
     expect(widget["error"]).toBe("delivery failed");
     expect(widget["streamingStatus"]).toBe("");
@@ -342,6 +383,7 @@ describe("widget readiness", () => {
       api.waitForSessionIdle = mock(async () => {
         throw new Error("Session unavailable");
       });
+      api.resumeStream = mock(async function* () {});
       widget["apiService"] = api;
       await widget["sendMessage"]();
       expect(widget["error"]).toBe("Session unavailable");
@@ -351,6 +393,212 @@ describe("widget readiness", () => {
       expect(api.streamMessage).toHaveBeenCalledTimes(afterSending ? 1 : 0);
     }
   );
+
+  describe("a stream that ends before its response", () => {
+    function followingWidget() {
+      const widget = new OnyxChatWidget();
+      widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+      widget["currentIdentity"] = async () => "user";
+      const api = new ApiService("https://onyx.test/api", async () => "key");
+      api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+      widget["apiService"] = api;
+      return { widget, api };
+    }
+
+    /** Pauses of the poll interval end at once and are logged. */
+    function logPauses(log: string[]) {
+      const setTimer = globalThis.setTimeout;
+      spyOn(globalThis, "setTimeout").mockImplementation(
+        (callback, delay, ...args) => {
+          if (delay === 1_000) log.push("pause");
+          return setTimer(callback, delay === 1_000 ? 0 : delay, ...args);
+        }
+      );
+    }
+
+    it("waits the poll interval before each status read, also after progress", async () => {
+      const { widget, api } = followingWidget();
+      const log: string[] = [];
+      logPauses(log);
+      let attempt = 0;
+      // A proxy cuts each stream after one batch.
+      api.resumeStream = mock(async function* (): AsyncGenerator<
+        Packet | StreamCursor
+      > {
+        attempt += 1;
+        log.push(`attempt ${attempt}`);
+        if (attempt === 1) {
+          yield {
+            obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+          };
+          yield { obj: { type: "message_start" } };
+        }
+        yield { obj: { type: "message_delta", content: `${attempt}` } };
+        yield { stream_id: 5, next_cursor: attempt + 1, replay_complete: true };
+        if (attempt === 3) {
+          yield { obj: { type: "stop" } };
+          return;
+        }
+        throw new TypeError("network error");
+      });
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => {
+          log.push("status");
+          return attachable(5) ? 5 : null;
+        }
+      );
+
+      await widget["resumeStream"]("session");
+
+      expect(log).toEqual([
+        "attempt 1",
+        "pause",
+        "status",
+        "attempt 2",
+        "pause",
+        "status",
+        "attempt 3",
+        "status",
+      ]);
+      expect(widget["messages"][0]).toMatchObject({ content: "123" });
+    });
+
+    const approval = (id: string) => ({
+      type: "tool_approval_request" as const,
+      approval_id: id,
+      tool_call_id: `call-${id}`,
+      tool_name: "send_email",
+      display_name: "Send email",
+      arguments: {},
+      expires_at: "2026-11-13T15:45:00Z",
+    });
+
+    it("is attached again from its last cursor without repeating packets", async () => {
+      const { widget, api } = followingWidget();
+      logPauses([]);
+      const attempts: unknown[] = [];
+      let pendingAfterReattach: string | undefined;
+      api.resumeStream = mock(async function* (
+        _session: string,
+        _signal: AbortSignal,
+        from: { streamId: number; cursor: number } | null = null
+      ): AsyncGenerator<Packet | StreamCursor> {
+        attempts.push(from);
+        if (from === null) {
+          yield {
+            obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+          };
+          yield { obj: { type: "message_start" } };
+          yield { obj: { type: "message_delta", content: "Hel" } };
+          yield { stream_id: 5, next_cursor: 3, replay_complete: true };
+          yield { obj: { type: "message_delta", content: "lo" } };
+          throw new TypeError("network error");
+        }
+        // Packets after the cursor arrive again.
+        yield { obj: { type: "message_delta", content: "lo" } };
+        yield { stream_id: 5, next_cursor: 4, replay_complete: true };
+        yield { obj: approval("later") };
+        pendingAfterReattach = widget["pendingApproval"]?.request.approval_id;
+        yield { stream_id: 5, next_cursor: 5, replay_complete: true };
+        yield { obj: { type: "message_delta", content: " world" } };
+        yield { obj: { type: "stop" } };
+      });
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => (attachable(5) ? 5 : null)
+      );
+
+      await widget["resumeStream"]("session");
+
+      expect(attempts).toEqual([null, { streamId: 5, cursor: 3 }]);
+      expect(pendingAfterReattach).toBe("later");
+      expect(widget["messages"]).toHaveLength(1);
+      expect(widget["messages"][0]).toMatchObject({
+        id: 2,
+        content: "Hello world",
+        approvals: [{ request: { approval_id: "later" } }],
+      });
+      expect(widget["isStreaming"]).toBe(false);
+      expect(widget["error"]).toBeUndefined();
+    });
+
+    it("never requests a stream again after it has no buffer, and follows a new stream from its start", async () => {
+      const { widget, api } = followingWidget();
+      logPauses([]);
+      const attempts: unknown[] = [];
+      api.resumeStream = mock(async function* (
+        _session: string,
+        _signal: AbortSignal,
+        from: { streamId: number; cursor: number } | null = null
+      ): AsyncGenerator<Packet | StreamCursor> {
+        attempts.push(from);
+        if (from === null) {
+          yield {
+            obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+          };
+          yield { stream_id: 5, next_cursor: 1, replay_complete: true };
+          yield { obj: approval("a") };
+          throw new TypeError("network error");
+        }
+        // Stream 5 is gone (404).
+        if (from.streamId === 5) return;
+        yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
+        yield { obj: approval("a") };
+        yield {
+          obj: {
+            type: "tool_approval_resolved",
+            approval_id: "a",
+            outcome: "approved",
+          },
+        };
+        yield { obj: { type: "message_start" } };
+        yield { obj: { type: "message_delta", content: "Done" } };
+        yield { obj: { type: "stop" } };
+        yield { stream_id: 6, next_cursor: 6, replay_complete: true };
+      });
+      const offered: boolean[] = [];
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => {
+          // The status reports stream 5 until it reports stream 6.
+          if (attempts.length < 3) {
+            offered.push(attachable(5));
+            if (attachable(5)) return 5;
+          }
+          return attachable(6) ? 6 : null;
+        }
+      );
+
+      await widget["resumeStream"]("session");
+
+      expect(attempts).toEqual([
+        null,
+        { streamId: 5, cursor: 1 },
+        { streamId: 6, cursor: 0 },
+      ]);
+      expect(offered).toEqual([true, false]);
+      expect(widget["messages"]).toHaveLength(1);
+      expect(widget["messages"][0]).toMatchObject({
+        id: 2,
+        content: "Done",
+        isStreaming: false,
+        approvals: [{ outcome: "approved" }],
+      });
+    });
+  });
 });
 
 

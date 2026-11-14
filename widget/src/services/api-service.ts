@@ -5,7 +5,9 @@
 import {
   ApprovalDecisionResponse,
   ChatSessionDetail,
+  MessageResponseIDInfo,
   Packet,
+  StreamCursor,
   CreateSessionRequest,
   CreateSessionResponse,
   SendMessageRequest,
@@ -14,6 +16,22 @@ import { TokenProvider } from "@/types/widget-types";
 import type { ApprovalDecision } from "@/services/approvals";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
+export const READINESS_POLL_INTERVAL_MS = 1_000;
+
+/** Resolves after `ms`, or at once when `signal` aborts. */
+export function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 class SessionUnavailableError extends Error {}
 
@@ -86,11 +104,16 @@ export class ApiService {
     return data.chat_session_id;
   }
 
+  /**
+   * Polls the session status until the session is idle (null), or until it
+   * runs a stream that `attachable` accepts (that stream's id).
+   */
   async waitForSessionIdle(
     sessionId: string,
     signal: AbortSignal,
-    onUnconfirmed: () => void
-  ): Promise<void> {
+    onUnconfirmed: () => void,
+    attachable: (streamId: number) => boolean = () => false
+  ): Promise<number | null> {
     let authenticationFailures = 0;
     while (!signal.aborted) {
       const controller = new AbortController();
@@ -142,7 +165,16 @@ export class ApiService {
         ) {
           throw new Error("Invalid chat readiness response");
         }
-        if (!status.is_processing) return;
+        if (!status.is_processing) return null;
+        const streamId =
+          "current_stream" in status &&
+          typeof status.current_stream === "object" &&
+          status.current_stream !== null &&
+          "stream_id" in status.current_stream &&
+          typeof status.current_stream.stream_id === "number"
+            ? status.current_stream.stream_id
+            : null;
+        if (streamId !== null && attachable(streamId)) return streamId;
       } catch (error) {
         if (signal.aborted || error instanceof SessionUnavailableError)
           throw error;
@@ -152,17 +184,7 @@ export class ApiService {
         signal.removeEventListener("abort", onAbort);
       }
       if (signal.aborted) break;
-      await new Promise<void>((resolve) => {
-        const onAbort = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        const timer = setTimeout(() => {
-          signal.removeEventListener("abort", onAbort);
-          resolve();
-        }, 1000);
-        signal.addEventListener("abort", onAbort, { once: true });
-      });
+      await pause(READINESS_POLL_INTERVAL_MS, signal);
     }
     throw new DOMException("Request cancelled", "AbortError");
   }
@@ -177,7 +199,7 @@ export class ApiService {
     parentMessageId?: number | null;
     signal?: AbortSignal;
     includeCitations?: boolean;
-  }): AsyncGenerator<Packet, void, unknown> {
+  }): AsyncGenerator<Packet | StreamCursor, void, unknown> {
     const request: SendMessageRequest = {
       message: params.message,
       chat_session_id: params.chatSessionId,
@@ -205,18 +227,24 @@ export class ApiService {
   }
 
   /**
-   * Replay the session's running response from its start, then follow it.
-   * Ends without packets when the session has no running response (404).
+   * Replay the session's running response from `from.cursor` of stream
+   * `from.streamId`, or from the start of the current stream, then follow it.
+   * Ends without packets when that stream cannot be replayed (a 4xx).
    */
   async *resumeStream(
     chatSessionId: string,
-    signal: AbortSignal
-  ): AsyncGenerator<Packet, void, unknown> {
+    signal: AbortSignal,
+    from: { streamId: number; cursor: number } | null = null
+  ): AsyncGenerator<Packet | StreamCursor, void, unknown> {
+    const query = from
+      ? `stream_id=${from.streamId}&cursor=${from.cursor}`
+      : "cursor=0";
     const response = await this.fetchWithRetry(
-      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?cursor=0`,
+      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?${query}`,
       async () => ({ headers: await this.getHeaders(), signal })
     );
-    if (response.status === 404) return;
+    // Below 500 the stream is not replayable; the caller retries a 5xx.
+    if (response.status < 500 && !response.ok) return;
     if (!response.ok) throw await apiErrorFrom(response);
     yield* this.parseSSEStream(response);
   }
@@ -279,16 +307,35 @@ export class ApiService {
   }
 
   /**
-   * Parse Server-Sent Events stream
-   * Backend returns newline-delimited JSON packets
+   * Parse the NDJSON stream. A response-ID line comes without a packet
+   * wrapper; a resumed stream adds its cursor lines.
    */
   private async *parseSSEStream(
     response: Response
-  ): AsyncGenerator<Packet, void, unknown> {
+  ): AsyncGenerator<Packet | StreamCursor, void, unknown> {
     const reader = response.body?.getReader();
     if (!reader) {
       throw new Error("Response body is not readable");
     }
+
+    const parse = (line: string): Packet | StreamCursor => {
+      try {
+        const rawData = JSON.parse(line);
+        if (
+          "user_message_id" in rawData &&
+          "reserved_assistant_message_id" in rawData
+        ) {
+          return { obj: rawData as MessageResponseIDInfo };
+        }
+        if ("next_cursor" in rawData && !("obj" in rawData)) {
+          return rawData as StreamCursor;
+        }
+        return rawData as Packet;
+      } catch (e) {
+        // Fail fast on malformed packets - don't hide backend issues
+        throw new Error(`Failed to parse SSE packet: ${line}. Error: ${e}`);
+      }
+    };
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -303,61 +350,10 @@ export class ApiService {
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
         for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const rawData = JSON.parse(line);
-
-              // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
-              if (
-                "user_message_id" in rawData &&
-                "reserved_assistant_message_id" in rawData
-              ) {
-                // Wrap it in a Packet structure for consistent handling
-                const packet: Packet = {
-                  obj: rawData as any,
-                };
-                yield packet;
-              } else if ("next_cursor" in rawData && !("obj" in rawData)) {
-                // A resumed stream's replay position; the widget always
-                // replays from the start.
-              } else {
-                // Regular packet with placement and obj
-                yield rawData as Packet;
-              }
-            } catch (e) {
-              // Fail fast on malformed packets - don't hide backend issues
-              throw new Error(
-                `Failed to parse SSE packet: ${line}. Error: ${e}`
-              );
-            }
-          }
+          if (line.trim()) yield parse(line);
         }
       }
-
-      // Process any remaining data in buffer
-      if (buffer.trim()) {
-        try {
-          const rawData = JSON.parse(buffer);
-
-          // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
-          if (
-            "user_message_id" in rawData &&
-            "reserved_assistant_message_id" in rawData
-          ) {
-            const packet: Packet = {
-              obj: rawData as any,
-            };
-            yield packet;
-          } else {
-            yield rawData as Packet;
-          }
-        } catch (e) {
-          // Fail fast on malformed final buffer packets
-          throw new Error(
-            `Failed to parse final packet: ${buffer}. Error: ${e}`
-          );
-        }
-      }
+      if (buffer.trim()) yield parse(buffer);
     } finally {
       reader.releaseLock();
     }
