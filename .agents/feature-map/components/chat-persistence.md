@@ -332,10 +332,10 @@ Tool results there keep their details as the saved type, documents included
 mode store work in later turns.
 The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
-answers before appending its text-file and mentioned-skill messages and then
-its question. A usage-only question row keeps its mentions, so the branch
-names the SKILL.md messages by id and the temporary list keeps the text that
-the turn first saw. A small response
+answers before appending its text-file messages and then its question. The
+temporary question keeps its mentions, not the skill text; prompt assembly
+reads each SKILL.md with the user's current access, so a revoked skill becomes
+the "no longer available" note on later turns and regenerations. A small response
 index keeps run IDs, output IDs and each response’s checkpoint.
 Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
@@ -428,9 +428,8 @@ Community downgrade clears it ([[billing]]).
    false, and `save_response_content` keeps only `response_status`. Error text
    becomes a generic message. A question keeps its `mentions` record (for a
    skill, its name and version id) in a content-free session: a mention
-   identifies a record, not conversation content, and the branch needs them
-   to select the question's SKILL.md messages
-   (`chat/process_message.py:prepare_chat_turn`).
+   identifies a record, not conversation content, and later turns need them
+   to add the question's skills (`chat/process_message.py:prepare_chat_turn`).
    Token counts and `request_params` are kept on purpose for usage metering. `db/chat.py:update_chat_session` drops a title
    with no error. Every runtime writer (`_ResponseWriter`, child reservation,
    `db/chat_checkpoint.py:publish_checkpoint__no_commit`) refuses a

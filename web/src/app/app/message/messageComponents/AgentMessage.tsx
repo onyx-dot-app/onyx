@@ -440,7 +440,10 @@ const AgentMessage = React.memo(function AgentMessage({
           <React.Fragment key={section.userMessage?.id ?? "initial"}>
             {section.userMessage && (
               <Section height="fit" alignItems="end" gap={0}>
-                <HumanMessageBubble content={section.userMessage.message} />
+                <HumanMessageBubble
+                  content={section.userMessage.message}
+                  mentions={section.userMessage.mentions}
+                />
               </Section>
             )}
 

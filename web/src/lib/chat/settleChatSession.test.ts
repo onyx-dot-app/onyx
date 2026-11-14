@@ -596,7 +596,12 @@ describe("with a scripted fetch", () => {
         },
         {
           placement: { turn_index: 1 },
-          obj: { type: "user_message", id: "send", message: "Focus here" },
+          obj: {
+            type: "user_message",
+            id: "send",
+            message: "Focus here",
+            mentions: [],
+          },
         },
       ],
     };

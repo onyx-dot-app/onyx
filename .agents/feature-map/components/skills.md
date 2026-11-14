@@ -47,10 +47,11 @@
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
 - **In chat**, the agent sees the names and descriptions of the user's
-  enabled custom skills. It reads a skill's SKILL.md with `skills_read` when
-  the task matches. A skill the user mentions in a question adds that
-  SKILL.md before the question, at the version the user ran when the
-  question was sent or, for a queued question, when it was accepted; a later
+  enabled custom skills. A skill's `metadata.short-description` replaces its
+  description when it has one. The agent reads a skill's SKILL.md with
+  `skills_read` when the task matches; Deep Research can use `skills_read` too.
+  A skill the user mentions in a message adds that SKILL.md right after the
+  message, at the version the user ran when the message was accepted; a later
   edit does not change what earlier turns see. After the skill is deleted or
   the user can no longer see it, earlier turns get a short "no longer
   available" note instead. Built-in skills
@@ -72,11 +73,13 @@
   a failed send's restore and voice input keep each tile where it was, also
   against other text such as `(` or a word typed after it, and leave typed
   `@name` text as text. A message with picks that the user sends while a
-  response runs carries its mentions like any pending input: a send gives
-  them to the running response, and a queued or interrupting message to its
-  own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
+  response runs carries its mentions like any pending input: a send applies
+  them in the running response when the response accepts the message, and a
+  queued or interrupting message applies them in its own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
   view, a sent question shows each skill it mentioned as a chip, first from
-  the picks and then from the recorded mentions. A shared view of the chat
+  the picks and then from the recorded mentions. A message accepted during a
+  response shows the mentions of its `user_message` packet, live and after
+  reload. A shared view of the chat
   gets no mentions, and Craft shows plain text.
 - **In a running Craft session**, a skill change does not reach the agent at
   once. The session shows a stale-skills notice with a reload action. The
@@ -183,7 +186,8 @@ chat gets: one query over the same predicates as
 `list_runtime_skills_for_user` (`_where_user_runs_skill`: visible, enabled,
 and a version the user runs that is not invalid), less built-in skills and
 skills of an external app, with the name and description of the version the
-user runs. Anonymous users get none. `chat/process_message.py:prepare_chat_turn`
+user runs. The description is the version's `metadata.short-description` when
+it has one, so the catalog, `skills_list` and `GET /skills/chat` show it. Anonymous users get none. `chat/process_message.py:prepare_chat_turn`
 reads it once per turn, and the `@` picker reads it through
 `server/features/skill/api.py:list_chat_skills_for_current_user`.
 `skills/chat.py` renders the catalog with Codex's limits (2% of the context
@@ -194,13 +198,17 @@ name}`) is its only kind. Later kinds, such as plugins and MCP servers, join
 the union; the request rejects a kind it does not know. The client sends the
 mentions in `SendMessageRequest.mentions`, or in
 `PendingChatMessageRequest.mentions`, which `ChatInput.mentions` keeps for
-the pending message; a send into a running response gives them to that
-response. The server never parses message text. When
+the pending message. The server never parses message text. When
 `prepare_chat_turn` accepts the question, it resolves each mention by type:
 a skill against `list_chat_skills`. It ignores skills the user cannot use and
 records each resolved skill with its version id (`RecordedSkillMention`) in
 `ChatMessage.mentions`; regeneration reuses the record. The turn's ID packet
 and the message detail carry the recorded mentions (`ChatTurnSetup.mentions`).
+A send into a running response resolves its mentions the same way when the
+run accepts it (`chat/run_store.py:ChatRunStore.receive_inputs`), records them
+on the accepted input (`ChatInputMetadata.mentions`), and the `user_message`
+packet carries them. `AgentMessage` passes them to `HumanMessageBubble`, the
+chip path of a sent question.
 The composer (`sections/input/AppInputBar.tsx`) holds the mentions as
 mention tiles in its input (`hooks/useContentEditable.ts`), so undo, cut and
 code that replaces the text change them with the text. A send reads the text
@@ -220,9 +228,12 @@ adds its section and maps its picker entry to a mention. The picker opens at
 a token start (`lib/skills/picker.ts:startsToken`), but a tile can sit
 against any text. An edit sends the recorded mentions that its text still
 has, and a resend or regeneration sends the recorded mentions. The agent preview passes its skill mentions to
-the new chat in the `skills` URL parameter. Chat history
-adds each recorded SKILL.md before its question ([[context-assembly]]), read
-for all questions in one query by `skills/content.py:read_versions_instructions`.
+the new chat in the `skills` URL parameter. History keeps only the recorded
+mentions. `chat/prompt_utils.py:prepare_prompt` adds each picked SKILL.md
+right after the message that picked it, on every model call
+([[context-assembly]]). `prepare_chat_turn` reads the text for all messages in
+one query by `skills/content.py:read_versions_instructions`, and the run
+store reads it for a message it accepts.
 That read (`db/plugin.py:get_visible_versions_skill_md`) returns text only for
 versions of skills the user can see now: the pinned version decides the
 content, and current access decides whether it is shown. Each injected
@@ -232,7 +243,8 @@ available" note, so the turn still runs. `chat/execution.py:create_chat_agent`
 adds `skills_list` and `skills_read`
 (`tools/tool_implementations/skills/skill_tools.py`) when the user has a chat
 skill, whatever the agent's tool selection; restored and child agents get them
-with the other configured tools. `skills_read` reads the version the user runs
+with the other configured tools. Deep Research and its research agents bind
+`skills_read` only. `skills_read` reads the version the user runs
 now, with the same access check. `ChatFeatureState` saves only the skill list;
 the agent renders the catalog from it for its own model's window.
 
