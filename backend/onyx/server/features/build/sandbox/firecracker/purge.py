@@ -29,7 +29,9 @@ logger = setup_logger()
 HARNESS_PURGE_ENABLED = FIRECRACKER_ENABLED and bool(SANDBOX_FC_TEMPLATE)
 
 
-def purge_harness_session(sandbox_id: UUID, session_id: UUID) -> None:
+def purge_harness_session(
+    sandbox_id: UUID, session_id: UUID, *, retention: bool = False
+) -> None:
     if not HARNESS_PURGE_ENABLED:
         return
     try:
@@ -41,6 +43,7 @@ def purge_harness_session(sandbox_id: UUID, session_id: UUID) -> None:
             tenant_id=get_current_tenant_id(),
             sandbox_id=sandbox_id,
             session_id=session_id,
+            retention=retention,
         )
     except Exception:
         logger.exception(
@@ -84,6 +87,8 @@ def purge_expired_harness_sessions(
     if not HARNESS_PURGE_ENABLED:
         return
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
+    # The scan gets half the time, so the purges always get the rest.
+    scan_deadline = time.monotonic() + (deadline - time.monotonic()) / 2
     try:
         from onyx.cache.factory import get_cache_backend
         from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -93,7 +98,7 @@ def purge_expired_harness_sessions(
         )
         from onyx.server.features.build.sandbox.firecracker.harness_state import (
             SAVED_SESSIONS_PREFIX,
-            clear_session_purge_mark,
+            clear_retention_mark,
             get_ids,
         )
         from onyx.server.features.build.sandbox.firecracker.session_saves import (
@@ -104,7 +109,7 @@ def purge_expired_harness_sessions(
         expired: list[tuple[UUID, UUID]] = []
         with get_session_with_current_tenant() as db_session:
             for sandbox_id in get_all_sandbox_ids(db_session):
-                if time.monotonic() >= deadline:
+                if time.monotonic() >= scan_deadline:
                     break
                 saved = [
                     UUID(i)
@@ -128,14 +133,14 @@ def purge_expired_harness_sessions(
         except Exception:
             logger.exception("sandbox_fc_retention_check_failed session=%s", session_id)
             continue
-        purge_harness_session(sandbox_id, session_id)
+        purge_harness_session(sandbox_id, session_id, retention=True)
         # Unlike a delete, the session can be opened again: let it save new
         # work. Only with no save in flight, which could bring back the
         # purged files; otherwise the mark expires on its own.
         try:
             with session_save_lock(tenant_cache, session_id) as no_save_runs:
                 if no_save_runs:
-                    clear_session_purge_mark(tenant_cache, session_id)
+                    clear_retention_mark(tenant_cache, session_id)
         except Exception:
             logger.exception(
                 "sandbox_fc_purge_mark_clear_failed session=%s", session_id

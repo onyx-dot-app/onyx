@@ -22,6 +22,7 @@ from onyx.db.models import BuildSession, ChatSession, User
 from onyx.db.users import delete_user_from_db
 from onyx.server.features.build.sandbox.firecracker import purge as purge_module
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
+    PURGED_SESSION_PREFIX,
     SAVED_SESSIONS_PREFIX,
     add_id,
     is_purged,
@@ -61,9 +62,9 @@ def _record_purges(monkeypatch: pytest.MonkeyPatch) -> list[tuple[UUID, UUID]]:
     """Records each purge and writes its purge mark, as the real purge does."""
     purged: list[tuple[UUID, UUID]] = []
 
-    def purge(sandbox_id: UUID, session_id: UUID) -> None:
+    def purge(sandbox_id: UUID, session_id: UUID, *, retention: bool = False) -> None:
         purged.append((sandbox_id, session_id))
-        mark_purged(get_cache_backend(), session_id=session_id)
+        mark_purged(get_cache_backend(), session_id=session_id, retention=retention)
 
     monkeypatch.setattr(purge_module, "purge_harness_session", purge)
     return purged
@@ -104,6 +105,7 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
     user = make_user(db_session, standard_account=True)
     user_id = user.id
     sandbox_id: UUID | None = None
+    seeded: list[UUID] = []
     try:
         sandbox_id = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING).id
         old_build = _build_session(db_session, user, age_days=_RETENTION_DAYS + 10)
@@ -111,7 +113,8 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         expired_chat = create_chat_session(db_session, None, user.id, None).id
         kept_chat = create_chat_session(db_session, None, user.id, None).id
         orphan = uuid4()
-        for session_id in (old_build, fresh_build, expired_chat, kept_chat, orphan):
+        seeded += [old_build, fresh_build, expired_chat, kept_chat, orphan]
+        for session_id in seeded:
             add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
 
         send_task = _run_chain_end(tenant_id, [expired_chat])
@@ -154,6 +157,14 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         assert (sandbox_id, old_build) in purged
         assert is_purged(tenant_cache, sandbox_id, old_build)
 
+        # A session delete's mark stays: only the retention mark goes.
+        tenant_cache.delete(PURGED_SESSION_PREFIX + str(old_build))
+        mark_purged(tenant_cache, session_id=old_build)
+        purge_module.purge_expired_harness_sessions(
+            _RETENTION_DAYS, limit=100, deadline=time.monotonic() + 60
+        )
+        assert is_purged(tenant_cache, sandbox_id, old_build)
+
         purged.clear()
         purge_module.purge_expired_harness_sessions(
             _RETENTION_DAYS, limit=2, deadline=time.monotonic() + 60
@@ -169,6 +180,8 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         db_session.rollback()
         if sandbox_id is not None:
             tenant_cache.delete(SAVED_SESSIONS_PREFIX + str(sandbox_id))
+        for session_id in seeded:
+            tenant_cache.delete(PURGED_SESSION_PREFIX + str(session_id))
         _delete_user(db_session, user_id)
 
 
@@ -223,7 +236,10 @@ def test_a_session_used_again_during_the_sweep_keeps_its_save(
             add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
         purged: list[UUID] = []
 
-        def purge_and_resume_the_other(_sandbox_id: UUID, session_id: UUID) -> None:
+        def purge_and_resume_the_other(
+            _sandbox_id: UUID, session_id: UUID, *, retention: bool = False
+        ) -> None:
+            assert retention
             purged.append(session_id)
             db_session.execute(
                 update(BuildSession)
