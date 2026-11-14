@@ -303,6 +303,41 @@ def test_pruning_lists_files_edited_during_the_listing(
     assert {_file_id(doc_id) for doc_id in pruning} == expected
 
 
+def test_permission_sync_lists_files_edited_during_the_listing(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A file edited during the listing moves past the window end. Permission
+    sync must still list it, or the file keeps its old permissions."""
+    monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", _PAGE_SIZE)
+    mock_drive = own_mock_drive
+    expected = mock_drive.content_file_ids()
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+    lock = threading.Lock()
+    edited: list[str] = []
+
+    def edit_during_listing(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> object:
+        with lock:
+            if not edited:
+                time.sleep(0.01)
+                edited.extend(
+                    mock_drive.client.post(
+                        "/_mock/corpus/touch", json={"count": 5}
+                    ).json()["file_ids"]
+                )
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", edit_during_listing
+    )
+
+    synced = _slim_ids(mock_drive.build_connector().retrieve_all_slim_docs_perm_sync())
+
+    assert edited
+    assert {_file_id(doc_id) for doc_id in synced} == expected
+
+
 def test_pruning_lists_files_edited_during_its_last_pass(
     own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
 ) -> None:
