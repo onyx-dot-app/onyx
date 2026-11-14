@@ -13,13 +13,15 @@ dependency on pypdf internals; the image-bearing ones are regenerated with
 """
 
 import importlib.util
+import subprocess
+import sys
 from io import BytesIO
 from pathlib import Path
 
 import pytest
 from pypdfium2 import PdfiumError
 
-from onyx.file_processing import extract_file_text, pdf_image_utils
+from onyx.file_processing import extract_file_text, pdf_image_utils, pdfium_text
 from onyx.file_processing.extract_file_text import pdf_to_text, read_pdf_file
 from onyx.file_processing.password_validation import is_pdf_protected
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
@@ -48,7 +50,7 @@ class TestReadPdfFile:
 
     def test_text_extraction_uses_pdfium(self) -> None:
         """Text extraction goes through pypdfium2 (GIL-releasing), not pypdf."""
-        text = extract_file_text._extract_pdf_text_pdfium(
+        text = pdfium_text.extract_pdf_text_pdfium(
             (FIXTURES / "multipage.pdf").read_bytes(), None
         )
         assert "Page one content" in text
@@ -340,3 +342,20 @@ class TestIsPdfProtected:
         pdf.seek(42)
         is_pdf_protected(pdf)
         assert pdf.tell() == 42
+
+
+def test_pdfium_text_module_has_light_imports() -> None:
+    """Each PDF's child process imports the module of the function it runs.
+    That module must not pull in ``extract_file_text``, which costs about a
+    CPU-second for each PDF."""
+    code = (
+        "import sys\n"
+        "import onyx.file_processing.pdfium_text\n"
+        "heavy = [m for m in ('onyx.file_processing.extract_file_text', "
+        "'openpyxl', 'chardet') if m in sys.modules]\n"
+        "assert not heavy, heavy\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stderr
