@@ -87,10 +87,11 @@ checkpoint covers exactly what the call yielded. The entry points:
   before it passes `INLINE_CALL_BUDGET_FILES`.
 - `retrieve_slim_docs_from_checkpoint`: full concurrency, stubs only.
 - Pruning and permission sync loop the calls in their task. Permission sync
-  stores the state through `on_checkpoint`. Pruning ends with a pass that has
-  no upper bound (`open_window_end`): every file modified at the window end or
-  later. A file edited during the listing moves past the end, and pruning
-  would read it as deleted.
+  stores the state through `on_checkpoint`. With no `end` from the caller, the
+  loop ends with a pass that has no upper bound (`open_window_end`): every
+  file modified at the window end or later. A file edited during the listing
+  moves past the end. Pruning would read it as deleted, and permission sync
+  would keep its old permissions.
 
 A requested folder (`shared_folder_urls`, or a requested drive id that is a
 folder) is a folder subtree partition. Its walk lists one folder at a time with
@@ -99,7 +100,11 @@ range and all its subfolders and shortcuts, and each subfolder becomes a new
 shard. A folder with more than one page becomes a `FILES` shard, which splits
 by time, and a `FOLDERS` shard. The walk follows shortcuts to folders and stops
 at a shortcut back up its path (`shortcut_path`). A folder in a shared drive
-that an organizer lists in full is not walked.
+that an organizer lists in full is walked too: the walk follows the folder
+shortcuts, and `_admit` drops the files that the drive listing covers. If no
+usable user can walk it, the drive listing is its only cover
+(`folders_covered_by_drive`), and a failure of that listing makes the folder
+unreachable.
 
 OAuth uses the same partition kinds with the OAuth user as the only principal:
 its member shared drives (from its own `drives.list`), its own files, and the
@@ -110,8 +115,9 @@ failure fails the listing, because no other principal can list the files.
 **Hierarchy.** On the shard engine, each partition also has a `FOLDERS` shard:
 a folder-only query with no time range, which does not split. Listed folders
 become hierarchy nodes. A parent that no folder listing returned goes into
-`DriveListingState.unresolved_parent_emails`. When the listing is done, those
-parents are read one tree level at a time, each once, up to a folder already
+`DriveListingState.unresolved_parent_emails`, with up to `MAX_PARENT_READERS`
+users who saw a child of it. When the listing is done, those parents are read
+one tree level at a time, each once, as each of those users in turn, up to a folder already
 yielded or a drive root. A document that arrives before its folder gets a STUB
 parent in docfetching. A folder subtree gets no `FOLDERS` shard: the folders it
 walks are the nodes. `reindex` reads the parents of its files the same way.
@@ -179,8 +185,9 @@ discovery document with its root URL replaced, so batch requests follow too.
 7. `prune-lists-late-edits` **A prune lists the edits made during its
    listing.** The shard engine lists the window `[start, end)`. A file edited
    during the listing moves past the end, and a prune would read it as
-   deleted. So `_retrieve_all_slim_docs_impl` with `for_pruning` lists the time
-   since the end once more before it ends.
+   deleted. So `_retrieve_all_slim_docs_impl` with no `end` lists the time
+   since the end once more before it ends. Permission sync takes the same
+   pass.
 
 ---
 
