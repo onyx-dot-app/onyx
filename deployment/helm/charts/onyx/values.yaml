@@ -2219,6 +2219,11 @@ craft:
       runbookUrl: https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations
       # Labels added to every rule (for example team or routing labels).
       extraLabels: {}
+      # Seconds since the api_server last accepted a node state report. The
+      # api_server stops placing VMs on a node that reported before after
+      # SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS (default 180). Needs the
+      # agent's state reports on (--state-report-interval > 0, the default).
+      nodeReportStaleSeconds: 300
       # Failed Creates (start failed after admission) / admitted Creates, 15 m.
       createFailureRatio: 0.2
       # Capacity refusals per node and reason in 15 m.

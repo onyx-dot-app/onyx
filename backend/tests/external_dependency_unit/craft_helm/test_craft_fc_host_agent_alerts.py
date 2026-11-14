@@ -31,6 +31,7 @@ _DOCS_RUNBOOK = (
 _ALERTS = [
     "CraftFcHostAgentDown",
     "CraftFcHostAgentPodsMissing",
+    "CraftFcNodeReportsStale",
     "CraftFcCreateFailures",
     "CraftFcAdmissionRefusals",
     "CraftFcSessionTransferFailures",
@@ -171,6 +172,31 @@ def test_template_unusable_sees_a_failed_root_drive_build() -> None:
     ) in expr
 
 
+def test_node_reports_stale_sees_rejected_reports() -> None:
+    # The agent answers scrapes, so only the report timestamp shows that the
+    # api_server rejects its reports.
+    selector = f'job="{_JOB}", namespace="{_AGENT_NS}"'
+    stale = _by_alert(_rules([*_METRICS_ON, *_RULES_ON]))["CraftFcNodeReportsStale"]
+    assert " ".join(stale["expr"].split()) == (
+        "time() - max by (namespace, node) "
+        f"(craft_fc_host_agent_node_report_last_success_timestamp_seconds{{{selector}}}) "
+        "> 300"
+    )
+    assert stale["for"] == "5m"
+    assert stale["labels"]["severity"] == "critical"
+    custom = _by_alert(
+        _rules(
+            [
+                *_METRICS_ON,
+                *_RULES_ON,
+                "--set",
+                "craft.hostAgent.alerts.nodeReportStaleSeconds=600",
+            ]
+        )
+    )
+    assert custom["CraftFcNodeReportsStale"]["expr"].rstrip().endswith("> 600")
+
+
 def test_relay_ratio_counts_each_connection_once() -> None:
     expr = _by_alert(_rules([*_METRICS_ON, *_RULES_ON]))["CraftFcRelayErrors"]["expr"]
     # An accepted connection whose proxy dial fails is also upstream_failed.
@@ -215,6 +241,21 @@ def test_dashboard_renders_and_uses_only_agent_metrics() -> None:
             assert 'node=~"$node"' in expr
     ids = [p["id"] for p in dashboard["panels"]]
     assert len(ids) == len(set(ids))
+
+
+def test_dashboard_names_every_create_result() -> None:
+    src = (_REPO_ROOT / "microvm/internal/metrics/metrics.go").read_text()
+    results = set(
+        re.findall(r'^\s+Create[A-Z][a-z]+\s+= "([a-z]+)"', src, re.MULTILINE)
+    )
+    assert "canceled" in results
+    dashboard = _dashboard([*_METRICS_ON, *_DASHBOARDS_ON])
+    assert dashboard is not None
+    (panel,) = [p for p in dashboard["panels"] if p.get("title") == "Create results"]
+    for result in results:
+        assert f"{result}:" in panel["description"], result
+    colored = {o["matcher"]["options"] for o in panel["fieldConfig"]["overrides"]}
+    assert {"/ failed$/", "/ canceled$/"} <= colored
 
 
 def test_dashboard_job_is_the_agent_service_name() -> None:

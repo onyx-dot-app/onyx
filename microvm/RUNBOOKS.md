@@ -110,6 +110,65 @@ failed pod.
 
 **Escalate** when a node with `onyx.app/kvm=true` gets no agent pod after the fix.
 
+### CraftFcNodeReportsStale
+
+**Meaning.** The agent on one node answers scrapes, but for 5 minutes the api_server has not
+accepted a node state report from it in the last 300 s (`craft.hostAgent.alerts.nodeReportStaleSeconds`).
+If the node had an accepted report since it registered, then after
+`SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default 180 s) without one the api_server places no new
+VMs on the node, and the next wake of a sandbox on the node starts it on a live node. VMs on the
+node continue to run. The api_server does not reconcile them. `CraftFcHostAgentDown` does not fire.
+
+The alert also fires when the agent has no accepted report since it started (the timestamp is 0,
+so the alert shows an age of about 56 years). The api_server still places VMs on a registered node
+that never reported. The agent sends reports only after its signing key registration succeeds, and
+the alert needs reports on (`--state-report-interval` above 0, the default 20 s).
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=300 | grep -E 'node state report|node signing key'
+kubectl $K -n $REL logs -l app=api-server --prefix --tail=500 \
+  | grep -E 'sandbox_fc_node_report_rejected|sandbox_node_signing_key_registered'
+```
+
+The dashboard panel "Time since last accepted report / key registration" shows both values per
+node. `craft_fc_host_agent_node_reports_total` and `craft_fc_host_agent_key_registrations_total`
+count each try by `result`.
+
+- `node signing key registration failed` with `HTTP 401`: the agent's registration secret does not
+  match `auth.sandboxNodeRegistration` of the api_server. This is the usual cause after a secret
+  rotation. The registered key expires 1 hour after the last good registration, then the reports
+  get `HTTP 401` too. So this alert fires about 1 hour after a wrong rotation.
+- `node state report failed` with `HTTP 401`, and `sandbox_fc_node_report_rejected` in the
+  api_server log: the api_server does not know the node key (for example after a Redis flush). The
+  agent registers again only every 20 minutes.
+- `HTTP 409` (`node has no registered agent_address`): the api_server has no agent address for
+  the node. The agent registered none (`no --advertise-address and no $POD_IP` at start-up), or the
+  address is gone from Redis. The agent sends it again at its next registration.
+- An error with no HTTP status (`result="failed"`): the agent cannot reach
+  `craft.hostAgent.apiServerUrl` (DNS, NetworkPolicy, ingress or WAF).
+- `HTTP 5xx` (`result="server_error"`): look for the error in the api_server log.
+
+**Fix.**
+
+- For a secret mismatch, make the agent's copy of the secret equal the api_server's value. With an
+  inline `auth.sandboxNodeRegistration` value, deploy again: the chart copies the value to the
+  agent namespace. With `craft.hostAgent.registrationExistingSecret`, update that Secret in the
+  agent namespace. The api_server and the agents read the value at start-up: restart the
+  api_server if its value changed, then the agents (`kubectl $K -n $NS rollout restart ds/$DS`).
+- For an unknown node key, delete the agent pod. The new agent registers at once, and adopts its
+  running VMs from the journal.
+- For a network error, fix the path to the api_server, or set `craft.hostAgent.apiServerUrl` to the
+  in-cluster URL of the api_server Service.
+
+The alert clears when reports are accepted again. After repeated failures the agent waits up to
+2 minutes between reports, so the first accepted report can come 2 minutes after the fix. The api_server places VMs on the node again
+after the first accepted report.
+
+**Escalate** when the reports stay rejected after the agent registered again
+(`node signing key registered` in the log).
+
 ### CraftFcCreateFailures
 
 **Meaning.** More than 20% (and at least 3) of admitted Creates on one node failed in 15
@@ -385,7 +444,5 @@ These have no Prometheus metric yet. Use the agent log:
 
 | Signal | Log line |
 |---|---|
-| Node state report push | `node state report failed` (with `failures`), then `node state report sent again` |
-| Node key registration | `node signing key registered` or `node signing key registration failed` |
 | Start-up template build | `template ready` or `template build at start-up failed` |
 | Balloon reclaim | none. The dashboard compares guest memory allocated with node memory in use |
