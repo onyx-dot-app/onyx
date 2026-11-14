@@ -3,6 +3,7 @@ service keeps up and halves it on pushback. A cut applies to the next task
 start. A task can return follow-up tasks. A drain stops new starts and returns
 when nothing runs. The first failure is raised after the running tasks end."""
 
+import collections.abc
 import contextvars
 import threading
 import time
@@ -95,6 +96,7 @@ def test_a_cut_applies_to_the_next_task_start() -> None:
     pool = AdaptiveTaskPool(concurrency)
     lock = threading.Lock()
     first_wave = threading.Barrier(8, timeout=5)
+    pushback_recorded = threading.Event()
     active = 0
     peak_after_cut = 0
 
@@ -108,6 +110,10 @@ def test_a_cut_applies_to_the_next_task_start() -> None:
             first_wave.wait()
             if index == 0:
                 record_pushback()
+                pushback_recorded.set()
+            # No first-wave task ends before the pushback, so every later
+            # start reads the cut limit.
+            assert pushback_recorded.wait(timeout=5)
         time.sleep(0.02)
         with lock:
             active -= 1
@@ -337,3 +343,48 @@ def test_worker_threads_are_reused() -> None:
     pool.run()
 
     assert len(threads) <= 2
+
+
+def test_a_generator_of_follow_ups_runs_in_the_worker_context() -> None:
+    """The body of a returned generator runs in the worker thread, with the
+    context of the task, and not in the thread that runs the pool."""
+    concurrency = AdaptiveConcurrency(PushbackObserver(), initial=1, maximum=1)
+    pool = AdaptiveTaskPool(concurrency)
+    seen: list[tuple[str, bool]] = []
+
+    def task() -> collections.abc.Iterator[AdaptiveTask]:
+        on_pool_thread = threading.current_thread() is pool_thread
+        seen.append((_TEST_VAR.get(), on_pool_thread))
+        _TEST_VAR.set("changed in the generator")
+        yield lambda: None
+
+    pool_thread = threading.current_thread()
+    token = _TEST_VAR.set("tenant-a")
+    try:
+        pool.add(task)
+        pool.run()
+        # The change stayed in the task's copy of the context.
+        assert _TEST_VAR.get() == "tenant-a"
+    finally:
+        _TEST_VAR.reset(token)
+
+    assert seen == [("tenant-a", False)]
+
+
+def test_pushback_before_a_drain_cuts_the_limit_that_run_leaves() -> None:
+    observer = PushbackObserver()
+    concurrency = AdaptiveConcurrency(observer, initial=8, maximum=8)
+    pool = AdaptiveTaskPool(concurrency)
+
+    def task() -> None:
+        record_pushback()
+        pool.drain()
+
+    token = PUSHBACK_OBSERVER.set(observer)
+    try:
+        pool.add(task)
+        pool.run()
+    finally:
+        PUSHBACK_OBSERVER.reset(token)
+
+    assert pool.limit == 4

@@ -942,9 +942,15 @@ type AdaptiveTask = Callable[[], collections.abc.Iterable[AdaptiveTask] | None]
 
 def _run_adaptive_task(
     context: contextvars.Context, task: AdaptiveTask
-) -> collections.abc.Iterable[AdaptiveTask] | None:
-    """Runs a task with the context of the thread that started it."""
-    return context.run(task)
+) -> list[AdaptiveTask]:
+    """Runs a task with the context of the thread that started it. A task can
+    return a generator: its body also runs here, in the worker and in that
+    context, and not in the pool's loop."""
+
+    def run() -> list[AdaptiveTask]:
+        return list(task() or ())
+
+    return context.run(run)
 
 
 class AdaptiveTaskPool:
@@ -991,7 +997,7 @@ class AdaptiveTaskPool:
             return self._pending.popleft() if self._pending else None
 
     def run(self) -> None:
-        running: set[Future[collections.abc.Iterable[AdaptiveTask] | None]] = set()
+        running: set[Future[list[AdaptiveTask]]] = set()
         failure: BaseException | None = None
         with ThreadPoolExecutor(
             max_workers=self._concurrency.maximum, thread_name_prefix="adaptive"
@@ -1026,13 +1032,13 @@ class AdaptiveTaskPool:
                     running.discard(future)
                     error = future.exception()
                     if error is None:
-                        try:
-                            # A task can return a generator, which runs here.
-                            for follow_up in future.result() or ():
-                                self.add(follow_up)
-                        except Exception as follow_up_error:
-                            error = follow_up_error
-                    if error is not None:
+                        for follow_up in future.result():
+                            self.add(follow_up)
+                    else:
                         failure = failure or error
+        # A task can record pushback and then drain. No start reads that
+        # pushback, so read it here: a caller that stores ``limit`` for the
+        # next pool gets the cut.
+        self._concurrency.observe()
         if failure is not None:
             raise failure
