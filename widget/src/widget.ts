@@ -52,6 +52,8 @@ import { DEFAULT_LOGO } from "./assets/logo";
 /** What a followed stream applied, and where a reattach continues from. */
 interface StreamFollow {
   message: ChatMessage | null;
+  // The saved ids of the turn's question and answer, from its first packet
+  userMessageId: number | null;
   assistantMessageId: number | null;
   streamId: number | null;
   cursor: number;
@@ -64,6 +66,7 @@ interface StreamFollow {
 function newFollow(streamId: number | null): StreamFollow {
   return {
     message: null,
+    userMessageId: null,
     assistantMessageId: null,
     streamId,
     cursor: 0,
@@ -789,18 +792,21 @@ export class OnyxChatWidget extends LitElement {
           controller.signal
         );
         if (!stillOurs()) return;
-        const assistantIds = session.messages
-          .filter((message) => message.message_type === "assistant")
-          .map((message) => message.message_id);
+        const assistants = session.messages.filter(
+          (message) => message.message_type === "assistant"
+        );
         for (const assistantMessageId of recoverIds) {
-          const replay =
-            session.packets[assistantIds.indexOf(assistantMessageId)];
+          const index = assistants.findIndex(
+            (message) => message.message_id === assistantMessageId
+          );
+          const replay = session.packets[index];
           if (!replay) continue;
+          const userMessageId = assistants[index]?.parent_message ?? null;
           await this.followStream(
             (async function* (): AsyncGenerator<Packet, void, unknown> {
               yield {
                 obj: {
-                  user_message_id: null,
+                  user_message_id: userMessageId,
                   reserved_assistant_message_id: assistantMessageId,
                 },
               };
@@ -866,7 +872,37 @@ export class OnyxChatWidget extends LitElement {
       if (result.messageIds) {
         onMessageIds(result.messageIds);
         // Store assistant message ID to apply when message is created
+        follow.userMessageId = result.messageIds.userMessageId;
         follow.assistantMessageId = result.messageIds.assistantMessageId;
+      }
+
+      // A turn accepted before this transcript was saved gets its question
+      // back, before its answer.
+      const questionId = follow.userMessageId;
+      if (
+        "type" in packet.obj &&
+        packet.obj.type === "user_message" &&
+        questionId !== null &&
+        !this.messages.some((message) => message.id === questionId)
+      ) {
+        const question: ChatMessage = {
+          id: questionId,
+          role: "user",
+          content: packet.obj.message,
+          timestamp: Date.now(),
+        };
+        const answerIndex = this.messages.findIndex(
+          (message) => message.id === follow.assistantMessageId
+        );
+        this.messages =
+          answerIndex >= 0
+            ? [
+                ...this.messages.slice(0, answerIndex),
+                question,
+                ...this.messages.slice(answerIndex),
+              ]
+            : [...this.messages, question];
+        saveSession(sessionId, this.messages, identity);
       }
 
       // Update status if provided

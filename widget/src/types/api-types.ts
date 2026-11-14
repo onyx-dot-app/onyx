@@ -16,6 +16,7 @@ export interface StreamCursor {
 
 export type PacketType =
   | MessageResponseIDInfo
+  | UserMessagePacket
   | MessageStart
   | MessageDelta
   | CitationInfo
@@ -45,6 +46,13 @@ export interface MessageResponseIDInfo {
   type?: "message_response_id_info"; // Optional for backend compatibility
   user_message_id: number | null;
   reserved_assistant_message_id: number;
+}
+
+/** A question the turn accepted; `id` is not the saved message id. */
+export interface UserMessagePacket {
+  type: "user_message";
+  id: string;
+  message: string;
 }
 
 export interface MessageStart {
@@ -204,7 +212,12 @@ export interface ChatSession {
 
 /** The fields of `/chat/get-chat-session` that the widget reads. */
 export interface ChatSessionDetail {
-  messages: { message_id: number; message_type: string }[];
+  messages: {
+    message_id: number;
+    message_type: string;
+    // The question an assistant message answers
+    parent_message?: number | null;
+  }[];
   // One replay packet list for each assistant message, in message order
   packets: Packet[][];
 }

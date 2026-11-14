@@ -90,6 +90,8 @@ send → ApiService                                   services/api-service.ts
 restore / resumeStream / decision with no stream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (cursor lines track stream_id
   │    and next_cursor; only a 404 stops requests for that stream)
+  ├─ a replayed user_message whose question the transcript lacks inserts it
+  │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
   └─ idle with a response unfinished or an acknowledged answer not shown →

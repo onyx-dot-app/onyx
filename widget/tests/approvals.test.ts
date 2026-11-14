@@ -626,6 +626,50 @@ describe("widget while a request waits", () => {
     });
   });
 
+  it("restores a missing question from the saved session before its answer", async () => {
+    const { stored, restore } = fakeSessionStorage();
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/status"))
+        return Response.json({ is_processing: false });
+      if (url.includes("/get-chat-session/")) {
+        return Response.json({
+          messages: [
+            { message_id: 6, message_type: "user" },
+            { message_id: 7, message_type: "assistant", parent_message: 6 },
+          ],
+          packets: [
+            [
+              {
+                obj: { type: "user_message", id: "sdk-1", message: "Email Bo" },
+              },
+              { obj: request("a") },
+              { obj: { type: "message_start" } },
+              { obj: { type: "message_delta", content: "Sent." } },
+              { obj: { type: "stop" } },
+            ],
+          ],
+        });
+      }
+      return new Response("none", { status: 404 });
+    }) as typeof fetch;
+    const widget = restoredWidget();
+
+    try {
+      await widget["resumeStream"]("session");
+    } finally {
+      restore();
+    }
+
+    const shown = widget["messages"].map((m) => [m.id, m.role, m.content]);
+    expect(shown).toEqual([
+      [6, "user", "Email Bo"],
+      [7, "assistant", "Sent."],
+    ]);
+    const saved = JSON.parse(stored.get("onyx-widget-session") ?? "null");
+    expect(saved.messages.map((m: ChatMessage) => m.id)).toEqual([6, 7]);
+  });
+
   it("keeps a restored response unfinished when the saved session cannot load", async () => {
     const { stored, restore } = fakeSessionStorage();
     globalThis.fetch = mock(async (input: RequestInfo | URL) => {
@@ -746,6 +790,58 @@ describe("widget while a request waits", () => {
       null
     );
     expect(pending?.request.approval_id).toBe("a");
+  });
+
+  it("restores the question of a turn accepted before the reload saved it", async () => {
+    const { stored, restore } = fakeSessionStorage();
+    const earlier: ChatMessage[] = [
+      { id: 1, role: "user", content: "first", timestamp: 0 },
+      { id: 2, role: "assistant", content: "first answer", timestamp: 0 },
+    ];
+    stored.set(
+      "onyx-widget-session",
+      JSON.stringify({
+        sessionId: "session",
+        messages: earlier,
+        timestamp: Date.now(),
+        identity: "shared",
+      })
+    );
+    const widget = restoredWidget();
+    widget["messages"] = [];
+    widget["currentIdentity"] = async () => "shared";
+    const api = widget["apiService"];
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor
+    > {
+      yield { obj: { user_message_id: 3, reserved_assistant_message_id: 4 } };
+      yield {
+        obj: { type: "user_message", id: "sdk-1", message: "second question" },
+      };
+      yield { obj: request("a") };
+      yield { stream_id: 5, next_cursor: 3, replay_complete: true };
+    });
+    api.waitForSessionIdle = mock(async () => null);
+    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+
+    try {
+      widget["restoreSession"]();
+      while (!widget["sessionRestored"]) await Bun.sleep(1);
+      await Bun.sleep(1);
+      while (widget["isStreaming"]) await Bun.sleep(1);
+    } finally {
+      restore();
+    }
+
+    const shown = widget["messages"].map((m) => [m.id, m.role, m.content]);
+    expect(shown).toEqual([
+      [1, "user", "first"],
+      [2, "assistant", "first answer"],
+      [3, "user", "second question"],
+      [4, "assistant", ""],
+    ]);
+    const saved = JSON.parse(stored.get("onyx-widget-session") ?? "null");
+    expect(saved.messages.map((m: ChatMessage) => m.id)).toEqual([1, 2, 3, 4]);
   });
 
   it("follows a response again when its stream ends before it does", async () => {
