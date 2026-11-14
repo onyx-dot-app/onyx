@@ -55,6 +55,11 @@ run "defaults_plan" {
   command = plan
 
   assert {
+    condition     = length(module.eks.cluster_addons) == 0
+    error_message = "By default the module adds no EKS addons, so existing clusters plan no change."
+  }
+
+  assert {
     condition     = local.node_group_defaults.metadata_options.http_put_response_hop_limit == 2
     error_message = "Node groups must keep the v20 IMDS hop limit of 2, or the upgrade rolls every node."
   }
@@ -77,6 +82,15 @@ run "optional_node_groups_and_addons_plan" {
     enable_gpu_node       = true
     enable_craft          = true
     enable_network_policy = true
+  }
+
+  assert {
+    condition = (
+      toset(keys(module.eks.cluster_addons)) == toset(["vpc-cni"]) &&
+      !try(local.cluster_addons["vpc-cni"].before_compute, false) &&
+      jsondecode(local.cluster_addons["vpc-cni"].configuration_values).enableNetworkPolicy == "true"
+    )
+    error_message = "enable_network_policy alone must keep adopting only the CNI, at its old address (not before_compute)."
   }
 
   assert {
@@ -352,4 +366,43 @@ run "pod_sandbox_group_needs_firecracker" {
     enable_craft_pod_sandbox_node_group = true
   }
   expect_failures = [var.enable_craft_pod_sandbox_node_group]
+}
+
+# A new cluster: upstream v21 creates no default addons, so without these the
+# nodes never become Ready.
+run "new_cluster_core_addons_plan" {
+  command = plan
+
+  variables {
+    manage_core_addons = true
+  }
+
+  assert {
+    condition     = toset(keys(module.eks.cluster_addons)) == toset(["coredns", "kube-proxy", "vpc-cni"])
+    error_message = "manage_core_addons must install vpc-cni, kube-proxy and CoreDNS."
+  }
+
+  assert {
+    condition     = try(local.cluster_addons["vpc-cni"].before_compute, false)
+    error_message = "The CNI must be installed before the node groups, or the nodes never become Ready."
+  }
+
+  assert {
+    condition     = jsondecode(local.cluster_addons["vpc-cni"].configuration_values).enableNetworkPolicy == "true"
+    error_message = "manage_core_addons turns on NetworkPolicy enforcement, so new clusters do not need enable_network_policy."
+  }
+}
+
+# Upstream keeps a before_compute CNI and an after-compute CNI in different
+# resources. On a cluster that already has enable_network_policy, adding
+# manage_core_addons would move the CNI and replace it (a CNI outage).
+run "core_addons_refuse_network_policy_cluster" {
+  command = plan
+
+  variables {
+    manage_core_addons    = true
+    enable_network_policy = true
+  }
+
+  expect_failures = [var.manage_core_addons]
 }
