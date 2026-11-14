@@ -1440,6 +1440,8 @@ export default function useChatController({
             stackTrace,
           };
         } else {
+          // Without a server error, the server can still run the turn.
+          const lostOutputs = new Set<Packet[]>();
           for (const output of isMultiModel
             ? packetsPerModel.filter(
                 (_, index) => !erroredModelIndices.has(index)
@@ -1450,6 +1452,7 @@ export default function useChatController({
                 placement: { turn_index: 0, tab_index: 0 },
                 obj: { type: "stop" },
               });
+              if (error === null) lostOutputs.add(output);
             }
           }
           // Keep the live question node: a regenerated question keeps its
@@ -1475,7 +1478,10 @@ export default function useChatController({
                 isRetryable,
                 errorDetails,
                 is_generating: false,
-              })
+              }).map((node) => ({
+                ...node,
+                streamLost: lostOutputs.has(node.packets),
+              }))
             : [
                 {
                   ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
@@ -1492,6 +1498,7 @@ export default function useChatController({
                   is_generating: false,
                   packets,
                   packetCount: packets.length,
+                  streamLost: lostOutputs.has(packets),
                   stackTrace: stackTrace,
                   errorCode: errorCode,
                   isRetryable: isRetryable,

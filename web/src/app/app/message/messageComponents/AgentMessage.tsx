@@ -26,11 +26,11 @@ import {
   type AuthError,
   useAuthErrors,
 } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
+import { useToolApprovals } from "@/lib/chat/hooks";
 import {
   orderApprovalsByTurn,
-  useToolApprovals,
-} from "@/app/app/message/messageComponents/hooks/useToolApprovals";
-import type { ToolApproval } from "@/lib/chat/toolApprovals";
+  type ToolApproval,
+} from "@/lib/chat/toolApprovals";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
@@ -57,6 +57,8 @@ export interface AgentMessageProps {
   rawPackets: Packet[];
   restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
+  /** This client lost the stream, so a stop here does not close approvals. */
+  streamLost?: boolean;
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -104,6 +106,7 @@ function arePropsEqual(
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
     prev.restoredPacketCount === next.restoredPacketCount &&
+    prev.streamLost === next.streamLost &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -127,6 +130,7 @@ const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
   restoredPacketCount: replayPacketCount = 0,
+  streamLost = false,
   chatState,
   nodeId,
   messageId,
@@ -225,7 +229,7 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const authErrors = useAuthErrors(rawPackets);
-  const toolApprovals = useToolApprovals(rawPackets);
+  const toolApprovals = useToolApprovals(rawPackets, streamLost);
 
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [

@@ -197,6 +197,8 @@ export interface Message {
 
   // Retained only with this response's packet prefix; never persisted alone.
   replayCursor?: number;
+  /** This client lost the response's stream; the server may still run it. */
+  streamLost?: boolean;
   restoredPacketCount?: number;
 
   // cached values for easy access

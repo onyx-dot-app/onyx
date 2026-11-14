@@ -10,6 +10,7 @@ import {
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
 import type { ApprovalStatus } from "@/lib/approvals/types";
+import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 
 /** What one response's packets say about an approval request. */
@@ -37,9 +38,14 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
 
 /**
  * The requests in one response's packets, and whether the response stopped.
- * A resolution without a known outcome counts as no resolution.
+ * A resolution without a known outcome counts as no resolution. The stop that
+ * closes a lost stream is this client's own, so it does not count: the server
+ * can still wait for a decision.
  */
-export function readToolApprovals(packets: Packet[]): {
+export function readToolApprovals(
+  packets: Packet[],
+  streamLost = false
+): {
   entries: ToolApprovalEntry[];
   stopped: boolean;
 } {
@@ -58,7 +64,7 @@ export function readToolApprovals(packets: Packet[]): {
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (packet.obj.type === PacketType.STOP) {
+    } else if (packet.obj.type === PacketType.STOP && !streamLost) {
       stopped = true;
     }
   }
@@ -91,6 +97,36 @@ export function toolApprovalStatus(
     default:
       return entry.outcome;
   }
+}
+
+export type SectionEntry =
+  | { kind: "display"; turnIndex: number; group: GroupedPacket }
+  | { kind: "approval"; turnIndex: number; approval: ToolApproval };
+
+/**
+ * Orders approval cards with a section's display groups by turn. A card
+ * follows the display groups of its own turn and of every earlier turn.
+ */
+export function orderApprovalsByTurn(
+  displayGroups: GroupedPacket[],
+  approvals: ToolApproval[]
+): SectionEntry[] {
+  const entries: SectionEntry[] = displayGroups.map((group) => ({
+    kind: "display",
+    turnIndex: group.turn_index,
+    group,
+  }));
+  for (const approval of approvals) {
+    const index = entries.findIndex(
+      (entry) => entry.turnIndex > approval.turnIndex
+    );
+    entries.splice(index === -1 ? entries.length : index, 0, {
+      kind: "approval",
+      turnIndex: approval.turnIndex,
+      approval,
+    });
+  }
+  return entries;
 }
 
 /** The status the server's answer to this client's decision shows. */
@@ -153,7 +189,10 @@ export function findPendingToolApprovalId(
   if (!tree) return null;
   const { localStatuses } = useToolApprovalUi.getState();
   for (const response of getLatestTurn(tree)) {
-    const { entries, stopped } = readToolApprovals(response.packets);
+    const { entries, stopped } = readToolApprovals(
+      response.packets,
+      response.streamLost
+    );
     const pending = entries.find(
       (entry) =>
         toolApprovalStatus(

@@ -223,7 +223,9 @@ The answer continues on the server. Send the decision, then read the answer:
 - Read the live stream with `GET /chat/chat-session/{chat_session_id}/resume-stream`.
 
 More calls can need approval after the response returns, for example after your decision.
-The resume stream shows their `tool_approval_request` packets.
+Only the resume stream shows their `tool_approval_request` packets. The chat session does not show approval requests,
+so polling cannot find a later request. That call waits until its deadline.
+If the agent can ask for more than one approval in an answer, read the resume stream.
 A new message to the session gets a `409` with `APPROVAL_PENDING` while a call waits.
 
 <Note>
