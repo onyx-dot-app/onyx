@@ -87,7 +87,7 @@ jest.mock("@/lib/connectors/hooks", () => ({
 }));
 const mockNoChatSkills = {
   entries: { skills: [], apps: [], mcpServers: [] },
-  revalidate: async () => undefined,
+  onInputFocus: () => undefined,
 };
 jest.mock("@/lib/skills/hooks", () => ({
   ...jest.requireActual("@/lib/skills/hooks"),

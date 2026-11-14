@@ -129,12 +129,6 @@ export interface PickerTrigger {
 /** Opens Craft's picker; a picked skill becomes a `/slug` prompt prefix. */
 export const CRAFT_PICKER_TRIGGER = "/";
 
-/** Whether a token starts at `index`: at the start of `text` or after
- * whitespace. Picker triggers and skill mentions both follow this rule. */
-export function startsToken(text: string, index: number): boolean {
-  return index === 0 || /\s/.test(text.charAt(index - 1));
-}
-
 // The trigger must start the caret's word, before the caret. The query runs
 // from the trigger to the next whitespace, so the caret can sit inside it.
 export function detectPickerTrigger(
@@ -142,7 +136,10 @@ export function detectPickerTrigger(
   trigger: string
 ): PickerTrigger | null {
   const triggerIndex = text.before.lastIndexOf(trigger);
-  if (triggerIndex === -1 || !startsToken(text.before, triggerIndex))
+  if (
+    triggerIndex === -1 ||
+    (triggerIndex > 0 && !/\s/.test(text.before.charAt(triggerIndex - 1)))
+  )
     return null;
 
   const before = text.before.slice(triggerIndex);

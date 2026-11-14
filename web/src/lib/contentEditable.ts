@@ -76,47 +76,6 @@ export function getTextAroundCursor(element: HTMLElement): CaretText | null {
   };
 }
 
-/** Whether the whitespace-delimited token before the caret can contain
- * `char`. Reads only the caret's text node, so callers can skip the copy that
- * `getTextAroundCursor` makes. */
-export function caretTokenMayContain(
-  element: HTMLElement,
-  char: string
-): boolean {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return false;
-  const range = selection.getRangeAt(0);
-  const node = range.startContainer;
-  if (!element.contains(node)) return false;
-  if (node.nodeType !== Node.TEXT_NODE) return true;
-  const before = (node.textContent ?? "").slice(0, range.startOffset);
-  const tokenStart = before.search(/\S*$/);
-  if (before.slice(tokenStart).includes(char)) return true;
-  // A token that reaches the node's start can continue in an earlier node.
-  return (
-    tokenStart === 0 &&
-    (node.previousSibling !== null || node.parentNode !== element)
-  );
-}
-
-/** Viewport rect of the caret, or `element`'s rect when the caret has none. */
-export function getCaretRect(element: HTMLElement): DOMRect | null {
-  const selection = window.getSelection();
-  if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0).cloneRange();
-  range.collapse(true);
-  const rect = range.getBoundingClientRect();
-  if (
-    rect.top === 0 &&
-    rect.left === 0 &&
-    rect.width === 0 &&
-    rect.height === 0
-  ) {
-    return element.getBoundingClientRect();
-  }
-  return rect;
-}
-
 // ─── Text Insertion ─────────────────────────────────────────────────────────
 
 export function insertTextAtCursor(element: HTMLElement, text: string): string {

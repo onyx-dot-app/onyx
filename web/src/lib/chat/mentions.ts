@@ -1,4 +1,9 @@
-import type { ComposedMention, Mention, PlacedMention } from "@/lib/chat/types";
+import {
+  MAX_MENTIONS_PER_MESSAGE,
+  type ComposedMention,
+  type Mention,
+  type PlacedMention,
+} from "@/lib/chat/types";
 import type { PickerSections } from "@/lib/skills/picker";
 
 /** Opens the chat's `@` menu; a picked mention shows as `@name` in the text. */
@@ -65,13 +70,16 @@ export function placeMentions(
 }
 
 /** The mentions a request sends: each one once, in order, without its
- * place in the text. The send and pending-message requests call it. */
-export function uniqueMentions(
+ * place in the text, and only the first `MAX_MENTIONS_PER_MESSAGE`. The send
+ * and pending-message requests call it, so every entry path is bounded. */
+export function requestMentions(
   mentions: readonly ComposedMention[]
 ): Mention[] {
   const unique = new Map<string, Mention>();
-  for (const { type, name } of mentions)
+  for (const { type, name } of mentions) {
+    if (unique.size === MAX_MENTIONS_PER_MESSAGE) break;
     if (!unique.has(`${type}:${name}`))
       unique.set(`${type}:${name}`, { type, name });
+  }
   return [...unique.values()];
 }

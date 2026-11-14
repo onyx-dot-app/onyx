@@ -264,11 +264,7 @@ const AppInputBar = React.memo(
       entries: mentionEntries,
       filter: filterMentionEntries,
       onSelect: insertMention,
-      onEmptyTrigger: chatSkills.revalidate,
     });
-    useEffect(() => {
-      if (mentionPicker.open) void chatSkills.revalidate();
-    }, [mentionPicker.open, chatSkills.revalidate]);
 
     // Clearing or replacing the input in code fires no input event.
     useEffect(() => {
@@ -1294,6 +1290,7 @@ const AppInputBar = React.memo(
                       onCut={handleCut}
                       onMouseDown={handleTileMouseDown}
                       onClick={handleTileClick}
+                      onFocus={chatSkills.onInputFocus}
                       onBlur={() => queueNav.setHighlightedId(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}

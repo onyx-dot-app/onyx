@@ -1,4 +1,4 @@
-import { placeMentions, uniqueMentions } from "@/lib/chat/mentions";
+import { placeMentions, requestMentions } from "@/lib/chat/mentions";
 import type { Mention } from "@/lib/chat/types";
 
 const skill = (name: string): Mention => ({ type: "skill", name });
@@ -47,10 +47,10 @@ describe("placeMentions", () => {
   });
 });
 
-describe("uniqueMentions", () => {
+describe("requestMentions", () => {
   it("sends each mention once, in order, without its index", () => {
     expect(
-      uniqueMentions([at("b", 0), skill("a"), at("b", 9), at("a", 4)])
+      requestMentions([at("b", 0), skill("a"), at("b", 9), at("a", 4)])
     ).toEqual([skill("b"), skill("a")]);
   });
 });

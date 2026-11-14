@@ -62,12 +62,16 @@
   In the chat input, `@` at the start of a word opens a picker of these
   skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
   filtered by name prefix without case. A row shows the skill's short
-  description when it has one, else its description. The picker fetches the
-  skills again when it opens, and when the user types `@` while the list is
-  empty. A message mentions at most 20 skills: at that limit, the picker
-  offers only the skills already picked. The query is the whole word, from
-  the `@` through the caret to the next whitespace. Only typing or deleting
-  opens the picker or changes its query. A paste never opens it. Any other
+  description when it has one, else its description. A skill change in the
+  library, the skill editor, a plugin's Skills tab or a Craft app connection
+  fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
+  changes, such as one from another tab or user, show after the chat input
+  gains focus, at most once per SWR focus throttle interval; a window focus
+  does not fetch the list. A message mentions at most 20 skills: at that
+  limit, the picker offers only the skills already picked, and each request
+  sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
+  is the whole word, from the `@` through the caret to the next whitespace.
+  Only typing or deleting opens the picker or changes its query. A paste never opens it. Any other
   caret move, such as a click, an arrow key or a paste, closes it, and a word
   that matches no skill closes it. Esc hides it until the user deletes the
   `@`. A pick replaces the whole word with a mention tile that reads `@name`.
@@ -235,7 +239,8 @@ code that replaces the text change them with the text. A send reads the text
 and the tiles as one `lib/chat/types.ts:ComposedMessage`: one mention per
 tile, each with `index`, where its `@name` starts in the text
 (`lib/contentEditable.ts:readContent`). The server gets each mention once,
-without `index` (`lib/chat/mentions.ts:uniqueMentions`). The draft, a failed
+without `index`, and at most 20 of them
+(`lib/chat/mentions.ts:requestMentions`). The draft, a failed
 send's restore and voice transcription keep the indexes, so
 `useContentEditable`'s `setMessage` puts each tile back at its index. Only
 server data has no index: a withdrawn queued message, an edited question and
@@ -245,7 +250,7 @@ the chips of a sent question place each recorded mention on the first
 without an index, restore by that rule too. The `@` menu uses
 the Craft picker's `PickerSections`: chat fills only `skills`, and a new kind
 adds its section and maps its picker entry to a mention. The picker opens at
-a token start (`lib/skills/picker.ts:startsToken`), but a tile can sit
+a word start (`lib/skills/picker.ts:detectPickerTrigger`), but a tile can sit
 against any text. An edit sends the recorded mentions that its text still
 has, and a resend or regeneration sends the recorded mentions. The agent preview passes its skill mentions to
 the new chat in the `skills` URL parameter. Each stored pick becomes a
@@ -593,7 +598,8 @@ The library preview of an external-app skill calls the same renderer
 24. `chat-skills-one-definition` **Chat's skills have one definition and
     mentions are records.** Change which skills chat gets only in
     `db/skill.py:list_chat_skills`; the turn, the tools and the `@` picker all
-    read it, and the web client does not filter skills itself. A skill
+    read it, and the web client does not decide which skills chat gets (the
+    composer only limits a message to 20 picks). A skill
     mention is accepted only once, when its message is accepted
     (`skills/chat.py:accept_picked_skills`), and stored with its type, name,
     version id and cut SKILL.md text (`ChatMessage.mentions` or the accepted

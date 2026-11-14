@@ -163,5 +163,6 @@ describe("SetupCard", () => {
     );
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.buildExternalApps);
     expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.userSkills);
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 });

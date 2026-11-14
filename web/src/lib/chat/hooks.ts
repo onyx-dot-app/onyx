@@ -28,7 +28,7 @@ import {
   skipRetryOnAuthError,
 } from "@/lib/fetcher";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
-import { uniqueMentions } from "@/lib/chat/mentions";
+import { requestMentions } from "@/lib/chat/mentions";
 import type {
   ChatSessionQueue,
   ChatSessionStatus,
@@ -209,7 +209,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
                     .targetResponseId,
                   deep_research: turn.deepResearch,
                   llm_override: turn.llmOverride,
-                  mentions: uniqueMentions(mentions),
+                  mentions: requestMentions(mentions),
                 }),
               }
             );

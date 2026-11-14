@@ -44,7 +44,6 @@ jest.mock("@/providers/UserProvider", () => ({
 const NO_SKILLS: PickerSections = { skills: [], apps: [], mcpServers: [] };
 // Null uses the real hook, which fetches the skills.
 let mockChatSkills: PickerSections | null = NO_SKILLS;
-const mockRevalidateChatSkills = async () => undefined;
 jest.mock("@/lib/skills/hooks", () => {
   const actual =
     jest.requireActual<typeof import("@/lib/skills/hooks")>(
@@ -55,7 +54,7 @@ jest.mock("@/lib/skills/hooks", () => {
     useChatSkills: () =>
       mockChatSkills === null
         ? actual.useChatSkills()
-        : { entries: mockChatSkills, revalidate: mockRevalidateChatSkills },
+        : { entries: mockChatSkills, onInputFocus: () => undefined },
   };
 });
 let mockIncognitoEnabled = false;
@@ -417,41 +416,52 @@ describe("`@` skill mentions", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
-  test("fetches the chat skills again when it opens, not on a window focus", async () => {
+  test("fetches the chat skills again when the input gains focus, not on a window focus", async () => {
     mockChatSkills = null;
-    const fetchSpy = jest.spyOn(global, "fetch").mockImplementation(
-      async () =>
-        new Response(
-          JSON.stringify([
-            {
-              name: "code-review",
-              description: "Review code",
-              short_description: null,
-              version_id: "v1",
-            },
-          ])
-        )
-    );
+    let skills: ChatSkill[] = [];
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify(skills)));
     try {
       const skillFetches = () =>
         fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
           .length;
-      render(<Composer plugins={[]} />, {
-        swrConfig: { focusThrottleInterval: 0 },
-      });
+      render(<Composer plugins={[]} />);
       await waitFor(() => expect(skillFetches()).toBe(1));
 
+      // A skill made in another tab or by another user.
+      skills = [
+        {
+          name: "code-review",
+          description: "Review code",
+          short_description: null,
+          version_id: "v1",
+        },
+      ];
       await act(async () => {
         window.dispatchEvent(new Event("focus"));
       });
       expect(skillFetches()).toBe(1);
 
-      const user = setupUser();
-      await user.type(screen.getByRole("textbox"), "use @co");
-      await screen.findByTestId("skill-picker-popover");
+      // The input took focus on mount, while the first fetch ran.
+      const input = screen.getByRole("textbox");
+      act(() => {
+        input.blur();
+        input.focus();
+      });
       await waitFor(() => expect(skillFetches()).toBe(2));
-      await user.keyboard("d");
-      expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
+      const user = setupUser();
+      await user.type(input, "use @co");
+      expect(
+        await screen.findByTestId("skill-picker-row-code-review")
+      ).toBeVisible();
+
+      // Focus fetches are throttled like SWR's window focus fetches.
+      act(() => {
+        input.blur();
+        input.focus();
+      });
+      await act(async () => {});
       expect(skillFetches()).toBe(2);
     } finally {
       fetchSpy.mockRestore();
@@ -490,33 +500,6 @@ describe("`@` skill mentions", () => {
       expect(
         screen.getByTestId("skill-picker-row-commit-message")
       ).toHaveTextContent("Write a commit message");
-    } finally {
-      fetchSpy.mockRestore();
-    }
-  });
-
-  test("with no chat skills, each typed `@` fetches them again once", async () => {
-    mockChatSkills = null;
-    const fetchSpy = jest
-      .spyOn(global, "fetch")
-      .mockImplementation(async () => new Response(JSON.stringify([])));
-    try {
-      const skillFetches = () =>
-        fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
-          .length;
-      render(<Composer plugins={[]} />);
-      await waitFor(() => expect(skillFetches()).toBe(1));
-
-      const user = setupUser();
-      const input = screen.getByRole("textbox");
-      await user.type(input, "use @co");
-      await waitFor(() => expect(skillFetches()).toBe(2));
-      await user.type(input, "de @");
-      await waitFor(() => expect(skillFetches()).toBe(3));
-      await user.type(input, "co");
-      await act(async () => {});
-      expect(skillFetches()).toBe(3);
-      expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
     } finally {
       fetchSpy.mockRestore();
     }

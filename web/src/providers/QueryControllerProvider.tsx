@@ -15,6 +15,7 @@ export type QueryState =
   | { phase: "chat" };
 
 export interface SubmitQueryOptions {
+  filters?: BaseFilters;
   /** Routes to chat, for a message that search cannot run, such as one with
    * mentions or in incognito. */
   chatOnly?: boolean;
@@ -34,7 +35,7 @@ export interface QueryControllerValue {
   /** Submit a query - routes to search or chat based on app mode */
   submit: (
     query: string,
-    onChat: () => void,
+    onChat: (query: string) => void,
     options?: SubmitQueryOptions
   ) => Promise<void>;
   /** Re-run the current search query with updated server-side filters */
@@ -50,7 +51,7 @@ export const QueryControllerContext = createContext<QueryControllerValue>({
   llmSelectedDocIds: null,
   error: null,
   submit: async (_q, onChat) => {
-    onChat();
+    onChat(_q);
   },
   refineSearch: async () => undefined,
   reset: () => undefined,

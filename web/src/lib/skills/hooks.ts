@@ -6,16 +6,10 @@ import {
   useState,
   type SyntheticEvent,
 } from "react";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
+import { getTextAroundCursor, type CaretText } from "@/lib/contentEditable";
 import {
-  caretTokenMayContain,
-  getCaretRect,
-  getTextAroundCursor,
-  type CaretText,
-} from "@/lib/contentEditable";
-import {
-  detectPickerTrigger,
   flattenSections,
   type PickerEntry,
   type PickerSections,
@@ -50,19 +44,31 @@ export function usePublishAction(): PublishAction {
 export interface ChatSkillEntries {
   /** The skills as `@` picker sections, sorted by name. */
   entries: PickerSections;
-  /** Fetches the skills again. A window focus does not, so the `@` menu
-   * calls this when it opens, and when `@` is typed while the list is empty. */
-  revalidate: () => Promise<ChatSkill[] | undefined>;
+  /** Call when the chat input gains focus. Fetches the skills again unless a
+   * fetch is running or this fetched within SWR's focus throttle interval. */
+  onInputFocus: () => void;
 }
 
-/** The custom skills that the user's chat agents get (`GET /api/skills/chat`). */
+/** The custom skills that the user's chat agents get (`GET /api/skills/chat`).
+ * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
+ * Changes from elsewhere show after the chat input gains focus; a window
+ * focus does not fetch them. */
 export function useChatSkills(): ChatSkillEntries {
   const { user } = useUser();
-  const { data, mutate } = useSWR<ChatSkill[]>(
+  const { focusThrottleInterval } = useSWRConfig();
+  const { data, mutate, isValidating } = useSWR<ChatSkill[]>(
     user ? SWR_KEYS.chatSkills : null,
     errorHandlingFetcher,
     { revalidateOnFocus: false }
   );
+  const lastFocusFetchRef = useRef(0);
+  const onInputFocus = useCallback(() => {
+    const now = Date.now();
+    if (isValidating || now - lastFocusFetchRef.current < focusThrottleInterval)
+      return;
+    lastFocusFetchRef.current = now;
+    void mutate();
+  }, [isValidating, focusThrottleInterval, mutate]);
   const entries = useMemo(
     (): PickerSections => ({
       skills: (data ?? []).map(
@@ -78,7 +84,7 @@ export function useChatSkills(): ChatSkillEntries {
     }),
     [data]
   );
-  return { entries, revalidate: mutate };
+  return { entries, onInputFocus };
 }
 
 interface UseEntryPickerOptions {
@@ -94,9 +100,6 @@ interface UseEntryPickerOptions {
    * trigger and its whole word, split at the caret) with the entry, e.g. as a
    * chip. The caret is still where the last input left it. */
   onSelect: (entry: PickerEntry, token: CaretText) => void;
-  /** Called once for each trigger typed while `entries` is empty, which
-   * cannot open the picker; for example, to fetch the entries again. */
-  onEmptyTrigger?: () => void;
 }
 
 export interface UseEntryPickerResult {
@@ -142,7 +145,6 @@ export function useEntryPicker({
   entries,
   filter,
   onSelect,
-  onEmptyTrigger,
 }: UseEntryPickerOptions): UseEntryPickerResult {
   const [session, setSession] = useState<PickerSession>(INITIAL_PICKER_SESSION);
   // The latest session, which handlers read before React renders it.
@@ -154,8 +156,6 @@ export function useEntryPicker({
     offset: number;
   } | null>(null);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-  // The trigger index that `onEmptyTrigger` was last called for.
-  const emptyTriggerRef = useRef<number | null>(null);
   const hasEntries = useMemo(
     () => flattenSections(entries).length > 0,
     [entries]
@@ -173,6 +173,7 @@ export function useEntryPicker({
 
   const onInput = useCallback(
     (event: SyntheticEvent<HTMLElement>) => {
+      if (!hasEntries) return;
       const input = event.currentTarget;
       let text: CaretText | null;
       if (input instanceof HTMLTextAreaElement) {
@@ -184,23 +185,27 @@ export function useEntryPicker({
         };
       } else {
         // Reading the text around the caret clones the DOM. Without a
-        // session, only a token that holds the trigger can open one.
-        if (
-          sessionRef.current.triggerIndex === null &&
-          !caretTokenMayContain(input, trigger)
-        ) {
-          emptyTriggerRef.current = null;
-          return;
+        // session, skip it unless the caret's word can hold the trigger: the
+        // word before the caret in its text node holds it, or the word can
+        // start in an earlier node.
+        if (sessionRef.current.triggerIndex === null) {
+          const caret = readCaret(input);
+          if (!caret) return;
+          if (caret.node.nodeType === Node.TEXT_NODE) {
+            const before = (caret.node.textContent ?? "").slice(
+              0,
+              caret.offset
+            );
+            const wordStart = before.search(/\S*$/);
+            const startsEarlier =
+              wordStart === 0 &&
+              (caret.node.previousSibling !== null ||
+                caret.node.parentNode !== input);
+            if (!startsEarlier && !before.slice(wordStart).includes(trigger))
+              return;
+          }
         }
         text = getTextAroundCursor(input);
-      }
-      if (!hasEntries) {
-        const index =
-          (text && detectPickerTrigger(text, trigger)?.triggerIndex) ?? null;
-        if (index !== null && index !== emptyTriggerRef.current)
-          onEmptyTrigger?.();
-        emptyTriggerRef.current = index;
-        return;
       }
       const next = reduceOnInput(sessionRef.current, text, trigger, (query) =>
         filter(entries, query)
@@ -208,15 +213,26 @@ export function useEntryPicker({
       if (next.open) {
         const caret = readCaret(input);
         caretRef.current = caret && { input, ...caret };
-        setAnchorRect(
-          input instanceof HTMLTextAreaElement
-            ? input.getBoundingClientRect()
-            : getCaretRect(input)
-        );
+        // A textarea anchors at itself. A caret on an empty line has an
+        // empty rect, so it anchors at the input too.
+        let rect = input.getBoundingClientRect();
+        if (caret && !(input instanceof HTMLTextAreaElement)) {
+          const range = document.createRange();
+          range.setStart(caret.node, caret.offset);
+          const caretRect = range.getBoundingClientRect();
+          if (
+            caretRect.top ||
+            caretRect.left ||
+            caretRect.width ||
+            caretRect.height
+          )
+            rect = caretRect;
+        }
+        setAnchorRect(rect);
       }
       commit(next);
     },
-    [hasEntries, trigger, filter, entries, commit, onEmptyTrigger]
+    [hasEntries, trigger, filter, entries, commit]
   );
 
   // Entries can change while open, for example on revalidation.

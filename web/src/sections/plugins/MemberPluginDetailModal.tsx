@@ -44,6 +44,7 @@ import { getAppTypeLogo } from "@/app/craft/v1/apps/registry";
 import { useExternalAppSkillIssues } from "@/lib/externalApps/hooks";
 import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
 import useUserSkills from "@/hooks/useUserSkills";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import type { Skill, SkillsList } from "@/lib/skills/types";
 import { useSettings } from "@/lib/settings/hooks";
 import {
@@ -440,6 +441,7 @@ export function MemberPluginDetailContent({
           return next;
         });
       }
+      if (changes.length > 0) void refreshSkillLists(mutate);
       onClose();
     } catch (error) {
       setSaveError(

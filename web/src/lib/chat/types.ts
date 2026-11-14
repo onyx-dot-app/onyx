@@ -30,7 +30,7 @@ export type RecordedMention = RecordedSkillMention;
 /** A mention as a question holds it: one per picked tile, with `index`, where
  * its `@name` starts in the message. A mention known only from the server,
  * such as a recorded or queued one, has no `index`. The server gets each
- * mention once, without `index` (`lib/chat/mentions.ts:uniqueMentions`). */
+ * mention once, without `index` (`lib/chat/mentions.ts:requestMentions`). */
 export type ComposedMention = Mention & { index?: number };
 
 /** A mention at a known place in its message. */
