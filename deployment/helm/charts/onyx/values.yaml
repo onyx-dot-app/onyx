@@ -2105,7 +2105,8 @@ craft:
     # metal, raise it or set 0 (no cap).
     maxVms: 60
     # Comma-separated DNS or URI SANs; the client certificate must have one.
-    # Empty = any certificate that the client CA (tls ca.crt) signed.
+    # Empty = the client certificate name with chart-made certificates, or
+    # any certificate that the client CA (tls ca.crt) signed with existingSecret.
     clientAllowedSans: ""
     # host:port the agent clients dial, sent with the node key registration.
     # Empty = the pod IP and listenPort.

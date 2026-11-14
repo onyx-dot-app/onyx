@@ -13,6 +13,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -220,4 +221,85 @@ func scopeActive(cmd jailer.Command, id string) string {
 	argv := cmd.SystemctlArgv("is-active", jailer.ScopeUnit(id))
 	out, _ := exec.Command(argv[0], argv[1:]...).Output()
 	return strings.TrimSpace(string(out))
+}
+
+// vsockProbePorts are the guest → host vsock ports that the deny-list checks
+// try: common service ports, the daemon port, the Dial default, the ports
+// next to the relay port, and the relay port itself.
+var vsockProbePorts = []int{1, 22, 52, 80, 443, 1024, 3010, 3127, 3128, 3129, 8080, 10250, 65535}
+
+// vsockProbe connects from the guest (as root) to each port on the host
+// (CID 2) and returns the ports that accepted the connection.
+func vsockProbe(ctx context.Context, vsockPath string, ports []int) (map[int]bool, string, error) {
+	list := make([]string, len(ports))
+	for i, p := range ports {
+		list[i] = strconv.Itoa(p)
+	}
+	out, err := guestRun(ctx, vsockPath, "root", `python3 - `+strings.Join(list, " ")+` <<'EOF'
+import socket, sys
+for port in map(int, sys.argv[1:]):
+    s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
+    s.settimeout(5)
+    try:
+        s.connect((2, port))
+        print("VSOCK", port, "OPEN")
+    except OSError as e:
+        print("VSOCK", port, "REFUSED", type(e).__name__)
+    finally:
+        s.close()
+EOF`)
+	accepted := map[int]bool{}
+	seen := 0
+	for _, l := range strings.Split(out, "\n") {
+		f := strings.Fields(l)
+		if len(f) < 3 || f[0] != "VSOCK" {
+			continue
+		}
+		p, perr := strconv.Atoi(f[1])
+		if perr != nil {
+			continue
+		}
+		seen++
+		if f[2] == "OPEN" {
+			accepted[p] = true
+		}
+	}
+	if err == nil && seen != len(ports) {
+		err = fmt.Errorf("probe reported %d of %d ports", seen, len(ports))
+	}
+	return accepted, out, err
+}
+
+// hostVsockListeners returns the guest-reachable vsock ports of a VM: the
+// <v.sock>_<port> sockets in its chroot.
+func hostVsockListeners(t *testing.T, vsockPath string) []string {
+	t.Helper()
+	m, err := filepath.Glob(vsockPath + "_*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := range m {
+		m[i] = strings.TrimPrefix(m[i], vsockPath+"_")
+	}
+	return m
+}
+
+// netnsOf returns the network namespace of pid and its interface names.
+func netnsOf(t *testing.T, pid int) (string, []string) {
+	t.Helper()
+	ns, err := os.Readlink(fmt.Sprintf("/proc/%d/ns/net", pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/net/dev", pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ifs []string
+	for _, l := range strings.Split(string(raw), "\n") {
+		if name, _, ok := strings.Cut(l, ":"); ok {
+			ifs = append(ifs, strings.TrimSpace(name))
+		}
+	}
+	return ns, ifs
 }
