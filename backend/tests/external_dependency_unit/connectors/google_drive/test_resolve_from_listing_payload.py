@@ -4,6 +4,8 @@ documents as today's checkpointed load, with no files.get calls."""
 import time
 from typing import Any
 
+import pytest
+
 from onyx.connectors.google_drive import doc_conversion
 from onyx.connectors.google_drive.models import DriveListingPayload
 from onyx.connectors.models import (
@@ -53,10 +55,8 @@ def _files_get_calls(mock_drive: MockDrive) -> int:
     return int(ops.get("drive.files.get", {}).get("count", 0))
 
 
-def test_payload_conversion_matches_reindex(
-    mock_drive: MockDrive,
-    listing_mode: str,  # noqa: F811
-) -> None:
+@pytest.mark.usefixtures("listing_mode")
+def test_payload_conversion_matches_reindex(mock_drive: MockDrive) -> None:
     connector = mock_drive.build_connector()
     listing = list_with_resume(connector)
     assert listing.stubs
@@ -73,17 +73,13 @@ def test_payload_conversion_matches_reindex(
     doc_conversion._folder_cache.clear()
     mock_drive.reset_stats()
     from_payload = list(connector.resolve_targets(targets))
-    if listing_mode == "parallel":
-        # The listing returned each folder, so each stub has its folder path.
-        assert all(
-            isinstance(t.listing_payload, DriveListingPayload)
-            and t.listing_payload.folder_path
-            for t in targets
-        )
-        assert _files_get_calls(mock_drive) == 0
-    else:
-        # The serial listing lists no folders. Conversion builds the paths.
-        assert _files_get_calls(mock_drive) > 0
+    # The listing returned each folder, so each stub has its folder path.
+    assert all(
+        isinstance(t.listing_payload, DriveListingPayload)
+        and t.listing_payload.folder_path
+        for t in targets
+    )
+    assert _files_get_calls(mock_drive) == 0
 
     doc_conversion._folder_cache.clear()
     today = _load_documents(mock_drive)
