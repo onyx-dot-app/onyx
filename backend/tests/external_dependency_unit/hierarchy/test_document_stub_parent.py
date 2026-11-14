@@ -2,6 +2,8 @@
 the source root. The STUB becomes the real node when the parent arrives, so
 the document keeps the right parent."""
 
+import threading
+import time
 from collections.abc import Generator, Iterator
 from uuid import uuid4
 
@@ -19,14 +21,21 @@ from onyx.db.hierarchy import (
     get_hierarchy_node_by_raw_id,
     persist_hierarchy_nodes_for_cc_pair,
     remove_unfilled_stub_hierarchy_nodes_for_cc_pair,
+    upsert_hierarchy_node_cc_pair_entries,
 )
-from onyx.db.models import ConnectorCredentialPair, Document, HierarchyNode
+from onyx.db.models import (
+    ConnectorCredentialPair,
+    Document,
+    HierarchyNode,
+    HierarchyNodeByConnectorCredentialPair,
+)
 from onyx.redis.redis_hierarchy import (
     evict_hierarchy_nodes_from_cache,
     get_node_id_from_raw_id,
     resolve_parent_node_ids,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.tenant_redis_client import TenantRedisClient
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -403,3 +412,142 @@ def test_a_cached_stub_that_a_cleanup_removed_is_made_again(
             )
         )
         db_session.commit()
+
+
+def _remove_stub(
+    db_session: Session, redis_client: TenantRedisClient, raw_id: str
+) -> None:
+    evict_hierarchy_nodes_from_cache(redis_client, _SOURCE, [raw_id])
+    db_session.rollback()
+    db_session.execute(
+        delete(HierarchyNode).where(
+            HierarchyNode.source == _SOURCE, HierarchyNode.raw_node_id == raw_id
+        )
+    )
+    db_session.commit()
+
+
+def test_a_shared_stub_goes_when_each_pair_that_links_it_succeeded(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """Two pairs wait for the same parent. The first success keeps the STUB,
+    because the other pair can still fill it. The second success removes it
+    and moves the documents of the two pairs to the root."""
+    redis_client = get_redis_client()
+    tag = uuid4().hex[:8]
+    raw_id = f"shared_{tag}"
+    other = make_cc_pair(db_session, source=_SOURCE)
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    doc_ids = seed_cc_pair_documents(db_session, pair, 1, prefix=f"shared-{tag}-")
+    try:
+        for cc_pair in (pair, other):
+            resolved = resolve_parent_node_ids(
+                redis_client=redis_client,
+                db_session=db_session,
+                source=_SOURCE,
+                source_node_id=source_node.id,
+                raw_parent_ids=[raw_id],
+                connector_id=cc_pair.connector_id,
+                credential_id=cc_pair.credential_id,
+            )
+        db_session.execute(
+            update(Document)
+            .where(Document.id.in_(doc_ids))
+            .values(parent_hierarchy_node_id=resolved[raw_id])
+        )
+        db_session.commit()
+
+        first = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, _SOURCE, pair.connector_id, pair.credential_id
+        )
+        assert first == []
+        assert get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE) is not None
+
+        second = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, _SOURCE, other.connector_id, other.credential_id
+        )
+        assert second == [raw_id]
+        db_session.expire_all()
+        assert get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE) is None
+        parents = set(
+            db_session.execute(
+                select(Document.parent_hierarchy_node_id).where(
+                    Document.id.in_(doc_ids)
+                )
+            ).scalars()
+        )
+        assert parents == {source_node.id}
+    finally:
+        _remove_stub(db_session, redis_client, raw_id)
+        cleanup_cc_pair(db_session, other)
+
+
+def test_cleanup_sees_a_link_that_commits_while_it_waits_for_the_lock(
+    db_session: Session, pair: ConnectorCredentialPair
+) -> None:
+    """Another pair links the STUB and holds its lock. The cleanup waits. When
+    the link commits, the cleanup must see it and keep the STUB: a check
+    from before the wait would delete the STUB and the other pair's link."""
+    redis_client = get_redis_client()
+    raw_id = f"waited_{uuid4().hex[:8]}"
+    other = make_cc_pair(db_session, source=_SOURCE)
+    source_node = ensure_source_node_exists(db_session, _SOURCE)
+    removed: list[list[str]] = []
+    try:
+        resolve_parent_node_ids(
+            redis_client=redis_client,
+            db_session=db_session,
+            source=_SOURCE,
+            source_node_id=source_node.id,
+            raw_parent_ids=[raw_id],
+            connector_id=pair.connector_id,
+            credential_id=pair.credential_id,
+        )
+        stub = get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE)
+        assert stub is not None
+        stub_id = stub.id
+        pair_ids = (pair.connector_id, pair.credential_id)
+        db_session.commit()
+
+        def cleanup() -> None:
+            with get_session_with_current_tenant() as cleanup_session:
+                removed.append(
+                    remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+                        cleanup_session, _SOURCE, *pair_ids
+                    )
+                )
+
+        with get_session_with_current_tenant() as linker:
+            # As link_cached_stub_nodes_for_cc_pair does, before its commit.
+            linker.execute(
+                select(HierarchyNode.id)
+                .where(HierarchyNode.id == stub_id)
+                .with_for_update(key_share=True)
+            )
+            upsert_hierarchy_node_cc_pair_entries(
+                db_session=linker,
+                hierarchy_node_ids=[stub_id],
+                connector_id=other.connector_id,
+                credential_id=other.credential_id,
+                commit=False,
+            )
+            thread = threading.Thread(target=cleanup)
+            thread.start()
+            # The cleanup now waits for the lock on the STUB.
+            time.sleep(1.0)
+            assert not removed
+            linker.commit()
+        thread.join(timeout=30)
+
+        assert removed == [[]]
+        db_session.expire_all()
+        assert get_hierarchy_node_by_raw_id(db_session, raw_id, _SOURCE) is not None
+        links = db_session.execute(
+            select(HierarchyNodeByConnectorCredentialPair.connector_id).where(
+                HierarchyNodeByConnectorCredentialPair.hierarchy_node_id == stub_id
+            )
+        ).scalars()
+        assert set(links) == {other.connector_id}
+    finally:
+        _remove_stub(db_session, redis_client, raw_id)
+        cleanup_cc_pair(db_session, other)
