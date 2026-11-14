@@ -1,7 +1,7 @@
 import contextvars
 import json
 from concurrent.futures import Future, ThreadPoolExecutor, wait
-from typing import Any, cast
+from typing import cast
 from uuid import UUID
 
 import requests
@@ -29,7 +29,11 @@ from onyx.image_gen.interfaces import (
 )
 from onyx.llm.cancellation import AgentCancelled
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
     CodeModeExposure,
     CodeModeResultKind,
@@ -52,9 +56,6 @@ logger = setup_logger()
 
 # Check cancellation while provider requests are in progress.
 CANCELLATION_POLL_INTERVAL = 5.0
-
-PROMPT_FIELD = "prompt"
-REFERENCE_IMAGE_FILE_IDS_FIELD = "reference_image_file_ids"
 
 
 class ImageGenerationTool(Tool):
@@ -118,47 +119,8 @@ class ImageGenerationTool(Tool):
         return is_image_generation_configured(db_session)
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    PROMPT_FIELD: {
-                        "type": "string",
-                        "description": "Prompt used to generate the image",
-                    },
-                    "shape": {
-                        "anyOf": [
-                            {
-                                "type": "string",
-                                "enum": [shape.value for shape in ImageShape],
-                            },
-                            {"type": "null"},
-                        ],
-                        "description": (
-                            "Use null for the default square shape."
-                            " Image shape: 'square', 'portrait', or 'landscape'."
-                        ),
-                    },
-                    REFERENCE_IMAGE_FILE_IDS_FIELD: {
-                        "anyOf": [
-                            {"type": "array", "items": {"type": "string"}},
-                            {"type": "null"},
-                        ],
-                        "description": (
-                            "Optional file_ids of existing images to edit or use as reference;"
-                            " the first is the primary edit source."
-                            " Get file_ids from `[attached image — file_id: <id>]` tags on"
-                            " user-attached images or from prior generate_image tool responses."
-                            " Use null for a fresh, unrelated generation."
-                        ),
-                    },
-                },
-                "required": [PROMPT_FIELD, "shape", REFERENCE_IMAGE_FILE_IDS_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, ImageGenerationArguments, strict=True
         )
 
     def _generate_image(
@@ -223,37 +185,9 @@ class ImageGenerationTool(Tool):
 
     def _resolve_reference_image_file_ids(
         self,
-        llm_kwargs: dict[str, Any],
+        reference_image_file_ids: list[str],
     ) -> list[str]:
-        raw_reference_ids = llm_kwargs.get(REFERENCE_IMAGE_FILE_IDS_FIELD)
-        if raw_reference_ids is None:
-            # No references requested — plain generation.
-            return []
-
-        if not isinstance(raw_reference_ids, list) or not all(
-            isinstance(file_id, str) for file_id in raw_reference_ids
-        ):
-            raise ToolCallException(
-                message=(
-                    f"Invalid {REFERENCE_IMAGE_FILE_IDS_FIELD}: expected array of strings, got {type(raw_reference_ids)}"
-                ),
-                llm_facing_message=(
-                    f"The '{REFERENCE_IMAGE_FILE_IDS_FIELD}' field must be an array of file_id strings."
-                ),
-            )
-
-        # Deduplicate while preserving order (first occurrence wins, so the
-        # LLM's intended "primary edit source" stays at index 0).
-        deduped_reference_image_ids: list[str] = []
-        seen_ids: set[str] = set()
-        for file_id in raw_reference_ids:
-            file_id = file_id.strip()
-            if not file_id or file_id in seen_ids:
-                continue
-            seen_ids.add(file_id)
-            deduped_reference_image_ids.append(file_id)
-
-        if not deduped_reference_image_ids:
+        if not reference_image_file_ids:
             return []
 
         if not self.img_provider.supports_reference_images:
@@ -269,8 +203,8 @@ class ImageGenerationTool(Tool):
 
         max_reference_images = self.img_provider.max_reference_images
         if max_reference_images > 0:
-            return deduped_reference_image_ids[:max_reference_images]
-        return deduped_reference_image_ids
+            return reference_image_file_ids[:max_reference_images]
+        return reference_image_file_ids
 
     def _load_reference_images(
         self,
@@ -316,19 +250,11 @@ class ImageGenerationTool(Tool):
         return reference_images
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        if PROMPT_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{PROMPT_FIELD}' parameter in generate_image tool call",
-                llm_facing_message=(
-                    f"The generate_image tool requires a '{PROMPT_FIELD}' parameter describing "
-                    f'the image to generate. Please provide like: {{"prompt": "a sunset over mountains"}}'
-                ),
-            )
         arguments = parse_tool_arguments(ImageGenerationArguments, invocation.arguments)
         prompt = arguments.prompt
         shape = arguments.shape
         reference_image_file_ids = self._resolve_reference_image_file_ids(
-            llm_kwargs=invocation.arguments,
+            arguments.reference_image_file_ids
         )
         reference_images = self._load_reference_images(reference_image_file_ids)
 

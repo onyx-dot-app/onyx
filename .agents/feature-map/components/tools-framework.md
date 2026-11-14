@@ -189,7 +189,7 @@ strict mode requires every object to be closed. Parsing ignores unknown argument
 sets `extra="forbid"`, because not every provider enforces the schema. A
 validation error names the argument and returns to the model as a tool error.
 The skill, subagent, memory, file reader, knowledge graph, internal search, web
-search and open URL tools use it.
+search, open URL, Python, bash, image generation and coding agent tools use it.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
