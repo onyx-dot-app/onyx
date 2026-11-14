@@ -1,4 +1,5 @@
-"""Parallel, sharded listing of a Google Drive domain for a service account.
+"""Parallel, sharded listing of a Google Drive domain for a service account,
+or of one user's files for OAuth, where that user is the only principal.
 
 Every partition (a shared drive, a user's My Drive, the files shared with a
 user) lists in one adaptive pool. One task lists one page. A partition with
@@ -357,6 +358,10 @@ class ParallelDriveLister:
         # INLINE_CALL_BUDGET_FILES, so the files that wait for conversion
         # stay few.
         inline: bool = False,
+        # The shared-with-user listing also returns shared drive files, for
+        # files shared directly from a drive the user is not a member of.
+        # Files of the drives that are listed are dropped as covered.
+        shared_with_all_drives: bool = False,
     ) -> None:
         if checkpoint.listing is None:
             raise ValueError("The checkpoint has no listing state")
@@ -372,6 +377,7 @@ class ParallelDriveLister:
         self._listing_denied = listing_denied
         self._admit_file = admit_file
         self._inline = inline
+        self._shared_with_all_drives = shared_with_all_drives
         self._budget_files = INLINE_CALL_BUDGET_FILES if inline else CALL_BUDGET_FILES
 
         # Guards the state, the checkpoint fields this class writes, and the
@@ -693,10 +699,14 @@ class ParallelDriveLister:
                 files.append(item)
         return files, next_token
 
-    @staticmethod
-    def _variant(shard: ListingShard) -> DriveCorpus:
+    def _variant(self, shard: ListingShard) -> DriveCorpus:
         if shard.partition.kind is ListingPartitionKind.SHARED_DRIVE:
             return DriveCorpus.DRIVE
+        if (
+            shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER
+            and self._shared_with_all_drives
+        ):
+            return DriveCorpus.ALL_DRIVES
         return DriveCorpus.USER
 
     @staticmethod
@@ -932,10 +942,11 @@ class ParallelDriveLister:
         list_again: bool,
     ) -> list[AdaptiveTask]:
         """The shard's partition cannot list: the service account can no
-        longer act as its user, or Drive denied a page. Closes every shard of
-        the partition and reports ``failures``. With ``list_again``, a shared
-        drive goes back to pending, to list again from its start as another
-        member. Otherwise the drive is incomplete."""
+        longer act as its user, or Drive denied a page. For OAuth, the
+        callbacks raise and fail the call. Closes every shard of the partition
+        and reports ``failures``. With ``list_again``, a shared drive goes back
+        to pending, to list again from its start as another member. Otherwise
+        the drive is incomplete."""
         partition = shard.partition
         with self._lock:
             state = self._state

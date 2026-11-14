@@ -102,6 +102,8 @@ def _build_oauth_connector(
     connector._is_service_account = False
     connector._primary_admin_email = _USER
     monkeypatch.setattr(connector, "get_all_drive_ids", lambda: set(drive_ids))
+    # The serial listing, which OAuth still uses with requested folders.
+    monkeypatch.setattr(connector, "_plan_parallel_listing", lambda *_args: False)
     monkeypatch.setattr(connector_module, "get_files_in_shared_drive", fake_retrieval)
     return connector
 

@@ -49,7 +49,6 @@ from onyx.connectors.google_drive.file_retrieval import (
     RESOLVED_FROM_SHORTCUT_KEY,
     DriveFileFieldType,
     crawl_folders_for_files,
-    get_all_files_for_oauth,
     get_all_files_in_my_drive_and_shared,
     get_external_access_for_folder,
     get_files_by_web_view_links_batch,
@@ -158,7 +157,6 @@ DRIVE_INTERLEAVE_LOOKAHEAD = 2000
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
-OAUTH_PAGES_PER_CHECKPOINT = 2
 # Partitions (drives or users) started per service account checkpoint call.
 PARTITIONS_PER_CHECKPOINT: int = 4
 
@@ -1769,40 +1767,6 @@ class GoogleDriveConnector(
         # When loading from a checkpoint, load the previously cached drive and folder ids
         return checkpoint.drive_ids_to_retrieve, checkpoint.folder_ids_to_retrieve
 
-    def _oauth_retrieval_all_files(
-        self,
-        field_type: DriveFileFieldType,
-        start: SecondsSinceUnixEpoch | None = None,
-        end: SecondsSinceUnixEpoch | None = None,
-        page_token: str | None = None,
-    ) -> Iterator[RetrievedDriveFile | str]:
-        if not self.include_files_shared_with_me and not self.include_my_drives:
-            return
-
-        logger.info(
-            "Getting shared files/my drive files for OAuth with include_files_shared_with_me=%s, include_my_drives=%s, include_shared_drives=%s.Using '%s' as the account.",
-            self.include_files_shared_with_me,
-            self.include_my_drives,
-            self.include_shared_drives,
-            self.primary_admin_email,
-        )
-        yield from add_retrieval_info(
-            get_all_files_for_oauth(
-                ops=self.ops,
-                user_email=self.primary_admin_email,
-                include_files_shared_with_me=self.include_files_shared_with_me,
-                include_my_drives=self.include_my_drives,
-                include_shared_drives=self.include_shared_drives,
-                field_type=field_type,
-                max_num_pages=OAUTH_PAGES_PER_CHECKPOINT,
-                start=start,
-                end=end,
-                page_token=page_token,
-            ),
-            self.primary_admin_email,
-            DriveRetrievalStage.OAUTH_FILES,
-        )
-
     def _oauth_retrieval_drives(
         self,
         field_type: DriveFileFieldType,
@@ -2039,48 +2003,21 @@ class GoogleDriveConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
     ) -> Iterator[RetrievedDriveFile]:
-        if checkpoint.completion_stage == DriveRetrievalStage.START:
-            checkpoint.completion_stage = DriveRetrievalStage.OAUTH_FILES
+        """The serial OAuth listing, only for requested folders: the shard
+        engine lists everything else. Requested targets turn the include
+        settings off, so it lists requested drives, then folders."""
+        # OAUTH_FILES: the old first stage, which listed no file with
+        # requested targets.
+        if checkpoint.completion_stage in (
+            DriveRetrievalStage.START,
+            DriveRetrievalStage.OAUTH_FILES,
+        ):
+            checkpoint.completion_stage = DriveRetrievalStage.DRIVE_IDS
             checkpoint.completion_map[self.primary_admin_email] = StageCompletion(
                 stage=DriveRetrievalStage.START,
                 completed_until=0,
                 current_folder_or_drive_id=None,
             )
-
-        if checkpoint.completion_stage == DriveRetrievalStage.OAUTH_FILES:
-            completion = checkpoint.completion_map[self.primary_admin_email]
-            all_files_start = start
-            # if resuming from a checkpoint
-            if completion.stage == DriveRetrievalStage.OAUTH_FILES:
-                all_files_start = _resume_start(completion.completed_until, start)
-
-            for file_or_token in self._oauth_retrieval_all_files(
-                field_type=field_type,
-                start=all_files_start,
-                end=end,
-                page_token=checkpoint.completion_map[
-                    self.primary_admin_email
-                ].next_page_token,
-            ):
-                if isinstance(file_or_token, str):
-                    checkpoint.completion_map[
-                        self.primary_admin_email
-                    ].next_page_token = file_or_token
-                    return  # done with the max num pages, return checkpoint
-                yield file_or_token
-            checkpoint.completion_stage = DriveRetrievalStage.DRIVE_IDS
-            checkpoint.completion_map[self.primary_admin_email].next_page_token = None
-            return  # create a new checkpoint
-
-        all_requested = (
-            self.include_files_shared_with_me
-            and self.include_my_drives
-            and self.include_shared_drives
-        )
-        if all_requested:
-            # If all 3 are true, we already yielded from get_all_files_for_oauth
-            checkpoint.completion_stage = DriveRetrievalStage.DONE
-            return
 
         sorted_drive_ids, sorted_folder_ids = self._determine_retrieval_ids(
             checkpoint, DriveRetrievalStage.SHARED_DRIVE_FILES
@@ -2125,9 +2062,9 @@ class GoogleDriveConnector(
         include_permissions: bool = False,
         inline: bool = False,
     ) -> Generator[RetrievedDriveFile, None, None]:
-        """One call of the listing. A service account with no requested
-        folders lists through ``ParallelDriveLister``. The OAuth flow and
-        requested folders use the serial listing. ``field_type`` is for the
+        """One call of the listing. With no requested folders, the listing
+        is ``ParallelDriveLister``, for a service account and for OAuth.
+        Requested folders use the serial listing. ``field_type`` is for the
         serial listing. The shard engine asks for permissions only when
         ``include_permissions`` or the link-only filter needs them. With
         ``inline``, the caller converts each file in this call (see
@@ -3066,14 +3003,14 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None,
     ) -> bool:
         """Sets up ``checkpoint.listing`` for this call. Returns False when
-        the connector must use the serial listing: the OAuth flow, and
-        requested folders, because a folder crawl has no time-range shards
-        yet. With no ``end``, a new listing ends now and a started one keeps
-        its end.
+        the connector must use the serial listing: requested folders, because
+        a folder crawl has no time-range shards yet. With no ``end``, a new
+        listing ends now and a started one keeps its end.
 
         The first call plans the partitions: shared drives, then My Drives,
-        then the files shared with each user."""
-        if not self._is_service_account or self._requested_folder_ids:
+        then the files shared with each user. An OAuth credential lists as
+        its one user."""
+        if self._requested_folder_ids:
             return False
         state = checkpoint.listing
         if state is None and checkpoint.folder_ids_to_retrieve:
@@ -3112,16 +3049,26 @@ class GoogleDriveConnector(
             ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key=drive_id)
             for drive_id in checkpoint.drive_ids_to_retrieve or []
         ]
-        user_emails = self._my_drive_partition_emails(checkpoint)
+        if self._is_service_account:
+            user_emails = self._my_drive_partition_emails(checkpoint)
+            shared_with_emails = (
+                user_emails if self.include_files_shared_with_me else []
+            )
+        else:
+            # The OAuth user's own files and the files shared with the user.
+            # Together with the member drives, this is the allDrives corpus.
+            # As in the serial OAuth listing, my_drive_emails does not apply.
+            oauth_user = [self.primary_admin_email]
+            user_emails = oauth_user if self.include_my_drives else []
+            shared_with_emails = oauth_user if self.include_files_shared_with_me else []
         partitions.extend(
             ListingPartition(kind=ListingPartitionKind.MY_DRIVE, key=email)
             for email in user_emails
         )
-        if self.include_files_shared_with_me:
-            partitions.extend(
-                ListingPartition(kind=ListingPartitionKind.SHARED_WITH_USER, key=email)
-                for email in user_emails
-            )
+        partitions.extend(
+            ListingPartition(kind=ListingPartitionKind.SHARED_WITH_USER, key=email)
+            for email in shared_with_emails
+        )
         checkpoint.listing = DriveListingState(
             window_t0=t0, window_t1=t1, pending_partitions=partitions
         )
@@ -3140,9 +3087,17 @@ class GoogleDriveConnector(
         def choose_drive_principal(
             drive_id: str, busy: Collection[str]
         ) -> tuple[str | None, bool]:
+            if not self._is_service_account:
+                # The OAuth user is the only principal. Its drives come from
+                # its own drives.list, so it is a member: the listing is
+                # complete.
+                return self.primary_admin_email, True
             return self._choose_drive_principal(drive_id, checkpoint, busy)
 
         def check_impersonation(email: str) -> tuple[bool, list[RetrievedDriveFile]]:
+            if not self._is_service_account:
+                # OAuth uses its own token. A failure fails the listing.
+                return True, []
             failures: list[RetrievedDriveFile] = []
             gate = self._impersonation_gate(email, checkpoint)
             while True:
@@ -3154,11 +3109,19 @@ class GoogleDriveConnector(
         def impersonation_failed(
             email: str, error: GoogleDriveRefreshError
         ) -> list[RetrievedDriveFile]:
+            if not self._is_service_account:
+                # No other principal can list the OAuth user's files. A
+                # partial listing would read as deleted files.
+                raise error
             return list(self._impersonation_failed(email, error, checkpoint))
 
         def listing_denied(
             partition: ListingPartition, email: str, error: GoogleDriveHttpError
         ) -> list[RetrievedDriveFile]:
+            if not self._is_service_account:
+                # No other principal can list the OAuth user's files. A
+                # denied page read as empty would read as deleted files.
+                raise error
             logger.warning(
                 "Drive denied the %s listing of %s as %s: %s",
                 partition.kind.value,
@@ -3201,6 +3164,13 @@ class GoogleDriveConnector(
             listing_denied=listing_denied,
             admit_file=admit_file,
             inline=inline,
+            # As the serial OAuth listing's allDrives corpus.
+            shared_with_all_drives=(
+                not self._is_service_account
+                and self.include_shared_drives
+                and self.include_my_drives
+                and self.include_files_shared_with_me
+            ),
         )
         state = checkpoint.listing
         if state is None:
