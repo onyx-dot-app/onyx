@@ -51,6 +51,7 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.redis.redis_connector import RedisConnector
 from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import get_redis_client
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.indexing_helpers import (
@@ -215,7 +216,10 @@ def run(
                 DBHierarchyNode.raw_node_id == run.connector.folder_id
             ).delete(synchronize_session="fetch")
             db_session.commit()
+            source = pair.connector.source
             cleanup_cc_pair(db_session, pair)
+            # The node rows are gone, so the cache must not name them.
+            invalidate_hierarchy_cache_for_source(get_redis_client(), source)
 
 
 def test_a_task_converts_a_stub_batch_and_sends_it_to_docprocessing(run: _Run) -> None:

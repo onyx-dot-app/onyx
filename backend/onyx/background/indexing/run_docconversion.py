@@ -215,13 +215,17 @@ def dispatch_stub_batches(
     cc_pair_id: int,
     tenant_id: str,
     is_backfill: bool,
+    task_id: str | None = None,
 ) -> list[int]:
     """Claims the stub batches that can go to conversion now and sends a
     task for each. Returns their numbers. The claim is one atomic update, so
-    callers that run at the same time never send one batch twice."""
+    callers that run at the same time never send one batch twice.
+
+    `task_id` is the caller's Celery task. The attempt keeps it as the last
+    task that dispatched, for the watchdog."""
     with get_session_with_current_tenant() as db_session:
         batch_nums = IndexingCoordination.claim_stub_batches(
-            db_session, index_attempt_id, DOCCONVERSION_WINDOW_BATCHES
+            db_session, index_attempt_id, DOCCONVERSION_WINDOW_BATCHES, task_id
         )
     for batch_num in batch_nums:
         send_docconversion_batch(
@@ -283,6 +287,7 @@ def convert_stub_batch(
     batch_num: int,
     enqueue_time_ms: int | None = None,
     is_backfill: bool = False,
+    task_id: str | None = None,
 ) -> None:
     """Converts one stub batch into a document batch and sends it to
     docprocessing.
@@ -330,6 +335,7 @@ def convert_stub_batch(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
             is_backfill=is_backfill,
+            task_id=task_id,
         )
         return
 
@@ -431,4 +437,5 @@ def convert_stub_batch(
             cc_pair_id=cc_pair_id,
             tenant_id=tenant_id,
             is_backfill=is_backfill,
+            task_id=task_id,
         )
