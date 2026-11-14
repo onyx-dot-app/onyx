@@ -1,0 +1,67 @@
+---
+title: "FAQ"
+description: "Common questions specifically for self-hosting"
+icon: "comments-question"
+---
+
+<Tip>
+  Additional FAQ questions are found in the [Architecture section](/security/architecture/faq)
+</Tip>
+
+## Deployment Security
+
+### In what cases should a team self-host?
+
+Self-hosting Onyx keeps all data inside your own infrastructure. You control data processing, storage,
+and network access.
+
+Teams with the highest security requirements often self-host. Self-hosting needs more operational work than Onyx Cloud,
+so we recommend Cloud unless you need to self-host.
+
+The Community edition is free to self-host. The Business and Enterprise plans are also available self-hosted.
+You subscribe from the admin panel, and Onyx issues a license to your instance.
+See [Plans & Billing](/admins/billing/overview).
+
+### Can I run Onyx completely offline in an air-gapped fashion?
+
+Yes. You must also host your own LLM for Onyx to connect to.
+Use a large LLM instead of a quantized or light version of a major model.
+
+For an air-gapped deployment:
+- Set `ONYX_AIRGAPPED=true` so Onyx does not fetch model catalogs or release notes from GitHub.
+- Set `DISABLE_TELEMETRY=true` to stop fleet telemetry.
+- Upload a Business or Enterprise license file manually. See [Plans & Billing](/admins/billing/overview).
+- Use `onyx-cli deploy upgrade --offline` to move to a staged version. See [Onyx CLI](/deployment/local/onyx_cli).
+
+### How do I keep my Onyx deployment up to date or get security patches?
+
+Onyx releases are backwards compatible. An upgrade rarely needs manual steps beyond a redeploy,
+and database migrations run automatically on start.
+See [Release Process & Updates](/deployment/miscellaneous/release_process)
+and the [Deployment section](/deployment/overview).
+
+### Is it possible to configure monitoring for self-hosted Onyx?
+
+Yes. Onyx exposes Prometheus metrics:
+- The API server and the MCP server serve `GET /metrics`. Set `METRICS_AUTH_TOKEN` and scrape with a bearer token.
+  Without a token, every request gets a `401`.
+- Each background worker serves metrics on its own port inside the cluster network.
+- The Helm chart ships `ServiceMonitor` resources (`monitoring.serviceMonitors.enabled`) and Grafana dashboards
+  (`monitoring.grafana.dashboards.enabled`).
+
+See [Monitoring](/deployment/production/monitoring) for the endpoints, the metrics, and example alerts.
+
+For LLM monitoring, connect Braintrust or Langfuse under **Admin Panel > Tracing**.
+See [Tracing](/admins/advanced_configs/tracing).
+
+### Can I send security events to my SIEM?
+
+Yes. Onyx writes an audit-event stream as JSON log lines for logins, user and permission changes,
+admin configuration changes, and credential access. Point your log shipper at the Onyx logs.
+See [Audit Logs & SIEM Integration](/admins/auditing/audit_logs).
+
+### Does Onyx send any data to the Onyx team?
+
+Self-hosted Onyx sends anonymous fleet telemetry by default. It never sends names, URLs, email addresses, user IDs,
+document content, or query text. Set `DISABLE_TELEMETRY=true` on every service to turn it off.
+See [Data Processing](/security/self_hosted/data_processing).
