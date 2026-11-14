@@ -1,0 +1,226 @@
+---
+title: "Slack Indexed"
+description: "Set up the Slack Indexed connector"
+---
+
+## How it works
+
+The Slack connector indexes messages and threads from the channels you select in a workspace.
+By default it indexes all public channels. The bot joins public channels on its own.
+
+To index a private channel, invite the Slack app to that channel.
+
+For Slack Enterprise Grid orgs, a single install covers every workspace in the org.
+See [Enterprise Grid setup](#enterprise-grid-setup) below.
+
+The connector is available in all editions.
+
+<Note>
+  For GovSlack,
+  set `SLACK_API_URL=https://slack-gov.com/api/` on every Onyx service and create the app at
+  [https://api.slack-gov.com/apps](https://api.slack-gov.com/apps).
+  See [SLACK_API_URL](/admins/getting_started/slack_bot_setup).
+</Note>
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Create new Slack app">
+    You must be an admin of the Slack workspace to set up the connector.
+    Sign in to [https://api.slack.com/apps](https://api.slack.com/apps).
+    Click **Create New App** and select **From an app manifest**. Select the relevant workspace and click **Next**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/slack/SlackApp.webp" alt="Slack app creation flow with manifest option selected"/>
+  </Step>
+
+  <Step title="Configure app manifest">
+    Select the "YAML" tab, paste the following manifest into the text box, and click **Next**:
+
+```
+display_information:
+  name: OnyxConnector
+  description: ReadOnly Connector for indexing Onyx
+features:
+  bot_user:
+    display_name: OnyxConnector
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - channels:join
+      - im:history
+      - users:read
+      - users:read.email
+      - usergroups:read
+settings:
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+  </Step>
+
+  <Step title="Install the app and copy the OAuth token">
+    Click **Create**. In the app page, open the **OAuth & Permissions** tab under the **Features** header.
+    Click **Install to Workspace** and approve the request. Copy the **Bot User OAuth Token**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/slack/SlackBotToken.webp" alt="Slack OAuth & Permissions page showing Bot User OAuth Token"/>
+
+### Indexing
+
+<Steps>
+  <Step title="Add the credential">
+    In the Admin Panel, go to **Connectors** and select **Slack**. Under **Authentication Account**,
+    click **New Slack Account** and paste the **Bot User OAuth Token** into **Slack Bot Token**.
+    Onyx checks the token and reports any missing scopes before it saves the credential.
+
+    <img className="rounded-image" src="/assets/admins/connectors/slack/SlackConnectorSetting.webp" alt="Onyx Slack connector settings showing the Slack Bot Token input"/>
+  </Step>
+
+  <Step title="Choose channels (optional)">
+    Open **Advanced Options** to limit what Onyx indexes:
+    - **Channels**: Pick the channels to index. Leave empty to index all public channels the bot can reach.
+    - **Enable Channel Regex**: Treat each entry in **Channels** as a regular expression.
+    - **Channels to Exclude**: Skip these channels.
+    - **Enable Exclude Channel Regex**: Treat each entry in **Channels to Exclude** as a regular expression.
+    - **Include Bot Messages**: Index messages posted by bots. Off by default.
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+**Note:** The first indexing pulls all of the public channels and takes longer than future updates.
+
+## Document access
+
+- **Everyone in Your Organization**: All Onyx users can search the indexed channels.
+- **Specific Groups**: Only members of the selected Onyx user groups can search the indexed channels.
+  This is a paid feature: the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+- **Sync with Slack**: Onyx mirrors Slack channel membership.
+  Messages from public channels stay visible to all users.
+  Messages from private channels are visible only to Onyx users whose email matches a channel member.
+  This needs the `users:read.email` scope.
+
+## Enterprise Grid setup
+
+If your Slack instance is an [Enterprise Grid](https://slack.com/help/articles/360000281563)
+org with multiple workspaces,
+you go through the app-creation flow once at the org level and use a single org-level bot token in Onyx.
+Slack still requires the org admin to choose which workspaces the bot is deployed to (it is not auto-deployed to every
+workspace just because the app is approved at the org level).
+Onyx detects Grid automatically from the bot token and indexes every workspace the bot has been deployed to.
+
+<Note>
+  You must be an **Org Owner** or **Org Admin** of the Slack Enterprise Grid org to do the org-level install.
+</Note>
+
+### Authorization (Grid)
+
+<Steps>
+  <Step title="Create a new Slack app">
+    On [https://api.slack.com/apps](https://api.slack.com/apps), click **Create New App** → **From an app manifest**.
+    Select **any** workspace inside your Grid org as the development workspace (the manifest below promotes the app to
+    org-level on install).
+  </Step>
+
+  <Step title="Use the Grid manifest">
+    Paste the following manifest. The two differences from the single-workspace manifest are `org_deploy_enabled:
+    true` and the added `team:read` bot scope:
+
+```yaml
+display_information:
+  name: OnyxConnector
+  description: ReadOnly Connector for indexing Onyx
+features:
+  bot_user:
+    display_name: OnyxConnector
+    always_online: false
+oauth_config:
+  scopes:
+    bot:
+      - channels:history
+      - channels:read
+      - groups:history
+      - groups:read
+      - channels:join
+      - im:history
+      - users:read
+      - users:read.email
+      - usergroups:read
+      - team:read
+settings:
+  org_deploy_enabled: true
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+```
+  </Step>
+
+  <Step title="Install to the organization">
+    Open **OAuth & Permissions** and click **Install to Organization** (not "Install to Workspace").
+    Approve the request as an Org Admin.
+    This is a single OAuth approval — it does **not** deploy the bot to any workspace yet.
+  </Step>
+
+  <Step title="Deploy the bot to each workspace you want indexed">
+    Slack does not auto-deploy org-approved apps to every workspace.
+    Open the Grid org admin panel (`https://<your-org>.enterprise.slack.com/admin`) → **Apps** → **Onyx Connector**,
+    and select the workspaces the bot should be deployed to.
+    Without this step Onyx only sees the workspace the app was developed in.
+  </Step>
+
+  <Step title="Copy the org-level bot token">
+    Back on the app's **OAuth & Permissions** page, copy the **Bot User OAuth Token**.
+    The token starts with `xoxb-` just like a regular bot token but carries org-level permissions.
+  </Step>
+</Steps>
+
+### Indexing (Grid)
+
+The connector setup in Onyx is identical to the single-workspace flow.
+Paste the bot token and click **Create Connector**. Onyx detects the Grid org from the token and:
+
+- Indexes every workspace the bot is deployed to
+- Indexes org-shared channels once
+- Builds channel links with the correct per-workspace URL
+
+### Permission scoping behavior
+
+This table applies when **Document Access** is set to **Sync with Slack**.
+
+| Channel type | Who can see the documents in Onyx |
+| -- | -- |
+| Public channel in one workspace | Users of that workspace |
+| Org-shared public channel | Users of every workspace the channel is shared into |
+| Private channel | The channel's members |
+| More than 5000 users, or workspaces unknown to Onyx | Everyone, so the documents stay searchable |
+
+### Troubleshooting (Grid)
+
+<AccordionGroup>
+  <Accordion title="Validation error: missing `team:read` scope">
+    The Grid path requires `team:read` to list workspaces. Add the scope to the manifest,
+    reinstall the app to the organization, and copy the new bot token into Onyx.
+  </Accordion>
+
+  <Accordion title="Onyx only indexes channels from one workspace">
+    Slack only reports the workspaces the bot has been added to.
+    Open the Grid org admin panel → **Apps** → **Onyx Connector** and add it to every workspace you want indexed,
+    then start a new index attempt from the connector page.
+  </Accordion>
+
+  <Accordion title="A user from another workspace can search a workspace's public-channel content">
+    This happens when more than 5000 users belong to the channel's workspaces.
+    Above that limit Onyx marks the documents public so they stay accessible.
+    The same fallback applies when none of the channel's workspaces are known to Onyx (for example a workspace added to
+    the Grid org after the connector was set up). Re-saving the credential rebuilds the workspace list.
+  </Accordion>
+</AccordionGroup>
