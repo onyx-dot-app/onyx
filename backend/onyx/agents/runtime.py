@@ -1,11 +1,9 @@
 """Stateful agents with one execution path and independent run records."""
 
-import hashlib
-import json
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import CancelledError, Future, InvalidStateError
+from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
 from datetime import datetime, timezone
@@ -84,6 +82,8 @@ from onyx.agents.tools import (
     HumanToolAnswer,
     InputDecision,
     InputMode,
+    NestedInputRequest,
+    NestedInputWait,
     PendingToolInput,
     ToolProgress,
 )
@@ -121,7 +121,6 @@ from onyx.llm.models import (
 from onyx.llm.token_budget import resolve_token_budget
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
-from onyx.utils.timing import PausableClock
 
 if TYPE_CHECKING:
     from onyx.agents.agent_coordination import (
@@ -287,19 +286,6 @@ class Agent:
                 raise ValueError("Tool phases require unique configured tool names")
             phases[name] = selected
         self._tool_phases = MappingProxyType(phases)
-        self._tool_configuration_digest = hashlib.sha256(
-            json.dumps(
-                [
-                    [tool.definition.model_dump(mode="json") for tool in self._tools],
-                    {
-                        name: [tool.name for tool in self._tools if tool.name in names]
-                        for name, names in sorted(phases.items())
-                    },
-                ],
-                separators=(",", ":"),
-                ensure_ascii=False,
-            ).encode()
-        ).hexdigest()
         self.system_prompt = system_prompt
         self.options = options or GenerationOptions()
         self.generation_context = generation_context
@@ -423,7 +409,6 @@ class Agent:
                         progress=RunProgress(
                             step_limit=max_steps,
                             deadline_at=deadline_at,
-                            tool_configuration_digest=self._tool_configuration_digest,
                         ),
                         run_id=run_id,
                         agent_id=self.id,
@@ -478,15 +463,29 @@ class Agent:
         self,
         snapshot: RunState,
         *,
+        answers: Sequence[HumanToolAnswer] = (),
+        deadline_at: datetime | None = None,
         coordinator: "AgentCoordinator | None" = None,
         on_event: Callable[[AgentEvent], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
     ) -> "Run":
-        """Restore a suspended run after its previous owner has released execution."""
+        """Restore a suspended run after its previous owner has released execution.
+
+        `answers` answer saved requests before execution starts, as `Run.submit`
+        does. `deadline_at` replaces the saved deadline.
+        """
         if snapshot.status != RunStatus.SUSPENDED or snapshot.progress is None:
             raise ValueError("Only a suspended execution snapshot can resume")
         if snapshot.agent_id != self.id:
             raise ValueError("Snapshot belongs to another agent")
+        snapshot = snapshot.model_copy(deep=True)
         progress = snapshot.progress
+        if progress is None:
+            raise ValueError("Only a suspended execution snapshot can resume")
+        for answer in answers:
+            _record_answer(progress, answer)
+        if deadline_at is not None:
+            progress.deadline_at = deadline_at
         if progress.finalized_tool_call_ids:
             if not 0 <= progress.step_index < len(snapshot.steps):
                 raise ValueError("Finalized tools require a recorded current step")
@@ -504,9 +503,10 @@ class Agent:
                         "Finalized tool must have a call and result in the current step"
                     )
         return self.start(
-            max_steps=snapshot.progress.step_limit,
+            max_steps=progress.step_limit,
             coordinator=coordinator,
             on_event=on_event,
+            event_dispatcher=event_dispatcher,
             _snapshot=snapshot,
         )
 
@@ -552,18 +552,10 @@ class Run:
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
         self._watched_children: dict[str, Future[RunState]] = {}
-        # Requests of calls that tools make for the model, by request ID. Their
-        # callers block on the futures; the requests are not saved with the run.
-        # Whoever removes a request publishes its end: its waiter, or the run's
-        # end for a request still open then.
-        self._nested_inputs: dict[
-            str, tuple[InputRequiredEvent, Future[HumanToolAnswer]]
-        ] = {}
-        # Answers applied to those requests, kept for the run's lifetime so a
-        # repeated answer is accepted and a conflicting one fails.
-        self._nested_answers: dict[str, HumanToolAnswer] = {}
-        # Stands still while a call waits for input; see wait_for_tool_activity.
-        self._input_wait_clock = PausableClock()
+        # Open requests of calls that tools make for the model, by request ID,
+        # until a NestedInputWait saves them; see NestedCallGate. They are not
+        # saved, so the run withdraws those still open when it suspends or ends.
+        self._open_nested: dict[str, NestedInputRequest] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._configured_tools: tuple[AgentTool, ...] = ()
@@ -624,26 +616,15 @@ class Run:
         """Copy unanswered tool requests without copying execution history."""
         with self.execution_lock:
             progress = self._state.progress
-            direct = progress.pending_tool_calls.values() if progress else ()
-            nested = (required.request for required, _ in self._nested_inputs.values())
-            return [
-                pending.model_copy(deep=True)
-                for pending in (*direct, *nested)
-                if isinstance(pending, PendingToolInput)
-            ]
+            saved = progress.input_requests if progress is not None else ()
+            opened = (nested.request for nested in self._open_nested.values())
+            return [request.model_copy(deep=True) for request in (*saved, *opened)]
 
     @property
     def approvals(self) -> "ToolApprovals | None":
         """The application's gate for calls that wait for the user's approval."""
         coordination = self.coordination
         return coordination.coordinator.approvals if coordination is not None else None
-
-    @property
-    def has_event_listeners(self) -> bool:
-        """Whether a listener receives this run's events, directly or through a
-        foreground ancestor."""
-        delivery = self.event_delivery
-        return delivery is not None and delivery.has_listeners
 
     @property
     def delivery_failed(self) -> bool:
@@ -690,53 +671,17 @@ class Run:
         with self._execution_condition:
             if self._released:
                 raise RunReleased("Run was released; deliver input through its run ID")
-            if (applied := self._nested_answers.get(answer.request_id)) is not None:
-                if applied != answer:
-                    raise ValueError("Conflicting answer for request")
-                return
-            if (nested := self._nested_inputs.get(answer.request_id)) is not None:
-                required, waiter = nested
-                if (required.request.mode == InputMode.RESULT) != (
-                    answer.decision == InputDecision.RESULT
-                ):
-                    raise ValueError("Answer does not match the request mode")
-                try:
-                    waiter.set_result(answer.model_copy(deep=True))
-                except InvalidStateError:
-                    # The call stopped waiting; its end removes the request.
-                    return
-                self._nested_answers[answer.request_id] = answer.model_copy(deep=True)
-                return
             progress = self._state.progress
             if progress is None:
                 raise ValueError("Run has no input state")
             existing = progress.human_tool_answers.get(answer.request_id)
-            if existing is not None:
-                if existing != answer:
-                    raise ValueError("Conflicting answer for request")
-                if self._state.status.is_terminal:
-                    return
-            else:
-                if self._state.status.is_terminal:
+            if existing is not None and existing != answer:
+                raise ValueError("Conflicting answer for request")
+            if self._state.status.is_terminal:
+                if existing is None:
                     raise ValueError("Run is not accepting input")
-                request = next(
-                    (
-                        pending
-                        for pending in progress.pending_tool_calls.values()
-                        if isinstance(pending, PendingToolInput)
-                        and pending.request_id == answer.request_id
-                    ),
-                    None,
-                )
-                if request is None:
-                    raise ValueError("Unknown input request")
-                if (request.mode == InputMode.RESULT) != (
-                    answer.decision == InputDecision.RESULT
-                ):
-                    raise ValueError("Answer does not match the request mode")
-                progress.human_tool_answers[answer.request_id] = answer.model_copy(
-                    deep=True
-                )
+                return
+            if _record_answer(progress, answer):
                 self._state.revision += 1
             self._wake_execution(resume=True)
 
@@ -865,108 +810,66 @@ class Run:
                     )
                 )
 
-    def _step_message_id(self) -> str:
-        message_id = self._state.steps[self._progress.step_index].message.id
-        if message_id is None:
-            raise RuntimeError("Tool execution requires a message ID")
-        return message_id
-
     def record_pending_tool(
-        self, call: ToolCall, pending: PendingToolInput | ChildRunWait
+        self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
     ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
-            event = (
-                InputRequiredEvent(
-                    **self.event_context,
-                    message_id=self._step_message_id(),
-                    step_index=self._progress.step_index,
-                    tool_call=call,
-                    request=pending,
-                )
-                if isinstance(pending, PendingToolInput)
-                else None
-            )
+            shown: list[NestedInputRequest] = []
             if isinstance(pending, PendingToolInput):
                 self._check_new_request_id(pending.request_id)
+                shown.append(self._direct_request(call, pending))
+            elif isinstance(pending, NestedInputWait):
+                request_ids = {nested.request.request_id for nested in pending.requests}
+                if len(request_ids) != len(pending.requests):
+                    raise ValueError("Input request IDs must be unique within a run")
+                for nested in pending.requests:
+                    # A request that the gate opened is already shown.
+                    if self._open_nested.pop(nested.request.request_id, None) is None:
+                        self._check_new_request_id(nested.request.request_id)
+                        shown.append(nested)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
             self._state.revision += 1
-            self._track_input_wait()
-            if event is not None and self.is_accepting and self.event_delivery:
-                self.event_delivery.publish(event)
+            if self.is_accepting and self.event_delivery:
+                for nested in shown:
+                    self.event_delivery.publish(
+                        self._input_required(
+                            nested, direct=isinstance(pending, PendingToolInput)
+                        )
+                    )
 
     def _check_new_request_id(self, request_id: str) -> None:
-        """Reject a request ID that an open or answered request of this run,
-        direct or nested, already uses. Call under the execution lock."""
+        """Reject a request ID that an open, saved or answered request of this
+        run already uses. Call under the execution lock."""
         progress = self._progress
         if (
-            request_id in self._nested_inputs
-            or request_id in self._nested_answers
+            request_id in self._open_nested
             or request_id in progress.human_tool_answers
             or any(
-                isinstance(existing, PendingToolInput)
-                and existing.request_id == request_id
-                for existing in progress.pending_tool_calls.values()
+                request.request_id == request_id for request in progress.input_requests
             )
         ):
             raise ValueError("Input request IDs must be unique within a run")
 
-    def await_nested_input(
-        self, required: InputRequiredEvent, cancellation: CancellationSignal
-    ) -> HumanToolAnswer:
-        """Publish `required`, for a call that a tool makes for the model, and
-        block that call until `submit` answers its request. Raises
-        AgentCancelled when the run or `cancellation`, the scope of the waiting
-        call, is cancelled."""
-        request = required.request
-        waiter = Future[HumanToolAnswer]()
+    def open_nested_input(self, request: NestedInputRequest) -> None:
+        """Show an open request of a call that a tool makes for the model; see
+        NestedCallGate."""
         with self.execution_lock:
             self.cancellation_signal.check()
-            self._check_new_request_id(request.request_id)
-            self._nested_inputs[request.request_id] = (
-                required.model_copy(deep=True),
-                waiter,
+            self._check_new_request_id(request.request.request_id)
+            self._open_nested[request.request.request_id] = request.model_copy(
+                deep=True
             )
-            self._track_input_wait()
-            self.publish_event(required)
+            self.publish_event(self._input_required(request))
 
-        def stop_waiting() -> None:
-            waiter.cancel()
-
-        answer: HumanToolAnswer | None = None
-        try:
-            with (
-                self.cancellation_signal.on_cancel(stop_waiting),
-                cancellation.on_cancel(stop_waiting),
-            ):
-                try:
-                    answer = waiter.result()
-                except CancelledError:
-                    self.cancellation_signal.check()
-                    cancellation.check()
-                    raise
-            return answer
-        finally:
-            if answer is None:
-                with self.execution_lock:
-                    open_request = request.request_id in self._nested_inputs
-                if open_request:
-                    # The run may continue, so its end does not end the request.
-                    answer = self._withdraw_approval(request)
-            with self.execution_lock:
-                # The run's end already ended a request that it found open.
-                if self._nested_inputs.pop(request.request_id, None) is not None:
-                    self._track_input_wait()
-                    self.publish_event(
-                        self._input_ended(
-                            message_id=required.message_id,
-                            step_index=required.step_index,
-                            tool_call=required.tool_call,
-                            nested_call=required.nested_call,
-                            request=required.request,
-                            answer=answer,
-                        )
-                    )
+    def withdraw_nested_input(self, request: NestedInputRequest) -> None:
+        """End an open request whose call stopped waiting; no-op once a
+        NestedInputWait saved it or it ended."""
+        with self.execution_lock:
+            if self._open_nested.pop(request.request.request_id, None) is None:
+                return
+        answer = self._withdraw_approval(request.request)
+        self.publish_event(self._input_ended(request, answer))
 
     def _withdraw_approval(self, request: PendingToolInput) -> HumanToolAnswer | None:
         """End a request of the approval gate whose call stopped waiting without
@@ -986,126 +889,120 @@ class Run:
             )
             return None
 
+    def _input_required(
+        self, request: NestedInputRequest, *, direct: bool = False
+    ) -> InputRequiredEvent:
+        """The start of `request`; a `direct` request belongs to `tool_call`
+        itself, not to a call that its tool made."""
+        return InputRequiredEvent(
+            **self.event_context,
+            message_id=request.message_id,
+            step_index=request.step_index,
+            tool_call=request.tool_call,
+            nested_call=None if direct else request.nested_call,
+            request=request.request,
+        )
+
     def _input_ended(
         self,
-        *,
-        message_id: str,
-        step_index: int,
-        tool_call: ToolCall,
-        nested_call: ToolCall | None,
-        request: PendingToolInput,
+        request: NestedInputRequest,
         answer: HumanToolAnswer | None,
+        *,
+        direct: bool = False,
     ) -> InputEndedEvent:
-        """The end of a request of this run: of a direct call, or of the call
-        `nested_call` that `tool_call` makes for the model."""
+        """The end of `request` with the answer applied, or None."""
         return InputEndedEvent(
             **self.event_context,
-            message_id=message_id,
-            step_index=step_index,
-            tool_call=tool_call,
-            nested_call=nested_call,
-            request=request,
+            message_id=request.message_id,
+            step_index=request.step_index,
+            tool_call=request.tool_call,
+            nested_call=None if direct else request.nested_call,
+            request=request.request,
             answer=answer,
         )
 
-    def _withdraw_pending_inputs(self, answers: Mapping[str, HumanToolAnswer]) -> None:
-        """Report the requests that end with the run: those of direct calls, and
-        those of calls that tools make for the model, whose waiting threads can
-        wake after the run has ended. `answers` holds the answers that approval
-        requests ended with (`ToolApprovals.withdraw_approval`); a direct call
-        that one denies keeps its result, so later runs see it. Call under the
-        execution lock."""
-        if self.event_delivery:
-            for required, _waiter in self._nested_inputs.values():
-                self.event_delivery.publish(
-                    self._input_ended(
-                        message_id=required.message_id,
-                        step_index=required.step_index,
-                        tool_call=required.tool_call,
-                        nested_call=required.nested_call,
-                        request=required.request,
-                        answer=answers.get(required.request.request_id),
-                    )
-                )
-        self._nested_inputs.clear()
-        # Requests of direct calls stay recorded, but nothing waits after the end.
-        self._input_wait_clock.set_paused(False)
-        progress = self._state.progress
-        if progress is None or not progress.pending_tool_calls:
-            return
-        step = self._state.steps[progress.step_index]
-        message = step.message
-        for call in message.tool_calls:
-            pending = progress.pending_tool_calls.get(call.id)
-            if not isinstance(pending, PendingToolInput):
-                continue
-            if message.id is None:
-                raise RuntimeError("Recorded generation has no message ID")
-            answer = answers.get(pending.request_id)
-            if answer is not None and answer.decision == InputDecision.DENY:
-                result = answer.result or ToolResult(
-                    content=DENIED_CALL_MESSAGE, is_error=True
-                )
-                execution = step.tools.setdefault(
-                    call.id, ToolExecutionRecord(status=ExecutionStatus.ERROR)
-                )
-                execution.result = _tool_result_message(result, call, message.id)
-                execution.status = (
-                    ExecutionStatus.ERROR
-                    if result.is_error
-                    else ExecutionStatus.COMPLETE
-                )
-            if self.event_delivery:
-                self.event_delivery.publish(
-                    self._input_ended(
-                        message_id=message.id,
-                        step_index=progress.step_index,
-                        tool_call=call,
-                        nested_call=None,
-                        request=pending,
-                        answer=answer,
-                    )
-                )
-
-    @property
-    def input_wait_seconds(self) -> float:
-        """Time this run's calls spent waiting for input, such as the user's
-        approval: directly or through a call that a tool makes for the model."""
-        return self._input_wait_clock.paused_seconds
-
-    def _track_input_wait(self) -> None:
-        """Pause the run's clock while a call waits for input. Call under the
-        execution lock."""
-        progress = self._state.progress
-        self._input_wait_clock.set_paused(
-            bool(self._nested_inputs)
-            or (
-                progress is not None
-                and any(
-                    isinstance(pending, PendingToolInput)
-                    for pending in progress.pending_tool_calls.values()
-                )
-            )
+    def _direct_request(
+        self, call: ToolCall, request: PendingToolInput
+    ) -> NestedInputRequest:
+        """A direct call's request, placed at the call in the current step."""
+        message_id = self._state.steps[self._progress.step_index].message.id
+        if message_id is None:
+            raise RuntimeError("Tool execution requires a message ID")
+        return NestedInputRequest(
+            message_id=message_id,
+            step_index=self._progress.step_index,
+            tool_call=call,
+            nested_call=call,
+            request=request,
         )
 
-    def resolve_tool_wait(
-        self, call: ToolCall, answer: HumanToolAnswer | None = None
-    ) -> None:
-        with self.execution_lock:
-            pending = self._progress.pending_tool_calls.pop(call.id)
-            self._state.revision += 1
-            self._track_input_wait()
-            if answer is not None and isinstance(pending, PendingToolInput):
-                self.publish_event(
+    def _withdraw_pending_inputs(self, answers: Mapping[str, HumanToolAnswer]) -> None:
+        """Report the requests that end with the run: saved ones and those that
+        tools opened. `answers` holds the answers that approval requests ended
+        with (`ToolApprovals.withdraw_approval`); a direct call that one denies
+        keeps its result, so later runs see it. Call under the execution lock."""
+        ended: list[tuple[NestedInputRequest, bool]] = []
+        progress = self._state.progress
+        if progress is not None and progress.pending_tool_calls:
+            step = self._state.steps[progress.step_index]
+            message = step.message
+            for call in message.tool_calls:
+                pending = progress.pending_tool_calls.get(call.id)
+                if isinstance(pending, NestedInputWait):
+                    ended.extend((nested, False) for nested in pending.requests)
+                    continue
+                if not isinstance(pending, PendingToolInput):
+                    continue
+                request = self._direct_request(call, pending)
+                answer = answers.get(pending.request_id)
+                if answer is not None and answer.decision == InputDecision.DENY:
+                    result = answer.result or ToolResult(
+                        content=DENIED_CALL_MESSAGE, is_error=True
+                    )
+                    execution = step.tools.setdefault(
+                        call.id, ToolExecutionRecord(status=ExecutionStatus.ERROR)
+                    )
+                    execution.result = _tool_result_message(
+                        result, call, request.message_id
+                    )
+                    execution.status = (
+                        ExecutionStatus.ERROR
+                        if result.is_error
+                        else ExecutionStatus.COMPLETE
+                    )
+                ended.append((request, True))
+        ended.extend((nested, False) for nested in self._open_nested.values())
+        self._open_nested.clear()
+        if self.event_delivery:
+            for request, direct in ended:
+                self.event_delivery.publish(
                     self._input_ended(
-                        message_id=self._step_message_id(),
-                        step_index=self._progress.step_index,
-                        tool_call=call,
-                        nested_call=None,
-                        request=pending,
-                        answer=answer,
+                        request, answers.get(request.request.request_id), direct=direct
                     )
                 )
+
+    def resolve_tool_wait(self, call: ToolCall) -> None:
+        """Stop the call's wait; an input request ends with its recorded answer."""
+        with self.execution_lock:
+            progress = self._progress
+            pending = progress.pending_tool_calls.pop(call.id)
+            self._state.revision += 1
+            answers = progress.human_tool_answers
+            if isinstance(pending, PendingToolInput):
+                self.publish_event(
+                    self._input_ended(
+                        self._direct_request(call, pending),
+                        answers.get(pending.request_id),
+                        direct=True,
+                    )
+                )
+            elif isinstance(pending, NestedInputWait):
+                for nested in pending.requests:
+                    self.publish_event(
+                        self._input_ended(
+                            nested, answers.get(nested.request.request_id)
+                        )
+                    )
 
     def finish_tool(self, call: ToolCall, context: ToolCallContext | None) -> None:
         with self.execution_lock:
@@ -1205,13 +1102,6 @@ class Run:
                     )
                 )
             if state.progress is not None:
-                if (
-                    state.progress.tool_configuration_digest
-                    != agent._tool_configuration_digest
-                ):
-                    raise ValueError(
-                        "Restored tool configuration does not match the saved run"
-                    )
                 feature_state = state.progress.feature_state
                 if feature_state is not None:
                     if agent._restoration is None:
@@ -1338,20 +1228,17 @@ class Run:
             return True
 
     def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
-        """Wait until a tool completes. A tool that shows no activity for
-        OPERATION_TIMEOUT_SECONDS fails the run; time in which one of its calls
-        waits for input does not count."""
-        deadline = self._input_wait_clock.now() + OPERATION_TIMEOUT_SECONDS
         with self._execution_condition:
-            while not (
-                self.cancellation_signal.cancelled
-                or self._execution_request == ExecutionRequest.WAKE
-                or completed()
-            ):
-                remaining = deadline - self._input_wait_clock.now()
-                if remaining <= 0:
-                    raise TimeoutError("Agent tool exceeded its execution bound")
-                self._execution_condition.wait(remaining)
+            ready = self._execution_condition.wait_for(
+                lambda: (
+                    self.cancellation_signal.cancelled
+                    or self._execution_request == ExecutionRequest.WAKE
+                    or completed()
+                ),
+                OPERATION_TIMEOUT_SECONDS,
+            )
+        if not ready:
+            raise TimeoutError("Agent tool exceeded its execution bound")
 
     def _execute(self) -> None:
         llm = self._llm
@@ -1424,6 +1311,10 @@ class Run:
         if failure is not None:
             # The run fails instead of suspending.
             raise failure
+        with self.execution_lock:
+            unsaved = list(self._open_nested.values())
+        for request in unsaved:
+            self.withdraw_nested_input(request)
         if self._restoration is not None:
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
@@ -1819,7 +1710,6 @@ def _advance_loop(
                     step=step,
                     previous=previous,
                     received_inputs=received,
-                    input_wait_seconds=run.input_wait_seconds,
                 ).model_copy(deep=True)
                 prepared = prepare(decision)
                 cancellation_signal.check()
@@ -2218,18 +2108,20 @@ def _execute_tools(run: Run) -> bool:
     progress = run._progress
     if run._step_tools is None:
         available = {tool.name: tool for tool in run._configured_tools}
-        tools: list[AgentTool] = []
         allowed = progress.allowed_tool_names
-        declarations = {tool.name for tool in progress.tools}
-        if allowed is not None and not allowed <= declarations:
+        if allowed is not None and not allowed <= {
+            tool.name for tool in progress.tools
+        }:
             raise ValueError("Restored tool permissions exceed the saved declarations")
-        for declaration in progress.tools:
-            tool = available.get(declaration.name)
-            if tool is None or tool.definition != declaration:
-                raise ValueError("Restored tools do not match the saved step")
-            if allowed is None or tool.name in allowed:
-                tools.append(tool)
-        run._step_tools = tools
+        # A restored step runs only the tools whose parameters its calls were
+        # made with; descriptions and other tools can differ.
+        run._step_tools = [
+            tool
+            for declaration in progress.tools
+            if (tool := available.get(declaration.name)) is not None
+            and tool.definition.parameters == declaration.parameters
+            and (allowed is None or tool.name in allowed)
+        ]
     recorded = [
         *run._history.messages,
         *run._state.input_messages,
@@ -2358,3 +2250,27 @@ def _tool_result_message(
         tool_call_id=call.id,
         tool_name=call.name,
     ).model_copy(deep=True)
+
+
+def _record_answer(progress: RunProgress, answer: HumanToolAnswer) -> bool:
+    """Record an answer to a saved request; False when it repeats the recorded
+    answer. Raises ValueError for a conflicting or unmatched answer."""
+    existing = progress.human_tool_answers.get(answer.request_id)
+    if existing is not None:
+        if existing != answer:
+            raise ValueError("Conflicting answer for request")
+        return False
+    request = next(
+        (
+            item
+            for item in progress.input_requests
+            if item.request_id == answer.request_id
+        ),
+        None,
+    )
+    if request is None:
+        raise ValueError("Unknown input request")
+    if (request.mode == InputMode.RESULT) != (answer.decision == InputDecision.RESULT):
+        raise ValueError("Answer does not match the request mode")
+    progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
+    return True

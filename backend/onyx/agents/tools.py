@@ -2,11 +2,17 @@
 
 from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future
-from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
+    model_validator,
+)
 
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -52,9 +58,6 @@ class PendingToolInput(BaseModel):
     request_id: str
     prompt: str
     mode: InputMode
-    # When the request stops waiting for an answer; the application that
-    # answers it enforces the deadline.
-    expires_at: datetime | None = None
     # The run's ToolApprovals opened the request; only that owner answers or
     # withdraws it. The runtime sets it.
     approval: bool = False
@@ -91,7 +94,34 @@ class ChildRunWait(BaseModel):
     run_ids: list[str]
 
 
-ToolOutcome = ToolResult | PendingToolInput | ChildRunWait
+class NestedInputRequest(BaseModel):
+    """A request of a call that a tool makes for the model, such as a program's.
+
+    `tool_call` is the call of the run that shows the request: the call whose
+    tool made `nested_call`, or an earlier call of the same tool.
+    """
+
+    message_id: str
+    step_index: int
+    tool_call: ToolCall
+    nested_call: ToolCall
+    request: PendingToolInput
+
+
+class NestedInputWait(BaseModel):
+    """Continue a call once every request of the calls that its tool made for
+    the model has an answer; `AgentTool.resume_with_input` continues it."""
+
+    kind: Literal["nested_input"] = "nested_input"
+    requests: list[NestedInputRequest] = Field(min_length=1)
+
+
+class NestedInputAnswer(BaseModel):
+    request: NestedInputRequest
+    answer: HumanToolAnswer
+
+
+ToolOutcome = ToolResult | PendingToolInput | ChildRunWait | NestedInputWait
 
 
 class SpawnResult(BaseModel):
@@ -176,25 +206,31 @@ class BeforeToolCallFailed(BaseException):
 class NestedCallGate(Protocol):
     """Decides the calls that a tool makes for the model, such as a program's
     tool calls, as the run decides its direct calls: the before_tool_call hook,
-    then the user's approval."""
+    then the user's approval.
 
-    def decide(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
-        """A result that replaces the call, a request that the call must wait
-        for, or None to run it. Raises BeforeToolCallFailed when the hook raises."""
+    A request that the gate returns is open: the run shows it at once. The call
+    does not block on it. The tool returns it in a `NestedInputWait`, which the
+    run saves and answers, or withdraws it. A request that is neither ends
+    without an answer when the run suspends or ends. Raises BeforeToolCallFailed
+    when the hook or the approval gate raises.
+    """
+
+    def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
+        """A result that replaces the call, a request that the call waits for,
+        or None to run it."""
         ...
 
-    def wait_for_input(
-        self,
-        call: ToolCall,
-        request: PendingToolInput,
-        cancellation: CancellationSignal,
-    ) -> ToolResult | None:
-        """Block the call until the run receives an answer to `request`: None
-        to run the approved call, or the result that replaces it. After the
-        user approves the hook's request, a call that requires approval also
-        waits for the approval gate. Raises AgentCancelled when the run, or
-        `cancellation`, the waiting call's own scope, is cancelled, and
-        BeforeToolCallFailed when the approval gate raises."""
+    def decide_approved(
+        self, call: ToolCall, request: NestedInputRequest
+    ) -> ToolResult | NestedInputRequest | None:
+        """The decision after the user approves `request`: None to run the
+        call, or, when the hook's request was approved and the call requires
+        approval, the approval gate's decision."""
+        ...
+
+    def withdraw(self, request: NestedInputRequest) -> None:
+        """End an open request whose call stopped waiting without an answer,
+        for example because its program ended."""
         ...
 
 
@@ -271,6 +307,10 @@ class AgentTool:
         execute: Callable[[ToolInvocation], ToolOutcome],
         result_from_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
         | None = None,
+        resume_with_input: Callable[
+            [ToolInvocation, list[NestedInputAnswer]], ToolOutcome
+        ]
+        | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
         merge_arguments: Callable[
             [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
@@ -283,6 +323,9 @@ class AgentTool:
         self.definition = definition
         self.execute = execute
         self.result_from_children = result_from_children
+        # Continues a call that returned NestedInputWait, with the answers to
+        # its requests in their order; it does not repeat `execute`.
+        self.resume_with_input = resume_with_input
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
         self.interrupted_result = interrupted_result
@@ -297,6 +340,7 @@ class AgentTool:
             definition=definition,
             execute=self.execute,
             result_from_children=self.result_from_children,
+            resume_with_input=self.resume_with_input,
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
             interrupted_result=self.interrupted_result,

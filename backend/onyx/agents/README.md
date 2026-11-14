@@ -153,7 +153,6 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
 `StepInput.received_inputs` contains submitted instructions and unread background results.
-`StepInput.input_wait_seconds` is the time this run's calls have spent waiting for input, such as the user's approval, so a feature can leave it out of its own timing.
 The runtime accepts them before the next model call, including when no preparation callback exists.
 A feature can return `PreparedStep.input_messages` to transform their content, for example to remap citations.
 Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
@@ -227,13 +226,14 @@ Two optional tool callbacks cover interception and enrichment:
 Callbacks receive copies. Required transformations belong inside the tool, before it returns a valid result.
 A tool that calls other tools for the model, such as a code mode program, gets `ToolInvocation.nested_calls`, a `NestedCallGate`.
 `NestedCallGate.decide` applies `before_tool_call`, then the approval gate below, to each of those calls.
-For a `PendingToolInput` decision, the tool can block the call with `NestedCallGate.wait_for_input`, which returns `None` to run an approved call or the result that replaces it.
-The run publishes `input_required` with the outer call as `tool_call` and the blocked call as `nested_call`.
-`run.submit()` answers it like any other request; the request is not saved with the run.
-Cancellation of the run, or of the signal the tool passes for the waiting call, unblocks it with `AgentCancelled`.
-A run that ends publishes `input_ended` without an answer for each request still open, nested or direct, before `agent_end`; the waiting call can wake later.
-While it waits, the outer call keeps running, so the run does not suspend.
-Code mode passes the cell's stop signal. While the program waits only for such calls, the wait counts toward neither its lifetime nor its yield time.
+A decision that waits for input is an open `NestedInputRequest`: the run publishes `input_required` at once, with the outer call as `tool_call` and the waiting call as `nested_call`.
+The waiting call does not block a thread.
+The tool returns its open requests in `NestedInputWait`, which the run saves as the outer call's pending entry, like `ChildRunWait`, so the run can suspend and transfer.
+When every request has an answer, the runtime calls `AgentTool.resume_with_input` with the answers instead of repeating `execute`.
+For an approved request, the tool asks `NestedCallGate.decide_approved`, which returns `None` to run the call, or the approval gate's decision after the user approved the hook's request.
+The continuation returns a result, or another `NestedInputWait`.
+A tool that stops waiting, for example because its program ended, ends the request with `NestedCallGate.withdraw`.
+A request that no `NestedInputWait` saved ends without an answer when the run suspends or ends.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.
 When no observation reports that end, the cells' finish or suspend hook raises `ReleaseFailed`.
@@ -241,16 +241,13 @@ For example, deep research normalizes a child report's citations before returnin
 
 Approval is separate from the callbacks. An `AgentTool` lists the call names that need the user's approval in `approval_required`: its own name, or the names of calls it makes for the model.
 The runtime gates those calls through the coordinator's `ToolApprovals` (`AgentCoordinator(approvals=...)`).
-A hook request does not replace that approval. When the user approves a `PendingToolInput` from `before_tool_call`, the runtime asks `ToolApprovals` next, without calling the hook again. `NestedCallGate.wait_for_input` does the same for a nested call.
+A hook request does not replace that approval. When the user approves a `PendingToolInput` from `before_tool_call`, the runtime asks `ToolApprovals` next, without calling the hook again. `NestedCallGate.decide_approved` does the same for a nested call.
 `ToolApprovals.request_approval(run, tool_call, nested_call)` returns a `PendingToolInput` to wait for, a `ToolResult` for a call that cannot wait, or `None` when a standing grant approves the call. `tool_call` is the call of the run's step; `nested_call` is the call that its tool makes for the model, or `None` for a direct call.
-`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, or any call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
+`ToolApprovals.withdraw_approval(request_id)` ends a request whose call stopped waiting without an answer: a nested call whose program ended, a request that no wait saved, or an unanswered call of a run that ends. It returns the answer of a decision that the application saved before the request ended, such as the user's rejection on Stop, or `None`.
 The runtime logs a `withdraw_approval` that raises and ends the request without an answer, so the run and the waiting call still end.
 The run reports that answer in `input_ended`. A direct call that the answer denies keeps the denial as its result, so the model sees it in later runs.
 The runtime sets `PendingToolInput.approval` on the requests that `ToolApprovals` opens. That owner answers and withdraws only those requests; hook and question-tool requests do not have it.
 Without `ToolApprovals`, such a call returns an error result.
-`Run.has_event_listeners` tells the application whether a listener receives the run's events, directly or through a foreground ancestor; a run that no one watches cannot show a request.
-`Run.input_wait_seconds` totals the time the run's calls spent waiting for input.
-The tool activity bound does not count that time either.
 
 The runtime records a tool's raw result before calling `after_tool_call`.
 That callback can replace the result; its failure preserves the raw result and fails the run.
@@ -508,8 +505,8 @@ Snapshots taken during provider I/O or arbitrary callbacks support inspection on
 `before_tool_call` or `ToolApprovals` can return `PendingToolInput(mode=InputMode.EXECUTE)` to gate an action.
 A question tool returns `PendingToolInput(mode=InputMode.RESULT)` to request its result from the caller.
 Each request has a unique `request_id` within its run.
-Submit a matching `HumanToolAnswer` through `run.submit()`; answers can arrive while sibling tools are still running.
-`PendingToolInput.expires_at` tells the client when the application stops waiting for an answer.
+Submit a matching `HumanToolAnswer` through `run.submit()`, or pass saved answers to `Agent.resume(snapshot, answers=...)`; answers can arrive while sibling tools are still running.
+A request takes answers once the run saves it: a direct call's request, or one in a `NestedInputWait`.
 A `standing` approval also approves later calls of the same action; the application that answers applies it to those calls.
 Approval executes the exact pending call. A result answer completes the question without repeating its tool code.
 The run publishes `input_ended` with the call and its answer when it applies the answer.
@@ -556,10 +553,10 @@ The SDK invokes release once; applications implement the storage operation.
 If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
 A new execution owner can register the same run ID once ownership is released.
 
-Pass executable tools to `Agent(tools=...)`; the runtime restores the saved declarations and execution permissions.
-A configuration digest rejects changed definitions, schema key order, tool order, or phases before restoration callbacks run.
-Schema key order matters because it changes the serialized prompt prefix.
-Older checkpoints without a digest still validate their saved step declarations.
+Pass executable tools to `Agent(tools=...)`; the runtime restores the saved step's declarations and execution permissions against them.
+A saved call runs only when the agent still has its tool with the same `parameters` schema; descriptions, other tools, their order and phases can differ.
+An approved call whose tool is gone or changed gets `UNAVAILABLE_CALL_MESSAGE` instead, and later steps use the current tools.
+`Agent.resume(..., deadline_at=...)` replaces the saved deadline.
 Onyx tools receive application context when invoked. Chat and research derive it from feature state,
 which changes after the tool phase.
 Rebuild the feature agent and its live resources with `restored.agent_state` and the saved `agent_id`.
@@ -780,7 +777,7 @@ Before handoff, the adapter verifies that saved history can reconstruct the capt
 Unsupported input representations fail while the original run still owns execution.
 
 `resume(run_id, context=...)` requires authorized history reconstructed by the application.
-The adapter validates its digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
+The adapter validates its history digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
 Only one process can claim a checkpoint. Conditional revision checks reject stale writers.
 Reconstruction failure before execution releases the claim for retry.
 Completion removes the checkpoint while preserving chat history.

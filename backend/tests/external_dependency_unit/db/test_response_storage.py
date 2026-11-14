@@ -1205,7 +1205,6 @@ def test_suspended_search_result_restores_after_database_round_trip(
             )
         ],
         progress=RunProgress(
-            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             action=RunAction.TOOLS,
             options=GenerationOptions(),

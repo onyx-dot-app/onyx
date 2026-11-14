@@ -10,7 +10,7 @@ observer.
 import json
 import threading
 import time
-from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from functools import partial
 from typing import Literal, cast
@@ -20,7 +20,7 @@ from pydantic import BaseModel, ConfigDict, JsonValue
 from onyx.agents.models import ReleaseFailed, ToolResultAmendment
 from onyx.agents.tools import (
     BeforeToolCallFailed,
-    PendingToolInput,
+    NestedInputRequest,
     ToolInvocation,
     ToolProgress,
 )
@@ -103,7 +103,6 @@ from onyx.tracing.framework.create import function_span
 from onyx.utils.logger import setup_logger
 from onyx.utils.pydantic_util import as_base
 from onyx.utils.threadpool_concurrency import start_thread_future
-from onyx.utils.timing import PausableClock
 
 logger = setup_logger()
 
@@ -307,6 +306,32 @@ def _call_result(
     return outcome
 
 
+def _decided_result(
+    source: ToolInvocation,
+    call_id: str,
+    tool_name: str,
+    arguments: dict[str, JsonValue],
+) -> ToolResult | None:
+    """The result that the run's decision gives a program's call, as it gives a
+    direct call one: the before_tool_call hook, then the user's approval; None
+    to run the tool.
+
+    A program cannot wait for input, so a call that would wait fails with the
+    request's prompt, as a tool error does, and its request ends.
+    """
+    gate = source.nested_calls
+    if gate is None:
+        return None
+    decision = gate.decide(ToolCall(id=call_id, name=tool_name, arguments=arguments))
+    if isinstance(decision, NestedInputRequest):
+        gate.withdraw(decision)
+        raise RuntimeError(
+            f"{tool_name} needs the user's approval and cannot run inside a "
+            f"program: {decision.request.prompt}"
+        )
+    return decision
+
+
 class _RunningCells:
     """The process-wide budget of running cells (MAX_RUNNING_CELLS)."""
 
@@ -314,31 +339,21 @@ class _RunningCells:
         self._lock = threading.Lock()
         self._limit = limit
         self._running = 0
-        # Called once at the next release.
-        self._wakes: set[Callable[[], None]] = set()
 
-    def acquire(self) -> bool:
-        """Take a slot if one is free."""
+    def acquire(self, tenant_id: str) -> bool:
         with self._lock:
             if self._running >= self._limit:
+                metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=tenant_id).inc()
                 return False
             self._running += 1
             metrics.CELLS_RUNNING.set(self._running)
             return True
-
-    def wake_when_free(self, wake: Callable[[], None]) -> None:
-        """Call `wake` once, when a slot is next released."""
-        with self._lock:
-            self._wakes.add(wake)
 
     def release(self, tenant_id: str, held_seconds: float) -> None:
         """Free a slot that a cell of `tenant_id` held for `held_seconds`."""
         with self._lock:
             self._running -= 1
             metrics.CELLS_RUNNING.set(self._running)
-            wakes, self._wakes = self._wakes, set()
-        for wake in wakes:
-            wake()
         metrics.CELL_SECONDS.labels(tenant_id=tenant_id).inc(held_seconds)
 
 
@@ -590,22 +605,9 @@ class CodeCell:
         self._last: tuple[str, ToolResult, CodeModeExecutionResult] | None = None
         # Observations taken but not yet formatted; `close` waits for them.
         self._formatting = 0
-        # Calls of the program that wait for input, such as the user's approval.
-        self._awaiting_input = 0
-        # The program waits for tool calls only; see `execute_program`.
-        self._program_blocked = False
-        # Stands still while the cell holds no running-cell slot and runs no
-        # call, e.g. while the program waits for input, so waiting uses up
-        # neither the program's lifetime nor an observation's yield time.
-        self._clock = PausableClock()
-        # When the cell took its running-cell slot; None while the program
-        # waits for input, while it waits for a free slot after that, and once
-        # the program stops; see `_update_waiting`.
-        self._slot_since: float | None = self._started_at
         # Last, so a cell that exists holds a running-cell slot; `_end_program`
         # releases it.
-        if not _running_cells.acquire():
-            metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=self._tenant_id).inc()
+        if not _running_cells.acquire(self._tenant_id):
             raise _rejected(BUSY_MESSAGE)
 
     def _collector(self) -> StdoutCollector:
@@ -785,9 +787,7 @@ class CodeCell:
         return observer
 
     def _observe(self, observer: CellObserver, yield_seconds: float) -> ToolResult:
-        # While a call waits, the model waits for the decision without
-        # spending steps.
-        deadline = self._clock.now() + yield_seconds
+        deadline = time.monotonic() + yield_seconds
         cancellation = observer.invocation.cancellation
 
         def wake() -> None:
@@ -800,18 +800,17 @@ class CodeCell:
                 or self._yielded is not None
                 or cancellation.cancelled
             ):
-                remaining = deadline - self._clock.now()
-                if remaining <= 0:
+                now = time.monotonic()
+                if now >= deadline:
                     break
                 if self._pending_stdout:
-                    now = time.monotonic()
                     flush_at = self._pending_since + STDOUT_FLUSH_SECONDS
                     if now >= flush_at:
                         self._flush_stdout()
                         continue
-                    self._changed.wait(min(remaining, flush_at - now))
+                    self._changed.wait(min(deadline, flush_at) - now)
                 else:
-                    self._changed.wait(remaining)
+                    self._changed.wait(deadline - now)
             cut, self._yielded = self._yielded, None
             if cut is None:
                 if cancellation.cancelled:
@@ -1038,8 +1037,6 @@ class CodeCell:
                     limits=program.limits,
                     on_print=self._print,
                     on_yield=self._yield_control,
-                    on_blocked=self._on_program_blocked,
-                    clock=self._clock,
                 )
         except BaseException as error:
             logger.exception("Code mode cell %s stopped with an error", self.id)
@@ -1093,9 +1090,7 @@ class CodeCell:
                 )
                 self._changed.notify_all()
         finally:
-            with self._lock:
-                # Also when the end failed: `_stopping` is cancelled.
-                self._update_waiting()
+            _running_cells.release(self._tenant_id, time.monotonic() - self._started_at)
 
     def _print(self, text: str) -> None:
         with self._lock:
@@ -1140,7 +1135,6 @@ class CodeCell:
             )
             source = self._source
             self._emit(CodeModeCallStarted(call=started))
-            self._update_waiting()
         try:
             return self._run_call(function, started, arguments, context, source)
         except AgentCancelled as error:
@@ -1168,73 +1162,6 @@ class CodeCell:
         finally:
             with self._lock:
                 self._calls[external.index].thread_alive = False
-                self._update_waiting()
-
-    def _on_program_blocked(self, blocked: bool, wake: Callable[[], None]) -> bool:
-        """The program waits for tool calls only, or would continue. It may
-        continue once its cell holds a slot; until then `wake` runs when a
-        slot frees."""
-        with self._lock:
-            self._program_blocked = blocked
-            self._update_waiting()
-            if blocked or self._slot_since is not None or self._stopping.cancelled:
-                return True
-            _running_cells.wake_when_free(wake)
-            # A slot that freed before the registration.
-            self._update_waiting()
-            return self._slot_since is not None
-
-    def _update_waiting(self) -> None:
-        """Hold the running-cell slot unless the program waits for input: it
-        waits for tool calls only, and each call that runs waits for input. So
-        waiting programs do not use up the budget, while any other work of the
-        program, such as a call, a sleep or its code, still counts. The cell
-        takes a slot back only when one is free. Until then its program waits
-        in the sandbox (`_on_program_blocked`), while a call that resumes runs
-        on its tool call thread: that thread waits for no slot, so a full
-        budget cannot hold the threads that other cells' calls need. The
-        cell's clock runs while it holds a slot or a call of it runs without
-        waiting for input. The caller holds the lock."""
-        running_calls = sum(record.thread_alive for record in self._calls.values())
-        waits_for_input = (
-            self._program_blocked and 0 < self._awaiting_input == running_calls
-        )
-        holds_slot = not waits_for_input and not self._stopping.cancelled
-        if holds_slot and self._slot_since is None:
-            if _running_cells.acquire():
-                self._slot_since = time.monotonic()
-        elif not holds_slot and self._slot_since is not None:
-            _running_cells.release(self._tenant_id, time.monotonic() - self._slot_since)
-            self._slot_since = None
-        self._clock.set_paused(
-            self._slot_since is None and running_calls <= self._awaiting_input
-        )
-        self._changed.notify_all()
-
-    def _decided_result(
-        self, source: ToolInvocation, call: ToolCall
-    ) -> ToolResult | None:
-        """The result that the run's decision gives a program's call, as it gives
-        a direct call one; None to run the tool. A call that waits for input
-        blocks until the run receives the answer."""
-        gate = source.nested_calls
-        if gate is None:
-            return None
-        decision = gate.decide(call)
-        if not isinstance(decision, PendingToolInput):
-            return decision
-        with self._lock:
-            self._awaiting_input += 1
-            self._update_waiting()
-        try:
-            result = gate.wait_for_input(call, decision, self._stopping)
-        finally:
-            with self._lock:
-                self._awaiting_input -= 1
-                self._update_waiting()
-        # A call whose program stopped while it waited does not run.
-        self._stopping.check()
-        return result
 
     def _run_call(
         self,
@@ -1245,9 +1172,7 @@ class CodeCell:
         source: ToolInvocation,
     ) -> object:
         inner_tool = function.tool
-        decided = self._decided_result(
-            source, ToolCall(id=started.id, name=inner_tool.name, arguments=arguments)
-        )
+        decided = _decided_result(source, started.id, inner_tool.name, arguments)
         cites = function.result.cites and decided is None
         start = (
             self._citations.reserve(context.next_citation_num)

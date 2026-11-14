@@ -900,7 +900,9 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
 @pytest.mark.parametrize(
     "change", ["order", "extra", "inactive_phase", "schema_order", "same"]
 )
-def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
+def test_handoff_resumes_when_other_tool_configuration_changes(change: str) -> None:
+    """A waiting call resumes while its tool keeps its parameters, whatever
+    else of the tool configuration changed, such as key order in its schema."""
     effects: list[str] = []
 
     def execute(_invocation: ToolInvocation) -> ToolResult:
@@ -955,11 +957,6 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     saved = run.handoff().model_dump(mode="json")
     checkpoint = ExecutionCheckpoint.model_validate(saved)
     rebuilt = make_agent(checkpoint.agent_state, restored=True)
-    if change in {"order", "extra", "inactive_phase", "schema_order"}:
-        with pytest.raises(ValueError, match="Restored tool configuration"):
-            rebuilt.resume(checkpoint.run_state)
-        assert effects == []
-        return
     resumed = rebuilt.resume(checkpoint.run_state)
     try:
         assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
