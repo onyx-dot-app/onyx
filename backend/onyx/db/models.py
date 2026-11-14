@@ -3611,6 +3611,67 @@ class ChatResponseCheckpoint(Base):
     state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
 
 
+class ApprovalRequest(Base):
+    """An action in a chat that waits for the user's decision.
+
+    The ID is the waiter's request ID, such as a run's input request ID.
+    ``decision IS NULL`` is pending. A ``SESSION_GRANT`` approval also approves
+    later requests of the same action in the chat session.
+    """
+
+    __tablename__ = "approval_request"
+    __table_args__ = (
+        Index(
+            "ix_approval_request_session_action",
+            "chat_session_id",
+            "gated_app_id",
+            "action_id",
+        ),
+        Index("ix_approval_request_chat_message", "chat_message_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The response that waits for the decision.
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
+    )
+    gated_app_id: Mapped[int] = mapped_column(
+        ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=False
+    )
+    # The action that the request asks to run, such as an MCP tool name. It
+    # keys the action policy and session grants.
+    action_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call of the response's step whose card shows the request: the call
+    # that waits, or the call whose tool, such as a program, made it. Places
+    # the request's record when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The name and display name of the tool of the call that waits, for the
+    # request's record and the result the model sees.
+    tool_name: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
+
+
 class ChatMessage(Base):
     """Questions, complete responses, and context summaries in a conversation tree."""
 

@@ -1,9 +1,12 @@
 import logging
+import signal
 import sys
+import threading
 import traceback
 import warnings
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from contextlib import asynccontextmanager
+from types import FrameType
 from typing import Any, cast
 
 import uvicorn
@@ -31,6 +34,7 @@ from onyx.auth.users import (
 )
 from onyx.cache.interface import CacheBackendType
 from onyx.chat.execution import chat_turn_work
+from onyx.chat.tool_approvals import end_approval_waits, reset_approval_waits
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
     APP_API_PREFIX,
@@ -352,6 +356,39 @@ def validate_no_vector_db_settings() -> None:
         )
 
 
+def _end_approval_waits_on_exit_signal() -> None:
+    """End chat turns that wait for the user's approval when shutdown starts,
+    so their streams close and do not hold the shutdown; the user sees them
+    stop. uvicorn waits for open responses before the lifespan shutdown, so
+    this chains the exit signal handlers that it installs on the main thread
+    while it serves."""
+    if threading.current_thread() is not threading.main_thread():
+        return
+    for exit_signal in (signal.SIGINT, signal.SIGTERM):
+        server_handler = signal.getsignal(exit_signal)
+
+        def end_approval_waits_and_exit(
+            signum: int,
+            frame: FrameType | None,
+            server_handler: Callable[[int, FrameType | None], Any]
+            | int
+            | signal.Handlers
+            | None = server_handler,
+        ) -> None:
+            end_approval_waits()
+            if server_handler is None or isinstance(server_handler, int):
+                # No Python handler: restore the signal's own handling.
+                signal.signal(
+                    signum,
+                    signal.SIG_DFL if server_handler is None else server_handler,
+                )
+                signal.raise_signal(signum)
+                return
+            server_handler(signum, frame)
+
+        signal.signal(exit_signal, end_approval_waits_and_exit)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     validate_no_vector_db_settings()
@@ -455,12 +492,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         recover_stuck_user_files(POSTGRES_DEFAULT_SCHEMA)
         start_periodic_poller(POSTGRES_DEFAULT_SCHEMA)
 
+    reset_approval_waits()
+    _end_approval_waits_on_exit_signal()
+
     # Shutdown runs even when the app exits with an error. Each step has its
     # own try so one failure cannot skip the steps after it.
     try:
         yield
     finally:
         try:
+            end_approval_waits()
             # Chat may outlive its HTTP reader and still need DB and tracing services.
             if not await run_in_threadpool(
                 chat_turn_work.wait_idle, CHAT_EXECUTION_TIMEOUT_S

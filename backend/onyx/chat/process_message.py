@@ -4,8 +4,9 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from concurrent.futures import Future
+from contextlib import closing
 from functools import partial
 from uuid import UUID
 
@@ -44,6 +45,7 @@ from onyx.chat.incognito import (
 from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.models import (
     AnswerStream,
+    AnswerStreamPart,
     ChatFullResponse,
     ChatInbox,
     ChatResponseOutcome,
@@ -66,6 +68,7 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
+from onyx.db.approval_request import get_pending_approval_ids
 from onyx.db.chat import (
     checkpoint_from_summary,
     create_new_chat_message,
@@ -119,7 +122,10 @@ from onyx.server.query_and_chat.models import (
     response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    Packet,
     StreamingError,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
 )
 from onyx.server.query_and_chat.token_limit import (
     check_model_spend_limits,
@@ -262,6 +268,7 @@ def prepare_chat_turn(
     additional_context: str | None = None,
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
+    ask_for_approval: bool = True,
     on_reserved: Callable[
         [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
         None,
@@ -752,6 +759,7 @@ def prepare_chat_turn(
             litellm_additional_headers=litellm_additional_headers,
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
+            ask_for_approval=ask_for_approval,
         )
     except BaseException:
         try:
@@ -936,6 +944,7 @@ def _stream_chat_turn(
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
     delivers_follow_ups: bool = True,
+    ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream.
 
@@ -957,6 +966,7 @@ def _stream_chat_turn(
             mcp_headers=mcp_headers,
             slack_context=slack_context,
             additional_context=additional_context,
+            ask_for_approval=ask_for_approval,
             on_reserved=saved_turn_packets.append,
         )
         stream = start_chat_turn(
@@ -1013,7 +1023,8 @@ def handle_stream_message_objects(
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
     delivers_follow_ups: bool = True,
-) -> AnswerStream:
+    ask_for_approval: bool = True,
+) -> Generator[AnswerStreamPart, None, None]:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
     Emits one fleet ``query`` record when server execution ends, including after
@@ -1032,6 +1043,7 @@ def handle_stream_message_objects(
         response_future=response_future,
         query_observation=query_observation,
         delivers_follow_ups=delivers_follow_ups,
+        ask_for_approval=ask_for_approval,
     )
 
 
@@ -1045,6 +1057,7 @@ def handle_multi_model_stream(
     custom_tool_additional_headers: dict[str, str] | None = None,
     mcp_headers: dict[str, str] | None = None,
     query_observation: QueryObservation | None = None,
+    ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Stream independent responses from two or three selected models."""
     n_models = len(llm_overrides)
@@ -1070,6 +1083,7 @@ def handle_multi_model_stream(
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
         mcp_headers=mcp_headers,
+        ask_for_approval=ask_for_approval,
     )
 
 
@@ -1120,11 +1134,19 @@ def gather_stream_full(
     packets: AnswerStream,
     response_future: Future[ChatResponseOutcome],
 ) -> ChatFullResponse:
-    """Read delivery metadata and project accepted execution content."""
+    """Read delivery metadata and project accepted execution content.
+
+    Returns early when a tool call waits for the user's approval, with every
+    request of the response that waits then: the caller reads the requests
+    instead of blocking until the user decides.
+    """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
+    # Requests read from the stream, by approval ID, and those that ended.
+    requested: dict[str, ToolApprovalRequest] = {}
+    ended: set[str] = set()
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -1134,6 +1156,37 @@ def gather_stream_full(
         elif isinstance(packet, CreateChatSessionID):
             chat_session_id = packet.chat_session_id
             incognito = packet.incognito
+        elif isinstance(packet, Packet) and isinstance(
+            packet.obj, ToolApprovalResolved
+        ):
+            ended.add(packet.obj.approval_id)
+        elif isinstance(packet, Packet) and isinstance(packet.obj, ToolApprovalRequest):
+            if message_id is None:
+                raise ValueError("Message ID is required")
+            requested[packet.obj.approval_id] = packet.obj
+            # A request is saved before its packet is sent, and expired after
+            # its end is sent: return once the stream has delivered the packet
+            # of every request that waits.
+            with get_session_with_current_tenant() as db_session:
+                waiting = {
+                    str(approval_id)
+                    for approval_id in get_pending_approval_ids(db_session, message_id)
+                } - ended
+            if waiting and waiting <= requested.keys():
+                return ChatFullResponse(
+                    answer="",
+                    answer_citationless="",
+                    top_documents=[],
+                    citation_info=[],
+                    message_id=message_id,
+                    chat_session_id=chat_session_id,
+                    incognito=incognito,
+                    pending_tool_approvals=[
+                        request
+                        for approval_id, request in requested.items()
+                        if approval_id in waiting
+                    ],
+                )
 
     if message_id is None:
         if error is not None:
@@ -1182,21 +1235,27 @@ def run_chat_turn(
     mcp_headers: dict[str, str] | None = None,
     additional_context: str | None = None,
     slack_context: SlackContext | None = None,
+    ask_for_approval: bool = True,
 ) -> ChatFullResponse:
-    """Run one chat turn to completion for in-process, non-streaming callers.
+    """Run one chat turn for in-process, non-streaming callers, to completion
+    or until a tool call waits for the user's approval.
 
     These callers read one response, so the turn offers no agent tools.
     """
     response_future = Future[ChatResponseOutcome]()
-    packets = handle_stream_message_objects(
-        new_msg_req=new_msg_req,
-        user=user,
-        litellm_additional_headers=litellm_additional_headers,
-        custom_tool_additional_headers=custom_tool_additional_headers,
-        mcp_headers=mcp_headers,
-        additional_context=additional_context,
-        slack_context=slack_context,
-        response_future=response_future,
-        delivers_follow_ups=False,
-    )
-    return gather_stream_full(packets, response_future)
+    # Closing the stream stops reading it; the turn keeps running.
+    with closing(
+        handle_stream_message_objects(
+            new_msg_req=new_msg_req,
+            user=user,
+            litellm_additional_headers=litellm_additional_headers,
+            custom_tool_additional_headers=custom_tool_additional_headers,
+            mcp_headers=mcp_headers,
+            additional_context=additional_context,
+            slack_context=slack_context,
+            response_future=response_future,
+            delivers_follow_ups=False,
+            ask_for_approval=ask_for_approval,
+        )
+    ) as packets:
+        return gather_stream_full(packets, response_future)

@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "App “{appName}” already has an associated skill named “{skillName}”. Upload a skill with a different name."
       },
       "mcpPolicy": {
-        "description": "Configure what the Craft agent may do with this MCP server's tools.",
+        "description": "Choose which tools run automatically, ask for approval, or are disabled in chat and Craft.",
         "emptyPolicies": "No enabled tools on this server. Enable tools on the MCP actions page first.",
         "saveButton": "Save",
         "title": "Edit {name}"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "{name} Approval settings",
       "title": "Approval settings",
-      "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations and new tasks; existing tasks keep their own settings.",
+      "personalDescription": "These settings control whether actions run automatically or require approval in Craft conversations, new tasks, and MCP tool calls in chat; existing tasks keep their own settings.",
       "taskDescription": "Choose the plugins this task can use, then manage which actions run automatically. Changes apply only to this task.",
       "newTaskDescription": "Enable a plugin to use your current action settings as a starting point.",
       "workspace_disabled": "Disabled for the workspace",

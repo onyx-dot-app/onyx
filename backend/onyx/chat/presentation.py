@@ -1,12 +1,15 @@
 """Attach chat metadata to agent output and build saved response summaries."""
 
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 
 from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
+    InputEndedEvent,
+    InputRequiredEvent,
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
@@ -34,6 +37,7 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    SavedToolApproval,
     ToolHistorySnapshot,
     ToolReplayData,
 )
@@ -42,9 +46,11 @@ from onyx.chat.renderer import (
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    approval_outcome,
     tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
+from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT, ended_answer
 from onyx.chat.tool_results import (
     restored_result_details,
     tool_result_parts,
@@ -59,6 +65,8 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
     UserMessagePacket,
 )
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -72,6 +80,10 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NO_APPROVALS: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = MappingProxyType(
+    {}
+)
 
 
 def _message_identity(message: AssistantMessage) -> str:
@@ -404,8 +416,12 @@ class ResponsePresenter:
         emitter: Emitter,
         *,
         tool_ids: Mapping[str, int | None] | None = None,
+        display_names: Mapping[str, str] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
+        # Tool display names by call name, for approval requests of calls that
+        # a tool makes for the model.
+        self.display_names = display_names or {}
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
@@ -455,17 +471,20 @@ class ResponsePresenter:
                     tool_placement,
                     self.tool_ids.get(call.name),
                 )
-        elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
+        elif isinstance(
+            event,
+            (
+                ToolStartEvent,
+                ToolUpdateEvent,
+                ToolEndEvent,
+                InputRequiredEvent,
+                InputEndedEvent,
+            ),
+        ):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
-            if isinstance(event, ToolStartEvent):
-                tool.display_name = event.display_name
-                output = tool.start()
-            elif isinstance(event, ToolUpdateEvent):
-                output = tool.update(event.progress.details, event.progress.content)
-            else:
-                output = tool.complete(event.result)
+            output = tool.consume(event, self.display_names)
         elif isinstance(event, ToolResultAmendedEvent):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return
@@ -520,9 +539,13 @@ def replay_response(
     layout: ResponseLayout | None = None,
     parent: Placement | None = None,
     default_mode: PresentationMode = PresentationMode.ANSWER,
+    *,
+    approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
+    `approvals` holds the response's approval requests by run ID and tool call
+    ID; each shows in its call's card as the stream showed it once decided.
     The session response carries the saved message error separately. Stop packets
     close rendering; they do not classify execution success or failure.
     """
@@ -575,6 +598,28 @@ def replay_response(
                 execution.display_name if execution is not None else None,
             )
             packets.extend(renderer_of_call.start())
+            for approval in approvals.get((response.run_id, call.id), ()):
+                approval_id = str(approval.id)
+                packets.extend(
+                    Packet(placement=tool_placement, obj=obj)
+                    for obj in (
+                        ToolApprovalRequest(
+                            approval_id=approval_id,
+                            tool_call_id=call.id,
+                            tool_name=approval.tool_name,
+                            display_name=approval.display_name,
+                            # A call that a program made is not saved.
+                            arguments=tool_arguments_for_display(call)
+                            if approval.tool_name == call.name
+                            else {},
+                            expires_at=approval.created_at + TOOL_APPROVAL_TIMEOUT,
+                        ),
+                        ToolApprovalResolved(
+                            approval_id=approval_id,
+                            outcome=approval_outcome(ended_answer(approval)),
+                        ),
+                    )
+                )
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (
@@ -598,6 +643,7 @@ def replay_response(
                         layout,
                         tool_placement,
                         child_mode,
+                        approvals=approvals,
                     )
                 )
             packets.extend(renderer_of_call.complete(result))

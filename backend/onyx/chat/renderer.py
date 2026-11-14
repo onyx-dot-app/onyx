@@ -5,8 +5,21 @@ from collections.abc import Mapping
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
 
+from onyx.agents.events import (
+    InputEndedEvent,
+    InputRequiredEvent,
+    ToolEndEvent,
+    ToolStartEvent,
+    ToolUpdateEvent,
+)
+from onyx.agents.tools import HumanToolAnswer, InputDecision
 from onyx.chat.citation_processor import DynamicCitationProcessor
-from onyx.chat.models import CitationMode, MessageRendering, PresentationMode
+from onyx.chat.models import (
+    CitationMode,
+    MessageRendering,
+    PresentationMode,
+    ToolApprovalDenial,
+)
 from onyx.chat.response import thinking_tool_text, tool_arguments_for_display
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.coding_agent.tool_definitions import (
@@ -462,6 +475,19 @@ class MessageRenderer:
         return result
 
 
+def approval_outcome(answer: HumanToolAnswer | None) -> packets.ToolApprovalOutcome:
+    """How an approval request ended, from the answer it gave its call; a
+    request without an answer stopped waiting."""
+    if answer is None:
+        return "cancelled"
+    if answer.standing:
+        return "approved_for_chat"
+    if answer.decision == InputDecision.APPROVE:
+        return "approved"
+    denial = answer.result.metadata if answer.result else None
+    return denial.outcome if isinstance(denial, ToolApprovalDenial) else "rejected"
+
+
 class ToolRenderer:
     """Project tool progress and final results without sending private tool state."""
 
@@ -485,6 +511,45 @@ class ToolRenderer:
         self._files: set[str] = set()
         self._started = False
         self._finished = False
+
+    def consume(
+        self,
+        event: ToolStartEvent
+        | ToolUpdateEvent
+        | ToolEndEvent
+        | InputRequiredEvent
+        | InputEndedEvent,
+        display_names: Mapping[str, str],
+    ) -> list[packets.Packet]:
+        if isinstance(event, ToolStartEvent):
+            self.display_name = event.display_name
+            return self.start()
+        if isinstance(event, ToolUpdateEvent):
+            return self.update(event.progress.details, event.progress.content)
+        if isinstance(event, ToolEndEvent):
+            return self.complete(event.result)
+        # Only the requests of the chat's tool approvals have cards; each has a
+        # deadline (onyx/chat/tool_approvals.py).
+        if not event.request.approval or event.request.expires_at is None:
+            return []
+        obj: packets.ToolApprovalRequest | packets.ToolApprovalResolved
+        if isinstance(event, InputRequiredEvent):
+            # A program's call waits inside this call's card.
+            call = event.nested_call or self.call
+            obj = packets.ToolApprovalRequest(
+                approval_id=event.request.request_id,
+                tool_call_id=call.id,
+                tool_name=call.name,
+                display_name=display_names.get(call.name, call.name),
+                arguments=tool_arguments_for_display(call),
+                expires_at=event.request.expires_at,
+            )
+        else:
+            obj = packets.ToolApprovalResolved(
+                approval_id=event.request.request_id,
+                outcome=approval_outcome(event.answer),
+            )
+        return [packets.Packet(placement=self.placement, obj=obj)]
 
     def start(self) -> list[packets.Packet]:
         if self._started:

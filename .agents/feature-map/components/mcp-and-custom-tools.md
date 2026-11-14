@@ -37,6 +37,31 @@
   A down MCP server gives "Tool execution failed" with the reason. An OpenAPI
   tool says that it could not reach its server. Only that call fails; the turn
   continues.
+- **A user in the web chat approves an MCP call.** Each MCP tool has an action
+  policy: Auto-approve, Ask or Disabled. When unset it is Auto-approve for a
+  tool the server marks read-only, else Ask, as in Craft
+  (`db/action_policy.py:mcp_tool_default_policy`). A Disabled tool
+  is not offered to the model. For an Ask tool the response pauses on an
+  approval card with the call's arguments and a deadline. The user picks
+  Approve once, Approve for this chat, or Reject. Approve once runs the exact
+  call. Approve for this chat also runs later calls of that tool in the chat
+  session with no card. Reject, or no decision within 10 minutes
+  (`chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`), gives the model a "did not
+  run" result, and the answer continues. A policy change applies from the next message.
+  Web, mobile, the widget, the CLI and API callers all show requests; a
+  non-streaming API call returns early with them. The Slack and Discord bots
+  run Ask tools without asking for now. Usage-only incognito chats, anonymous
+  users, and background or hosted agent runs cannot wait: an Ask call gives the
+  model an error that names the cause ([[#chat-approval-needs-waiting-client]]). The upgrade
+  migration (`backend/alembic/versions/7c00f53ab75f_chat_tool_approvals.py`)
+  writes Auto-approve for tools that exist then on servers not available in
+  Craft, and on every server when the tenant has no `build_session` row (it
+  never used Craft); it keeps existing policies. Craft servers of a tenant that
+  used Craft keep their policies, and new tools use their default. If Craft is
+  enabled on such a server later, those Auto-approve policies apply in Craft
+  too. Older clients (mobile builds, CLI versions and pinned widgets from
+  before the feature) cannot answer requests; the docs tell admins to upgrade
+  them.
 
 The plugin screens, Default Chat selection and personal preferences are in
 [[plugins]].
@@ -51,14 +76,18 @@ This component owns:
   that runs a call;
 - OpenAPI custom tools: the admin API, schema parsing, and the `CustomTool`
   that runs a call;
-- MCP server access grants and the per-server and per-user credential rows.
+- MCP server access grants and the per-server and per-user credential rows;
+- chat tool approvals: the policy materialized at tool construction, the
+  approval requests and their decisions.
 
 Its neighbours own:
 - [[tools-framework]]: the `Tool` interface and per-turn construction.
 - [[plugins]]: the plugin UI, Default Chat selection and personal preferences.
 - [[auth-and-identity]]: the OpenAPI per-tool `OAuthConfig` and
   `OAuthUserToken` rows, and the OAuth attempt store.
-- [[craft-external-apps]]: what a Craft action policy on an MCP tool means.
+- [[craft-external-apps]]: action policy storage and precedence, and the Craft
+  proxy gate.
+- [[chat-frontend]]: the approval card.
 - [[mcp-server]]: the opposite direction, Onyx as an MCP server. Check who
   connects to whom before you change "MCP" code.
 
@@ -149,11 +178,65 @@ self-hosted allows private targets at every level and loopback only at
 `DISABLED`, cloud blocks all internal targets, and `ssrf_safe_request` does not
 follow redirects.
 
-**Craft action policies.** `update_mcp_server_simple` and `_publish_mcp_setup`
+**Action policies.** `update_mcp_server_simple` and `_publish_mcp_setup`
 call `replace_workspace_action_policies` under `MANAGE_ACTIONS` with
 `allow_scope=True`, so a scoped action manager can write them.
 `update_mcp_server_with_tools` only sets `Tool.enabled` for the selected tools.
-Policy precedence is in [[craft-external-apps]].
+Policy precedence is in [[craft-external-apps]]. The Craft proxy and the chat
+gate below read the same policies.
+
+**Chat approvals.**
+
+```
+tools/tool_constructor.py:_construct_tools_impl   resolve_user_action_policies once per turn
+  (db/action_policy.py: one batched core, _resolve_policies, with resolve_action_policies)
+  (defaults: mcp_tool_default_policy(ToolConfiguration.mcp_read_only))
+  DENY -> tool not offered    ASK -> MCPTool.approval = ToolApprovalScope
+  Tool.bind -> AgentTool.approval_required
+agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program calls
+  through ToolInvocation.nested_calls, a NestedCallGate)
+  -> coordinator ToolApprovals = chat/run_store.py:ChatRunStore.request_approval
+     -> chat/tool_approvals.py:open_tool_approval
+        session grant (current_action_policy not DENY) -> run
+        cannot wait (signed out, unwatched, server stopping) -> error by cause
+        else ApprovalRequest row -> PendingToolInput(expires_at = created_at + timeout)
+     the runtime marks the request PendingToolInput.approval
+  direct call waits in the run; program call waits in its cell; both in memory
+  renderer sends tool_approval_request on the call's (or execute_code's) card
+POST /chat/approvals/{id}/decision (public)   db/approval_request.py:record_approval_decision__no_commit
+  then wake key chat_response_approval:{id}
+ChatRunStore.poll_control   one exists_many reads the Stop keys and the wake keys
+ChatRunStore._deliver_tool_decisions
+  requests = the owned runs' Run.pending_inputs with PendingToolInput.approval
+  reads woken responses, and all every APPROVAL_FALLBACK_POLL_SECONDS
+  (that read also expires overdue rows, up to that interval late)
+  -> Run.submit(tool_answer) -> input_ended (answer) -> tool_approval_resolved
+     (a SESSION_GRANT decision is a standing answer -> "approved_for_chat")
+user Stop: chat/execution.py:ChatTurnExecution._poll_control
+  -> ChatRunStore.reject_waiting_approvals   REJECTED by USER where decision IS NULL
+  -> then cancels the turn
+a call that stops waiting, or a run that ends
+  -> ToolApprovals.withdraw_approval = ChatRunStore.withdraw_approval
+     expires the row if it still waits; returns the answer of a decision saved
+     first (chat/tool_approvals.py:ended_answer), e.g. the Stop's rejection
+  -> input_ended (that answer, or none -> "cancelled"); a direct call that the
+     answer denies keeps the denial as its result
+  ChatRunStore.release expires what is left by response
+session load: db/chat_response.py:read_response_replay_data (ended responses)
+  -> chat/presentation.py:replay_response   request + resolved on the call's card
+```
+
+A decision row is the only channel between the API pod that takes the
+decision and the pod that owns the run. The `approval_request` row holds the
+session, the waiting response (`chat_message_id`), the `GatedApp`, the action
+ID, the decision, and for the saved record the step's call that shows the card
+(`tool_call_id`), the tool name and its display name. The arguments come from
+the stream packet, not the table. Craft's proxy keeps its own `action_approval` table
+([[craft-external-apps]]). The table, the decision route and the card are
+general, so future sandbox-proxy network approvals can reuse them. An
+"approve_session" decision is a session grant: it also approves the action's
+other pending rows in the chat session, and `has_session_grant` lets later
+calls run with no row unless the policy is now DENY.
 
 ---
 
@@ -267,6 +350,118 @@ Policy precedence is in [[craft-external-apps]].
     A result that already completed wins a concurrent cancellation. Discovery
     calls that have no signal keep the existing synchronous behavior. Stopping
     the local request cannot undo work already performed by the remote server.
+15. `chat-approval-needs-waiting-client` **Every client handles approvals;
+    only a signed-in owner's watched run can wait.**
+    `chat/run_store.py:ChatRunStore.request_approval` gives
+    `chat/tool_approvals.py:open_tool_approval` an `ApprovalBlocker`:
+    `SIGNED_OUT` for an anonymous user, `SERVER_STOPPING` once the API server
+    starts to shut down, `UNWATCHED_RUN` when `Run.has_event_listeners` is
+    false, as for background subagents and hosted runs; foreground children
+    such as deep research can wait. A `USAGE_ONLY`
+    incognito turn has no run store, so the runtime's own error applies. Each
+    cause has its own model-facing text in `chat/tool_approvals.py`; nothing
+    about approvals goes into the system prompt or tool descriptions. Turns
+    the server starts (queued messages, agent-result follow-ups) can wait too.
+    The non-streaming API returns early: at each `tool_approval_request`,
+    `gather_stream_full` reads the response's pending rows
+    (`db/approval_request.py:get_pending_approval_ids`); a row is saved before
+    its packet streams, so it returns once the stream has delivered the packet
+    of every waiting request, and lists them all in
+    `ChatFullResponse.pending_tool_approvals`. Closing the stream leaves the
+    turn running. Requests that open later reach the caller through the resume
+    stream. The Slack and Discord bots do not ask for approval, so
+    their turns build no approval scope (`ChatTurnSetup.ask_for_approval`,
+    `construct_tools(ask_for_approval=...)`); Disabled tools stay unbuilt.
+    Only server-side callers set it: the Slack handler and evals pass it to
+    `run_chat_turn`, and
+    `server/query_and_chat/chat_backend.py:handle_send_chat_message` sets it
+    for the Discord bot's service API key. Authentication marks that key
+    (`db/api_key.py:ApiKeyAuthResult.is_discord_bot`: no owner and the bot's
+    name, which no key can be renamed to) on `request.state`, so the send
+    route opens no extra session. The client-supplied
+    `SendMessageRequest.origin` never changes it.
+16. `chat-approval-owner-delivers` **Only the run's owner applies a decision.**
+    `server/query_and_chat/chat_backend.py:decide_approval` saves the row, then
+    sets the response's wake key. `chat/run_store.py:ChatRunStore.poll_control`
+    reads the wake keys and the Stop keys in one `exists_many`, and
+    `ChatRunStore._deliver_tool_decisions` calls `Run.submit`. The requests are
+    those that the owned runs wait on (`Run.pending_inputs`) and that the
+    runtime marks as opened by `ToolApprovals` (`PendingToolInput.approval`).
+    Requests from a `before_tool_call` hook or a question tool are not rows,
+    and the store does not read or withdraw them. The row owns the lifecycle
+    and deadline, and the store keeps no copy. A read every `APPROVAL_FALLBACK_POLL_SECONDS` covers a
+    lost key and expires overdue rows, so expiry can be up to that interval
+    late. `ChatRunStore.release` expires a run's open rows by response;
+    `withdraw_approval` expires one by ID. When the response has no owner, the
+    route expires its requests and returns 409. When the API server starts to
+    shut down, `backend/onyx/main.py:_end_approval_waits_on_exit_signal` (chained to
+    uvicorn's SIGTERM and SIGINT handlers, because uvicorn waits for open
+    responses before the lifespan shutdown) calls
+    `chat/tool_approvals.py:end_approval_waits`; the next control poll cancels
+    runs that wait, their cards close as `cancelled`, and their streams end.
+    The lifespan resets the flag at startup. A user Stop (the chat's stream
+    Stop key, read by `chat/execution.py:ChatTurnExecution._poll_control`)
+    first calls `ChatRunStore.reject_waiting_approvals`, which saves
+    `REJECTED` by `USER` under the same `decision IS NULL` condition as the
+    decision route, so a decision that races the Stop keeps whichever saved
+    first. The runs then end, `withdraw_approval` returns the saved decision's
+    answer, the card's outcome is `rejected`, and the call's saved result is
+    the rejection text that the model reads in the next turn. A cancelled turn
+    still sends `tool_approval_resolved` (`ChatTurnExecution._publish`). An
+    approval of a tool whose
+    current policy (`db/action_policy.py:current_action_policy`, also used by
+    the session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
+    returns 200; the model reads that the tool is disabled, and the card's
+    outcome is `disabled`. Deleting the tool's server deletes its rows; the
+    owner's next read (`db/approval_request.py:settle_approval_requests__no_commit`)
+    answers a call whose row is gone as `disabled`. While the response runs, an approval of a row that
+    is already approved returns 200 with the row's `decided_via`. An
+    `approve_session` on a row the user approved once upgrades it to a session
+    grant and approves the waiting sibling requests; every request that a grant
+    decides ends with the outcome `approved_for_chat`
+    (`HumanToolAnswer.standing`). `chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`
+    is 10 minutes, well below `CHAT_EXECUTION_TIMEOUT_S`, so one wait cannot
+    use up the turn. Several waits in a row can still reach the turn deadline.
+17. `chat-approval-records-replay` **A saved response shows the records its
+    stream showed.** `db/chat_response.py:read_response_replay_data` loads the
+    `approval_request` rows of an ended response and its child runs, and
+    `chat/presentation.py:replay_response` sends a `tool_approval_request` and a
+    `tool_approval_resolved` for each, after the start of the card of the
+    row's `tool_call_id`, in the order the requests opened. The outcome comes
+    from the same mapping as the stream: `chat/tool_approvals.py:ended_answer`
+    then `chat/renderer.py:approval_outcome`. An `EXPIRED` row that ended
+    before its deadline was withdrawn, so it replays as `cancelled`; a row
+    still undecided in an ended response also replays as `cancelled`. A
+    running response replays no records; its stream, through resume-stream,
+    shows them, and a waiting card stays decidable. A program's call is not
+    saved, so its replayed request has empty arguments and the program call's
+    ID.
+18. `program-call-waits-in-cell` **A program's Ask call waits inside its
+    cell.** MCP tools stay program functions in code mode.
+    `tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`
+    asks `ToolInvocation.nested_calls` (`agents/tools.py:NestedCallGate`) and
+    blocks through `NestedCallGate.wait_for_input`, giving back the cell's
+    running-cell slot while it waits. When the wait ends, the program
+    continues only once a slot is free, so resumed cells never exceed
+    `MAX_RUNNING_CELLS` (`CodeCell._update_waiting`). `execute_code` and `wait_code` keep
+    waiting instead of returning, so the model spends no steps. The request is
+    not saved with the run, and the events carry `nested_call`.
+19. `policy-fixed-per-turn` **The policy is read once per turn.**
+    `tools/tool_constructor.py:_construct_tools_impl` resolves every MCP tool's
+    policy when it builds the turn's tools. A change applies from the next
+    message; within the turn, only a session grant rechecks for DENY
+    (`chat/tool_approvals.py:open_tool_approval`), and the decision route
+    rejects an approval of a now-disabled tool.
+20. `waiting-approval-blocks-send` **A chat that waits for an approval starts
+    no user turn.** `server/query_and_chat/chat_backend.py:_reject_while_approval_waits`
+    rejects `send-chat-message` and the pending-message submit and interrupt
+    routes with `APPROVAL_PENDING` (409) while the user's chat has a pending
+    row younger than the timeout
+    (`db/approval_request.py:responses_waiting_for_approval`). A row whose
+    response has no owner expires instead. The send route checks before the
+    stream starts, so the client gets a status, not a stream packet. Stop and
+    withdraw stay open. A new route that starts a user turn in an existing
+    chat must make the same check.
 
 `Tool.enabled` gates MCP tools everywhere and OpenAPI tools only in Default
 Chat: see [[plugins#openapi-enabled-default-chat-only]].
@@ -290,6 +485,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 ---
 
 ## Known issues
+
+- The Slack and Discord bots run Ask tools without approval until they get
+  approval buttons (TODOs in `onyxbot/slack/handlers/handle_regular_answer.py`
+  and `server/query_and_chat/chat_backend.py:handle_send_chat_message`).
 
 - Schema placeholders are a plain string replace.
   `build_custom_tools_from_openapi_schema_and_headers` replaces
@@ -315,6 +514,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   server. The Community downgrade ([[billing]]) makes only group-restricted
   servers public, so a server restricted to named users fails every access
   edit until an admin makes it public.
+- A saved chat shows no approval history. The approval packets come only from
+  live runtime events; replay (`chat/presentation.py:replay_response`) renders
+  saved results, so a reload after the response shows the call's result or
+  error with no card.
 
 ---
 
@@ -329,7 +532,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - [[editions-and-gating]]: the EE `make_mcp_server_private`, and the
   encryption used for setup attempts.
 - [[agents-personas]]: `Persona__Tool` attaches these tools to agents.
-- [[craft-external-apps]]: Craft action policies (`GatedApp`) on MCP servers.
+- [[craft-external-apps]]: action policies (`GatedApp`) on MCP servers and
+  their resolution, which the chat gate calls.
+- [[agent-runtime]]: `AgentTool.approval_required`, `ToolApprovals`,
+  `NestedCallGate` and `Run.submit`, which pause and continue an approved call.
 - [[craft-sessions]]: the `mcp_config_hash` restamp that the hot reload calls.
 
 ---
@@ -372,6 +578,15 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   and the user's `MCPServerUserPreference` must not turn the server off
   ([[plugins]]); `Tool.enabled` must be true; and a tool that the remote
   server added or renamed exists only after a sync ([[#mcp-schema-from-db]]).
+- `investigate-stuck-approval` **Investigate "I approved, but the call did not
+  run".** Query `approval_request` for the response (`chat_message_id`). A
+  NULL `decision` means no decision was saved. `EXPIRED` means the deadline,
+  the end of the run or a lost owner came first, and the route returned 409.
+  A saved decision on a call that still waits means the owner did not apply
+  it: check the `chat_response_approval:<id>` wake key, search the API server
+  log for "Could not read tool approval wake-ups" or "Could not read tool
+  approval decisions", and check that the pod that owns the response still
+  runs ([[#chat-approval-owner-delivers]]).
 
 ---
 

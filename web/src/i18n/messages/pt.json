@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
       },
       "mcpPolicy": {
-        "description": "Configure o que o agente do Craft pode fazer com as ferramentas deste servidor MCP.",
+        "description": "Escolha quais ferramentas são executadas automaticamente, pedem aprovação ou ficam desativadas no chat e no Craft.",
         "emptyPolicies": "Nenhuma ferramenta habilitada neste servidor. Habilite as ferramentas primeiro na página de ações MCP.",
         "saveButton": "Salvar",
         "title": "Editar {name}"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "Configurações de aprovação de {name}",
       "title": "Configurações de aprovação",
-      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft e nas novas tarefas; as tarefas existentes mantêm suas próprias configurações.",
+      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft, nas novas tarefas e nas chamadas de ferramentas MCP no chat; as tarefas existentes mantêm suas próprias configurações.",
       "taskDescription": "Escolha os plugins que esta tarefa pode usar e quais ações serão executadas automaticamente. As alterações valem apenas para esta tarefa.",
       "newTaskDescription": "Ative um plugin para começar com suas configurações atuais de ações.",
       "workspace_disabled": "Desativada para o espaço de trabalho",

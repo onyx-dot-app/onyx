@@ -552,6 +552,7 @@ class TestRunModels:
                 openapi_schema=None,
                 mcp_input_schema=None,
                 mcp_output_schema=None,
+                mcp_read_only=None,
                 custom_headers=None,
                 passthrough_auth=False,
                 mcp_server_id=None,

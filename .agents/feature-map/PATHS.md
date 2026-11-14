@@ -41,6 +41,7 @@ covers new files that match it.
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
+| `backend/onyx/chat/tool_approvals.py`, `backend/onyx/db/approval_request.py` | mcp-and-custom-tools |
 | `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_inputs.py` | chat-persistence |
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |

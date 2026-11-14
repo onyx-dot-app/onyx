@@ -24,12 +24,14 @@ from onyx.chat.models import (
     ResponseReplayData,
     ResponseStatus,
     SavedResponse,
+    SavedToolApproval,
     ToolRecordReference,
     ToolReplayData,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
+from onyx.db.approval_request import get_response_approval_requests
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
@@ -1242,9 +1244,11 @@ def read_response_replay_data(
         reference.record_id: reference for reference in execution.tool_records
     }
     accepted: set[tuple[str, str]] = set()
+    run_ids: list[str] = []
     pending = [execution.response]
     while pending:
         response = pending.pop()
+        run_ids.append(response.run_id)
         for step in response.steps:
             if step.message.id is not None:
                 accepted.update(
@@ -1302,7 +1306,17 @@ def read_response_replay_data(
         )
     if len(rows) != len(references):
         raise ValueError("Accepted tool replay data is unavailable")
+    # A running response's requests reach the client through its stream.
+    approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
+    if accepted and execution.response.status.is_terminal:
+        for request in get_response_approval_requests(
+            db_session, [int(run_id) for run_id in run_ids]
+        ):
+            approvals.setdefault(
+                (str(request.chat_message_id), request.tool_call_id), []
+            ).append(SavedToolApproval.model_validate(request))
     return ResponseReplayData(
         tools=tools,
         documents=documents,
+        approvals=approvals,
     )

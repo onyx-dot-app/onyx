@@ -441,7 +441,7 @@ health calls are not retried.
     `ToolResult` decision becomes the call's result, so a denial raises in the
     program as a tool error does, and a `PendingToolInput` decision blocks the
     call in its cell until the answer
-    (`agents/README.md`, nested calls). A hook that raises fails
+    ([[mcp-and-custom-tools#program-call-waits-in-cell]]). A hook that raises fails
     the run, as for a direct call: `NestedCallGate.decide` raises
     `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
     cannot catch; the cell stops its program, and the observation that reports

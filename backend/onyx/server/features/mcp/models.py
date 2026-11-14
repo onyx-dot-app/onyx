@@ -469,7 +469,7 @@ class MCPServerSimpleCreateRequest(BaseModel):
 class MCPServerSimpleUpdateRequest(BaseModel):
     users_can_manage_policies: bool | None = Field(
         default=None,
-        description="Whether users may manage their own action policies. None leaves this unchanged.",
+        description="Whether users may manage action policies. None leaves this unchanged.",
     )
     name: Optional[str] = Field(None, description="Name of the MCP server")
     description: Optional[str] = Field(
@@ -479,8 +479,9 @@ class MCPServerSimpleUpdateRequest(BaseModel):
     action_policies: Optional[dict[str, ActionPolicy]] = Field(
         default=None,
         description=(
-            "Sparse per-tool Craft approval overrides keyed by tool name; "
-            "replaces the stored set. Unlisted tools use the default (ASK). "
+            "Sparse per-tool approval overrides for chat and Craft keyed by tool name; "
+            "replaces the stored set. Unlisted tools use their default: ALWAYS "
+            "when the server marks them read-only, else ASK. "
             "None leaves existing overrides unchanged."
         ),
     )
@@ -826,8 +827,9 @@ class MCPServer(BaseModel):
     action_policies: Optional[dict[str, ActionPolicy]] = Field(
         None,
         description=(
-            "Stored per-tool Craft approval overrides (sparse; unlisted tools "
-            "default to ASK). Owner/admin views only."
+            "Stored per-tool approval overrides for chat and Craft (sparse; unlisted "
+            "tools use their default: ALWAYS when read-only, else ASK). "
+            "Owner/admin views only."
         ),
     )
     last_refreshed_at: Optional[datetime.datetime] = None

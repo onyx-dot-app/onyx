@@ -94,6 +94,10 @@ test.describe("Default Agent MCP Integration", () => {
       serverId,
       MCP_ASSERTED_TOOL_NAME
     );
+    // These tests cover invocation, not approval (mcp_tool_approval.spec.ts).
+    await adminClient.setMcpActionPolicies(serverId, {
+      [MCP_ASSERTED_TOOL_NAME]: "ALWAYS",
+    });
 
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";

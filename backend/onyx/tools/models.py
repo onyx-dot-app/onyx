@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, SearchDoc
+from onyx.db.enums import GatedAppKind
 from onyx.file_store.models import (
     install_lazy_content_loader,
     maybe_materialize_lazy_content,
@@ -89,6 +90,7 @@ class ToolConfiguration(BaseModel):
     openapi_schema: dict[str, JsonValue] | None
     mcp_input_schema: dict[str, JsonValue] | None
     mcp_output_schema: dict[str, JsonValue] | None
+    mcp_read_only: bool | None
     custom_headers: list[HeaderItemDict] | None
     passthrough_auth: bool
     mcp_server_id: int | None
@@ -183,6 +185,18 @@ class DynamicSchemaInfo(BaseModel):
     message_id: int | None
     user_id: UUID | None = None
     user_email: str | None = None
+
+
+class ToolApprovalScope(BaseModel):
+    """The gated action of a tool whose calls wait for the user's approval."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # What the action policy governs, such as an MCP server and its ID.
+    app_kind: GatedAppKind
+    target_id: int
+    # Keys the action policy and session grants, e.g. the MCP tool name.
+    action_id: str
 
 
 class ChatFile(BaseModel):

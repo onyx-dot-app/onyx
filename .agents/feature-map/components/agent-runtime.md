@@ -160,7 +160,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 | Runtime interface | Chat implementation |
 |---|---|
 | `RunStore` | `chat/persistence.py:ChatResponsePersistence` saves the root response at the end and skips child runs. In a session that keeps content, `chat/run_store.py:ChatRunStore` wraps it: it saves the parent's partial record before each child reservation and saves each child when it ends. Incognito sessions have no children. |
-| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox: received inputs, unread results, withdrawn results and submitted messages. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
+| `RunOwnership` | `ChatRunStore`, with cache leases that the turn's control thread renews. It also owns the inbox: received inputs, unread results, withdrawn results and submitted messages. Its control poll also applies saved tool approval decisions. A `FULL_HISTORY` incognito run also has it; a `USAGE_ONLY` incognito run has no run ownership. |
 | `AgentDirectory` | `chat/run_store.py:ChatRunStore`, limited to the selected branch of a chat that keeps content, including a `FULL_HISTORY` incognito chat. It lists the branch's agent tree and accepts messages for any agent in it; lookup, restore, and run reads go through each agent's spawner. A `USAGE_ONLY` incognito run has no directory. |
 | Event listener | `chat/presentation.py:ResponsePresenter`. |
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
@@ -168,9 +168,16 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 
 **Live and not wired.** In-process suspension is live: deep research and the
 coding agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. No product code requests human input through `PendingToolInput` or calls
-`Run.suspend`, `Run.submit`, `ChatRunStore.handoff`, or `ChatRunStore.resume`.
-Only tests do.
+process. Chat tool approvals request human input in the same process: the
+runtime gates calls of `AgentTool.approval_required` through the
+coordinator's `ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`),
+which returns `PendingToolInput`, and
+`chat/run_store.py:ChatRunStore._deliver_tool_decisions` calls `Run.submit`
+([[mcp-and-custom-tools#chat-approval-owner-delivers]]). A code mode program's
+call waits through `ToolInvocation.nested_calls` (`NestedCallGate`) while the
+outer call keeps running, so that run does not suspend
+([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
+`Run.suspend`, `ChatRunStore.handoff`, or `ChatRunStore.resume`. Only tests do.
 `chat/run_store.py:ChatRunStore.restore_agent` loads a saved child for a
 new run. `chat/restoration.py:restore_subagent` rebuilds it with the current
 request's tools and settings. Checkpoint resume is separate:
@@ -183,7 +190,7 @@ the checkpoint owner and delete any row at a terminal status.
 To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool `submit` calls and code mode `state.resume`. Expect
-only the program-call wait in
+only `chat/tool_approvals.py:open_tool_approval` and the program-call wait in
 `tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`.
 
 ---
@@ -199,9 +206,12 @@ only the program-call wait in
    Neither failure shows in `run.result()`. The table in the package README lists what each
    wait means.
 2. `no-side-effect-wiring` **Do not reach human input or checkpoint transfer
-   from a product path as a side effect.** A tool that returns a
-   `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
-   `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display. Update the
+   from a product path as a side effect.** A new tool, hook or `ToolApprovals`
+   that returns a `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
+   `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display.
+   Chat tool approvals are the one reviewed source of `PendingToolInput`; a
+   new source needs its own saved requests and delivery, as
+   [[mcp-and-custom-tools#chat-approval-owner-delivers]] has. Update the
    Not wired paragraph in the same change ([[#wire-module]]).
 3. `restored-tools-must-match` **A restored run needs the same tools and
    configuration.** A checkpoint holds data only. It does not serialize clients,

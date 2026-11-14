@@ -14631,7 +14631,7 @@
         "duplicateSkillName": "L'app « {appName} » a déjà une compétence associée nommée « {skillName} ». Importez une compétence avec un autre nom."
       },
       "mcpPolicy": {
-        "description": "Configurez ce que l'agent Craft peut faire avec les outils de ce serveur MCP.",
+        "description": "Choisissez les outils qui s'exécutent automatiquement, demandent une approbation ou sont désactivés dans le chat et dans Craft.",
         "emptyPolicies": "Aucun outil activé sur ce serveur. Activez d'abord les outils sur la page des actions MCP.",
         "saveButton": "Enregistrer",
         "title": "Modifier {name}"
@@ -15828,7 +15828,7 @@
     "actionPolicies": {
       "appTitle": "Paramètres d’approbation de {name}",
       "title": "Paramètres d’approbation",
-      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft et les nouvelles tâches ; les tâches existantes conservent leurs propres paramètres.",
+      "personalDescription": "Ces paramètres déterminent si les actions s’exécutent automatiquement ou nécessitent une approbation dans les conversations Craft, les nouvelles tâches et les appels d’outils MCP dans le chat ; les tâches existantes conservent leurs propres paramètres.",
       "taskDescription": "Choisissez les plugins de cette tâche et les actions à exécuter automatiquement. Les modifications concernent uniquement cette tâche.",
       "newTaskDescription": "Activez un plugin pour partir de vos paramètres actuels des actions.",
       "workspace_disabled": "Désactivée pour cet espace de travail",

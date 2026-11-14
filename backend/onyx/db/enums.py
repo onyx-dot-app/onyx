@@ -511,6 +511,8 @@ class ApprovalDecidedVia(str, PyEnum):
     USER = "USER"
     PRE_APPROVAL = "PRE_APPROVAL"
     SESSION_GRANT = "SESSION_GRANT"
+    # The action policy blocked the action when the user approved it.
+    POLICY = "POLICY"
 
 
 class ScheduledTaskStatus(str, PyEnum):

@@ -66,7 +66,8 @@ Neighbours:
   internet egress is intentional.
 - [[mcp-and-custom-tools]]: MCP server records, access lists and credential
   storage. This component only matches and injects for Craft-enabled servers.
-  Chat outside Craft runs MCP and OpenAPI calls with no policy check or approval
+  Chat applies the same MCP tool policies through its own gate and approval
+  rows ([[mcp-and-custom-tools]]). OpenAPI calls in chat have no policy check
   ([[plugins]]).
 - [[craft-streaming]]: how an approval or connect card reaches the live
   stream.
@@ -123,8 +124,8 @@ read-only (`Tool.mcp_read_only`, from `readOnlyHint`). Grants, policies and appr
 3. If the app does not allow user management
    (`GatedApp.users_can_manage_policies` false), the workspace policy applies.
 4. Otherwise the stored choice applies: the task's choice in a scheduled run,
-   or the user's personal choice in an interactive or Slack session. A stored
-   choice can be looser than the workspace policy.
+   or the user's personal choice in an interactive or Slack session and in
+   main chat. A stored choice can be looser than the workspace policy.
 5. With no stored choice, a scheduled run uses Ask and an interactive session
    uses the workspace policy.
 
@@ -320,10 +321,11 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
 - The proxy does not scrub responses. An upstream API that echoes request
   headers in its response body returns the injected credential to the agent.
 - The MCP tool default comes from the server's unverified `readOnlyHint`
-  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, the policy view
-  and workspace saves all use it. A workspace save drops an override equal to
-  the default, so an admin Ask chosen while the default was Ask has no row. That
-  tool becomes Always when a later sync marks it read-only.
+  (`db/action_policy.py:mcp_tool_default_policy`). The proxy, chat tool
+  construction, the policy view and workspace saves all use it. A workspace
+  save drops an override equal to the default, so an admin Ask chosen while the
+  default was Ask has no row. That tool becomes Always when a later sync marks
+  it read-only.
 
 ---
 

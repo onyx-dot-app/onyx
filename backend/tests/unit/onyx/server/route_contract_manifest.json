@@ -589,6 +589,7 @@
   "POST /build/user-library/directories": "basic",
   "POST /build/user-library/upload": "basic",
   "POST /build/user-library/upload-zip": "basic",
+  "POST /chat/approvals/{approval_id}/decision": "write:chat",
   "POST /chat/chat-session/{session_id}/pending-messages": "current_chat_accessible_user, write:chat",
   "POST /chat/chat-session/{session_id}/pending-messages/{message_id}/interrupt": "current_chat_accessible_user, write:chat",
   "POST /chat/chat-session/{session_id}/stop-subagents": "write:chat",

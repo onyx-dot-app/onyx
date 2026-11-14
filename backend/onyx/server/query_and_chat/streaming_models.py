@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.context.search.models import SearchDoc
 from onyx.server.query_and_chat.placement import Placement
@@ -54,6 +54,8 @@ class StreamingType(Enum):
     CUSTOM_TOOL_START = "custom_tool_start"
     CUSTOM_TOOL_ARGS = "custom_tool_args"
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
+    TOOL_APPROVAL_REQUEST = "tool_approval_request"
+    TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
     REASONING_START = "reasoning_start"
@@ -474,6 +476,35 @@ class CodeModeDelta(BaseObj):
     response_ended: bool = False
 
 
+# A tool call waits for the user's decision; placed with the call's tool packets.
+class ToolApprovalRequest(BaseObj):
+    type: Literal["tool_approval_request"] = StreamingType.TOOL_APPROVAL_REQUEST.value
+
+    approval_id: str
+    tool_call_id: str
+    tool_name: str
+    display_name: str
+    arguments: dict[str, JsonValue]
+    expires_at: datetime
+
+
+# How a tool approval request ended: the user's decision, an approval of the
+# action for the rest of the chat session (approved_for_chat: this request's or
+# an earlier request's), no decision in time, an approval that the action
+# policy blocked or a request deleted with its tool's server (disabled), or the
+# call stopped waiting because its run or program stopped.
+ToolApprovalOutcome = Literal[
+    "approved", "approved_for_chat", "rejected", "expired", "disabled", "cancelled"
+]
+
+
+class ToolApprovalResolved(BaseObj):
+    type: Literal["tool_approval_resolved"] = StreamingType.TOOL_APPROVAL_RESOLVED.value
+
+    approval_id: str
+    outcome: ToolApprovalOutcome
+
+
 ################################################
 # Packet Object
 ################################################
@@ -504,6 +535,8 @@ PacketObj = Union[
     CustomToolStart,
     CustomToolArgs,
     CustomToolDelta,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
     FileReaderStart,
     FileReaderResult,
     MemoryToolStart,

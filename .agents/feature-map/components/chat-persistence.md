@@ -458,7 +458,10 @@ Community downgrade clears it ([[billing]]).
 8. `replay-matches-live-stream` **Replay must match the live stream.** Runtime
    replay and the live stream share `chat/renderer.py:MessageRenderer` and
    `chat/renderer.py:ToolRenderer`, so change rendering there, not in one
-   caller. Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
+   caller. Tool approval records replay from `approval_request` rows through
+   the stream's outcome mapping, `chat/renderer.py:approval_outcome`
+   ([[mcp-and-custom-tools#chat-approval-records-replay]]).
+   Runtime replay uses `chat/presentation.py:overall_stop`: a `CANCELLED`
    response with a `DEADLINE` failure gets `timed_out`; other cancellations get
    `user_cancelled`. Lost admission, lost ownership lease and control failures
    still cancel without a classified failure and replay like Stop. History keeps

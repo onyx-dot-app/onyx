@@ -63,6 +63,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     StreamingError,
+    ToolApprovalResolved,
 )
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
@@ -251,7 +252,11 @@ class ChatTurnExecution:
             clear_status_then_finish()
 
     def _publish(self, packet: Packet) -> None:
-        if not self.cancellation.cancelled:
+        # A resolution reports a saved decision, such as the rejection of a
+        # Stop, so the request's card shows it after the turn stops.
+        if not self.cancellation.cancelled or isinstance(
+            packet.obj, ToolApprovalResolved
+        ):
             self.delivery.publish(packet)
             if isinstance(packet.obj, OverallStop):
                 with self._lock:
@@ -520,7 +525,8 @@ class ChatTurnExecution:
                 with self._lock:
                     self._stores.append(store)
             else:
-                # Incognito chats have no child agents to find, restore, or own.
+                # Incognito chats have no child agents to find, restore, or own,
+                # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
             coordinator.register(
                 AgentInfo(
@@ -541,7 +547,13 @@ class ChatTurnExecution:
                 deadline_at=self._deadline_at,
                 coordinator=coordinator,
                 event_dispatcher=self.delivery.events,
-                on_event=ResponsePresenter(emitter, tool_ids=tool_ids).consume,
+                on_event=ResponsePresenter(
+                    emitter,
+                    tool_ids=tool_ids,
+                    display_names={
+                        tool.name: tool.display_name for tool in configured_tools
+                    },
+                ).consume,
             )
 
             def response_saved(completion: Future[RunState]) -> None:
@@ -619,6 +631,9 @@ class ChatTurnExecution:
                     stream_id=self.setup.stream_id,
                 ):
                     self._stopped_by_user = True
+                    # Before the runs stop, so their requests end rejected.
+                    for store in stores:
+                        store.reject_waiting_approvals()
                     self.cancellation.cancel()
             except Exception:
                 logger.exception("Failed to read chat Stop request; will retry")
@@ -669,7 +684,7 @@ def bind_run_store(
         ),
         root_response=root_response,
         on_child_released=on_child_released,
-        tool_ids={tool.name: tool.id for tool in tools},
+        tools=tools,
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
     )
@@ -817,6 +832,7 @@ def create_chat_agent(
             ),
             allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
             search_usage_forcing_setting=setup.search_params.search_usage,
+            ask_for_approval=setup.ask_for_approval,
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
 
