@@ -2837,6 +2837,11 @@ class IndexAttempt(Base):
         Integer, default=0, server_default="0"
     )
 
+    # Documents that the lister listed, and those it dropped because the
+    # stored document has the same modified time and size.
+    stubs_listed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    stubs_skipped: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
     # The last task that sent stub batches to conversion, and when. The
     # watchdog checks this task before it decides that the chain is broken.
     last_dispatch_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
