@@ -101,6 +101,8 @@ files.
 | `folder_trees[].depth`, `branching` | Folder levels under the tree's root folder, and subfolders of each folder. |
 | `folder_trees[].files_per_folder` | Files in each folder of the tree. |
 | `folder_trees[].deepest_folder_files` | More files in the first folder of the last level: a large folder deep in the tree. |
+| `folder_trees[].cycle_shortcut` | A shortcut in the first folder of the last level to the tree's root folder: a cycle that a folder walk must stop at. |
+| `folder_trees[].shortcut_to_tree` | A shortcut in the tree's root folder to the root folder of an earlier tree (its index in `folder_trees`). A folder walk follows it. |
 
 For example:
 
@@ -157,7 +159,7 @@ Useful scenarios:
 --perm-sync
 
 # Override the connector's tunables for the run
---conversion-workers 16 --partitions-per-checkpoint 8
+--conversion-workers 16
 
 # Write cProfile stats of every thread (read them with pstats)
 --profile /tmp/drive.pstats
@@ -206,7 +208,7 @@ curl -X PATCH localhost:9650/_mock/config -H 'content-type: application/json' \
 | `POST /_mock/corpus` | Generate a new corpus from corpus settings; resets the stats |
 | `GET /_mock/corpus/summary?include_ids=true` | Counts, users, shared drives and the ids of every content file |
 | `GET /_mock/corpus/files/{id}` | One file as stored, with the users who can read it |
-| `GET /_mock/corpus/folders/{id}/content-ids` | The content files under a folder at any depth: what a folder target must index |
+| `GET /_mock/corpus/folders/{id}/content-ids` | The content files under a folder at any depth, with the targets of the shortcuts in it: what a folder target must index |
 | `GET /_mock/corpus/users/{email}/content-ids?scope=` | The content files a user lists: `all_drives` (what `corpora=allDrives` returns), `owned` or `shared_with_me`. What an OAuth connector of that user must index |
 | `POST /_mock/corpus/touch` | Mark files as modified now, for incremental runs |
 | `GET /_mock/service-account-key` | A service account key for the mock |

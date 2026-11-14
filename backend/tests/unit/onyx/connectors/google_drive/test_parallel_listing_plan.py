@@ -15,7 +15,6 @@ from onyx.connectors.google_drive.file_retrieval import (
 )
 from onyx.connectors.google_drive.models import (
     DriveListingState,
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
     ListingPartition,
@@ -31,7 +30,6 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import DocumentTypeLabel
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
 
 _DRIVE = ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key="drive_1")
 _DAY = 86_400_000
@@ -171,9 +169,6 @@ def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
     """A lister of the window [_WINDOW_T0, _WINDOW_T1) where the My Drive of
     b@x.com has begun. ``admit_file`` records each dedup claim."""
     checkpoint = GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.START,
-        completion_map=ThreadSafeDict(),
         has_more=True,
         listing=DriveListingState(
             window_t0=_WINDOW_T0, window_t1=_WINDOW_T1, listed_owners={"b@x.com"}
@@ -194,6 +189,9 @@ def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
         impersonation_failed=lambda _email, _error: [],
         listing_denied=lambda _partition, _email, _error: [],
         admit_file=admit_file,
+        plan_folder_target=lambda _folder, _covered: (
+            parallel_listing.FolderTargetPlan()
+        ),
     )
 
 
@@ -252,3 +250,88 @@ def test_a_shortcut_to_an_own_old_file_is_emitted() -> None:
     assert lister._admit(shard, old)
     assert not lister._admit(shard, recent)
     assert admitted == ["old"]
+
+
+_FOLDER = ListingPartition(kind=ListingPartitionKind.FOLDER_SUBTREE, key="folder_1")
+
+
+@pytest.mark.parametrize(
+    "partition, folder_id",
+    [(_SHARED_WITH_A, None), (_FOLDER, "folder_1")],
+)
+def test_a_recovery_listing_keeps_the_targets_of_other_owners_shortcuts(
+    monkeypatch: pytest.MonkeyPatch,
+    partition: ListingPartition,
+    folder_id: str | None,
+) -> None:
+    """The My Drive listing of b@x.com failed, so a shard lists the files of
+    b@x.com again. A shortcut that c@x.com owns can point to a file of
+    b@x.com: the query must return the shortcut, and the shard keeps the
+    target and drops what other owners have."""
+    admitted: list[str] = []
+    lister = _lister(admitted)
+    lister._state.listed_owners.clear()
+    shard = ListingShard(
+        id=1,
+        partition=partition,
+        principal="a@x.com",
+        t0=_WINDOW_T0,
+        t1=_WINDOW_T1,
+        exact=False,
+        owner_filter="b@x.com",
+        folder_id=folder_id,
+    )
+    lister._state.shards[shard.id] = shard
+
+    query = lister._query(shard, shard.t0, shard.t1)
+    assert (
+        "('b@x.com' in owners or mimeType = 'application/vnd.google-apps.shortcut')"
+        in query
+    )
+
+    page: list[GoogleDriveFileType] = [
+        {"id": "own", "owners": [{"emailAddress": "b@x.com"}]},
+        {"id": "shortcut_to_b", "mimeType": "application/vnd.google-apps.shortcut"},
+        {"id": "shortcut_to_c", "mimeType": "application/vnd.google-apps.shortcut"},
+    ]
+    targets: dict[str, GoogleDriveFileType] = {
+        "shortcut_to_b": _shortcut_target("target_of_b", "b@x.com", _WINDOW_T0 - _DAY),
+        "shortcut_to_c": _shortcut_target("target_of_c", "c@x.com", _WINDOW_T0 - _DAY),
+    }
+    monkeypatch.setattr(lister, "_fetch_page", lambda _shard: (page, None))
+    monkeypatch.setattr(
+        lister, "_resolve_file", lambda _email, file: targets.get(file["id"], file)
+    )
+
+    lister._list_one_page(shard)
+
+    assert admitted == ["own", "target_of_b"]
+
+
+def test_a_folder_with_no_usable_user_is_unreachable_when_its_drive_listing_fails() -> (
+    None
+):
+    """No usable user can walk the requested folder, and a full listing of
+    its shared drive covers it. When that listing fails, nothing covers the
+    folder, so pruning must not run."""
+    lister = _lister([])
+    state = lister._state
+    state.listed_drive_ids.add(_DRIVE.key)
+    state.pending_partitions.append(_FOLDER)
+    lister._planning.add(_FOLDER)
+    lister._plan_folder_target = lambda _folder, _covered: (
+        parallel_listing.FolderTargetPlan(covered_drive_id=_DRIVE.key)
+    )
+
+    assert lister._plan_folder_subtree(_FOLDER) == []
+    assert state.folders_covered_by_drive == {"folder_1": _DRIVE.key}
+    assert lister._checkpoint.unreachable_target_ids == set()
+
+    drive_shard = ListingShard(
+        id=7, partition=_DRIVE, principal="a@x.com", t0=_WINDOW_T0, t1=_WINDOW_T1
+    )
+    state.shards[drive_shard.id] = drive_shard
+    lister._partition_failed(drive_shard, [], list_again=True)
+
+    assert state.folders_covered_by_drive == {}
+    assert lister._checkpoint.unreachable_target_ids == {"folder_1"}

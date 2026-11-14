@@ -106,23 +106,11 @@ def list_with_resume(
     return listing
 
 
-@pytest.fixture(params=["parallel", "serial"])
-def listing_mode(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> str:
-    """Runs a test on the parallel sharded listing and on the serial listing
-    that the OAuth flow and requested folders use."""
-    if request.param == "serial":
-        monkeypatch.setattr(
-            GoogleDriveConnector,
-            "_plan_parallel_listing",
-            lambda _self, _checkpoint, _start, _end: False,
-        )
-    else:
-        # Small pages and a small budget, so the small corpus needs many calls.
-        monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", 5)
-        monkeypatch.setattr(parallel_listing, "CALL_BUDGET_FILES", 10)
-    return request.param
+@pytest.fixture
+def listing_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Small pages and a small budget, so the small corpus needs many calls."""
+    monkeypatch.setattr(parallel_listing, "LISTING_PAGE_SIZE", 5)
+    monkeypatch.setattr(parallel_listing, "CALL_BUDGET_FILES", 10)
 
 
 @pytest.mark.usefixtures("listing_mode")
