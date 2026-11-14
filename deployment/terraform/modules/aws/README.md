@@ -67,6 +67,9 @@ module "onyx" {
   postgres_username = local.postgres_username
   postgres_password = local.postgres_password
   # create_vpc    = true  # default true; set to false to use an existing VPC (see below)
+
+  # New cluster: install vpc-cni, kube-proxy and CoreDNS (see "Core addons on new clusters").
+  manage_core_addons = true
 }
 
 resource "null_resource" "wait_for_cluster" {
@@ -198,6 +201,9 @@ module "onyx" {
   name              = "onyx"
   postgres_username = "pgusername"
   postgres_password = "your-postgres-password"
+
+  # New cluster: install vpc-cni, kube-proxy and CoreDNS (see "Core addons on new clusters").
+  manage_core_addons = true
 
   create_vpc       = false
   vpc_id           = "vpc-xxxxxxxx"
