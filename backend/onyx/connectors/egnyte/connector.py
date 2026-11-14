@@ -68,7 +68,7 @@ from onyx.file_processing.extract_file_text import (
     get_file_ext,
     read_text_file,
 )
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import request_with_retries
@@ -147,7 +147,7 @@ def is_indexable(file: EgnyteFile) -> bool:
     """Shared by indexing and the slim listing, so pruning never keeps a
     document for a file indexing skips."""
     # TODO(wenxi-onyx): consider allowing images
-    return get_file_ext(file.name) in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
+    return is_indexable_file_type(file.name, None, allow_images=False)
 
 
 def _extract_text(file: EgnyteFile, file_content: BytesIO) -> str:

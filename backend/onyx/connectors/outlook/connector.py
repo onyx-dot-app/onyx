@@ -138,9 +138,8 @@ from onyx.connectors.outlook.threads import (
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
     extract_file_text_locally,
-    get_file_ext,
 )
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import run_in_isolated_process
@@ -412,10 +411,7 @@ def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
         return "not a file attachment"
     if attachment.is_inline:
         return "inline attachment"
-    if (
-        get_file_ext(attachment.name)
-        not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
-    ):
+    if not is_indexable_file_type(attachment.name, None, allow_images=False):
         return "unsupported file type"
     if attachment.size > OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
         return "over the size threshold"

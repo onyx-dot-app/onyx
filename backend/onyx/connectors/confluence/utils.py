@@ -16,8 +16,8 @@ from onyx.configs.app_configs import (
     REQUEST_TIMEOUT_SECONDS,
 )
 from onyx.configs.constants import FileOrigin
-from onyx.file_processing.extract_file_text import extract_file_text, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
+from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.file_types import OnyxMimeTypes, is_indexable_file_type
 from onyx.file_processing.html_utils import format_document_soup
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.utils.datetime import datetime_to_utc
@@ -51,14 +51,16 @@ def validate_attachment_filetype(
     Validates if the attachment is a supported file type.
     """
     media_type = attachment.get("metadata", {}).get("mediaType", "")
-    if media_type.startswith("image/"):
-        return media_type in OnyxMimeTypes.IMAGE_MIME_TYPES
-
-    # For non-image files, check if we support the extension
-    title = attachment.get("title", "")
-    extension = get_file_ext(title)
-
-    return extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+    # An image media type that Onyx does not read wins over the title.
+    if (
+        media_type.startswith("image/")
+        and media_type not in OnyxMimeTypes.IMAGE_MIME_TYPES
+    ):
+        return False
+    # allow_images is applied by the callers.
+    return is_indexable_file_type(
+        attachment.get("title", ""), media_type, allow_images=True
+    )
 
 
 class AttachmentProcessingResult(BaseModel):
