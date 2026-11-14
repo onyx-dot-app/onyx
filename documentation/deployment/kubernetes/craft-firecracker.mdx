@@ -343,8 +343,10 @@ craft:
 
 The clients connect to host agent pod IPs. Set `client.tlsServerName` to a DNS SAN of the host agent certificate.
 With the chart-made certificates, `client.tlsServerName` is optional.
-Set `clientAllowedSans` to accept only client certificates with one of these SANs. When it is empty,
-the host agent accepts every client certificate that its CA signed.
+Set `clientAllowedSans` to accept only client certificates with one of these SANs. {/* depends: #17839 */}
+When it is empty with the chart-made certificates, the chart sets it to the chart's client certificate name.
+When it is empty with `existingSecret`, the host agent accepts every client certificate that its CA signed. Set it,
+so that an agent certificate from the same CA cannot call the other agents.
 
 ## Verify the deployment
 

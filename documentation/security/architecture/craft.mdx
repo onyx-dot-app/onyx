@@ -89,7 +89,7 @@ The microVM does not share a kernel with other sandboxes, with the node, or with
 | --- | --- |
 | **Hardware virtualization** | The guest kernel runs in its own virtual machine on KVM. |
 | **Minimal virtual hardware** | Firecracker gives the microVM block devices, a vsock socket, a memory balloon, and a serial console. The microVM has no network card and no instance metadata service. |
-| **Firecracker process** | Firecracker runs with its default seccomp filters. The Firecracker jailer runs each microVM process as its own unprivileged user, in a chroot and its own PID namespace. |
+| **Firecracker process** | Firecracker runs with its default seccomp filters. The Firecracker jailer runs each microVM process as its own unprivileged user, in a chroot, in its own PID namespace, and in an empty network namespace of its own. {/* depends: #17839 */} |
 | **Resource limits** | Each microVM runs in its own systemd scope with a memory limit and a CPU limit. |
 | **Clean starts** | Each microVM starts from a node template. The host agent checks the template files against their SHA-256 hashes and stops a start if a file changed. |
 | **Commands in the guest** | Agent commands run as an unprivileged user (UID 1000) in the guest. Skills and User Library files are on a drive that the microVM cannot write. |
@@ -97,6 +97,7 @@ The microVM does not share a kernel with other sandboxes, with the node, or with
 ### Network and identity
 
 The microVM cannot open a network connection. Its only way out is a vsock socket to the host agent on its node.
+A connection from the microVM to any other port on the node is refused.
 The host agent forwards the traffic to the sandbox proxy, which applies the same destination policies, approvals,
 and credential injection as for pod sandboxes. Credentials stay in the proxy.
 
@@ -109,9 +110,12 @@ A node registers its key with a shared registration value.
 ### Control plane access
 
 Only the API server, the heavy worker, and the Scheduled Task worker can call the host agent.
-The calls use mutual TLS 1.3 with a separate client CA, and a NetworkPolicy allows only these pods.
+The calls use mutual TLS 1.3, and a NetworkPolicy allows only these pods. {/* depends: #17839 */}
+With the certificates that the chart makes, the host agents accept only the chart's client certificate.
+With your own PKI, set `craft.hostAgent.clientAllowedSans` to the SANs of your client certificates.
 Each microVM has its own random key for its command service, new for each start.
 The host agent writes an audit line for each call. The line has no request body and no key.
+The host agent writes its audit lines to its standard error. Ship the pod logs to keep them off the node.
 
 ### Data on the node
 
@@ -119,8 +123,15 @@ The host agent writes an audit line for each call. The line has no request body 
 - Session files go to the file store through presigned URLs, each for one object and one method. The nodes have no
   storage credentials.
 - Onyx does not save microVM memory of user sessions. Session saves contain files only.
+- A microVM stops after 15 minutes without activity (`SANDBOX_FC_IDLE_TIMEOUT_SECONDS`). Onyx saves the session
+  files first. Onyx also saves at the end of a turn and when a node drains.
 - When you delete a Craft session or a user, Onyx deletes the session saves from the file store. See
   [Delete user data](/deployment/kubernetes/craft-firecracker-operations#delete-user-data).
+- The chat retention setting does not delete Craft session saves.
+- Node disk and file store encryption come from your platform. On bare metal, and with the bundled object store,
+  set up encryption yourself.
+- The hop from the host agent to the sandbox proxy is plain TCP inside the cluster. Each token on it is signed,
+  valid for 60 seconds, and used one time.
 
 ### The host agent is privileged
 
@@ -128,6 +139,7 @@ The host agent runs as a privileged DaemonSet with `hostPID`, `/dev/kvm`, and a 
 in its own namespace with Pod Security `privileged`. User sandboxes never run in that namespace.
 Container security tools (Amazon GuardDuty, Microsoft Defender for Containers, Google Security Command Center)
 can report findings for this DaemonSet. Scope suppressions to the host agent namespace only.
+You patch the node operating system and the host kernel.
 
 ## Network egress
 
