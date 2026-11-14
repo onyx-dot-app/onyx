@@ -24,7 +24,7 @@ so the preflight check prints a `WARN kernel` line for it.
 Some subscriptions cannot use every VM size in every region. Before you apply, run:
 
 ```bash
-az vm list-skus -l <region> --size Standard_D8ds \
+az vm list-skus --all -l <region> --size Standard_D8ds \
   --query "[].{name:name,restriction:restrictions[0].reasonCode}" -o table
 az vm list-usage -l <region> -o table
 ```
