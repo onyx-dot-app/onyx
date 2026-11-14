@@ -326,7 +326,11 @@ set `monitoring.serviceMonitors.enabled: true` (with
 `monitoring.serviceMonitors.labels` that match your Prometheus
 `serviceMonitorSelector`), unless another scrape configuration collects the
 agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
-to its `job` label. Runbooks: `microvm/RUNBOOKS.md`.
+to its `job` label. Each alert links to
+`craft.hostAgent.alerts.runbookUrl#<alert name in lower case>`; the default is
+the Craft Firecracker operations page on docs.onyx.app (source:
+`microvm/RUNBOOKS.md`). Set `runbookUrl` to your own copy if your on-call
+team cannot reach docs.onyx.app.
 
 ## Using an external Redis
 
