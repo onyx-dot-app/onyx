@@ -72,9 +72,12 @@ submitted, so nodes still precede their documents.
 
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
-the given user with a service-account key. The gateway keeps one Drive client
-per thread (`threading.local`), because `googleapiclient` over `httplib2` is
-not thread safe.
+the given user with a service-account key. The gateway impersonates each user
+once and shares that credential across threads, so each user's token is fetched
+once (`GoogleDriveSourceOperations._impersonated`). It keeps the Drive and
+directory clients and the Docs API sessions per thread (`threading.local`),
+because `googleapiclient` over `httplib2` and a `requests` session are not
+thread safe. A thread keeps only its most recent Docs sessions.
 
 ---
 

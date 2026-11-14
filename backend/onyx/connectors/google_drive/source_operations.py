@@ -15,6 +15,7 @@ import inspect
 import io
 import json
 import threading
+from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from enum import Enum
@@ -23,6 +24,7 @@ from typing import Any, ParamSpec, TypeVar, cast
 import httplib2
 import requests
 from google.auth.exceptions import RefreshError, TransportError
+from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.errors import HttpError
@@ -54,8 +56,8 @@ from onyx.connectors.google_utils.google_utils import (
 )
 from onyx.connectors.google_utils.resources import (
     GoogleService,
-    get_google_authorized_session,
-    get_google_service,
+    build_google_service,
+    get_impersonated_creds,
 )
 from onyx.connectors.google_utils.shared_constants import (
     DB_CREDENTIALS_PRIMARY_ADMIN_KEY,
@@ -85,6 +87,8 @@ _CHUNK_SIZE_BUFFER = 64
 _DOCS_API_DOCUMENT_URL = "https://docs.googleapis.com/v1/documents/{doc_id}"
 _FORMS_API_FORM_URL = "https://forms.googleapis.com/v1/forms/{form_id}"
 _DOCS_FETCH_TIMEOUT_SECONDS = 60
+# Docs API sessions a thread keeps open, one per user it read as most recently.
+_MAX_DOCS_SESSIONS_PER_THREAD = 8
 _DOCS_FETCH_CHUNK_SIZE = 1024 * 1024
 # The Docs API's per-user read quota resets each minute; these waits add up to
 # about half a minute.
@@ -423,24 +427,70 @@ class GoogleDriveSourceOperations(SourceOperations):
             raise RuntimeError("Bug: the credential load set no credentials.")
         return self._cached_creds
 
-    def _drive(self, user_email: str) -> Any:
-        """One Drive client per thread and user. A build is not free, and a
-        client is not thread-safe."""
-        local: threading.local = vars(self).setdefault(
-            "_drive_clients", threading.local()
-        )
-        clients: dict[str, Any] = vars(local).setdefault("by_user", {})
-        if user_email not in clients:
-            clients[user_email] = get_google_service(
-                GoogleService.DRIVE, self._creds(), user_email
+    def _impersonated(
+        self, user_email: str
+    ) -> ServiceAccountCredentials | OAuthCredentials:
+        """One credential per user, shared by every thread's clients, so each
+        user's token is fetched once and refreshed when it expires."""
+        by_email: dict[str, ServiceAccountCredentials | OAuthCredentials] = vars(
+            self
+        ).setdefault("_impersonated_by_email", {})
+        creds = by_email.get(user_email)
+        if creds is None:
+            creds = by_email.setdefault(
+                user_email, get_impersonated_creds(self._creds(), user_email)
             )
-        return clients[user_email]
+        return creds
+
+    def _thread_clients(self) -> dict[tuple[str, str], Any]:
+        """This thread's clients, by kind and user. A client is not
+        thread-safe, and a build is not free."""
+        local: threading.local = vars(self).setdefault(
+            "_thread_local_clients", threading.local()
+        )
+        return vars(local).setdefault("by_key", {})
+
+    def _drive(self, user_email: str) -> Any:
+        clients = self._thread_clients()
+        key = ("drive", user_email)
+        if key not in clients:
+            clients[key] = build_google_service(
+                GoogleService.DRIVE, self._impersonated(user_email)
+            )
+        return clients[key]
 
     def _directory(self) -> Any:
         """The Admin SDK directory service, acting as the primary admin."""
-        return get_google_service(
-            GoogleService.ADMIN, self._creds(), self._auth().primary_admin_email
+        clients = self._thread_clients()
+        admin = self._auth().primary_admin_email
+        key = ("directory", admin)
+        if key not in clients:
+            clients[key] = build_google_service(
+                GoogleService.ADMIN, self._impersonated(admin)
+            )
+        return clients[key]
+
+    def _docs_session(self, user_email: str) -> AuthorizedSession:
+        """This thread's Docs API session for the user. Reusing it keeps the
+        connection open between documents. A thread keeps only its most
+        recent sessions, so a run over many users does not hold a connection
+        open for each of them."""
+        local: threading.local = vars(self).setdefault(
+            "_thread_local_clients", threading.local()
         )
+        sessions: OrderedDict[str, AuthorizedSession] = vars(local).setdefault(
+            "docs_sessions", OrderedDict()
+        )
+        session = sessions.get(user_email)
+        if session is not None:
+            sessions.move_to_end(user_email)
+            return session
+        session = AuthorizedSession(self._impersonated(user_email))
+        sessions[user_email] = session
+        if len(sessions) > _MAX_DOCS_SESSIONS_PER_THREAD:
+            _, oldest = sessions.popitem(last=False)
+            oldest.close()
+        return session
 
     def _domain(self) -> str:
         return self._auth().primary_admin_email.split("@")[-1]
@@ -891,18 +941,17 @@ class GoogleDriveSourceOperations(SourceOperations):
     ) -> dict[str, Any] | None:
         """The JSON body of a GET, streamed so an oversized one is never held
         whole. None when it exceeds ``max_response_bytes``."""
-        with get_google_authorized_session(self._creds(), user_email) as session:
-            with session.get(
-                url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
-            ) as response:
-                response.raise_for_status()
-                buffer = bytearray()
-                for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
-                    if not chunk:
-                        continue
-                    if len(buffer) + len(chunk) > max_response_bytes:
-                        return None
-                    buffer.extend(chunk)
+        with self._docs_session(user_email).get(
+            url, params=params, stream=True, timeout=_DOCS_FETCH_TIMEOUT_SECONDS
+        ) as response:
+            response.raise_for_status()
+            buffer = bytearray()
+            for chunk in response.iter_content(chunk_size=_DOCS_FETCH_CHUNK_SIZE):
+                if not chunk:
+                    continue
+                if len(buffer) + len(chunk) > max_response_bytes:
+                    return None
+                buffer.extend(chunk)
         return json.loads(buffer)
 
     @source_operation(
