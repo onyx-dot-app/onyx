@@ -538,15 +538,19 @@ Community downgrade clears it ([[billing]]).
     display grouping. `db/chat_response.py:write_response_items` also refuses
     an update that drops a saved item or tool result, so a run must keep its
     step ids stable across saves.
-15. `checkpoints-not-written` **No chat path writes a checkpoint.**
-    `chat/run_store.py:ChatRunStore.handoff` writes `chat_response_checkpoint`
-    and `agent-checkpoint/<root session id>/` blobs
-    (`chat/restoration.py:persist_checkpoint_files`), but nothing calls it.
-    Nothing calls `ChatRunStore.resume` either, so no chat path claims a
-    checkpoint or runs `chat/restoration.py:restore_chat_agent`. A turn that a
-    restart interrupts is never resumed ([[#save-chat-turn-one-commit]]). A
-    feature that starts to suspend runs must keep blobs under the root session
-    id, because hard delete finds them only by that prefix.
+15. `checkpoints-for-approvals` **Only a chat turn that waits for approval
+    writes a checkpoint.** `chat/execution.py:ChatTurnExecution._hand_off`
+    calls `chat/run_store.py:ChatRunStore.handoff`, which writes
+    `chat_response_checkpoint`, sets the response `SUSPENDED`, and saves
+    `agent-checkpoint/<root session id>/` blobs
+    (`chat/restoration.py:persist_checkpoint_files`), parked programs' dumps
+    included. The continuation's `ChatRunStore.resume` claims it once and runs
+    `chat/restoration.py:restore_chat_agent`; completion deletes it
+    ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A turn that a
+    restart interrupts mid-step is never resumed
+    ([[#save-chat-turn-one-commit]]). A feature that suspends runs must keep
+    blobs under the root session id, because hard delete finds them only by
+    that prefix.
 16. `code-mode-replay-content` **A code mode result is replayed as saved, so
     its content must carry what the next turn needs**
     (`tools/tool_implementations/code_mode/prompt.py:format_content`). An

@@ -39,10 +39,12 @@
   text. Multi-model Stop also marks the individual response IDs, so automatic
   child-result delivery can check the same stop request. Anonymous users cannot
   stop ([[#anonymous-send]]).
-- **A tool call waits for approval.** The response pauses inside the turn, so
-  the session stays busy until the user decides, the request expires or the
-  user stops the turn. Stop expires the request
-  ([[mcp-and-custom-tools#chat-approval-owner-delivers]]).
+- **A tool call waits for approval.** When nothing but approval requests
+  remains, the turn stops with `awaiting_approval` and the session is idle;
+  the user can draft but not send. Once the user decides every request, the
+  response continues in a new stream, on any server
+  ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
+  rejects its waiting requests.
 - **Leaving is not stopping.** If the user closes the tab, navigates away or loses
   the network, the run continues on the server and is saved. When the user returns
   while the run is live, the client resumes the stream ([[streaming-protocol]]).

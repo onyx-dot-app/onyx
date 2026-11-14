@@ -230,7 +230,7 @@ class ToolApprovalDenial(BaseModel):
 
     # disabled: the action policy blocked the call when the user approved it,
     # or the tool's server was deleted while the call waited.
-    outcome: Literal["rejected", "expired", "disabled"]
+    outcome: Literal["rejected", "disabled"]
 
 
 class MessageRendering(BaseModel):
@@ -390,6 +390,9 @@ class ChatInbox(BaseModel):
     child_work: list[AgentInboxWork] = Field(default_factory=list)
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
+    # The selected response, suspended while tool calls waited for approval,
+    # once none of its requests waits; it continues before any queued turn.
+    resumable_response_id: int | None = None
 
     @property
     def unfinished_response_ids(self) -> list[int]:
@@ -609,9 +612,9 @@ class ChatFullResponse(BaseModel):
     # packet does. A server that omits it did not honor an incognito request.
     incognito: bool = False
     error_msg: str | None = None
-    # Set when the response returned early because a tool call waits for the
-    # user's approval. The turn keeps running; its answer is saved to the chat
-    # session after the decision. Empty for a finished response.
+    # Set when the response stopped because tool calls wait for the user's
+    # approval (stop reason `awaiting_approval`). After the decisions the
+    # response continues in the chat session. Empty for a finished response.
     pending_tool_approvals: list[ToolApprovalRequest] = []
 
 
@@ -897,6 +900,9 @@ class ChatTurnSetup(BaseModel):
     # for a bot that cannot show approval requests. Only server-side callers
     # set it; the public request has no such field.
     ask_for_approval: bool = True
+    # The suspended response that this turn continues after its approvals,
+    # under a new stream ID; None for a turn that starts a response.
+    resumed_response_id: int | None = None
 
 
 class ResponseOwner(BaseModel):
@@ -986,6 +992,6 @@ class ResponseReplayData(BaseModel):
 
     tools: dict[tuple[str, str], ToolReplayData]
     documents: dict[str, SearchDoc]
-    # The approval requests of an ended response, in the order they were
-    # made, by response run ID and tool call ID.
+    # The approval requests of an ended or suspended response, in the order
+    # they were made, by response run ID and tool call ID.
     approvals: dict[tuple[str, str], list[SavedToolApproval]]

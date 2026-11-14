@@ -1627,6 +1627,20 @@ def create_chat_history_chain(
     return mainline_messages
 
 
+def reserve_stream_id(db_session: Session) -> int:
+    """A new stream ID for a stream without a new message, such as one that
+    continues a suspended response. It comes from the message ID sequence, so
+    it never equals another stream's ID, which is a message ID."""
+    stream_id = db_session.scalar(
+        select(
+            func.nextval(func.pg_get_serial_sequence(ChatMessage.__tablename__, "id"))
+        )
+    )
+    if stream_id is None:
+        raise RuntimeError("The message ID sequence returned no value")
+    return stream_id
+
+
 def load_message_branch(
     chat_session_id: UUID,
     parent_id: int | None,

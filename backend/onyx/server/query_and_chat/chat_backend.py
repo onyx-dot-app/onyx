@@ -1,6 +1,6 @@
 import datetime
 import time
-from collections.abc import Collection, Generator
+from collections.abc import Generator
 from concurrent.futures import Future
 from datetime import timedelta
 from typing import Annotated
@@ -27,7 +27,6 @@ from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
 from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import (
     ADMISSION_CACHE_TIMEOUT_S,
     current_turn_owner,
@@ -63,11 +62,9 @@ from onyx.chat.run_store import (
     ownerless_response_ids,
     request_response_stop,
     stop_response,
-    wake_approval_waiters,
 )
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
-from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
@@ -83,7 +80,6 @@ from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.action_policy import current_action_policy
 from onyx.db.approval_request import (
-    close_pending_approval_requests__no_commit,
     get_approval_request_for_user,
     record_approval_decision__no_commit,
     responses_waiting_for_approval,
@@ -171,7 +167,7 @@ from onyx.secondary_llm_flows.chat_session_naming import (
     get_fallback_chat_session_name,
 )
 from onyx.server.api_key_usage import check_api_key_usage
-from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
+from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
@@ -179,6 +175,7 @@ from onyx.server.query_and_chat.chat_utils import (
 )
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
+    ChatApprovalDecisionRequest,
     ChatFeedbackRequest,
     ChatMessageIdentifier,
     ChatRenameRequest,
@@ -912,32 +909,11 @@ def end_incognito_session(
             logger.exception("Incognito teardown could not %s for %s", what, session_id)
 
 
-def _expire_ownerless_approvals(
-    db_session: Session, cache: CacheBackend, response_ids: Collection[int]
-) -> set[int]:
-    """Expire the requests of the responses that lost their owner, e.g. to a
-    server restart: nothing waits for their decisions. Returns those responses."""
-    ownerless = ownerless_response_ids(cache, response_ids)
-    if ownerless:
-        for response_id in ownerless:
-            close_pending_approval_requests__no_commit(
-                db_session,
-                ApprovalDecision.EXPIRED,
-                None,
-                chat_message_id=response_id,
-            )
-        db_session.commit()
-    return ownerless
-
-
-def _reject_while_approval_waits(
-    db_session: Session, chat_session_id: UUID, user: User
-) -> None:
-    """The user may draft but not send while the chat waits for an approval."""
-    waiting = responses_waiting_for_approval(
-        db_session, chat_session_id, user.id, timeout=TOOL_APPROVAL_TIMEOUT
-    )
-    if waiting - _expire_ownerless_approvals(db_session, get_cache_backend(), waiting):
+def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> None:
+    """The user may draft but not send while a request of the selected branch
+    waits for a decision."""
+    _, branch = get_selected_branch(db_session, chat_session_id)
+    if responses_waiting_for_approval(db_session, branch.message_ids):
         raise OnyxError(
             OnyxErrorCode.APPROVAL_PENDING,
             "Approve or reject the pending requests before you send a message",
@@ -955,8 +931,9 @@ def _reject_while_approval_waits(
             "description": (
                 "If `stream=true`, returns `text/event-stream`.\n"
                 "If `stream=false`, returns `application/json` (ChatFullResponse). "
-                "It returns early, with `pending_tool_approvals`, when a tool "
-                "call waits for the user's approval."
+                "When tool calls wait for the user's approval, the response "
+                "stops and lists them in `pending_tool_approvals`; after the "
+                "decisions it continues in the chat session."
             ),
             "content": {
                 "text/event-stream": {
@@ -988,8 +965,8 @@ def handle_send_chat_message(
         chat_message_req (SendMessageRequest): Details about the new chat message.
             - When stream=True (default): Returns StreamingResponse with SSE
             - When stream=False: Returns ChatFullResponse with complete data, or
-              early with `pending_tool_approvals` when a tool call waits for the
-              user's approval
+              with `pending_tool_approvals` when the response stops because tool
+              calls wait for the user's approval
         request (Request): The current HTTP request context.
         user (User): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
@@ -1007,9 +984,7 @@ def handle_send_chat_message(
     # Check before streaming starts, so the client gets a status, not a packet.
     if chat_message_req.chat_session_id is not None:
         with get_session_with_current_tenant() as db_session:
-            _reject_while_approval_waits(
-                db_session, chat_message_req.chat_session_id, user
-            )
+            _reject_while_approval_waits(db_session, chat_message_req.chat_session_id)
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
@@ -1525,6 +1500,8 @@ def get_chat_session_processing_status(
         and user.id is not None
         and (
             inbox.next_turn is not None
+            # A suspended response whose requests are all decided continues.
+            or inbox.resumable_response_id is not None
             # Dispatch saves a response whose owner is gone as interrupted.
             or ownerless_response_ids(cache, inbox.unfinished_response_ids)
             # Agent work needs a host when no running child's store scans.
@@ -1671,7 +1648,7 @@ def submit_pending_chat_message(
 ) -> PendingChatMessage:
     """Submit text for the next step, normal completion, or interruption."""
     chat_session = get_human_input_session(db_session, session_id, user)
-    _reject_while_approval_waits(db_session, session_id, user)
+    _reject_while_approval_waits(db_session, session_id)
     cache = get_cache_backend()
     pending = submit_human_message__no_commit(
         db_session,
@@ -1743,7 +1720,7 @@ def interrupt_with_pending_chat_message(
 ) -> PendingChatMessage:
     """Stop current work; the message starts the next turn."""
     get_human_input_session(db_session, session_id, user)
-    _reject_while_approval_waits(db_session, session_id, user)
+    _reject_while_approval_waits(db_session, session_id)
     pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
     cache = get_cache_backend()
     # The interrupt stops the turn running at commit, never the turn it starts.
@@ -1814,34 +1791,32 @@ def stop_chat_subagents(
 @router.post("/approvals/{approval_id}/decision", tags=PUBLIC_API_TAGS)
 def decide_approval(
     approval_id: UUID,
-    body: DecisionBody,
+    body: ChatApprovalDecisionRequest,
+    request: Request,
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> ApprovalDecisionResponse:
     """Approve or reject an action in a chat that waits for the user.
 
-    The decision is saved, then its waiter is woken to continue the action.
-    Repeating a saved decision returns it, also after the response ends or the
-    action policies change; a different one, or a request that is no longer
-    waiting, is a conflict. Approving an action that the current action
-    policies block saves a rejection by the policy (`decided_via` POLICY).
+    The decision is saved. Once no request of its response waits, the response
+    continues under a new stream ID, which the chat session's status reports
+    when this returns. Repeating a saved decision returns it, also after the
+    response ends or the action policies change; a different one, or a
+    request that is no longer waiting, is a conflict. Approving an action that
+    the current action policies block saves a rejection by the policy
+    (`decided_via` POLICY). `mcp_headers` reach the MCP servers of the
+    continuation and are not saved.
     """
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
-    cache = get_cache_backend()
-    ownerless = _expire_ownerless_approvals(
-        db_session, cache, [approval.chat_message_id]
-    )
     rejected = body.decision == ApprovalChoice.REJECT
     upgrades_to_grant = (
         body.decision == ApprovalChoice.APPROVE_SESSION
         and approval.decision == ApprovalDecision.APPROVED
         and approval.decided_via == ApprovalDecidedVia.USER
     )
-    decided_responses: set[int] = set()
-    # Nothing waits for an ownerless response's decision, so none is saved.
-    if not ownerless and (approval.decision is None or upgrades_to_grant):
+    if approval.decision is None or upgrades_to_grant:
         blocked = (
             current_action_policy(
                 db_session,
@@ -1851,7 +1826,7 @@ def decide_approval(
             )
             == ActionPolicy.DENY
         )
-        decided_responses = record_approval_decision__no_commit(
+        record_approval_decision__no_commit(
             db_session,
             approval,
             ApprovalDecision.REJECTED
@@ -1862,7 +1837,6 @@ def decide_approval(
             else ApprovalDecidedVia.SESSION_GRANT
             if body.decision == ApprovalChoice.APPROVE_SESSION
             else ApprovalDecidedVia.USER,
-            timeout=TOOL_APPROVAL_TIMEOUT,
         )
     db_session.refresh(approval)
     decided_via = approval.decided_via
@@ -1880,7 +1854,13 @@ def decide_approval(
             "This request was already decided or is no longer waiting",
         )
     db_session.commit()
-    wake_approval_waiters(cache, decided_responses)
+    dispatch_pending_chat_messages(
+        approval.chat_session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+        mcp_headers=body.mcp_headers,
+    )
     return ApprovalDecisionResponse(
         approval_id=approval_id, decision=decision, decided_via=decided_via
     )

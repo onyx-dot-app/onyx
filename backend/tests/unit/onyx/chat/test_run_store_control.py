@@ -18,7 +18,6 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.agents.runtime import Run
-from onyx.agents.tools import InputMode, PendingToolInput
 from onyx.cache.interface import CacheBackend
 from onyx.chat import run_store
 from onyx.chat.models import (
@@ -28,12 +27,10 @@ from onyx.chat.models import (
     ResponseOwner,
 )
 from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
-from onyx.db.enums import GatedAppKind
 from onyx.db.models import User
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolApprovalScope
 
 
 class Clock:
@@ -51,8 +48,6 @@ def ownership(
     monkeypatch.setattr(run_store, "time", clock)
     cache = MagicMock(spec=CacheBackend)
     cache.exists.return_value = False
-    # Every Stop key is present; `get` supplies its value.
-    cache.exists_many.side_effect = lambda keys: set(keys)
     cache.get.return_value = None
     cache.renew_if_value.return_value = True
     store = ChatRunStore(
@@ -160,56 +155,6 @@ def test_stop_read_failure_retries_without_invalidating_lease(
     run.cancel.assert_not_called()
     store.poll_control()
     run.cancel.assert_called_once()
-
-
-def test_one_cache_read_finds_stop_requests_and_approval_wake_ups(
-    ownership: tuple[ChatRunStore, _OwnerLease, MagicMock, MagicMock, Clock],
-) -> None:
-    store, _, run, cache, _ = ownership
-    store._approval_scopes = {
-        "send": ToolApprovalScope(
-            app_kind=GatedAppKind.MCP_SERVER, target_id=3, action_id="send"
-        )
-    }
-    run.pending_inputs = [
-        PendingToolInput(
-            request_id=str(uuid4()),
-            prompt="Allow send?",
-            mode=InputMode.EXECUTE,
-            approval=True,
-        )
-    ]
-    cache.exists_many.side_effect = lambda _keys: set()
-    # Not yet due for the fallback read of the decisions.
-    store._next_approval_read = 1.0
-    store.poll_control()
-    cache.exists_many.assert_called_once_with(
-        [run_store._stop_key(1), run_store._approval_wake_key(1)]
-    )
-    cache.get.assert_not_called()
-
-
-def test_control_ignores_requests_that_approvals_did_not_open(
-    ownership: tuple[ChatRunStore, _OwnerLease, MagicMock, MagicMock, Clock],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    store, _, run, cache, _ = ownership
-    store._approval_scopes = {
-        "send": ToolApprovalScope(
-            app_kind=GatedAppKind.MCP_SERVER, target_id=3, action_id="send"
-        )
-    }
-    # A request from a before_tool_call hook or a question tool.
-    run.pending_inputs = [
-        PendingToolInput(request_id="hook", prompt="Allow?", mode=InputMode.EXECUTE)
-    ]
-    settle = MagicMock()
-    monkeypatch.setattr(run_store, "settle_approval_requests__no_commit", settle)
-    store.poll_control()
-    cache.exists_many.assert_called_once_with([run_store._stop_key(1)])
-    settle.assert_not_called()
-    run.submit.assert_not_called()
-    run.cancel.assert_not_called()
 
 
 def test_root_and_child_control_calls_use_the_callers_thread(

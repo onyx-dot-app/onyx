@@ -102,9 +102,9 @@ usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 - Craft: `ActionApproval` rows (`action_approval`) that the sandbox proxy writes and waits on
   (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`), with "approve for session" scoped
   to a Craft session. See [[craft-external-apps]].
-- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls
-  (`chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`), with "Approve for this chat" scoped to a
-  chat session. See [[mcp-and-custom-tools#chat-approval-owner-delivers]].
+- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
+  deadline; the response is saved while they wait. "Approve for this chat" is
+  scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
 
 **MCP** goes both ways. Onyx is an MCP client of servers that an admin connects
 ([[mcp-and-custom-tools]]), and an MCP server for external clients

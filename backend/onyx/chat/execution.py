@@ -18,7 +18,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Run
+from onyx.agents.runtime import Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
@@ -33,7 +33,7 @@ from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
-from onyx.chat.run_store import ChatRunStore
+from onyx.chat.run_store import ChatRunStore, fail_suspended_response
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.chat_configs import (
@@ -42,6 +42,7 @@ from onyx.configs.chat_configs import (
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
 from onyx.db.chat_inputs import pause_chat_queue__no_commit
+from onyx.db.chat_response import read_suspended_response_replay
 from onyx.db.chat_subagents import load_chat_branch
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
@@ -209,6 +210,8 @@ class ChatTurnExecution:
         self._query_observation = query_observation
         self._dispatch_pending_messages = dispatch_pending_messages
         self._stores: list[ChatRunStore] = []
+        # The store of each response, by model index, to hand off its run.
+        self._response_stores: dict[int, ChatRunStore] = {}
         self.cancellation = CancellationSignal()
         self._response_future = response_future
         self._response_workers: dict[Future[Run | None], ChatResponsePersistence] = {}
@@ -400,7 +403,9 @@ class ChatTurnExecution:
                 if not worker_done:
                     continue
                 if run is not None:
-                    if not run.status.is_terminal:
+                    if not run.status.is_terminal and not self._hand_off(
+                        run, persistence
+                    ):
                         continue
                     try:
                         if not run.wait_for_idle(timeout=0):
@@ -431,6 +436,32 @@ class ChatTurnExecution:
                         snapshot.status, snapshot.failure
                     )
             del self._response_workers[worker]
+
+    def _hand_off(self, run: Run, persistence: ChatResponsePersistence) -> bool:
+        """Save a suspended run that has nothing left but approval waits and
+        release it, so the turn ends with `awaiting_approval`; a decision
+        resumes it on any pod. True once it handed off."""
+        store = self._response_stores.get(persistence.model_index)
+        if (
+            store is None
+            or run.status != RunStatus.SUSPENDED
+            or not run.wait_for_idle(timeout=0)
+            or not any(request.approval for request in run.pending_inputs)
+        ):
+            return False
+        try:
+            store.handoff(run.id)
+        except RunNotTransferable:
+            # A foreground child still runs; the run hands off after it ends.
+            return False
+        persistence.report_suspended(run)
+        self._publish(
+            Packet(
+                placement=Placement(turn_index=0, model_index=persistence.model_index),
+                obj=overall_stop(RunStatus.SUSPENDED, None),
+            )
+        )
+        return True
 
     def _clear_processing_status(self) -> None:
         def save_late_stop() -> None:
@@ -516,6 +547,7 @@ class ChatTurnExecution:
             else:
                 configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
+            store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
                 store, coordinator = bind_run_store(
                     self.setup,
@@ -531,37 +563,74 @@ class ChatTurnExecution:
                 )
                 with self._lock:
                     self._stores.append(store)
+                    self._response_stores[index] = store
             else:
                 # Incognito chats have no child agents to find, restore, or own,
                 # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
-            coordinator.register(
-                AgentInfo(
-                    id=chat_agent.id,
-                    path="/root",
-                    parent_id=None,
-                    description="",
-                    restoration_config=None,
-                    latest_run_id=self.setup.previous_run_id,
+            presenter = ResponsePresenter(
+                emitter,
+                tool_ids=tool_ids,
+                display_names={
+                    tool.name: tool.display_name for tool in configured_tools
+                },
+            )
+            resumed_id = self.setup.resumed_response_id
+            if resumed_id is None:
+                coordinator.register(
+                    AgentInfo(
+                        id=chat_agent.id,
+                        path="/root",
+                        parent_id=None,
+                        description="",
+                        restoration_config=None,
+                        latest_run_id=self.setup.previous_run_id,
+                    )
                 )
-            )
-            cancellation.check()
-            run = chat_agent.start(
-                background=False,
-                messages=self.setup.input_messages,
-                max_steps=chat_agent.max_steps,
-                cancellation=cancellation,
-                deadline_at=self._deadline_at,
-                coordinator=coordinator,
-                event_dispatcher=self.delivery.events,
-                on_event=ResponsePresenter(
-                    emitter,
-                    tool_ids=tool_ids,
-                    display_names={
-                        tool.name: tool.display_name for tool in configured_tools
-                    },
-                ).consume,
-            )
+                cancellation.check()
+                run = chat_agent.start(
+                    background=False,
+                    messages=self.setup.input_messages,
+                    max_steps=chat_agent.max_steps,
+                    cancellation=cancellation,
+                    deadline_at=self._deadline_at,
+                    coordinator=coordinator,
+                    event_dispatcher=self.delivery.events,
+                    on_event=presenter.consume,
+                )
+            elif store is None:
+                raise ValueError("Only a saved chat response can continue")
+            else:
+                # The saved output first, then the run with the saved decisions.
+                with get_session_with_current_tenant() as db_session:
+                    execution, replay = read_suspended_response_replay(
+                        db_session, resumed_id
+                    )
+                presenter.replay(execution.response, replay, execution.presentation)
+                try:
+                    resumed = store.resume(
+                        str(resumed_id),
+                        context=AgentState(
+                            messages=list(self.setup.messages),
+                            checkpoint=self.setup.checkpoint,
+                        ),
+                        deadline_at=self._deadline_at,
+                        on_event=presenter.consume,
+                        event_dispatcher=self.delivery.events,
+                    )
+                except Exception:
+                    fail_suspended_response(
+                        self.setup.cache, get_current_tenant_id(), resumed_id
+                    )
+                    raise
+                if resumed is None:
+                    raise RuntimeError("The response no longer waits to continue")
+                run = resumed
+                links.enter_context(
+                    cancellation.on_cancel(
+                        lambda: resumed.cancel(cancellation.reason or "requested")
+                    )
+                )
 
             def response_saved(completion: Future[RunState]) -> None:
                 try:

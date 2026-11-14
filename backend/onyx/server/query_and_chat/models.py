@@ -18,6 +18,7 @@ from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
+from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 from onyx.tools.models import ChatToolSelection
 
@@ -306,6 +307,12 @@ class RenameChatSessionResponse(BaseModel):
 
 class StopChatResponse(BaseModel):
     message: str
+
+
+class ChatApprovalDecisionRequest(DecisionBody):
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
 
 
 class ApprovalDecisionResponse(BaseModel):

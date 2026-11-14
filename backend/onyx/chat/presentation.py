@@ -37,6 +37,7 @@ from onyx.chat.models import (
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    ResponseReplayData,
     SavedToolApproval,
     ToolHistorySnapshot,
     ToolReplayData,
@@ -51,7 +52,7 @@ from onyx.chat.renderer import (
     tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT, ended_answer
+from onyx.chat.tool_approvals import ended_answer
 from onyx.chat.tool_results import (
     restored_result_details,
     tool_result_parts,
@@ -64,6 +65,7 @@ from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_APPROVAL,
     OverallStop,
     Packet,
     ToolApprovalRequest,
@@ -432,6 +434,25 @@ class ResponsePresenter:
         self.renderers: dict[str, MessageRenderer] = {}
         self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
 
+    def replay(
+        self,
+        response: ResponseRecord,
+        replay: ResponseReplayData,
+        settings: dict[str, MessageRendering],
+    ) -> None:
+        """Send the saved output of a suspended response that this stream
+        continues; its calls that wait stay open for their live events."""
+        for packet in replay_response(
+            response,
+            replay.tools,
+            settings,
+            replay.documents,
+            self.layout,
+            approvals=replay.approvals,
+            open_calls=self.tools,
+        ):
+            self.emitter.emit(packet)
+
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
         parent = self.tools.get(
@@ -528,7 +549,10 @@ class ResponsePresenter:
 
 
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
-    """How a top-level response ended: the one mapping for live, replay and Stop."""
+    """How a top-level response ended: the one mapping for live, replay and Stop.
+    A suspended response waits for the user's approval decisions."""
+    if status == RunStatus.SUSPENDED:
+        return OverallStop(stop_reason=AWAITING_APPROVAL)
     if status != RunStatus.CANCELLED:
         return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
@@ -546,13 +570,19 @@ def replay_response(
     default_mode: PresentationMode = PresentationMode.ANSWER,
     *,
     approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
+    open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
     `approvals` holds the response's approval requests by run ID and tool call
-    ID; each shows in its call's card as the stream showed it once decided.
-    The session response carries the saved message error separately. Stop packets
-    close rendering; they do not classify execution success or failure.
+    ID; each shows in its call's card, with its decision once it has one. The
+    calls of a suspended response that have no result stay open, as its stream
+    left them. With `open_calls`, the replay starts a stream that continues the
+    response: it collects those calls' renderers, by run, message and call ID,
+    for their live events, leaves their decisions to those events, and sends
+    no stop. The session response carries the saved message error separately.
+    Stop packets close rendering; they do not classify execution success or
+    failure.
     """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
@@ -603,12 +633,13 @@ def replay_response(
                 execution.display_name if execution is not None else None,
             )
             packets.extend(renderer_of_call.start())
+            waits = result is None and response.status == RunStatus.SUSPENDED
             for approval in approvals.get((response.run_id, call.id), ()):
                 approval_id = str(approval.id)
-                packets.extend(
-                    Packet(placement=tool_placement, obj=obj)
-                    for obj in (
-                        ToolApprovalRequest(
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolApprovalRequest(
                             approval_id=approval_id,
                             tool_call_id=call.id,
                             tool_name=approval.tool_name,
@@ -617,14 +648,21 @@ def replay_response(
                             arguments=tool_arguments_for_display(call)
                             if approval.tool_name == call.name
                             else {},
-                            expires_at=approval.created_at + TOOL_APPROVAL_TIMEOUT,
-                        ),
-                        ToolApprovalResolved(
-                            approval_id=approval_id,
-                            outcome=approval_outcome(ended_answer(approval)),
                         ),
                     )
                 )
+                if approval.decision is not None and not (
+                    waits and open_calls is not None
+                ):
+                    packets.append(
+                        Packet(
+                            placement=tool_placement,
+                            obj=ToolApprovalResolved(
+                                approval_id=approval_id,
+                                outcome=approval_outcome(ended_answer(approval)),
+                            ),
+                        )
+                    )
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (
@@ -651,8 +689,14 @@ def replay_response(
                         approvals=approvals,
                     )
                 )
+            if waits:
+                if open_calls is not None:
+                    open_calls[(response.run_id, message_id, call.id)] = (
+                        renderer_of_call
+                    )
+                continue
             packets.extend(renderer_of_call.complete(result))
-    if response.parent_run_id is None:
+    if response.parent_run_id is None and open_calls is None:
         packets.append(
             Packet(
                 placement=Placement(turn_index=0),

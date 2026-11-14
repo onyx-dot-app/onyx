@@ -4,9 +4,8 @@ An overview can be found in the README.md file in this directory.
 """
 
 import re
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from concurrent.futures import Future
-from contextlib import closing
 from functools import partial
 from uuid import UUID
 
@@ -47,7 +46,6 @@ from onyx.chat.incognito_context import incognito_session_ended
 from onyx.chat.mention_models import AcceptedPicks
 from onyx.chat.models import (
     AnswerStream,
-    AnswerStreamPart,
     ChatFullResponse,
     ChatInbox,
     ChatResponseOutcome,
@@ -64,7 +62,10 @@ from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
     get_default_base_system_prompt,
 )
-from onyx.chat.run_store import interrupt_ownerless_responses
+from onyx.chat.run_store import (
+    fail_suspended_response,
+    interrupt_ownerless_responses,
+)
 from onyx.chat.stream_buffer import ChatStream
 from onyx.configs.chat_configs import CHAT_RESPONSE_WAIT_TIMEOUT_S
 from onyx.configs.constants import (
@@ -72,7 +73,6 @@ from onyx.configs.constants import (
     MessageType,
     MilestoneRecordType,
 )
-from onyx.db.approval_request import get_pending_approval_ids
 from onyx.db.chat import (
     checkpoint_from_summary,
     create_new_chat_message,
@@ -80,6 +80,7 @@ from onyx.db.chat import (
     get_chat_session_by_id,
     load_message_branch,
     reserve_chat_response_ids,
+    reserve_stream_id,
     set_response_model_names__no_commit,
 )
 from onyx.db.chat_inputs import (
@@ -127,6 +128,8 @@ from onyx.server.query_and_chat.models import (
     response_id_info,
 )
 from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_APPROVAL,
+    OverallStop,
     Packet,
     StreamingError,
     ToolApprovalRequest,
@@ -275,6 +278,7 @@ def prepare_chat_turn(
     queued_turn: QueuedChatTurn | None = None,
     agent_host: bool = False,
     ask_for_approval: bool = True,
+    resumed_response_id: int | None = None,
     on_reserved: Callable[
         [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
         None,
@@ -291,11 +295,19 @@ def prepare_chat_turn(
     An agent host adds no messages. Its setup belongs to the selected response,
     the request's parent, and its agents run with that configuration.
 
+    A turn that continues the suspended `resumed_response_id`, the request's
+    parent, adds no messages either. It prepares that response's question
+    again, and streams under a new stream ID.
+
     `on_reserved` receives a send's ID packets, a created session first, once
     its question and responses are saved with their content, so a later
     preparation failure can still name the saved turn.
     """
     results_turn = queued_turn is not None and queued_turn.message is None
+    # Turns that the server starts use the chat's current tools and model.
+    server_started = (
+        queued_turn is not None or agent_host or resumed_response_id is not None
+    )
     admission = ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
@@ -305,9 +317,7 @@ def prepare_chat_turn(
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
             admission.claim(chat_session.id)
-            if (
-                queued_turn is not None or agent_host
-            ) and chat_session.tool_selection is not None:
+            if server_started and chat_session.tool_selection is not None:
                 # A turn the server starts, or its agent host, uses the chat's
                 # current tools and filters.
                 new_msg_req = SendMessageRequest.model_validate(
@@ -315,8 +325,7 @@ def prepare_chat_turn(
                 )
             alternate_model = (
                 (chat_session.current_alternate_model or "").split("__")
-                if (queued_turn is not None or agent_host)
-                and new_msg_req.llm_override is None
+                if server_started and new_msg_req.llm_override is None
                 else []
             )
             if len(alternate_model) >= 3:
@@ -340,6 +349,15 @@ def prepare_chat_turn(
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
             )
+            stream_id: int | None = None
+            if resumed_response_id is not None:
+                if parent_message.id != resumed_response_id or len(chat_history) < 2:
+                    raise ValueError("The resumed response is not the request's parent")
+                chat_history.pop()
+                parent_message = chat_history[-1]
+                check_token_rate_limits(user)
+                response_ids = [resumed_response_id]
+                stream_id = reserve_stream_id(db_session)
             accepted_text = None
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
@@ -382,7 +400,7 @@ def prepare_chat_turn(
                 # Hosted agents spend the owner's budget for every model.
                 check_token_rate_limits(user)
                 response_ids = [parent_message.id]
-            if not results_turn and not agent_host:
+            if not results_turn and not agent_host and resumed_response_id is None:
                 persona = chat_session.persona
                 tenant_id = get_current_tenant_id()
                 # Record the user's first chat for milestone tracking.
@@ -483,6 +501,7 @@ def prepare_chat_turn(
             if (
                 queued_turn is None
                 and not agent_host
+                and resumed_response_id is None
                 and parent_message.message_type != MessageType.USER
             ):
                 accepted_text = process_chat_query(
@@ -549,7 +568,11 @@ def prepare_chat_turn(
             persona = chat_session.persona
             response_parent_id = chat_history[-1].id
             # Clients render no question for a follow-up response.
-            user_message_id = None if results_turn or agent_host else response_parent_id
+            user_message_id = (
+                None
+                if results_turn or agent_host or resumed_response_id is not None
+                else response_parent_id
+            )
             context_user_files = capture_user_file_metadata(
                 resolve_context_user_files(
                     persona, chat_session.project_id, user.id, db_session
@@ -800,7 +823,11 @@ def prepare_chat_turn(
             previous_run_id=previous_run_id,
             additional_context=additional_context or new_msg_req.additional_context,
             extracted_context_files=extracted_files,
-            stream_id=response_parent_id if is_multi else models[0].message_id,
+            stream_id=stream_id
+            if stream_id is not None
+            else response_parent_id
+            if is_multi
+            else models[0].message_id,
             reasoning_effort=reasoning_effort,
             search_params=search_params,
             all_injected_file_metadata=history.all_injected_file_metadata,
@@ -819,10 +846,12 @@ def prepare_chat_turn(
             custom_tool_additional_headers=custom_tool_additional_headers,
             mcp_headers=mcp_headers,
             ask_for_approval=ask_for_approval,
+            resumed_response_id=resumed_response_id,
         )
     except BaseException:
         try:
-            if response_ids:
+            # A suspended response keeps its saved state for another attempt.
+            if response_ids and resumed_response_id is None:
                 with get_session_with_current_tenant() as db_session:
                     for response_id in response_ids:
                         fail_response_start__no_commit(db_session, response_id)
@@ -856,23 +885,32 @@ def dispatch_pending_chat_messages(
     litellm_additional_headers: dict[str, str] | None = None,
     custom_tool_additional_headers: dict[str, str] | None = None,
     *,
+    mcp_headers: dict[str, str] | None = None,
     start_agent_host: bool = True,
 ) -> None:
     """Start the selected branch's next queued work through chat admission.
 
-    The next root turn starts first. Otherwise, idle agents' work starts in an
-    agent host when no running child keeps a run store scanning. Chat turns pass
-    `start_agent_host=False`: their own run stores start that work. Started work
-    uses the pass-through headers of the request that led to it.
+    A suspended response whose approval requests are all decided continues
+    first; its turn publishes its stream ID before this returns, so a status
+    read right after sees it. Then the next root turn starts. Otherwise, idle
+    agents' work starts in an agent host when no running child keeps a run
+    store scanning. Chat turns pass `start_agent_host=False`: their own run
+    stores start that work. Started work uses the pass-through headers of the
+    request that led to it.
     """
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         if is_chat_session_processing(chat_session_id, cache):
             return
         inbox = read_repaired_chat_inbox(chat_session_id, cache)
+        resumable = inbox.resumable_response_id
         queued_turn = inbox.next_turn
-        if queued_turn is None and not (
-            start_agent_host and inbox.child_work and not inbox.running_response_ids
+        if (
+            resumable is None
+            and queued_turn is None
+            and not (
+                start_agent_host and inbox.child_work and not inbox.running_response_ids
+            )
         ):
             return
 
@@ -894,6 +932,39 @@ def dispatch_pending_chat_messages(
                     custom_tool_additional_headers,
                     start_agent_host=False,
                 )
+                if resumable is not None:
+                    if not has_global_permission(user, Permission.WRITE_CHAT):
+                        logger.info("A suspended response waits for write access")
+                        return
+                    try:
+                        setup = prepare_chat_turn(
+                            new_msg_req=SendMessageRequest(
+                                message="",
+                                chat_session_id=chat_session_id,
+                                parent_message_id=resumable,
+                                accepts_follow_ups=True,
+                            ),
+                            user=user,
+                            llm_overrides=None,
+                            litellm_additional_headers=litellm_additional_headers,
+                            custom_tool_additional_headers=custom_tool_additional_headers,
+                            mcp_headers=mcp_headers,
+                            resumed_response_id=resumable,
+                        )
+                    except OnyxError as error:
+                        # Its model or agent is gone: it cannot continue.
+                        if error.error_code not in (
+                            OnyxErrorCode.CONFLICT,
+                            OnyxErrorCode.RATE_LIMITED,
+                        ):
+                            fail_suspended_response(
+                                cache, get_current_tenant_id(), resumable
+                            )
+                        raise
+                    start_chat_turn(
+                        setup, user, dispatch_pending_messages=dispatch
+                    ).close()
+                    return
                 if queued_turn is None:
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("Agent work waits for its owner's write access")
@@ -972,6 +1043,9 @@ def dispatch_pending_chat_messages(
                 Scope.reset_current_span(span_token)
                 Scope.reset_current_trace(trace_token)
 
+        if resumable is not None:
+            start_pending_work()
+            return
         chat_turn_work.started()
         try:
             worker = start_thread_future(
@@ -1086,7 +1160,7 @@ def handle_stream_message_objects(
     query_observation: QueryObservation | None = None,
     delivers_follow_ups: bool = True,
     ask_for_approval: bool = True,
-) -> Generator[AnswerStreamPart, None, None]:
+) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
 
     Emits one fleet ``query`` record when server execution ends, including after
@@ -1198,17 +1272,16 @@ def gather_stream_full(
 ) -> ChatFullResponse:
     """Read delivery metadata and project accepted execution content.
 
-    Returns early when a tool call waits for the user's approval, with every
-    request of the response that waits then: the caller reads the requests
-    instead of blocking until the user decides.
+    A response that stops because tool calls wait for the user's approval
+    returns the requests that still wait in `pending_tool_approvals`.
     """
     error: StreamingError | None = None
     message_id: int | None = None
     chat_session_id: UUID | None = None
     incognito = False
-    # Requests read from the stream, by approval ID, and those that ended.
-    requested: dict[str, ToolApprovalRequest] = {}
-    ended: set[str] = set()
+    # Requests read from the stream, by approval ID; resolved ones are removed.
+    waiting: dict[str, ToolApprovalRequest] = {}
+    awaiting_approval = False
 
     for packet in packets:
         if isinstance(packet, StreamingError):
@@ -1218,37 +1291,13 @@ def gather_stream_full(
         elif isinstance(packet, CreateChatSessionID):
             chat_session_id = packet.chat_session_id
             incognito = packet.incognito
-        elif isinstance(packet, Packet) and isinstance(
-            packet.obj, ToolApprovalResolved
-        ):
-            ended.add(packet.obj.approval_id)
-        elif isinstance(packet, Packet) and isinstance(packet.obj, ToolApprovalRequest):
-            if message_id is None:
-                raise ValueError("Message ID is required")
-            requested[packet.obj.approval_id] = packet.obj
-            # A request is saved before its packet is sent, and expired after
-            # its end is sent: return once the stream has delivered the packet
-            # of every request that waits.
-            with get_session_with_current_tenant() as db_session:
-                waiting = {
-                    str(approval_id)
-                    for approval_id in get_pending_approval_ids(db_session, message_id)
-                } - ended
-            if waiting and waiting <= requested.keys():
-                return ChatFullResponse(
-                    answer="",
-                    answer_citationless="",
-                    top_documents=[],
-                    citation_info=[],
-                    message_id=message_id,
-                    chat_session_id=chat_session_id,
-                    incognito=incognito,
-                    pending_tool_approvals=[
-                        request
-                        for approval_id, request in requested.items()
-                        if approval_id in waiting
-                    ],
-                )
+        elif isinstance(packet, Packet):
+            if isinstance(packet.obj, ToolApprovalRequest):
+                waiting[packet.obj.approval_id] = packet.obj
+            elif isinstance(packet.obj, ToolApprovalResolved):
+                waiting.pop(packet.obj.approval_id, None)
+            elif isinstance(packet.obj, OverallStop):
+                awaiting_approval = packet.obj.stop_reason == AWAITING_APPROVAL
 
     if message_id is None:
         if error is not None:
@@ -1286,6 +1335,7 @@ def gather_stream_full(
         chat_session_id=chat_session_id,
         incognito=incognito,
         error_msg=outcome.error or (error.error if error else None),
+        pending_tool_approvals=list(waiting.values()) if awaiting_approval else [],
     )
 
 
@@ -1300,24 +1350,21 @@ def run_chat_turn(
     ask_for_approval: bool = True,
 ) -> ChatFullResponse:
     """Run one chat turn for in-process, non-streaming callers, to completion
-    or until a tool call waits for the user's approval.
+    or until tool calls wait for the user's approval.
 
     These callers read one response, so the turn offers no agent tools.
     """
     response_future = Future[ChatResponseOutcome]()
-    # Closing the stream stops reading it; the turn keeps running.
-    with closing(
-        handle_stream_message_objects(
-            new_msg_req=new_msg_req,
-            user=user,
-            litellm_additional_headers=litellm_additional_headers,
-            custom_tool_additional_headers=custom_tool_additional_headers,
-            mcp_headers=mcp_headers,
-            additional_context=additional_context,
-            slack_context=slack_context,
-            response_future=response_future,
-            delivers_follow_ups=False,
-            ask_for_approval=ask_for_approval,
-        )
-    ) as packets:
-        return gather_stream_full(packets, response_future)
+    packets = handle_stream_message_objects(
+        new_msg_req=new_msg_req,
+        user=user,
+        litellm_additional_headers=litellm_additional_headers,
+        custom_tool_additional_headers=custom_tool_additional_headers,
+        mcp_headers=mcp_headers,
+        additional_context=additional_context,
+        slack_context=slack_context,
+        response_future=response_future,
+        delivers_follow_ups=False,
+        ask_for_approval=ask_for_approval,
+    )
+    return gather_stream_full(packets, response_future)

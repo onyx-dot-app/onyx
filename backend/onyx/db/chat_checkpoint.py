@@ -6,11 +6,12 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.chat.models import ResponseCheckpoint, SavedCheckpoint
+from onyx.db.approval_request import close_pending_approval_requests__no_commit
 from onyx.db.chat import configure_response_transaction__no_commit
 from onyx.db.chat_response import (
     finish_checkpoint__no_commit,
 )
-from onyx.db.enums import record_mode_persists_content
+from onyx.db.enums import ApprovalDecision, record_mode_persists_content
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -79,6 +80,11 @@ def claim_checkpoint__no_commit(
     )
 
 
+def read_checkpoint(session: Session, message_id: int) -> ResponseCheckpoint | None:
+    row = session.get(ChatResponseCheckpoint, message_id)
+    return ResponseCheckpoint.model_validate(row.state) if row is not None else None
+
+
 def check_checkpoint_owner__no_commit(
     session: Session, message_id: int, ownership_version: int | None
 ) -> None:
@@ -117,16 +123,22 @@ def interrupt_response__no_commit(
 ) -> None:
     """Caller holds the response's cache lock and has verified that no owner remains.
 
-    A cancelled response keeps `failure`, the reason its Stop gave, if any.
+    A cancelled response keeps `failure`, the reason its Stop gave, if any; a
+    failed one keeps `failure`, or says that its owner stopped. Its approval
+    requests end, since no call waits for them anymore.
     """
     response = _lock_response(session, message_id)
     if response.response_status is None or response.response_status.is_terminal:
         return
+    close_pending_approval_requests__no_commit(
+        session, ApprovalDecision.EXPIRED, None, chat_message_id=message_id
+    )
     response.response_status = RunStatus.CANCELLED if cancelled else RunStatus.ERROR
     response.response_failure = (
         failure
         if cancelled
-        else RunFailure(
+        else failure
+        or RunFailure(
             kind=RunFailureKind.EXECUTION,
             message="The response owner stopped reporting progress",
         )

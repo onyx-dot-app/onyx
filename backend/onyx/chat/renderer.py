@@ -528,9 +528,9 @@ class ToolRenderer:
             return self.update(event.progress.details, event.progress.content)
         if isinstance(event, ToolEndEvent):
             return self.complete(event.result)
-        # Only the requests of the chat's tool approvals have cards; each has a
-        # deadline (onyx/chat/tool_approvals.py).
-        if not event.request.approval or event.request.expires_at is None:
+        # Only the requests of the chat's tool approvals have cards
+        # (onyx/chat/tool_approvals.py).
+        if not event.request.approval:
             return []
         obj: packets.ToolApprovalRequest | packets.ToolApprovalResolved
         if isinstance(event, InputRequiredEvent):
@@ -542,7 +542,6 @@ class ToolRenderer:
                 tool_name=call.name,
                 display_name=display_names.get(call.name, call.name),
                 arguments=tool_arguments_for_display(call),
-                expires_at=event.request.expires_at,
             )
         else:
             obj = packets.ToolApprovalResolved(

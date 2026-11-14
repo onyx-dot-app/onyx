@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from pydantic import ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
@@ -20,7 +21,8 @@ from onyx.agents.agent_coordination import (
     RunStore,
     ToolApprovals,
 )
-from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
+from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS, EventDispatcher
+from onyx.agents.events import AgentEvent
 from onyx.agents.models import (
     AgentCompletion,
     AgentInfo,
@@ -30,6 +32,8 @@ from onyx.agents.models import (
     ExecutionCheckpoint,
     InputMessageMetadata,
     InputSource,
+    RunFailure,
+    RunFailureKind,
     RunState,
     RunStatus,
     StepRecord,
@@ -43,6 +47,7 @@ from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.mention_models import AcceptedPicks, PickedMentions
 from onyx.chat.models import (
     ChatBranch,
+    ChatFeatureState,
     ChatInbox,
     CheckpointBinding,
     ResponseOwner,
@@ -57,9 +62,7 @@ from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.tool_approvals import (
-    TOOL_APPROVAL_TIMEOUT,
     ApprovalBlocker,
-    approval_waits_ending,
     ended_answer,
     open_tool_approval,
     tool_answer,
@@ -67,7 +70,7 @@ from onyx.chat.tool_approvals import (
 from onyx.configs.constants import MessageType
 from onyx.db.approval_request import (
     close_pending_approval_requests__no_commit,
-    settle_approval_requests__no_commit,
+    get_approval_requests,
 )
 from onyx.db.chat import get_selected_branch, session_ancestors
 from onyx.db.chat_checkpoint import (
@@ -75,6 +78,7 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     interrupt_response__no_commit,
     publish_checkpoint__no_commit,
+    read_checkpoint,
     release_checkpoint_claim__no_commit,
 )
 from onyx.db.chat_inputs import (
@@ -110,6 +114,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import User
 from onyx.db.skill import list_chat_skills
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
@@ -129,11 +134,10 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
+RESUME_FAILED_MESSAGE = (
+    "This response could not continue after the approval. Send the message again."
+)
 INPUT_POLL_SECONDS = 1.0
-# A decision wakes the response owner through the cache. The owner also reads
-# the decisions of its open requests this often, in case a wake-up was lost.
-APPROVAL_WAKE_TTL_SECONDS = 60
-APPROVAL_FALLBACK_POLL_SECONDS = 30.0
 MAX_RUNNING_AGENTS = 10
 # A step reads at most this many finished results; a run reads the rest in its
 # next steps before it answers.
@@ -193,18 +197,52 @@ def interrupt_ownerless_responses(
     return interrupted
 
 
+def fail_suspended_response(
+    cache: CacheBackend, tenant_id: str, response_id: int
+) -> None:
+    """End a suspended response that cannot continue after its approvals, for
+    example because its model or saved state is gone: save it as failed, end
+    its requests, and delete its checkpoint and its parked programs' dumps."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            try:
+                checkpoint = read_checkpoint(session, response_id)
+                feature_state = (
+                    checkpoint.progress.get("feature_state") if checkpoint else None
+                )
+                dumps = (
+                    [
+                        file_id
+                        for cell in ChatFeatureState.model_validate(
+                            feature_state
+                        ).code_cells
+                        if (file_id := cell.program.dump.file_id) is not None
+                    ]
+                    if feature_state is not None
+                    else []
+                )
+            except ValidationError:
+                logger.exception("Could not read the parked programs of a response")
+                dumps = []
+            interrupt_response__no_commit(
+                session,
+                response_id,
+                failure=RunFailure(
+                    kind=RunFailureKind.EXECUTION, message=RESUME_FAILED_MESSAGE
+                ),
+            )
+            session.commit()
+    for file_id in dumps:
+        try:
+            get_default_file_store().delete_file(file_id, error_on_missing=False)
+        except Exception:
+            logger.exception("Could not delete the dump of a parked program")
+
+
 def _stop_key(response_id: int) -> str:
     return f"chat_response_stop:{response_id}"
-
-
-def _approval_wake_key(response_id: int) -> str:
-    return f"chat_response_approval:{response_id}"
-
-
-def wake_approval_waiters(cache: CacheBackend, response_ids: Collection[int]) -> None:
-    """Tell the owners of these responses that approval decisions were saved."""
-    for response_id in response_ids:
-        cache.set(_approval_wake_key(response_id), 1, ex=APPROVAL_WAKE_TTL_SECONDS)
 
 
 def request_response_stop(
@@ -355,7 +393,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         }
         # The approval records of calls name their tools' display names.
         self._display_names = {tool.name: tool.display_name for tool in tools}
-        self._next_approval_read = 0.0
         # Result follow-ups use the step limit of this store's chat agent.
         self._follow_up_steps = follow_up_steps
         # Every run counts against the chat owner's token rate limits.
@@ -1138,8 +1175,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         is_child = response_id != self.response_id
         with owned.lease.lock:
             owned.lease.released = True
-        if self._approval_scopes:
-            # No call of the run waits anymore, so its requests cannot be approved.
+        if self._approval_scopes and owned.run.status.is_terminal:
+            # No call of the run waits anymore, so its requests cannot be
+            # approved. A handed-off run keeps them for its resume.
             try:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                     close_pending_approval_requests__no_commit(
@@ -1175,42 +1213,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             raise _OwnershipLost("Response ownership was lost")
 
     def poll_control(self) -> None:
-        """Renew leases, read Stop, deliver approval decisions, and dispatch
-        messages on the turn's control thread."""
+        """Renew leases, read Stop, and dispatch messages on the turn's control thread."""
         with self._lock:
             leases = list(self._leases.items())
-            runs = {
-                response_id: owned.run for response_id, owned in self._owned.items()
-            }
-        pending = (
-            {response_id: run.pending_inputs for response_id, run in runs.items()}
-            if self._approval_scopes
-            else {}
-        )
-        # At server shutdown, runs that wait for the user stop, as on Stop.
-        shutdown_stops = (
-            {response_id for response_id, inputs in pending.items() if inputs}
-            if approval_waits_ending()
-            else set()
-        )
-        waiting = {
-            UUID(request.request_id): response_id
-            for response_id, inputs in pending.items()
-            for request in inputs
-            if request.approval
-        }
-        # One cache read finds the Stop requests and the approval wake-ups.
-        present: set[str] = set()
-        try:
-            present = self.control_cache.exists_many(
-                [_stop_key(response_id) for response_id, _lease in leases]
-                + [
-                    _approval_wake_key(response_id)
-                    for response_id in set(waiting.values())
-                ]
-            )
-        except Exception:
-            logger.exception("Failed to read agent Stop requests; will retry")
         for response_id, lease in leases:
             if not lease.lock.acquire(blocking=False):
                 continue
@@ -1241,9 +1246,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                             # Cache response latency must not extend local ownership.
                             lease.refreshed = now
                 lease.expire_if_due()
-                if lease.error is None and _stop_key(response_id) in present:
+                if lease.error is None:
                     try:
-                        # The value is the reason for the Stop.
                         requested = self.control_cache.get(_stop_key(response_id))
                         stopped = requested is not None
                         if requested == b"user":
@@ -1253,9 +1257,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                             "Failed to read agent Stop request; will retry"
                         )
                     lease.expire_if_due()
-                stopped = (
-                    stopped or lease.error is not None or response_id in shutdown_stops
-                )
+                stopped = stopped or lease.error is not None
             finally:
                 lease.lock.release()
             if not stopped:
@@ -1264,8 +1266,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 owned = self._owned.get(response_id)
             if owned is not None:
                 owned.run.cancel(reason)
-        if waiting:
-            self._deliver_tool_decisions(runs, waiting, present)
         self._dispatch_messages()
 
     def request_approval(
@@ -1281,16 +1281,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             tool_name=call.name,
             display_name=self._display_names.get(call.name, call.name),
             scope=self._approval_scopes[call.name],
-            # Only the chat's signed-in owner can decide. Chat subscribes only
-            # the response presenter, so a run without listeners has no card
-            # to show the request on.
+            # Only the chat's signed-in owner can decide. Only the root run's
+            # suspension hands off and resumes the response, so a child's
+            # request could never be answered.
             blocker=ApprovalBlocker.SIGNED_OUT
             if self._user.is_anonymous
-            else ApprovalBlocker.SERVER_STOPPING
-            if approval_waits_ending()
             else None
-            if run.has_event_listeners
-            else ApprovalBlocker.UNWATCHED_RUN,
+            if run.id == str(self.response_id)
+            else ApprovalBlocker.CHILD_RUN,
         )
 
     def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
@@ -1303,9 +1301,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     None,
                     approval_ids=[approval_id],
                 )
-                row = settle_approval_requests__no_commit(
-                    session, [approval_id], timeout=TOOL_APPROVAL_TIMEOUT
-                ).get(approval_id)
+                row = get_approval_requests(session, [approval_id]).get(approval_id)
                 # A deleted request has no decision; its call just stops waiting.
                 ended = SavedToolApproval.model_validate(row) if row else None
                 session.commit()
@@ -1339,62 +1335,6 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 session.commit()
         except Exception:
             logger.exception("Could not reject the tool approvals of a Stop")
-
-    def _deliver_tool_decisions(
-        self,
-        runs: dict[int, Run],
-        waiting: dict[UUID, int],
-        present_keys: set[str],
-    ) -> None:
-        """Answer waiting calls with their saved decisions.
-
-        `waiting` maps the approval requests that the owned runs wait on to
-        their responses. The database is read for responses whose wake key is
-        in `present_keys`, and for all of them every
-        APPROVAL_FALLBACK_POLL_SECONDS, which also expires overdue requests.
-        """
-        response_ids = set(waiting.values())
-        woken: set[int] = set()
-        try:
-            for response_id in response_ids:
-                if _approval_wake_key(response_id) in present_keys:
-                    # Before the read, so a decision saved after it wakes again.
-                    self.control_cache.delete(_approval_wake_key(response_id))
-                    woken.add(response_id)
-        except Exception:
-            logger.exception("Could not clear tool approval wake-ups; will retry")
-        now = time.monotonic()
-        if now >= self._next_approval_read:
-            self._next_approval_read = now + APPROVAL_FALLBACK_POLL_SECONDS
-            woken = response_ids
-        to_read = [
-            approval_id
-            for approval_id, response_id in waiting.items()
-            if response_id in woken
-        ]
-        if not to_read:
-            return
-        try:
-            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                decided = {
-                    approval_id: (
-                        SavedToolApproval.model_validate(approval)
-                        if approval is not None
-                        else None
-                    )
-                    for approval_id, approval in settle_approval_requests__no_commit(
-                        session, to_read, timeout=TOOL_APPROVAL_TIMEOUT
-                    ).items()
-                }
-                session.commit()
-        except Exception:
-            logger.exception("Could not read tool approval decisions; will retry")
-            return
-        for approval_id, approval in decided.items():
-            try:
-                runs[waiting[approval_id]].submit(tool_answer(approval_id, approval))
-            except Exception:
-                logger.exception("Could not deliver a tool approval decision")
 
     def handoff(self, run_id: str) -> None:
         """Save a paused run before releasing ownership for another API pod."""
@@ -1451,8 +1391,21 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
 
         owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
 
-    def resume(self, run_id: str, *, context: AgentState) -> Run | None:
-        """Resume with authorized, rehydrated history; never reconstruct a live owner."""
+    def resume(
+        self,
+        run_id: str,
+        *,
+        context: AgentState,
+        deadline_at: datetime | None = None,
+        on_event: Callable[[AgentEvent], None] | None = None,
+        event_dispatcher: EventDispatcher | None = None,
+    ) -> Run | None:
+        """Resume with authorized, rehydrated history; never reconstruct a live owner.
+
+        Each approval request that the run waits for gets the answer of its
+        saved decision; one that is still undecided keeps waiting. None when
+        another owner holds the run or no checkpoint waits.
+        """
         if not run_id.isdecimal():
             raise LookupError("Response is unavailable")
         response_id = int(run_id)
@@ -1496,12 +1449,36 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 context,
                 self._binding(saved.message_id),
             )
+            progress = captured.run_state.progress
+            approval_ids = [
+                UUID(request.request_id)
+                for request in (progress.input_requests if progress else [])
+                if request.approval
+            ]
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                rows = get_approval_requests(session, approval_ids)
+                answers = [
+                    tool_answer(
+                        approval_id,
+                        SavedToolApproval.model_validate(row) if row else None,
+                    )
+                    for approval_id in approval_ids
+                    if (row := rows.get(approval_id)) is None
+                    or row.decision is not None
+                ]
             agent = self._with_tenant(lambda: build_agent(captured))
             self._coordinator.register(saved.agent)
             for info in self.list_agents():
                 self._coordinator.register(info)
             return self._with_tenant(
-                lambda: agent.resume(captured.run_state, coordinator=self._coordinator)
+                lambda: agent.resume(
+                    captured.run_state,
+                    answers=answers,
+                    deadline_at=deadline_at,
+                    coordinator=self._coordinator,
+                    on_event=on_event,
+                    event_dispatcher=event_dispatcher,
+                )
             )
         except BaseException:
             try:

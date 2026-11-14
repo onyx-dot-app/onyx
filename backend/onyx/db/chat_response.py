@@ -1258,6 +1258,18 @@ def save_response_record__no_commit(
     session.flush()
 
 
+def read_suspended_response_replay(
+    db_session: Session, response_id: int
+) -> tuple[ChatExecutionRecord, ResponseReplayData]:
+    """The saved output of a suspended response, to replay where its run
+    continues."""
+    message = db_session.get(ChatMessage, response_id)
+    execution = read_chat_execution(message) if message is not None else None
+    if execution is None or execution.response.status != RunStatus.SUSPENDED:
+        raise ValueError("The response is not suspended")
+    return execution, read_response_replay_data(execution, db_session)
+
+
 def read_response_replay_data(
     execution: ChatExecutionRecord, db_session: Session
 ) -> ResponseReplayData:
@@ -1338,7 +1350,8 @@ def read_response_replay_data(
         raise ValueError("Accepted tool replay data is unavailable")
     # A running response's requests reach the client through its stream.
     approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
-    if accepted and execution.response.status.is_terminal:
+    status = execution.response.status
+    if accepted and (status.is_terminal or status == RunStatus.SUSPENDED):
         for request in get_response_approval_requests(
             db_session, [int(run_id) for run_id in run_ids]
         ):

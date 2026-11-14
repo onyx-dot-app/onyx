@@ -159,9 +159,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        # The run's input wait time at the latest step; elapsed time leaves it
-        # out, so waiting for the user's approval is not thinking time.
-        self._input_wait_seconds = 0.0
         self.preferred_tool_id = preferred_tool_id
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
@@ -256,7 +253,7 @@ class ChatAgent(Agent, RestorableFeature):
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
             reminders_enabled=self.reminders_enabled,
-            elapsed_seconds=self._elapsed_seconds(),
+            elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
             gathered_documents=self.gathered_documents,
@@ -286,8 +283,6 @@ class ChatAgent(Agent, RestorableFeature):
             raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
         self.started = time.monotonic() - saved.elapsed_seconds
-        # The restored run counts its input waits from zero.
-        self._input_wait_seconds = 0.0
         self.citation_processor.citation_to_doc = saved.citation_sources
         self.citation_mapping = saved.citation_mapping
         self.gathered_documents = saved.gathered_documents
@@ -330,12 +325,8 @@ class ChatAgent(Agent, RestorableFeature):
             inject_memories_in_prompt=self.inject_memories,
         )
 
-    def _elapsed_seconds(self) -> float:
-        return max(0.0, time.monotonic() - self.started - self._input_wait_seconds)
-
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
-        self._input_wait_seconds = state.input_wait_seconds
         if previous is None:
             self.search_context = SearchContext()
             self.started = time.monotonic()
@@ -400,7 +391,7 @@ class ChatAgent(Agent, RestorableFeature):
                 sources=dict(self.citation_processor.citation_to_doc),
                 documents=list(self.gathered_documents),
                 include_citations=self.include_citations,
-                elapsed_seconds=self._elapsed_seconds(),
+                elapsed_seconds=time.monotonic() - self.started,
             ),
             assemble_messages=partial(
                 prepare_prompt,

@@ -34,6 +34,7 @@ from onyx.chat.models import (
 )
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import MessageType
+from onyx.db.approval_request import responses_waiting_for_approval
 from onyx.db.chat import (
     agent_session_path,
     configure_response_transaction__no_commit,
@@ -444,6 +445,13 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
+    # A response suspends only while its tool calls wait for approval.
+    if (
+        selected is not None
+        and selected.response_status == RunStatus.SUSPENDED
+        and not responses_waiting_for_approval(session, [selected.id])
+    ):
+        inbox.resumable_response_id = selected.id
     # Only conversations with inbox rows have queued turns or child work.
     if not has_chat_inputs(session, chat_session_id):
         return inbox

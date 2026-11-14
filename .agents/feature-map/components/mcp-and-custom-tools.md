@@ -41,18 +41,22 @@
   policy: Auto-approve, Ask or Disabled. When unset it is Auto-approve for a
   tool the server marks read-only, else Ask, as in Craft
   (`db/action_policy.py:mcp_tool_default_policy`). A Disabled tool
-  is not offered to the model. For an Ask tool the response pauses on an
-  approval card with the call's arguments and a deadline. The user picks
-  Approve once, Approve for this chat, or Reject. Approve once runs the exact
-  call. Approve for this chat also runs later calls of that tool in the chat
-  session with no card. Reject, or no decision within 10 minutes
-  (`chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`), gives the model a "did not
-  run" result, and the answer continues. A policy change applies from the next message.
+  is not offered to the model. For an Ask tool the call's card shows an
+  approval request with the call's arguments, and when nothing but such
+  requests remains, the response stops: its stream ends with the stop reason
+  `awaiting_approval`, and the response waits, saved, with no server holding
+  it and no time limit. The user picks Approve once, Approve for this chat, or
+  Reject. Approve once runs the exact call. Approve for this chat also runs
+  later calls of that tool in the chat session with no card. Reject gives the
+  model a "did not run" result. Once no request of the response waits, the
+  response continues in a new stream, on any server, and the answer continues.
+  A policy change applies from the next message.
   Web, mobile, the widget, the CLI and API callers all show requests; a
-  non-streaming API call returns early with them. The Slack and Discord bots
-  run Ask tools without asking for now. Usage-only incognito chats, anonymous
-  users, and background or hosted agent runs cannot wait: an Ask call gives the
-  model an error that names the cause ([[#chat-approval-needs-waiting-client]]). The upgrade
+  non-streaming API call returns them when the response stops. The Slack and
+  Discord bots run Ask tools without asking for now. Usage-only incognito
+  chats, anonymous users, and child agent runs cannot wait: an Ask call gives
+  the model an error that names the cause
+  ([[#chat-approval-needs-waiting-client]]). The upgrade
   migration (`backend/alembic/versions/7c00f53ab75f_chat_tool_approvals.py`)
   writes Auto-approve for tools that exist then on servers not available in
   Craft, and on every server when the tenant has no `build_session` row (it
@@ -351,25 +355,20 @@ calls run with no row unless the policy is now DENY.
     calls that have no signal keep the existing synchronous behavior. Stopping
     the local request cannot undo work already performed by the remote server.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
-    only a signed-in owner's watched run can wait.**
+    only a signed-in owner's root run can wait.**
     `chat/run_store.py:ChatRunStore.request_approval` gives
     `chat/tool_approvals.py:open_tool_approval` an `ApprovalBlocker`:
-    `SIGNED_OUT` for an anonymous user, `SERVER_STOPPING` once the API server
-    starts to shut down, `UNWATCHED_RUN` when `Run.has_event_listeners` is
-    false, as for background subagents and hosted runs; foreground children
-    such as deep research can wait. A `USAGE_ONLY`
-    incognito turn has no run store, so the runtime's own error applies. Each
-    cause has its own model-facing text in `chat/tool_approvals.py`; nothing
-    about approvals goes into the system prompt or tool descriptions. Turns
-    the server starts (queued messages, agent-result follow-ups) can wait too.
-    The non-streaming API returns early: at each `tool_approval_request`,
-    `gather_stream_full` reads the response's pending rows
-    (`db/approval_request.py:get_pending_approval_ids`); a row is saved before
-    its packet streams, so it returns once the stream has delivered the packet
-    of every waiting request, and lists them all in
-    `ChatFullResponse.pending_tool_approvals`. Closing the stream leaves the
-    turn running. Requests that open later reach the caller through the resume
-    stream. The Slack and Discord bots do not ask for approval, so
+    `SIGNED_OUT` for an anonymous user, and `CHILD_RUN` for any run but the
+    response's root run, since only the root's suspension hands off and
+    resumes. A `USAGE_ONLY` incognito turn has no run store, so the runtime's
+    own error applies. Each cause has its own model-facing text in
+    `chat/tool_approvals.py`; nothing about approvals goes into the system
+    prompt or tool descriptions. Turns the server starts (queued messages,
+    agent-result follow-ups) can wait too. The non-streaming API reads the
+    whole stream: `chat/process_message.py:gather_stream_full` returns the
+    requests that the stream asked and did not resolve when its last stop is
+    `awaiting_approval`, in `ChatFullResponse.pending_tool_approvals`. The
+    Slack and Discord bots do not ask for approval, so
     their turns build no approval scope (`ChatTurnSetup.ask_for_approval`,
     `construct_tools(ask_for_approval=...)`); Disabled tools stay unbuilt.
     Only server-side callers set it: the Slack handler and evals pass it to
@@ -380,75 +379,85 @@ calls run with no row unless the policy is now DENY.
     name, which no key can be renamed to) on `request.state`, so the send
     route opens no extra session. The client-supplied
     `SendMessageRequest.origin` never changes it.
-16. `chat-approval-owner-delivers` **Only the run's owner applies a decision.**
-    `server/query_and_chat/chat_backend.py:decide_approval` saves the row, then
-    sets the response's wake key. `chat/run_store.py:ChatRunStore.poll_control`
-    reads the wake keys and the Stop keys in one `exists_many`, and
-    `ChatRunStore._deliver_tool_decisions` calls `Run.submit`. The requests are
-    those that the owned runs wait on (`Run.pending_inputs`) and that the
-    runtime marks as opened by `ToolApprovals` (`PendingToolInput.approval`).
-    Requests from a `before_tool_call` hook or a question tool are not rows,
-    and the store does not read or withdraw them. The row owns the lifecycle
-    and deadline, and the store keeps no copy. A read every `APPROVAL_FALLBACK_POLL_SECONDS` covers a
-    lost key and expires overdue rows, so expiry can be up to that interval
-    late. `ChatRunStore.release` expires a run's open rows by response;
-    `withdraw_approval` expires one by ID. When the response has no owner, the
-    route expires its pending requests, saves no decision, and returns 409
-    unless the body repeats the saved decision. When the API server starts to
-    shut down, `backend/onyx/main.py:_end_approval_waits_on_exit_signal` (chained to
-    uvicorn's SIGTERM and SIGINT handlers, because uvicorn waits for open
-    responses before the lifespan shutdown) calls
-    `chat/tool_approvals.py:end_approval_waits`; the next control poll cancels
-    runs that wait, their cards close as `cancelled`, and their streams end.
-    The lifespan resets the flag at startup. A user Stop (the chat's stream
-    Stop key, read by `chat/execution.py:ChatTurnExecution._poll_control`)
-    first calls `ChatRunStore.reject_waiting_approvals`, which saves
-    `REJECTED` by `USER` under the same `decision IS NULL` condition as the
-    decision route, so a decision that races the Stop keeps whichever saved
-    first. The runs then end, `withdraw_approval` returns the saved decision's
-    answer, the card's outcome is `rejected`, and the call's saved result is
-    the rejection text that the model reads in the next turn. A cancelled turn
-    still sends `tool_approval_resolved` (`ChatTurnExecution._publish`). An
-    approval of a tool whose
-    current policy (`db/action_policy.py:current_action_policy`, also used by
-    the session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
+16. `chat-approval-durable-wait` **A waiting response is saved, not held.**
+    When the root run suspends with approval requests in `Run.pending_inputs`
+    and nothing else left (no foreground child runs),
+    `chat/execution.py:ChatTurnExecution._hand_off` calls
+    `chat/run_store.py:ChatRunStore.handoff`: the checkpoint is saved, the
+    response is `SUSPENDED`, the lease is released, and the stream ends with
+    `OverallStop(awaiting_approval)` (`chat/presentation.py:overall_stop`).
+    `ChatRunStore.release` keeps the rows of a handed-off run. Requests have
+    no deadline. `server/query_and_chat/chat_backend.py:decide_approval` saves
+    the decision (`db/approval_request.py:record_approval_decision__no_commit`,
+    conditional on `decision IS NULL`) and calls
+    `chat/process_message.py:dispatch_pending_chat_messages` with the body's
+    `mcp_headers`, which are not saved. Dispatch reads
+    `db/chat_inputs.py:read_chat_inbox`: the selected response is
+    `resumable_response_id` when it is `SUSPENDED` and none of its rows is
+    undecided, and it continues before any queued turn, synchronously, so the
+    new stream ID (`db/chat.py:reserve_stream_id`) is published before the
+    route returns. A session grant decides the action's sibling rows, so one
+    decision can resume the response. `_dispatch_after_release` and the status
+    route's background dispatch catch a decision saved before the handoff
+    finished. The continuation is a `ChatTurnExecution` whose setup has
+    `resumed_response_id`: it replays the saved response
+    (`chat/presentation.py:ResponsePresenter.replay`, which keeps the waiting
+    calls' renderers open), then `ChatRunStore.resume` claims the checkpoint
+    once (`db/chat_checkpoint.py:claim_checkpoint__no_commit`; a second claim
+    gets None) and answers each waiting request from its row
+    (`chat/tool_approvals.py:tool_answer`; a deleted row is "no longer
+    available"). A saved call whose tool is gone or whose parameters changed
+    gets `agents/tool_execution.py:UNAVAILABLE_CALL_MESSAGE`. A response that
+    cannot continue (its model or saved state is gone) is saved as failed by
+    `chat/run_store.py:fail_suspended_response`, which ends its rows and
+    deletes its checkpoint and parked programs' dumps. A user Stop of a live
+    turn (the chat's stream Stop key, read by
+    `chat/execution.py:ChatTurnExecution._poll_control`) first calls
+    `ChatRunStore.reject_waiting_approvals`, which saves `REJECTED` by `USER`
+    under the same `decision IS NULL` condition, so a decision that races the
+    Stop keeps whichever saved first; the runs then end with the saved
+    answers, and a cancelled turn still sends `tool_approval_resolved`
+    (`ChatTurnExecution._publish`). A suspended response runs nothing, so a
+    Stop finds no turn: the stop route only pauses the queue, and the requests
+    still wait. Ownerless repair
+    (`db/chat_checkpoint.py:interrupt_response__no_commit`) ends the rows of
+    the response it saves as interrupted. An approval of a tool whose current
+    policy (`db/action_policy.py:current_action_policy`, also used by the
+    session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
-    outcome is `disabled`. Deleting the tool's server deletes its rows; the
-    owner's next read (`db/approval_request.py:settle_approval_requests__no_commit`)
-    answers a call whose row is gone as `disabled`. A decision that repeats
-    the saved one returns 200 with the row's `decided_via`, also after the
-    response ends or the policy changes, so a client can retry a decision
-    whose reply it lost. An
-    `approve_session` on a row the user approved once upgrades it to a session
-    grant and approves the waiting sibling requests; every request that a grant
-    decides ends with the outcome `approved_for_chat`
-    (`HumanToolAnswer.standing`). `chat/tool_approvals.py:TOOL_APPROVAL_TIMEOUT`
-    is 10 minutes, well below `CHAT_EXECUTION_TIMEOUT_S`, so one wait cannot
-    use up the turn. Several waits in a row can still reach the turn deadline.
+    outcome is `disabled`. A decision that repeats the saved one returns 200
+    with the row's `decided_via`, also after the response ends or the policy
+    changes. An `approve_session` on a row the user approved once upgrades it
+    to a session grant; every request that a grant decides ends with the
+    outcome `approved_for_chat` (`HumanToolAnswer.standing`).
 17. `chat-approval-records-replay` **A saved response shows the records its
     stream showed.** `db/chat_response.py:read_response_replay_data` loads the
-    `approval_request` rows of an ended response and its child runs, and
-    `chat/presentation.py:replay_response` sends a `tool_approval_request` and a
-    `tool_approval_resolved` for each, after the start of the card of the
-    row's `tool_call_id`, in the order the requests opened. The outcome comes
-    from the same mapping as the stream: `chat/tool_approvals.py:ended_answer`
-    then `chat/renderer.py:approval_outcome`. An `EXPIRED` row that ended
-    before its deadline was withdrawn, so it replays as `cancelled`; a row
-    still undecided in an ended response also replays as `cancelled`. A
-    running response replays no records; its stream, through resume-stream,
-    shows them, and a waiting card stays decidable. A program's call is not
-    saved, so its replayed request has empty arguments and the program call's
-    ID.
-18. `program-call-waits-in-cell` **A program's Ask call waits inside its
-    cell.** MCP tools stay program functions in code mode.
-    `tools/tool_implementations/code_mode/cells.py:CodeCell._decided_result`
-    asks `ToolInvocation.nested_calls` (`agents/tools.py:NestedCallGate`) and
-    blocks through `NestedCallGate.wait_for_input`, giving back the cell's
-    running-cell slot while it waits. When the wait ends, the program
-    continues only once a slot is free, so resumed cells never exceed
-    `MAX_RUNNING_CELLS` (`CodeCell._update_waiting`). `execute_code` and `wait_code` keep
-    waiting instead of returning, so the model spends no steps. The request is
-    not saved with the run, and the events carry `nested_call`.
+    `approval_request` rows of an ended or suspended response and its child
+    runs, and `chat/presentation.py:replay_response` sends a
+    `tool_approval_request` for each, after the start of the card of the row's
+    `tool_call_id`, in the order the requests opened, and a
+    `tool_approval_resolved` for each decided row. The outcome comes from the
+    same mapping as the stream: `chat/tool_approvals.py:ended_answer` then
+    `chat/renderer.py:approval_outcome`; an `EXPIRED` row was withdrawn, so it
+    replays as `cancelled`. A suspended response's waiting calls stay open and
+    it ends with `awaiting_approval`, as its stream did, so a reload shows
+    decidable cards. A running response replays no records; its stream,
+    through resume-stream, shows them. A program's call is not saved, so its
+    replayed request has empty arguments and the program call's ID.
+18. `program-call-waits-in-cell` **A program's Ask call parks its
+    program.** MCP tools stay program functions in code mode. A gated call
+    opens its request through `ToolInvocation.nested_calls`
+    (`agents/tools.py:NestedCallGate`), and its card shows at once on the
+    observing `execute_code` or `wait_code` card, also for a cell that runs in
+    the background. The program parks once it waits only for such calls
+    ([[code-execution]]), the observation ends with `NestedInputWait`, and the
+    run hands off as for a direct call: the parked cell is saved in
+    `ChatFeatureState.code_cells`, and its dump goes to the file store with the
+    checkpoint (`chat/restoration.py:persist_checkpoint_files`). The
+    continuation loads the dump on any server and runs the approved call. A
+    program too large to park fails the waiting call with
+    `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE` and
+    continues; the request ends `cancelled`. The events carry `nested_call`.
 19. `policy-fixed-per-turn` **The policy is read once per turn.**
     `tools/tool_constructor.py:_construct_tools_impl` resolves every MCP tool's
     policy when it builds the turn's tools. A change applies from the next
@@ -458,10 +467,10 @@ calls run with no row unless the policy is now DENY.
 20. `waiting-approval-blocks-send` **A chat that waits for an approval starts
     no user turn.** `server/query_and_chat/chat_backend.py:_reject_while_approval_waits`
     rejects `send-chat-message` and the pending-message submit and interrupt
-    routes with `APPROVAL_PENDING` (409) while the user's chat has a pending
-    row younger than the timeout
-    (`db/approval_request.py:responses_waiting_for_approval`). A row whose
-    response has no owner expires instead. The send route checks before the
+    routes with `APPROVAL_PENDING` (409) while a response on the chat's
+    selected branch has an undecided row
+    (`db/approval_request.py:responses_waiting_for_approval`), whether its
+    turn runs or it is suspended. The send route checks before the
     stream starts, so the client gets a status, not a stream packet. Stop and
     withdraw stay open. A new route that starts a user turn in an existing
     chat must make the same check.
@@ -588,13 +597,14 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   server added or renamed exists only after a sync ([[#mcp-schema-from-db]]).
 - `investigate-stuck-approval` **Investigate "I approved, but the call did not
   run".** Query `approval_request` for the response (`chat_message_id`). A
-  NULL `decision` means no decision was saved. `EXPIRED` means the deadline,
-  the end of the run or a lost owner came first, and the route returned 409.
-  A saved decision on a call that still waits means the owner did not apply
-  it: check the `chat_response_approval:<id>` wake key, search the API server
-  log for "Could not read tool approval wake-ups" or "Could not read tool
-  approval decisions", and check that the pod that owns the response still
-  runs ([[#chat-approval-owner-delivers]]).
+  NULL `decision` means no decision was saved, and the response waits for it.
+  `EXPIRED` means the call stopped waiting first: its program or run ended, or
+  ownerless repair ended the response. When every row is decided and the
+  response (`chat_message.response_status`) is still `SUSPENDED`, nothing
+  resumed it: a session status read dispatches it again; search the API server
+  log for "Could not start queued chat work" or "Could not dispatch queued
+  chat input". An `ERROR` response with "could not continue after the
+  approval" could not rebuild its run ([[#chat-approval-durable-wait]]).
 
 ---
 

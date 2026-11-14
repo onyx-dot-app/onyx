@@ -1,21 +1,23 @@
-"""MCP tool calls in chat follow the action policies and wait for the user."""
+"""MCP tool calls in chat follow the action policies and wait for the user:
+the turn stops, and the response continues in a new stream after the
+decisions, on any API server."""
 
 import json
 import time
 from collections.abc import Callable, Generator, Iterator
-from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from sqlalchemy import select
 
+from onyx.agents.models import RunStatus
+from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
+from onyx.cache.factory import get_cache_backend
 from onyx.chat.models import ChatFullResponse
 from onyx.chat.process_message import run_chat_turn
-from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT
+from onyx.chat.run_store import ownerless_response_ids
 from onyx.configs.constants import DISCORD_SERVICE_API_KEY_NAME
 from onyx.db.api_key import insert_api_key, remove_api_key
-from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_chat_session
 from onyx.db.discord_bot import (
     delete_discord_service_api_key,
@@ -23,8 +25,14 @@ from onyx.db.discord_bot import (
     get_or_create_discord_service_api_key,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ActionPolicy, ApprovalDecidedVia, ApprovalDecision
-from onyx.db.models import ApprovalRequest, GatedApp, User
+from onyx.db.enums import ActionPolicy
+from onyx.db.models import (
+    ApprovalRequest,
+    ChatMessage,
+    ChatResponseCheckpoint,
+    User,
+)
+from onyx.file_store.file_store import get_default_file_store
 from onyx.server.api_key.models import APIKeyArgs
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
@@ -33,12 +41,15 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_APPROVAL,
+    OverallStop,
     Packet,
     PacketObj,
     ToolApprovalOutcome,
     ToolApprovalRequest,
     ToolApprovalResolved,
 )
+from onyx.tools.tool_implementations.code_mode.stubs import function_name
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
@@ -124,6 +135,16 @@ def _decide(user: DATestUser, approval_id: str, decision: str) -> httpx.Response
     )
 
 
+def _status(user: DATestUser, chat_session_id: UUID) -> dict[str, object]:
+    status = client.get(
+        f"{API_SERVER_URL}/chat/chat-session/{chat_session_id}/status",
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+    status.raise_for_status()
+    return status.json()
+
+
 def _saved_answer(
     chat_session_id: UUID,
     message_id: int,
@@ -132,7 +153,7 @@ def _saved_answer(
     headers: dict[str, str],
     cookies: dict[str, str] | None = None,
 ) -> str | None:
-    """The saved answer of a response that kept running after the request
+    """The saved answer of a response that continued after the request
     returned, once it is `expected` or 30 seconds pass."""
     deadline = time.monotonic() + 30
     while True:
@@ -163,15 +184,39 @@ def _packets(response: httpx.Response) -> Iterator[Packet]:
             yield Packet.model_validate(data)
 
 
-def _stream(
+def _waiting(packets: list[Packet]) -> list[tuple[Packet, ToolApprovalRequest]]:
+    """The requests that a stream asked and did not resolve."""
+    resolved = {
+        packet.obj.approval_id
+        for packet in packets
+        if isinstance(packet.obj, ToolApprovalResolved)
+    }
+    return [
+        (packet, packet.obj)
+        for packet in packets
+        if isinstance(packet.obj, ToolApprovalRequest)
+        and packet.obj.approval_id not in resolved
+    ]
+
+
+def _stop_reason(packets: list[Packet]) -> str | None:
+    stops = [packet.obj for packet in packets if isinstance(packet.obj, OverallStop)]
+    return stops[-1].stop_reason if stops else None
+
+
+def _converse(
     streaming_api: str,
     user: DATestUser,
     request: SendMessageRequest,
     on_request: OnRequest,
-) -> list[Packet]:
-    """Send a message over a real HTTP stream and call `on_request` for each
-    approval request as it arrives; the run waits until it is decided."""
-    packets: list[Packet] = []
+    on_continued: Callable[[], None] = lambda: None,
+) -> list[list[Packet]]:
+    """Send a message over a real HTTP stream, as a client does. A stream that
+    stops to wait for approval calls `on_request` for each request it left
+    waiting; then the client reads the chat's status and follows the
+    continuation's new stream from cursor 0. Returns each stream's packets."""
+    assert request.chat_session_id is not None
+    streams: list[list[Packet]] = []
     with httpx.Client(
         base_url=streaming_api,
         headers=user.headers,
@@ -181,11 +226,33 @@ def _stream(
         with http.stream(
             "POST", "/chat/send-chat-message", json=request.model_dump(mode="json")
         ) as response:
-            for packet in _packets(response):
-                packets.append(packet)
-                if isinstance(packet.obj, ToolApprovalRequest):
-                    on_request(packet, packet.obj)
-    return packets
+            streams.append(list(_packets(response)))
+        ended_streams: set[int] = set()
+        while _stop_reason(streams[-1]) == AWAITING_APPROVAL:
+            for packet, waiting in _waiting(streams[-1]):
+                on_request(packet, waiting)
+            status = http.get(f"/chat/chat-session/{request.chat_session_id}/status")
+            status.raise_for_status()
+            current = status.json()["current_stream"]
+            if current is None:
+                break
+            stream_id = current["stream_id"]
+            # Each continuation streams under a new ID.
+            assert stream_id not in ended_streams
+            ended_streams.add(stream_id)
+            with http.stream(
+                "GET",
+                f"/chat/chat-session/{request.chat_session_id}/resume-stream",
+                params={"cursor": 0, "stream_id": stream_id},
+            ) as continued:
+                on_continued()
+                streams.append(list(_packets(continued)))
+    return streams
+
+
+def _response_of(approval_id: str) -> int:
+    with get_session_with_current_tenant() as db_session:
+        return db_session.get_one(ApprovalRequest, UUID(approval_id)).chat_message_id
 
 
 def _of_type[T](packets: list[Packet], kind: type[T]) -> list[T]:
@@ -215,7 +282,7 @@ def _saved_approval_packets(
     "decision, outcome",
     [("approve_once", "approved"), ("reject", "rejected")],
 )
-def test_a_call_waits_for_the_users_decision(
+def test_a_waiting_turn_stops_and_its_response_continues_after_the_decision(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
@@ -225,15 +292,16 @@ def test_a_call_waits_for_the_users_decision(
     decision: str,
     outcome: ToolApprovalOutcome,
 ) -> None:
-    """With the default ASK policy, the stream asks for approval at the call's
-    card, the call waits, and the decision runs or skips the tool. A decision
-    is saved once."""
+    """With the default ASK policy, the stream asks at the call's card and
+    stops. The turn releases the chat and its server: the response waits in
+    its checkpoint. The decision continues it in a new stream that replays the
+    response, then runs or skips the tool. A decision is saved once."""
     name = uuid4().hex
     hello = _hello(connected_mcp_server, CALL_ID, name)
     mock_llm.conversation(
         "chat",
         Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
-        # The answer waits for the checks below, so the response keeps its owner.
+        # The answer waits until the client follows the continuation.
         Reply(
             text="Done. All set.",
             conditions=RequestConditions(has_results_for=[CALL_ID]),
@@ -241,25 +309,22 @@ def test_a_call_waits_for_the_users_decision(
         ),
     )
     chat_session_id = new_chat()
-    asked_at = datetime.now(timezone.utc)
-    replayed: list[Packet] = []
     decisions: list[httpx.Response] = []
+    waiting: list[tuple[bool, RunStatus | None, bool, bool]] = []
 
     def on_request(_packet: Packet, request: ToolApprovalRequest) -> None:
-        # A client that resumes the stream sees the request at its placement.
-        with httpx.Client(
-            base_url=streaming_api,
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-            timeout=60,
-        ) as http:
-            with http.stream(
-                "GET", f"/chat/chat-session/{chat_session_id}/resume-stream?cursor=0"
-            ) as resumed:
-                for replay in _packets(resumed):
-                    if isinstance(replay.obj, ToolApprovalRequest):
-                        replayed.append(replay)
-                        break
+        response_id = _response_of(request.approval_id)
+        with get_session_with_current_tenant() as db_session:
+            response = db_session.get_one(ChatMessage, response_id)
+            saved = db_session.get(ChatResponseCheckpoint, response_id) is not None
+            waiting.append(
+                (
+                    bool(_status(admin_user, chat_session_id)["is_processing"]),
+                    response.response_status,
+                    saved,
+                    bool(ownerless_response_ids(get_cache_backend(), [response_id])),
+                )
+            )
         opposite = "approve_once" if decision == "reject" else "reject"
         decisions.extend(
             [
@@ -269,38 +334,33 @@ def test_a_call_waits_for_the_users_decision(
                 _decide(basic_user, request.approval_id, decision),
             ]
         )
-        mock_llm.release_gate("answer")
 
     try:
-        packets = _stream(
-            streaming_api, admin_user, _request(chat_session_id), on_request
+        first, continued = _converse(
+            streaming_api,
+            admin_user,
+            _request(chat_session_id),
+            on_request,
+            on_continued=lambda: mock_llm.release_gate("answer"),
         )
     finally:
         mock_llm.release_gate("answer")
 
-    [request_packet] = [
-        packet for packet in packets if isinstance(packet.obj, ToolApprovalRequest)
-    ]
-    request = request_packet.obj
-    assert isinstance(request, ToolApprovalRequest)
+    [(request_packet, request)] = _waiting(first)
     assert request.model_dump(include={"tool_call_id", "tool_name", "arguments"}) == {
         "tool_call_id": CALL_ID,
         "tool_name": hello.name,
         "arguments": {"name": name},
     }
     assert request.display_name
-    assert (
-        asked_at + TOOL_APPROVAL_TIMEOUT - timedelta(seconds=5)
-        <= request.expires_at
-        <= datetime.now(timezone.utc) + TOOL_APPROVAL_TIMEOUT
-    )
-    assert [(packet.placement, packet.obj) for packet in replayed] == [
-        (request_packet.placement, request)
-    ]
-    # The call's card starts, asks, shows the decision, then any result.
+    # Not processing, suspended with its checkpoint, and no server owns it.
+    assert waiting == [(False, RunStatus.SUSPENDED, True, True)]
+    assert first[-1].obj == OverallStop(stop_reason=AWAITING_APPROVAL)
+
+    # The continuation replays the card, then shows the decision and result.
     card = [
         packet.obj.type
-        for packet in packets
+        for packet in continued
         if packet.placement == request_packet.placement
         and packet.obj.type
         in {
@@ -316,9 +376,10 @@ def test_a_call_waits_for_the_users_decision(
         "tool_approval_resolved",
     ]
     assert ("custom_tool_delta" in card) is (outcome == "approved")
-    assert _of_type(packets, ToolApprovalResolved) == [
+    assert _of_type(continued, ToolApprovalResolved) == [
         ToolApprovalResolved(approval_id=request.approval_id, outcome=outcome)
     ]
+    assert continued[-1].obj == OverallStop(stop_reason="finished")
 
     # Repeating the decision returns it; the opposite one conflicts; another
     # user cannot see the request.
@@ -343,6 +404,11 @@ def test_a_call_waits_for_the_users_decision(
             tool_result
             == f"The user rejected this {hello.name} call, so it did not run."
         )
+    with get_session_with_current_tenant() as db_session:
+        assert (
+            db_session.get(ChatResponseCheckpoint, _response_of(request.approval_id))
+            is None
+        )
 
     # A reload shows the request's record where the stream showed it.
     assert _saved_approval_packets(admin_user, chat_session_id) == [
@@ -352,6 +418,50 @@ def test_a_call_waits_for_the_users_decision(
             ToolApprovalResolved(approval_id=request.approval_id, outcome=outcome),
         ),
     ]
+
+
+def test_a_reload_while_the_turn_waits_shows_the_request_and_the_stop(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    streaming_api: str,
+) -> None:
+    hello = _hello(connected_mcp_server, CALL_ID, "team")
+    mock_llm.conversation(
+        "chat",
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
+    )
+    chat_session_id = new_chat()
+    reloaded: list[list[tuple[Placement, PacketObj]]] = []
+    stops: list[list[str | None]] = []
+
+    def on_request(_packet: Packet, request: ToolApprovalRequest) -> None:
+        reloaded.append(_saved_approval_packets(admin_user, chat_session_id))
+        detail = client.get(
+            f"{API_SERVER_URL}/chat/get-chat-session/{chat_session_id}",
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        )
+        detail.raise_for_status()
+        stops.append(
+            [
+                Packet.model_validate(packet).obj.model_dump().get("stop_reason")
+                for response in detail.json()["packets"]
+                for packet in response
+                if packet["obj"]["type"] == "stop"
+            ]
+        )
+        _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
+
+    first, _continued = _converse(
+        streaming_api, admin_user, _request(chat_session_id), on_request
+    )
+
+    [(request_packet, request)] = _waiting(first)
+    assert reloaded == [[(request_packet.placement, request)]]
+    assert stops == [[AWAITING_APPROVAL]]
 
 
 def test_approving_a_tool_that_an_admin_disabled_meanwhile_reports_it_disabled(
@@ -379,23 +489,58 @@ def test_approving_a_tool_that_an_admin_disabled_meanwhile_reports_it_disabled(
         decided.raise_for_status()
         decisions.append(decided.json())
 
-    packets = _stream(
-        streaming_api,
-        admin_user,
-        _request(new_chat()),
-        on_request,
-    )
+    streams = _converse(streaming_api, admin_user, _request(new_chat()), on_request)
 
     assert [
         (decision["decision"], decision["decided_via"]) for decision in decisions
     ] == [("REJECTED", "POLICY")]
     assert [
-        resolved.outcome for resolved in _of_type(packets, ToolApprovalResolved)
+        resolved.outcome for resolved in _of_type(streams[-1], ToolApprovalResolved)
     ] == ["disabled"]
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
-    assert tool_result is not None
     assert (
         tool_result == f"The {hello.name} tool is disabled, so this call did not run."
+    )
+
+
+def test_a_tool_removed_while_its_call_waits_is_no_longer_available(
+    connected_mcp_server: ConnectedMCPServer,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    streaming_api: str,
+) -> None:
+    """The response continues with the agent's current tools."""
+    hello = _hello(connected_mcp_server, CALL_ID, "team")
+    mock_llm.conversation(
+        "chat",
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
+    )
+    persona = PersonaManager.create(
+        tool_ids=[connected_mcp_server.tool_ids["hello"]],
+        user_performing_action=admin_user,
+    )
+    chat = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+
+    def on_request(_packet: Packet, request: ToolApprovalRequest) -> None:
+        PersonaManager.edit(
+            persona,
+            user_performing_action=admin_user,
+            tool_ids=[connected_mcp_server.tool_ids["get_ticket"]],
+        )
+        _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
+
+    try:
+        streams = _converse(streaming_api, admin_user, _request(chat.id), on_request)
+    finally:
+        ChatSessionManager.delete(chat, admin_user)
+        PersonaManager.delete(persona, admin_user)
+
+    assert len(streams) == 2
+    assert mock_llm.requests_in("chat")[-1].tool_result(CALL_ID) == (
+        UNAVAILABLE_CALL_MESSAGE
     )
 
 
@@ -463,25 +608,22 @@ def test_a_personal_always_policy_applies_only_where_users_can_manage(
         asked.append(request.approval_id)
         _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
 
-    _stream(
-        streaming_api,
-        admin_user,
-        _request(new_chat()),
-        on_request,
-    )
+    _converse(streaming_api, admin_user, _request(new_chat()), on_request)
 
     assert len(asked) == (0 if users_can_manage else 1)
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
     assert tool_result is not None and f"Hello, {name}!" in tool_result
 
 
-def test_approving_for_the_chat_runs_waiting_and_later_calls(
+def test_approving_for_the_chat_continues_once_and_runs_later_calls(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
 ) -> None:
+    """One decision of two requests does not continue the response; an
+    approval for the chat decides both, and later calls do not ask."""
     first = _hello(connected_mcp_server, "call_a", "a")
     second = _hello(connected_mcp_server, "call_b", "b")
     later = _hello(connected_mcp_server, "call_c", "c")
@@ -502,20 +644,25 @@ def test_approving_for_the_chat_runs_waiting_and_later_calls(
     )
     chat_session_id = new_chat()
     asked: list[str] = []
+    processing_after_first: list[bool] = []
 
     def grant(_packet: Packet, request: ToolApprovalRequest) -> None:
         asked.append(request.approval_id)
-        # Both calls wait, then the user approves the first for the chat.
         if len(asked) == 2:
+            _decide(admin_user, asked[1], "approve_once").raise_for_status()
+            processing_after_first.append(
+                bool(_status(admin_user, chat_session_id)["is_processing"])
+            )
             _decide(admin_user, asked[0], "approve_session").raise_for_status()
 
-    packets = _stream(streaming_api, admin_user, _request(chat_session_id), grant)
+    streams = _converse(streaming_api, admin_user, _request(chat_session_id), grant)
 
-    # The grant approves the waiting sibling too, and both cards say so.
+    assert len(streams) == 2
+    assert processing_after_first == [False]
     assert sorted(
         (resolved.approval_id, resolved.outcome)
-        for resolved in _of_type(packets, ToolApprovalResolved)
-    ) == sorted((approval_id, "approved_for_chat") for approval_id in asked)
+        for resolved in _of_type(streams[-1], ToolApprovalResolved)
+    ) == sorted([(asked[0], "approved_for_chat"), (asked[1], "approved")])
     results = mock_llm.requests_in("chat")[-1]
     assert "Hello, a!" in (results.tool_result("call_a") or "")
     assert "Hello, b!" in (results.tool_result("call_b") or "")
@@ -526,7 +673,7 @@ def test_approving_for_the_chat_runs_waiting_and_later_calls(
         later_requests.append(request.approval_id)
         _decide(admin_user, request.approval_id, "reject").raise_for_status()
 
-    later_packets = _stream(
+    later_streams = _converse(
         streaming_api,
         admin_user,
         _request(chat_session_id, "Say hello again.").model_copy(
@@ -536,7 +683,7 @@ def test_approving_for_the_chat_runs_waiting_and_later_calls(
     )
 
     assert later_requests == []
-    assert _of_type(later_packets, ToolApprovalResolved) == []
+    assert len(later_streams) == 1
     later_result = mock_llm.requests_in("chat")[-1].tool_result("call_c")
     assert later_result is not None and "Hello, c!" in later_result
 
@@ -557,7 +704,7 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     )
     chat_session_id = new_chat()
     blocked: list[httpx.Response] = []
-    held_seconds = 6.0
+    held_seconds = 4.0
 
     def on_request(_packet: Packet, request: ToolApprovalRequest) -> None:
         blocked.append(
@@ -574,7 +721,7 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
         time.sleep(held_seconds)
         _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
 
-    _stream(streaming_api, admin_user, _request(chat_session_id), on_request)
+    _converse(streaming_api, admin_user, _request(chat_session_id), on_request)
 
     [rejected] = blocked
     assert rejected.status_code == 409
@@ -602,71 +749,135 @@ def test_a_waiting_chat_blocks_new_messages_and_its_wait_is_not_thought_time(
     assert first_answer["processing_duration_seconds"] < held_seconds
 
 
-def test_stopping_a_waiting_chat_rejects_its_request(
+def test_a_stop_while_the_turn_waits_leaves_its_request_to_decide(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     streaming_api: str,
 ) -> None:
-    """A Stop rejects the request that waits, as the user's Reject does: the
-    card, the saved record, a reload and the model's next turn show it."""
+    """A waiting turn already stopped and runs nothing, so Stop finds no turn
+    to stop: the request still waits, and its decision continues the
+    response."""
     hello = _hello(connected_mcp_server, CALL_ID, "team")
-    rejected = f"The user rejected this {hello.name} call, so it did not run."
     mock_llm.conversation(
         "chat",
         Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
-        # The next turn's request: the stopped turn asks no more.
-        Reply(
-            text="Understood.",
-            conditions=RequestConditions(has_results_for=[CALL_ID]),
-        ),
+        Reply(text="Done.", conditions=RequestConditions(has_results_for=[CALL_ID])),
     )
     chat_session_id = new_chat()
+    stopped: list[int] = []
 
-    def stop(_packet: Packet, _request: ToolApprovalRequest) -> None:
-        client.post(
-            f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        ).raise_for_status()
-
-    packets = _stream(streaming_api, admin_user, _request(chat_session_id), stop)
-
-    [request_packet] = [
-        packet for packet in packets if isinstance(packet.obj, ToolApprovalRequest)
-    ]
-    request = request_packet.obj
-    assert isinstance(request, ToolApprovalRequest)
-    resolved = Packet(
-        placement=request_packet.placement,
-        obj=ToolApprovalResolved(approval_id=request.approval_id, outcome="rejected"),
-    )
-    # The card shows the rejection before the stream stops.
-    types = [packet.obj.type for packet in packets]
-    assert packets.index(resolved) < types.index(
-        "stop", types.index("tool_approval_request")
-    )
-    with get_session_with_current_tenant() as db_session:
-        saved = db_session.get_one(ApprovalRequest, UUID(request.approval_id))
-        assert (saved.decision, saved.decided_via) == (
-            ApprovalDecision.REJECTED,
-            ApprovalDecidedVia.USER,
+    def stop_then_approve(_packet: Packet, request: ToolApprovalRequest) -> None:
+        # Web sends no stream ID; the CLI sends the ID of the stream that
+        # stopped, which is the response's.
+        stopped.extend(
+            client.post(
+                f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
+                params={"stream_id": stream_id} if stream_id else None,
+                headers=admin_user.headers,
+                cookies=admin_user.cookies,
+            ).status_code
+            for stream_id in (None, _response_of(request.approval_id))
         )
-    assert _decide(admin_user, request.approval_id, "approve_once").status_code == 409
-    assert _saved_approval_packets(admin_user, chat_session_id) == [
-        (request_packet.placement, request),
-        (resolved.placement, resolved.obj),
-    ]
+        with get_session_with_current_tenant() as db_session:
+            assert (
+                db_session.get_one(ApprovalRequest, UUID(request.approval_id)).decision
+                is None
+            )
+        _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
 
-    answer = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
-        message="Never mind.",
-        user_performing_action=admin_user,
+    streams = _converse(
+        streaming_api, admin_user, _request(chat_session_id), stop_then_approve
     )
 
-    assert answer.error is None and answer.full_message == "Understood."
-    assert mock_llm.requests_in("chat")[-1].tool_result(CALL_ID) == rejected
+    assert stopped == [200, 200]
+    assert len(streams) == 2 and streams[-1][-1].obj == OverallStop(
+        stop_reason="finished"
+    )
+    tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
+    assert tool_result is not None and "Hello, team!" in tool_result
+
+
+def test_a_program_that_waits_for_approval_pauses_and_continues(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    streaming_api: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In code mode, a program's gated call shows its card on the program's
+    card; the program parks, its dump is saved with the run, and after the
+    decision it continues with its earlier output and both results."""
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", True)
+    _set_policies(
+        connected_mcp_server,
+        admin_user,
+        action_policies={"get_ticket": ActionPolicy.ALWAYS.value},
+    )
+    hello = connected_mcp_server.callable_name("hello")
+    get_ticket = connected_mcp_server.callable_name("get_ticket")
+    # Programs call the tools by their Python identifiers.
+    hello_function, ticket_function = (
+        function_name(name) for name in (hello, get_ticket)
+    )
+    code = (
+        "print('started')\n"
+        f"ticket, greeting = await asyncio.gather({ticket_function}(ticket_id=7), "
+        f"{hello_function}(name='team'))\n"
+        "print('ticket', ticket)\nprint('greeting', greeting)\n"
+    )
+    program = ToolCall(id="program", name="execute_code", arguments={"code": code})
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[program],
+            conditions=RequestConditions(offers=["execute_code"]),
+        ),
+        Reply(text="Done.", conditions=RequestConditions(has_results_for=["program"])),
+    )
+    chat_session_id = new_chat(["hello", "get_ticket"])
+    dumps: list[int] = []
+
+    def on_request(_packet: Packet, request: ToolApprovalRequest) -> None:
+        dumps.append(
+            len(
+                get_default_file_store().list_files_by_prefix(
+                    f"agent-checkpoint/{chat_session_id}/"
+                )
+            )
+        )
+        _decide(admin_user, request.approval_id, "approve_once").raise_for_status()
+
+    first, continued = _converse(
+        streaming_api, admin_user, _request(chat_session_id), on_request
+    )
+
+    [(request_packet, request)] = _waiting(first)
+    assert request.tool_name == hello
+    # The program's second call, inside the program's card.
+    assert request.tool_call_id == "program:1"
+    starts = [
+        packet.placement for packet in first if packet.obj.type == "code_mode_start"
+    ]
+    assert request_packet.placement in starts
+    assert dumps == [1]
+    result = mock_llm.requests_in("chat")[-1].tool_result("program")
+    assert result is not None
+    assert "started" in result
+    assert "widget" in result and "Hello, team!" in result
+    assert "Execution completed" in result
+    assert _of_type(continued, ToolApprovalResolved) == [
+        ToolApprovalResolved(approval_id=request.approval_id, outcome="approved")
+    ]
+    # The continuation loaded the dump and deleted it.
+    assert (
+        get_default_file_store().list_files_by_prefix(
+            f"agent-checkpoint/{chat_session_id}/"
+        )
+        == []
+    )
 
 
 def test_an_always_tool_runs_at_once(
@@ -726,7 +937,7 @@ def test_a_user_who_claims_a_bot_origin_still_asks(
         asked.append(request.approval_id)
         _decide(admin_user, request.approval_id, "reject").raise_for_status()
 
-    _stream(
+    _converse(
         streaming_api,
         admin_user,
         _request(new_chat()).model_copy(update={"origin": origin}),
@@ -897,66 +1108,14 @@ def test_a_turn_that_cannot_ask_runs_tools_that_would_ask(
     assert tool_result is not None and f"Hello, {name}!" in tool_result
 
 
-@pytest.mark.parametrize("action", ["decide", "send"])
-def test_a_request_whose_response_has_no_owner_expires_when_used(
-    connected_mcp_server: ConnectedMCPServer,
-    new_chat: NewChat,
-    admin_user: DATestUser,
-    mock_llm: MockLLMScript,
-    action: str,
-) -> None:
-    """Nothing waits for a response whose owner is gone, e.g. after its server
-    restarted: a decision conflicts, and a new message is not blocked."""
-    mock_llm.conversation(
-        "chat", Reply(text="First."), Reply(text="Second.", required=False)
-    )
-    chat_session_id = new_chat()
-    finished = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
-        message="Hi.",
-        user_performing_action=admin_user,
-    )
-    with get_session_with_current_tenant() as db_session:
-        approval_id, _created_at = create_approval_request__no_commit(
-            db_session,
-            chat_session_id=chat_session_id,
-            chat_message_id=finished.assistant_message_id,
-            gated_app_id=db_session.scalars(
-                select(GatedApp.id).where(
-                    GatedApp.mcp_server_id == connected_mcp_server.id
-                )
-            ).one(),
-            action_id="hello",
-            tool_call_id=CALL_ID,
-            tool_name="hello",
-            display_name="hello",
-        )
-        db_session.commit()
-
-    if action == "decide":
-        assert _decide(admin_user, str(approval_id), "approve_once").status_code == 409
-    else:
-        second = ChatSessionManager.send_message(
-            chat_session_id=chat_session_id,
-            message="Again.",
-            user_performing_action=admin_user,
-        )
-        assert second.error is None and second.full_message == "Second."
-
-    with get_session_with_current_tenant() as db_session:
-        assert db_session.get_one(ApprovalRequest, approval_id).decision == (
-            ApprovalDecision.EXPIRED
-        )
-
-
 def test_a_non_streaming_request_returns_when_a_call_waits_for_approval(
     connected_mcp_server: ConnectedMCPServer,
     new_chat: NewChat,
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
 ) -> None:
-    """The complete response returns early with the request to decide. The
-    turn keeps running, and its answer reaches the chat after the decision."""
+    """The response stops with the request to decide. After the decision it
+    continues, and its answer reaches the chat."""
     name = uuid4().hex
     hello = _hello(connected_mcp_server, CALL_ID, name)
     mock_llm.conversation(

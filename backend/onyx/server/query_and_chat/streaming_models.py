@@ -100,6 +100,11 @@ class SectionEnd(BaseObj):
     type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
+# The stop reason of a response whose run waits for the user's approval
+# decisions; it continues in a new stream after them.
+AWAITING_APPROVAL = "awaiting_approval"
+
+
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
@@ -488,16 +493,15 @@ class ToolApprovalRequest(BaseObj):
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
-    expires_at: datetime
 
 
 # How a tool approval request ended: the user's decision, an approval of the
 # action for the rest of the chat session (approved_for_chat: this request's or
-# an earlier request's), no decision in time, an approval that the action
-# policy blocked or a request deleted with its tool's server (disabled), or the
-# call stopped waiting because its run or program stopped.
+# an earlier request's), an approval that the action policy blocked or a
+# request deleted with its tool's server (disabled), or the call stopped
+# waiting because its run or program stopped.
 ToolApprovalOutcome = Literal[
-    "approved", "approved_for_chat", "rejected", "expired", "disabled", "cancelled"
+    "approved", "approved_for_chat", "rejected", "disabled", "cancelled"
 ]
 
 

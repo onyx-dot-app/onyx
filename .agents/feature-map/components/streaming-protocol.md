@@ -141,11 +141,16 @@ requests that `ToolApprovals` opened (`PendingToolInput.approval`).
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
-earlier one), `rejected` (also a user Stop), `expired`, `disabled` (an approval
-of a tool that the policy now disables, or a request deleted with its tool's
-server), or `cancelled` for a call that stopped waiting without a decision. The
-request's `expires_at` is the row's `created_at` plus the timeout
-(`PendingToolInput.expires_at`). A run that ends publishes
+earlier one), `rejected` (also a user Stop of a live turn), `disabled` (an
+approval of a tool that the policy now disables, or a request deleted with its
+tool's server), or `cancelled` for a call that stopped waiting without a
+decision. Requests have no deadline. A turn whose run has nothing left but
+approval waits ends its stream with its requests, then
+`stop(awaiting_approval)` (`chat/presentation.py:overall_stop` maps
+`SUSPENDED`); after the decisions the response continues in a new stream,
+under a new stream ID, that clients follow from cursor 0: it replays the saved
+response, then the decisions and the rest live
+([[mcp-and-custom-tools#chat-approval-durable-wait]]). A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
 `agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
 of a decision saved first. A turn-level Stop drops packets after it, except
@@ -156,9 +161,10 @@ program's call, the events carry `nested_call`, and
 the packet sits on the `execute_code` or `wait_code` card with the nested
 call's name and arguments. Every client gets them
 ([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
-the widget and the CLI mirror them. Saved-session replay sends the same pair
-for each request of an ended response from its `approval_request` row
-([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
+the widget and the CLI mirror them. Saved-session replay sends the request,
+and its resolution once decided, for each request of an ended or suspended
+response from its `approval_request` row, and a suspended response ends with
+`stop(awaiting_approval)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`; the configured reasoning
 tool streams as reasoning packets instead
@@ -464,8 +470,9 @@ its background task end ([[#pure-asgi-middleware]]).
   6. Update the other consumers from [[#vocabulary-mirrored-by-hand]]. The
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
-     decide whether the snapshot needs the new data. The one packet it reads is
-     `tool_approval_request`: it returns early with `pending_tool_approvals`.
+     decide whether the snapshot needs the new data. It reads the approval
+     packets and the last `stop`: when that is `awaiting_approval`, the
+     unresolved requests become `pending_tool_approvals`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A
