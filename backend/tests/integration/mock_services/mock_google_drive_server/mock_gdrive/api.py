@@ -13,7 +13,7 @@ import re
 import time
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from pydantic import BaseModel
@@ -116,6 +116,7 @@ def _flag(query: dict[str, str], name: str) -> bool:
 
 
 def rfc3339(value: datetime) -> str:
+    value = value.astimezone(timezone.utc)
     return value.strftime("%Y-%m-%dT%H:%M:%S.") + f"{value.microsecond // 1000:03d}Z"
 
 
@@ -520,9 +521,10 @@ class MockGoogleApi:
             member_drives = set(corpus.member_drive_ids(me))
             return lambda f: f in mine or corpus.files[f].drive_id in member_drives
         if corpora == "domain":
-            return lambda f: (
-                f in mine
-                or any(p.type == "domain" for p in corpus.files[f].permissions)
+            # Only files shared with the domain: a private file of the user
+            # is not in this corpus.
+            return lambda f: any(
+                p.type == "domain" for p in corpus.files[f].permissions
             )
         return lambda f: f in mine
 
@@ -574,7 +576,10 @@ async def files_list(
     query = req.query
     corpora = query.get("corpora", "user")
     drive_id = query.get("driveId")
-    include_all = _flag(query, "includeItemsFromAllDrives")
+    # Google leaves out shared drive items unless the caller sets both flags.
+    include_all = _flag(query, "includeItemsFromAllDrives") and _flag(
+        query, "supportsAllDrives"
+    )
     if corpora not in ("user", "drive", "allDrives", "domain"):
         return bad_request(f"Invalid Value: corpora={corpora}", "corpora")
     if (corpora == "drive") != (drive_id is not None):
@@ -583,7 +588,7 @@ async def files_list(
             "driveId",
         )
     if corpora == "drive":
-        if not include_all or not _flag(query, "supportsAllDrives"):
+        if not include_all:
             return bad_request(
                 "The includeItemsFromAllDrives parameter must be set to true when "
                 "corpora is set to drive.",

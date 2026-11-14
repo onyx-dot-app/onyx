@@ -180,6 +180,8 @@ Read the report like this:
    and every Celery worker, for example in `.vscode/.env`. Then restart them. The setting is for
    testing only. When it is set, every Google connector sends its calls to the mock. This
    includes Gmail connectors, and the mock has no Gmail routes, so their calls fail.
+   Onyx accepts plain `http` only for `localhost`, `127.0.0.1` and `::1`. Any other host must use
+   `https`.
 2. Save the service account key:
    `curl -s localhost:9650/_mock/service-account-key > mock-service-account.json`
 3. In the Admin panel, add a Google Drive connector. Upload `mock-service-account.json` as a

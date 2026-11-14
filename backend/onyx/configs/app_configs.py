@@ -1391,6 +1391,9 @@ GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
 )
 
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
 def _load_google_api_endpoint_override() -> str | None:
     raw = os.environ.get("GOOGLE_API_ENDPOINT_OVERRIDE", "").strip()
     if not raw:
@@ -1402,6 +1405,15 @@ def _load_google_api_endpoint_override() -> str | None:
     if parsed is None or parsed.scheme not in ("http", "https") or not parsed.netloc:
         logger.error(
             "Ignoring GOOGLE_API_ENDPOINT_OVERRIDE=%r: it is not an http(s) URL.", raw
+        )
+        return None
+    # Tokens and credentials go to this endpoint. Plain HTTP is safe only
+    # when the endpoint is on this machine.
+    if parsed.scheme == "http" and parsed.hostname not in _LOOPBACK_HOSTS:
+        logger.error(
+            "Ignoring GOOGLE_API_ENDPOINT_OVERRIDE=%r: an endpoint that is not "
+            "on this machine must use https.",
+            raw,
         )
         return None
     logger.warning(

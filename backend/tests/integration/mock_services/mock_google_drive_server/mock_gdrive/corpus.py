@@ -120,6 +120,12 @@ def stable_digits(value: str, length: int = 20) -> str:
     return str(int.from_bytes(digest[:12], "big")).rjust(length, "1")[:length]
 
 
+def _whole_ms(value: datetime) -> datetime:
+    """Drive keeps times to the millisecond. A finer time would compare
+    differently from the time that the API returns."""
+    return value.replace(microsecond=value.microsecond // 1000 * 1000)
+
+
 def _make_id(prefix: str, seed: int, kind: str, n: int, length: int) -> str:
     digest = hashlib.sha256(f"{seed}:{kind}:{n}".encode()).digest()
     text = base64.urlsafe_b64encode(digest).decode().rstrip("=")
@@ -235,7 +241,7 @@ class Corpus:
         """Marks `count` random content files as modified now."""
         candidates = [f.id for f in self.content_files()]
         chosen = rng.sample(candidates, min(count, len(candidates)))
-        now = datetime.now(timezone.utc)
+        now = _whole_ms(datetime.now(timezone.utc))
         for file_id in chosen:
             self.files[file_id].modified_time = now
         return chosen
@@ -669,8 +675,8 @@ class Corpus:
 
     def _times(self, rng: random.Random | None = None) -> tuple[datetime, datetime]:
         rng = rng or self._rng
-        created = _CORPUS_START + _CORPUS_SPAN * rng.random()
-        modified = created + _MAX_EDIT_SPAN * rng.random()
+        created = _whole_ms(_CORPUS_START + _CORPUS_SPAN * rng.random())
+        modified = _whole_ms(created + _MAX_EDIT_SPAN * rng.random())
         return created, modified
 
     def _content_size(self, rng: random.Random | None = None) -> int:

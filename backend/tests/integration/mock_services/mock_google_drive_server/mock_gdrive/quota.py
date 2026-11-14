@@ -45,7 +45,11 @@ class QuotaTracker:
         self._user: dict[tuple[Bucket, str], SlidingWindow] = {}
 
     def update_settings(self, settings: QuotaSettings) -> None:
-        if settings.window_seconds != self.settings.window_seconds:
+        # A count in units means nothing in requests, and the reverse.
+        if (
+            settings.window_seconds != self.settings.window_seconds
+            or settings.model != self.settings.model
+        ):
             self._project.clear()
             self._user.clear()
         self.settings = settings

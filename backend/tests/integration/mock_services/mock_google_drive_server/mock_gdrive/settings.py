@@ -12,7 +12,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 DOC_MIME = "application/vnd.google-apps.document"
 SHEET_MIME = "application/vnd.google-apps.spreadsheet"
@@ -61,6 +61,15 @@ class BulkUploadSettings(_Settings):
     # Seconds between the bursts.
     spacing_seconds: int = Field(default=2, ge=1)
     start: datetime = datetime(2025, 6, 1, 7, 58, tzinfo=timezone.utc)
+
+    @field_validator("start")
+    @classmethod
+    def _start_in_utc(cls, value: datetime) -> datetime:
+        """A time with no zone is UTC. The corpus compares it with aware times."""
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
     # "my_drive": the My Drive of user `index` (0 is the admin).
     # "shared_drive": shared drive `index`.
     # "external": owned by external account `index` and shared with the
@@ -192,6 +201,9 @@ class QuotaSettings(_Settings):
 class LatencySettings(_Settings):
     """Time each call takes. A call waits its base time, scaled by a random
     factor in [1 - jitter, 1 + jitter], plus its body size over the bandwidth."""
+
+    # An infinite wait would hang every call of that kind.
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
     enabled: bool = True
     token_ms: float = 80

@@ -268,3 +268,72 @@ def test_folder_target_lists_exactly_its_subtree(
         shared_folder_urls=f"https://drive.google.com/drive/folders/{root_id}",
     )
     _assert_exact(_slim_ids(connector), expected)
+
+
+def _list_files(mock: MockDrive, email: str, **params: str) -> list[dict[str, Any]]:
+    response = mock.client.get(
+        "/drive/v3/files",
+        params={"pageSize": "1000", "fields": "files(id,modifiedTime)", **params},
+        headers={"authorization": f"Bearer {_access_token(mock, email)}"},
+    )
+    response.raise_for_status()
+    return list(response.json()["files"])
+
+
+def test_bulk_upload_start_times_are_read_as_utc(own_mock_drive: MockDrive) -> None:
+    """A start with no zone is UTC, and a start with an offset is converted.
+    The time that the API returns is the time that a query compares."""
+    own_mock_drive.set_corpus(
+        {
+            **_BASE_CORPUS,
+            "bulk_uploads": [
+                {"count": 3, "start": "2025-06-03T09:00:00"},
+                {"count": 4, "start": "2025-06-04T12:00:00+02:00"},
+            ],
+        }
+    )
+    admin = own_mock_drive.client.get("/_mock/corpus/summary").json()["admin_email"]
+
+    # A sort over every file compares these times with the generated ones.
+    everything = _list_files(own_mock_drive, admin, orderBy="modifiedTime")
+    no_zone = _list_files(
+        own_mock_drive, admin, q="modifiedTime = '2025-06-03T09:00:00.000Z'"
+    )
+    offset = _list_files(
+        own_mock_drive, admin, q="modifiedTime = '2025-06-04T10:00:00.000Z'"
+    )
+
+    assert len(no_zone) == 3
+    assert len(offset) == 4
+    assert {f["modifiedTime"] for f in offset} == {"2025-06-04T10:00:00.000Z"}
+    # Each returned time finds its file again: no time is finer than the API shows.
+    for file in everything[:20]:
+        found = _list_files(
+            own_mock_drive, admin, q=f"modifiedTime = '{file['modifiedTime']}'"
+        )
+        assert file["id"] in {f["id"] for f in found}
+
+
+def test_a_config_change_works_with_a_bulk_upload_corpus(
+    own_mock_drive: MockDrive,
+) -> None:
+    """The config has a datetime when the corpus has a bulk upload."""
+    own_mock_drive.set_corpus({**_BASE_CORPUS, "bulk_uploads": [{"count": 2}]})
+
+    response = own_mock_drive.client.patch(
+        "/_mock/config", json={"latency": {"enabled": False}}
+    )
+
+    assert response.status_code == 200
+    start = response.json()["corpus"]["bulk_uploads"][0]["start"]
+    assert start.startswith("2025-06-01")
+
+
+def test_an_infinite_latency_is_refused(own_mock_drive: MockDrive) -> None:
+    response = own_mock_drive.client.patch(
+        "/_mock/config",
+        content='{"latency": {"metadata_ms": 1e309}}',
+        headers={"content-type": "application/json"},
+    )
+
+    assert response.status_code == 400

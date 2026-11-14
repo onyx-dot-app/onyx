@@ -259,9 +259,11 @@ def matches(node: QueryNode | None, file: MockFile, me: str, corpus: Corpus) -> 
         roles = {"owner", "organizer", "fileOrganizer", "writer"}
         if node.field == "readers":
             roles |= {"commenter", "reader"}
-        return any(
-            p.email_address == value and p.role in roles for p in file.permissions
-        )
+        permissions = list(file.permissions)
+        if file.drive_id is not None:
+            # A shared drive item inherits the roles of the drive's members.
+            permissions += corpus.drives[file.drive_id].members
+        return any(p.email_address == value and p.role in roles for p in permissions)
     if node.field == "mimeType":
         return _compare(file.mime_type, node.op, node.value)
     if node.field == "name":
