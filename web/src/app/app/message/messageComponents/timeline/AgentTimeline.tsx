@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useCallback } from "react";
+import React, { useMemo, useCallback, useLayoutEffect, useState } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
 import {
   FullChatState,
@@ -24,6 +24,7 @@ import {
   stepHasCollapsedStreamingContent,
 } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { useTimelineStepState } from "@/app/app/message/messageComponents/timeline/hooks/useTimelineStepState";
+import type { ApprovalWait } from "@/app/app/message/messageComponents/timeline/hooks/useStreamingDuration";
 import { StreamingHeader } from "@/app/app/message/messageComponents/timeline/headers/StreamingHeader";
 import { CompletedHeader } from "@/app/app/message/messageComponents/timeline/headers/CompletedHeader";
 import { StoppedHeader } from "@/app/app/message/messageComponents/timeline/headers/StoppedHeader";
@@ -92,6 +93,8 @@ export interface AgentTimelineProps {
   toolProcessingDuration?: number;
   /** A code mode program works between tool calls; it has no step */
   codeModeWorking?: boolean;
+  /** A tool call in the latest turn waits for the user's approval */
+  awaitingApproval?: boolean;
 }
 
 /**
@@ -114,7 +117,8 @@ function areAgentTimelinePropsEqual(
     prev.chatState === next.chatState &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
-    prev.codeModeWorking === next.codeModeWorking
+    prev.codeModeWorking === next.codeModeWorking &&
+    prev.awaitingApproval === next.awaitingApproval
   );
 }
 
@@ -132,12 +136,14 @@ export const AgentTimeline = React.memo(function AgentTimeline({
   generatedImageCount = 0,
   toolProcessingDuration,
   codeModeWorking = false,
+  awaitingApproval = false,
 }: AgentTimelineProps) {
   // Header text and state flags
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    codeModeWorking
+    codeModeWorking,
+    awaitingApproval
   );
 
   // Memoized metrics derived from turn groups
@@ -166,6 +172,25 @@ export const AgentTimeline = React.memo(function AgentTimeline({
 
   // Streaming duration tracking
   const streamingStartTime = useStreamingStartTime();
+
+  // The timeline outlives its headers, so it keeps the approval waits of the
+  // run. A layout effect records each wait edge before the timer paints.
+  const [approvalWait, setApprovalWait] = useState<
+    ApprovalWait & { startTime: number | undefined }
+  >({ startTime: streamingStartTime, excludedMs: 0, since: null });
+  useLayoutEffect(() => {
+    const now = Date.now();
+    setApprovalWait((wait) => {
+      const run =
+        wait.startTime === streamingStartTime
+          ? wait
+          : { startTime: streamingStartTime, excludedMs: 0, since: null };
+      if (awaitingApproval === (run.since !== null)) return run;
+      return run.since === null
+        ? { ...run, since: now }
+        : { ...run, excludedMs: run.excludedMs + now - run.since, since: null };
+    });
+  }, [awaitingApproval, streamingStartTime]);
 
   // Parallel step analysis for collapsed streaming view
   const parallelActiveStep = useMemo(() => {
@@ -234,6 +259,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     parallelActiveStepHasCollapsedContent,
     finalAnswerComing,
     codeModeWorking,
+    awaitingApproval,
   });
 
   const headerIsInteractive = useMemo(() => {
@@ -284,6 +310,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
             onToggle={handleToggle}
             streamingStartTime={streamingStartTime}
             toolProcessingDuration={toolProcessingDuration}
+            approvalWait={approvalWait}
           />
         );
 
@@ -342,6 +369,7 @@ export const AgentTimeline = React.memo(function AgentTimeline({
     processingDurationSeconds,
     generatedImageCount,
     toolProcessingDuration,
+    approvalWait,
   ]);
 
   // Empty state: no packets, still streaming, and not stopped

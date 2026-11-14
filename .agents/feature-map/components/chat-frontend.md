@@ -52,6 +52,26 @@
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
+- **A tool call needs approval.** An approval card shows in the answer with
+  the tool's arguments and a deadline. The user approves once, approves for
+  the chat, or rejects; the card then becomes a one-line record of the
+  outcome, or of "No longer waiting" when the server returns 409 or 404. A
+  Stop rejects the requests that wait, and the record reads "Not approved".
+  Once the stop packet arrives, a card without a resolution reads as no longer
+  waiting (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The stop that the
+  client adds when it loses the stream does not count: the node's `streamLost`
+  mark keeps the card open, because the server can still wait for the
+  decision. The saved answer replays the same records, so they stay after the
+  answer settles and after a reload.
+  While the card waits, the timeline header reads "Waiting for your approval",
+  also after a preamble and for parallel tool calls, and its timer leaves out
+  the wait.
+  While a card waits, the user can type but not send: the composer keeps
+  the draft, scrolls to the card, shakes it and shows a toast
+  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). A 409
+  `APPROVAL_PENDING` from the server, for example for a turn that
+  another tab started, gets the same treatment.
+  What each decision does is in [[mcp-and-custom-tools]].
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
   reload shows the same version.
@@ -304,19 +324,20 @@ flush, so it does not reuse call or step objects.
 When the response has `current_stream`, Stop can target that stream ID at
 once. `lib/chat/settleChatSession.ts:prepareSavedChat` turns the saved page and
 the local tree into the tree to show and the stream to replay; load and
-`refreshChatSession` both use it. When the ID is an assistant node,
-`lib/chat/settleChatSession.ts:followChatSession` calls
-`resumeStream` with the stream ID and the node's `replayCursor` (0 on a fresh
-page). It publishes packets only at each `StreamCursor` line, so the cursor
+`refreshChatSession` both use it. The ID names an assistant node, or the
+user node of a multi-model turn. `lib/chat/settleChatSession.ts:followChatSession`
+calls `resumeStream` with the stream ID and that node's `replayCursor` (0 on a
+fresh page). In a multi-model turn it routes each packet to the answer at
+`placement.model_index`, in `getMultiModelChildren` order, and gives the
+overall stop to every answer. It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
 `AgentMessage` shows it without animation. `resumeStream` does not drop
 heartbeats, so `followChatSession` drops `chat_heartbeat` itself. A resumed
-error packet turns the node into an `error` node. The backend decides whether
+error packet turns its answer into an `error` node. The backend decides whether
 queued input can run. When
-the reader ends, it settles the session. A multi-model turn, whose stream ID
-is the user message, only settles.
+the reader ends, it settles the session.
 
 When the user opens a session, it is fetched again when its state is
 `input` or `unconfirmed`, or its `AbortController` is aborted. In the last two
@@ -347,10 +368,11 @@ turns and remaps the selected response.
 After a resume, a Stop, an error or a failed save it also reloads saved
 history. `preserveFailedMessages` keeps a local error unless the saved row's
 `response_status` is `complete`, `limit` or `cancelled` (text or files when
-the field is absent). After a clean send, the streamed tree stays. Settlement
+the field is absent). It keeps the local `streamLost` mark only while the
+saved row is `running` or `suspended`. After a clean send, the streamed tree stays. Settlement
 never reloads history for an incognito session, in either record mode; on a
 reload or recovery it only adds a stop packet to the last answer if it has
-none. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+none, and clears its `streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
 A newly active stream during reload transfers to the same replay reader. Recovery comes
 from the input bar's manual check or from loading the session again (see
 Resume).

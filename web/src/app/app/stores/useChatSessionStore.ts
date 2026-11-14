@@ -9,6 +9,7 @@ import {
 } from "@/app/app/types";
 import {
   getLatestMessageChain,
+  getLatestTurn,
   getMessageByMessageId,
   MessageTreeState,
 } from "../services/messageTree";
@@ -673,16 +674,8 @@ export const useCurrentResponseStopped = () =>
       ? sessions.get(currentSessionId)
       : null;
     if (!currentSession) return false;
-    const tree = currentSession.messageTree;
-    const latest = getLatestMessageChain(tree).at(-1);
-    if (!latest) return false;
     // Each model of a multi-model turn is a sibling that ends with its own stop.
-    const turn =
-      latest.parentNodeId === null
-        ? [latest]
-        : (tree.get(latest.parentNodeId)?.childrenNodeIds ?? [latest.nodeId])
-            .map((nodeId) => tree.get(nodeId))
-            .filter((node): node is Message => node !== undefined);
+    const turn = getLatestTurn(currentSession.messageTree);
     return (
       turn.length > 0 &&
       turn.every((node) => node.packets.at(-1)?.obj.type === "stop")

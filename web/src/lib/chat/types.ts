@@ -54,3 +54,10 @@ export interface ChatSessionQueue {
   /** Interrupts every running subagent on the selected branch. */
   stopSubagents: () => Promise<void>;
 }
+
+export interface ApprovalDecisionResponse {
+  approval_id: string;
+  decision: "APPROVED" | "REJECTED";
+  // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY";
+}

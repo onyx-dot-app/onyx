@@ -90,6 +90,7 @@ import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
 } from "@/lib/chat/stopChatSession";
+import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -204,6 +205,7 @@ export default function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const tReadiness = useTranslations("chat.readiness");
+  const approvalGuard = useToolApprovalSendGuard();
 
   const navigatingAway = useRef(false);
 
@@ -1387,12 +1389,17 @@ export default function useChatController({
         // could get stranded in local state.
         flushPendingUpdates();
 
-        // Surface FIFO errors (e.g. 429 before any packets arrive) so the
-        // catch block replaces the thinking placeholder with an error message.
-        if (stack.error) {
-          throw new Error(stack.error);
+        if (stack.approvalPending) {
+          restoreTreeBeforeSend();
+          approvalGuard.showPendingApproval();
+        } else {
+          // Surface FIFO errors (e.g. 429 before any packets arrive) so the
+          // catch block replaces the thinking placeholder with an error message.
+          if (stack.error) {
+            throw new Error(stack.error);
+          }
+          streamSucceeded = true;
         }
-        streamSucceeded = true;
       } catch (e: any) {
         if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
@@ -1412,6 +1419,8 @@ export default function useChatController({
             stackTrace,
           };
         } else {
+          // Without a server error, the server can still run the turn.
+          const lostOutputs = new Set<Packet[]>();
           for (const output of isMultiModel
             ? packetsPerModel.filter(
                 (_, index) => !erroredModelIndices.has(index)
@@ -1422,6 +1431,7 @@ export default function useChatController({
                 placement: { turn_index: 0, tab_index: 0 },
                 obj: { type: "stop" },
               });
+              if (error === null) lostOutputs.add(output);
             }
           }
           // Keep the live question node: a regenerated question keeps its
@@ -1446,7 +1456,10 @@ export default function useChatController({
                 isRetryable,
                 errorDetails,
                 is_generating: false,
-              })
+              }).map((node) => ({
+                ...node,
+                streamLost: lostOutputs.has(node.packets),
+              }))
             : [
                 {
                   ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
@@ -1463,6 +1476,7 @@ export default function useChatController({
                   is_generating: false,
                   packets,
                   packetCount: packets.length,
+                  streamLost: lostOutputs.has(packets),
                   stackTrace: stackTrace,
                   errorCode: errorCode,
                   isRetryable: isRetryable,
@@ -1538,6 +1552,7 @@ export default function useChatController({
       searchParams,
       resetInputBar,
       restoreInputBar,
+      approvalGuard,
       t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,

@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "This message was already accepted and is no longer pending.",
         "interruptFailed": "Could not send this message now. It remains pending.",
         "stopSubagentsFailed": "Could not stop the subagents."
+      },
+      "pendingToolApproval": {
+        "toast": "Approve or reject the pending tool calls first."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "Working"
+          },
+          "waitingForApproval": {
+            "label": "Waiting for your approval"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "Approve for this chat",
+        "tooltip": "Approve now and run this tool without asking again for the rest of this chat"
+      },
       "approveOnce": {
         "ariaLabel": "Approve this action once",
         "button": "Approve once"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "Approved: {headline}",
         "closed": "No longer waiting: {headline}",
+        "disabled": "Disabled: {headline}",
         "expired": "Timed out: {headline}",
         "rejected": "Not approved: {headline}",
+        "approvedForChat": "Approved for this chat: {headline}",
         "approvedForSession": "Approved for this session: {headline}"
       },
       "submitError": "Could not submit your decision. Try again.",

@@ -34,6 +34,8 @@ export interface ApprovalCardProps {
   payload: Record<string, unknown>;
   /** ISO 8601 deadline shown while the request waits. */
   expiresAt?: string | null;
+  /** What "approve for session" covers: a Craft session or a chat. */
+  sessionScope?: "session" | "chat";
   canApproveForSession?: boolean;
   status: ApprovalStatus;
   /**
@@ -49,6 +51,7 @@ export default function ApprovalCard({
   appName,
   payload,
   expiresAt,
+  sessionScope = "session",
   canApproveForSession = true,
   status,
   onDecide,
@@ -84,9 +87,22 @@ export default function ApprovalCard({
           count: actions.length,
           app: appName ?? "",
         });
+  const sessionCopy =
+    sessionScope === "chat" ? "approveChat" : "approveSession";
   // A decided request leaves a one-line record in the timeline.
   const record =
-    status === "pending" ? null : t(`record.${status}`, { headline });
+    status === "pending"
+      ? null
+      : t(
+          `record.${
+            status !== "approvedForSession"
+              ? status
+              : sessionScope === "chat"
+                ? "approvedForChat"
+                : "approvedForSession"
+          }`,
+          { headline }
+        );
 
   const single = actions.length === 1;
 
@@ -149,7 +165,7 @@ export default function ApprovalCard({
             icon={
               status === "approved" || status === "approvedForSession"
                 ? SvgCheckSquare
-                : status === "rejected"
+                : status === "rejected" || status === "disabled"
                   ? SvgX
                   : SvgClock
             }
@@ -161,7 +177,7 @@ export default function ApprovalCard({
           <div className="rounded-08 border border-status-info-03 overflow-hidden bg-background-neutral-00">
             <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
               <Collapsible.Trigger className="flex w-full items-center gap-2 px-3 py-2 text-start transition-colors hover:bg-background-tint-02">
-                <SvgLoader className="size-4 shrink-0 stroke-status-info-05 animate-spin" />
+                <SvgLoader className="size-4 shrink-0 stroke-status-info-05 motion-safe:animate-spin" />
                 <span className="min-w-0 flex-1">
                   <Text
                     font="main-ui-muted"
@@ -213,7 +229,7 @@ export default function ApprovalCard({
                 </Button>
                 {canApproveForSession && (
                   <Tooltip
-                    tooltip={t("approveSession.tooltip")}
+                    tooltip={t(`${sessionCopy}.tooltip`)}
                     delayDuration={200}
                   >
                     <Button
@@ -221,9 +237,9 @@ export default function ApprovalCard({
                       size="sm"
                       disabled={submitting}
                       onClick={() => void decide("approve_session")}
-                      aria-label={t("approveSession.tooltip")}
+                      aria-label={t(`${sessionCopy}.tooltip`)}
                     >
-                      {t("approveSession.button")}
+                      {t(`${sessionCopy}.button`)}
                     </Button>
                   </Tooltip>
                 )}

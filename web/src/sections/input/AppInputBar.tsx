@@ -29,6 +29,7 @@ import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
+import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
 import type { ChatSessionQueue, PendingChatMessage } from "@/lib/chat/types";
 import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
@@ -319,6 +320,8 @@ const AppInputBar = React.memo(
       setIsRecording(nextIsRecording);
     }, []);
 
+    const approvalGuard = useToolApprovalSendGuard();
+
     // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
     const handleSubmit = useCallback(
       (text: string) => {
@@ -329,13 +332,12 @@ const AppInputBar = React.memo(
     );
     const submitMessage = useCallback(
       (text: string) => {
-        if (chatState !== "input" || !text.trim()) {
+        if (chatState !== "input" || !text.trim() || approvalGuard.blocksSend())
           return;
-        }
         handleSubmit(text);
         clearChatDraft();
       },
-      [chatState, handleSubmit, clearChatDraft]
+      [chatState, handleSubmit, clearChatDraft, approvalGuard]
     );
 
     const { currentMessageFiles, setCurrentMessageFiles } =
@@ -452,7 +454,13 @@ const AppInputBar = React.memo(
     async function submitPendingMessage(
       delivery: PendingChatMessage["delivery"]
     ) {
-      if (!canSubmitPending || !hasPendingInput || disabled || isClassifying)
+      if (
+        !canSubmitPending ||
+        !hasPendingInput ||
+        disabled ||
+        isClassifying ||
+        approvalGuard.blocksSend()
+      )
         return;
       const submitted = message;
       const sessionId = currentSessionId;
@@ -495,7 +503,7 @@ const AppInputBar = React.memo(
 
     function interruptWithQueuedMessage(index: number) {
       const pending = queue.messages[index];
-      if (!pending || disabled) return;
+      if (!pending || disabled || approvalGuard.blocksSend()) return;
       stopTTS({ manual: true });
       void queue.interrupt(pending.id);
     }

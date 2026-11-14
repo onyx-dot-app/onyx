@@ -14,6 +14,7 @@ import {
   type GeneratedImage,
 } from "@/app/app/services/streamingModels";
 import CustomToolAuthCard from "@/app/app/message/messageComponents/CustomToolAuthCard";
+import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
@@ -25,6 +26,11 @@ import {
   type AuthError,
   useAuthErrors,
 } from "@/app/app/message/messageComponents/hooks/useAuthErrors";
+import { useToolApprovals } from "@/lib/chat/hooks";
+import {
+  orderApprovalsByTurn,
+  type ToolApproval,
+} from "@/lib/chat/toolApprovals";
 import { getMessageSwitching } from "@/app/app/message/messageComponents/messageSwitching";
 import { RendererComponent } from "@/app/app/message/messageComponents/renderMessageComponent";
 import { GeneratedImageGrid } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
@@ -51,6 +57,8 @@ export interface AgentMessageProps {
   rawPackets: Packet[];
   restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
+  /** This client lost the stream, so a stop here does not close approvals. */
+  streamLost?: boolean;
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -79,6 +87,7 @@ interface ResponseSection {
   displayGroups: GroupedPacket[];
   images: GeneratedImage[];
   authErrors: AuthError[];
+  toolApprovals: ToolApproval[];
 }
 
 // TODO: Consider more robust comparisons:
@@ -97,6 +106,7 @@ function arePropsEqual(
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
     prev.restoredPacketCount === next.restoredPacketCount &&
+    prev.streamLost === next.streamLost &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -120,6 +130,7 @@ const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
   restoredPacketCount: replayPacketCount = 0,
+  streamLost = false,
   chatState,
   nodeId,
   messageId,
@@ -218,6 +229,7 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const authErrors = useAuthErrors(rawPackets);
+  const toolApprovals = useToolApprovals(rawPackets, streamLost);
 
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [
@@ -228,6 +240,7 @@ const AgentMessage = React.memo(function AgentMessage({
         displayGroups: [],
         images: [],
         authErrors: [],
+        toolApprovals: [],
       },
     ];
     let current = sections[0]!;
@@ -241,6 +254,7 @@ const AgentMessage = React.memo(function AgentMessage({
           displayGroups: [],
           images: [],
           authErrors: [],
+          toolApprovals: [],
         };
         sections.push(current);
       } else {
@@ -269,8 +283,19 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < error.turnIndex)!
         .authErrors.push(error);
     }
+    for (const approval of toolApprovals) {
+      sections
+        .findLast((section) => section.turnIndex < approval.turnIndex)!
+        .toolApprovals.push(approval);
+    }
     return sections;
-  }, [pacedDisplayGroups, pacedTurnGroups, generatedImages, authErrors]);
+  }, [
+    pacedDisplayGroups,
+    pacedTurnGroups,
+    generatedImages,
+    authErrors,
+    toolApprovals,
+  ]);
   const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
   // Merge streaming citation/document data with chatState props.
@@ -455,6 +480,12 @@ const AgentMessage = React.memo(function AgentMessage({
               finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
               toolProcessingDuration={toolProcessingDuration}
               codeModeWorking={isLastSection && codeModeWorking}
+              awaitingApproval={
+                isLastSection &&
+                section.toolApprovals.some(
+                  (approval) => approval.status === "pending"
+                )
+              }
             />
 
             {/* Row 2: Display content + MessageToolbar */}
@@ -474,7 +505,8 @@ const AgentMessage = React.memo(function AgentMessage({
                 </div>
               )}
               {(section.displayGroups.length > 0 ||
-                section.authErrors.length > 0) && (
+                section.authErrors.length > 0 ||
+                section.toolApprovals.length > 0) && (
                 <div
                   ref={(element) => {
                     answerRefs.current[sectionIndex] = element;
@@ -490,44 +522,57 @@ const AgentMessage = React.memo(function AgentMessage({
                       agentId={effectiveChatState.agent.id}
                     />
                   ))}
-                  {section.displayGroups.map((displayGroup) => (
-                    <RendererComponent
-                      key={getToolKey(
-                        displayGroup.turn_index,
-                        displayGroup.tab_index
-                      )}
-                      packets={displayGroup.packets}
-                      nestedCalls={displayGroup.nestedCalls}
-                      streamPackets={displayGroup.streamPackets}
-                      chatState={effectiveChatState}
-                      messageNodeId={nodeId}
-                      hasTimelineThinking={section.toolGroups.length > 0}
-                      onComplete={() => {
-                        // Only mark complete on the last display group
-                        // Hook handles the finalAnswerComing check internally
-                        if (displayGroup === lastAnswerGroup) {
-                          onRenderComplete();
-                        }
-                      }}
-                      restoredTextLength={visibleGroups.get(
-                        getToolKey(
-                          displayGroup.turn_index,
-                          displayGroup.tab_index
-                        )
-                      )}
-                      animate={!stopPacketSeen && isLastSection}
-                      stopPacketSeen={stopPacketSeen}
-                      stopReason={stopReason}
-                    >
-                      {(results) => (
-                        <>
-                          {results.map((r, i) => (
-                            <div key={i}>{r.content}</div>
-                          ))}
-                        </>
-                      )}
-                    </RendererComponent>
-                  ))}
+                  {orderApprovalsByTurn(
+                    section.displayGroups,
+                    section.toolApprovals
+                  ).map((entry) => {
+                    if (entry.kind === "approval") {
+                      return (
+                        <ToolApprovalCard
+                          key={entry.approval.request.approval_id}
+                          approval={entry.approval}
+                        />
+                      );
+                    }
+                    return (
+                      <RendererComponent
+                        key={getToolKey(
+                          entry.group.turn_index,
+                          entry.group.tab_index
+                        )}
+                        packets={entry.group.packets}
+                        nestedCalls={entry.group.nestedCalls}
+                        streamPackets={entry.group.streamPackets}
+                        chatState={effectiveChatState}
+                        messageNodeId={nodeId}
+                        hasTimelineThinking={section.toolGroups.length > 0}
+                        onComplete={() => {
+                          // Only mark complete on the last display group
+                          // Hook handles the finalAnswerComing check internally
+                          if (entry.group === lastAnswerGroup) {
+                            onRenderComplete();
+                          }
+                        }}
+                        restoredTextLength={visibleGroups.get(
+                          getToolKey(
+                            entry.group.turn_index,
+                            entry.group.tab_index
+                          )
+                        )}
+                        animate={!stopPacketSeen && isLastSection}
+                        stopPacketSeen={stopPacketSeen}
+                        stopReason={stopReason}
+                      >
+                        {(results) => (
+                          <>
+                            {results.map((r, i) => (
+                              <div key={i}>{r.content}</div>
+                            ))}
+                          </>
+                        )}
+                      </RendererComponent>
+                    );
+                  })}
                 </div>
               )}
               {/* Show stopped message when user cancelled and no display content */}

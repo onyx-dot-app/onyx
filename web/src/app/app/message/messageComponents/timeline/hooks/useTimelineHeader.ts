@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { TurnGroup } from "@/app/app/message/messageComponents/timeline/transformers";
-import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
   Packet,
   PacketType,
@@ -13,7 +12,10 @@ import {
   formatSearchHeader,
   constructCurrentSearchState,
 } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import { type TimelineTranslate } from "@/app/app/message/messageComponents/toolDisplayHelpers";
+import {
+  firstActivityPacket,
+  type TimelineTranslate,
+} from "@/app/app/message/messageComponents/toolDisplayHelpers";
 
 /** Header text for the activity of one step, or null for no tool activity. */
 function stepHeaderText(
@@ -21,9 +23,7 @@ function stepHeaderText(
   t: TimelineTranslate,
   locale: string
 ): string | null {
-  const firstPacket = packets.find(
-    (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
-  );
+  const firstPacket = firstActivityPacket(packets);
   if (!firstPacket) return null;
 
   switch (firstPacket.obj.type) {
@@ -85,7 +85,8 @@ export interface TimelineHeaderResult {
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
-  codeModeWorking = false
+  codeModeWorking = false,
+  awaitingApproval = false
 ): TimelineHeaderResult {
   const t = useTranslations("chat.messages.timeline");
   const locale = useLocale();
@@ -95,16 +96,21 @@ export function useTimelineHeader(
     const userStopped = stopReason === StopReason.USER_CANCELLED;
     const thinkingHeader = t("header.thinkingEllipsis.label");
 
+    // Get the last (current) turn group
+    const currentTurn = turnGroups.at(-1);
+
+    if (awaitingApproval) {
+      return {
+        headerText: t("header.waitingForApproval.label"),
+        hasPackets,
+        userStopped,
+      };
+    }
+
     if (codeModeWorking) {
       return { headerText: t("header.working.label"), hasPackets, userStopped };
     }
 
-    if (!hasPackets) {
-      return { headerText: thinkingHeader, hasPackets, userStopped };
-    }
-
-    // Get the last (current) turn group
-    const currentTurn = turnGroups[turnGroups.length - 1];
     if (!currentTurn) {
       return { headerText: thinkingHeader, hasPackets, userStopped };
     }
@@ -117,5 +123,5 @@ export function useTimelineHeader(
     const headerText =
       stepHeaderText(currentStep.packets, t, locale) ?? thinkingHeader;
     return { headerText, hasPackets, userStopped };
-  }, [turnGroups, stopReason, codeModeWorking, t, locale]);
+  }, [turnGroups, stopReason, codeModeWorking, awaitingApproval, t, locale]);
 }

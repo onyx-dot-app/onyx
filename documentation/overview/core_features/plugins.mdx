@@ -78,12 +78,13 @@ Custom agents that use the plugin can still use it.
 ## Review tools
 
 The **Tools** tab lists the tools that the plugin gives the agent. For connected MCP plugins,
-**Approval settings** shows which tools run automatically in Craft, which ask for your approval, and which are disabled.
+**Approval settings** shows which tools run automatically, which ask for your approval, and which are disabled.
+These policies apply in Chat and in Craft.
 
 <img className="rounded-image" src="/assets/overview/core_features/plugins/member_plugin_mcp_tools.webp" alt="The Tools tab for an MCP plugin with three tools"/>
 
 **Approval settings** shows only if your admin lets users manage approval settings. There,
-you can change the policy for tools that the admin did not disable. You do not need access to Craft to change them.
+you can change the policy for tools that the admin did not disable. You do not need Craft.
 
 ## Use plugins in Chat
 
@@ -98,7 +99,31 @@ If Chat shows **Tools need credentials**, connect the listed MCP plugins before 
 Onyx excludes their tools from the agent until the required credentials are available.
 You can continue chatting with other tools.
 
-In Chat, the agent calls plugin tools without an approval prompt. Check the result in the service after a change.
+### Approve tool calls
+
+Your admin sets an approval policy for each MCP tool. When the agent calls a tool with the **Ask** policy,
+the answer pauses and an approval card shows **Approval requested** with the tool name, the time to approve by,
+and the arguments of the call. Select one of these options:
+
+| Option | Effect |
+| --- | --- |
+| **Approve once** | The call runs with the arguments that the card shows. |
+| **Approve for this chat** | The call runs. Later calls of the same tool in this chat run without a card. |
+| **Reject** | The call does not run. The agent is told that you rejected the call. |
+
+After your decision, the card becomes a one-line record of the result.
+The record stays when the answer finishes and when you open the chat again. If you do not decide in time,
+the call does not run, and the card shows **Timed out**. If your admin disables the tool before you approve,
+the call does not run, and the card shows **Disabled**. If you stop the answer, Onyx rejects the call,
+and the card shows **Not approved**.
+
+The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
+The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
+Incognito chats can block approvals, if your admin sets them to keep no content. There,
+a tool that needs approval does not run, and the agent is told why.
+
+OpenAPI plugin tools and MCP tools with the **Auto-approve** policy run without a card.
+Check the result in the service after a change.
 
 <Note>
   Custom agents use the plugins that the agent builder selected. Your default Chat settings do not change them.

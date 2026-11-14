@@ -104,6 +104,15 @@ export class ChatPage {
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
+  /** Opens a new chat with an agent and waits until the chat uses it. A
+   * message sent sooner goes to the default agent. */
+  async gotoAgent(agentId: number, name: string): Promise<void> {
+    await this.page.goto(`/app?agentId=${agentId}`);
+    await expect(this.page.getByTestId("agent-name-display")).toContainText(
+      name
+    );
+  }
+
   async reload(): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });

@@ -193,6 +193,8 @@ export interface Message {
 
   // Retained only with this response's packet prefix; never persisted alone.
   replayCursor?: number;
+  /** This client lost the response's stream; the server may still run it. */
+  streamLost?: boolean;
   restoredPacketCount?: number;
 
   // cached values for easy access
@@ -325,6 +327,8 @@ export interface StreamingError {
 // error_code emitted by the backend usage rate-limiter (429). Branch on this to
 // show the dedicated usage-limit banner instead of the generic chat error.
 export const RATE_LIMITED_ERROR_CODE = "RATE_LIMITED";
+// The chat waits for an approval, so it cannot start a new turn.
+export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
 // Shape of StreamingError.details for a RATE_LIMITED error — mirrors the 429
 // JSON body so the banner can compute a human-friendly reset time.

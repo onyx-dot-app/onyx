@@ -365,6 +365,7 @@ const ChatUI = React.memo(
                       rawPackets={message.packets}
                       packetCount={message.packetCount}
                       restoredPacketCount={message.restoredPacketCount}
+                      streamLost={message.streamLost}
                       chatState={chatStateData}
                       nodeId={message.nodeId}
                       messageId={message.messageId}

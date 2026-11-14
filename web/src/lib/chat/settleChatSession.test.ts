@@ -5,12 +5,15 @@ import type {
   Message,
 } from "@/app/app/types";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
-import { processRawChatHistory } from "@/app/app/services/lib";
+import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
+import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  preserveFailedMessages,
   refreshChatSession,
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
+import { findPendingToolApprovalId } from "@/lib/chat/toolApprovals";
 import {
   fetchSettledChatSession,
   waitForChatResponseEnd,
@@ -26,6 +29,7 @@ const actualReadiness = jest.requireActual<
 jest.mock("@/app/app/services/lib", () => ({
   ...jest.requireActual("@/app/app/services/lib"),
   processRawChatHistory: jest.fn(),
+  resumeStream: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   ...jest.requireActual("@/lib/chat/sessionReadiness"),
@@ -109,6 +113,7 @@ function savedSession(
 
 beforeEach(() => {
   jest.resetAllMocks();
+  jest.mocked(resumeStream).mockImplementation(actualLib.resumeStream);
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("session");
 });
@@ -618,6 +623,106 @@ describe("with a scripted fetch", () => {
       ?.messageTree.get(2);
     expect(refreshed?.packets).toBe(live.packets);
     expect(refreshed?.replayCursor).toBe(7);
+  });
+
+  test("refresh replays a running multi-model turn into each answer", async () => {
+    const raw = [
+      savedMessage(1, "user", "Question"),
+      { ...savedMessage(2, "assistant", ""), model_display_name: "First" },
+      {
+        ...savedMessage(3, "assistant", ""),
+        parent_message: 1,
+        model_display_name: "Second",
+      },
+    ];
+    const session = savedSession(raw, 1);
+    session.messages[0] = { ...session.messages[0]!, latest_child_message: 3 };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+    });
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      if (String(input).includes("get-chat-session"))
+        return Response.json(session);
+      // Leave the readiness check pending; this test covers the replay.
+      return new Promise<Response>(() => {});
+    });
+    const approvalRequest = (modelIndex: number): Packet => ({
+      placement: { turn_index: 1, tab_index: 0, model_index: modelIndex },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: `approval-${modelIndex}`,
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    });
+    const stop: Packet = {
+      placement: { turn_index: 2 },
+      obj: { type: "stop" },
+    };
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield approvalRequest(1);
+      yield approvalRequest(0);
+      yield { stream_id: 1, next_cursor: 2, replay_complete: true };
+      yield stop;
+      yield { stream_id: 1, next_cursor: 3, replay_complete: true };
+    });
+
+    await refreshChatSession("session", errorMessage);
+
+    const tree = () =>
+      useChatSessionStore.getState().sessions.get("session")!.messageTree;
+    for (let tick = 0; tick < 50 && tree().get(1)?.replayCursor !== 3; tick++)
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(tree().get(1)?.replayCursor).toBe(3);
+    expect(resumeStream).toHaveBeenCalledWith(
+      "session",
+      1,
+      0,
+      expect.anything()
+    );
+    expect(tree().get(2)?.packets).toEqual([approvalRequest(0), stop]);
+    expect(tree().get(3)?.packets).toEqual([approvalRequest(1), stop]);
+    expect(tree().get(3)?.restoredPacketCount).toBe(1);
+  });
+
+  test("a waiting approval of a lost stream stays open until its run ends", () => {
+    const raw = [
+      { ...savedMessage(1, "user", "Question"), latest_child_message: 2 },
+      savedMessage(2, "assistant", ""),
+    ];
+    const local = processRawChatHistory(raw, [[]]);
+    local.set(2, {
+      ...local.get(2)!,
+      type: "error",
+      errorMessage: "network error",
+      streamLost: true,
+      packets: [
+        {
+          placement: { turn_index: 1, tab_index: 0 },
+          obj: {
+            type: "tool_approval_request",
+            approval_id: "approval",
+            tool_call_id: "call",
+            tool_name: "mcp__3__github__create_issue",
+            display_name: "Create issue",
+            arguments: {},
+            expires_at: "2099-01-01T00:00:00Z",
+          },
+        },
+        { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
+      ],
+    });
+    const merged = (status: Message["responseStatus"]) => {
+      const saved = processRawChatHistory(raw, [[]]);
+      saved.set(2, { ...saved.get(2)!, responseStatus: status });
+      return preserveFailedMessages(saved, local);
+    };
+
+    expect(findPendingToolApprovalId(merged("running"))).toBe("approval");
+    expect(findPendingToolApprovalId(merged("error"))).toBeNull();
   });
 
   test.each(["completion", "refresh"])(

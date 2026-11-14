@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
         "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
         "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
+      },
+      "pendingToolApproval": {
+        "toast": "وافق على استدعاءات الأدوات المعلقة أو ارفضها أولاً."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "قيد العمل"
+          },
+          "waitingForApproval": {
+            "label": "في انتظار موافقتك"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "موافقة لهذه المحادثة",
+        "tooltip": "وافق الآن وشغّل هذه الأداة دون السؤال مرة أخرى لبقية هذه المحادثة"
+      },
       "approveOnce": {
         "ariaLabel": "الموافقة على هذا الإجراء مرة واحدة",
         "button": "الموافقة مرة واحدة"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "تمت الموافقة: {headline}",
         "closed": "لم يعد في الانتظار: {headline}",
+        "disabled": "معطّل: {headline}",
         "expired": "انتهت المهلة: {headline}",
         "rejected": "لم تتم الموافقة: {headline}",
+        "approvedForChat": "تمت الموافقة لهذه المحادثة: {headline}",
         "approvedForSession": "تمت الموافقة لهذه الجلسة: {headline}"
       },
       "submitError": "تعذر إرسال قرارك. حاول مرة أخرى.",

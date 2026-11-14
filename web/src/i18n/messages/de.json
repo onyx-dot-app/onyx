@@ -12644,6 +12644,9 @@
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
         "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend.",
         "stopSubagentsFailed": "Die Unteragenten konnten nicht gestoppt werden."
+      },
+      "pendingToolApproval": {
+        "toast": "Geben Sie zuerst die ausstehenden Tool-Aufrufe frei oder lehnen Sie sie ab."
       }
     },
     "mcpApiKey": {
@@ -13086,6 +13089,9 @@
           },
           "working": {
             "label": "In Arbeit"
+          },
+          "waitingForApproval": {
+            "label": "Wartet auf Ihre Freigabe"
           }
         },
         "internalSearch": {
@@ -14453,6 +14459,10 @@
       }
     },
     "approvalCard": {
+      "approveChat": {
+        "button": "Für diesen Chat freigeben",
+        "tooltip": "Jetzt freigeben und dieses Tool für den Rest dieses Chats ohne erneute Nachfrage ausführen"
+      },
       "approveOnce": {
         "ariaLabel": "Diese Aktion einmalig genehmigen",
         "button": "Einmalig genehmigen"
@@ -14476,8 +14486,10 @@
       "record": {
         "approved": "Freigegeben: {headline}",
         "closed": "Wartet nicht mehr: {headline}",
+        "disabled": "Deaktiviert: {headline}",
         "expired": "Zeitüberschreitung: {headline}",
         "rejected": "Nicht freigegeben: {headline}",
+        "approvedForChat": "Für diesen Chat freigegeben: {headline}",
         "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
       },
       "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",
