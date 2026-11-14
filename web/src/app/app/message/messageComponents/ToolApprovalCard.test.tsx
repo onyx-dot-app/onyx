@@ -7,7 +7,7 @@ import {
   waitFor,
 } from "@tests/setup/test-utils";
 import ToolApprovalCard from "@/app/app/message/messageComponents/ToolApprovalCard";
-import { useToolApprovals } from "@/app/app/message/messageComponents/hooks/useToolApprovals";
+import { useToolApprovals } from "@/lib/chat/hooks";
 import { type ToolApproval, useToolApprovalUi } from "@/lib/chat/toolApprovals";
 import {
   Packet,

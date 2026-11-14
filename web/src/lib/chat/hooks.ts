@@ -43,8 +43,12 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   findPendingToolApprovalId,
+  readToolApprovals,
+  type ToolApproval,
+  toolApprovalStatus,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
+import type { Packet } from "@/app/app/services/streamingModels";
 import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
@@ -75,6 +79,42 @@ function isApprovalPendingError(error: unknown): boolean {
   return (
     error instanceof FetchError &&
     error.info?.error_code === APPROVAL_PENDING_ERROR_CODE
+  );
+}
+
+/** The approval requests of one response, each with its final status. */
+export function useToolApprovals(
+  rawPackets: Packet[],
+  streamLost = false
+): ToolApproval[] {
+  // Streams append to the same array, so its length keys the result too.
+  const packetCount = rawPackets.length;
+  const { entries, stopped } = useMemo(
+    () => readToolApprovals(rawPackets.slice(0, packetCount), streamLost),
+    [rawPackets, packetCount, streamLost]
+  );
+  // Only this response's statuses, so other decisions do not re-render it.
+  const localStatuses = useToolApprovalUi(
+    useShallow((state) =>
+      entries.map((entry) => state.localStatuses.get(entry.request.approval_id))
+    )
+  );
+  const resolvedIds = entries
+    .filter((entry) => entry.outcome !== null)
+    .map((entry) => entry.request.approval_id)
+    .join(" ");
+  useEffect(() => {
+    if (resolvedIds)
+      useToolApprovalUi.getState().forgetStatuses(resolvedIds.split(" "));
+  }, [resolvedIds]);
+  return useMemo(
+    () =>
+      entries.map((entry, index) => ({
+        turnIndex: entry.turnIndex,
+        request: entry.request,
+        status: toolApprovalStatus(entry, localStatuses[index], stopped),
+      })),
+    [entries, localStatuses, stopped]
   );
 }
 

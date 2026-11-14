@@ -5,7 +5,10 @@ import { useTranslations } from "next-intl";
 import { SvgFold, SvgExpand } from "@opal/icons";
 import { Button } from "@opal/components";
 import { TextLoader } from "@opal/loaders";
-import { useStreamingDuration } from "../hooks/useStreamingDuration";
+import {
+  type ApprovalWait,
+  useStreamingDuration,
+} from "@/app/app/message/messageComponents/timeline/hooks/useStreamingDuration";
 import { formatDurationSeconds } from "@opal/time";
 
 export interface StreamingHeaderProps {
@@ -17,8 +20,8 @@ export interface StreamingHeaderProps {
   streamingStartTime?: number;
   /** Tool processing duration from backend (freezes timer when available) */
   toolProcessingDuration?: number;
-  /** The run waits for the user's approval; the timer does not count it. */
-  awaitingApproval?: boolean;
+  /** Approval waits, which the timer does not count. */
+  approvalWait?: ApprovalWait;
 }
 
 /** Header during streaming - shimmer text with current activity */
@@ -30,7 +33,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
   onToggle,
   streamingStartTime,
   toolProcessingDuration,
-  awaitingApproval = false,
+  approvalWait,
 }: StreamingHeaderProps) {
   const t = useTranslations("chat.messages.timeline");
   // Use backend duration when available, otherwise continue live timer
@@ -38,7 +41,7 @@ export const StreamingHeader = React.memo(function StreamingHeader({
     toolProcessingDuration === undefined, // Stop updating when we have backend duration
     streamingStartTime,
     toolProcessingDuration,
-    awaitingApproval
+    approvalWait
   );
   const showElapsedTime =
     isExpanded && streamingStartTime && elapsedSeconds > 0;

@@ -111,10 +111,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       ],
     });
     const chat = new ChatPage(page);
-    if (!sameChat) {
-      await page.goto(`/app?agentId=${agentId}`);
-      await chat.expectAgent(agentName);
-    }
+    if (!sameChat) await chat.gotoAgent(agentId, agentName);
     await chat.inputBar.fill(`Call ${TOOL_NAME} with ${nonce}`);
     await chat.inputBar.send();
     return { nonce, answer, conversation };

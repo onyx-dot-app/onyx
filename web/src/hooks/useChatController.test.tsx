@@ -11,7 +11,10 @@ import {
 } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import {
+  findPendingToolApprovalId,
+  useToolApprovalUi,
+} from "@/lib/chat/toolApprovals";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
@@ -413,6 +416,68 @@ test.each([false, true])(
     expect(error?.packets.at(-1)?.obj.type).toBe("stop");
   }
 );
+
+test("a lost stream keeps a waiting approval open until the server is idle", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  const idle = Promise.withResolvers<number | null>();
+  jest.mocked(waitForChatResponseEnd).mockReturnValueOnce(idle.promise);
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session", { incognito: true });
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: "approval",
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        expires_at: "2099-01-01T00:00:00Z",
+      },
+    };
+    throw new Error("network error");
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const tree = () =>
+    useChatSessionStore.getState().sessions.get("session")!.messageTree;
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(waitForChatResponseEnd).toHaveBeenCalled());
+  const lost = [...tree().values()].find((message) => message.type === "error");
+  expect(lost?.packets.at(-1)?.obj.type).toBe("stop");
+  expect(findPendingToolApprovalId(tree())).toBe("approval");
+
+  await act(async () => {
+    idle.resolve(null);
+    await sending;
+  });
+  expect(findPendingToolApprovalId(tree())).toBeNull();
+});
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
