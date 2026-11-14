@@ -49,17 +49,17 @@ field, and `GoogleDriveCredentialBinding.validate_credential` rejects a
 credential of the other kind.
 
 **Crawl.** Indexing, the stub listing, pruning and permission sync share one
-listing (`GoogleDriveConnector._fetch_drive_items`). For a service account
-with no requested folders it is the shard engine (see **Shard engine**). The
-serial crawl lists the rest. A service account with requested folders (or a
+listing (`GoogleDriveConnector._fetch_drive_items`). With no requested
+folders it is the shard engine (see **Shard engine**), for a service account
+and for OAuth. The serial crawl lists the rest. A service account with requested folders (or a
 requested drive id that is a folder) walks phases for the whole domain
 (`DriveRetrievalPhase`): inventory, shared drives, My Drives, requested
 targets, external shares. Shared drives run before My Drives, so later phases
 drop any file from a drive already covered. This stops shortcuts from producing
 duplicates. The phase state holds partition keys and page tokens, so it grows
 with drives and users. Only the dedup set grows with files
-([[#dedup-set-capped]]). The OAuth crawl walks stages for its one user
-(`DriveRetrievalStage`).
+([[#dedup-set-capped]]). OAuth with requested folders walks stages for its
+one user (`DriveRetrievalStage`).
 
 **Checkpointed slim listing.**
 `GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one call of the
@@ -97,6 +97,12 @@ checkpoint covers exactly what the call yielded. The entry points:
   later. A file edited during the listing moves past the end, and pruning
   would read it as deleted.
 
+OAuth uses the same partition kinds with the OAuth user as the only principal:
+its member shared drives (from its own `drives.list`), its own files, and the
+files shared with it, as the include settings select. With all three, that is
+the `corpora=allDrives` corpus. Nothing is impersonated. A token refresh
+failure fails the listing, because no other principal can list the files.
+
 **Hierarchy.** On the shard engine, each partition also has a `FOLDERS` shard:
 a folder-only query with no time range, which does not split. Listed folders
 become hierarchy nodes. A parent that no folder listing returned goes into
@@ -106,8 +112,8 @@ yielded or a drive root. A document that arrives before its folder gets a STUB
 parent in docfetching. The serial crawl and reindex walk the ancestors of each
 file batch (`_get_new_ancestors_for_files`).
 
-A service account checkpoint of the serial crawl (`phase_progress` or a stage)
-is dropped: the attempt lists again from its window start.
+A checkpoint of the serial crawl (`phase_progress` or a stage), for a service
+account or OAuth, is dropped: the attempt lists again from its window start.
 
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).

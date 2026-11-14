@@ -83,8 +83,7 @@ class DriveBatchResult(BaseModel):
 TOKEN_EXPIRATION_TIME = 3600  # 1 hour
 
 
-# Stages of the OAuth flow:
-# get_all_files_for_oauth(),
+# Stages of the serial OAuth flow, which lists only requested folders:
 # get_all_drive_ids(),
 # get_files_in_shared_drive(),
 # crawl_folders_for_files()
@@ -95,7 +94,8 @@ TOKEN_EXPIRATION_TIME = 3600  # 1 hour
 class DriveRetrievalStage(str, Enum):
     START = "start"
     DONE = "done"
-    # OAuth specific stages
+    # OAuth specific stages. OAUTH_FILES is no longer entered; old
+    # checkpoints can hold it.
     OAUTH_FILES = "oauth_files"
 
     # Service account specific stages

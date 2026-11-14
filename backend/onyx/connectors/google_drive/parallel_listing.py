@@ -1,4 +1,5 @@
-"""Parallel, sharded listing of a Google Drive domain for a service account.
+"""Parallel, sharded listing of a Google Drive domain for a service account,
+or of one user's files for OAuth, where that user is the only principal.
 
 Every partition (a shared drive, a user's My Drive, the files shared with a
 user) lists in one adaptive pool. One task lists one page. A partition with
@@ -932,10 +933,11 @@ class ParallelDriveLister:
         list_again: bool,
     ) -> list[AdaptiveTask]:
         """The shard's partition cannot list: the service account can no
-        longer act as its user, or Drive denied a page. Closes every shard of
-        the partition and reports ``failures``. With ``list_again``, a shared
-        drive goes back to pending, to list again from its start as another
-        member. Otherwise the drive is incomplete."""
+        longer act as its user, or Drive denied a page. For OAuth, the
+        callbacks raise and fail the call. Closes every shard of the partition
+        and reports ``failures``. With ``list_again``, a shared drive goes back
+        to pending, to list again from its start as another member. Otherwise
+        the drive is incomplete."""
         partition = shard.partition
         with self._lock:
             state = self._state
