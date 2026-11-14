@@ -1,3 +1,5 @@
+from enum import Enum
+
 from box_sdk_gen import BoxClient
 from box_sdk_gen.box.errors import BoxAPIError
 from box_sdk_gen.schemas.collaboration import Collaboration, CollaborationStatusField
@@ -25,6 +27,20 @@ logger = setup_logger()
 
 _COLLABORATIONS_PAGE_SIZE = 1000
 _MAX_PAGINATION_ITERATIONS = 10_000
+
+
+def _enum_or_str_value(value: Enum | str) -> str:
+    """Normalize a box_sdk_gen enum-typed field to its raw string.
+
+    The SDK types these fields as enums (e.g. CollaborationRoleField) but
+    deserialization assigns the API's raw string without coercion, so at
+    runtime the attribute is a plain str. Unknown values the SDK version
+    does not define also arrive as plain strings; they must reach the
+    role allowlist below so they fail closed with a warning instead of
+    raising AttributeError.
+    """
+    return value.value if isinstance(value, Enum) else value
+
 
 # Every accepted Box collaboration role except `uploader` can read or preview.
 # Keeping an allowlist ensures new SDK roles fail closed until reviewed.
@@ -84,7 +100,7 @@ def apply_collaborations_to_access(
             or collaboration.role is None
         ):
             continue
-        role_value = str(collaboration.role.value)
+        role_value = _enum_or_str_value(collaboration.role)
         if role_value not in _READ_ACCESS_COLLABORATION_ROLES:
             if role_value != "uploader":
                 logger.warning("Unrecognized Box collaboration role: %s", role_value)
@@ -112,9 +128,9 @@ def apply_shared_link_to_access(
     if shared_link is None:
         return access
     shared_link_access = (
-        shared_link.effective_access.value
+        _enum_or_str_value(shared_link.effective_access)
         if shared_link.effective_access is not None
-        else shared_link.access.value
+        else _enum_or_str_value(shared_link.access)
         if shared_link.access is not None
         else None
     )
