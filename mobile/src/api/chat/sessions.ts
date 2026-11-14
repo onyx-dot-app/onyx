@@ -33,13 +33,18 @@ export async function getChatSession(
   });
 }
 
+export interface ChatSessionStatus {
+  is_processing: boolean;
+  // The running response's stream, once it has one.
+  current_stream?: { stream_id: number } | null;
+}
+
 export async function getChatSessionStatus(
   sessionId: string,
-): Promise<{ is_processing: boolean }> {
-  return apiFetch<{ is_processing: boolean }>(
-    `/chat/chat-session/${sessionId}/status`,
-    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
-  );
+): Promise<ChatSessionStatus> {
+  return apiFetch<ChatSessionStatus>(`/chat/chat-session/${sessionId}/status`, {
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
+  });
 }
 
 // client abort alone leaves the backend generating

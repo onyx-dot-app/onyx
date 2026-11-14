@@ -20,8 +20,8 @@ describe("session readiness", () => {
     const unconfirmed = jest.fn();
     let settled = false;
     const pending = waitForSessionIdle("s", () => true, unconfirmed).then(
-      (idle) => {
-        settled = idle;
+      (wait) => {
+        settled = wait.kind === "idle";
       },
     );
     await jest.advanceTimersByTimeAsync(1000);
@@ -38,7 +38,33 @@ describe("session readiness", () => {
       current = false;
       return { is_processing: false };
     });
-    expect(await waitForSessionIdle("s", () => current, jest.fn())).toBe(false);
+    expect(await waitForSessionIdle("s", () => current, jest.fn())).toEqual({
+      kind: "released",
+    });
+  });
+
+  it("returns the running stream that the caller follows", async () => {
+    jest.useFakeTimers();
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({ is_processing: true, current_stream: null })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 7 },
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 8 },
+      });
+    const pending = waitForSessionIdle(
+      "s",
+      () => true,
+      jest.fn(),
+      (streamId) => streamId !== 7,
+    );
+    await jest.advanceTimersByTimeAsync(2000);
+    expect(await pending).toEqual({ kind: "stream", streamId: 8 });
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
   });
 });
 

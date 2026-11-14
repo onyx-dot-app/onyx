@@ -12,11 +12,15 @@ import { getChatSession } from "@/api/chat/sessions";
 import {
   isHeartbeat,
   isPacket,
+  isStreamCursor,
   isStreamError,
   resumeChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
-import { waitForSessionIdle } from "@/chat/sessionReadiness";
+import {
+  SESSION_POLL_INTERVAL_MS,
+  waitForSessionIdle,
+} from "@/chat/sessionReadiness";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { BackendChatSession } from "@/chat/interfaces";
@@ -25,12 +29,12 @@ import {
   getMessageByMessageId,
   upsertMessages,
 } from "@/chat/messageTree";
-import { Packet } from "@/chat/streamingModels";
+import { Packet, PacketType } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 import { toast } from "@/hooks/useToast";
 
-// Reattaches to a live run, then settles from the saved session once the server is idle.
+// Follows a live run until the server is idle, then settles from the saved session.
 export async function recoverChatSession(
   sessionId: string,
   runId: number | null,
@@ -42,138 +46,208 @@ export async function recoverChatSession(
   const data = store.getState().sessions.get(sessionId);
   if (!data || data.abortController) return;
   if (runId === null && data.chatState === "input") return;
-  const node =
-    runId !== null
-      ? getMessageByMessageId(data.messageTree, runId)
-      : getLatestMessageChain(data.messageTree).at(-1);
-  // Single-model only: a multi-model stream_id is the user message, not an assistant node.
-  if (
-    runId !== null &&
-    (!node || (node.type !== "assistant" && node.type !== "error"))
-  )
-    return;
 
   store.getState().setAbortController(sessionId, controller);
-  if (node && runId !== null) {
-    const nodeId = node.nodeId;
-    store.getState().setStreamId(sessionId, runId);
-    store
-      .getState()
-      .updateChatState(
-        sessionId,
-        node.type === "error" ? "settling" : "streaming",
-      );
-    // A client that never saw the run's start times it from here (web shows no timer at all here).
-    if (node.type === "assistant" && node.streamingStartedAt === undefined) {
-      store
-        .getState()
-        .patchNode(sessionId, nodeId, { streamingStartedAt: Date.now() });
-    }
-    // The replay starts at the run's first packet, so it replaces what this client holds (the
-    // reserved placeholder, or the output before a lost connection) once it delivers.
-    let replaced = false;
-
-    // writes are safe only while this session stays focused and unaborted
-    const stillCurrent = () =>
-      store.getState().currentSessionId === sessionId &&
-      !controller.signal.aborted &&
-      store.getState().sessions.get(sessionId)?.abortController === controller;
-
-    let pending: Packet[] = [];
-    let flushTimer: ReturnType<typeof setTimeout> | null = null;
-
-    function flush() {
-      if (pending.length === 0) return;
-      if (!stillCurrent()) {
-        pending = [];
-        return;
-      }
-      const current = store.getState().sessions.get(sessionId);
-      const target = current?.messageTree.get(nodeId);
-      if (!current || !target) {
-        pending = [];
-        return;
-      }
-      const updated = replaced
-        ? { ...target, packets: [...target.packets, ...pending] }
-        : { ...target, message: "", packets: pending };
-      replaced = true;
-      pending = [];
-      store
-        .getState()
-        .updateSessionTree(
-          sessionId,
-          upsertMessages(current.messageTree, [updated], false),
-        );
-    }
-
-    function scheduleFlush() {
-      if (flushTimer) return;
-      flushTimer = setTimeout(() => {
-        flushTimer = null;
-        flush();
-      }, FLUSH_INTERVAL_MS);
-    }
-
-    try {
-      // An error already ended local delivery; reopening still needs to confirm server readiness.
-      const stream =
-        node.type === "error"
-          ? []
-          : resumeChatMessage(sessionId, 0, controller.signal);
-      for await (const event of stream) {
-        // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
-        if (!stillCurrent()) break;
-        if (isStreamError(event)) {
-          // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)
-          // the snapshot settle below. Matches the live-send path in useChatController.
-          console.warn("resume-stream received a backend error", {
-            sessionId,
-            errorCode: event.error_code ?? null,
-            error: event.error,
-          });
-          pending = [];
-          if (flushTimer) {
-            clearTimeout(flushTimer);
-            flushTimer = null;
-          }
-          store.getState().patchNode(sessionId, nodeId, {
-            type: "error",
-            message: event.error,
-            errorCode: event.error_code ?? null,
-          });
-          break;
-        }
-        if (isPacket(event) && !isHeartbeat(event)) {
-          pending.push(event);
-          scheduleFlush();
-        }
-      }
-    } catch (error) {
-      // 404 = nothing to resume (finished/evicted run) — expected, stay quiet. Anything else is a
-      // real failure worth surfacing. Either way we settle from the snapshot below.
-      if (
-        !controller.signal.aborted &&
-        !(error instanceof StreamHttpError && error.status === 404)
-      ) {
-        console.warn("resume-stream failed; settling from snapshot", error);
-      }
-    } finally {
-      if (flushTimer) clearTimeout(flushTimer);
-      flush();
-    }
-  }
+  // Stop targets the stream this recovery follows.
+  if (runId !== null) store.getState().setStreamId(sessionId, runId);
   const stillOurs = () =>
     store.getState().sessions.get(sessionId)?.abortController === controller;
   const stillOpen = () =>
     stillOurs() && store.getState().currentSessionId === sessionId;
-  if (!stillOurs()) return;
-  store.getState().updateChatState(sessionId, "settling");
+  // writes are safe only while this session stays focused and unaborted
+  const stillCurrent = () => stillOpen() && !controller.signal.aborted;
+  const onUnconfirmed = () =>
+    store.getState().updateChatState(sessionId, "unconfirmed");
+  // The response whose local failure the settle keeps.
+  let node =
+    runId !== null
+      ? getMessageByMessageId(data.messageTree, runId)
+      : getLatestMessageChain(data.messageTree).at(-1);
+  let streamId = runId;
+  // Where a reattach to `streamId` continues, so no packet arrives twice.
+  let cursor = 0;
+  // A replay from the start holds its packets until it reaches the end of the output that
+  // existed when it began, so a replay that fails partway keeps what this device shows.
+  let restored = false;
+  let replay: Packet[] = [];
   try {
-    const idle = await waitForSessionIdle(sessionId, stillOpen, () => {
-      store.getState().updateChatState(sessionId, "unconfirmed");
-    });
-    if (!idle || !stillOpen()) return;
+    while (true) {
+      // "lost": the connection ended before the run's stop. "noBuffer": the server has nothing
+      // to replay for this stream, so only a new stream is followed.
+      let end: "finished" | "lost" | "noBuffer" = "noBuffer";
+      if (streamId !== null && stillCurrent()) {
+        let target = getMessageByMessageId(
+          store.getState().sessions.get(sessionId)?.messageTree ?? new Map(),
+          streamId,
+        );
+        if (!target) {
+          // A response this device has not seen: load it, so its output and requests show.
+          try {
+            const saved = await getChatSession(sessionId);
+            if (stillCurrent()) {
+              const messages = processRawChatHistory(
+                saved.messages,
+                saved.packets,
+              );
+              store.getState().hydrateSession(sessionId, messages);
+              target = getMessageByMessageId(messages, streamId);
+            }
+          } catch (error) {
+            console.warn("Could not load the running response", error);
+          }
+        }
+        // An error already ended local delivery; reopening still needs to confirm server readiness.
+        if (target?.type === "error") {
+          node = target;
+          end = "finished";
+        }
+        // Single-model only: a multi-model stream_id is the user message, not an assistant node.
+        if (target?.type === "assistant" && stillCurrent()) {
+          node = target;
+          const nodeId = target.nodeId;
+          store.getState().updateChatState(sessionId, "streaming");
+          // A client that never saw the run's start times it from here (web shows no timer at all here).
+          if (target.streamingStartedAt === undefined) {
+            store
+              .getState()
+              .patchNode(sessionId, nodeId, { streamingStartedAt: Date.now() });
+          }
+          // Packets after the last cursor. A reattach delivers them again, so they wait for it.
+          let batch: Packet[] = [];
+          let batchStops = false;
+          let pending: Packet[] = [];
+          // The finished replay replaces the node's packets instead of extending them.
+          let replacing = false;
+          let flushTimer: ReturnType<typeof setTimeout> | null = null;
+          let sawCursor = false;
+          let stopped = false;
+          let errored = false;
+          let threw = false;
+          let missing = false;
+
+          const flush = () => {
+            if (pending.length === 0 && !replacing) return;
+            const current = store.getState().sessions.get(sessionId);
+            const latest = current?.messageTree.get(nodeId);
+            if (!stillCurrent() || !current || !latest) {
+              pending = [];
+              return;
+            }
+            const updated = replacing
+              ? { ...latest, message: "", packets: pending }
+              : { ...latest, packets: [...latest.packets, ...pending] };
+            replacing = false;
+            pending = [];
+            store
+              .getState()
+              .updateSessionTree(
+                sessionId,
+                upsertMessages(current.messageTree, [updated], false),
+              );
+          };
+
+          try {
+            for await (const event of resumeChatMessage(
+              sessionId,
+              streamId,
+              cursor,
+              controller.signal,
+            )) {
+              // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
+              if (!stillCurrent()) break;
+              if (isStreamCursor(event)) {
+                sawCursor = true;
+                cursor = event.next_cursor;
+                stopped ||= batchStops;
+                batchStops = false;
+                if (restored) {
+                  pending.push(...batch);
+                } else {
+                  replay.push(...batch);
+                  if (event.replay_complete) {
+                    restored = true;
+                    replacing = true;
+                    pending = replay;
+                    replay = [];
+                  }
+                }
+                batch = [];
+                if (restored && !flushTimer) {
+                  flushTimer = setTimeout(() => {
+                    flushTimer = null;
+                    flush();
+                  }, FLUSH_INTERVAL_MS);
+                }
+                continue;
+              }
+              if (isStreamError(event)) {
+                // Errored run: show it immediately rather than waiting on (or getting stuck if it fails)
+                // the snapshot settle below. Matches the live-send path in useChatController.
+                console.warn("resume-stream received a backend error", {
+                  sessionId,
+                  errorCode: event.error_code ?? null,
+                  error: event.error,
+                });
+                errored = true;
+                if (restored) pending.push(...batch);
+                flush();
+                store.getState().patchNode(sessionId, nodeId, {
+                  type: "error",
+                  message: event.error,
+                  errorCode: event.error_code ?? null,
+                });
+                break;
+              }
+              if (isPacket(event) && !isHeartbeat(event)) {
+                batch.push(event);
+                if (event.obj.type === PacketType.STOP) batchStops = true;
+              }
+            }
+          } catch (error) {
+            // 404 = this stream has no buffer (finished/evicted run): expected, stay quiet.
+            if (!controller.signal.aborted) {
+              if (error instanceof StreamHttpError && error.status === 404) {
+                missing = true;
+              } else {
+                threw = true;
+                console.warn("resume-stream failed", error);
+              }
+            }
+          } finally {
+            if (flushTimer) clearTimeout(flushTimer);
+            flush();
+          }
+          if (errored || stopped) end = "finished";
+          else if (threw || (sawCursor && !missing)) end = "lost";
+        }
+      }
+      if (!stillOurs()) return;
+      store.getState().updateChatState(sessionId, "settling");
+      const followed = streamId;
+      const wait = await waitForSessionIdle(
+        sessionId,
+        stillOpen,
+        onUnconfirmed,
+        // After a confirmed Stop only idle ends the wait.
+        (next) =>
+          !controller.signal.aborted && (end === "lost" || next !== followed),
+      );
+      if (wait.kind === "released") return;
+      if (wait.kind === "idle") break;
+      if (wait.streamId !== streamId) {
+        streamId = wait.streamId;
+        store.getState().setStreamId(sessionId, streamId);
+        cursor = 0;
+        restored = false;
+        replay = [];
+      } else {
+        // Paces reattaching to a stream whose connection keeps failing.
+        await new Promise((resolve) =>
+          setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
+        );
+      }
+    }
+    if (!stillOpen()) return;
 
     try {
       const settled = await getChatSession(sessionId);

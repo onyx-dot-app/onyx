@@ -103,24 +103,37 @@ only. The app trades the code and its PKCE verifier at
 `apiFetch`, because only `expo/fetch` exposes a readable body on React Native.
 `streamChatMessage` yields packets, the message-id object and stream errors,
 told apart by field presence. It drops heartbeats. `resumeChatMessage` keeps
-them as liveness ticks. Stop calls `stop-chat-session` with the response id
-from the message-id packet and aborts the local `AbortController`, because a
-client abort alone leaves the backend generating. Before that packet arrives,
-`mobile/src/hooks/useChatController.ts:stop` waits for it (`STOP_ACK_TIMEOUT_MS`), then
-aborts locally and never sends an unscoped Stop. The server's Stop rejects the
-tool approval requests that wait, and the cut stream does not deliver their
-resolutions, so a confirmed Stop records them as rejected on the device
-(`stopAcknowledgedStream`, `chat/toolApprovals.ts:findPendingToolApprovalIds`).
+them as liveness ticks, and its cursor objects (`isStreamCursor`). Stop calls
+`stop-chat-session` with the response id from the message-id packet, because a
+client abort alone leaves the backend generating. The app aborts the local
+`AbortController` only after the server confirms Stop. A failed Stop keeps the
+stream and shows an error, so a waiting approval request stays pending and
+decidable. Recovery sets the session's `streamId` to each stream it follows,
+so Stop targets that stream. Before that
+packet arrives, `mobile/src/hooks/useChatController.ts:stop` waits for it
+(`STOP_ACK_TIMEOUT_MS`), then aborts locally and never sends an unscoped Stop.
+The server's Stop rejects the tool approval requests that wait, and the cut
+stream does not deliver their resolutions, so a confirmed Stop records them as
+rejected on the device (`stopAcknowledgedStream`,
+`chat/toolApprovals.ts:findPendingToolApprovalIds`).
 
 **Readiness.** When delivery ends, the session goes to `settling` and
 `chat/sessionReadiness.ts:waitForSessionIdle` polls
 `GET /chat/chat-session/{id}/status` until `is_processing` is `false`. Only
 then does the chat state return to `input`. A resumed stream in
 `hooks/useChatSessionController.ts` also waits for idle before it loads the
-saved history. A connection that drops after the server accepts a turn does
-not end the run, so the send hands the session to `recoverChatSession`. It
-replays the run through resume-stream, which keeps a waiting approval card
-on screen.
+saved history. The poll also reports the running stream id. A send whose
+delivery ends before the run's stop, or a send the server refuses while
+another response runs (such as `APPROVAL_PENDING`), hands the session to
+`recoverChatSession` when the poll reports that stream. Recovery loads the
+saved session when the response is not in the local tree, then follows the
+stream through resume-stream with `stream_id`. It commits packets only at
+cursor objects. A replay from cursor 0 replaces the shown packets only at
+`replay_complete`, so a replay that fails partway keeps a waiting approval
+card on screen. A lost connection reattaches from the last cursor while the
+poll reports the same stream, paced by `SESSION_POLL_INTERVAL_MS`. A stream
+that answers 404, or ends without a cursor, is not retried; recovery waits
+for a new stream id or for idle.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
