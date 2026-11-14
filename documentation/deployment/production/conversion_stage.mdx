@@ -1,0 +1,106 @@
+---
+title: "Conversion Stage for Large Indexing Jobs"
+description: "Split Google Drive indexing into a listing step and a conversion worker that you can scale"
+icon: "layer-group"
+---
+
+<Note>
+  The conversion stage is off by default. It applies to the Google Drive connector only.
+  All other connectors index as before.
+</Note>
+
+By default, the `docfetching` worker lists the files of a connector and also downloads and parses them.
+For a very large Google Drive, one worker process does all of that work.
+
+With the conversion stage on, indexing has three steps:
+
+1. `docfetching` lists the files and stores the list in batches.
+2. The `docconversion` worker downloads and parses each batch.
+3. `docprocessing` chunks, embeds, and indexes the documents, as before.
+
+You can then add `docconversion` replicas to convert more files at the same time.
+
+## Turn on the conversion stage
+
+### Kubernetes (Helm)
+
+Set `celery_worker_docconversion.enabled` to `true`. The chart then deploys the worker.
+It also sets `ENABLE_CONVERSION_STAGE=true` on the `docfetching` worker and the `docconversion` worker.
+
+```yaml values.yaml
+celery_worker_docconversion:
+  enabled: true
+  replicaCount: 3
+```
+
+<Warning>
+  Do not set `ENABLE_CONVERSION_STAGE` in `configMap`. Use `celery_worker_docconversion.enabled`.
+  If the switch is on and no `docconversion` worker runs, Google Drive indexing lists files but does not index them.
+</Warning>
+
+### Docker Compose
+
+Set the variable in your `.env` file.
+
+```bash .env
+ENABLE_CONVERSION_STAGE=true
+```
+
+Then recreate the `background` container. A `docker compose restart` does not read the `.env` file again.
+
+```bash
+docker compose up -d --force-recreate background
+```
+
+The `background` container starts the `docconversion` worker only when the variable is `true`.
+
+## Settings
+
+| Helm value | Default | Description |
+| --- | --- | --- |
+| `celery_worker_docconversion.enabled` | `false` | Deploys the worker and turns on the conversion stage. |
+| `celery_worker_docconversion.replicaCount` | `1` | Number of worker pods when autoscaling is off. |
+| `celery_worker_docconversion.concurrency` | `2` | Conversion threads in each pod. |
+| `celery_worker_docconversion.autoscaling` | Off | Same fields as the other workers. See [High Availability and Scaling](/deployment/production/high_availability). |
+| `celery_worker_docconversion.resources` | 500m CPU, 2Gi memory requests | Resource requests and limits for each pod. |
+
+| Environment variable | Default | Description |
+| --- | --- | --- |
+| `ENABLE_CONVERSION_STAGE` | `false` | Turns on the conversion stage. With Helm, the chart sets it. |
+| `CELERY_WORKER_DOCCONVERSION_CONCURRENCY` | `2` | Conversion threads for the worker in Docker Compose. |
+| `DOCCONVERSION_WINDOW_BATCHES` | `32` | The most batches of one indexing run that wait for conversion or convert at one time. |
+| `DOCCONVERSION_STALL_SECONDS` | `300` | Seconds with no new conversion task before Onyx checks the run and sends lost batches again. |
+
+## Scale the worker
+
+A conversion parses one file on one CPU core. Add replicas, not threads.
+
+To scale on queue depth with KEDA, add a Prometheus trigger. With a queue trigger, you can set `minReplicas` to `0`.
+The worker then stops when no conversion waits.
+
+```yaml values.yaml
+autoscaling:
+  engine: keda
+
+celery_worker_docconversion:
+  enabled: true
+  autoscaling:
+    enabled: true
+    minReplicas: 0
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: null
+    targetMemoryUtilizationPercentage: null
+    customTriggers:
+      - type: prometheus
+        metadata:
+          serverAddress: http://prometheus-operated.monitoring.svc:9090
+          query: max(onyx_queue_depth{queue="docconversion"})
+          threshold: "8"  # Target queued batches for each replica
+```
+
+## Turn off the conversion stage
+
+Wait until the Google Drive indexing runs finish. Then set `celery_worker_docconversion.enabled` to `false`,
+or remove `ENABLE_CONVERSION_STAGE` from your `.env` file and recreate the `background` container.
+
+If a run did not finish before the change, the next run starts its listing again from the start of its time range.

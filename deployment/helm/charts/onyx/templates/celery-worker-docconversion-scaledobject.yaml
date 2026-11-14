@@ -1,0 +1,41 @@
+{{- if and .Values.vectorDB.enabled .Values.celery_worker_docconversion.enabled (.Values.celery_worker_docconversion.autoscaling.enabled) (eq (include "onyx.autoscaling.engine" .) "keda") }}
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docconversion") }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onyx.resourceName" (list . "celery-worker-docconversion") }}
+  minReplicaCount: {{ .Values.celery_worker_docconversion.autoscaling.minReplicas }}
+  maxReplicaCount: {{ .Values.celery_worker_docconversion.autoscaling.maxReplicas | default 10 }}
+  pollingInterval: {{ .Values.celery_worker_docconversion.autoscaling.pollingInterval | default 30 }}
+  cooldownPeriod: {{ .Values.celery_worker_docconversion.autoscaling.cooldownPeriod | default 300 }}
+  {{- if hasKey .Values.celery_worker_docconversion.autoscaling "idleReplicaCount" }}
+  idleReplicaCount: {{ .Values.celery_worker_docconversion.autoscaling.idleReplicaCount }}
+  {{- end }}
+  {{- if .Values.celery_worker_docconversion.autoscaling.customTriggers }}
+  fallback:
+    failureThreshold: {{ .Values.celery_worker_docconversion.autoscaling.failureThreshold | default 3 }}
+    replicas: {{ .Values.celery_worker_docconversion.autoscaling.fallbackReplicas | default 1 }}
+  {{- end }}
+  triggers:
+    {{- if .Values.celery_worker_docconversion.autoscaling.targetCPUUtilizationPercentage }}
+    - type: cpu
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_docconversion.autoscaling.targetCPUUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_docconversion.autoscaling.targetMemoryUtilizationPercentage }}
+    - type: memory
+      metricType: Utilization
+      metadata:
+        value: "{{ .Values.celery_worker_docconversion.autoscaling.targetMemoryUtilizationPercentage }}"
+    {{- end }}
+    {{- if .Values.celery_worker_docconversion.autoscaling.customTriggers }}
+    {{- toYaml .Values.celery_worker_docconversion.autoscaling.customTriggers | nindent 4 }}
+    {{- end }}
+{{- end }}
