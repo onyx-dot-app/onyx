@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Pesquisar no Slack na consulta"
+        },
+        "jiraServiceManagement": {
+          "description": "Indexar tickets dos projetos de serviço do Jira Service Management."
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "Configurar o conector Jira Service Management",
+          "subtext": "Escolha quais tickets do Jira Service Management indexar: todos os projetos de serviço acessíveis, um projeto específico ou uma consulta JQL.",
+          "indexingScopeLabel": "Como devemos indexar o Jira Service Management?",
+          "everythingLabel": "Todos os projetos JSM",
+          "everythingDescription": "Indexar todos os tickets do Jira Service Management que a conta pode ler.",
+          "jqlDescription": "Filtre tickets do Jira Service Management com JQL. Os resultados são limitados a projetos de serviço. Não inclua filtros de tempo nem cláusulas ORDER BY. [Documentação JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },

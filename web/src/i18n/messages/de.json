@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Slack zur Abfragezeit durchsuchen"
+        },
+        "jiraServiceManagement": {
+          "description": "Tickets aus Jira Service Management-Serviceprojekten indizieren."
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "Geben Sie die zu indexierenden Postfächer an (z. B. INBOX, Sent, Drafts). Leer lassen, um alle Postfächer zu indexieren."
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management-Connector konfigurieren",
+          "subtext": "Wählen Sie die zu indizierenden Jira Service Management-Tickets: alle zugänglichen Serviceprojekte, ein bestimmtes Projekt oder eine JQL-Abfrage.",
+          "indexingScopeLabel": "Wie soll Jira Service Management indiziert werden?",
+          "everythingLabel": "Alle JSM-Projekte",
+          "everythingDescription": "Alle Jira Service Management-Vorgänge indizieren, auf die das Konto Lesezugriff hat.",
+          "jqlDescription": "Jira Service Management-Vorgänge mit JQL filtern. Die Ergebnisse sind auf Serviceprojekte beschränkt. Verwenden Sie keine Zeitfilter oder ORDER BY-Klauseln. [JQL-Dokumentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },

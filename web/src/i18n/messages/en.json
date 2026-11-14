@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "Search Slack at query time"
+        },
+        "jiraServiceManagement": {
+          "description": "Index Jira Service Management tickets from service projects."
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "Specify mailboxes to index (e.g., INBOX, Sent, Drafts). Leave empty to index all mailboxes."
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Choose which Jira Service Management tickets to index: all accessible service projects, a specific project, or a JQL query.",
+          "indexingScopeLabel": "How Should We Index Jira Service Management?",
+          "everythingLabel": "All JSM Projects",
+          "everythingDescription": "Index all Jira Service Management issues the account can read.",
+          "jqlDescription": "Filter Jira Service Management issues with JQL. Results are restricted to service projects. Do not include time filters or ORDER BY clauses. [JQL documentation](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },

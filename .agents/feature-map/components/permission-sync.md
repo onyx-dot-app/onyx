@@ -262,6 +262,9 @@ runs.
     `web/src/lib/connectors/AutoSyncOptionFields.tsx:autoSyncConfigBySource` is
     keyed by it. It mirrors `_SOURCE_TO_SYNC_CONFIG` by hand. A source missing
     from it cannot be set to Sync from the UI, and no test fails.
+    Jira Service Management is intentionally absent: it has a distinct source
+    but no backend sync configuration. Inheriting Jira indexing does not register
+    Jira document/group permission sync for JSM.
 13. `stub-documents` **Doc sync can create a stub `Document`.** When a source
     reports a document that is not indexed yet,
     `upsert_document_external_perms` creates a row with an empty `semantic_id`,

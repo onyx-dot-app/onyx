@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jiraServiceManagement": {
+          "description": "فهرسة تذاكر مشاريع الخدمة في Jira Service Management."
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "إعداد موصل Jira Service Management",
+          "subtext": "اختر تذاكر Jira Service Management المراد فهرستها: جميع مشاريع الخدمة المتاحة، أو مشروع محدد، أو استعلام JQL.",
+          "indexingScopeLabel": "كيف تريد فهرسة Jira Service Management؟",
+          "everythingLabel": "جميع مشاريع JSM",
+          "everythingDescription": "فهرسة جميع مشكلات Jira Service Management التي يمكن للحساب قراءتها.",
+          "jqlDescription": "تصفية مشكلات Jira Service Management باستخدام JQL. تقتصر النتائج على مشاريع الخدمة. لا تُضمّن عوامل تصفية زمنية أو عبارات ORDER BY. [وثائق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },

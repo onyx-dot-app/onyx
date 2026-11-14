@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 서비스 프로젝트의 티켓을 색인합니다."
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 커넥터 설정",
+          "subtext": "색인할 Jira Service Management 티켓을 선택하세요. 접근 가능한 모든 서비스 프로젝트, 특정 프로젝트 또는 JQL 쿼리를 지정할 수 있습니다.",
+          "indexingScopeLabel": "Jira Service Management 색인 방식",
+          "everythingLabel": "모든 JSM 프로젝트",
+          "everythingDescription": "계정에서 읽을 수 있는 모든 Jira Service Management 이슈를 색인합니다.",
+          "jqlDescription": "JQL로 Jira Service Management 이슈를 필터링합니다. 결과는 서비스 프로젝트로 제한됩니다. 시간 필터나 ORDER BY 절을 포함하지 마세요. [JQL 문서](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },

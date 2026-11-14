@@ -1106,6 +1106,76 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jiraServiceManagement.description",
+    subtext: "connectors.jiraServiceManagement.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "tab",
+        name: "indexing_scope",
+        label: "connectors.jiraServiceManagement.indexingScopeLabel",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label: "connectors.jiraServiceManagement.everythingLabel",
+            fields: [
+              {
+                type: "string_tab",
+                label: "connectors.jiraServiceManagement.everythingLabel",
+                name: "everything",
+                description:
+                  "connectors.jiraServiceManagement.everythingDescription",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label: "connectors.jira.fields.indexing_scope.tabs.project.label",
+            fields: [
+              {
+                type: "text",
+                label: "connectors.jira.fields.project_key.label",
+                name: "project_key",
+                description: "connectors.jira.fields.project_key.description",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
+            fields: [
+              {
+                type: "text",
+                label: "connectors.jira.fields.jql_query.label",
+                name: "jql_query",
+                description: "connectors.jiraServiceManagement.jqlDescription",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jira.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [

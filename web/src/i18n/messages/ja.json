@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "クエリ時に Slack を検索"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management のサービスプロジェクトのチケットをインデックス化します。"
         }
       }
     },
@@ -4942,6 +4945,14 @@
               "description": "インデックスするメールボックスを指定します(例: INBOX、Sent、Drafts)。空欄の場合は、すべてのメールボックスをインデックスします。"
             }
           }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management コネクタを設定",
+          "subtext": "インデックスを作成する Jira Service Management チケットを選択します。アクセス可能なすべてのサービスプロジェクト、特定のプロジェクト、または JQL クエリを指定できます。",
+          "indexingScopeLabel": "Jira Service Management のインデックス作成方法",
+          "everythingLabel": "すべての JSM プロジェクト",
+          "everythingDescription": "アカウントが閲覧できるすべての Jira Service Management 課題のインデックスを作成します。",
+          "jqlDescription": "JQL で Jira Service Management の課題を絞り込みます。結果はサービスプロジェクトに限定されます。時間フィルターや ORDER BY 句は含めないでください。[JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)"
         }
       }
     },
