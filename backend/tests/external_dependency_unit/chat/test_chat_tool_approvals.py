@@ -342,7 +342,7 @@ def test_an_overdue_request_cannot_be_decided_and_its_call_gets_the_timeout(
     owned.owner.poll_control()
 
     assert owned.run.result(timeout=10).output.text == "done"
-    assert "did not answer the approval request" in owned.first_result("send")
+    assert "expired before the user answered" in owned.first_result("send")
     assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
 
 
@@ -367,7 +367,7 @@ def test_an_unwatched_run_cannot_wait(
     owned = _direct_call(chat, owned_runs, watched=False)
 
     assert owned.run.result(timeout=10).output.text == "done"
-    assert "this agent cannot ask for it" in owned.first_result("send")
+    assert "only the agent that started you can ask" in owned.first_result("send")
     assert chat.rows(db_session) == []
 
 
@@ -433,7 +433,7 @@ def test_a_foreground_child_can_wait_and_a_background_child_cannot(
         _until_value(lambda: children.get(AgentLifetime.BACKGROUND.value))
     ).result(timeout=10)
     send = background.steps[0].tools["send"].result
-    assert send is not None and "this agent cannot ask for it" in send.text
+    assert send is not None and "only the agent that started you" in send.text
 
     [row] = _until_value(lambda: chat.rows(db_session) or None)
     assert row.chat_message_id == int(children[AgentLifetime.FOREGROUND.value])
@@ -643,9 +643,12 @@ def test_a_non_streaming_response_returns_with_every_request_that_waits(
                 chat_message_id=chat.response_id,
                 gated_app_id=chat.gated_app_id,
                 action_id=ACTION,
+                tool_call_id=f"call_{index}",
+                tool_name=ACTION,
+                display_name="Send email",
             )[0]
         )
-        for _ in range(3)
+        for index in range(3)
     ]
     db_session.commit()
     ended = approval_ids[2]

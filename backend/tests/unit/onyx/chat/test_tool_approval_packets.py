@@ -1,12 +1,12 @@
 """How a tool call that waits for approval ends, as its card shows it."""
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
-from onyx.agents.models import RunStatus
+from onyx.agents.models import ExecutionStatus, RunStatus, StepRecord
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
@@ -17,9 +17,9 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.chat.emitter import Emitter
-from onyx.chat.presentation import ResponsePresenter
-from onyx.chat.tool_approvals import tool_answer
-from onyx.db.approval_request import SavedDecision
+from onyx.chat.models import ResponseRecord, SavedToolApproval
+from onyx.chat.presentation import ResponsePresenter, replay_response
+from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT, tool_answer
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -50,7 +50,12 @@ APPROVAL_ID = UUID("8f9a6a52-4c4e-4d55-9a0e-2f43e7d1c001")
 
 
 class _Approvals(ToolApprovals):
-    def request_approval(self, run: Run, call: ToolCall) -> PendingToolInput:  # noqa: ARG002
+    def request_approval(
+        self,
+        run: Run,  # noqa: ARG002
+        tool_call: ToolCall,  # noqa: ARG002
+        nested_call: ToolCall | None,  # noqa: ARG002
+    ) -> PendingToolInput:
         return PendingToolInput(
             request_id=str(APPROVAL_ID),
             prompt="Allow?",
@@ -58,24 +63,45 @@ class _Approvals(ToolApprovals):
             expires_at=datetime.now(UTC),
         )
 
-    def withdraw_approval(self, request_id: str) -> None:
-        pass
+    def withdraw_approval(self, request_id: str) -> None:  # noqa: ARG002
+        return None
+
+
+def _saved(
+    decision: ApprovalDecision | None,
+    decided_via: ApprovalDecidedVia | None = None,
+    *,
+    decided_after: timedelta = timedelta(minutes=1),
+    approval_id: UUID = APPROVAL_ID,
+) -> SavedToolApproval:
+    created_at = datetime(2026, 11, 13, tzinfo=UTC)
+    return SavedToolApproval(
+        id=approval_id,
+        chat_message_id=1,
+        tool_call_id=CALL.id,
+        tool_name=CALL.name,
+        display_name="Send email",
+        created_at=created_at,
+        decision=decision,
+        decided_via=decided_via,
+        decided_at=created_at + decided_after if decision is not None else None,
+    )
 
 
 @pytest.mark.parametrize(
     ("saved", "ends"),
     [
-        ((ApprovalDecision.EXPIRED, None, CALL.name), "expired"),
         (
-            (ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY, CALL.name),
-            "disabled",
+            _saved(ApprovalDecision.EXPIRED, decided_after=TOOL_APPROVAL_TIMEOUT),
+            "expired",
         ),
+        (_saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY), "disabled"),
         # The request's row was deleted with its tool's server.
         (None, "disabled"),
     ],
 )
 def test_a_program_call_that_ends_without_a_decision_reports_how(
-    saved: SavedDecision | None,
+    saved: SavedToolApproval | None,
     ends: ToolApprovalOutcome,
 ) -> None:
     """Integration covers decided direct calls, and external dependency tests
@@ -189,4 +215,75 @@ def test_a_question_for_the_user_streams_no_approval_packets() -> None:
     assert not any(
         isinstance(packet.obj, (ToolApprovalRequest, ToolApprovalResolved))
         for packet in live
+    )
+
+
+@pytest.mark.parametrize(
+    "saved, outcome",
+    [
+        (_saved(ApprovalDecision.APPROVED, ApprovalDecidedVia.USER), "approved"),
+        (
+            _saved(ApprovalDecision.APPROVED, ApprovalDecidedVia.SESSION_GRANT),
+            "approved_for_chat",
+        ),
+        (_saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.USER), "rejected"),
+        (_saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY), "disabled"),
+        (
+            _saved(ApprovalDecision.EXPIRED, decided_after=TOOL_APPROVAL_TIMEOUT),
+            "expired",
+        ),
+        # The call stopped waiting before the deadline, or the response ended
+        # while the request waited.
+        (_saved(ApprovalDecision.EXPIRED), "cancelled"),
+        (_saved(None), "cancelled"),
+    ],
+    ids=[
+        "approved",
+        "approved_for_chat",
+        "rejected",
+        "disabled",
+        "expired",
+        "withdrawn",
+        "undecided",
+    ],
+)
+def test_a_saved_response_shows_each_request_as_its_stream_ended_it(
+    saved: SavedToolApproval, outcome: ToolApprovalOutcome
+) -> None:
+    response = ResponseRecord(
+        run_id="1",
+        status=RunStatus.CANCELLED,
+        steps=[
+            StepRecord(
+                message=AssistantMessage(id="message", content=[CALL]),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+    )
+
+    packets = replay_response(response, {}, {}, {}, approvals={("1", CALL.id): [saved]})
+
+    card = [
+        packet
+        for packet in packets
+        if isinstance(
+            packet.obj, (CustomToolStart, ToolApprovalRequest, ToolApprovalResolved)
+        )
+    ]
+    assert [type(packet.obj) for packet in card] == [
+        CustomToolStart,
+        ToolApprovalRequest,
+        ToolApprovalResolved,
+    ]
+    assert card[0].placement == card[1].placement == card[2].placement
+    assert card[1].obj == ToolApprovalRequest(
+        approval_id=str(APPROVAL_ID),
+        tool_call_id=CALL.id,
+        tool_name=CALL.name,
+        display_name="Send email",
+        arguments={"to": "team"},
+        expires_at=saved.created_at + TOOL_APPROVAL_TIMEOUT,
+    )
+    assert card[2].obj == ToolApprovalResolved(
+        approval_id=str(APPROVAL_ID), outcome=outcome
     )

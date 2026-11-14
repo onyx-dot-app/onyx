@@ -87,6 +87,9 @@ def _create_approval_request() -> None:
         sa.Column("chat_message_id", sa.Integer(), nullable=False),
         sa.Column("gated_app_id", sa.Integer(), nullable=False),
         sa.Column("action_id", sa.String(), nullable=False),
+        sa.Column("tool_call_id", sa.String(), nullable=False),
+        sa.Column("tool_name", sa.String(), nullable=False),
+        sa.Column("display_name", sa.String(), nullable=False),
         sa.Column(
             "created_at",
             sa.DateTime(timezone=True),
