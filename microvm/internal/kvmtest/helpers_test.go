@@ -229,14 +229,16 @@ func scopeActive(cmd jailer.Command, id string) string {
 var vsockProbePorts = []int{1, 22, 52, 80, 443, 1024, 3010, 3127, 3128, 3129, 8080, 10250, 65535}
 
 // vsockProbe connects from the guest (as root) to each port on the host
-// (CID 2) and returns the ports that accepted the connection.
+// (CID 2) and returns the ports that accepted the connection. A port counts
+// as refused only on ECONNREFUSED or ECONNRESET (Firecracker resets a connect
+// to a port with no host socket); any other error fails the probe.
 func vsockProbe(ctx context.Context, vsockPath string, ports []int) (map[int]bool, string, error) {
 	list := make([]string, len(ports))
 	for i, p := range ports {
 		list[i] = strconv.Itoa(p)
 	}
 	out, err := guestRun(ctx, vsockPath, "root", `python3 - `+strings.Join(list, " ")+` <<'EOF'
-import socket, sys
+import errno, socket, sys
 for port in map(int, sys.argv[1:]):
     s = socket.socket(socket.AF_VSOCK, socket.SOCK_STREAM)
     s.settimeout(5)
@@ -244,10 +246,16 @@ for port in map(int, sys.argv[1:]):
         s.connect((2, port))
         print("VSOCK", port, "OPEN")
     except OSError as e:
-        print("VSOCK", port, "REFUSED", type(e).__name__)
+        if e.errno in (errno.ECONNREFUSED, errno.ECONNRESET):
+            print("VSOCK", port, "REFUSED", errno.errorcode[e.errno])
+        else:
+            print("VSOCK", port, "ERROR", type(e).__name__, e)
     finally:
         s.close()
 EOF`)
+	if err == nil && !strings.Contains(out, "EXIT 0") {
+		err = fmt.Errorf("probe script failed")
+	}
 	accepted := map[int]bool{}
 	seen := 0
 	for _, l := range strings.Split(out, "\n") {
@@ -260,8 +268,14 @@ EOF`)
 			continue
 		}
 		seen++
-		if f[2] == "OPEN" {
+		switch f[2] {
+		case "OPEN":
 			accepted[p] = true
+		case "REFUSED":
+		default:
+			if err == nil {
+				err = fmt.Errorf("port %d: %s", p, strings.Join(f[2:], " "))
+			}
 		}
 	}
 	if err == nil && seen != len(ports) {
