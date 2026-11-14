@@ -1,12 +1,16 @@
 """The execute_code and wait_code tools: model-written Python programs that call
 other tools, run as cells of the response (code_mode/cells.py)."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from onyx.agents.tools import ToolExecutionMode, ToolInvocation
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import CodeModeExposure, ToolCallException, ToolContext
 from onyx.tools.tool_implementations.code_mode.cells import (
     DEFAULT_MAX_OUTPUT_TOKENS,
@@ -45,17 +49,40 @@ RESTORED_WAIT_MESSAGE = (
 )
 
 
+_MAX_OUTPUT_TOKENS_DESCRIPTION = (
+    "Token budget for the output this call returns; longer output is cut in the "
+    f"middle. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most "
+    f"{MAX_OUTPUT_TOKENS}."
+)
+
+
 class CodeModeArguments(BaseModel):
-    code: str
-    yield_time_ms: int = DEFAULT_EXECUTE_YIELD_MS
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
+    code: str = Field(description="The Python program to run.")
+    yield_time_ms: int = Field(
+        default=DEFAULT_EXECUTE_YIELD_MS,
+        description="How long to wait for the program before returning its output "
+        f"so far while it keeps running. Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, "
+        f"at most {MAX_EXECUTE_YIELD_MS} ms.",
+    )
+    max_output_tokens: int = Field(
+        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    )
 
 
 class WaitCodeArguments(BaseModel):
-    cell_id: int
-    yield_time_ms: int = DEFAULT_WAIT_YIELD_MS
-    max_output_tokens: int = DEFAULT_MAX_OUTPUT_TOKENS
-    terminate: bool = False
+    cell_id: int = Field(description="Identifier of the running cell.")
+    yield_time_ms: int = Field(
+        default=DEFAULT_WAIT_YIELD_MS,
+        description="How long to wait for more output before returning. Defaults "
+        f"to {DEFAULT_WAIT_YIELD_MS} ms, at most {MAX_WAIT_YIELD_MS} ms.",
+    )
+    max_output_tokens: int = Field(
+        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    )
+    terminate: bool = Field(
+        default=False,
+        description="True stops the running cell; false or omitted waits for output.",
+    )
 
 
 def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
@@ -64,11 +91,6 @@ def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
 
 def output_tokens(requested: int) -> int:
     return min(max(requested, 1), MAX_OUTPUT_TOKENS)
-
-
-_MAX_TOKENS_TEXT = (
-    f"Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most {MAX_OUTPUT_TOKENS}."
-)
 
 
 # The saved result of an `execute_code` call that stopped before it returned. A
@@ -140,32 +162,10 @@ class CodeModeTool(Tool):
         return ToolExecutionMode.SEQUENTIAL
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=code_mode_description(self._stubs, self._limits),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "code": {
-                        "type": "string",
-                        "description": "The Python program to run.",
-                    },
-                    "yield_time_ms": {
-                        "type": "integer",
-                        "description": "How long to wait for the program before "
-                        "returning its output so far while it keeps running. "
-                        f"Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, at most "
-                        f"{MAX_EXECUTE_YIELD_MS} ms.",
-                    },
-                    "max_output_tokens": {
-                        "type": "integer",
-                        "description": "Token budget for the output this call "
-                        "returns; longer output is cut in the middle. "
-                        + _MAX_TOKENS_TEXT,
-                    },
-                },
-                "required": ["code"],
-            },
+        return tool_definition_from_arguments(
+            self.name,
+            code_mode_description(self._stubs, self._limits),
+            CodeModeArguments,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
@@ -223,36 +223,8 @@ class WaitCodeTool(Tool):
         return ToolExecutionMode.SEQUENTIAL
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=WAIT_CODE_DESCRIPTION,
-            parameters={
-                "type": "object",
-                "properties": {
-                    "cell_id": {
-                        "type": "integer",
-                        "description": "Identifier of the running cell.",
-                    },
-                    "yield_time_ms": {
-                        "type": "integer",
-                        "description": "How long to wait for more output before "
-                        f"returning. Defaults to {DEFAULT_WAIT_YIELD_MS} ms, at most "
-                        f"{MAX_WAIT_YIELD_MS} ms.",
-                    },
-                    "max_output_tokens": {
-                        "type": "integer",
-                        "description": "Token budget for the output this call "
-                        "returns; longer output is cut in the middle. "
-                        + _MAX_TOKENS_TEXT,
-                    },
-                    "terminate": {
-                        "type": "boolean",
-                        "description": "True stops the running cell; false or "
-                        "omitted waits for output.",
-                    },
-                },
-                "required": ["cell_id"],
-            },
+        return tool_definition_from_arguments(
+            self.name, WAIT_CODE_DESCRIPTION, WaitCodeArguments
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
