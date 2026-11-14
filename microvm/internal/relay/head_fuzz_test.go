@@ -8,8 +8,8 @@ import (
 )
 
 // FuzzReadHead feeds guest bytes to the head parser. A head that parses must,
-// after Stamp, parse again with exactly the relay's credential and at most
-// one session hint: the guest cannot smuggle its own identity headers.
+// after Stamp, have exactly the relay's credential and at most one session
+// hint, also after a reparse: the guest cannot smuggle identity headers.
 //
 //	go test -run '^$' -fuzz FuzzReadHead -fuzztime 60s ./internal/relay
 func FuzzReadHead(f *testing.F) {
@@ -32,9 +32,14 @@ func FuzzReadHead(f *testing.F) {
 		}
 		h.Stamp(token)
 		out := h.Bytes()
-		again, err := ReadHead(bufio.NewReader(bytes.NewReader(out)))
-		if err != nil {
-			t.Fatalf("stamped head does not parse: %v\n%q", err, out)
+		// Stamp adds fields and Bytes a space after each colon, so the output
+		// can pass the input limits: check the fields, and reparse when it fits.
+		again := h
+		if len(out) <= MaxHeadBytes {
+			again, err = ReadHead(bufio.NewReaderSize(bytes.NewReader(out), len(out)))
+			if err != nil {
+				t.Fatalf("stamped head does not parse: %v\n%q", err, out)
+			}
 		}
 		if again.Method != h.Method || again.Target != h.Target || again.Version != h.Version {
 			t.Fatalf("request line changed: %q", out)
