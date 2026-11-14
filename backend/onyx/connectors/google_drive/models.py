@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
-from onyx.connectors.models import ListingPayload
+from onyx.connectors.models import DocumentTypeLabel, ListingPayload
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 
@@ -262,6 +262,113 @@ class DriveListingPayload(ListingPayload):
     retriever_email: str
 
 
+class ListingPartitionKind(str, Enum):
+    """What one partition of the parallel listing lists."""
+
+    # A shared drive, listed as one of its members.
+    SHARED_DRIVE = "shared_drive"
+    # The files a user owns.
+    MY_DRIVE = "my_drive"
+    # All files a user sees. Files that another partition covers are dropped.
+    SHARED_WITH_USER = "shared_with_user"
+
+
+class ListingPartition(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    kind: ListingPartitionKind
+    # A drive id for a shared drive, a user email for the other kinds.
+    key: str
+
+
+class ListingShardKind(str, Enum):
+    FILES = "files"
+
+
+class ListingShard(BaseModel):
+    """One listing of a partition over the modifiedTime range [t0, t1), in
+    whole milliseconds. The ranges of a partition's open shards do not
+    overlap, and together they cover what is still to list."""
+
+    id: int
+    partition: ListingPartition
+    # The user the shard lists as.
+    principal: str
+    kind: ListingShardKind = ListingShardKind.FILES
+    t0: int
+    t1: int
+    # The page to list next. None for the first page.
+    page_token: str | None = None
+    # The newest modifiedTime in the partition, when it was read. It only
+    # steers where a split puts its cuts. A wrong value loses no file.
+    newest_ms: int | None = None
+    # The partition owns the files this shard lists, so they need no dedup.
+    exact: bool = True
+    # The newest modifiedTime of the pages this shard kept, and the ids it
+    # kept at that time. A split on a later page starts there.
+    frontier_ms: int | None = None
+    frontier_ids: list[str] = []
+    # True when more files share the frontier time than the shard keeps ids
+    # for. A page that starts at that time cannot split. A page that starts
+    # later can, because it needs no ids.
+    frontier_overflow: bool = False
+    # False when a page had a file older than the frontier. A later page
+    # then cannot split.
+    in_order: bool = True
+    # Files on the pages this shard kept, and the oldest modifiedTime among
+    # them. With the frontier they give the density of the range so far.
+    kept_files: int = 0
+    kept_since_ms: int | None = None
+    # Ids at the start of the range that an earlier shard already listed.
+    skip_ids: list[str] = []
+    # Lists only the files of this owner. Set on a shared-with-user shard
+    # that lists again the files of an owner whose My Drive partition failed.
+    owner_filter: str | None = None
+    # True when the shard has no upper bound: it lists every file modified at
+    # t0 or later, and t1 is not used. Such a shard does not split.
+    open_end: bool = False
+
+
+class DriveListingState(BaseModel):
+    """Checkpoint of the parallel sharded listing (the service account flow).
+    Its size follows the drives, the users and the open shards, not the
+    files."""
+
+    # The window of the listing, [t0, t1) in milliseconds.
+    window_t0: int
+    window_t1: int
+    # Partitions with no shard yet, in the order they start.
+    pending_partitions: list[ListingPartition] = []
+    # Partitions whose listing began, with the user and whether it is exact.
+    # A later call with a later window end adds a shard for each of them.
+    started_partitions: list[tuple[ListingPartition, str, bool]] = []
+    # Open shards by id.
+    shards: dict[int, ListingShard] = {}
+    next_shard_id: int = 0
+    # Coverage: drives (complete listings only) and owners whose listing has
+    # begun. A copy of their files on another path is dropped.
+    listed_drive_ids: set[str] = set()
+    listed_owners: set[str] = set()
+    # The worker limit the last call ended with. The next call starts from it.
+    concurrency_limit: int | None = None
+    # Running count of the files the listing yielded that pass the metadata
+    # check.
+    docs_by_type: dict[DocumentTypeLabel, int] = {}
+    # Bytes per type. Only files that Drive lists with a size add to it.
+    bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    # True after open_window_end: shards that start from now on have no
+    # upper bound.
+    open_end: bool = False
+
+    @property
+    def is_done(self) -> bool:
+        return not self.pending_partitions and not self.shards
+
+    @property
+    def total_docs(self) -> int:
+        return sum(self.docs_by_type.values())
+
+
 class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # Checkpoint version of _retrieved_ids
     retrieved_folder_and_drive_ids: set[str]
@@ -290,8 +397,8 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # --- Phased retrieval state, used by the service account flow. Sized by
-    # drives and users, never by documents.
+    # --- Phased retrieval state, used by the serial service account listing
+    # (requested folders). Sized by drives and users, never by documents.
 
     # None until the first phased run; a checkpoint written by the per-user
     # stage loop also has None here and restarts at INVENTORY.
@@ -317,6 +424,11 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # Pruning refuses to run while this is non-empty, because absence from the
     # listing would delete every document indexed from them.
     unreachable_target_ids: set[str] = set()
+
+    # State of the shard engine, which lists a service account with no
+    # requested folders. None for the serial listing (OAuth and requested
+    # folders). A service account checkpoint of the serial listing is dropped.
+    listing: DriveListingState | None = None
 
     # Hierarchy node raw IDs that have already been yielded.
     # Used to avoid yielding duplicate hierarchy nodes across checkpoints.

@@ -2,6 +2,7 @@
 drops (broken pipe, reset, TLS EOF, timeout) instead of letting one dropped
 socket fail the whole crawl, and must re-raise when the drop persists."""
 
+import json
 import socket
 import ssl
 from collections.abc import Callable
@@ -143,3 +144,27 @@ def test_access_probe_records_server_errors_as_pushback(
         PUSHBACK_OBSERVER.reset(token)
 
     assert observer.take_hits() == 1
+
+
+def test_rate_limit_retry_waits_for_the_retry_after_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """httplib2 stores header names in lowercase. The retry must still find
+    Retry-After, or it waits a full minute."""
+    waits: list[float] = []
+    monkeypatch.setattr(google_utils.time, "sleep", waits.append)
+    response = httplib2.Response({"status": "429", "Retry-After": "2"})
+    content = json.dumps(
+        {"error": {"errors": [{"reason": "rateLimitExceeded"}], "code": 429}}
+    ).encode()
+    attempts = {"count": 0}
+
+    def execute() -> dict[str, list[dict[str, str]]]:
+        attempts["count"] += 1
+        if attempts["count"] == 1:
+            raise HttpError(response, content)
+        return {"files": []}
+
+    assert google_utils._execute_with_retry(_Request(execute)) == {"files": []}
+    # The header value plus the 3 s buffer.
+    assert waits == [5]

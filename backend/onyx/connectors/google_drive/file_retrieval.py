@@ -88,6 +88,16 @@ def generate_time_range_filter(
     return time_range_filter
 
 
+def owner_email(drive_file: GoogleDriveFileType) -> str | None:
+    """Lowercased owner of a My Drive file. Drive allows one owner; shared
+    drive files have none."""
+    owners = drive_file.get("owners") or []
+    if not owners:
+        return None
+    email = owners[0].get("emailAddress")
+    return email.lower() if isinstance(email, str) else None
+
+
 LINK_ONLY_PERMISSION_TYPES = {"domain", "anyone"}
 
 
@@ -206,7 +216,7 @@ def get_external_access_for_folder(
     return get_folder_access_fn(folder, google_domain, ops, user_email, add_prefix)
 
 
-def _get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
+def get_fields_for_file_type(field_type: DriveFileFieldType) -> str:
     """Get the appropriate fields string for files().list() based on the field type enum."""
     if field_type == DriveFileFieldType.SLIM:
         return SLIM_FILE_FIELDS
@@ -232,11 +242,14 @@ def _extract_single_file_fields(list_fields: str) -> str:
 
 def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
     """Get the appropriate fields string for files().get() based on the field type enum."""
-    return _extract_single_file_fields(_get_fields_for_file_type(field_type))
+    return _extract_single_file_fields(get_fields_for_file_type(field_type))
 
 
 # Set on a shortcut's resolved target, holding the shortcut's id.
 RESOLVED_FROM_SHORTCUT_KEY = "onyxResolvedFromShortcutId"
+# Set on a shortcut's resolved target, holding the target's own modifiedTime.
+# The target's modifiedTime field holds the shortcut's time.
+TARGET_MODIFIED_TIME_KEY = "onyxTargetModifiedTime"
 
 
 def _is_drive_shortcut(file: GoogleDriveFileType) -> bool:
@@ -289,7 +302,7 @@ def _resolve_shortcut_target(
     )
 
 
-def _resolve_file_or_shortcut(
+def resolve_file_or_shortcut(
     ops: GoogleDriveSourceOperations,
     user_email: str,
     file: GoogleDriveFileType,
@@ -314,6 +327,9 @@ def _resolve_file_or_shortcut(
     # it, so this preserves the invariant that a retrieved item's modifiedTime
     # lies within the requested time range — the target's can sit far outside
     # it, which would corrupt the checkpoint frontier and re-poll windows.
+    # The target's own time stays under a separate key: it says if the
+    # listing of the target's own partition returns the target.
+    target[TARGET_MODIFIED_TIME_KEY] = target.get(GoogleFields.MODIFIED_TIME.value)
     listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
     if listing_modified_time is not None:
         target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
@@ -359,7 +375,7 @@ def _resolve_file_shortcuts(
             yield file
             continue
 
-        resolved_file = _resolve_file_or_shortcut(ops, user_email, file, field_type)
+        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
         if resolved_file is not None:
             yield resolved_file
 
@@ -381,12 +397,12 @@ def _get_files_in_parent(
             variant=DriveCorpus.ALL_DRIVES,
             user_email=user_email,
             query=query,
-            fields=_get_fields_for_file_type(field_type),
+            fields=get_fields_for_file_type(field_type),
             order_by=GoogleFields.MODIFIED_TIME.value,
             continue_on_404_or_403=True,
         )
     ):
-        resolved_file = _resolve_file_or_shortcut(ops, user_email, file, field_type)
+        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
         if resolved_file is not None:
             yield resolved_file
 
@@ -526,7 +542,7 @@ def get_files_in_shared_drive(
         user_email=user_email,
         drive_id=drive_id,
         query=file_query,
-        fields=_get_fields_for_file_type(field_type),
+        fields=get_fields_for_file_type(field_type),
         order_by=GoogleFields.MODIFIED_TIME.value,
         page_token=page_token,
         max_num_pages=max_num_pages,
@@ -536,7 +552,7 @@ def get_files_in_shared_drive(
             yield file
             continue
 
-        resolved_file = _resolve_file_or_shortcut(ops, user_email, file, field_type)
+        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
         if resolved_file is None:
             continue
         # If we found any files, mark this drive as traversed. When a user has access to a drive,
@@ -577,7 +593,7 @@ def get_all_files_in_my_drive_and_shared(
                 variant=DriveCorpus.USER,
                 user_email=user_email,
                 query=folder_query,
-                fields=_get_fields_for_file_type(field_type),
+                fields=get_fields_for_file_type(field_type),
             )
         ):
             update_traversed_ids_func(folder[GoogleFields.ID])
@@ -598,7 +614,7 @@ def get_all_files_in_my_drive_and_shared(
             variant=DriveCorpus.USER,
             user_email=user_email,
             query=file_query,
-            fields=_get_fields_for_file_type(field_type),
+            fields=get_fields_for_file_type(field_type),
             order_by=GoogleFields.MODIFIED_TIME.value,
             page_token=page_token,
             max_num_pages=max_num_pages,
@@ -645,7 +661,7 @@ def get_all_files_for_oauth(
             variant=corpus,
             user_email=user_email,
             query=file_query,
-            fields=_get_fields_for_file_type(field_type),
+            fields=get_fields_for_file_type(field_type),
             order_by=GoogleFields.MODIFIED_TIME.value,
             page_token=page_token,
             max_num_pages=max_num_pages,

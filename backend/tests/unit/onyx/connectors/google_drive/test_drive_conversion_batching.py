@@ -375,7 +375,7 @@ def test_checkpoint_load_submits_conversions_in_user_turns() -> None:
     with (
         _patched(connector, conversions),
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_WORKERS", 1),
-        patch.object(connector, "_fetch_drive_items", return_value=iter(files)),
+        patch.object(connector, "_fetch_drive_items", return_value=(f for f in files)),
     ):
         out = list(
             connector._load_from_checkpoint(

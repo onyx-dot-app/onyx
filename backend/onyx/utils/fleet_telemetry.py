@@ -18,6 +18,7 @@ import requests
 
 from onyx.configs.app_configs import DISABLE_TELEMETRY, DISABLE_VECTOR_DB, WEB_DOMAIN
 from onyx.configs.constants import OnyxCeleryQueues
+from onyx.connectors.models import DocumentTypeLabel
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -103,6 +104,8 @@ CONNECTOR_ROW_SETTINGS: tuple[str, ...] = (
     "auto_sync_enabled",
     "permission_sync_enabled",
 )
+# The document types a corpus count can break down by.
+_DOCUMENT_TYPES: frozenset[str] = frozenset(label.value for label in DocumentTypeLabel)
 # Nested maps: their values must be numbers or booleans.
 _NESTED_FIELDS: dict[str, frozenset[str]] = {
     "metadata": frozenset(
@@ -121,6 +124,8 @@ _NESTED_FIELDS: dict[str, frozenset[str]] = {
             "write_errors",
         }
     ),
+    "expected_by_type": _DOCUMENT_TYPES,
+    "expected_bytes_by_type": _DOCUMENT_TYPES,
 }
 # The keys each event type may carry. The fleet service checks the values.
 _FIELDS: dict[str, frozenset[str]] = {
@@ -244,6 +249,20 @@ _FIELDS: dict[str, frozenset[str]] = {
             "cpu_limit_cores",
             "cpu_throttled_seconds",
             "shared",
+        }
+    ),
+    "corpus": frozenset(
+        {
+            "attempt_id",
+            "cc_pair_id",
+            "connector_type",
+            "window_start",
+            "window_end",
+            "duration_ms",
+            "expected_docs",
+            "expected_partial",
+            "expected_by_type",
+            "expected_bytes_by_type",
         }
     ),
     "runtime": frozenset({"service_instance_id", "reason"}),
@@ -839,6 +858,40 @@ def emit_stage_counter(
             },
             tenant_id=tenant_id,
         )
+
+
+def emit_corpus_count(
+    attempt_id: int,
+    cc_pair_id: int,
+    connector_type: str,
+    *,
+    window_start: float,
+    window_end: float,
+    duration_ms: int,
+    docs_by_type: dict[DocumentTypeLabel, int],
+    bytes_by_type: dict[DocumentTypeLabel, int],
+    partial: bool,
+) -> None:
+    """One event when the listing of an attempt's window finishes: how many
+    documents it found, by type, with their bytes. ``partial`` means the
+    listing could not reach a part of the source, so the real total is at
+    least this. The fleet compares the count with the attempt's own
+    docs_indexed."""
+    emit_telemetry(
+        "corpus",
+        {
+            "attempt_id": attempt_id,
+            "cc_pair_id": cc_pair_id,
+            "connector_type": connector_type,
+            "window_start": window_start,
+            "window_end": window_end,
+            "duration_ms": duration_ms,
+            "expected_docs": sum(docs_by_type.values()),
+            "expected_partial": partial,
+            "expected_by_type": {k.value: v for k, v in docs_by_type.items()},
+            "expected_bytes_by_type": {k.value: v for k, v in bytes_by_type.items()},
+        },
+    )
 
 
 def error_category(error: BaseException) -> str:
