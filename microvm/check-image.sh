@@ -6,6 +6,7 @@
 # - nsenter is on PATH.
 # - mkfs.ext4 is on PATH and supports -d (managed drive images).
 # - mkfs.xfs is on PATH and makes reflink file systems (the loop store).
+# - python3 is not in the image, and the xfsprogs dpkg record is (for scanners).
 # - /opt/craft-fc passes deployment/craft-fc/check-artifacts.sh.
 # - firecracker and jailer match the SHA256 pins that the agent checks at start
 #   (internal/binaries/binaries.go), so the agent does not refuse them.
@@ -45,11 +46,24 @@ else
   fail "mkfs.ext4 -d does not work (e2fsprogs)"
 fi
 
-# Like the loop store image (internal/loopstore): a sparse file with reflink=1.
-if run sh -c 'truncate -s 1G /tmp/s.img && mkfs.xfs -q -K -m reflink=1 /tmp/s.img' >/dev/null; then
+# The loop store image flags (internal/loopstore makeImage) on a sparse file.
+if run sh -c 'truncate -s 1G /tmp/s.img && mkfs.xfs -q -K -s size=4096 -m reflink=1 -L craft-fc /tmp/s.img' >/dev/null; then
   pass "mkfs.xfs -m reflink=1"
 else
   fail "mkfs.xfs -m reflink=1 does not work (xfsprogs)"
+fi
+
+# The image copies mkfs.xfs, not the xfsprogs package, which pulls in python3.
+if run sh -c 'command -v python3 || ls -d /usr/bin/python3* /usr/lib/python3* 2>/dev/null | grep -q .' >/dev/null 2>&1; then
+  fail "python3 is in the image"
+else
+  pass "no python3"
+fi
+
+if run test -s /var/lib/dpkg/status.d/xfsprogs; then
+  pass "xfsprogs dpkg record"
+else
+  fail "/var/lib/dpkg/status.d/xfsprogs is missing: scanners do not see mkfs.xfs"
 fi
 
 export_dir="$(mktemp -d)"
