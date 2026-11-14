@@ -6,6 +6,7 @@ when nothing runs. The first failure is raised after the running tasks end."""
 import contextvars
 import threading
 import time
+from collections.abc import Iterator
 
 import pytest
 
@@ -49,10 +50,21 @@ def test_the_limit_halves_on_pushback_and_recovers() -> None:
 
 
 def test_growth_is_paced_by_time_not_by_calls() -> None:
-    concurrency = AdaptiveConcurrency(PushbackObserver(), initial=2, maximum=8)
+    now = 100.0
+    concurrency = AdaptiveConcurrency(
+        PushbackObserver(), initial=2, maximum=8, clock=lambda: now
+    )
+    # The initial limit holds for the first interval.
+    for _ in range(50):
+        concurrency.observe()
+    assert concurrency.limit == 2
+    now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
     for _ in range(50):
         concurrency.observe()
     assert concurrency.limit == 3
+    now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
+    concurrency.observe()
+    assert concurrency.limit == 4
 
 
 def test_a_cut_holds_through_the_cooldown() -> None:
@@ -111,6 +123,43 @@ def test_a_cut_applies_to_the_next_task_start() -> None:
     # The cooldown holds the limit at 4 for the whole run.
     assert concurrency.limit == 4
     assert 0 < peak_after_cut <= 4
+
+
+class _PushbackAfterFirstStart(PushbackObserver):
+    """Reports pushback at the second read: a task of the batch that is
+    starting saw it."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.reads = 0
+
+    def take_hits(self) -> int:
+        self.reads += 1
+        return 1 if self.reads == 2 else 0
+
+
+def test_pushback_cuts_the_batch_that_is_starting() -> None:
+    concurrency = AdaptiveConcurrency(_PushbackAfterFirstStart(), initial=8, maximum=8)
+    pool = AdaptiveTaskPool(concurrency)
+    lock = threading.Lock()
+    active = 0
+    peak = 0
+
+    def page() -> None:
+        nonlocal active, peak
+        with lock:
+            active += 1
+            peak = max(peak, active)
+        time.sleep(0.05)
+        with lock:
+            active -= 1
+
+    for _ in range(8):
+        pool.add(page)
+    pool.run()
+
+    assert concurrency.limit == 4
+    assert peak <= 4
 
 
 def test_a_task_can_return_follow_up_tasks() -> None:
@@ -243,3 +292,48 @@ def test_the_first_failure_stops_new_work_and_is_raised() -> None:
     with pytest.raises(RuntimeError, match="boom"):
         pool.run()
     assert seen == [0, 1]
+
+
+def test_a_failing_follow_up_generator_waits_for_running_tasks() -> None:
+    concurrency = AdaptiveConcurrency(PushbackObserver(), initial=2, maximum=2)
+    pool = AdaptiveTaskPool(concurrency)
+    slow_task_ended = threading.Event()
+    started: list[str] = []
+
+    def slow() -> None:
+        started.append("slow")
+        time.sleep(0.2)
+        slow_task_ended.set()
+
+    def follow_ups() -> Iterator[AdaptiveTask]:
+        started.append("generator")
+        raise RuntimeError("boom")
+        yield slow
+
+    pool.add(slow)
+    pool.add(follow_ups)
+    pool.add(lambda: started.append("late"))
+    with pytest.raises(RuntimeError, match="boom"):
+        pool.run()
+
+    # The pool raised only after the running task ended, and started nothing
+    # after the failure.
+    assert slow_task_ended.is_set()
+    assert "late" not in started
+
+
+def test_worker_threads_are_reused() -> None:
+    concurrency = AdaptiveConcurrency(PushbackObserver(), initial=2, maximum=2)
+    pool = AdaptiveTaskPool(concurrency)
+    threads: set[int] = set()
+    lock = threading.Lock()
+
+    def page() -> None:
+        with lock:
+            threads.add(threading.get_ident())
+
+    for _ in range(20):
+        pool.add(page)
+    pool.run()
+
+    assert len(threads) <= 2
