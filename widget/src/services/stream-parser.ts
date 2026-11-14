@@ -4,7 +4,7 @@
 
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
-import { readOutcome } from "@/services/approvals";
+import { boundArguments, readOutcome } from "@/services/approvals";
 
 export interface ParsedMessage {
   message: ChatMessage;
@@ -210,7 +210,13 @@ export function processPacket(
       return {
         message: {
           ...base,
-          approvals: [...others, { request: obj, outcome: null }],
+          approvals: [
+            ...others,
+            {
+              request: { ...obj, arguments: boundArguments(obj.arguments) },
+              outcome: null,
+            },
+          ],
         },
         status: "",
       };

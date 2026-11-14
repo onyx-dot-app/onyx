@@ -60,8 +60,9 @@ export function readOutcome(value: unknown): ApprovalOutcome | null {
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision from
- * this widget decides it; a stopped response closes the request. The deadline
- * never does: the server resolves an expired request.
+ * this widget decides it; a stopped response closes the request. A response
+ * stops only when the server ends it, not when this widget loses its stream.
+ * The deadline never decides: the server resolves an expired request.
  */
 export function approvalStatus(
   entry: ApprovalEntry,
@@ -80,14 +81,6 @@ export function approvalStatus(
   }
 }
 
-/** A message's response stopped when it no longer streams in this widget. */
-export function isResponseStopped(
-  message: ChatMessage,
-  widgetStreaming: boolean
-): boolean {
-  return !(message.isStreaming && widgetStreaming);
-}
-
 /** The status the server's answer to a decision from this widget shows. */
 export function decidedStatus(
   response: ApprovalDecisionResponse
@@ -102,17 +95,15 @@ export function decidedStatus(
 /** The first request that still waits for this user. */
 export function findPendingApproval(
   messages: ChatMessage[],
-  widgetStreaming: boolean,
   localStatuses: ReadonlyMap<string, ApprovalStatus>
 ): ApprovalEntry | null {
   for (const message of messages) {
-    const stopped = isResponseStopped(message, widgetStreaming);
     const pending = message.approvals?.find(
       (entry) =>
         approvalStatus(
           entry,
           localStatuses.get(entry.request.approval_id),
-          stopped
+          !message.isStreaming
         ) === "pending"
     );
     if (pending) return pending;
@@ -155,6 +146,71 @@ export function approvalDeadline(
     minute: "2-digit",
   }).format(date);
   return `Approve by ${time}`;
+}
+
+// Limits on a tool call's arguments, which come from the model, before the
+// widget stores them in sessionStorage or renders them. Lengths count UTF-16
+// code units, the unit sessionStorage and the DOM store. The per-value limits
+// keep one large value from hiding the arguments after it.
+const MAX_ARGUMENT_STRING_CHARS = 2_000;
+const MAX_ARGUMENT_CHARS = 20_000;
+const MAX_ARGUMENT_ITEMS = 50;
+// Values in the whole argument tree, containers included
+const MAX_ARGUMENT_VALUES = 500;
+const MAX_ARGUMENT_DEPTH = 8;
+const OMITTED = "…";
+
+/**
+ * A copy of the arguments within the limits. Past a limit, a string ends in
+ * "…", a container lists its first values and then "…", and a deeper value
+ * becomes "…".
+ */
+export function boundArguments(
+  args: Record<string, unknown>
+): Record<string, unknown> {
+  let chars = 0;
+  let values = 0;
+  const full = () =>
+    values >= MAX_ARGUMENT_VALUES || chars >= MAX_ARGUMENT_CHARS;
+  const clip = (text: string): string => {
+    const room = Math.min(
+      MAX_ARGUMENT_STRING_CHARS,
+      MAX_ARGUMENT_CHARS - chars
+    );
+    chars += Math.min(text.length, room);
+    return text.length > room ? `${text.slice(0, room)}${OMITTED}` : text;
+  };
+  const bound = (value: unknown, depth: number): unknown => {
+    values += 1;
+    if (typeof value === "string") return clip(value);
+    if (value === null || typeof value !== "object") return value;
+    if (depth >= MAX_ARGUMENT_DEPTH) return OMITTED;
+    if (Array.isArray(value)) {
+      const items: unknown[] = [];
+      for (const item of value) {
+        if (items.length >= MAX_ARGUMENT_ITEMS || full()) {
+          items.push(OMITTED);
+          break;
+        }
+        items.push(bound(item, depth + 1));
+      }
+      return items;
+    }
+    const entries: [string, unknown][] = [];
+    for (const key in value) {
+      if (entries.length >= MAX_ARGUMENT_ITEMS || full()) {
+        entries.push([OMITTED, OMITTED]);
+        break;
+      }
+      entries.push([
+        clip(key),
+        bound((value as Record<string, unknown>)[key], depth + 1),
+      ]);
+    }
+    // fromEntries defines own keys, so a "__proto__" key stays plain data.
+    return Object.fromEntries(entries);
+  };
+  return bound(args ?? {}, 0) as Record<string, unknown>;
 }
 
 // Past this length a string value shows Show more.

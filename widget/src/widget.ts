@@ -34,7 +34,6 @@ import {
   argumentRows,
   decidedStatus,
   findPendingApproval,
-  isResponseStopped,
   readOutcome,
 } from "./services/approvals";
 import { MessageIDs, processPacket } from "./services/stream-parser";
@@ -189,11 +188,9 @@ export class OnyxChatWidget extends LitElement {
       if (!stored) return;
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
-      // A response saved while it ran, e.g. one waiting for a decision,
-      // shows again if it still runs.
-      if (stored.messages.some((message) => message.isStreaming)) {
-        await this.resumeStream(stored.sessionId);
-      }
+      // A response that still runs, e.g. one waiting for a decision, shows
+      // again, even when the page closed before it saved any of it.
+      await this.resumeStream(stored.sessionId);
     })();
   }
 
@@ -419,11 +416,7 @@ export class OnyxChatWidget extends LitElement {
 
   /** The request that still waits for this user, if any. */
   private get pendingApproval(): ApprovalEntry | null {
-    return findPendingApproval(
-      this.messages,
-      this.isStreaming,
-      this.localApprovalStatuses
-    );
+    return findPendingApproval(this.messages, this.localApprovalStatuses);
   }
 
   /** Brings a waiting card into view and focuses its first decision. */
@@ -504,7 +497,8 @@ export class OnyxChatWidget extends LitElement {
       this.abortController === controller && !controller.signal.aborted;
     let sentSessionId: string | undefined;
     let acknowledged = false;
-    // Set when the server reports a waiting request this widget does not show.
+    // Set when the response runs on without this stream: the server reports a
+    // waiting request this widget does not show, or the stream ended first.
     let reattach = false;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
@@ -579,14 +573,16 @@ export class OnyxChatWidget extends LitElement {
           );
         }
       );
+      reattach = this.messages.some((m) => m.isStreaming);
     } catch (err: unknown) {
       if (!stillOurs()) return;
       console.error("Failed to send message:", err);
       if (!(err instanceof Error && err.name === "AbortError")) {
-        reattach =
+        const blocked =
           err instanceof ApiError &&
           err.errorCode === APPROVAL_PENDING_ERROR_CODE;
-        this.error = reattach
+        reattach = blocked || acknowledged;
+        this.error = blocked
           ? "This chat waits for your decision on a tool request. Your message was not sent."
           : err instanceof Error
             ? err.message
@@ -637,7 +633,7 @@ export class OnyxChatWidget extends LitElement {
 
   /**
    * Shows the session's running response again, so a request that waits for a
-   * decision can be decided after a reload or a blocked send.
+   * decision can be decided after a reload, a blocked send, or a lost stream.
    */
   private async resumeStream(sessionId: string) {
     if (this.abortController) return;
@@ -656,10 +652,54 @@ export class OnyxChatWidget extends LitElement {
         stillOurs,
         () => {}
       );
-      // The response ended, possibly before this page saw its end (a 404
-      // when it finished while the page was closed). Its last saved state
-      // stays, and the next load does not resume it again.
+      if (!stillOurs()) return;
+      // The server can still save the turn after its stream ends.
+      await this.apiService.waitForSessionIdle(
+        sessionId,
+        controller.signal,
+        () => {
+          if (stillOurs())
+            this.streamingStatus =
+              "Waiting to confirm that this conversation is ready.";
+        }
+      );
+      // The replay ended before the response did: there was no replay (a 404,
+      // e.g. the run finished while the page was closed), or the replay
+      // buffer ended early. The server's saved copy finishes the response.
+      // On a failure the snapshot stays unfinished, so the next load tries
+      // again.
       if (stillOurs() && this.messages.some((message) => message.isStreaming)) {
+        const session = await this.apiService.getChatSession(
+          sessionId,
+          controller.signal
+        );
+        if (!stillOurs()) return;
+        const assistantIds = session.messages
+          .filter((message) => message.message_type === "assistant")
+          .map((message) => message.message_id);
+        for (const message of this.messages) {
+          if (!message.isStreaming || typeof message.id !== "number") continue;
+          const replay = session.packets[assistantIds.indexOf(message.id)];
+          if (!replay) continue;
+          const assistantMessageId = message.id;
+          await this.followStream(
+            (async function* (): AsyncGenerator<Packet, void, unknown> {
+              yield {
+                obj: {
+                  user_message_id: null,
+                  reserved_assistant_message_id: assistantMessageId,
+                },
+              };
+              yield* replay;
+            })(),
+            sessionId,
+            identity,
+            stillOurs,
+            () => {}
+          );
+          if (!stillOurs()) return;
+        }
+        // A response the server has no saved copy of keeps its snapshot.
         this.messages = this.messages.map((message) =>
           message.isStreaming ? { ...message, isStreaming: false } : message
         );
@@ -958,7 +998,7 @@ export class OnyxChatWidget extends LitElement {
                   approvalStatus(
                     entry,
                     this.localApprovalStatuses.get(entry.request.approval_id),
-                    isResponseStopped(msg, this.isStreaming)
+                    !msg.isStreaming
                   )
                 )
               )}
@@ -1018,14 +1058,14 @@ export class OnyxChatWidget extends LitElement {
                       ? ICON_X
                       : ICON_CLOCK
                 }
-                <span>${record}</span>
+                <span title=${record}>${record}</span>
               </div>`
             : html`<div class="approval-card">
                 <div class="approval-header">
                   <span class="approval-spinner" aria-hidden="true"
                     >${ICON_LOADER}</span
                   >
-                  <span class="approval-title">${title}</span>
+                  <span class="approval-title" title=${title}>${title}</span>
                   ${
                     deadline
                       ? html`<span class="approval-deadline">${deadline}</span>`
