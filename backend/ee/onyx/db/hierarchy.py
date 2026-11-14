@@ -49,7 +49,7 @@ def _build_connector_access_filter(user_id: UUID) -> ColumnElement[bool]:
     return stmt.exists()
 
 
-def _build_hierarchy_access_filter(
+def build_hierarchy_access_filter(
     db_session: Session,
     user_email: str,
     external_group_ids: list[str],
@@ -111,7 +111,7 @@ def _get_accessible_hierarchy_nodes_for_source(
         HierarchyNode.node_type != HierarchyNodeType.STUB,
     )
     stmt = stmt.where(
-        _build_hierarchy_access_filter(
+        build_hierarchy_access_filter(
             db_session, user_email, external_group_ids, user_id
         )
     )
@@ -137,7 +137,7 @@ def _search_accessible_hierarchy_nodes(
                 [HierarchyNodeType.STUB, HierarchyNodeType.SOURCE]
             ),
             HierarchyNode.display_name.ilike(pattern, escape="\\"),
-            _build_hierarchy_access_filter(
+            build_hierarchy_access_filter(
                 db_session, user_email, external_group_ids, user_id
             ),
         )
@@ -159,7 +159,7 @@ def _filter_accessible_hierarchy_node_ids(
     """EE version: keep only the node ids the user can access."""
     stmt = select(HierarchyNode.id).where(HierarchyNode.id.in_(node_ids))
     stmt = stmt.where(
-        _build_hierarchy_access_filter(
+        build_hierarchy_access_filter(
             db_session, user_email, external_group_ids, user_id
         )
     )
