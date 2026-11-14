@@ -28,7 +28,7 @@ export const StoppedHeader = React.memo(function StoppedHeader({
   );
 
   const label = (
-    <div className="px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+    <div className="flex-1 min-w-0 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
       <Text as="p" font="main-ui-action" color="text-03">
         {t("interruptedThinking.label")}
       </Text>

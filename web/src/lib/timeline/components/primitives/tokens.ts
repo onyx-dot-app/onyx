@@ -35,8 +35,8 @@ export type TimelineTopSpacerVariant = "default" | "first" | "none";
  * Default sizing for the timeline layout. Override in TimelineRoot if needed.
  */
 export const timelineTokenDefaults: TimelineTokens = {
-  railWidth: "2.25rem",
-  headerRowHeight: "2.25rem",
+  railWidth: "var(--spacing-block-36)",
+  headerRowHeight: "var(--spacing-block-36)",
   stepHeaderHeight: "2rem",
   topConnectorHeight: "0.5rem",
   firstTopSpacerHeight: "0.25rem",
@@ -46,8 +46,8 @@ export const timelineTokenDefaults: TimelineTokens = {
   stepHeaderRightSectionWidth: "2.125rem",
   headerPaddingLeft: "0.5rem",
   headerPaddingRight: "0.25rem",
-  headerTextPaddingX: "0.375rem",
-  headerTextPaddingY: "0.125rem",
+  headerTextPaddingX: "var(--padding-text-4)",
+  headerTextPaddingY: "var(--padding-text-2)",
   stepTopPadding: "0.25rem",
   agentMessagePaddingLeft: "0.12rem",
   timelineCommonTextPadding: "0.12rem",

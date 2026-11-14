@@ -135,7 +135,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
   if (isMemoryOnly) {
     return (
       <div className="flex w-full justify-between">
-        <div className="flex items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+        <div className="flex flex-1 min-w-0 items-center px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
           <MemoryTagWithTooltip
             memoryText={memoryText}
             memoryOperation={memoryOperation}
@@ -171,7 +171,7 @@ export const CompletedHeader = React.memo(function CompletedHeader({
       : null;
 
   const summary = (
-    <div className="flex items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
+    <div className="flex flex-1 min-w-0 items-center gap-2 px-(--timeline-header-text-padding-x) py-(--timeline-header-text-padding-y)">
       <Text as="p" font="main-ui-action" color="text-03">
         {isExpanded ? durationText : (imageText ?? durationText)}
       </Text>
