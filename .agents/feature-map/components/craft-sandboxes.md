@@ -349,9 +349,15 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   exec records; its artifacts stay. A user delete (`delete_user_from_db`
   in a background thread, `UserManager.delete`) and the last-admin tenant
   delete stop the VM and delete every save, artifact and record of the
-  sandbox. A purge mark makes a save in progress drop its
-  archive instead of committing. Saves and artifacts are indexed per
-  sandbox in the tenant cache.
+  sandbox. At the end of each chat retention chain
+  (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
+  `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
+  heavy worker has the host agent client certificates). It purges up to
+  100 saved sessions whose chat session is gone or whose build session had
+  no activity in the window.
+  A purge mark makes a save in progress drop its archive instead of
+  committing. Saves and artifacts are indexed per sandbox in the tenant
+  cache.
 
 ---
 
