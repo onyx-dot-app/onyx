@@ -38,6 +38,7 @@ from onyx.llm.constants import (
 )
 from onyx.llm.model_capabilities import (
     catalog_model_or_alias_supports_image_input,
+    catalog_model_supports_image_input,
     get_max_input_tokens,
 )
 from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
@@ -1788,9 +1789,7 @@ def sync_auto_mode_models(
         if model_name in existing_names:
             continue
         supported_flows = _model_protocol_flows(provider.provider, model_name, None)
-        if catalog_model_or_alias_supports_image_input(
-            model_name, provider.provider, provider.deployment_name
-        ):
+        if catalog_model_supports_image_input(model_name, provider.provider):
             supported_flows.add(LLMModelFlowType.VISION)
         insert_new_model_configuration__no_commit(
             db_session=db_session,

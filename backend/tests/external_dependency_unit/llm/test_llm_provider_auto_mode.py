@@ -343,6 +343,32 @@ def test_sync_stores_image_support_for_released_models(
     assert default_vision.name == "gpt-4o"
 
 
+def test_sync_reads_image_support_from_each_released_model_name(
+    db_session: Session, provider_name: str
+) -> None:
+    provider = _create_provider(
+        db_session,
+        provider_name,
+        LlmProviderNames.OPENAI,
+        is_auto_mode=True,
+        models={"gpt-a": True},
+    )
+    # A deployment alias is one name for the whole provider, so it must not
+    # mark every released model as image-capable.
+    provider.deployment_name = "gpt-4o"
+    db_session.commit()
+
+    sync_auto_mode_models(
+        db_session=db_session,
+        provider=provider,
+        released_model_names=["gpt-3.5-turbo"],
+        retired_model_names=set(),
+    )
+    db_session.commit()
+
+    assert _flows(db_session, provider_name)["gpt-3.5-turbo"] == {LLMModelFlowType.CHAT}
+
+
 def test_vision_default_accepts_a_model_stored_without_image_support(
     db_session: Session,
     provider_name: str,
