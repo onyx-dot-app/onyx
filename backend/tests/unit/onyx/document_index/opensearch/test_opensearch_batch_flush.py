@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from onyx.access.models import DocumentAccess
@@ -63,6 +64,7 @@ def _make_index() -> tuple[OpenSearchDocumentIndex, MagicMock]:
     mock_client = MagicMock()
     mock_bulk = MagicMock()
     mock_client.bulk_index_documents = mock_bulk
+    mock_client.delete_by_query.return_value = 0
 
     tenant_state = TenantState(tenant_id="test_tenant", multitenant=False)
 
@@ -97,8 +99,7 @@ def test_single_doc_under_batch_limit_flushes_once() -> None:
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
     metadata = _make_metadata(doc_id, num_chunks)
 
-    with patch.object(index, "delete", return_value=0):
-        index.index(chunks, metadata)
+    index.index(chunks, metadata)
 
     assert mock_bulk.call_count == 1
     batch_arg = mock_bulk.call_args_list[0]
@@ -117,8 +118,7 @@ def test_single_doc_over_batch_limit_flushes_multiple_times() -> None:
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
     metadata = _make_metadata(doc_id, num_chunks)
 
-    with patch.object(index, "delete", return_value=0):
-        index.index(chunks, metadata)
+    index.index(chunks, metadata)
 
     # 250 chunks / 100 per batch = 3 flushes (100 + 100 + 50)
     assert mock_bulk.call_count == 3
@@ -139,8 +139,7 @@ def test_single_doc_exactly_at_batch_limit() -> None:
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
     metadata = _make_metadata(doc_id, num_chunks)
 
-    with patch.object(index, "delete", return_value=0):
-        index.index(chunks, metadata)
+    index.index(chunks, metadata)
 
     # 100 chunks hit the >= check on chunk 101 which doesn't exist,
     # so final flush handles all 100
@@ -164,8 +163,7 @@ def test_single_doc_one_over_batch_limit() -> None:
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
     metadata = _make_metadata(doc_id, num_chunks)
 
-    with patch.object(index, "delete", return_value=0):
-        index.index(chunks, metadata)
+    index.index(chunks, metadata)
 
     assert mock_bulk.call_count == 2
     batch_sizes = [len(call.kwargs["documents"]) for call in mock_bulk.call_args_list]
@@ -176,26 +174,27 @@ def test_single_doc_one_over_batch_limit() -> None:
     "onyx.document_index.opensearch.opensearch_document_index.MAX_CHUNKS_PER_DOC_BATCH",
     100,
 )
-def test_multiple_docs_each_under_limit_flush_per_doc() -> None:
-    """Multiple documents each under the batch limit should flush once per document."""
+def test_multiple_docs_under_limit_share_one_delete_and_one_bulk() -> None:
+    """Documents that fit in one group share one delete and one bulk call."""
     index, mock_bulk = _make_index()
     chunks = []
     for doc_idx in range(3):
         doc_id = f"doc_{doc_idx}"
-        chunks.extend(_make_chunk(doc_id, chunk_idx) for chunk_idx in range(50))
+        chunks.extend(_make_chunk(doc_id, chunk_idx) for chunk_idx in range(30))
 
     metadata = IndexingMetadata(
         doc_id_to_chunk_cnt_diff={
-            f"doc_{i}": IndexingMetadata.ChunkCounts(old_chunk_cnt=0, new_chunk_cnt=50)
+            f"doc_{i}": IndexingMetadata.ChunkCounts(old_chunk_cnt=0, new_chunk_cnt=30)
             for i in range(3)
         },
     )
 
-    with patch.object(index, "delete", return_value=0):
-        index.index(chunks, metadata)
+    results = index.index(chunks, metadata)
 
-    # 3 documents = 3 flushes (one per doc boundary + final)
-    assert mock_bulk.call_count == 3
+    assert mock_bulk.call_count == 1
+    assert len(mock_bulk.call_args.kwargs["documents"]) == 90
+    cast(MagicMock, index._client).delete_by_query.assert_called_once()
+    assert [r.document_id for r in results] == ["doc_0", "doc_1", "doc_2"]
 
 
 @patch(
@@ -211,10 +210,12 @@ def test_delete_called_once_per_document() -> None:
     chunks = [_make_chunk(doc_id, i) for i in range(num_chunks)]
     metadata = _make_metadata(doc_id, num_chunks)
 
-    with patch.object(index, "delete", return_value=0) as mock_delete:
-        index.index(chunks, metadata)
+    index.index(chunks, metadata)
 
-    mock_delete.assert_called_once_with(doc_id, None)
+    mock_delete: MagicMock = cast(MagicMock, index._client).delete_by_query
+    mock_delete.assert_called_once()
+    query = mock_delete.call_args.args[0]
+    assert {"terms": {"document_id": [doc_id]}} in query["query"]["bool"]["filter"]
 
 
 def test_index_writes_all_enriched_source_types() -> None:
@@ -228,8 +229,7 @@ def test_index_writes_all_enriched_source_types() -> None:
         }
     )
 
-    with patch.object(index, "delete", return_value=0):
-        index.index([chunk], _make_metadata("doc_1", 1))
+    index.index([chunk], _make_metadata("doc_1", 1))
 
     indexed_chunk = mock_bulk.call_args.kwargs["documents"][0]
     assert indexed_chunk.model_dump()["source_type"] == [
