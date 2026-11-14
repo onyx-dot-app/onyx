@@ -169,32 +169,93 @@ def test_agent_pod_spec() -> None:
     assert any(a.startswith("--api-server-url=http") for a in args)
     assert env["NODE_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "spec.nodeName"
     assert "--watch-node-drain" in args
-    assert "--drain-taints=node.kubernetes.io/unschedulable" in args
+    # The cluster autoscaler taints a node it removes and does not cordon it.
+    assert (
+        "--drain-taints=node.kubernetes.io/unschedulable,ToBeDeletedByClusterAutoscaler"
+        in args
+    )
     assert "--drain-poll-interval=10s" in args
+    assert "--scale-down-guard" in args
+    assert "--scale-down-guard-grace=10m" in args
 
 
-def test_drain_watch_rbac_is_get_nodes_only() -> None:
-    docs = _render(_FIRECRACKER)
+def _cluster_rbac(docs: list[dict[str, Any]]) -> dict[str, list[Any]]:
+    """ClusterRole rules by name suffix, each checked against its binding."""
     account = _by_kind(docs, "ServiceAccount")
-    role = _by_kind(docs, "ClusterRole")
-    binding = _by_kind(docs, "ClusterRoleBinding")
+    bindings = {
+        d["roleRef"]["name"]: d for d in docs if d["kind"] == "ClusterRoleBinding"
+    }
+    out: dict[str, list[Any]] = {}
+    for role in (d for d in docs if d["kind"] == "ClusterRole"):
+        name = role["metadata"]["name"]
+        assert bindings.pop(name)["subjects"] == [
+            {
+                "kind": "ServiceAccount",
+                "name": account["metadata"]["name"],
+                "namespace": _AGENT_NS,
+            }
+        ]
+        out["node-" + name.rsplit("-node-", 1)[1]] = role["rules"]
+    assert not bindings
+    return out
 
-    assert account["metadata"]["namespace"] == _AGENT_NS
-    assert role["rules"] == [
-        {"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}
+
+def test_node_rbac_is_get_and_patch_nodes_only() -> None:
+    docs = _render(_FIRECRACKER)
+
+    assert _by_kind(docs, "ServiceAccount")["metadata"]["namespace"] == _AGENT_NS
+    assert _cluster_rbac(docs) == {
+        "node-read": [{"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}],
+        "node-annotate": [
+            {"apiGroups": [""], "resources": ["nodes"], "verbs": ["patch"]}
+        ],
+    }
+
+
+def test_scale_down_guard_grace_and_off() -> None:
+    docs = _render(
+        [*_FIRECRACKER, "--set-string", "craft.hostAgent.scaleDownGuard.grace=2m"]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
     ]
-    assert binding["roleRef"]["name"] == role["metadata"]["name"]
-    assert binding["subjects"] == [
-        {
-            "kind": "ServiceAccount",
-            "name": account["metadata"]["name"],
-            "namespace": _AGENT_NS,
-        }
+    assert "--scale-down-guard-grace=2m" in args
+
+    docs = _render(
+        [*_FIRECRACKER, "--set", "craft.hostAgent.scaleDownGuard.enabled=false"]
+    )
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
     ]
+    assert _cluster_rbac(docs) == {
+        "node-read": [{"apiGroups": [""], "resources": ["nodes"], "verbs": ["get"]}]
+    }
+    assert not [a for a in args if "scale-down" in a]
+    assert "--watch-node-drain" in args
 
 
-def test_drain_watch_off_keeps_only_the_egress_ca_rbac() -> None:
+def test_scale_down_guard_without_drain_watch_can_read_nodes() -> None:
     docs = _render([*_FIRECRACKER, "--set", "craft.hostAgent.drainWatch.enabled=false"])
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    # The guard reads the Node before it patches it.
+    assert set(_cluster_rbac(docs)) == {"node-read", "node-annotate"}
+    assert "--scale-down-guard" in args
+    assert not [a for a in args if "drain" in a]
+
+
+def test_drain_watch_and_guard_off_keep_only_the_egress_ca_rbac() -> None:
+    docs = _render(
+        [
+            *_FIRECRACKER,
+            "--set",
+            "craft.hostAgent.drainWatch.enabled=false",
+            "--set",
+            "craft.hostAgent.scaleDownGuard.enabled=false",
+        ]
+    )
     kinds = {d["kind"] for d in docs}
     spec = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]
     args = spec["containers"][0]["args"]
@@ -202,15 +263,17 @@ def test_drain_watch_off_keeps_only_the_egress_ca_rbac() -> None:
     assert not kinds & {"ClusterRole", "ClusterRoleBinding"}
     assert {"ServiceAccount", "Role", "RoleBinding"} <= kinds
     assert spec["automountServiceAccountToken"] is True
-    assert not [a for a in args if "drain" in a]
+    assert not [a for a in args if "drain" in a or "scale-down" in a]
 
 
-def test_drain_watch_and_egress_ca_off_have_no_rbac() -> None:
+def test_drain_watch_guard_and_egress_ca_off_have_no_rbac() -> None:
     docs = _render(
         [
             *_FIRECRACKER,
             "--set",
             "craft.hostAgent.drainWatch.enabled=false",
+            "--set",
+            "craft.hostAgent.scaleDownGuard.enabled=false",
             "--set",
             "craft.hostAgent.egressCA.enabled=false",
         ]

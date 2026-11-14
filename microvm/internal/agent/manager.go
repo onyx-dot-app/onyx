@@ -608,6 +608,14 @@ func (m *Manager) vmSlotsUsedLocked() int {
 	return n
 }
 
+// VMSlotsUsed counts the VMs that may run on the node: starting and running
+// VMs, template build VMs and processes in doubt.
+func (m *Manager) VMSlotsUsed() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.vmSlotsUsedLocked()
+}
+
 // rescanAtCap scans the processes again when processes in doubt hold slots
 // of a node at its cap, so a doubt whose process exited frees its slot.
 func (m *Manager) rescanAtCap() {

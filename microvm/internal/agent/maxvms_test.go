@@ -42,7 +42,7 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	}
 	_, _, err = f.m.BuildSlot("tpl-def", 1024)
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
-	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 {
+	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.VMSlotsUsed() != 2 {
 		t.Fatalf("NodeInfo with a build %+v %v", info, err)
 	}
 
