@@ -32,6 +32,50 @@ The `WARN filesystem` line for the ext4 root disk is also expected.
   then `gcloud container clusters get-credentials <cluster> --location=<region> --dns-endpoint`.
 </Note>
 
+<Warning>
+  {/* depends: proxy egress fix (sandbox-proxy egress NetworkPolicy on Dataplane V2) */} On GKE Dataplane V2,
+  the sandbox proxy egress NetworkPolicy of the chart blocks DNS and in-cluster traffic from the sandbox proxy.
+  Dataplane V2 does not match pod IP addresses with `ipBlock` rules, and NodeLocal DNSCache pods answer DNS.
+  Then microVM egress fails: `curl` in the sandbox hangs,
+  and the sandbox proxy logs `Temporary failure in name resolution`. Until a chart fix ships,
+  apply this extra NetworkPolicy in the release namespace. NetworkPolicies add up, so it only adds the missing paths.
+
+  ```yaml sandbox-proxy-dns.yaml
+  apiVersion: networking.k8s.io/v1
+  kind: NetworkPolicy
+  metadata:
+    name: sandbox-proxy-dns-and-cluster
+    namespace: onyx
+  spec:
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/instance: onyx
+        app.kubernetes.io/component: sandbox-proxy
+    policyTypes: [Egress]
+    egress:
+      - to:
+          - namespaceSelector:
+              matchLabels:
+                kubernetes.io/metadata.name: kube-system
+            podSelector:
+              matchExpressions:
+                - key: k8s-app
+                  operator: In
+                  values: [kube-dns, node-local-dns]
+        ports:
+          - { protocol: UDP, port: 53 }
+          - { protocol: TCP, port: 53 }
+      - to:
+          - podSelector: {}   # pods in the release namespace, for example the API server
+  ```
+
+  ```bash
+  kubectl -n onyx apply -f sandbox-proxy-dns.yaml
+  ```
+
+  Change `onyx` to your release name and namespace.
+</Warning>
+
 ## Option 1: Onyx Terraform modules
 
 The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/deployment/cloud/gcp) for the full module.
@@ -206,6 +250,19 @@ on the node pools that run the API server and the workers.
 The two sandbox pools do not change these settings on your other pools.
 See the Google Cloud guide [Use Workload Identity Federation for
 GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).
+
+## Remove a test installation
+
+`terraform destroy` can fail on `google_service_networking_connection` with `Producer services (e.g. CloudSQL,
+Cloud Memstore, etc.) are still using this connection`, also after Cloud SQL and Memorystore are gone.
+Delete the peering, remove the connection from the state, and run `terraform destroy` again:
+
+```bash
+gcloud compute networks peerings delete servicenetworking-googleapis-com --network=<vpc> --project=<project>
+terraform state list | grep google_service_networking_connection
+terraform state rm '<address from the previous command>'
+terraform destroy
+```
 
 ## Google Cloud security findings
 

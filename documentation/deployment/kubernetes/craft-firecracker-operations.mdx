@@ -238,10 +238,13 @@ the API server logs `sandbox_fc_session_purge_failed` or `sandbox_fc_sandbox_pur
 steps. If a microVM stop fails, the API server still removes the sandbox record.
 It then stops the microVM as an orphan at the next node report of the host agent.
 
-If the file store keeps deleted objects, a purged save stays recoverable for that time. Examples are S3 versioning,
-Google Cloud Storage soft delete, and Azure Blob soft delete.
-The Onyx Azure `storage` module turns on blob soft delete for 7 days by default (`blob_soft_delete_days`).
-To remove saves at once, turn off soft delete on the file store, or purge the deleted objects.
+Onyx deletes only the current object of a save. If the file store keeps deleted objects or old versions,
+a purged save stays recoverable for that time. Examples are S3 versioning,
+Google Cloud Storage soft delete and object versioning, and Azure Blob soft delete and blob versioning.
+The Onyx Azure `storage` module turns on both by default: blob soft delete for 7 days (`blob_soft_delete_days`),
+and blob versions for 90 days (`enable_versioning`, `noncurrent_expiration_days`). To remove saves at once,
+delete the soft-deleted objects and the old versions too.
+Turning off soft delete alone is not sufficient while versioning is on.
 
 ## Monitoring
 

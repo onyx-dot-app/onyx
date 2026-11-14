@@ -254,14 +254,31 @@ A new role assignment can take a few minutes to start working.
 ## Remove a test installation
 
 The `postgres` module guards the PostgreSQL server and database with `prevent_destroy`,
-so `terraform destroy` stops with an error. This protects production data. To remove a test installation,
-delete its resource group, then delete the local Terraform state:
+so `terraform destroy` stops with an error. This protects production data.
+
+<Warning>
+  Delete the resource group only if the module made it for the test installation (`create_resource_group = true`,
+  the default) and nothing else uses it. The command deletes every resource in the group.
+</Warning>
+
+For a dedicated resource group, delete the group, then delete the local Terraform state:
 
 ```bash
 az group delete --name <resource-group> --yes
 ```
 
 Azure also deletes the node resource group of the cluster (`MC_...`). Check with `az group exists --name <name>`.
+
+For a shared resource group (`create_resource_group = false`), remove only the Onyx resources.
+Delete the PostgreSQL server first, because its subnet cannot be deleted while the server uses it.
+Then remove the server and database from the Terraform state, and destroy the other resources:
+
+```bash
+az postgres flexible-server delete --resource-group <resource-group> --name <server> --yes
+terraform state list | grep -E 'azurerm_postgresql_flexible_server(_database)?\.this'
+terraform state rm '<server address>' '<database address>'
+terraform destroy
+```
 
 ## Azure security findings
 

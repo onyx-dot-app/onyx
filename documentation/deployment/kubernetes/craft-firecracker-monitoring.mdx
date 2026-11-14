@@ -125,6 +125,9 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
 <Steps>
   <Step title="Check the scrape targets">
     In Prometheus, open **Status → Targets**. The `onyx-craft-fc-host-agent` target of each KVM node must be `UP`.
+    If the target is missing,
+    check that `serviceMonitorNamespaceSelector` of your Prometheus selects the host agent namespace (default
+    `onyx-sandbox-runtime`). The host agent ServiceMonitor is in that namespace.
   </Step>
 
   <Step title="Check the alert rules">
