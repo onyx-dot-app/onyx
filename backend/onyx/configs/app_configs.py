@@ -1167,9 +1167,12 @@ CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index
-# in a single pass. Connector deletion queues its per-document cleanup in batches
-# of this size, so the broker holds at most one batch per cc_pair.
+# in a single pass. Connector deletion queues cleanup for at most this many
+# documents per pass, so the broker holds at most one pass per cc_pair.
 DOCUMENT_INDEX_SYNC_MAX_TASKS = 8192
+
+# Documents per connector-deletion / pruning cleanup task.
+DOCUMENT_CLEANUP_BATCH_SIZE = int(os.environ.get("DOCUMENT_CLEANUP_BATCH_SIZE") or 500)
 
 DB_YIELD_PER_DEFAULT = 64
 
@@ -1207,6 +1210,18 @@ WEB_CONNECTOR_OAUTH_TOKEN_URL = os.environ.get("WEB_CONNECTOR_OAUTH_TOKEN_URL")
 # the Chromium binary installed).
 OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED = (
     os.environ.get("OPEN_URL_PLAYWRIGHT_FALLBACK_ENABLED", "true").lower() == "true"
+)
+# The fallback browser runs inside the calling process. Onyx kills a browser when
+# its render passes the time limit, or when all fallback browsers in the process
+# together pass the memory limit (the largest goes). 0 turns off the memory limit.
+OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_TIMEOUT_SECONDS", 60)
+)
+OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB = _non_negative_int_env(
+    "OPEN_URL_PLAYWRIGHT_MAX_MEMORY_MB", 2048
+)
+OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY = max(
+    1, _non_negative_int_env("OPEN_URL_PLAYWRIGHT_MAX_CONCURRENCY", 3)
 )
 
 # Limits for the built-in open_url crawler. The body read stops at the larger
@@ -1347,6 +1362,26 @@ CONFLUENCE_USE_ONYX_USERS_FOR_GROUP_SYNC = (
 GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD = int(
     os.environ.get("GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD", 10 * 1024 * 1024)
 )
+
+# Files the Google Drive connector converts at once in one docfetching
+# process. Each conversion makes one to three Google calls, so this sets the
+# requests in flight. Past about 32, parsing on one core limits a run.
+_GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT = 32
+try:
+    GOOGLE_DRIVE_CONVERSION_WORKERS = max(
+        1,
+        int(
+            os.environ.get("GOOGLE_DRIVE_CONVERSION_WORKERS")
+            or _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
+        ),
+    )
+except ValueError:
+    logger.warning(
+        "GOOGLE_DRIVE_CONVERSION_WORKERS=%r is not an integer; falling back to %d",
+        os.environ.get("GOOGLE_DRIVE_CONVERSION_WORKERS"),
+        _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT,
+    )
+    GOOGLE_DRIVE_CONVERSION_WORKERS = _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
 
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from

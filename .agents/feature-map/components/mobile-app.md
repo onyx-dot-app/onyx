@@ -36,7 +36,11 @@ appear once above the answer, with their full contents visible.
 After an answer ends, Send stays disabled until the server confirms that the
 session is idle. A send that the server does not accept keeps its draft.
 
-On failure: a stream error shows in the message. A failed token refresh signs
+On failure: a stream error shows in the message. The next message continues
+after the failed answer, as on web. A send that the server rejects before it
+sends message IDs (an error packet, or an HTTP status below 500 other than
+408) leaves no turn: the tree returns to its state before the send, a toast
+shows the error, and the composer keeps the draft. A failed token refresh signs
 the user out only when the server rejects the token. A network failure keeps
 the session. When the user switches instance, the app never shows data or
 uses a token from the previous instance.
@@ -174,10 +178,11 @@ the sources.
    apart from web. [[streaming-protocol]] owns the list of mirrors that a new
    packet type must update.
 10. `stream-end-is-not-idle` **The end of a stream does not enable Send.**
-    `chat/execution.py` releases the session admission lease only after
-    delivery finishes and child-run work drains. A send before the release
-    fails with a `CONFLICT` `StreamingError`, so only the status poll in `chat/sessionReadiness.ts:waitForSessionIdle` returns the session
-    to `input`. A transient failure keeps polling. An auth error or a 404
+    `chat/execution.py` releases the session admission lease after the
+    turn's saves drain, before the stream ends. The app still returns the
+    session to `input` only through the status poll in
+    `chat/sessionReadiness.ts:waitForSessionIdle`, which also covers a send
+    that another client started. A transient failure keeps polling. An auth error or a 404
     stops the poll and leaves the state `unconfirmed`. A server without the
     status route answers 404, so a new app on an older server cannot send a
     second message in a session. Keep each `stillOurs` guard in

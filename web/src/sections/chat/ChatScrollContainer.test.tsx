@@ -207,3 +207,79 @@ test("an interrupted smooth scroll does not resume following later content", asy
     jest.useRealTimers();
   }
 });
+
+test.each([
+  // The browser clamps the scroll position to the shorter content.
+  { case: "layout moves", scrollTopAfterShrink: 500, follows: true },
+  // The user scrolls up farther than the content shrank.
+  { case: "the user scrolls", scrollTopAfterShrink: 300, follows: false },
+])(
+  "when shrinking rows move the scroll position up and $case, following is $follows",
+  async ({ scrollTopAfterShrink, follows }) => {
+    // A reloaded chat opens at the bottom and follows during the opening
+    // window. Windowed rows settle to smaller heights before the first scroll
+    // event, the scroll position moves up, then the resumed run streams more.
+    const frames: FrameRequestCallback[] = [];
+    const requestFrame = jest
+      .spyOn(window, "requestAnimationFrame")
+      .mockImplementation((callback) => {
+        frames.push(callback);
+        return frames.length;
+      });
+    const chat = (anchorSelector?: string) => (
+      <ChatScrollContainer
+        sessionId="session"
+        anchorSelector={anchorSelector}
+        autoScroll={false}
+      >
+        <div id="anchor" />
+      </ChatScrollContainer>
+    );
+    const view = render(chat());
+    const container = screen.getByTestId("chat-scroll-container");
+    const end = container.firstElementChild?.lastElementChild;
+    if (!(end instanceof HTMLElement))
+      throw new Error("Missing content end marker");
+    let contentHeight = 1000;
+    Object.defineProperties(container, {
+      clientHeight: { get: () => 400 },
+      scrollHeight: { get: () => contentHeight },
+    });
+    Object.defineProperty(end, "offsetTop", { get: () => contentHeight });
+    const scrollTo = jest.fn((options?: ScrollToOptions | number) => {
+      if (typeof options === "object" && options.top !== undefined)
+        container.scrollTop = options.top;
+    });
+    container.scrollTo = scrollTo;
+    try {
+      view.rerender(chat("#anchor"));
+      expect(container.scrollTop).toBe(600);
+
+      contentHeight = 900;
+      container.scrollTop = scrollTopAfterShrink;
+      fireEvent.scroll(container);
+
+      scrollTo.mockClear();
+      await act(async () => {
+        contentHeight += 150;
+        end.before(document.createElement("div"));
+        await Promise.resolve();
+      });
+      act(() => frames.splice(0).forEach((callback) => callback(0)));
+
+      if (follows) {
+        expect(scrollTo).toHaveBeenCalledWith({
+          top: 650,
+          behavior: "instant",
+        });
+        expect(container.scrollTop).toBe(650);
+      } else {
+        expect(scrollTo).not.toHaveBeenCalled();
+        expect(container.scrollTop).toBe(scrollTopAfterShrink);
+      }
+    } finally {
+      view.unmount();
+      requestFrame.mockRestore();
+    }
+  }
+);

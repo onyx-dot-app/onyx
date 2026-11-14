@@ -138,7 +138,10 @@ for their display). `KEEP_MARKERS` emits no `CitationInfo`, but a report still
 lists the sources it cites in `IntermediateReportCitedDocs`
 (`chat/renderer.py:MessageRenderer.finish`).
 `chat/citation_utils.py:collapse_citations` renumbers those markers when
-`deep_research/agent.py` merges the reports. In `REMOVE` mode,
+`deep_research/agent.py` merges the reports. Chat, research and deep research
+also use `remap_received_citations` before accepting background results.
+It preserves input identities and gives the received text and next answer the same source numbers.
+In `REMOVE` mode,
 `MessageRenderer.complete` does not re-send unrendered final text, so an answer
 of only markers stays empty.
 
@@ -182,8 +185,8 @@ of only markers stays empty.
    the error, and the turn saves with no citations and no renderings. With
    `persist_content=False` (temporary chats), `save_chat_turn` saves no
    citations or search docs. `chat/history_store.py:RedisChatHistoryStore`
-   keeps those numbers in Redis instead, with `sources_by_run` for child agents.
-   A new save path must cover both history stores.
+   retains citation numbers and source documents in the cached root messages.
+   Incognito does not support subagents. A new save path must cover both history stores.
 5. `document-key-prompt-design` **The document JSON key and field order are
    prompt design.** The key is `document`, not `citation_id`, so the model does
    not write reasoning such as "I should reference citation_id: 5". The number

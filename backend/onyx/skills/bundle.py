@@ -7,7 +7,7 @@ import io
 import stat
 import sys
 import zipfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
 from dataclasses import dataclass
@@ -27,7 +27,11 @@ from onyx.skills.metadata import (
     serialize_skill_md,
     split_skill_md,
 )
-from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
+from onyx.skills.models import (
+    CustomSkillBundleContents,
+    PluginFileEntry,
+    SkillBundleFile,
+)
 
 _MIB: Final[int] = 1024 * 1024
 
@@ -35,6 +39,8 @@ DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
 DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
 DEFAULT_MAX_FILE_COUNT: Final[int] = 500
+# Each new version stores its SKILL.md text in the database.
+SKILL_MD_MAX_BYTES: Final[int] = 256 * 1024
 # Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
 # were capped at the expanded total.
 STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
@@ -43,7 +49,12 @@ ZIP_DIRECTORY_MAX_BYTES: Final[int] = 1 * _MIB
 STORED_ZIP_DIRECTORY_MAX_BYTES: Final[int] = 4 * _MIB
 
 SkillBundleLimit = Literal[
-    "zip_bytes", "zip_metadata_bytes", "file_count", "file_bytes", "total_bytes"
+    "zip_bytes",
+    "zip_metadata_bytes",
+    "file_count",
+    "file_bytes",
+    "total_bytes",
+    "skill_md_bytes",
 ]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
@@ -78,6 +89,23 @@ def _zip_too_large_error(max_bytes: int) -> OnyxError:
         max_bytes,
         f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
     )
+
+
+def check_skill_md_size(raw_skill_md: bytes) -> None:
+    """Refuse a SKILL.md that a new version cannot store."""
+    if len(raw_skill_md) > SKILL_MD_MAX_BYTES:
+        raise _bundle_limit_error(
+            "skill_md_bytes",
+            SKILL_MD_MAX_BYTES,
+            f"SKILL.md exceeds the {SKILL_MD_MAX_BYTES // 1024} KiB limit. "
+            "Split it into several files and link them from SKILL.md.",
+        )
+    # A Postgres text column cannot hold NUL.
+    if b"\x00" in raw_skill_md:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md cannot contain a NUL character. Remove it and try again.",
+        )
 
 
 def read_bundle_file(
@@ -168,6 +196,21 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
         files=sorted_files,
+    )
+
+
+def custom_bundle_contents_from_stored(
+    skill_md: str, file_manifest: Iterable[PluginFileEntry]
+) -> CustomSkillBundleContents:
+    """The same contents as ``inspect_custom_bundle``, from the SKILL.md text
+    and file list a version stores in the database."""
+    return CustomSkillBundleContents(
+        instructions_markdown=strip_skill_md_frontmatter(skill_md),
+        files=[
+            SkillBundleFile(path=entry.path, size=entry.size)
+            for entry in sorted(file_manifest, key=lambda entry: entry.path)
+            if entry.path != SKILL_MD_NAME and not _is_ignored_bundle_path(entry.path)
+        ],
     )
 
 
@@ -760,3 +803,29 @@ def compute_bundle_sha256(zip_bytes: bytes) -> str:
     with identical contents but different timestamps still hash differently.
     """
     return hashlib.sha256(zip_bytes).hexdigest()
+
+
+def compute_bundle_manifest(zip_bytes: bytes) -> list[PluginFileEntry]:
+    """Path, size and SHA-256 of each file in a normalized bundle, by path.
+
+    Two bundles with the same manifest hold the same files, also when their
+    ZIP bytes differ (timestamps, compression)."""
+    entries: list[PluginFileEntry] = []
+    with open_bundle_zip(zip_bytes) as bundle_zip:
+        for info in bundle_zip.infolist():
+            if info.is_dir():
+                continue
+            digest = hashlib.sha256()
+            size = 0
+            with bundle_zip.open(info, mode="r") as source:
+                while chunk := source.read(64 * 1024):
+                    digest.update(chunk)
+                    size += len(chunk)
+            entries.append(
+                PluginFileEntry(
+                    path=_validated_bundle_path(info),
+                    size=size,
+                    sha256=digest.hexdigest(),
+                )
+            )
+    return sorted(entries, key=lambda entry: entry.path)

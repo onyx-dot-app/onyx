@@ -183,6 +183,129 @@ run "firecracker_pins_the_tested_image_and_labels_the_pool" {
   }
 }
 
+run "firecracker_with_pod_sandbox_pool" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition = (
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].node_labels == tomap({ "onyx.app/workload" = "sandbox" }) &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].node_taints == tolist(["workload=sandbox:NoSchedule"])
+    )
+    error_message = "The pod sandbox pool must match the chart's sandboxPod selector and toleration, with no onyx.app/kvm label or taint."
+  }
+
+  assert {
+    condition = (
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].vm_size == "Standard_D4ds_v5" &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].min_count == 1 &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].max_count == 2 &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].os_disk_size_gb == 200 &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].mode == "User"
+    )
+    error_message = "The pod sandbox pool defaults to Standard_D4ds_v5, 1 to 2 nodes, with the sandbox disk size."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].os_sku == "Ubuntu"
+    error_message = "The pod sandbox pool keeps the AKS default Ubuntu image; only the Firecracker pool pins Ubuntu 24.04."
+  }
+
+  assert {
+    condition     = azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].temporary_name_for_rotation == local.rotation_names["sandboxpod"]
+    error_message = "The pod sandbox pool needs its own rotation name."
+  }
+
+  assert {
+    condition = (
+      azurerm_kubernetes_cluster_node_pool.this["sandbox"].os_sku == "Ubuntu2404" &&
+      azurerm_kubernetes_cluster_node_pool.this["sandbox"].node_taints == tolist(["workload=sandbox:NoSchedule", "onyx.app/kvm=true:NoSchedule"])
+    )
+    error_message = "The Firecracker pool keeps its own image and taint next to the pod pool."
+  }
+
+  assert {
+    condition     = output.node_pool_names == ["main", "index", "sandbox", "sandboxpod"]
+    error_message = "The pod sandbox pool should be listed with the other pools."
+  }
+}
+
+run "the_pod_sandbox_pool_can_be_sized" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+    craft_pod_sandbox_node_vm_size     = "Standard_D8ds_v5"
+    craft_pod_sandbox_node_min_count   = 0
+    craft_pod_sandbox_node_max_count   = 4
+  }
+
+  assert {
+    condition = (
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].vm_size == "Standard_D8ds_v5" &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].min_count == 0 &&
+      azurerm_kubernetes_cluster_node_pool.this["sandboxpod"].max_count == 4
+    )
+    error_message = "The pod sandbox pool should take the given VM size and counts."
+  }
+}
+
+run "pod_sandbox_pool_needs_firecracker" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
+}
+
+run "pod_sandbox_pool_needs_the_sandbox_pool" {
+  command = plan
+
+  variables {
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
+}
+
+run "rejects_a_pod_sandbox_pool_that_would_replace_a_defined_one" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+    node_pools = {
+      main       = { vm_size = "Standard_D8ds_v5" }
+      sandboxpod = { vm_size = "Standard_D8ds_v5" }
+    }
+  }
+
+  expect_failures = [var.enable_craft_pod_sandbox_node_pool]
+}
+
+run "rejects_a_pod_sandbox_pool_whose_max_is_below_its_min" {
+  command = plan
+
+  variables {
+    craft_pod_sandbox_node_min_count = 3
+    craft_pod_sandbox_node_max_count = 2
+  }
+
+  expect_failures = [var.craft_pod_sandbox_node_max_count]
+}
+
 run "firecracker_accepts_intel_v5_to_v7_sizes" {
   command = plan
 
@@ -462,8 +585,10 @@ run "rotation_names_are_unique_and_valid_pool_names" {
   command = plan
 
   variables {
-    enable_gpu_node_pool     = true
-    enable_sandbox_node_pool = true
+    enable_gpu_node_pool               = true
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
   }
 
   assert {

@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "身份验证"
       },
+      "codingAgentIncognito": {
+        "tooltip": "无痕模式下无法使用编码智能体"
+      },
       "configure": {
         "tooltip": "配置"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "搜索操作..."
       },
+      "selectionSaveFailed": "无法保存此聊天的工具选择。",
       "serverFallback": {
         "label": "服务器"
       },
@@ -5204,6 +5208,27 @@
       "unavailable": {
         "description": "Craft 由 Onyx 按部署逐一启用。请联系您的 Onyx 客户代表以获取访问权限。",
         "title": "此部署不提供 Craft"
+      },
+      "publishing": {
+        "title": "技能发布",
+        "open": {
+          "label": "开放",
+          "description": "技能作者可以立即发布到组织。"
+        },
+        "requiresReview": {
+          "label": "需要审核",
+          "description": "管理员批准每次发布和每次更新。"
+        },
+        "off": {
+          "label": "关闭",
+          "description": "只有管理员可以将技能发布到组织。"
+        },
+        "saveSuccess": {
+          "message": "已保存发布设置。"
+        },
+        "saveError": {
+          "message": "无法保存发布设置。"
+        }
       }
     },
     "credentials": {
@@ -12166,6 +12191,10 @@
         },
         "organization": {
           "label": "组织"
+        },
+        "unpublished": {
+          "label": "未发布的更改",
+          "tooltip": "组织仍在使用版本 {number}。"
         }
       },
       "toggle": {
@@ -12447,6 +12476,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "子代理正在工作",
         "attachFilesButton": {
           "tooltip": "附加文件"
         },
@@ -12455,6 +12485,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "多模型模式下无法使用深度研究",
+          "incognitoTooltip": "无痕模式下无法使用深度研究",
           "label": "深度研究"
         },
         "incognitoNotice": {
@@ -12483,6 +12514,24 @@
         "voiceSetupButton": {
           "ariaLabel": "设置语音",
           "tooltip": "未配置语音。请在管理员设置中配置。"
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter 发送 · Ctrl 或 Command + Enter 加入队列",
+          "multiModelHint": "比较模型时无法加入队列。请选择一个模型以使用队列。",
+          "attachmentsHint": "请在此回复结束后发送附件。",
+          "chooseResponseHint": "请先选择回复，再将消息加入队列。",
+          "incognitoHint": "在无痕聊天中，请等待回复结束。",
+          "sendHint": "在此回复的下一步发送",
+          "interruptHint": "中断当前工作并发送此消息",
+          "sendLabel": "发送",
+          "queueLabel": "排队",
+          "interruptKeyboardHint": "Enter 中断 · Ctrl 或 Command + Enter 加入队列",
+          "interruptLabel": "中断",
+          "waitHint": "请等待回复完成。",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "停止子代理"
         }
       },
       "baseInputBar": {
@@ -12581,16 +12630,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "移除排队的消息"
+          "tooltip": "移除排队的消息",
+          "ariaLabel": "移除排队的消息：{message}"
         },
         "editHint": {
           "label": "编辑 ·"
         },
-        "item": {
-          "ariaLabel": "切换排队的消息"
-        },
         "removeHint": {
           "label": "移除"
+        },
+        "editButton": {
+          "tooltip": "编辑队列中的消息",
+          "clearDraftTooltip": "请清空草稿后再编辑队列中的消息",
+          "ariaLabel": "编辑排队的消息：{message}"
+        },
+        "sendButton": {
+          "tooltip": "中断当前工作并发送此消息",
+          "ariaLabel": "立即发送：{message}"
+        },
+        "sendHint": {
+          "label": "立即发送 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12600,6 +12659,14 @@
         "startSessionButton": {
           "label": "开始新会话"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "无法提交消息。",
+        "withdrawFailed": "无法移除待处理消息。",
+        "loadFailed": "无法加载待处理消息。",
+        "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
+        "stopSubagentsFailed": "无法停止子代理。"
       }
     },
     "mcpApiKey": {
@@ -12695,6 +12762,9 @@
         "timedOut": {
           "text": "回复已达到时间限制，因此已停止。"
         }
+      },
+      "agentResults": {
+        "received": "已收到子代理结果"
       },
       "codeBlock": {
         "copyButton": {
@@ -12843,11 +12913,6 @@
         },
         "stoppedStatus": {
           "text": "图片生成已停止"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "复制表格"
         }
       },
       "memoizedLink": {
@@ -14505,7 +14570,7 @@
         "promote": {
           "cancelButton": "取消",
           "confirmButton": "设为组织范围可用",
-          "description": "与应用关联的技能必须对所有人可用。此更改将在保存应用时生效。",
+          "description": "与应用关联的技能必须对所有人可用。保存应用时，该技能会发布到组织。发布后无法撤销。",
           "title": "将“{name}”设为组织范围可用？"
         },
         "search": {
@@ -16441,6 +16506,12 @@
       "title": "对话",
       "toasts": {
         "saveFailed": "保存偏好设置失败"
+      },
+      "sendBehavior": {
+        "title": "工作期间的发送行为",
+        "description": "选择在回答过程中按 Enter 键和发送按钮的行为。Ctrl/Cmd+Enter 始终将后续消息加入队列。",
+        "afterStep": "当前步骤完成后",
+        "interrupt": "中断当前工作"
       }
     },
     "connectors": {
@@ -17153,6 +17224,13 @@
         "savingChanges": "正在保存更改...",
         "savingSkill": "正在保存技能..."
       },
+      "staleVersion": {
+        "description": "有人保存了更新的版本。请重新加载以获取。未保存的更改将丢失。",
+        "reload": {
+          "label": "重新加载"
+        },
+        "title": "此技能在您打开后已被更改"
+      },
       "toasts": {
         "created": "已创建“{name}”",
         "deleteFailed": "删除技能失败",
@@ -17353,9 +17431,6 @@
           "message": "正在加载共享详情…"
         },
         "noOwnerTitle": "没有有效的所有者",
-        "organizationPermissionMenu": {
-          "ariaLabel": "更改组织权限"
-        },
         "ownerLabel": "所有者",
         "permissionMenu": {
           "ariaLabel": "更新 {name} 的访问权限"
@@ -17396,14 +17471,77 @@
         "peopleTitle": "有访问权限的人员",
         "manageIndividualAccess": "管理单独访问权限",
         "individualAccessTitle": "单独访问权限",
-        "ownershipTitle": "所有权"
+        "ownershipTitle": "所有权",
+        "published": {
+          "title": "组织",
+          "description": "已发布。组织中的所有人都可以使用此技能。"
+        },
+        "publishWarning": {
+          "title": "发布后无法撤销",
+          "description": "保存后，组织中的所有人都可以使用此技能。您无法再将其设为私有。只有管理员可以删除它。",
+          "reviewDescription": "在管理员批准请求之前，技能保持私有。批准后，您无法再将其设为私有。"
+        },
+        "reviewRequestedToast": {
+          "message": "你的发布请求已提交给管理员审核。"
+        },
+        "publishOff": {
+          "title": "发布已关闭",
+          "description": "管理员已关闭向组织发布。请让管理员发布此技能。"
+        }
       },
       "placeholders": {
         "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
       },
       "tabs": {
         "details": "详情",
-        "sharing": "共享"
+        "sharing": "共享",
+        "versions": "版本"
+      },
+      "versions": {
+        "tableLabel": "技能版本",
+        "columns": {
+          "version": "版本",
+          "madeBy": "创建者",
+          "date": "日期"
+        },
+        "versionLabel": "版本 {number}",
+        "currentBadge": "当前",
+        "unknownAuthor": "未知",
+        "previewRow": {
+          "ariaLabel": "预览版本 {number}"
+        },
+        "restore": {
+          "label": "恢复",
+          "ariaLabel": "恢复版本 {number}",
+          "successToast": "已将版本 {number} 恢复为版本 {newNumber}。",
+          "unchangedToast": "版本 {number} 的文件与当前版本相同。",
+          "failedToast": "无法恢复此版本。",
+          "unsavedChanges": {
+            "title": "请先保存更改",
+            "description": "在恢复版本之前，请保存或放弃编辑器中的更改。"
+          }
+        },
+        "loadError": {
+          "title": "无法加载版本",
+          "description": "请稍后重试。"
+        },
+        "preview": {
+          "back": "所有版本",
+          "loadError": {
+            "title": "无法加载此版本"
+          }
+        },
+        "status": {
+          "pending": "待审核",
+          "published": "已发布"
+        },
+        "publishUpdate": {
+          "label": "发布更新",
+          "successToast": "已将版本 {number} 发布到组织。",
+          "failedToast": "无法发布此更新。",
+          "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
+          "offNotice": "发布已关闭。请让管理员发布此更新。"
+        }
       }
     },
     "page": {
@@ -17556,10 +17694,41 @@
       "shareDescription": "将这些更改应用于每个所选技能。未更改的设置将保留当前值。",
       "unchanged": "保持不变",
       "everyone": "组织中的所有人",
-      "invitedOnly": "受邀人员和群组",
       "addAccessDescription": "将这些人员和群组添加到每个所选技能。列出的人员和群组将获得所选权限。其他人保持当前访问权限不变。",
       "apply": "{count, plural, one {应用于 # 个技能} other {应用于 # 个技能}}",
-      "moreActions": "更多操作"
+      "moreActions": "更多操作",
+      "publishWarning": {
+        "title": "发布后无法撤销",
+        "description": "应用后，组织中的所有人都可以使用所选技能。已发布的技能无法再设为私有。只有管理员可以删除它们。"
+      }
+    },
+    "reviewRequests": {
+      "title": "发布请求",
+      "description": "批准或拒绝将技能发布到组织的请求。",
+      "columns": {
+        "skill": "技能",
+        "version": "版本",
+        "author": "作者",
+        "saved": "保存时间"
+      },
+      "unnamedSkill": "未命名技能",
+      "review": {
+        "label": "审核",
+        "ariaLabel": "审核 {name}"
+      },
+      "approve": {
+        "label": "批准"
+      },
+      "deny": {
+        "label": "拒绝"
+      },
+      "approvedToast": "已发布 {name} 的版本 {number}。",
+      "deniedToast": "已拒绝 {name} 的版本 {number}。",
+      "failedToast": "无法更新此请求。",
+      "version": {
+        "firstPublish": "v{number} · 首次发布",
+        "update": "v{number} · 从 v{published} 更新"
+      }
     }
   },
   "opensearchHealth": {

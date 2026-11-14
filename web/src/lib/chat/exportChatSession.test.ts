@@ -3,6 +3,7 @@ import {
   BackendMessage,
   ChatSessionSharedStatus,
 } from "@/app/app/types";
+import type { Packet } from "@/app/app/services/streamingModels";
 import { downloadFile } from "@/lib/download";
 import { exportChatSession } from "./exportChatSession";
 
@@ -126,7 +127,31 @@ describe("exportChatSession", () => {
     );
   });
 
-  it("omits system, tool-call, reminder, and empty messages", async () => {
+  it("exports messages sent during a response before its answer", async () => {
+    const session = makeSession([
+      makeMessage("user", "Plan a trip"),
+      makeMessage("assistant", "Take the train."),
+    ]);
+    const accepted: Packet = {
+      placement: { turn_index: 1 },
+      obj: { type: "user_message", id: "accepted", message: "Avoid flights" },
+    };
+    session.packets = [[accepted]];
+
+    for (const format of ["text", "markdown"] as const) {
+      jest.clearAllMocks();
+      mockFetchOk(session);
+      await exportChatSession("session-1", "Trip", format);
+      const { content } = lastDownload();
+      expect(content).toBe(
+        format === "text"
+          ? "Trip\n\nUser:\nPlan a trip\n\nUser:\nAvoid flights\n\nAssistant:\nTake the train.\n"
+          : "# Trip\n\n## User\n\nPlan a trip\n\n## User\n\nAvoid flights\n\n## Assistant\n\nTake the train.\n"
+      );
+    }
+  });
+
+  it("omits system, tool-call, reminder, agent-results, and empty messages", async () => {
     mockFetchOk(
       makeSession([
         makeMessage("system", "you are a helpful assistant"),
@@ -134,6 +159,7 @@ describe("exportChatSession", () => {
         makeMessage("tool_call_response", "{...}"),
         makeMessage("assistant", "Answer."),
         makeMessage("user_reminder", "reminder"),
+        makeMessage("agent_results", "Subagent results"),
         makeMessage("assistant", "   "),
       ])
     );

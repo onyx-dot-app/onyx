@@ -194,7 +194,7 @@ def test_chat_optout_blocks_default_chat_but_preserves_custom_agent(
         )
         assert set(result) == ({tool.id} if persona_id else set())
         if persona_id:
-            assert result[tool.id][0].name == tool.name
+            assert result[tool.id][0].code_mode_function_name.name == tool.name
     finally:
         db_session.rollback()
         delete_test_user(db_session, user)

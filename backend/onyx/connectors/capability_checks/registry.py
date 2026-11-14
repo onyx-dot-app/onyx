@@ -25,6 +25,7 @@ from onyx.connectors.capability_checks.two_step import validate_step_links
 from onyx.connectors.confluence.capability_checks import (
     build_confluence_indexing_checks,
 )
+from onyx.connectors.egnyte.capability_checks import build_egnyte_indexing_checks
 from onyx.connectors.factory import source_has_settings_probe
 from onyx.connectors.github.capability_checks import build_github_indexing_checks
 from onyx.connectors.google_drive.capability_checks import (
@@ -64,6 +65,7 @@ _INDEXING_CHECKS_BY_SOURCE: dict[DocumentSource, list[CapabilityCheck]] = {
     DocumentSource.YOUTRACK: build_youtrack_indexing_checks(),
     DocumentSource.ASANA: build_asana_indexing_checks(),
     DocumentSource.AZURE_DATALAKE: build_azure_datalake_indexing_checks(),
+    DocumentSource.EGNYTE: build_egnyte_indexing_checks(),
 }
 
 

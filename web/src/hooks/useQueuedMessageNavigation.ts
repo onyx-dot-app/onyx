@@ -1,16 +1,12 @@
-import {
-  useCallback,
-  useEffect,
-  useState,
-  type Dispatch,
-  type KeyboardEvent,
-  type SetStateAction,
-} from "react";
+import { useCallback, useState, type KeyboardEvent } from "react";
 import { QueuedMessage } from "@/app/app/types";
+import type { PendingChatMessage } from "@/lib/chat/types";
+
+type QueuedItem = QueuedMessage | PendingChatMessage;
 
 interface UseQueuedMessageNavigationParams {
   /** The messages currently queued for the active session. */
-  messages: readonly QueuedMessage[];
+  messages: readonly QueuedItem[];
   /**
    * Whether the text input is empty. Up-arrow only enters navigation mode
    * when there is no text to move the caret within.
@@ -19,13 +15,17 @@ interface UseQueuedMessageNavigationParams {
   /** Remove the queued message at `index`. */
   onRemove: (index: number) => void;
   /** Pull a queued message's text back into the input for editing. */
-  onEdit: (text: string) => void;
+  onEdit: (index: number) => void;
+  onSendNow?: (index: number) => void;
 }
 
 export interface QueuedMessageNavigation {
-  /** Index of the queued message focused for keyboard editing, or null. */
-  highlightedIndex: number | null;
-  setHighlightedIndex: Dispatch<SetStateAction<number | null>>;
+  /**
+   * The queued message focused for keyboard editing, or null. Keyed by ID, so
+   * a message that leaves the queue drops the highlight instead of passing it on.
+   */
+  highlightedId: QueuedItem["id"] | null;
+  setHighlightedId: (id: QueuedItem["id"] | null) => void;
   /**
    * Handle a keydown for queue navigation. Returns true if the event was
    * consumed (the caller should stop processing it). Returns false when the
@@ -35,72 +35,63 @@ export interface QueuedMessageNavigation {
   handleKeyDown: (event: KeyboardEvent<HTMLDivElement>) => boolean;
 }
 
-/**
- * Keyboard navigation for the queued-message bar, shared by the main chat and
- * Craft input bars. Owns the highlight state and translates key presses into
- * remove / edit / navigate actions, leaving the store wiring to the caller.
- *
- * Behavior:
- * - ↑ on an empty input enters navigation mode at the last queued message.
- * - In navigation mode: ↑/↓ move (↓ past the end exits), Enter edits (pulls
- *   the message into the input), Delete/Backspace removes (staying in
- *   navigation mode so items can be pruned in a row), Escape exits.
- * - Any other key exits navigation mode and falls through so it types.
- */
+/** Queue navigation shared with Craft; Enter sends immediately when supported, otherwise edits. */
 export function useQueuedMessageNavigation({
   messages,
   inputIsEmpty,
   onRemove,
   onEdit,
+  onSendNow,
 }: UseQueuedMessageNavigationParams): QueuedMessageNavigation {
-  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
-
-  // Keep the highlight in range as the queue shrinks (auto-send or prune),
-  // and clear it once the queue empties.
-  useEffect(() => {
-    setHighlightedIndex((prev) => {
-      if (prev === null) return null;
-      if (messages.length === 0) return null;
-      return Math.min(prev, messages.length - 1);
-    });
-  }, [messages.length]);
+  const [selectedId, setHighlightedId] = useState<QueuedItem["id"] | null>(
+    null
+  );
+  // Text in the composer, however it arrived, ends navigation, so its keys
+  // edit and send that text. Clearing the text later does not restore it.
+  if (!inputIsEmpty && selectedId !== null) {
+    setHighlightedId(null);
+  }
+  const highlightedIndex = messages.findIndex(
+    (message) => message.id === selectedId
+  );
+  const highlightedId =
+    highlightedIndex === -1 || !inputIsEmpty ? null : selectedId;
 
   const handleKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>): boolean => {
       // Navigation mode: keys act on the highlighted queued message.
-      if (highlightedIndex !== null) {
+      if (highlightedId !== null) {
         if (event.key === "Enter") {
           event.preventDefault();
-          const queued = messages[highlightedIndex];
-          if (queued) {
-            onRemove(highlightedIndex);
-            onEdit(queued.text);
-          }
-          setHighlightedIndex(null);
+          (onSendNow ?? onEdit)(highlightedIndex);
+          setHighlightedId(null);
           return true;
         }
         if (event.key === "ArrowUp") {
           event.preventDefault();
-          setHighlightedIndex((prev) => Math.max((prev ?? 0) - 1, 0));
+          setHighlightedId(
+            messages[Math.max(highlightedIndex - 1, 0)]?.id ?? null
+          );
           return true;
         }
         if (event.key === "ArrowDown") {
           event.preventDefault();
-          setHighlightedIndex((prev) => {
-            const next = (prev ?? 0) + 1;
-            return next >= messages.length ? null : next;
-          });
+          setHighlightedId(messages[highlightedIndex + 1]?.id ?? null);
           return true;
         }
         if (event.key === "Delete" || event.key === "Backspace") {
           event.preventDefault();
-          // Stay in nav mode (clamp effect re-points the index) to prune in a row.
+          // Stay in nav mode on a neighbor to prune in a row.
+          setHighlightedId(
+            (messages[highlightedIndex + 1] ?? messages[highlightedIndex - 1])
+              ?.id ?? null
+          );
           onRemove(highlightedIndex);
           return true;
         }
         if (event.key === "Escape") {
           event.preventDefault();
-          setHighlightedIndex(null);
+          setHighlightedId(null);
           return true;
         }
         if (
@@ -113,20 +104,29 @@ export function useQueuedMessageNavigation({
           return true;
         }
         // Any other key exits navigation mode and falls through to type.
-        setHighlightedIndex(null);
+        setHighlightedId(null);
       }
 
       // Up arrow on an empty input enters navigation mode.
-      if (event.key === "ArrowUp" && inputIsEmpty && messages.length > 0) {
+      const last = messages.at(-1);
+      if (event.key === "ArrowUp" && inputIsEmpty && last) {
         event.preventDefault();
-        setHighlightedIndex(messages.length - 1);
+        setHighlightedId(last.id);
         return true;
       }
 
       return false;
     },
-    [highlightedIndex, messages, inputIsEmpty, onRemove, onEdit]
+    [
+      highlightedId,
+      highlightedIndex,
+      messages,
+      inputIsEmpty,
+      onRemove,
+      onEdit,
+      onSendNow,
+    ]
   );
 
-  return { highlightedIndex, setHighlightedIndex, handleKeyDown };
+  return { highlightedId, setHighlightedId, handleKeyDown };
 }

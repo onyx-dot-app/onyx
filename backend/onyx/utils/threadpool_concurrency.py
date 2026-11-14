@@ -389,6 +389,63 @@ def run_functions_tuples_in_parallel(
     return [result for index, result in results]
 
 
+class BoundedParallelRunner(Generic[R]):
+    """Runs calls on a thread pool with at most ``max_in_flight`` pending, and
+    hands back their results as they finish.
+
+    ``submit`` waits while the window is full and returns the results that
+    freed it. A producer that submits as it reads therefore overlaps its own
+    work with the calls, and holds at most ``max_in_flight`` results. The
+    caller's contextvars (tenant id, log prefix) ride along, as in the rest of
+    this module. Leaving the ``with`` block cancels the calls that have not
+    started and waits for the running ones.
+    """
+
+    def __init__(self, max_workers: int, max_in_flight: int | None = None) -> None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._max_in_flight = max(max_in_flight or max_workers, 1)
+        self._pending: set[Future[R]] = set()
+
+    def __enter__(self) -> "BoundedParallelRunner[R]":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._executor.shutdown(wait=True, cancel_futures=True)
+
+    def submit(self, func: Callable[..., R], *args: Any) -> list[R]:
+        results: list[R] = []
+        while len(self._pending) >= self._max_in_flight:
+            results.extend(self._collect(block=True))
+        future = cast(
+            Future[R],
+            self._executor.submit(contextvars.copy_context().run, func, *args),
+        )
+        self._pending.add(future)
+        return results
+
+    def ready(self) -> list[R]:
+        """The results of the calls that already finished."""
+        return self._collect(block=False)
+
+    def drain(self) -> Iterator[R]:
+        """Every remaining result, as each call finishes."""
+        while self._pending:
+            yield from self._collect(block=True)
+
+    def _collect(self, block: bool) -> list[R]:
+        if not self._pending:
+            return []
+        done, pending = wait(
+            self._pending,
+            timeout=None if block else 0,
+            return_when=FIRST_COMPLETED,
+        )
+        self._pending = pending
+        return [future.result() for future in done]
+
+
 class FunctionCall(Generic[R]):
     """
     Container for run_functions_in_parallel, fetch the results from the output of

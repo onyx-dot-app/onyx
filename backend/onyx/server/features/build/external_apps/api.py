@@ -39,6 +39,7 @@ from onyx.db.external_app import (
     validate_auth_template,
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
+from onyx.db.plugin import get_plugin_version_validity
 from onyx.db.skill import affected_user_ids_for_skill
 from onyx.db.utils import UNSET, none_as_unset
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -94,6 +95,14 @@ def _to_admin_response(
 ) -> ExternalAppAdminResponse:
     # ``stored`` is the app's approval policy overrides.
     managed = MULTI_TENANT and get_onyx_managed_provider(app.app_type) is not None
+    custom_skills = sorted(
+        (skill for skill in app.associated_skills if skill.is_custom),
+        key=lambda skill: (skill.name, str(skill.id)),
+    )
+    # The organization runs the published version of an associated skill.
+    validity = get_plugin_version_validity(
+        (skill.id for skill in custom_skills), "organization", db_session
+    )
     return ExternalAppAdminResponse(
         id=app.id,
         name=app.name,
@@ -117,12 +126,9 @@ def _to_admin_response(
             ExternalAppAssociatedSkill(
                 id=skill.id,
                 name=skill.name,
-                is_valid=skill.is_valid,
+                is_valid=validity.get(skill.id),
             )
-            for skill in sorted(
-                (skill for skill in app.associated_skills if skill.is_custom),
-                key=lambda skill: (skill.name, str(skill.id)),
-            )
+            for skill in custom_skills
         ],
         is_onyx_managed=managed,
     )

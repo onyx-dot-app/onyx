@@ -79,7 +79,7 @@ def test_bundle_is_the_seven_token_set() -> None:
             Permission.ADD_AGENTS,
             Permission.MANAGE_USER_GROUPS,
             Permission.MANAGE_ACTIONS,
-            Permission.MANAGE_SKILLS,
+            Permission.MANAGE_PLUGINS,
         }
     )
     # admin-only tokens must never be scopable

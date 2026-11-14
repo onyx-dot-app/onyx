@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Autenticar"
       },
+      "codingAgentIncognito": {
+        "tooltip": "O agente de código não está disponível no modo anônimo"
+      },
       "configure": {
         "tooltip": "Configurar"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "Pesquisar ações..."
       },
+      "selectionSaveFailed": "Não foi possível salvar a seleção de ferramentas deste chat.",
       "serverFallback": {
         "label": "servidor"
       },
@@ -5204,6 +5208,27 @@
       "unavailable": {
         "description": "O Craft é ativado por implantação pela Onyx. Entre em contato com seu representante Onyx para obter acesso.",
         "title": "O Craft não está disponível nesta implantação"
+      },
+      "publishing": {
+        "title": "Publicação de habilidades",
+        "open": {
+          "label": "Aberta",
+          "description": "Os autores publicam na organização na hora."
+        },
+        "requiresReview": {
+          "label": "Requer revisão",
+          "description": "Um administrador aprova cada publicação e cada atualização."
+        },
+        "off": {
+          "label": "Desativada",
+          "description": "Somente administradores publicam habilidades na organização."
+        },
+        "saveSuccess": {
+          "message": "Configuração de publicação salva."
+        },
+        "saveError": {
+          "message": "Não foi possível salvar a configuração de publicação."
+        }
       }
     },
     "credentials": {
@@ -12166,6 +12191,10 @@
         },
         "organization": {
           "label": "Organização"
+        },
+        "unpublished": {
+          "label": "Alterações não publicadas",
+          "tooltip": "A organização ainda usa a versão {number}."
         }
       },
       "toggle": {
@@ -12447,6 +12476,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagentes trabalhando",
         "attachFilesButton": {
           "tooltip": "Anexar arquivos"
         },
@@ -12455,6 +12485,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "A pesquisa profunda está desativada no modo multimodelo",
+          "incognitoTooltip": "A pesquisa profunda não está disponível no modo anônimo",
           "label": "Pesquisa profunda"
         },
         "incognitoNotice": {
@@ -12483,6 +12514,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "A voz não está configurada. Configure nas configurações de administração."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter para enviar · Ctrl ou Command + Enter para enfileirar",
+          "multiModelHint": "Não é possível colocar mensagens na fila ao comparar modelos. Escolha um modelo para usar a fila.",
+          "attachmentsHint": "Envie os arquivos anexados após esta resposta terminar.",
+          "chooseResponseHint": "Escolha uma resposta antes de colocar uma mensagem na fila.",
+          "incognitoHint": "Aguarde a resposta terminar no chat anônimo.",
+          "sendHint": "Enviar na próxima etapa desta resposta",
+          "interruptHint": "Interromper o trabalho atual e enviar esta mensagem",
+          "sendLabel": "Enviar",
+          "queueLabel": "Fila",
+          "interruptKeyboardHint": "Enter para interromper · Ctrl ou Command + Enter para enfileirar",
+          "interruptLabel": "Interromper",
+          "waitHint": "Aguarde a resposta terminar.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Parar subagentes"
         }
       },
       "baseInputBar": {
@@ -12581,16 +12630,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Remover mensagem da fila"
+          "tooltip": "Remover mensagem da fila",
+          "ariaLabel": "Remover mensagem da fila: {message}"
         },
         "editHint": {
           "label": "editar ·"
         },
-        "item": {
-          "ariaLabel": "Alternar mensagem na fila"
-        },
         "removeHint": {
           "label": "remover"
+        },
+        "editButton": {
+          "tooltip": "Editar mensagem na fila",
+          "clearDraftTooltip": "Limpe seu rascunho para editar uma mensagem na fila",
+          "ariaLabel": "Editar mensagem na fila: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interromper o trabalho atual e enviar esta mensagem",
+          "ariaLabel": "Enviar agora: {message}"
+        },
+        "sendHint": {
+          "label": "enviar agora ·"
         }
       },
       "sharedAppInputBar": {
@@ -12600,6 +12659,14 @@
         "startSessionButton": {
           "label": "Iniciar nova sessão"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Não foi possível enviar a mensagem.",
+        "withdrawFailed": "Não foi possível remover a mensagem pendente.",
+        "loadFailed": "Não foi possível carregar as mensagens pendentes.",
+        "alreadyAccepted": "Esta mensagem já foi aceita e não está mais pendente.",
+        "interruptFailed": "Não foi possível enviar esta mensagem agora. Ela continua pendente.",
+        "stopSubagentsFailed": "Não foi possível parar os subagentes."
       }
     },
     "mcpApiKey": {
@@ -12695,6 +12762,9 @@
         "timedOut": {
           "text": "A resposta parou porque atingiu o limite de tempo."
         }
+      },
+      "agentResults": {
+        "received": "Resultados dos subagentes recebidos"
       },
       "codeBlock": {
         "copyButton": {
@@ -12843,11 +12913,6 @@
         },
         "stoppedStatus": {
           "text": "Geração de imagens interrompida"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "Copiar tabela"
         }
       },
       "memoizedLink": {
@@ -14505,7 +14570,7 @@
         "promote": {
           "cancelButton": "Cancelar",
           "confirmButton": "Disponibilizar para toda a organização",
-          "description": "Habilidades associadas a um app devem estar disponíveis para todos. Esta alteração é aplicada quando você salva o app.",
+          "description": "Habilidades associadas a um app devem estar disponíveis para todos. Quando você salva o app, a habilidade é publicada na organização. A publicação não pode ser desfeita.",
           "title": "Tornar “{name}” disponível para toda a organização?"
         },
         "search": {
@@ -16441,6 +16506,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Falha ao salvar preferências"
+      },
+      "sendBehavior": {
+        "title": "Comportamento de Envio Durante o Trabalho",
+        "description": "Escolha o que Enter e o botão de envio fazem durante uma resposta. Ctrl/Cmd+Enter sempre coloca uma mensagem na fila.",
+        "afterStep": "Após a etapa atual",
+        "interrupt": "Interromper o trabalho atual"
       }
     },
     "connectors": {
@@ -17153,6 +17224,13 @@
         "savingChanges": "Salvando as alterações...",
         "savingSkill": "Salvando a habilidade..."
       },
+      "staleVersion": {
+        "description": "Alguém salvou uma versão mais recente. Recarregue para obtê-la. Suas alterações não salvas serão perdidas.",
+        "reload": {
+          "label": "Recarregar"
+        },
+        "title": "Esta habilidade mudou desde que você a abriu"
+      },
       "toasts": {
         "created": "\"{name}\" criada",
         "deleteFailed": "Falha ao excluir a habilidade",
@@ -17353,9 +17431,6 @@
           "message": "Carregando os detalhes de compartilhamento..."
         },
         "noOwnerTitle": "Sem proprietário ativo",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Alterar a permissão da organização"
-        },
         "ownerLabel": "Proprietário",
         "permissionMenu": {
           "ariaLabel": "Atualizar o acesso de {name}"
@@ -17396,14 +17471,77 @@
         "peopleTitle": "Pessoas com acesso",
         "manageIndividualAccess": "Gerenciar acesso individual",
         "individualAccessTitle": "Acesso individual",
-        "ownershipTitle": "Propriedade"
+        "ownershipTitle": "Propriedade",
+        "published": {
+          "title": "Organização",
+          "description": "Publicada. Todos na organização podem usar esta habilidade."
+        },
+        "publishWarning": {
+          "title": "A publicação não pode ser desfeita",
+          "description": "Depois de salvar, todos na organização podem usar esta habilidade. Não é possível torná-la privada novamente. Somente um administrador pode excluí-la.",
+          "reviewDescription": "A habilidade fica privada até um administrador aprovar a solicitação. Depois da aprovação, não é possível torná-la privada novamente."
+        },
+        "reviewRequestedToast": {
+          "message": "Sua solicitação de publicação foi enviada a um administrador para revisão."
+        },
+        "publishOff": {
+          "title": "A publicação está desativada",
+          "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar esta habilidade."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
       },
       "tabs": {
         "details": "Detalhes",
-        "sharing": "Compartilhamento"
+        "sharing": "Compartilhamento",
+        "versions": "Versões"
+      },
+      "versions": {
+        "tableLabel": "Versões da habilidade",
+        "columns": {
+          "version": "Versão",
+          "madeBy": "Criada por",
+          "date": "Data"
+        },
+        "versionLabel": "Versão {number}",
+        "currentBadge": "Atual",
+        "unknownAuthor": "Desconhecido",
+        "previewRow": {
+          "ariaLabel": "Pré-visualizar a versão {number}"
+        },
+        "restore": {
+          "label": "Restaurar",
+          "ariaLabel": "Restaurar a versão {number}",
+          "successToast": "Versão {number} restaurada como versão {newNumber}.",
+          "unchangedToast": "A versão {number} tem os mesmos arquivos que a versão atual.",
+          "failedToast": "Não foi possível restaurar esta versão.",
+          "unsavedChanges": {
+            "title": "Salve suas alterações primeiro",
+            "description": "Salve ou descarte as alterações no editor antes de restaurar uma versão."
+          }
+        },
+        "loadError": {
+          "title": "Não foi possível carregar as versões",
+          "description": "Tente novamente mais tarde."
+        },
+        "preview": {
+          "back": "Todas as versões",
+          "loadError": {
+            "title": "Não foi possível carregar esta versão"
+          }
+        },
+        "status": {
+          "pending": "Revisão pendente",
+          "published": "Publicada"
+        },
+        "publishUpdate": {
+          "label": "Publicar atualização",
+          "successToast": "Versão {number} publicada para a organização.",
+          "failedToast": "Não foi possível publicar esta atualização.",
+          "sentForReviewToast": "A versão {number} foi enviada a um administrador para revisão.",
+          "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
+        }
       }
     },
     "page": {
@@ -17556,10 +17694,41 @@
       "shareDescription": "Aplique estas alterações a cada habilidade selecionada. As configurações não alteradas mantêm os valores atuais.",
       "unchanged": "Manter sem alterações",
       "everyone": "Todos na organização",
-      "invitedOnly": "Pessoas e grupos convidados",
       "addAccessDescription": "Adicione estas pessoas e grupos a cada habilidade selecionada. As pessoas e grupos indicados recebem a permissão escolhida. Os demais mantêm o acesso atual.",
       "apply": "{count, plural, one {Aplicar a # habilidade} other {Aplicar a # habilidades}}",
-      "moreActions": "Mais ações"
+      "moreActions": "Mais ações",
+      "publishWarning": {
+        "title": "A publicação não pode ser desfeita",
+        "description": "Depois de aplicar, todos na organização podem usar as habilidades selecionadas. Habilidades publicadas não podem voltar a ser privadas. Somente um administrador pode excluí-las."
+      }
+    },
+    "reviewRequests": {
+      "title": "Solicitações de publicação",
+      "description": "Aprove ou recuse solicitações para publicar habilidades na organização.",
+      "columns": {
+        "skill": "Habilidade",
+        "version": "Versão",
+        "author": "Autor",
+        "saved": "Salva"
+      },
+      "unnamedSkill": "Habilidade sem nome",
+      "review": {
+        "label": "Revisar",
+        "ariaLabel": "Revisar {name}"
+      },
+      "approve": {
+        "label": "Aprovar"
+      },
+      "deny": {
+        "label": "Recusar"
+      },
+      "approvedToast": "Versão {number} de {name} publicada.",
+      "deniedToast": "Versão {number} de {name} recusada.",
+      "failedToast": "Não foi possível atualizar esta solicitação.",
+      "version": {
+        "firstPublish": "v{number} · Primeira publicação",
+        "update": "v{number} · Atualização da v{published}"
+      }
     }
   },
   "opensearchHealth": {

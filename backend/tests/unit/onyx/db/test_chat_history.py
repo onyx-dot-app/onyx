@@ -236,6 +236,7 @@ def test_saved_response_history_preserves_generation_content() -> None:
             id="generation-1",
             chat_message_id=42,
             step_index=0,
+            inputs=[],
             generation_status=ExecutionStatus.CANCELLED,
             message=AssistantMessage(
                 id="generation-1", content=[TextContent(text="Accepted partial output")]
@@ -285,6 +286,7 @@ def test_saved_file_citations_restore_without_search_tool_results() -> None:
             id="generation-1",
             chat_message_id=42,
             step_index=0,
+            inputs=[],
             generation_status=ExecutionStatus.COMPLETE,
             message=AssistantMessage.model_validate_json(
                 AssistantMessage(

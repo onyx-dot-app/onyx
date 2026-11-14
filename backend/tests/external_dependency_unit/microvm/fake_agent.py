@@ -4,6 +4,7 @@ daemon behind its pass-through."""
 import hashlib
 import io
 import itertools
+import shlex
 import threading
 import time
 import zipfile
@@ -35,6 +36,7 @@ _REASON_CODES: dict[HostAgentErrorReason, grpc.StatusCode] = {
     HostAgentErrorReason.CAPACITY_DISK: grpc.StatusCode.RESOURCE_EXHAUSTED,
     HostAgentErrorReason.CAPACITY_VM_SLOTS: grpc.StatusCode.RESOURCE_EXHAUSTED,
     HostAgentErrorReason.ATTEMPT_CONFLICT: grpc.StatusCode.ALREADY_EXISTS,
+    HostAgentErrorReason.STALE_ATTEMPT: grpc.StatusCode.FAILED_PRECONDITION,
     HostAgentErrorReason.SANDBOX_NOT_FOUND: grpc.StatusCode.NOT_FOUND,
     HostAgentErrorReason.INSTANCE_MISMATCH: grpc.StatusCode.FAILED_PRECONDITION,
     HostAgentErrorReason.GUEST_UNREACHABLE: grpc.StatusCode.UNAVAILABLE,
@@ -57,7 +59,12 @@ _DAEMON_REASON_CODES: dict[SandboxDaemonErrorReason, grpc.StatusCode] = {
     SandboxDaemonErrorReason.FILE_NOT_FOUND: grpc.StatusCode.NOT_FOUND,
     SandboxDaemonErrorReason.FILE_EXISTS: grpc.StatusCode.ALREADY_EXISTS,
     SandboxDaemonErrorReason.LIMIT_EXCEEDED: grpc.StatusCode.RESOURCE_EXHAUSTED,
+    SandboxDaemonErrorReason.EXECUTION_CAP_REACHED: grpc.StatusCode.RESOURCE_EXHAUSTED,
 }
+
+# The guest daemon's files.TopFilesRoot.
+TOP_FILES_ROOT = ".onyx-top-level"
+WORKSPACES = "/home/onyx/workspaces"
 
 
 def _abort(
@@ -116,6 +123,11 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         ]
         self.vms: dict[str, hostagent_pb2.VM] = {}
         self.refuse_create: HostAgentErrorReason | None = None
+        self.max_vms = 0
+        # Slots of template builds and processes in doubt.
+        self.other_slots = 0
+        # With refuse_create: refuse only this many more Creates (None: all).
+        self.refuse_create_times: int | None = None
         self.next_generation = 1_000
         self.create_calls = 0
         self.stop_calls: list[tuple[str, int, int]] = []
@@ -148,10 +160,32 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # SwapManagedRequest.mount of each swapped VM, in order.
         self.swap_mounts: list[str] = []
         self._ids = itertools.count(1)
+        # Execution IDs of every Cancel.
+        self.cancel_calls: list[str] = []
+        # Start and Run refuse with EXECUTION_CAP_REACHED at this many
+        # running executions of a VM.
+        self.max_running_executions = 64
         # Seconds each Create waits before it runs (to overlap two wakes).
         self.create_delay_seconds = 0.0
+        # Like the real agent: a Create of a stopped (sandbox, attempt) fails
+        # with STALE_ATTEMPT. Off by default.
+        self.remember_stopped_attempts = False
+        self.stopped_attempts: set[tuple[str, int]] = set()
+        # ListFiles returns at most this many entries (None: 10,000).
+        self.list_max_entries: int | None = None
         # Seconds each Stop waits before it runs.
         self.stop_delay_seconds = 0.0
+        # CaptureSession waits this long first; a cancelled call ends early
+        # and spools nothing (like the agent).
+        self.capture_delay_seconds = 0.0
+        self.capture_started = threading.Event()
+        self.capture_cancelled = threading.Event()
+        self.drain_state = hostagent_pb2.DRAIN_STATE_ACTIVE
+        # Seconds each guest daemon Init waits before it runs.
+        self.init_delay_seconds = 0.0
+        # Like grpc-go, the agent resets a stream with CANCELLED at its
+        # deadline; this many seconds early models a reset that wins the race.
+        self.stream_reset_lead_seconds: float | None = None
 
     def add_vm(
         self,
@@ -191,8 +225,17 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             self.create_requests.append(
                 (request.sandbox_id, request.attempt, request.sandboxd_key)
             )
-            if self.refuse_create is not None:
+            if self.refuse_create is not None and self.refuse_create_times != 0:
+                if self.refuse_create_times is not None:
+                    self.refuse_create_times -= 1
                 abort_with_reason(context, self.refuse_create, "refused by the test")
+            if (
+                self.remember_stopped_attempts
+                and (request.sandbox_id, request.attempt) in self.stopped_attempts
+            ):
+                abort_with_reason(
+                    context, HostAgentErrorReason.STALE_ATTEMPT, "attempt stopped"
+                )
             existing = self.vms.get(request.sandbox_id)
             if existing is not None:
                 # Like the real agent: the same attempt returns the VM, even
@@ -209,6 +252,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                         context, HostAgentErrorReason.ATTEMPT_CONFLICT, "other attempt"
                     )
                 del self.vms[request.sandbox_id]
+            if all(t.version != request.template for t in self.templates):
+                abort_with_reason(
+                    context, HostAgentErrorReason.TEMPLATE_MISSING, "no template"
+                )
             if self.mem_available_mib < request.mem_mib:
                 abort_with_reason(
                     context, HostAgentErrorReason.CAPACITY_MEMORY, "not enough memory"
@@ -276,6 +323,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                     context, HostAgentErrorReason.INSTANCE_MISMATCH, "other instance"
                 )
             del self.vms[request.sandbox_id]
+            self.stopped_attempts.add((request.sandbox_id, vm.attempt))
             self.daemon_keys.pop(request.sandbox_id, None)
             self.daemon_inits.pop(request.sandbox_id, None)
             self._drop_guest_state(request.sandbox_id)
@@ -306,6 +354,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 host_kernel="6.18",
                 agent_version="test",
                 disk_free_mib=100_000,
+                max_vms=self.max_vms,
+                vm_slots_used=len(self.vms) + self.other_slots,
+                drain=hostagent_pb2.DrainStatus(state=self.drain_state),
             )
 
     def CloseConnections(  # noqa: N802
@@ -355,6 +406,13 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         request: hostagent_pb2.CaptureSessionRequest,
         context: grpc.ServicerContext,
     ) -> hostagent_pb2.CaptureSessionResponse:
+        self.capture_started.set()
+        waited_until = time.monotonic() + self.capture_delay_seconds
+        while time.monotonic() < waited_until:
+            if not context.is_active():
+                self.capture_cancelled.set()
+                abort_with_reason(context, HostAgentErrorReason.INTERNAL, "cancelled")
+            time.sleep(0.05)
         with self.lock:
             self._check_instance(
                 context,
@@ -376,6 +434,23 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 path: data
                 for path, data in selected.items()
                 if not _skipped(path, exclude, skip_hidden=False)
+            }
+            # Like the daemon: top-level files go under TOP_FILES_ROOT. Files
+            # directly in a TOP_FILES_ROOT directory stay there, unless a
+            # top-level entry has the same name.
+            top_names = {
+                p.split("/", 1)[0]
+                for (sid, session, p) in self.files
+                if sid == request.sandbox_id and session == request.session_id
+            }
+            members = {
+                p if "/" in p else f"{TOP_FILES_ROOT}/{p}": d
+                for p, d in members.items()
+                if not p.startswith(f"{TOP_FILES_ROOT}/")
+                or (
+                    p.count("/") == 1
+                    and p.removeprefix(f"{TOP_FILES_ROOT}/") not in top_names
+                )
             }
             archive = _zip(members)
             capture_id = self.next_id("cap")
@@ -458,7 +533,10 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
                 abort_with_reason(
                     context, HostAgentErrorReason.ARCHIVE_MISMATCH, "other archive"
                 )
-            members = _unzip(archive)
+            archived = _unzip(archive)
+            members = {
+                p.removeprefix(f"{TOP_FILES_ROOT}/"): d for p, d in archived.items()
+            }
             roots = {p.split("/", 1)[0] for p in members}
             for key in [
                 k
@@ -472,7 +550,7 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             return hostagent_pb2.RestoreSessionResponse(
                 files=len(members),
                 expanded_bytes=sum(len(d) for d in members.values()),
-                roots=sorted({p.split("/", 1)[0] for p in members}),
+                roots=sorted({p.split("/", 1)[0] for p in archived}),
             )
 
     def PutManagedImage(  # noqa: N802
@@ -563,13 +641,16 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
 
 @dataclass
 class FakeExecution:
-    """A scripted command: echo, fail <code>, cat (stdin) or sleep."""
+    """A scripted command: echo, fail <code>, cat (echoes stdin), sleep or
+    mkdir. `bash -c <script>` runs the script's words as one of these."""
 
     execution_id: str
     argv: list[str]
     labels: dict[str, str]
     stdin_open: bool
     session_id: str = ""
+    cwd: str = ""
+    env: dict[str, str] = field(default_factory=dict)
     stdout: bytes = b""
     stderr: bytes = b""
     result: sandboxd_pb2.ExecResult | None = None
@@ -692,6 +773,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     def Init(  # noqa: N802
         self, request: sandboxd_pb2.InitRequest, context: grpc.ServicerContext
     ) -> sandboxd_pb2.InitResponse:
+        if self.agent.init_delay_seconds:
+            time.sleep(self.agent.init_delay_seconds)
         with self.agent.lock:
             sandbox_id, key = self._route(context)
             self._check_key(context, sandbox_id, key)
@@ -716,16 +799,38 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> FakeExecution:
         sandbox_id = self._ready(context)
         argv = list(command.argv)
-        if not argv or argv[0] not in ("echo", "fail", "cat", "sleep"):
+        script = argv
+        if argv[:2] == ["bash", "-c"] and len(argv) == 3:
+            script = shlex.split(argv[2])
+        if not script or script[0] not in (
+            "echo",
+            "fail",
+            "cat",
+            "sleep",
+            "mkdir",
+            "true",
+        ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
+        running = [
+            e
+            for e in self.agent.executions.get(sandbox_id, {}).values()
+            if e.result is None
+        ]
+        if len(running) >= self.agent.max_running_executions:
+            abort_daemon(context, SandboxDaemonErrorReason.EXECUTION_CAP_REACHED, "cap")
         execution = FakeExecution(
             execution_id=self.agent.next_id("exec"),
             argv=argv,
             labels=dict(command.labels),
             stdin_open=command.stdin,
             session_id=command.session_id,
+            cwd=command.cwd,
+            env=dict(command.env),
         )
-        if argv[0] == "echo":
+        argv = script
+        if argv[0] in ("mkdir", "true"):
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "fail":
@@ -804,23 +909,43 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         stdout_offset: int,
         stderr_offset: int,
     ) -> Iterator[sandboxd_pb2.ExecEvent]:
-        """Like the daemon: the stream stays open until the result. A client
+        """Like the daemon: output as it comes, then the result. A client
         that goes away ends the stream, not the command."""
-        with self.agent.lock:
-            while (
-                execution.result is None
-                and not execution.vm_gone
-                and context.is_active()
-            ):
-                self.agent.ended.wait(timeout=0.05)
-            if execution.vm_gone:
-                abort_with_reason(
-                    context, HostAgentErrorReason.VM_NOT_RUNNING, "VM stopped"
-                )
-            if execution.result is None:
+        offsets = [stdout_offset, stderr_offset]
+        reset_lead = self.agent.stream_reset_lead_seconds
+        while True:
+            with self.agent.lock:
+                while (
+                    execution.result is None
+                    and not execution.vm_gone
+                    and context.is_active()
+                    and len(execution.stdout) <= offsets[0]
+                    and len(execution.stderr) <= offsets[1]
+                ):
+                    if (
+                        reset_lead is not None
+                        and context.time_remaining() <= reset_lead
+                    ):
+                        context.abort(
+                            grpc.StatusCode.CANCELLED,
+                            "Received RST_STREAM with error code 8",
+                        )
+                    self.agent.ended.wait(timeout=0.05)
+                if execution.vm_gone:
+                    abort_with_reason(
+                        context, HostAgentErrorReason.VM_NOT_RUNNING, "VM stopped"
+                    )
+                if not context.is_active():
+                    return
+                events = self._events(execution, offsets[0], offsets[1])
+                offsets = [
+                    max(offsets[0], len(execution.stdout)),
+                    max(offsets[1], len(execution.stderr)),
+                ]
+                done = execution.result is not None
+            yield from events
+            if done:
                 return
-            events = self._events(execution, stdout_offset, stderr_offset)
-        yield from events
 
     def Start(  # noqa: N802
         self, request: sandboxd_pb2.StartRequest, context: grpc.ServicerContext
@@ -854,11 +979,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     context, SandboxDaemonErrorReason.STDIN_NOT_OPEN, "no stdin"
                 )
             execution.stdin_data += request.data
-            if request.close_stdin:
-                # cat: echo stdin, exit at EOF.
+            if execution.argv[-1:] == ["cat"]:
+                # cat: echo stdin as it comes, exit at EOF.
                 execution.stdout = bytes(execution.stdin_data)
+            if request.close_stdin:
                 execution.end(sandboxd_pb2.EXITED, 0)
-                self.agent.ended.notify_all()
+            self.agent.ended.notify_all()
             return sandboxd_pb2.InteractResponse(written=len(request.data))
 
     def Cancel(  # noqa: N802
@@ -866,14 +992,18 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.CancelResponse:
         with self.agent.lock:
             execution = self._execution(context, request.execution_id)
+            self.agent.cancel_calls.append(request.execution_id)
             already_ended = execution.result is not None
             soft = request.signal in (
                 sandboxd_pb2.CANCEL_SIGNAL_SIGINT,
                 sandboxd_pb2.CANCEL_SIGNAL_SIGTERM,
             )
             if soft and not already_ended:
-                # The scripted command dies of the signal later; no result yet.
+                # Scripted commands do not trap signals: the command dies of
+                # it after the answer, which carries no result.
                 execution.signaled = request.signal
+                execution.end(sandboxd_pb2.CANCELED)
+                self.agent.ended.notify_all()
                 return sandboxd_pb2.CancelResponse(signaled=True)
             if not already_ended:
                 execution.end(sandboxd_pb2.CANCELED)
@@ -1053,7 +1183,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 continue
             entries.append(self._info(path, len(data)))
         listing = [self._info(d, 0, directory=True) for d in sorted(dirs)] + entries
-        limit = request.max_entries or 10_000
+        limit = request.max_entries or self.agent.list_max_entries or 10_000
         return sandboxd_pb2.ListFilesResponse(
             entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )
@@ -1063,6 +1193,13 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
     ) -> sandboxd_pb2.DeleteFileResponse:
         with self.agent.lock:
             sandbox_id = self._ready(context)
+            if not request.session_id and request.path.startswith(WORKSPACES + "/"):
+                # VM-wide delete of a whole session directory.
+                session = request.path.removeprefix(WORKSPACES + "/")
+                gone = [k for k in self.agent.files if k[:2] == (sandbox_id, session)]
+                for k in gone:
+                    del self.agent.files[k]
+                return sandboxd_pb2.DeleteFileResponse(deleted=bool(gone))
             path = self._check_path(context, request.path)
             key = (sandbox_id, request.session_id, path)
             if self.agent.files.pop(key, None) is not None:

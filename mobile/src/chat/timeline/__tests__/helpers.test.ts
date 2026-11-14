@@ -91,6 +91,21 @@ describe("toolDisplay", () => {
     expect(getToolName([searchInternet])).toBe("Web Search");
     expect(getToolName([searchInternal])).toBe("Internal Search");
     expect(getToolName([])).toBe("Tool");
+    expect(
+      getToolName([
+        makePlacedPacket({
+          type: "custom_tool_start",
+          tool_name: "mcp__3__my__srv__create_issue",
+          display_name: "create_issue",
+        }),
+      ]),
+    ).toBe("create_issue");
+    // Servers that predate display names send only the tool name.
+    expect(
+      getToolName([
+        makePlacedPacket({ type: "custom_tool_start", tool_name: "lookup" }),
+      ]),
+    ).toBe("lookup");
   });
 
   it("detects completion and errors", () => {

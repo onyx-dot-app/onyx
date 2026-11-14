@@ -294,6 +294,11 @@ module "aks" {
   sandbox_node_disk_size_gb = var.sandbox_node_disk_size_gb
   craft_sandbox_runtime     = var.craft_sandbox_runtime
 
+  enable_craft_pod_sandbox_node_pool = var.enable_craft_pod_sandbox_node_pool
+  craft_pod_sandbox_node_vm_size     = var.craft_pod_sandbox_node_vm_size
+  craft_pod_sandbox_node_min_count   = var.craft_pod_sandbox_node_min_count
+  craft_pod_sandbox_node_max_count   = var.craft_pod_sandbox_node_max_count
+
   private_cluster_enabled              = var.private_cluster_enabled
   api_server_authorized_ip_ranges      = local.api_server_authorized_ip_ranges
   allow_unrestricted_api_server_access = var.allow_unrestricted_api_server_access

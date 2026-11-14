@@ -215,41 +215,6 @@ export function getLatestMessageChain(messages: MessageTreeState): Message[] {
   return chain;
 }
 
-export function getLastSuccessfulMessageId(
-  messages: MessageTreeState,
-  chain?: Message[],
-): number | null {
-  const messageChain = chain || getLatestMessageChain(messages);
-  for (let i = messageChain.length - 1; i >= 0; i--) {
-    const message = messageChain[i];
-    if (!message) {
-      console.error(`Message ${i} not found in the message chain.`);
-      continue;
-    }
-
-    if (message.type !== "error" && message.messageId !== undefined) {
-      return message.messageId ?? null;
-    }
-  }
-
-  // chain all errors/empty → fall back to the system node
-  const systemMessage = messages.get(SYSTEM_NODE_ID);
-  if (systemMessage) {
-    const childNodeId = systemMessage.latestChildNodeId;
-    if (childNodeId !== null && childNodeId !== undefined) {
-      const firstRealMessage = messages.get(childNodeId);
-      if (firstRealMessage && firstRealMessage.type !== "error") {
-        return firstRealMessage.messageId ?? null;
-      }
-    }
-    // -3 (synthetic root) here is intentional; the send caller maps it to null
-    // (PR3, mirroring web's useChatController) — matches web.
-    return systemMessage.messageId ?? null;
-  }
-
-  return null;
-}
-
 interface BuildEmptyMessageParams {
   messageType: "user" | "assistant";
   parentNodeId: number;

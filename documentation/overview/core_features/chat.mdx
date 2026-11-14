@@ -67,6 +67,17 @@ Onyx supports all major LLM providers and self-hosted options such as Ollama and
 
 Set your default model, reasoning level, and temperature under **Settings → Chats**.
 
+### Send While Onyx Responds
+
+You can keep typing while Onyx works on a response.
+- Press **Enter** to add your message to the current response. Onyx reads it after its current step.
+- Press **Ctrl+Enter** (**Cmd+Enter** on macOS) to queue your message. Onyx sends it after the response finishes.
+
+Messages that Onyx has not read yet appear above the input bar. You can edit or remove them there,
+or select **Send now** to stop the current response and send that message. Stopping a response pauses the queue.
+
+To make **Enter** stop the current response instead, change **Send Behavior While Working** under **Settings → Chats**.
+
 ## Sources Panel
 
 <img className="rounded-image" src="/assets/overview/core_features/sources_sidebar.webp" alt="Sources panel with Cited Sources and More"/>
@@ -97,7 +108,8 @@ When the Project files do not fit in the model's context window, Onyx searches t
 Start an **Incognito Chat** from the chat header before you send the first message.
 An incognito chat is not saved in your history and is not used to update your memories.
 You can attach text files and images, then ask follow-up questions about them while the session remains active.
-Your admin's data policy still applies. An admin turns Incognito Chats on at **Admin Panel → Security & Hardening**.
+Deep Research and the Coding Agent are not available in an incognito chat. Your admin's data policy still applies.
+An admin turns Incognito Chats on at **Admin Panel → Security & Hardening**.
 
 ## Memory
 

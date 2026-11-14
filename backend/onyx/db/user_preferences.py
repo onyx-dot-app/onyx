@@ -163,6 +163,19 @@ def update_user_paste_as_tile(
     db_session.commit()
 
 
+def update_user_interrupt_on_send(
+    user_id: UUID,
+    interrupt_on_send: bool,
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(interrupt_on_send=interrupt_on_send)
+    )
+    db_session.commit()
+
+
 def update_user_auto_scroll(
     user_id: UUID,
     auto_scroll: bool | None,

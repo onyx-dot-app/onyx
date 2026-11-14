@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "認証"
       },
+      "codingAgentIncognito": {
+        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
+      },
       "configure": {
         "tooltip": "設定"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "アクションを検索..."
       },
+      "selectionSaveFailed": "このチャットのツール選択を保存できませんでした。",
       "serverFallback": {
         "label": "サーバー"
       },
@@ -5204,6 +5208,27 @@
       "unavailable": {
         "description": "Craft はデプロイごとに Onyx が有効にします。利用するには、Onyx の担当者にお問い合わせください。",
         "title": "このデプロイでは Craft を利用できません"
+      },
+      "publishing": {
+        "title": "スキルの公開",
+        "open": {
+          "label": "オープン",
+          "description": "スキルの作成者はすぐに組織に公開できます。"
+        },
+        "requiresReview": {
+          "label": "レビューが必要",
+          "description": "管理者が各公開と各更新を承認します。"
+        },
+        "off": {
+          "label": "オフ",
+          "description": "管理者だけがスキルを組織に公開できます。"
+        },
+        "saveSuccess": {
+          "message": "公開設定を保存しました。"
+        },
+        "saveError": {
+          "message": "公開設定を保存できませんでした。"
+        }
       }
     },
     "credentials": {
@@ -12166,6 +12191,10 @@
         },
         "organization": {
           "label": "組織"
+        },
+        "unpublished": {
+          "label": "未公開の変更",
+          "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
       },
       "toggle": {
@@ -12447,6 +12476,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "サブエージェントが作業中",
         "attachFilesButton": {
           "tooltip": "ファイルを添付"
         },
@@ -12455,6 +12485,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "マルチモデルモードでは Deep Research を使用できません",
+          "incognitoTooltip": "シークレットモードでは Deep Research を使用できません",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12483,6 +12514,24 @@
         "voiceSetupButton": {
           "ariaLabel": "音声を設定",
           "tooltip": "音声が未設定です。管理設定で設定してください。"
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enterで送信 · CtrlまたはCommand + Enterでキューに追加",
+          "multiModelHint": "モデルの比較中はキューに追加できません。キューを使うにはモデルを1つ選んでください。",
+          "attachmentsHint": "この応答が終わってから添付ファイルを送信してください。",
+          "chooseResponseHint": "メッセージをキューに追加する前に応答を選択してください。",
+          "incognitoHint": "シークレットチャットでは応答が終わるまでお待ちください。",
+          "sendHint": "この応答の次のステップで送信",
+          "interruptHint": "現在の処理を中断してこのメッセージを送信",
+          "sendLabel": "送信",
+          "queueLabel": "キュー",
+          "interruptKeyboardHint": "Enterで中断 · CtrlまたはCommand + Enterでキューに追加",
+          "interruptLabel": "中断",
+          "waitHint": "応答が終わるまでお待ちください。",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "サブエージェントを停止"
         }
       },
       "baseInputBar": {
@@ -12581,16 +12630,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "キュー内のメッセージを削除"
+          "tooltip": "キュー内のメッセージを削除",
+          "ariaLabel": "キュー内のメッセージを削除: {message}"
         },
         "editHint": {
           "label": "編集 ·"
         },
-        "item": {
-          "ariaLabel": "キュー内のメッセージを切り替え"
-        },
         "removeHint": {
           "label": "削除"
+        },
+        "editButton": {
+          "tooltip": "キュー内のメッセージを編集",
+          "clearDraftTooltip": "キュー内のメッセージを編集するには下書きを空にしてください",
+          "ariaLabel": "キュー内のメッセージを編集: {message}"
+        },
+        "sendButton": {
+          "tooltip": "現在の処理を中断してこのメッセージを送信",
+          "ariaLabel": "今すぐ送信: {message}"
+        },
+        "sendHint": {
+          "label": "今すぐ送信 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12600,6 +12659,14 @@
         "startSessionButton": {
           "label": "新しいセッションを開始"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "メッセージを送信できませんでした。",
+        "withdrawFailed": "保留中のメッセージを削除できませんでした。",
+        "loadFailed": "保留中のメッセージを読み込めませんでした。",
+        "alreadyAccepted": "このメッセージはすでに受け付けられており、保留中ではありません。",
+        "interruptFailed": "今すぐ送信できませんでした。メッセージは保留中です。",
+        "stopSubagentsFailed": "サブエージェントを停止できませんでした。"
       }
     },
     "mcpApiKey": {
@@ -12695,6 +12762,9 @@
         "timedOut": {
           "text": "応答は制限時間に達したため停止しました。"
         }
+      },
+      "agentResults": {
+        "received": "サブエージェントの結果を受信しました"
       },
       "codeBlock": {
         "copyButton": {
@@ -12843,11 +12913,6 @@
         },
         "stoppedStatus": {
           "text": "画像の生成を停止しました"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "表をコピー"
         }
       },
       "memoizedLink": {
@@ -14505,7 +14570,7 @@
         "promote": {
           "cancelButton": "キャンセル",
           "confirmButton": "組織全体で利用可能にする",
-          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。この変更はアプリの保存時に適用されます。",
+          "description": "アプリに関連付けられたスキルは全員が利用できる必要があります。アプリを保存すると、スキルが組織に公開されます。公開は取り消せません。",
           "title": "「{name}」を組織全体で利用可能にしますか？"
         },
         "search": {
@@ -16441,6 +16506,12 @@
       "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
+      },
+      "sendBehavior": {
+        "title": "処理中の送信動作",
+        "description": "応答中のEnterキーと送信ボタンの動作を選択します。Ctrl/Cmd+Enterは常に次のメッセージをキューに追加します。",
+        "afterStep": "現在のステップの後",
+        "interrupt": "現在の処理を中断"
       }
     },
     "connectors": {
@@ -17153,6 +17224,13 @@
         "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
       },
+      "staleVersion": {
+        "description": "他のユーザーが新しいバージョンを保存しました。再読み込みして取得してください。保存されていない変更は失われます。",
+        "reload": {
+          "label": "再読み込み"
+        },
+        "title": "このスキルは開いた後に変更されました"
+      },
       "toasts": {
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",
@@ -17353,9 +17431,6 @@
           "message": "共有設定を読み込み中..."
         },
         "noOwnerTitle": "有効な所有者がいません",
-        "organizationPermissionMenu": {
-          "ariaLabel": "組織の権限を変更"
-        },
         "ownerLabel": "所有者",
         "permissionMenu": {
           "ariaLabel": "{name} のアクセス権を更新"
@@ -17396,14 +17471,77 @@
         "peopleTitle": "アクセスできるユーザー",
         "manageIndividualAccess": "個別のアクセスを管理",
         "individualAccessTitle": "個別のアクセス",
-        "ownershipTitle": "所有権"
+        "ownershipTitle": "所有権",
+        "published": {
+          "title": "組織",
+          "description": "公開済み。組織内の全員がこのスキルを使用できます。"
+        },
+        "publishWarning": {
+          "title": "公開は取り消せません",
+          "description": "保存すると、組織内の全員がこのスキルを使用できます。非公開に戻すことはできません。削除できるのは管理者のみです。",
+          "reviewDescription": "管理者がリクエストを承認するまで、スキルは非公開のままです。承認後は非公開に戻すことはできません。"
+        },
+        "reviewRequestedToast": {
+          "message": "公開リクエストを管理者のレビューに送信しました。"
+        },
+        "publishOff": {
+          "title": "公開はオフになっています",
+          "description": "管理者が組織への公開をオフにしました。このスキルの公開を管理者に依頼してください。"
+        }
       },
       "placeholders": {
         "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
       },
       "tabs": {
         "details": "詳細",
-        "sharing": "共有"
+        "sharing": "共有",
+        "versions": "バージョン"
+      },
+      "versions": {
+        "tableLabel": "スキルのバージョン",
+        "columns": {
+          "version": "バージョン",
+          "madeBy": "作成者",
+          "date": "日付"
+        },
+        "versionLabel": "バージョン {number}",
+        "currentBadge": "現在",
+        "unknownAuthor": "不明",
+        "previewRow": {
+          "ariaLabel": "バージョン {number} をプレビュー"
+        },
+        "restore": {
+          "label": "復元",
+          "ariaLabel": "バージョン {number} を復元",
+          "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
+          "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
+          "failedToast": "このバージョンを復元できませんでした。",
+          "unsavedChanges": {
+            "title": "先に変更を保存してください",
+            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
+          }
+        },
+        "loadError": {
+          "title": "バージョンを読み込めませんでした",
+          "description": "後でもう一度お試しください。"
+        },
+        "preview": {
+          "back": "すべてのバージョン",
+          "loadError": {
+            "title": "このバージョンを読み込めませんでした"
+          }
+        },
+        "status": {
+          "pending": "レビュー待ち",
+          "published": "公開済み"
+        },
+        "publishUpdate": {
+          "label": "更新を公開",
+          "successToast": "バージョン {number} を組織に公開しました。",
+          "failedToast": "この更新を公開できませんでした。",
+          "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
+          "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
+        }
       }
     },
     "page": {
@@ -17556,10 +17694,41 @@
       "shareDescription": "選択したすべてのスキルに変更を適用します。変更しない設定は現在の値を維持します。",
       "unchanged": "変更しない",
       "everyone": "組織内の全員",
-      "invitedOnly": "招待されたユーザーとグループ",
       "addAccessDescription": "選択したすべてのスキルに、これらのユーザーとグループを追加します。指定したユーザーとグループには選択した権限が設定されます。それ以外のユーザーの現在のアクセス権は変わりません。",
       "apply": "{count, plural, one {# 件のスキルに適用} other {# 件のスキルに適用}}",
-      "moreActions": "その他の操作"
+      "moreActions": "その他の操作",
+      "publishWarning": {
+        "title": "公開は取り消せません",
+        "description": "適用すると、組織内の全員が選択したスキルを使用できます。公開したスキルを非公開に戻すことはできません。削除できるのは管理者のみです。"
+      }
+    },
+    "reviewRequests": {
+      "title": "公開リクエスト",
+      "description": "組織へのスキル公開リクエストを承認または却下します。",
+      "columns": {
+        "skill": "スキル",
+        "version": "バージョン",
+        "author": "作成者",
+        "saved": "保存日時"
+      },
+      "unnamedSkill": "名前のないスキル",
+      "review": {
+        "label": "確認",
+        "ariaLabel": "{name} を確認"
+      },
+      "approve": {
+        "label": "承認"
+      },
+      "deny": {
+        "label": "却下"
+      },
+      "approvedToast": "{name} のバージョン {number} を公開しました。",
+      "deniedToast": "{name} のバージョン {number} を却下しました。",
+      "failedToast": "このリクエストを更新できませんでした。",
+      "version": {
+        "firstPublish": "v{number} · 初回公開",
+        "update": "v{number} · v{published} からの更新"
+      }
     }
   },
   "opensearchHealth": {

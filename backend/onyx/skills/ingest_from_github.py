@@ -16,6 +16,7 @@ from onyx.skills.bundle import (
     DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
+    check_skill_md_size,
     normalize_custom_bundle,
 )
 from onyx.skills.metadata import parse_skill_document
@@ -228,6 +229,19 @@ def fetch_github_skill_bundles(
                     description=document.metadata.description,
                     bundle_bytes=None,
                     unavailable_reason="A built-in Onyx skill already uses this name.",
+                )
+            )
+            continue
+        try:
+            check_skill_md_size(files[skill_md_path])
+        except OnyxError as exc:
+            skills.append(
+                GitHubSkillBundle(
+                    path=skill_directory or ".",
+                    name=document.metadata.name,
+                    description=document.metadata.description,
+                    bundle_bytes=None,
+                    unavailable_reason=exc.detail,
                 )
             )
             continue

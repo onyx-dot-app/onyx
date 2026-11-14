@@ -76,6 +76,7 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 | Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
 | Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
 | Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+| Run Craft against the shared Firecracker dev cluster | `ods craft-dev api` and `ods craft-dev web` | Foreground, stop with Ctrl-C |
 
 Source commands use the selected project's ports and environment. Shared
 infrastructure is the default. `--project NAME` selects an existing project;
@@ -246,6 +247,49 @@ ods backend model-server
 # Start the model server on a custom port
 ods backend model-server --port 9001
 ```
+
+### `craft-dev` - Run Craft Against the Firecracker Dev Cluster
+
+Run a local Craft API and web server against the shared remote Firecracker dev
+cluster, and work with your own sandbox VM there. The commands run the Python
+launchers in `deployment/helm/dev` with `uv run`. That directory's
+[README](../../deployment/helm/dev/README.md) has the full workflow.
+
+A profile file holds the cluster facts: `--profile`, else `CRAFT_DEV_PROFILE`,
+else `dev/craft-dev.yaml` in the onyx-internal checkout next to this repository.
+kubectl always gets an explicit context. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in the profile's `kube.allowed_contexts`.
+
+```shell
+ods craft-dev <subcommand>
+```
+
+**Subcommands:**
+
+- `doctor` - Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head. Changes nothing.
+- `api` - Start the local API server. Needs `telepresence connect`. Arguments after `--` go to uvicorn.
+- `web` - Start the local web server against the local API.
+- `vms` - Show your VM.
+- `skills push <dir>` - Put a local directory on a managed mount of your VM (`--mount`, `--wake`).
+- `exec -- <command>` - Run a command in your VM as the sandbox user (`--wake`, `--cwd`).
+- `logs` - Show the guest and agent lines of your VM (`--guest`, `--agent`, `--since`, `--tail`, `-f`).
+- `reset` - Save your sessions, then stop your VM (`--force` skips the save).
+
+The VM commands act only on your user: `--user`, else `CRAFT_DEV_USER`, else
+`user.email` in the profile.
+
+**Examples:**
+
+```shell
+ods craft-dev doctor
+ods craft-dev api --port 8081
+ods craft-dev web --port 8081
+CRAFT_DEV_USER=me@example.com ods craft-dev skills push ./my-skills --wake
+ods craft-dev exec -- ls -la /mnt/skills
+```
+
+Until an `onyx-devtools` release includes `craft-dev`, run it from source at the
+repository root: `go -C tools/ods run . craft-dev doctor`.
 
 ### `stack` - Run the Local Dev Stack of a Worktree
 
@@ -1003,6 +1047,45 @@ ods audit --format=sarif,text > audit.sarif
 ods audit --all-lockfiles --web --python
 ```
 
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
+
+#### Audit the Craft Firecracker guest kernel and Firecracker
+
+A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
+`ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
+`deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
+
+- The guest kernel is an Amazon Linux `microvm-kernel` tag. Each Amazon Linux 2023
+  advisory (ALAS) for the same kernel series, fixed in a newer package than the pin, is a finding.
+- Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
+
+The allowlist, report formats and `--fail-on` work as for `ods audit image`.
+A feed that cannot be read fails the command. Set `GH_TOKEN` to raise the GitHub API rate limit.
+
+```shell
+ods audit craft-fc --fail-on=high
+```
+
 #### Checking a release branch before a tag
 
 `ods audit gate` runs the deploy gate on the checked-out tree: the lockfiles,
@@ -1404,10 +1487,14 @@ matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

@@ -104,7 +104,10 @@ const ChatScrollContainer = React.memo(
       );
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const followOpeningUntilRef = useRef(0);
-      const prevScrollTopRef = useRef(0); // Track scroll position to detect scroll direction
+      // Scroll position and content height that the next scroll event is
+      // measured from. Record both together: shrinkage since the baseline
+      // explains upward movement.
+      const scrollBaselineRef = useRef({ top: 0, height: 0 });
       const [isScrollReady, setIsScrollReady] = useState(false);
 
       // Use refs for values that change during streaming to prevent effect re-runs
@@ -189,7 +192,10 @@ const ChatScrollContainer = React.memo(
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Update tracking refs
-          prevScrollTopRef.current = targetScrollTop;
+          scrollBaselineRef.current = {
+            top: targetScrollTop,
+            height: container.scrollHeight,
+          };
           isAtBottomRef.current = true;
 
           // For smooth scrolling, keep isAutoScrollingRef true longer
@@ -207,7 +213,10 @@ const ChatScrollContainer = React.memo(
                     behavior: "instant",
                   });
                 }
-                prevScrollTopRef.current = container.scrollTop;
+                scrollBaselineRef.current = {
+                  top: container.scrollTop,
+                  height: container.scrollHeight,
+                };
               }
               // A user can interrupt the glide before it reaches the bottom.
               isAtBottomRef.current = updateScrollState().isAtBottom;
@@ -259,8 +268,17 @@ const ChatScrollContainer = React.memo(
         if (isAutoScrollingRef.current) return;
 
         const currentScrollTop = container.scrollTop;
-        const scrolledUp = currentScrollTop < prevScrollTopRef.current - 5; // 5px threshold to ignore micro-movements
-        prevScrollTopRef.current = currentScrollTop;
+        // Content that shrinks (rows settling to their measured height) makes
+        // the browser clamp or anchor the scroll position up by at most the
+        // shrinkage. That part is layout, not the user, so only movement
+        // beyond it stops following.
+        const baseline = scrollBaselineRef.current;
+        const shrinkage = Math.max(0, baseline.height - container.scrollHeight);
+        const scrolledUp = currentScrollTop < baseline.top - shrinkage - 5; // 5px threshold to ignore micro-movements
+        scrollBaselineRef.current = {
+          top: currentScrollTop,
+          height: container.scrollHeight,
+        };
 
         // Only upward movement can stop following new content.
         if (scrolledUp) {
@@ -356,7 +374,7 @@ const ChatScrollContainer = React.memo(
         if (isNewSession) {
           scrolledForSessionRef.current = null;
           setIsScrollReady(false);
-          prevScrollTopRef.current = 0;
+          scrollBaselineRef.current = { top: 0, height: 0 };
           isAtBottomRef.current = true;
         }
 
@@ -403,8 +421,11 @@ const ChatScrollContainer = React.memo(
 
           container.scrollTo({ top: targetScrollTop, behavior });
 
-          // Update prevScrollTopRef so scroll direction is measured from new position
-          prevScrollTopRef.current = targetScrollTop;
+          // Measure the next scroll from the new position
+          scrollBaselineRef.current = {
+            top: targetScrollTop,
+            height: container.scrollHeight,
+          };
 
           isAtBottomRef.current = updateScrollState().isAtBottom;
 

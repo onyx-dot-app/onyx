@@ -205,6 +205,11 @@ def on_task_postrun(
         f"for tenant_id={tenant_id}" if tenant_id else "",
     )
 
+    _remove_from_taskset(task_id, tenant_id)
+
+
+def _remove_from_taskset(task_id: str, tenant_id: str) -> None:
+    """Drop a finished or revoked task from the taskset its id prefix names."""
     r = get_redis_client(tenant_id=tenant_id)
 
     # NOTE: we want to remove the `Redis*` classes, prefer to just have functions to
@@ -245,24 +250,19 @@ def on_task_revoked(
     request: Any | None = None,
     **kwds: Any,  # noqa: ARG001
 ) -> None:
-    """Drain the doc-sync taskset when a task is revoked/expired.
+    """Drain the taskset when a task is revoked/expired.
 
     Expired tasks are discarded before running, so task_postrun (which normally
     srem's the taskset) never fires. Without this, the stranded id keeps the
-    taskset non-empty and wedges the sync fence until its 7-day TTL.
+    taskset non-empty and wedges the fence until its 7-day TTL.
     """
     task_id = getattr(request, "id", None)  # ods: ignore[getattr]
     if not task_id:
         return
 
-    if not task_id.startswith(DOCUMENT_SYNC_PREFIX):
-        return
-
     request_kwargs = getattr(request, "kwargs", None) or {}  # ods: ignore[getattr]
     tenant_id = cast(str, request_kwargs.get("tenant_id", POSTGRES_DEFAULT_SCHEMA))
-
-    r = get_redis_client(tenant_id=tenant_id)
-    r.srem(DOCUMENT_SYNC_TASKSET_KEY, task_id)
+    _remove_from_taskset(task_id, tenant_id)
 
 
 def on_celeryd_init(

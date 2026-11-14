@@ -78,7 +78,7 @@ from onyx.db.connector import (
     check_federated_connectors_exist,
     fetch_unique_document_sources,
 )
-from onyx.db.document_set import filter_document_set_names_by_user_access
+from onyx.db.document_set import require_document_set_access
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.federated import (
     get_federated_connector_document_set_mappings_by_document_set_names,
@@ -88,7 +88,6 @@ from onyx.db.models import SearchSettings, User
 from onyx.db.search_settings import get_current_search_settings
 from onyx.db.slack_bot import fetch_slack_bots
 from onyx.document_index.interfaces import DocumentIndex
-from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.factory import get_default_feature_flag_provider
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -1021,26 +1020,13 @@ class SearchTool(Tool):
             )
 
             # Validate document-set access for user-supplied filters.
-            if (
-                self.user_selected_filters
-                and self.user_selected_filters.document_set
-                and self.user
-                and not self.user.is_anonymous
-            ):
-                requested = self.user_selected_filters.document_set
-                accessible = filter_document_set_names_by_user_access(
-                    db_session=db_session,
-                    document_set_names=requested,
-                    user=self.user,
-                )
-                unauthorized = sorted(
-                    name for name in requested if name not in accessible
-                )
-                if unauthorized:
-                    raise OnyxError(
-                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                        f"User does not have access to document sets: {unauthorized}",
-                    )
+            require_document_set_access(
+                db_session,
+                self.user_selected_filters.document_set
+                if self.user_selected_filters
+                else None,
+                self.user,
+            )
 
             # SearchSettings → materialise EmbeddingModel while session is
             # open (forces lazy-load of cloud_provider properties)

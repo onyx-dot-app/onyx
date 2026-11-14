@@ -13,7 +13,7 @@ from onyx.configs.app_configs import (
     MAX_EMBEDDING_RATE_LIMIT_REQUESTS,
 )
 from onyx.configs.constants import QueryHistoryType
-from onyx.db.enums import SupportedLanguage
+from onyx.db.enums import PluginPublishingPolicy, SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
@@ -137,6 +137,10 @@ class Settings(BaseModel):
     # API access for external tools like Claude Code or Cursor). When False,
     # every gateway route rejects requests. Default on.
     llm_gateway_enabled: bool = True
+
+    # Who can publish skills to the organization. Organization-wide skill
+    # managers always publish at once.
+    plugin_publishing: PluginPublishingPolicy = PluginPublishingPolicy.OPEN
 
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.

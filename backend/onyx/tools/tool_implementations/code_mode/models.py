@@ -63,6 +63,8 @@ class CodeModeCall(BaseModel):
     tool_name: str
     # Tool row of the called tool; the UI uses it to reconnect custom and MCP tools.
     tool_id: int | None = None
+    # The called tool's display name. Calls saved without one show `tool_name`.
+    display_name: str | None = None
     # Name of the Python function the program called; differs when the tool name is not
     # a valid identifier.
     function_name: str

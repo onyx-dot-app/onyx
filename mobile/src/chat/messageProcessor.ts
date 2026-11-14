@@ -284,6 +284,10 @@ function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
   state.stopPacketSeen = true;
   state.isComplete = true;
   state.stopReason = (packet.obj as Stop).stop_reason;
+  // Nothing follows Stop, so the latest text is the answer, even when its step also called a tool.
+  if (state.displayGroupKeys.size > 0) {
+    state.finalAnswerComing = true;
+  }
 
   // Close every still-open group — this is why the final-answer group gets its SECTION_END (the
   // backend never sends one).

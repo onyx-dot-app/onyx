@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "S'authentifier"
       },
+      "codingAgentIncognito": {
+        "tooltip": "L'agent de code n'est pas disponible en mode incognito"
+      },
       "configure": {
         "tooltip": "Configurer"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "Rechercher des actions..."
       },
+      "selectionSaveFailed": "Impossible d’enregistrer la sélection d’outils de ce chat.",
       "serverFallback": {
         "label": "serveur"
       },
@@ -5204,6 +5208,27 @@
       "unavailable": {
         "description": "Craft est activé déploiement par déploiement par Onyx. Contactez votre représentant Onyx pour y accéder.",
         "title": "Craft n'est pas disponible sur ce déploiement"
+      },
+      "publishing": {
+        "title": "Publication des compétences",
+        "open": {
+          "label": "Ouverte",
+          "description": "Les auteurs publient pour l'organisation immédiatement."
+        },
+        "requiresReview": {
+          "label": "Examen requis",
+          "description": "Un administrateur approuve chaque publication et chaque mise à jour."
+        },
+        "off": {
+          "label": "Désactivée",
+          "description": "Seuls les administrateurs publient des compétences pour l'organisation."
+        },
+        "saveSuccess": {
+          "message": "Paramètre de publication enregistré."
+        },
+        "saveError": {
+          "message": "Impossible d'enregistrer le paramètre de publication."
+        }
       }
     },
     "credentials": {
@@ -12166,6 +12191,10 @@
         },
         "organization": {
           "label": "Organisation"
+        },
+        "unpublished": {
+          "label": "Modifications non publiées",
+          "tooltip": "L'organisation utilise encore la version {number}."
         }
       },
       "toggle": {
@@ -12447,6 +12476,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Sous-agents en cours",
         "attachFilesButton": {
           "tooltip": "Joindre des fichiers"
         },
@@ -12455,6 +12485,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "La recherche approfondie est désactivée en mode multi-modèle",
+          "incognitoTooltip": "La recherche approfondie n'est pas disponible en mode incognito",
           "label": "Recherche approfondie"
         },
         "incognitoNotice": {
@@ -12483,6 +12514,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurer la voix",
           "tooltip": "La voix n'est pas configurée. Configurez-la dans les paramètres d'administration."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Entrée pour envoyer · Ctrl ou Commande + Entrée pour mettre en attente",
+          "multiModelHint": "La file d'attente n'est pas disponible pendant la comparaison de modèles. Choisissez un modèle pour mettre des messages en file.",
+          "attachmentsHint": "Envoyez les pièces jointes une fois cette réponse terminée.",
+          "chooseResponseHint": "Choisissez une réponse avant de mettre un message en file.",
+          "incognitoHint": "Attendez la fin de la réponse dans le chat incognito.",
+          "sendHint": "Envoyer à la prochaine étape de cette réponse",
+          "interruptHint": "Interrompre le travail en cours et envoyer ce message",
+          "sendLabel": "Envoyer",
+          "queueLabel": "En attente",
+          "interruptKeyboardHint": "Entrée pour interrompre · Ctrl ou Commande + Entrée pour mettre en attente",
+          "interruptLabel": "Interrompre",
+          "waitHint": "Attendez la fin de la réponse.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Arrêter les sous-agents"
         }
       },
       "baseInputBar": {
@@ -12581,16 +12630,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Retirer le message en attente"
+          "tooltip": "Retirer le message en attente",
+          "ariaLabel": "Retirer le message en attente : {message}"
         },
         "editHint": {
           "label": "modifier ·"
         },
-        "item": {
-          "ariaLabel": "Basculer le message en attente"
-        },
         "removeHint": {
           "label": "retirer"
+        },
+        "editButton": {
+          "tooltip": "Modifier le message en file",
+          "clearDraftTooltip": "Videz votre brouillon pour modifier un message en file",
+          "ariaLabel": "Modifier le message en attente : {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrompre le travail en cours et envoyer ce message",
+          "ariaLabel": "Envoyer maintenant : {message}"
+        },
+        "sendHint": {
+          "label": "envoyer maintenant ·"
         }
       },
       "sharedAppInputBar": {
@@ -12600,6 +12659,14 @@
         "startSessionButton": {
           "label": "Démarrer une nouvelle session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Impossible d’envoyer le message.",
+        "withdrawFailed": "Impossible de retirer le message en attente.",
+        "loadFailed": "Impossible de charger les messages en attente.",
+        "alreadyAccepted": "Ce message a déjà été accepté et n’est plus en attente.",
+        "interruptFailed": "Impossible d’envoyer ce message maintenant. Il reste en attente.",
+        "stopSubagentsFailed": "Impossible d'arrêter les sous-agents."
       }
     },
     "mcpApiKey": {
@@ -12695,6 +12762,9 @@
         "timedOut": {
           "text": "La réponse s'est arrêtée, car elle a atteint sa limite de temps."
         }
+      },
+      "agentResults": {
+        "received": "Résultats des sous-agents reçus"
       },
       "codeBlock": {
         "copyButton": {
@@ -12843,11 +12913,6 @@
         },
         "stoppedStatus": {
           "text": "Génération d'images arrêtée"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "Copier le tableau"
         }
       },
       "memoizedLink": {
@@ -14505,7 +14570,7 @@
         "promote": {
           "cancelButton": "Annuler",
           "confirmButton": "Rendre disponible pour l'organisation",
-          "description": "Les compétences associées à une app doivent être disponibles pour tous. Ce changement est appliqué lorsque vous enregistrez l'app.",
+          "description": "Les compétences associées à une app doivent être disponibles pour tous. Lorsque vous enregistrez l'app, la compétence est publiée dans l'organisation. La publication est irréversible.",
           "title": "Rendre « {name} » disponible pour toute l'organisation ?"
         },
         "search": {
@@ -16441,6 +16506,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Échec de l'enregistrement des préférences"
+      },
+      "sendBehavior": {
+        "title": "Comportement d’Envoi Pendant le Travail",
+        "description": "Choisissez l’action d’Entrée et du bouton d’envoi pendant une réponse. Ctrl/Cmd+Entrée met toujours le message en attente.",
+        "afterStep": "Après l’étape en cours",
+        "interrupt": "Interrompre le travail en cours"
       }
     },
     "connectors": {
@@ -17153,6 +17224,13 @@
         "savingChanges": "Enregistrement des modifications...",
         "savingSkill": "Enregistrement de la compétence..."
       },
+      "staleVersion": {
+        "description": "Quelqu’un a enregistré une version plus récente. Rechargez pour l’obtenir. Vos modifications non enregistrées seront perdues.",
+        "reload": {
+          "label": "Recharger"
+        },
+        "title": "Cette compétence a changé depuis son ouverture"
+      },
       "toasts": {
         "created": "« {name} » créée",
         "deleteFailed": "Échec de la suppression de la compétence",
@@ -17353,9 +17431,6 @@
           "message": "Chargement des détails de partage..."
         },
         "noOwnerTitle": "Aucun propriétaire actif",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Changer l'autorisation de l'organisation"
-        },
         "ownerLabel": "Propriétaire",
         "permissionMenu": {
           "ariaLabel": "Mettre à jour l'accès de {name}"
@@ -17396,14 +17471,77 @@
         "peopleTitle": "Personnes ayant accès",
         "manageIndividualAccess": "Gérer les accès individuels",
         "individualAccessTitle": "Accès individuels",
-        "ownershipTitle": "Propriété"
+        "ownershipTitle": "Propriété",
+        "published": {
+          "title": "Organisation",
+          "description": "Publiée. Tout le monde dans l'organisation peut utiliser cette compétence."
+        },
+        "publishWarning": {
+          "title": "La publication est irréversible",
+          "description": "Après l'enregistrement, tout le monde dans l'organisation peut utiliser cette compétence. Vous ne pourrez plus la rendre privée. Seul un administrateur peut la supprimer.",
+          "reviewDescription": "La compétence reste privée jusqu'à ce qu'un administrateur approuve la demande. Après l'approbation, vous ne pourrez plus la rendre privée."
+        },
+        "reviewRequestedToast": {
+          "message": "Votre demande de publication a été envoyée à un administrateur pour examen."
+        },
+        "publishOff": {
+          "title": "La publication est désactivée",
+          "description": "Un administrateur a désactivé la publication dans l'organisation. Demandez à un administrateur de publier cette compétence."
+        }
       },
       "placeholders": {
         "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
       },
       "tabs": {
         "details": "Détails",
-        "sharing": "Partage"
+        "sharing": "Partage",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Versions de la compétence",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Créée par",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Actuelle",
+        "unknownAuthor": "Inconnu",
+        "previewRow": {
+          "ariaLabel": "Aperçu de la version {number}"
+        },
+        "restore": {
+          "label": "Restaurer",
+          "ariaLabel": "Restaurer la version {number}",
+          "successToast": "Version {number} restaurée en tant que version {newNumber}.",
+          "unchangedToast": "La version {number} a les mêmes fichiers que la version actuelle.",
+          "failedToast": "Impossible de restaurer cette version.",
+          "unsavedChanges": {
+            "title": "Enregistrez d'abord vos modifications",
+            "description": "Enregistrez ou annulez les modifications de l'éditeur avant de restaurer une version."
+          }
+        },
+        "loadError": {
+          "title": "Impossible de charger les versions",
+          "description": "Réessayez plus tard."
+        },
+        "preview": {
+          "back": "Toutes les versions",
+          "loadError": {
+            "title": "Impossible de charger cette version"
+          }
+        },
+        "status": {
+          "pending": "Examen en attente",
+          "published": "Publiée"
+        },
+        "publishUpdate": {
+          "label": "Publier la mise à jour",
+          "successToast": "Version {number} publiée pour l'organisation.",
+          "failedToast": "Impossible de publier cette mise à jour.",
+          "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
+          "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
+        }
       }
     },
     "page": {
@@ -17556,10 +17694,41 @@
       "shareDescription": "Appliquez ces modifications à chaque compétence sélectionnée. Les paramètres non modifiés conservent leurs valeurs actuelles.",
       "unchanged": "Ne pas modifier",
       "everyone": "Tout le monde dans l’organisation",
-      "invitedOnly": "Personnes et groupes invités",
       "addAccessDescription": "Ajoutez ces personnes et groupes à chaque compétence sélectionnée. Les personnes et groupes indiqués reçoivent la permission choisie. Les autres conservent leur accès actuel.",
       "apply": "{count, plural, one {Appliquer à # compétence} other {Appliquer à # compétences}}",
-      "moreActions": "Plus d’actions"
+      "moreActions": "Plus d’actions",
+      "publishWarning": {
+        "title": "La publication est irréversible",
+        "description": "Après l'application, tout le monde dans l'organisation peut utiliser les compétences sélectionnées. Les compétences publiées ne peuvent plus redevenir privées. Seul un administrateur peut les supprimer."
+      }
+    },
+    "reviewRequests": {
+      "title": "Demandes de publication",
+      "description": "Approuvez ou refusez les demandes de publication de compétences pour l'organisation.",
+      "columns": {
+        "skill": "Compétence",
+        "version": "Version",
+        "author": "Auteur",
+        "saved": "Enregistrée"
+      },
+      "unnamedSkill": "Compétence sans nom",
+      "review": {
+        "label": "Examiner",
+        "ariaLabel": "Examiner {name}"
+      },
+      "approve": {
+        "label": "Approuver"
+      },
+      "deny": {
+        "label": "Refuser"
+      },
+      "approvedToast": "Version {number} de {name} publiée.",
+      "deniedToast": "Version {number} de {name} refusée.",
+      "failedToast": "Impossible de mettre à jour cette demande.",
+      "version": {
+        "firstPublish": "v{number} · Première publication",
+        "update": "v{number} · Mise à jour depuis v{published}"
+      }
     }
   },
   "opensearchHealth": {

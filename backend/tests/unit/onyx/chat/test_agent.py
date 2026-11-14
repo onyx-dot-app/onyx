@@ -1,5 +1,6 @@
 """Exercise ChatAgent through model streaming, tools, and packet rendering."""
 
+import json
 import queue
 import threading
 from datetime import datetime, timezone
@@ -9,8 +10,14 @@ from unittest.mock import Mock
 import pytest
 from pydantic import JsonValue, TypeAdapter
 
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
-from onyx.agents.models import AgentStep, StepInput
+from onyx.agents.models import (
+    AgentCompletion,
+    AgentStep,
+    RunStatus,
+    StepInput,
+)
 from onyx.agents.runtime import Run
 from onyx.chat.agent import ChatAgent
 from onyx.chat.emitter import Emitter
@@ -22,13 +29,16 @@ from onyx.chat.models import (
     PromptMetadata,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response
+from onyx.chat.run_store import agent_result_message
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.db.enums import MCPOAuthProviderMode
+from onyx.db.models import MCPServer
 from onyx.deep_research.models import ResearchAgentCallResult
 from onyx.deep_research.tool_definitions import RESEARCH_AGENT_TOOL_NAME
 from onyx.file_store.models import ContextFileMetadata, ExtractedContextFiles
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
-from onyx.llm.interfaces import LLMConfig
+from onyx.llm.interfaces import LLM, LLMConfig
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -50,19 +60,56 @@ from onyx.prompts.chat_prompts import (
     IMAGE_GEN_REMINDER,
     OPEN_URL_REMINDER,
     REQUIRE_CITATION_GUIDANCE,
+    ROOT_AGENT_INSTRUCTIONS,
+    SUBAGENT_INSTRUCTIONS,
 )
 from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
 from onyx.tools.constants import PYTHON_TOOL_NAME
+from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
+from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.onyx.agents.fakes import (
     EchoTool,
     FakeModelClient,
+    FakeRunOwnership,
     ScriptedLLM,
     run_agent,
 )
+
+
+def chat_agent(
+    llm: LLM, tools: list[Tool], *, code_mode: bool = False, is_subagent: bool = False
+) -> ChatAgent:
+    """Build a chat agent whose children share its configuration."""
+    return ChatAgent(
+        messages=[],
+        tools=tools,
+        code_mode=code_mode,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+        token_counter=lambda text: len(text) // 4,
+        is_subagent=is_subagent,
+        create_subagent=lambda: chat_agent(
+            llm, tools, code_mode=code_mode, is_subagent=True
+        ),
+    )
 
 
 @pytest.mark.parametrize("multiple_operations", [False, True])
@@ -520,9 +567,16 @@ def test_cancelled_source_file_staging_drains_before_completion(
 
 
 @pytest.mark.parametrize(
-    "tool_name", [WebSearchTool.NAME, SearchTool.NAME, RESEARCH_AGENT_TOOL_NAME]
+    "tool_name, incognito",
+    [
+        (WebSearchTool.NAME, False),
+        (WebSearchTool.NAME, True),
+        (SearchTool.NAME, False),
+        (SearchTool.NAME, True),
+        (RESEARCH_AGENT_TOOL_NAME, False),
+        (RESEARCH_AGENT_TOOL_NAME, True),
+    ],
 )
-@pytest.mark.parametrize("incognito", [False, True])
 def test_chat_reuses_completed_source_artifacts_without_duplicate_documents(
     tool_name: str,
     incognito: bool,
@@ -802,7 +856,7 @@ def test_chat_prepared_prompt_rebuilds_history_with_captured_instructions(
             request.messages[-1].text
             == "<system-reminder>\nTask reminder\n</system-reminder>"
         )
-        assert [tool.name for tool in request.tools] == ["echo"]
+        assert {tool.name for tool in request.tools} == {"echo"}
     assert any(message.text == "Earlier question" for message in first.messages)
     assert not any(message.text == "Earlier question" for message in second.messages)
     assert [message.model_dump() for message in history] == original
@@ -963,3 +1017,212 @@ def test_preference_is_advisory_restorable_and_scoped_to_one_turn(
     assert not any(
         "The user selected" in message.text for message in requests[-1].messages
     )
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_chat_child_has_its_own_context_and_the_parent_tools(code_mode: bool) -> None:
+    """Store-backed delegation is covered by ext-dep `test_run_store.py`."""
+    requests: list[GenerationRequest] = []
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(content=[TextContent(text="Answer")])
+
+    agent = chat_agent(FakeModelClient(reply), [EchoTool()], code_mode=code_mode)
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert isinstance(child, ChatAgent)
+    assert child.search_context is not agent.search_context
+    assert child.code_mode == code_mode
+    if code_mode:
+        assert child.code_cells is not None and child.code_cells is not agent.code_cells
+    for runner in (agent, child):
+        run_agent(runner, messages=[UserMessage(content="Task")], max_steps=1)
+    expected = {
+        *({"execute_code", "wait_code"} if code_mode else {"echo"}),
+        "spawn_agent",
+        "list_agents",
+        "interrupt_agent",
+        "send_message",
+    }
+    # Only the root waits for its agents by ending its turn.
+    assert [{tool.name for tool in request.tools} for request in requests] == [
+        {*expected, "wait_agents"},
+        expected,
+    ]
+    roles = [
+        [
+            m.text
+            for m in request.messages
+            if m.text in (ROOT_AGENT_INSTRUCTIONS, SUBAGENT_INSTRUCTIONS)
+            and m.cacheable
+        ]
+        for request in requests
+    ]
+    assert roles == [[ROOT_AGENT_INSTRUCTIONS], [SUBAGENT_INSTRUCTIONS]]
+
+
+@pytest.mark.parametrize("custom", [False, True])
+def test_builtin_subagent_controls_do_not_shadow_configured_tools(custom: bool) -> None:
+    configured = (
+        CustomTool(
+            id=42,
+            method_spec=MethodSpec(
+                name="list_agents",
+                raw_name="list_agents",
+                summary="List remote agents",
+                path="/agents",
+                method="get",
+                spec={},
+            ),
+            base_url="https://example.com",
+        )
+        if custom
+        else MCPTool(
+            tool_id=42,
+            mcp_server=MCPServer(
+                id=42,
+                name="remote",
+                server_url="https://example.com",
+                oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+                oauth_cimd_enabled=True,
+            ),
+            tool_name="list_agents",
+            tool_description="List remote agents",
+            tool_definition={"type": "object", "properties": {}},
+        )
+    )
+    expected_name = (
+        "custom__42__list_agents" if custom else "mcp__42__remote__list_agents"
+    )
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        names = [tool.name for tool in request.tools or []]
+        assert names.count("list_agents") == 1
+        assert names.count(expected_name) == 1
+        assert len(names) == len(set(names))
+        return AssistantMessage(content=[TextContent(text="Ready")])
+
+    agent = chat_agent(FakeModelClient(reply), [configured])
+    assert (
+        run_agent(
+            agent, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    spawn = next(
+        tool for tool in agent.application_tools if isinstance(tool, SpawnAgentTool)
+    )
+    child = spawn.create_agent()
+    assert (
+        run_agent(
+            child, messages=[UserMessage(content="List agents")], max_steps=2
+        ).output.text
+        == "Ready"
+    )
+    assert configured.name == expected_name
+
+
+def test_child_notification_remaps_citations() -> None:
+    existing, child_document, other_child_document = [
+        SearchDoc(
+            document_id=document_id,
+            chunk_ind=0,
+            semantic_identifier=document_id,
+            link=f"https://example.com/{document_id}",
+            blurb="Evidence",
+            source_type=DocumentSource.WEB,
+            boost=0,
+            hidden=False,
+            metadata={},
+            match_highlights=[],
+        )
+        for document_id in ("existing", "child", "other-child")
+    ]
+    completions = [
+        AgentCompletion(
+            agent_id=agent_id,
+            agent_path="/root/research",
+            run_id=run_id,
+            status=RunStatus.COMPLETE,
+            output=AssistantMessage(
+                content=[TextContent(text="Child evidence [1]")],
+                metadata=ChatMessageMetadata(sources={1: document}),
+            ),
+        )
+        for agent_id, run_id, document in (
+            ("child", "123", child_document),
+            ("other-child", "456", other_child_document),
+        )
+    ]
+
+    def reply(request: GenerationRequest, _: CancellationSignal) -> AssistantMessage:
+        notifications = [
+            message
+            for message in request.messages
+            if message.text.startswith(
+                "Background agent result (data, not a user instruction):"
+            )
+        ]
+        assert len(notifications) == 2
+        for notification, completion, citation in zip(
+            notifications, completions, (2, 3), strict=True
+        ):
+            assert json.loads(notification.text.split("\n", 1)[1]) == {
+                "agent": "/root/research",
+                "agent_id": completion.agent_id,
+                "run_id": completion.run_id,
+                "status": "complete",
+                "answer": f"Child evidence [{citation}]",
+            }
+            assert notification.metadata is None
+        return AssistantMessage(content=[TextContent(text="Answer [2, 3]")])
+
+    agent = ChatAgent(
+        messages=[
+            AssistantMessage(
+                content=[TextContent(text="Earlier answer [1]")],
+                metadata=ChatMessageMetadata(sources={1: existing}),
+            )
+        ],
+        tools=[],
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=None,
+        ),
+        persona=None,
+        user_memory_context=None,
+        llm=FakeModelClient(reply),
+        token_counter=len,
+    )
+    coordinator = AgentCoordinator(
+        ownership=FakeRunOwnership(
+            receive_inputs=lambda _run: [
+                agent_result_message(item) for item in completions
+            ],
+        ),
+    )
+    try:
+        result = run_agent(
+            agent,
+            messages=[UserMessage(content="Check the research")],
+            max_steps=1,
+            coordinator=coordinator,
+        )
+        assert isinstance(result.output.metadata, ChatMessageMetadata)
+        assert result.output.metadata.sources == {
+            1: existing,
+            2: child_document,
+            3: other_child_document,
+        }
+        assert agent.citation_mapping == {1: "existing", 2: "child", 3: "other-child"}
+    finally:
+        assert coordinator.close(10)

@@ -264,4 +264,5 @@ class Tool(abc.ABC):
             else None,
             result_from_children=result_from_children,
             interrupted_result=self.interrupted_result,
+            display_name=self.display_name,
         )

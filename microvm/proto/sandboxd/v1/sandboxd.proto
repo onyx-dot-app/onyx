@@ -675,8 +675,14 @@ message ArchiveLimits {
 
 message CaptureSessionRequest {
   string session_id = 1;
-  // Capture roots: names of directories in the session directory. Empty
-  // means the daemon's --capture-dirs (attachments).
+  // Capture roots: names of directories or regular files in the session
+  // directory. Empty means the daemon's --capture-dirs (attachments).
+  // Regular files go in the archive under the directory ".onyx-top-level",
+  // and the summary roots name ".onyx-top-level" instead of the files.
+  // Restore moves them back to the top level. A daemon without this rule
+  // restores ".onyx-top-level" as a directory. A ".onyx-top-level" root
+  // takes the regular files directly in that session directory into the
+  // archive in the same way, except names that are also top-level entries.
   repeated string roots = 2;
   // Names skipped at any depth. Empty means the daemon's --capture-exclude
   // (node_modules, .venv, caches, ...). A directory with pyvenv.cfg is
@@ -699,7 +705,7 @@ message CaptureSummary {
   int64 skipped = 7;
   // Files that shrank during the capture. Their tail is zero-filled.
   int64 changed = 8;
-  // Capture roots that exist and are in the archive.
+  // Capture roots that exist and are in the archive. Pass them to restore.
   repeated string roots = 9;
 }
 

@@ -119,6 +119,11 @@ For interruption tests, set `pause_after_first_chunk` on a scripted reply to a
 unique gate ID. Wait for the first text in the browser, perform the interruption,
 then call `releaseMockLlmGate(gateId)`. Release the gate in `finally` too. This
 holds the provider response without mocking the chat API or using fixed sleeps.
+Set `heartbeat_while_paused: true` to keep emitting whitespace while the answer
+is held. This tests cancellation during streaming; leave it off to test a blocked read.
+
+To fail a turn after some streamed text, set `error_after_text` on a scripted reply.
+The stream sends the reply text, then ends with that provider error.
 
 `chat/stream_recovery.spec.ts` covers real chat streaming, saved history, reloads,
 network loss, and stopping. Keep packet fixtures in rendering tests: they test
@@ -130,3 +135,11 @@ default mode captures images without checking them.
 Incognito currently ends its ephemeral context on `pagehide`, including reloads,
 and its history endpoint reads redacted database rows;
 live reload recovery is not a supported contract for usage-only incognito chats.
+
+## 4. Code mode
+
+CI runs the specs tagged `@code-mode` a second time, in the `code-mode` project, against a backend with
+`CODE_MODE_ENABLED=true`. The model then calls most tools from `execute_code` programs, so a scripted native tool call
+does not match. Tag a spec when its backend flow or rendering differs in code mode. Script tool calls with
+`mockLlmToolCallReply`, which picks the call shape for the mode, or branch on `CODE_MODE_ENABLED`. Both are in
+`tests/e2e/utils/mockLlm.ts` and read the variable that CI also sets for the runner. Set it the same way locally.

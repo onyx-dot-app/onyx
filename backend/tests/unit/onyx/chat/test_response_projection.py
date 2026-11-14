@@ -21,7 +21,7 @@ from onyx.agents.models import (
     ToolExecutionRecord,
 )
 from onyx.agents.runtime import Agent, Run
-from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.models import (
@@ -466,7 +466,7 @@ def test_response_save_includes_children_registered_through_execution_view() -> 
     )
     execution = coordinator.view(store=persistence)
 
-    def research(invocation: ToolInvocation) -> ToolResult:
+    def research(invocation: ToolInvocation) -> ChildRunWait:
         child = invocation.agents.spawn_agent(
             Agent(
                 FakeModelClient(
@@ -481,9 +481,7 @@ def test_response_save_includes_children_registered_through_execution_view() -> 
             max_steps=1,
             messages=[UserMessage(content="Find evidence")],
         )
-        result = invocation.agents.wait_run(child.run_id, timeout=5)
-        assert result is not None
-        return ToolResult(content=result.output.text)
+        return ChildRunWait(run_ids=[child.run_id])
 
     replies = iter(
         [
@@ -502,6 +500,9 @@ def test_response_save_includes_children_registered_through_execution_view() -> 
                     name="research", description="Research", parameters={}
                 ),
                 execute=research,
+                result_from_children=lambda _invocation, children: ToolResult(
+                    content=children[0].messages[-1].text
+                ),
             )
         ],
     )

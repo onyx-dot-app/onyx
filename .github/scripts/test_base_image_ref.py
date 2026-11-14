@@ -13,7 +13,7 @@ SCRIPT = Path(__file__).with_name("base-image-ref.sh")
 
 
 def resolve_image(
-    component: str, browser_status: int, gate: bool
+    component: str, browser_status: int
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
@@ -26,11 +26,8 @@ def resolve_image(
         docker = root / "docker"
         docker.write_text('#!/bin/sh\n[ "$1" = build ] || exit 99\n')
         docker.chmod(0o755)
-        arguments = ["bash", str(scripts / SCRIPT.name), component]
-        if not gate:
-            arguments.append("--report")
         return subprocess.run(
-            arguments,
+            ["bash", str(scripts / SCRIPT.name), component],
             cwd=root,
             env={**os.environ, "PATH": f"{root}{os.pathsep}{os.environ['PATH']}"},
             capture_output=True,
@@ -118,62 +115,7 @@ class BrowserUpdateTests(unittest.TestCase):
 
 
 class ImageResolverTests(unittest.TestCase):
-    def test_browser_inventory_requires_the_version_specific_chrome_cpe(self) -> None:
-        version = "157.0.8103.38"
-        expected_cpe = f"cpe:2.3:a:google:chrome:{version}:*:*:*:*:*:*:*"
-        for cpe in (
-            None,
-            "",
-            expected_cpe.replace("google", "other"),
-            expected_cpe.replace(version, "156.0.8078.79"),
-            expected_cpe,
-        ):
-            with self.subTest(cpe=cpe), tempfile.TemporaryDirectory() as directory:
-                root = Path(directory)
-                component = {"name": "chrome", "version": version}
-                if cpe is not None:
-                    component["cpe"] = cpe
-                inventory = root / "browser.cdx.json"
-                inventory.write_text(json.dumps({"components": [component]}))
-                docker = root / "docker"
-                docker.write_text(
-                    '#!/bin/sh\ncase "$1" in\n'
-                    "create) echo test-container;;\n"
-                    'cp) cp "$TEST_INVENTORY" "$3";;\n'
-                    'run) echo "grype ran";;\n'
-                    "rm) ;;\n"
-                    "*) exit 99;;\nesac\n"
-                )
-                docker.chmod(0o755)
-                curl = root / "curl"
-                stable_response = json.dumps(
-                    {"channels": {"Stable": {"version": version}}}
-                )
-                curl.write_text(f"#!/bin/sh\necho '{stable_response}'\n")
-                curl.chmod(0o755)
-                result = subprocess.run(
-                    [
-                        "bash",
-                        str(SCRIPT.with_name("audit-sandbox-browser.sh")),
-                        "test-image",
-                    ],
-                    env={
-                        **os.environ,
-                        "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
-                        "TEST_INVENTORY": str(inventory),
-                    },
-                    capture_output=True,
-                    text=True,
-                    check=False,
-                )
-                if cpe == expected_cpe:
-                    self.assertEqual(result.returncode, 0, result.stderr)
-                    self.assertIn("grype ran", result.stdout)
-                else:
-                    self.assertNotEqual(result.returncode, 0)
-                    self.assertNotIn("grype ran", result.stdout)
-
-    def test_release_collects_os_reports_before_failing_the_browser_gate(self) -> None:
+    def test_browser_failure_is_reported_without_blocking_other_images(self) -> None:
         workflow = SCRIPT.parent.parent / "workflows/deployment.yml"
         lines = workflow.read_text().splitlines()
         step = lines.index("      - name: Run base image audit")
@@ -195,12 +137,9 @@ class ImageResolverTests(unittest.TestCase):
                 resolver = scripts / SCRIPT.name
                 shutil.copyfile(SCRIPT, resolver)
                 resolver.chmod(0o755)
-                (scripts / "audit-sandbox-browser.sh").write_text(
-                    f'echo "browser audit ran" >&2\nexit {browser_status}\n'
-                )
                 for name, body in {
                     "docker": '[ "$1" = build ] || exit 99',
-                    "uv": 'echo \'{"version":"2.1.0","runs":[]}\'',
+                    "ods-audit": f'echo \'{{"version":"2.1.0","runs":[]}}\'; case "$*" in *onyx-sandbox*) echo "sandbox audit ran" >&2; exit {browser_status};; esac',
                 }.items():
                     executable = root / name
                     executable.write_text(f"#!/bin/sh\n{body}\n")
@@ -211,6 +150,7 @@ class ImageResolverTests(unittest.TestCase):
                     env={
                         **os.environ,
                         "PATH": f"{root}{os.pathsep}{os.environ['PATH']}",
+                        "GITHUB_OUTPUT": str(root / "outputs"),
                         "DHI_NODE_BUILD_ARGS": "NODE_RUNTIME_IMAGE=web:fixture",
                         "DHI_PYTHON_BUILD_ARGS": "PYTHON_RUNTIME_IMAGE=model:fixture",
                     },
@@ -218,38 +158,67 @@ class ImageResolverTests(unittest.TestCase):
                     text=True,
                     check=False,
                 )
-                self.assertEqual(
-                    result.returncode, int(browser_status != 0), result.stderr
+                self.assertEqual(result.returncode, 0, result.stderr)
+                expected = "success" if browser_status == 0 else "failure"
+                self.assertIn(
+                    f"sandbox-status={expected}", (root / "outputs").read_text()
                 )
-                self.assertIn("browser audit ran", result.stderr)
+                self.assertIn("sandbox audit ran", result.stderr)
                 for component in ("web", "model-server", "backend", "sandbox"):
                     report = root / f"image-audit-{component}.sarif"
                     self.assertEqual(json.loads(report.read_text())["version"], "2.1.0")
 
-    def test_report_collection_does_not_run_the_browser_gate(self) -> None:
-        for status in (1, 2, 3):
-            with self.subTest(browser_status=status):
-                result = resolve_image("sandbox", status, gate=False)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertEqual(result.stdout.strip(), "onyx-sandbox-os:audit")
-                self.assertNotIn("browser audit ran", result.stderr)
+    def test_cached_sandbox_publication_requires_a_successful_audit(self) -> None:
+        workflow = (SCRIPT.parent.parent / "workflows/deployment.yml").read_text()
+        prepare = workflow.split("  prepare-sandbox:\n", 1)[1].split(
+            "  build-sandbox-amd64:\n", 1
+        )[0]
+        first_step = prepare.split("    steps:\n", 1)[1].split("      - ")[1]
+        self.assertIn("Require a passing sandbox audit", first_step)
+        self.assertIn(
+            "SANDBOX_STATUS: ${{ needs.audit-gate.outputs.sandbox-status }}", first_step
+        )
+        commands = first_step.split("        run: |\n", 1)[1]
+        commands = "\n".join(line[10:] for line in commands.splitlines())
+        for cached in ("true", "false"):
+            for status in ("success", "failure", ""):
+                with self.subTest(cached=cached, status=status):
+                    result = subprocess.run(
+                        ["bash", "-e", "-c", commands],
+                        env={
+                            **os.environ,
+                            "SANDBOX_STATUS": status,
+                            "CONTEXT_EXISTS": cached,
+                        },
+                        capture_output=True,
+                        text=True,
+                        check=False,
+                    )
+                    self.assertEqual(
+                        result.returncode == 0, status == "success", result.stdout
+                    )
+        merge = workflow.split("  merge-sandbox:\n", 1)[1]
+        condition = next(
+            line for line in merge.splitlines() if line.startswith("    if:")
+        )
+        self.assertIn("needs.prepare-sandbox.result == 'success' &&", condition)
+        self.assertIn(
+            "needs.prepare-sandbox.outputs.context-exists == 'true'", condition
+        )
 
-    def test_browser_failures_cannot_be_mistaken_for_unknown_components(self) -> None:
-        for status in (1, 2, 3):
-            with self.subTest(browser_status=status):
-                result = resolve_image("sandbox", status, gate=True)
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertEqual(result.stdout, "")
-                self.assertIn("browser audit ran", result.stderr)
-
-    def test_clean_browser_gate_returns_the_image(self) -> None:
-        result = resolve_image("sandbox", 0, gate=True)
+    def test_resolver_only_resolves_the_image(self) -> None:
+        result = resolve_image("sandbox", 1)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(result.stdout.strip(), "onyx-sandbox-os:audit")
-        self.assertIn("browser audit ran", result.stderr)
+        self.assertNotIn("browser audit ran", result.stderr)
+
+    def test_craft_fc_host_agent_resolves_to_the_built_image(self) -> None:
+        result = resolve_image("craft-fc-host-agent", 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "onyx-craft-fc-host-agent:audit")
 
     def test_unknown_component_keeps_its_distinct_exit_status(self) -> None:
-        result = resolve_image("unknown", 0, gate=True)
+        result = resolve_image("unknown", 0)
         self.assertEqual(result.returncode, 2, result.stderr)
         self.assertNotIn("browser audit ran", result.stderr)
 

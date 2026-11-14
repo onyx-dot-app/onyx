@@ -100,6 +100,10 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  chatSessionStatus: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/status`,
+  pendingChatMessages: (sessionId: string) =>
+    `/api/chat/chat-session/${sessionId}/pending-messages`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
@@ -266,6 +270,10 @@ export const SWR_KEYS = {
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
+  skillReviewRequests: "/api/skills/review-requests",
+  skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
+  skillVersion: (skillId: string, versionId: string) =>
+    `/api/skills/custom/${skillId}/versions/${versionId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",

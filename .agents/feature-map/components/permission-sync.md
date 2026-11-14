@@ -200,7 +200,10 @@ runs.
    (`onyx/db/document.py:upsert_documents`) stores group IDs as the connector
    gives them, so a connector that sets `external_access` during indexing must
    namespace its group IDs itself (see `add_prefix` in
-   `ee/onyx/external_permissions/google_drive/doc_sync.py`). A change to the
+   `ee/onyx/external_permissions/google_drive/doc_sync.py`). Hierarchy node
+   access is stored as given on every path, the doc sync included, so nodes
+   always carry namespaced IDs (`onyx/connectors/egnyte/connector.py:_prefixed`).
+   A change to the
    namespacing needs a full doc sync and group sync, not a reindex, because the
    Postgres rows hold the old IDs.
 3. `never-widen-first` **Never clear or widen access before the new value is

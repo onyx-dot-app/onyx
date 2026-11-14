@@ -606,6 +606,7 @@ def prepare_prompt(
     token_counter: Callable[[str], int],
     user_info_prompt: Message | None = None,
     request_context_message: Message | None = None,
+    agent_instructions: str | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
@@ -627,6 +628,9 @@ def prepare_prompt(
         result.append(user_info_prompt.model_copy())
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy())
+    if agent_instructions is not None:
+        # Keep shared instructions ahead of the fixed agent-role block for prefix caching.
+        result.append(SystemMessage(content=agent_instructions))
     if context_files and (context_files.file_texts or context_files.image_files):
         result.append(
             _create_context_files_message(context_files, context_file_citations)

@@ -7,7 +7,6 @@ from contextlib import closing
 from dataclasses import dataclass
 
 from onyx.db.file_record import FileRecordNotFoundError
-from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -62,22 +61,25 @@ def _is_missing_file_error(exc: Exception) -> bool:
 
 
 def validate_stored_custom_skill(
-    skill: Skill,
+    name: str,
+    bundle_file_id: str | None,
     file_store: FileStore,
 ) -> SkillValidationResult:
-    if len(skill.name) > 64 or not SKILL_NAME_PATTERN.fullmatch(skill.name):
+    """Validate the stored bundle of one plugin version. ``name`` is the name
+    in the version's frontmatter."""
+    if len(name) > 64 or not SKILL_NAME_PATTERN.fullmatch(name):
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
             detail="persisted skill name does not match the canonical grammar",
         )
-    if skill.name in BUILT_IN_SKILLS:
+    if name in BUILT_IN_SKILLS:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
             detail="persisted skill name is reserved for a built-in skill",
         )
-    if skill.bundle_file_id is None:
+    if bundle_file_id is None:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,
@@ -85,10 +87,7 @@ def validate_stored_custom_skill(
         )
 
     try:
-        normalized = load_stored_custom_skill_bundle(
-            skill.bundle_file_id,
-            file_store,
-        )
+        normalized = load_stored_custom_skill_bundle(bundle_file_id, file_store)
     except Exception as exc:
         if _is_missing_file_error(exc):
             return SkillValidationResult(
@@ -142,7 +141,7 @@ def validate_stored_custom_skill(
             detail=f"stored bundle is invalid: {detail}",
         )
 
-    if document.metadata.name != skill.name:
+    if document.metadata.name != name:
         return SkillValidationResult(
             is_valid=False,
             normalized_bundle=None,

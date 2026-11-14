@@ -25,6 +25,7 @@ from onyx.chat.citation_utils import (
     collapse_citations,
     extract_citation_order_from_text,
     message_citation_sources,
+    remap_received_citations,
 )
 from onyx.chat.models import PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
@@ -289,6 +290,10 @@ class DeepResearchAgent(Agent, RestorableFeature):
             )
             reminder = USER_FINAL_REPORT_QUERY.format(research_plan=plan)
         with self._citation_lock:
+            received = remap_received_citations(
+                state.received_inputs, self.citation_mapping
+            )
+            self.citation_mapping.update(received.new_citations)
             sources = dict(self.citation_mapping)
         output_metadata = ResearchMessageMetadata(
             is_reasoning_model=self.is_reasoning_model,
@@ -297,6 +302,7 @@ class DeepResearchAgent(Agent, RestorableFeature):
             elapsed_seconds=time.monotonic() - self.started,
         )
         return PreparedStep(
+            input_messages=received.messages,
             tool_phase=phase.value,
             options=options,
             stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S

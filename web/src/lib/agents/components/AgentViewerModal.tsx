@@ -32,6 +32,7 @@ import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import AppInputBar from "@/sections/input/AppInputBar";
+import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { useLlmManager } from "@/lib/hooks";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { formatMmDdYyyy } from "@/lib/dateUtils";
@@ -132,6 +133,8 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
   // Over the listing, so the URL says nothing about the chat this would
   // start; the agent is named here instead.
   const toolConfiguration = useToolConfiguration(agent.id);
+  // A preview starts a new chat, so it has no pending input.
+  const queue = useChatSessionQueue(false);
 
   // This send navigates in order to send, so the configuration is left where
   // that page will find it rather than travelling with the call. Closing the
@@ -158,6 +161,7 @@ function AgentChatInput({ agent, onSubmit }: AgentChatInputProps) {
       deepResearchEnabled={false}
       toggleDeepResearch={() => {}}
       disabled={false}
+      queue={queue}
     />
   );
 }

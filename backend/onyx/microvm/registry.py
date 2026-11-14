@@ -474,6 +474,24 @@ def list_live_nodes(shared_cache: CacheBackend, now: int) -> list[RegisteredNode
     ]
 
 
+_NODE_DRAINING_PREFIX = "sandbox_fc:node_draining:"
+# About three node reports: a node that stops reporting stops draining here.
+_NODE_DRAINING_TTL_SECONDS = 60
+
+
+def set_node_draining(shared_cache: CacheBackend, node_id: str, draining: bool) -> None:
+    """Record the drain state that the node's agent reported last."""
+    key = _NODE_DRAINING_PREFIX + node_id
+    if draining:
+        shared_cache.set(key, "1", ex=_NODE_DRAINING_TTL_SECONDS)
+    else:
+        shared_cache.delete(key)
+
+
+def is_node_draining(shared_cache: CacheBackend, node_id: str) -> bool:
+    return shared_cache.get(_NODE_DRAINING_PREFIX + node_id) is not None
+
+
 def _prune_node(shared_cache: CacheBackend, node_id: str) -> None:
     """Drop an expired node from the set, unless it registered again meanwhile."""
     try:
@@ -536,6 +554,40 @@ def set_sandbox_daemon_key(
     )
 
 
+def claim_sandbox_daemon_key(
+    tenant_cache: CacheBackend,
+    sandbox_id: UUID,
+    *,
+    attempt: int,
+    owner: str,
+    new_key: SecretStr,
+) -> tuple[SecretStr, bytes] | None:
+    """The attempt's key, stored under `owner` (a reservation owner), and its
+    stored value. Keeps the attempt's existing key, or stores `new_key`; any
+    other attempt's key is replaced. The write is a compare-and-set, so a
+    `clear_sandbox_daemon_key_if` with an older owner's value cannot delete
+    it. None when another caller changed the key meanwhile. No TTL."""
+    redis_key = _DAEMON_KEY_PREFIX + str(sandbox_id)
+    raw = tenant_cache.get(redis_key)
+    key = new_key
+    if raw is not None:
+        record = json.loads(raw)
+        if record["attempt"] == attempt:
+            key = SecretStr(decrypt_bytes_to_string(base64.b64decode(record["key"])))
+            if record.get("owner") == owner:
+                return key, raw
+    sealed = encrypt_string_to_bytes(key.get_secret_value())
+    value = json.dumps(
+        {"attempt": attempt, "key": base64.b64encode(sealed).decode(), "owner": owner}
+    )
+    taken = (
+        tenant_cache.set_if_absent(redis_key, value)
+        if raw is None
+        else tenant_cache.replace_if_value(redis_key, raw, value)
+    )
+    return (key, value.encode()) if taken else None
+
+
 def get_sandbox_daemon_key(
     tenant_cache: CacheBackend, sandbox_id: UUID, *, attempt: int
 ) -> SecretStr | None:
@@ -560,6 +612,13 @@ def clear_sandbox_daemon_key(
     raw = tenant_cache.get(key)
     if raw is not None and json.loads(raw)["attempt"] == attempt:
         tenant_cache.delete_if_value(key, raw)
+
+
+def clear_sandbox_daemon_key_if(
+    tenant_cache: CacheBackend, sandbox_id: UUID, held: bytes
+) -> bool:
+    """Delete the key only while its stored value is still `held`."""
+    return tenant_cache.delete_if_value(_DAEMON_KEY_PREFIX + str(sandbox_id), held)
 
 
 _NODE_REPORT_LEASE_PREFIX = "sandbox_fc:node_report_lease:"

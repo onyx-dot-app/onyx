@@ -16,6 +16,7 @@ from onyx.agents.tools import AgentTool
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.citation_utils import (
     message_citation_sources,
+    remap_received_citations,
 )
 from onyx.chat.models import CitationMode, PromptMetadata
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
@@ -256,6 +257,16 @@ class ResearchAgent(Agent, RestorableFeature):
                 if just_ran_web_search and has_open_url
                 else None
             )
+        received = remap_received_citations(
+            state.received_inputs, self.citation_processor.citation_to_doc
+        )
+        self.citation_processor.update_citation_mapping(received.new_citations)
+        self.citation_mapping.update(
+            {
+                number: document.document_id
+                for number, document in received.new_citations.items()
+            }
+        )
         output_metadata = ResearchMessageMetadata(
             is_reasoning_model=self.is_reasoning_model,
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
@@ -263,6 +274,7 @@ class ResearchAgent(Agent, RestorableFeature):
             sources=dict(self.citation_processor.citation_to_doc),
         )
         return PreparedStep(
+            input_messages=received.messages,
             allowed_tool_names=frozenset() if is_final_step else None,
             options=options,
             stall_timeout_s=DR_REPORT_LLM_TIMEOUT_S if is_final_step else None,

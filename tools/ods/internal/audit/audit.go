@@ -9,6 +9,7 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -133,11 +134,19 @@ type Options struct {
 	Stderr io.Writer
 }
 
+// ScannedPackage identifies a package checked even when no vulnerability matched.
+type ScannedPackage struct {
+	Ecosystem string `json:"ecosystem"`
+	Package   string `json:"package"`
+}
+
 // Result is the outcome of an audit run.
 type Result struct {
-	Findings []Finding `json:"findings"` // kept findings, after allowlist filtering
-	Ignored  []Finding `json:"ignored"`  // findings suppressed by the allowlist
-	Blocking []Finding `json:"blocking"` // kept findings at or above FailOn
+	ScannedPackages []ScannedPackage `json:"scanned_packages,omitempty"`
+	Updates         []UpdateStatus   `json:"updates,omitempty"`
+	Findings        []Finding        `json:"findings"` // kept findings, after allowlist filtering
+	Ignored         []Finding        `json:"ignored"`  // findings suppressed by the allowlist
+	Blocking        []Finding        `json:"blocking"` // kept findings at or above FailOn
 }
 
 // Run executes the selected audit backends, applies the allowlist, renders a
@@ -330,14 +339,21 @@ func blockingFindings(findings []Finding, failOn Severity) []Finding {
 // and version. The same advisory can surface from more than one lockfile (e.g.
 // the root and web bun.lock) or from both osv-scanner and Dependabot.
 func dedupeFindings(findings []Finding) []Finding {
-	seen := make(map[string]bool, len(findings))
+	seen := make(map[string]int, len(findings))
 	out := findings[:0]
 	for _, f := range findings {
 		key := strings.ToLower(f.ID) + "\x00" + strings.ToLower(f.Ecosystem) + "\x00" + f.Package + "\x00" + f.Version
-		if seen[key] {
+		if index, ok := seen[key]; ok {
+			aliases := append(slices.Clone(out[index].Aliases), f.Aliases...)
+			slices.Sort(aliases)
+			aliases = slices.Compact(aliases)
+			if f.Severity.rank() > out[index].Severity.rank() {
+				out[index] = f
+			}
+			out[index].Aliases = aliases
 			continue
 		}
-		seen[key] = true
+		seen[key] = len(out)
 		out = append(out, f)
 	}
 	return out

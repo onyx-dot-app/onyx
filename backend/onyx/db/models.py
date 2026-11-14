@@ -54,7 +54,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
+from onyx.agents.models import (
+    ExecutionStatus,
+    InputSource,
+    MessageDelivery,
+    RunFailure,
+    RunStatus,
+)
 from onyx.auth.schemas import UserRole
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
@@ -155,6 +161,7 @@ from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
 from onyx.tools.models import (
+    ChatToolSelection,
     CustomToolCallSummary,
     FileReadResult,
     LlmBashExecutionResult,
@@ -164,6 +171,10 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.subagents.models import (
+    AgentWaitDetails,
+    ChatConfiguration,
+)
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -525,6 +536,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # Input preferences
     paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+    interrupt_on_send: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -3478,8 +3492,13 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
-        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
+    restoration_config: Mapped[ResearchConfiguration | ChatConfiguration | None] = (
+        mapped_column(
+            PydanticType(
+                ResearchConfiguration | ChatConfiguration, sanitize_strings=True
+            ),
+            nullable=True,
+        )
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -3549,6 +3568,15 @@ class ChatSession(Base):
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
+    # The tools the user last selected. Turns the server starts use them; NULL
+    # means the agent's tools.
+    tool_selection: Mapped[ChatToolSelection | None] = mapped_column(
+        PydanticType(ChatToolSelection), nullable=True
+    )
+    # When the user stopped the chat; queued turns wait until the next turn starts.
+    queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -3608,12 +3636,11 @@ class ChatMessage(Base):
         PydanticType(RunFailure, sanitize_strings=True), nullable=True
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-        index=True,
+        Integer, nullable=True, index=True
     )
     invoking_tool_call: Mapped["ToolCall | None"] = relationship(
-        "ToolCall", foreign_keys=[invoking_tool_call_id]
+        "ToolCall",
+        primaryjoin="foreign(ChatMessage.invoking_tool_call_id) == ToolCall.id",
     )
     response_items: Mapped[list["ChatResponseItem"]] = relationship(
         "ChatResponseItem",
@@ -3631,7 +3658,7 @@ class ChatMessage(Base):
     # Parent message pointer for the tree structure, nullable because the first message is
     # an empty root node to allow edits on the first message of a session.
     parent_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id"), nullable=True
+        ForeignKey("chat_message.id"), nullable=True, index=True
     )
     # This only maps to the latest because only that message chain is needed.
     # It can be updated as needed to trace other branches.
@@ -3748,6 +3775,15 @@ class ChatMessage(Base):
     )
 
 
+class AcceptedChatInput(BaseModel):
+    """A message a model generation accepted, with its provenance."""
+
+    id: str
+    source: InputSource
+    source_run_id: str | None = None
+    content: str
+
+
 class ChatResponseItem(Base):
     """One recorded model generation and its display settings."""
 
@@ -3775,6 +3811,14 @@ class ChatResponseItem(Base):
     message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
     )
+    # Messages this generation accepted before it started, in model order.
+    # An input accepted between steps is stored only here, on the step that read
+    # it; it is not a chat_message row. See chat-persistence.md for the routing.
+    inputs: Mapped[list[AcceptedChatInput]] = mapped_column(
+        PydanticListType(AcceptedChatInput),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     generation_status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -3795,6 +3839,85 @@ class ChatResponseItem(Base):
     )
 
 
+class ChatInput(Base):
+    """A pending message for a chat or agent session; consuming it deletes the row.
+
+    A message is in exactly one place at any moment. A step that reads a
+    `send` moves it to `ChatResponseItem.inputs`; a turn that accepts any other
+    message moves it to a USER `ChatMessage`. The routing table is in
+    `.agents/feature-map/components/chat-persistence.md`.
+
+    `agent_result` rows exist from the child response's reservation and become
+    readable when it finishes. Rows from child agents name the root response of
+    the invocation, which decides branch visibility.
+    """
+
+    __tablename__ = "chat_input"
+    __table_args__ = (
+        # IS TRUE: a NULL comparison makes CHECK pass, so require a true result.
+        CheckConstraint(
+            "((source = 'human' AND delivery IN ('send', 'queue', 'interrupt') "
+            "AND invoking_tool_call_id IS NULL AND max_steps IS NULL "
+            "AND root_response_id IS NULL) OR "
+            "(source = 'agent' AND delivery IN ('send', 'queue') "
+            "AND invoking_tool_call_id IS NOT NULL AND max_steps > 0 "
+            "AND root_response_id IS NOT NULL) OR "
+            "(source = 'agent_result' AND delivery IS NULL "
+            "AND source_response_id IS NOT NULL AND root_response_id IS NOT NULL)) "
+            "IS TRUE",
+            name="ck_chat_input_source",
+        ),
+        Index("ix_chat_input_recipient", "recipient_session_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[str] = mapped_column(String)
+    source: Mapped[InputSource] = mapped_column(
+        Enum(
+            InputSource,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
+    invoking_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    source_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    target_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    root_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    delivery: Mapped[MessageDelivery | None] = mapped_column(
+        Enum(
+            MessageDelivery,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    content: Mapped[str] = mapped_column(Text)
+    # A queued or interrupting human message starts its turn as Deep Research.
+    deep_research: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    # The model the composer showed when a queued or interrupting message was sent.
+    llm_override: Mapped[LLMOverride | None] = mapped_column(
+        PydanticType(LLMOverride), nullable=True
+    )
+    max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invoking_tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall", foreign_keys=[invoking_tool_call_id]
+    )
+
+
 # Tool result details that saved responses, checkpoints and temporary chats keep,
 # told apart by their `type` literal.
 SavedToolResultDetails = Annotated[
@@ -3808,7 +3931,8 @@ SavedToolResultDetails = Annotated[
     | MemoryUpdated
     | ToolExecutionError
     | FinalImageGenerationResponse
-    | CodeModeExecutionResult,
+    | CodeModeExecutionResult
+    | AgentWaitDetails,
     Field(discriminator="type"),
 ]
 SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(
@@ -3847,7 +3971,7 @@ class ToolCall(Base):
     # If this is not None, it's a top level tool call from the user message
     # If this is None, it's a lower level call from another tool/agent
     parent_chat_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     # If this is not None, this tool call is a child of another tool call
     parent_tool_call_id: Mapped[int | None] = mapped_column(
@@ -3862,6 +3986,8 @@ class ToolCall(Base):
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
     tool_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # The tool's display name when called; None for a tool without one.
+    display_name: Mapped[str | None] = mapped_column(String(), nullable=True)
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())
@@ -4493,6 +4619,8 @@ class Tool(Base):
     mcp_output_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP readOnlyHint; NULL when the server gives none. Only applies to MCP tools.
+    mcp_read_only: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -5575,12 +5703,14 @@ class Plugin(Base):
         Enum(PluginInstallationPolicy, native_enum=False),
         nullable=True,
     )
-    # Both pointers are deferred composite FKs to a version of this plugin, so
-    # one transaction inserts a plugin and its first version.
     current_version_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), nullable=False
     )
     published_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    # The version waiting for an admin's review, if any.
+    pending_version_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True), nullable=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
@@ -5600,22 +5730,6 @@ class Plugin(Base):
         CheckConstraint(
             "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
             name="ck_private_plugin_has_owner",
-        ),
-        ForeignKeyConstraint(
-            ["current_version_id", "id"],
-            ["plugin_version.id", "plugin_version.plugin_id"],
-            name="fk_plugin_current_version",
-            use_alter=True,
-            deferrable=True,
-            initially="DEFERRED",
-        ),
-        ForeignKeyConstraint(
-            ["published_version_id", "id"],
-            ["plugin_version.id", "plugin_version.plugin_id"],
-            name="fk_plugin_published_version",
-            use_alter=True,
-            deferrable=True,
-            initially="DEFERRED",
         ),
     )
 
@@ -5638,7 +5752,8 @@ class PluginVersion(Base):
     bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
     bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
     is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-    # One {path, size, sha256} entry per file. NULL until the repair task runs.
+    # One {path, size, sha256} entry per file. NULL for a version copied from
+    # a legacy skill row.
     file_manifest: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True, deferred=True
     )

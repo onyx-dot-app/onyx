@@ -22,7 +22,9 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
 from onyx.tools.models import CodeModeExposure, ToolContext
-from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
+from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
     _normalize_parameters_schema,
@@ -120,10 +122,11 @@ def _make_tool(
     input_schema: dict,
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
+    server_id: int = 1,
     auth_type: MCPAuthenticationType | None = MCPAuthenticationType.NONE,
 ) -> MCPTool:
     mcp_server = MCPServer(
-        id=1,
+        id=server_id,
         name=server_name,
         server_url="http://mcp.example",
         auth_type=auth_type,
@@ -190,46 +193,73 @@ class TestMCPToolDefinition:
 
 
 class TestMCPToolLLMNames:
-    def test_mcp_tool_keeps_original_name_without_conflicts(self) -> None:
-        tool = _make_tool({"type": "object"})
-
-        _disambiguate_mcp_tool_names([tool])
-
-        assert tool.name == "aws___list_regions"
-        assert tool.tool_definition().name == "aws___list_regions"
-
-    def test_mcp_tool_disambiguates_at_construction_when_names_conflict(self) -> None:
-        mcp_tool = _make_tool(
-            {"type": "object"}, tool_name="shared", server_name="server name"
+    def test_external_names_are_stable_and_distinct(self) -> None:
+        method = MethodSpec(
+            name="shared",
+            raw_name="shared",
+            summary="Shared operation",
+            path="/shared",
+            method="get",
+            spec={},
         )
-        static_tool = _StaticTool("shared")
-
-        _disambiguate_mcp_tool_names([mcp_tool, static_tool])
-
-        assert mcp_tool.name == "mcp_server_name_shared"
-        assert mcp_tool.tool_definition().name == "mcp_server_name_shared"
-        assert static_tool.name == "shared"
-
-    def test_second_order_disambiguated_name_conflicts_are_allowed(self) -> None:
-        mcp_tool = _make_tool(
-            {"type": "object"}, tool_name="shared", server_name="server"
-        )
-        conflicting_tool = _StaticTool("shared")
-        second_order_conflicting_tool = _StaticTool("mcp_server_shared")
-
-        tools: list[Tool] = [mcp_tool, conflicting_tool, second_order_conflicting_tool]
-        _disambiguate_mcp_tool_names(tools)
-
-        assert [tool.name for tool in tools] == [
-            "mcp_server_shared",
-            "shared",
-            "mcp_server_shared",
+        custom_tools = [
+            CustomTool(id=id, method_spec=method, base_url="https://example.com")
+            for id in (1, 2)
         ]
+        mcp_tools = [
+            _make_tool({}, tool_name="shared", server_name="same name", server_id=id)
+            for id in (1, 2)
+        ]
+        tools: list[Tool] = [_StaticTool("shared"), *custom_tools, *mcp_tools]
+        names = [tool.name for tool in tools]
+        assert names == [
+            "shared",
+            "custom__1__shared",
+            "custom__2__shared",
+            "mcp__1__same_name__shared",
+            "mcp__2__same_name__shared",
+        ]
+        assert [tool.tool_definition().name for tool in tools] == names
+        assert all(tool.display_name == "shared" for tool in tools)
+        assert method.name == "shared"
+        assert method.raw_name == "shared"
+        stubs = build_tool_stubs(tools)
+        assert set(stubs.functions) == set(names)
+        assert all(
+            function.tool.name == name for name, function in stubs.functions.items()
+        )
+
+    @pytest.mark.parametrize("names", [("a" * 58, "a" * 57 + "b"), ("a.b", "a_b")])
+    def test_qualified_names_fit_provider_limits_without_collisions(
+        self, names: tuple[str, str]
+    ) -> None:
+        tools: list[Tool] = []
+        for name in names:
+            method = MethodSpec(
+                name=name.replace(".", "_"),
+                raw_name=name,
+                summary="Operation",
+                path="/shared",
+                method="get",
+                spec={},
+            )
+            tools.extend(
+                [
+                    CustomTool(
+                        id=1, method_spec=method, base_url="https://example.com"
+                    ),
+                    _make_tool({}, tool_name=name, server_name="server" * 20),
+                ]
+            )
+        assert len({tool.name for tool in tools}) == len(tools)
+        for tool in tools:
+            assert len(tool.name) <= 64
+            assert tool.tool_definition().name == tool.name
+            assert tool.name.isascii()
+            assert all(char.isalnum() or char in "_-" for char in tool.name)
 
     def test_disambiguated_mcp_tool_calls_server_with_original_name(self) -> None:
         mcp_tool = _make_tool({"type": "object"}, tool_name="shared")
-        conflicting_tool = _StaticTool("shared")
-        _disambiguate_mcp_tool_names([mcp_tool, conflicting_tool])
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",

@@ -175,7 +175,7 @@ def test_federated_retrieval_uses_selected_document_sets(
     federated = MagicMock(return_value=[])
 
     with patch(
-        f"{MODULE}.filter_document_set_names_by_user_access",
+        "onyx.db.document_set.filter_document_set_names_by_user_access",
         return_value=set(selected or []),
     ):
         _run(

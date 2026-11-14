@@ -8,14 +8,17 @@
 #                  onyxdotapp/craft-fc-artifacts).
 #   SOURCE_IMAGE   onyxdotapp/sandbox:<tag>, the source of the root drives.
 #
-# smoke: TestCoreKVM, TestDialKVM, TestRestartKVM (kit root drive only).
+# smoke: TestCoreKVM, TestDialKVM, TestRestartKVM, TestLoopStoreKVM (kit root
+#        drive only).
 # full:  smoke, then the egress, pass-through, template, managed drive,
-#        memory and root drive delivery tests. It needs KVM_PYTHON: a Python
+#        memory, root drive delivery and VM cap tests. It needs KVM_PYTHON: a Python
 #        with backend/requirements/default.txt (the egress proxy harness).
 #
 # Optional env: KVM_VMS (default 4), BASE_IMAGE_REGISTRY (a Docker Hub
 # pull-through cache), KVM_ONLY (a test name regex, to run fewer tests),
-# KVM_S3_BUCKET (TestSavesKVM; without it the test skips), KVM_KEEP_WORK=1.
+# KVM_S3_BUCKET (TestSavesKVM; without it the test skips), KVM_KEEP_WORK=1,
+# KVM_AGENT_IMAGE (a local image the agent containers run, e.g. a build of
+# microvm/Dockerfile; default: Debian with the agent's tool packages).
 set -euo pipefail
 
 if [ "$#" -ne 3 ] || [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ] || [ "$(id -u)" -ne 0 ]; then
@@ -50,10 +53,10 @@ if [ "${lane}" = full ]; then
   KVM_PYTHON="$(cd "$(dirname "${KVM_PYTHON}")" && pwd)/$(basename "${KVM_PYTHON}")"
   export KVM_PYTHON
 fi
-tests="TestCoreKVM TestDialKVM TestRestartKVM"
+tests="TestCoreKVM TestDialKVM TestRestartKVM TestLoopStoreKVM"
 if [ "${lane}" = full ]; then
   tests="${tests} TestEgressKVM TestPassthroughKVM TestSavesKVM TestTemplateBuildKVM TestManagedSwapKVM"
-  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM"
+  tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM TestMaxVMsKVM"
 fi
 if [ -n "${KVM_ONLY:-}" ]; then
   selected=""
@@ -80,7 +83,7 @@ if mountpoint -q "${xfs}"; then
   echo "${xfs} is already mounted" >&2
   exit 1
 fi
-containers="kvm-redis ha1 ha2 pt-a1 pt-a2 tb-a1 tb-a2 ms-a1 mem-a1 mem-oom-a1 rd-a1 rd-a2 sv-a1"
+containers="kvm-redis ha1 ha2 ls1 ls2 ls3 pt-a1 pt-a2 tb-a1 tb-a2 ms-a1 mem-a1 mem-oom-a1 rd-a1 rd-a2 sv-a1"
 cleanup_vms() {
   # A Go test timeout panic does not run t.Cleanup.
   # shellcheck disable=SC2086
@@ -89,6 +92,17 @@ cleanup_vms() {
   for proc in /proc/[0-9]*; do
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
+  # TestLoopStoreKVM: its VMs run in host scopes outside ${xfs}; then its
+  # loop store and the ext4 mount under it.
+  case " ${tests} " in *" TestLoopStoreKVM "*) ;; *) return 0 ;; esac
+  systemctl kill --signal=KILL 'fcvm-*.scope' >/dev/null 2>&1 || true
+  for _ in $(seq 150); do
+    pgrep -x firecracker >/dev/null || break
+    sleep 0.1
+  done
+  loop_data="${KVM_LOOP_DATA_DIR:-/mnt/fcext4/craft-fc}"
+  while mountpoint -q "${loop_data}"; do umount "${loop_data}" || break; done
+  if mountpoint -q "$(dirname "${loop_data}")"; then umount "$(dirname "${loop_data}")" || true; fi
 }
 test_pid="" mitm=""
 cleanup() {
@@ -142,11 +156,16 @@ pull_as() {
 }
 pull_as "${source_image}" "${source_image}"
 mkdir -p "${work}/agent-image"
-cat >"${work}/agent-image/Dockerfile" <<EOF
+if [ -n "${KVM_AGENT_IMAGE:-}" ]; then
+  # Some tests pass the agent binary as the command: no entrypoint.
+  printf 'FROM %s\nENTRYPOINT []\n' "${KVM_AGENT_IMAGE}" >"${work}/agent-image/Dockerfile"
+else
+  cat >"${work}/agent-image/Dockerfile" <<EOF
 FROM ${registry}/library/debian:trixie-slim
-RUN apt-get update && apt-get install -y --no-install-recommends e2fsprogs util-linux ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends e2fsprogs util-linux xfsprogs ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 EOF
+fi
 docker build -q -t craft-fc-kvm-agent:local "${work}/agent-image" >/dev/null
 
 # The kit root drive: the source image with fc-init and the prototype guest
@@ -198,7 +217,10 @@ if [ "${lane}" = full ]; then
 
   # Root drives from build-rootfs.sh: "ca" with the proxy CA built in
   # (pass-through, template and managed drive tests), "reclaim" with the
-  # memory test daemon command, "noca" for the delivery image.
+  # memory test daemon command, "noca" for the delivery image. "ca" and
+  # "reclaim" run commands as root (--command-user=): the managed drive and
+  # memory tests remount, drop caches and read /dev/vda. "noca" keeps the
+  # production default, commands as the sandbox user.
   pull_registry=()
   [ -z "${BASE_IMAGE_REGISTRY:-}" ] || pull_registry=(--registry "${BASE_IMAGE_REGISTRY}")
   rootfs() {
@@ -208,8 +230,8 @@ if [ "${lane}" = full ]; then
       --out "${work}/rootfs-$1" "${@:2}" | tail -3
   }
   ca="${confdir}/mitmproxy-ca-cert.pem"
-  rootfs ca --ca "${ca}"
-  rootfs reclaim --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m"
+  rootfs ca --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --command-user="
+  rootfs reclaim --ca "${ca}" --daemon-cmd "/craft-fc/bin/guest-daemon --reclaim-idle=1m --command-user="
   rootfs noca
   pt_img="${work}/img-pt"
   mkdir -p "${pt_img}"

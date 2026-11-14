@@ -6,6 +6,7 @@ interface BaseObj {
 }
 
 export enum PacketType {
+  USER_MESSAGE = "user_message",
   MESSAGE_START = "message_start",
   MESSAGE_DELTA = "message_delta",
   MESSAGE_END = "message_end",
@@ -92,6 +93,12 @@ export const isCodeInterpreterToolType = (toolType: string): boolean =>
 export const CODE_MODE_TOOL_TYPE = "execute_code";
 
 // Basic Message Packets
+export interface UserMessage extends BaseObj {
+  type: "user_message";
+  id: string;
+  message: string;
+}
+
 export interface MessageStart extends BaseObj {
   id: string;
   type: "message_start";
@@ -218,7 +225,10 @@ export interface CustomToolErrorInfo {
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // The name the model calls; custom and MCP tools use a qualified name.
   tool_name: string;
+  // The name users see.
+  display_name: string;
   tool_id?: number | null;
 }
 
@@ -518,6 +528,7 @@ export interface ToolCallDebug extends BaseObj {
 
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | UserMessage
   | ToolCallDebug
   | ChatObj
   | NewToolObj

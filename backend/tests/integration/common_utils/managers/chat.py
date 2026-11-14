@@ -112,6 +112,7 @@ class ChatSessionManager:
         preferred_tool_id: int | None = None,
         chat_session: DATestChatSession | None = None,
         deep_research: bool = False,
+        accepts_follow_ups: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> StreamedResponse:
         chat_message_req = SendMessageRequest(
@@ -126,6 +127,7 @@ class ChatSessionManager:
             allowed_tool_ids=allowed_tool_ids,
             preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
+            accepts_follow_ups=accepts_follow_ups,
             llm_override=llm_override,
         )
 

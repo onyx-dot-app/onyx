@@ -51,6 +51,13 @@ const (
 	writePrefix   = ".craft-write-"
 )
 
+// TopFilesRoot is the archive directory that holds the session's top-level
+// regular files. Restore moves its files back to the top level. A daemon
+// without this rule restores it as a normal directory, so its restore does
+// not fail. A capture with a TopFilesRoot root takes the files of that
+// session directory back into the archive.
+const TopFilesRoot = ".onyx-top-level"
+
 // DefaultCaptureRoots are the session directories that a save holds.
 var DefaultCaptureRoots = []string{"attachments"}
 
@@ -275,8 +282,8 @@ func (s *Store) limits(req Limits) (Limits, error) {
 
 // DefaultDeniedVMPaths are the VM paths that a call with no session ID
 // refuses: kernel interfaces and the daemon's own state (its key and Init
-// state). Commands run as root and can still reach them; this guards the
-// file API callers against mistakes.
+// state). This guards the file API callers against mistakes; the commands
+// run as the sandbox user, not root.
 var DefaultDeniedVMPaths = []string{"/proc", "/sys", "/dev", "/run/craft-fc"}
 
 // SessionDir returns the absolute directory of a session and makes it if it
