@@ -417,7 +417,8 @@ calls run with no row unless the policy is now DENY.
     owner's next read (`db/approval_request.py:settle_approval_requests__no_commit`)
     answers a call whose row is gone as `disabled`. A decision that repeats
     the saved one returns 200 with the row's `decided_via`, also after the
-    response ends, so a client can retry a decision whose reply it lost. An
+    response ends or the policy changes, so a client can retry a decision
+    whose reply it lost. An
     `approve_session` on a row the user approved once upgrades it to a session
     grant and approves the waiting sibling requests; every request that a grant
     decides ends with the outcome `approved_for_chat`

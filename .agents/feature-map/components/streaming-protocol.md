@@ -32,7 +32,9 @@
   After a reload, the caller gets the stream ID from `current_stream` in the
   session detail response. To resume, the caller calls
   `GET /chat/chat-session/{id}/resume-stream?stream_id=<id>&cursor=0`. A 404
-  means that no run with that stream ID can be resumed. While the turn is in
+  means that nothing can be served at that cursor: no run with that stream ID,
+  or a buffer that is gone or has a gap there. A 200 stream starts with a
+  `StreamCursor` line. While the turn is in
   preparation, the session reports `is_processing: true` but `current_stream`
   is null, and resume returns 404. Before the next send,
   the caller waits until `GET /chat/chat-session/{id}/status` reports
@@ -80,7 +82,9 @@ send-chat-message -> chat/process_message.py:_stream_chat_turn   prepare, start_
             -> StreamBufferWriter                   zlib chunks in the cache
 
 resume-stream: get_processing_stream_id (must match stream_id) -> read_stream_chunks(cursor, 32 per read)
-  -> blocks + StreamCursor line per batch -> poll until done or the owner lapses, with heartbeats
+  before the response starts (404 when it finds no buffer or a gap)
+  -> StreamCursor line, then blocks + StreamCursor line per batch
+  -> poll until done or the owner lapses, with heartbeats
 ```
 
 `chat/execution.py:start_chat_turn` publishes the ID lines and starts the turn
@@ -100,7 +104,7 @@ details and on replayed `user_message` packets. Packets and ID lines carry
 only the record of a pick (type, name and version id), never its skill text. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
-`backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
+`backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, first and after each batch. It
 is never buffered. When the send route itself fails
 (`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes
 one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
@@ -316,8 +320,12 @@ its background task end ([[#pure-asgi-middleware]]).
 11. `buffer-gap-ends-resume` **A buffer gap ends the resume, and the cursor
     counts chunks.** `chat/stream_buffer.py:read_stream_chunks` reports `gap`
     for a missing chunk, a bad chunk or a truncated buffer.
-    `server/query_and_chat/chat_backend.py:resume_chat_stream` then ends the
-    stream, and the client refetches the session. A capped read can say `done` with
+    `server/query_and_chat/chat_backend.py:resume_chat_stream` reads once
+    before the response starts and returns 404 for a gap at the requested
+    cursor, so a 200 stream always starts with a `StreamCursor` line and only
+    a 404 means "do not resume this stream again". A later gap ends the
+    stream without the stop packet; a resume from its last cursor then gets
+    output or 404, and after a 404 the client refetches the session. A capped read can say `done` with
     chunks still pending: read until `blocks` is empty. The cursor counts chunks,
     not packets. A client may keep a `StreamCursor.next_cursor` only together
     with every packet before it, and must send the matching `stream_id`, or it
@@ -479,8 +487,9 @@ its background task end ([[#pure-asgi-middleware]]).
   `/api/chat/chat-session/<id>/resume-stream?cursor=0` while the run is live. A
   404 means the session owner key or the processing fence is missing, the
   `stream_id` does not match the fence, or the buffer meta key
-  (`chatstream_<session_id>_<stream_id>:meta`) is missing. A stream that ends
-  early means a gap ([[#buffer-gap-ends-resume]]). If the input stays busy
+  (`chatstream_<session_id>_<stream_id>:meta`) is missing or has a gap at the
+  cursor. A stream that ends early without the stop packet means a later gap
+  ([[#buffer-gap-ends-resume]]). If the input stays busy
   after the stream ends, call `/api/chat/chat-session/<id>/status`
   ([[#stream-end-is-not-idle]]).
 

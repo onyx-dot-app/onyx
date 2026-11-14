@@ -235,13 +235,6 @@ class StreamBufferWriter:
         self._truncation_persisted = self._meta.truncated
 
 
-def has_stream_buffer(
-    cache: CacheBackend, chat_session_id: UUID, stream_id: int
-) -> bool:
-    """O(1) existence probe — no chunk reads or decompression."""
-    return cache.exists(_meta_key(chat_session_id, stream_id))
-
-
 def read_stream_chunks(
     cache: CacheBackend,
     chat_session_id: UUID,

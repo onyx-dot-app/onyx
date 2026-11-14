@@ -39,9 +39,15 @@ from onyx.chat.tool_approvals import (
     reset_approval_waits,
 )
 from onyx.configs.constants import MessageType
+from onyx.db.action_policy import replace_workspace_action_policies
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind
+from onyx.db.enums import (
+    ActionPolicy,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    GatedAppKind,
+)
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ApprovalRequest,
@@ -633,11 +639,13 @@ def test_deleting_the_server_ends_the_wait_of_its_calls(
     assert "no longer available" in owned.first_result("send")
 
 
+@pytest.mark.parametrize("policy", ["unchanged", "denied"])
 def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
-    db_session: Session, chat: ApprovalChat
+    db_session: Session, chat: ApprovalChat, policy: str
 ) -> None:
     """A retry whose first attempt saved the decision, but lost its HTTP
-    response, gets the saved decision once the response has no owner."""
+    response, gets the saved decision once the response has no owner, also
+    after an admin disables the tool."""
     approval_id, _created_at = create_approval_request__no_commit(
         db_session,
         chat_session_id=chat.chat_session_id,
@@ -656,6 +664,10 @@ def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
             decided_via=ApprovalDecidedVia.SESSION_GRANT,
         )
     )
+    if policy == "denied":
+        replace_workspace_action_policies(
+            db_session, chat.gated_app_id, {ACTION: ActionPolicy.DENY}
+        )
     db_session.commit()
     assert run_store.ownerless_response_ids(get_cache_backend(), [chat.response_id])
 

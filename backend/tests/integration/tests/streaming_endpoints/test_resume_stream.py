@@ -216,12 +216,8 @@ def test_evicted_resume_buffer_preserves_completion_and_next_turn(
                 assert cache.exists(key)
                 cache.delete(key)
                 with http.stream("GET", resume_url) as failed_resume:
-                    if evicted_record == "chunk":
-                        assert failed_resume.status_code == 200
-                        assert list(failed_resume.iter_lines()) == []
-                    else:
-                        assert failed_resume.status_code == 404
-                        assert "No resumable stream" in failed_resume.read().decode()
+                    assert failed_resume.status_code == 404
+                    assert "No resumable stream" in failed_resume.read().decode()
                 assert (
                     _get_session_detail(session.id, admin_user).current_stream
                     is not None

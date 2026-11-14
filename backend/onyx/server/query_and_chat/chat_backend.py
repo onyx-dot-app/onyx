@@ -66,7 +66,7 @@ from onyx.chat.run_store import (
     wake_approval_waiters,
 )
 from onyx.chat.stop_signal_checker import request_stop
-from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
+from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
 from onyx.chat.tool_approvals import TOOL_APPROVAL_TIMEOUT
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
@@ -1552,9 +1552,12 @@ def resume_chat_stream(
     ),
 ) -> StreamingResponse:
     """Replay buffered output from ``cursor`` and tail it while its worker is live.
-    Serves any pod: the buffer lives in the
-    shared cache. 404 when the session has no resumable run — the client
-    falls back to refetching the session."""
+    Serves any pod: the buffer lives in the shared cache. 404 when nothing can
+    be served at ``cursor``: no running stream, a different ``stream_id``, or
+    a buffer that is missing or has a gap there. The client then refetches
+    the session. A 200 stream starts with a cursor packet; a stream that ends
+    without a stop packet lost its tail, and a resume from its last cursor gets
+    output or 404."""
     # Short-lived session: a Depends(get_session) would stay checked out (idle
     # in transaction) for the lifetime of the SSE response.
     with get_session_with_current_tenant() as db_session:
@@ -1569,41 +1572,43 @@ def resume_chat_stream(
 
     cache = get_cache_backend()
     stream_id = get_processing_stream_id(session_id, cache)
+    first_read = (
+        None
+        if stream_id is None
+        or (expected_stream_id is not None and expected_stream_id != stream_id)
+        else read_stream_chunks(
+            cache,
+            session_id,
+            stream_id,
+            cursor,
+            max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
+        )
+    )
     if (
         stream_id is None
-        or (expected_stream_id is not None and expected_stream_id != stream_id)
-        or not has_stream_buffer(cache, session_id, stream_id)
+        or first_read is None
+        or first_read.gap
+        or cursor > first_read.chunk_count
     ):
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
         )
+    # Freeze the restore boundary so new writes cannot prolong replay.
+    replay_through = first_read.chunk_count
 
-    def stream_buffered_run() -> Generator[str, None, None]:
+    def stream_buffered_run(read: StreamChunkRead) -> Generator[str, None, None]:
         chunk_cursor = cursor
-        replay_through: int | None = None
         writer_stopped = False
         last_emit = time.monotonic()
+        yield get_json_line(
+            StreamCursor(
+                stream_id=stream_id,
+                next_cursor=chunk_cursor,
+                replay_complete=chunk_cursor >= replay_through,
+            ).model_dump()
+        )
         while True:
-            read = read_stream_chunks(
-                cache,
-                session_id,
-                stream_id,
-                chunk_cursor,
-                max_chunks=(
-                    min(_RESUME_MAX_CHUNKS_PER_READ, replay_through - chunk_cursor)
-                    if replay_through is not None and chunk_cursor < replay_through
-                    else _RESUME_MAX_CHUNKS_PER_READ
-                ),
-            )
-            # Buffer expired/evicted or sequence broken: end the stream — the
-            # client refetches the session and renders the persisted message.
-            if read is None or read.gap or chunk_cursor > read.chunk_count:
-                return
-            initial_read = replay_through is None
-            if replay_through is None:
-                # Freeze the restore boundary so new writes cannot prolong replay.
-                replay_through = read.chunk_count
-            if read.blocks or initial_read:
+            if read.blocks:
                 yield "".join(read.blocks)
                 chunk_cursor = read.next_cursor
                 yield get_json_line(
@@ -1613,24 +1618,45 @@ def resume_chat_stream(
                         replay_complete=chunk_cursor >= replay_through,
                     ).model_dump()
                 )
-            if read.blocks:
-                last_emit = time.monotonic()
                 # Drain the backlog before sleeping; done is only trusted once
                 # a read comes back empty (a capped read can precede the tail).
-                continue
-            if read.done or writer_stopped:
+                last_emit = time.monotonic()
+            elif read.done or writer_stopped:
                 return
-            # Drain once more after ownership ends to catch the writer's last flush.
-            if not is_chat_session_processing(session_id, cache):
+            elif not is_chat_session_processing(session_id, cache):
+                # Drain once more after ownership ends to catch the writer's
+                # last flush.
                 writer_stopped = True
-                continue
-            now = time.monotonic()
-            if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
-                yield get_json_line(heartbeat_packet().model_dump())
-                last_emit = now
-            time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
+            else:
+                now = time.monotonic()
+                if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
+                    yield get_json_line(heartbeat_packet().model_dump())
+                    last_emit = now
+                time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
+            next_read = read_stream_chunks(
+                cache,
+                session_id,
+                stream_id,
+                chunk_cursor,
+                max_chunks=(
+                    min(_RESUME_MAX_CHUNKS_PER_READ, replay_through - chunk_cursor)
+                    if chunk_cursor < replay_through
+                    else _RESUME_MAX_CHUNKS_PER_READ
+                ),
+            )
+            # The buffer expired or broke: end the stream. A resume from the
+            # last cursor gets 404, and the client refetches the session.
+            if (
+                next_read is None
+                or next_read.gap
+                or chunk_cursor > next_read.chunk_count
+            ):
+                return
+            read = next_read
 
-    return StreamingResponse(stream_buffered_run(), media_type="text/event-stream")
+    return StreamingResponse(
+        stream_buffered_run(first_read), media_type="text/event-stream"
+    )
 
 
 @router.post("/chat-session/{session_id}/pending-messages")
@@ -1795,9 +1821,10 @@ def decide_approval(
     """Approve or reject an action in a chat that waits for the user.
 
     The decision is saved, then its waiter is woken to continue the action.
-    Repeating a saved decision returns it, also after the response ends; a
-    different one, or a request that is no longer waiting, is a conflict. Approving an action that the current action
-    policies now block saves a rejection by the policy (`decided_via` POLICY).
+    Repeating a saved decision returns it, also after the response ends or the
+    action policies change; a different one, or a request that is no longer
+    waiting, is a conflict. Approving an action that the current action
+    policies block saves a rejection by the policy (`decided_via` POLICY).
     """
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
@@ -1806,44 +1833,52 @@ def decide_approval(
     ownerless = _expire_ownerless_approvals(
         db_session, cache, [approval.chat_message_id]
     )
-    blocked = (
-        current_action_policy(
-            db_session,
-            user_id=user.id,
-            gated_app_id=approval.gated_app_id,
-            action_id=approval.action_id,
-        )
-        == ActionPolicy.DENY
-    )
     rejected = body.decision == ApprovalChoice.REJECT
-    decision = (
-        ApprovalDecision.REJECTED if rejected or blocked else ApprovalDecision.APPROVED
+    upgrades_to_grant = (
+        body.decision == ApprovalChoice.APPROVE_SESSION
+        and approval.decision == ApprovalDecision.APPROVED
+        and approval.decided_via == ApprovalDecidedVia.USER
     )
-    decided_via = (
-        ApprovalDecidedVia.POLICY
-        if blocked and not rejected
-        else ApprovalDecidedVia.SESSION_GRANT
-        if body.decision == ApprovalChoice.APPROVE_SESSION
-        else ApprovalDecidedVia.USER
-    )
+    decided_responses: set[int] = set()
     # Nothing waits for an ownerless response's decision, so none is saved.
-    decided_responses = (
-        set()
-        if ownerless
-        else record_approval_decision__no_commit(
-            db_session, approval, decision, decided_via, timeout=TOOL_APPROVAL_TIMEOUT
-        )
-    )
-    if not decided_responses:
-        db_session.refresh(approval)
-        # An earlier answer, e.g. a session grant from another request or a
-        # retry after the response ended, decided it.
-        if approval.decision != decision or approval.decided_via is None:
-            raise OnyxError(
-                OnyxErrorCode.CONFLICT,
-                "This request was already decided or is no longer waiting",
+    if not ownerless and (approval.decision is None or upgrades_to_grant):
+        blocked = (
+            current_action_policy(
+                db_session,
+                user_id=user.id,
+                gated_app_id=approval.gated_app_id,
+                action_id=approval.action_id,
             )
-        decided_via = approval.decided_via
+            == ActionPolicy.DENY
+        )
+        decided_responses = record_approval_decision__no_commit(
+            db_session,
+            approval,
+            ApprovalDecision.REJECTED
+            if rejected or blocked
+            else ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.POLICY
+            if blocked and not rejected
+            else ApprovalDecidedVia.SESSION_GRANT
+            if body.decision == ApprovalChoice.APPROVE_SESSION
+            else ApprovalDecidedVia.USER,
+            timeout=TOOL_APPROVAL_TIMEOUT,
+        )
+    db_session.refresh(approval)
+    decided_via = approval.decided_via
+    # The answer to this body: an approval that a policy blocked was saved as
+    # a rejection. A saved answer also comes from an earlier attempt, a session
+    # grant from another request, or a concurrent decision.
+    decision = (
+        ApprovalDecision.REJECTED
+        if rejected or decided_via == ApprovalDecidedVia.POLICY
+        else ApprovalDecision.APPROVED
+    )
+    if decided_via is None or approval.decision != decision:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This request was already decided or is no longer waiting",
+        )
     db_session.commit()
     wake_approval_waiters(cache, decided_responses)
     return ApprovalDecisionResponse(
