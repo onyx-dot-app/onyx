@@ -20,10 +20,15 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
     GoogleDriveCheckpoint,
+    ListingPartitionKind,
     ListingShard,
     StageCompletion,
 )
-from onyx.connectors.google_drive.source_operations import GoogleDriveRefreshError
+from onyx.connectors.google_drive.source_operations import (
+    DriveCorpus,
+    GoogleDriveHttpError,
+    GoogleDriveRefreshError,
+)
 from onyx.connectors.models import HierarchyNode, SlimDocumentStub
 from onyx.utils.threadpool_concurrency import ThreadSafeDict
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
@@ -353,3 +358,60 @@ def test_a_refresh_failure_fails_the_listing(
 
     with pytest.raises(GoogleDriveRefreshError):
         list(connector.retrieve_all_slim_docs())
+
+
+@pytest.mark.usefixtures("small_calls")
+def test_a_denied_page_fails_the_listing(
+    mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A 403 on the OAuth user's own listing, for example after Drive access
+    is turned off, must fail the prune, not end the listing as empty."""
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def denied_my_drive(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> object:
+        if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
+            raise GoogleDriveHttpError(
+                status_code=403,
+                reasons=("accessNotConfigured",),
+                access_denied=True,
+                message="Drive API is disabled",
+            )
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(
+        parallel_listing.ParallelDriveLister, "_fetch_page", denied_my_drive
+    )
+    connector = _oauth_connector(mock_drive, include_my_drives=True)
+
+    with pytest.raises(GoogleDriveHttpError):
+        list(connector.retrieve_all_slim_docs())
+
+
+@pytest.mark.parametrize("all_settings", [True, False])
+def test_shared_with_listing_includes_shared_drive_items_as_all_drives(
+    mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch, all_settings: bool
+) -> None:
+    """With all three settings on, main listed corpora=allDrives, which holds
+    files shared directly from drives the user is not a member of. The
+    shared-with-user listing then lists all drives too."""
+    connector = _oauth_connector(
+        mock_drive,
+        include_my_drives=all_settings,
+        include_files_shared_with_me=True,
+        include_shared_drives=all_settings,
+    )
+    variants: set[DriveCorpus] = set()
+    list_files = connector.ops.list_files
+
+    def recording_list_files(**kwargs: Any) -> Any:
+        if "not 'me' in owners" in (kwargs.get("query") or ""):
+            variants.add(kwargs["variant"])
+        return list_files(**kwargs)
+
+    monkeypatch.setattr(connector.ops, "list_files", recording_list_files)
+    list(connector.retrieve_all_slim_docs())
+
+    expected = DriveCorpus.ALL_DRIVES if all_settings else DriveCorpus.USER
+    assert variants == {expected}
