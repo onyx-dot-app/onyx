@@ -92,6 +92,31 @@ export class InputBar {
     await this.textbox.focus();
   }
 
+  /** Clicks the text so the caret lands before character `offset`. */
+  async clickAtTextOffset(offset: number): Promise<void> {
+    const point = await this.textbox.evaluate((el, at) => {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+      let remaining = at;
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining < length) {
+          const range = document.createRange();
+          range.setStart(node, remaining);
+          range.setEnd(node, remaining + 1);
+          const rect = range.getBoundingClientRect();
+          // The left part of a character puts the caret before it.
+          return {
+            x: rect.left + rect.width / 4,
+            y: rect.top + rect.height / 2,
+          };
+        }
+        remaining -= length;
+      }
+      throw new Error(`No character at offset ${at}`);
+    }, offset);
+    await this.page.mouse.click(point.x, point.y);
+  }
+
   async clear(): Promise<void> {
     await this.textbox.focus();
     await this.page.keyboard.press("ControlOrMeta+a");

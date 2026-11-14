@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Selector de habilidades"
         },
-        "empty": {
-          "text": "No hay habilidades que coincidan"
-        },
         "mcpServersGroup": {
           "label": "Servidores MCP"
         },

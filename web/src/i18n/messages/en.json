@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Skill picker"
         },
-        "empty": {
-          "text": "No matching skills"
-        },
         "mcpServersGroup": {
           "label": "MCP servers"
         },

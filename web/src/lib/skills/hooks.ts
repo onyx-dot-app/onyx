@@ -11,14 +11,19 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import {
   caretTokenMayContain,
   getCaretRect,
-  getTextBeforeCursor,
+  getTextAroundCursor,
+  type CaretText,
 } from "@/lib/contentEditable";
-import type { PickerEntry, PickerSkill } from "@/lib/skills/picker";
+import {
+  flattenSections,
+  type PickerEntry,
+  type PickerSections,
+  type PickerSkill,
+} from "@/lib/skills/picker";
 import {
   INITIAL_PICKER_SESSION,
-  reduceOnDismiss,
+  reduceOnEscape,
   reduceOnInput,
-  reduceOnSelection,
   type PickerSession,
 } from "@/lib/skills/pickerSession";
 import type { ChatSkill } from "@/lib/skills/types";
@@ -42,8 +47,8 @@ export function usePublishAction(): PublishAction {
 }
 
 /** The custom skills that the user's chat agents get (`GET /api/skills/chat`),
- * as `@` picker entries, sorted by name. */
-export function useChatSkills(): PickerSkill[] {
+ * as `@` picker sections, sorted by name. */
+export function useChatSkills(): PickerSections {
   const { user } = useUser();
   const { data } = useSWR<ChatSkill[]>(
     user ? SWR_KEYS.chatSkills : null,
@@ -51,8 +56,8 @@ export function useChatSkills(): PickerSkill[] {
     { revalidateOnFocus: false }
   );
   return useMemo(
-    () =>
-      (data ?? []).map(
+    () => ({
+      skills: (data ?? []).map(
         (skill): PickerSkill => ({
           kind: "skill",
           slug: skill.name,
@@ -60,104 +65,188 @@ export function useChatSkills(): PickerSkill[] {
           description: skill.description,
         })
       ),
+      apps: [],
+      mcpServers: [],
+    }),
     [data]
   );
 }
 
 interface UseEntryPickerOptions {
-  /** Called when the user picks an entry. The caller replaces `token` (the
-   * trigger and query before the caret) with the entry, e.g. as a chip. */
-  onSelect: (entry: PickerEntry, token: string) => void;
   /** The character that opens the picker. */
   trigger: string;
+  /** Everything the picker can offer. Memoize it: a new identity matches the
+   * open query again. */
+  entries: PickerSections;
+  /** The `entries` that match a query; a module-level function, so its
+   * identity is stable. A word that matches none ends the session. */
+  filter: (entries: PickerSections, query: string) => PickerSections;
+  /** Called when the user picks an entry. The caller replaces `token` (the
+   * trigger and its whole word, split at the caret) with the entry, e.g. as a
+   * chip. The caret is still where the last input left it. */
+  onSelect: (entry: PickerEntry, token: CaretText) => void;
 }
 
 export interface UseEntryPickerResult {
   open: boolean;
   query: string;
+  /** The entries that match `query`. */
+  sections: PickerSections;
   anchorRect: DOMRect | null;
   onSelect: (entry: PickerEntry) => void;
-  onClose: () => void;
+  /** Esc: hide the picker until the trigger is deleted. */
+  onEscape: () => void;
+  /** End the session; the next input in the word can open it again. */
   reset: () => void;
+  /** The input's input (or textarea change) handler. */
   onInput: (event: SyntheticEvent<HTMLElement>) => void;
-  onSelectionChange: (event: SyntheticEvent<HTMLElement>) => void;
 }
 
-/** Drives the trigger-character entry picker over a contentEditable input.
- * The host forwards the input's events; their `currentTarget` is read for the
- * text before the caret and the caret position. */
+/** A collapsed caret in `input`, a contentEditable or a focused textarea. */
+function readCaret(input: HTMLElement): { node: Node; offset: number } | null {
+  if (input instanceof HTMLTextAreaElement) {
+    return document.activeElement === input &&
+      input.selectionStart === input.selectionEnd
+      ? { node: input, offset: input.selectionStart }
+      : null;
+  }
+  const selection = window.getSelection();
+  const range =
+    selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+  return range?.collapsed && input.contains(range.startContainer)
+    ? { node: range.startContainer, offset: range.startOffset }
+    : null;
+}
+
+/** Drives the trigger-character entry picker over a contentEditable input or
+ * a textarea. The host forwards the input's input events; their
+ * `currentTarget` is read for the text around the caret and the caret
+ * position. Only input opens the picker or changes its query. Any selection
+ * change that leaves the caret elsewhere than the last input put it ends the
+ * session. When `entries` change while open, the query is matched again, and a
+ * query that matches nothing ends the session. */
 export function useEntryPicker({
-  onSelect,
   trigger,
+  entries,
+  filter,
+  onSelect,
 }: UseEntryPickerOptions): UseEntryPickerResult {
   const [session, setSession] = useState<PickerSession>(INITIAL_PICKER_SESSION);
-  // Mirror into a ref so the returned handlers keep a stable identity.
+  // The latest session, which handlers read before React renders it.
   const sessionRef = useRef(session);
+  // The input and where its last input left the caret.
+  const caretRef = useRef<{
+    input: HTMLElement;
+    node: Node;
+    offset: number;
+  } | null>(null);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  const hasEntries = useMemo(
+    () => flattenSections(entries).length > 0,
+    [entries]
+  );
 
-  useEffect(() => {
-    sessionRef.current = session;
-  }, [session]);
-
-  const reset = useCallback(() => setSession(INITIAL_PICKER_SESSION), []);
-  const onClose = useCallback(() => setSession(reduceOnDismiss), []);
+  const commit = useCallback((next: PickerSession) => {
+    sessionRef.current = next;
+    setSession(next);
+  }, []);
+  const reset = useCallback(() => commit(INITIAL_PICKER_SESSION), [commit]);
+  const onEscape = useCallback(
+    () => commit(reduceOnEscape(sessionRef.current)),
+    [commit]
+  );
 
   const onInput = useCallback(
     (event: SyntheticEvent<HTMLElement>) => {
+      if (!hasEntries) return;
       const input = event.currentTarget;
-      // Reading the text before the caret clones the DOM. Without a session,
-      // only a token that holds the trigger can open one.
-      if (
-        sessionRef.current.triggerIndex === null &&
-        !caretTokenMayContain(input, trigger)
-      )
-        return;
-      const next = reduceOnInput(
-        sessionRef.current,
-        getTextBeforeCursor(input),
-        trigger
+      let text: CaretText | null;
+      if (input instanceof HTMLTextAreaElement) {
+        const caret = input.selectionStart;
+        const tail = input.value.slice(caret);
+        text = {
+          before: input.value.slice(0, caret),
+          after: tail.slice(0, tail.search(/\s|$/)),
+        };
+      } else {
+        // Reading the text around the caret clones the DOM. Without a
+        // session, only a token that holds the trigger can open one.
+        if (
+          sessionRef.current.triggerIndex === null &&
+          !caretTokenMayContain(input, trigger)
+        )
+          return;
+        text = getTextAroundCursor(input);
+      }
+      const next = reduceOnInput(sessionRef.current, text, trigger, (query) =>
+        filter(entries, query)
       );
-      if (next.open) setAnchorRect(getCaretRect(input));
-      setSession(next);
+      if (next.open) {
+        const caret = readCaret(input);
+        caretRef.current = caret && { input, ...caret };
+        setAnchorRect(
+          input instanceof HTMLTextAreaElement
+            ? input.getBoundingClientRect()
+            : getCaretRect(input)
+        );
+      }
+      commit(next);
     },
-    [trigger]
+    [hasEntries, trigger, filter, entries, commit]
   );
 
-  // Re-sync (or close) the picker after the caret moves (arrow keys, click).
-  const onSelectionChange = useCallback(
-    (event: SyntheticEvent<HTMLElement>) => {
-      const current = sessionRef.current;
-      if (!current.open) return;
-      const input = event.currentTarget;
-      const next = reduceOnSelection(
-        current,
-        getTextBeforeCursor(input),
-        trigger
+  // Entries can change while open, for example on revalidation.
+  useEffect(() => {
+    const current = sessionRef.current;
+    if (!current.open) return;
+    const sections = filter(entries, current.query);
+    commit(
+      flattenSections(sections).length > 0
+        ? { ...current, sections }
+        : INITIAL_PICKER_SESSION
+    );
+  }, [entries, filter, commit]);
+
+  // `selectionchange` follows every caret move, including the one an input
+  // makes, so only a caret that left the place where the last input put it
+  // ends the session. Text controls fire it at the element, so listen in the
+  // capture phase.
+  useEffect(() => {
+    if (!session.open) return;
+    function handleSelectionChange() {
+      const last = caretRef.current;
+      const caret = last && readCaret(last.input);
+      if (caret && caret.node === last?.node && caret.offset === last.offset)
+        return;
+      commit(INITIAL_PICKER_SESSION);
+    }
+    document.addEventListener("selectionchange", handleSelectionChange, true);
+    return () =>
+      document.removeEventListener(
+        "selectionchange",
+        handleSelectionChange,
+        true
       );
-      if (next.open) setAnchorRect(getCaretRect(input));
-      setSession(next);
-    },
-    [trigger]
-  );
+  }, [session.open, commit]);
 
   const handleSelect = useCallback(
     (entry: PickerEntry) => {
       const current = sessionRef.current;
       if (!current.open) return;
-      onSelect(entry, `${trigger}${current.query}`);
+      onSelect(entry, current.token);
       reset();
     },
-    [onSelect, reset, trigger]
+    [onSelect, reset]
   );
 
   return {
     open: session.open,
     query: session.query,
+    sections: session.sections,
     anchorRect,
     onSelect: handleSelect,
-    onClose,
+    onEscape,
     reset,
     onInput,
-    onSelectionChange,
   };
 }

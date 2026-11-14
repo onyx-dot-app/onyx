@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "스킬 선택기"
         },
-        "empty": {
-          "text": "일치하는 스킬 없음"
-        },
         "mcpServersGroup": {
           "label": "MCP 서버"
         },

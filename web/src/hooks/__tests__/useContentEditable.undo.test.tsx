@@ -419,7 +419,7 @@ describe("token deletion history", () => {
     undo();
     expect(input().textContent).toBe("before");
     act(() => {
-      expect(api.deleteBeforeToken("/stale")).toBe(false);
+      expect(api.deleteToken({ before: "/stale", after: "" })).toBe(false);
     });
     redo();
     expect(input().textContent).toBe("after");
@@ -430,7 +430,7 @@ describe("token deletion history", () => {
     act(() => api.setMessage("Prompt /pptx"));
     caretAtTextOffset(12);
     act(() => {
-      expect(api.deleteBeforeToken("/pptx")).toBe(true);
+      expect(api.deleteToken({ before: "/pptx", after: "" })).toBe(true);
     });
     expect(input().textContent).toBe("Prompt ");
     undo();

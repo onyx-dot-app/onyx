@@ -34,6 +34,7 @@ import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import type { CaretText } from "@/lib/contentEditable";
 import { useEntryPicker } from "@/lib/skills/hooks";
 import {
   CRAFT_PICKER_TRIGGER,
@@ -200,20 +201,18 @@ const CraftInputBar = memo(
       }, []);
 
       const pickEntry = useCallback(
-        (entry: PickerEntry, token: string) => {
-          baseRef.current?.deleteBeforeToken(token);
+        (entry: PickerEntry, token: CaretText) => {
+          baseRef.current?.deleteToken(token);
           addEntry(entry);
         },
         [addEntry]
       );
       const slashPicker = useEntryPicker({
-        onSelect: pickEntry,
         trigger: CRAFT_PICKER_TRIGGER,
+        entries: pickerSections,
+        filter: filterPickerSections,
+        onSelect: pickEntry,
       });
-      const slashPickerSections = useMemo(
-        () => filterPickerSections(pickerSections, slashPicker.query),
-        [pickerSections, slashPicker.query]
-      );
 
       const interruptible = !!onInterrupt && isRunning;
       const handleInterrupt = useCallback(() => {
@@ -370,15 +369,15 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
-            onSelectionChange={slashPicker.onSelectionChange}
           />
           <EntryPickerPopover
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={slashPickerSections}
+            sections={slashPicker.sections}
             onSelect={slashPicker.onSelect}
-            onClose={slashPicker.onClose}
+            onEscape={slashPicker.onEscape}
+            onDismiss={slashPicker.reset}
             trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (

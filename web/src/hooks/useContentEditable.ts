@@ -6,12 +6,13 @@ import {
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
   getTextContent,
-  deleteTokenBeforeCursor,
+  deleteTokenAtCursor,
   stripLeadingBr,
   captureSnapshot,
   restoreSnapshot,
   snapshotsEqual,
   pushBoundedSnapshot,
+  type CaretText,
   type EditableSnapshot,
 } from "@/lib/contentEditable";
 import {
@@ -88,16 +89,17 @@ export interface UseContentEditableReturn {
    * mention tile. */
   setMessage: (text: string, mentions?: readonly Mention[]) => void;
   clearMessage: () => void;
-  deleteBeforeToken: (token: string) => boolean;
+  /** Delete `token` around the caret: `token.before` ends at the caret. */
+  deleteToken: (token: CaretText) => boolean;
   handleInput: (event: React.SyntheticEvent<HTMLDivElement>) => string;
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
   insertTileAtCursor: (text: string) => HTMLElement | null;
   expandTile: (tile: HTMLElement) => void;
-  /** Insert a mention tile and a space, replacing `beforeToken` (the
-   * `@<query>` before the caret). */
-  insertMentionTile: (mention: Mention, beforeToken: string) => boolean;
+  /** Insert a mention tile and a space, replacing `token` (the `@<query>`
+   * word around the caret). */
+  insertMentionTile: (mention: Mention, token: CaretText) => boolean;
   pasteText: (text: string) => void;
   /** Whether to show the "paste again to expand" hint — true while a paste tile exists. */
   pasteExpandHintVisible: boolean;
@@ -509,12 +511,12 @@ export function useContentEditable({
     onContentChangeRef.current?.("");
   }, [resize, clearTileSelection, clearUndoHistory, setMentions]);
 
-  const deleteBeforeToken = useCallback(
-    (token: string): boolean => {
+  const deleteToken = useCallback(
+    (token: CaretText): boolean => {
       const el = ref.current;
       if (!el) return false;
       const snapshot = captureSnapshot(el);
-      if (!deleteTokenBeforeCursor(el, token)) return false;
+      if (!deleteTokenAtCursor(el, token)) return false;
       pushUndoSnapshot(snapshot);
       syncFromDOM();
       resize();
@@ -594,13 +596,13 @@ export function useContentEditable({
   );
 
   const insertMentionTile = useCallback(
-    (mention: Mention, beforeToken: string): boolean => {
+    (mention: Mention, token: CaretText): boolean => {
       const el = ref.current;
       if (!el) return false;
       pushUndoSnapshot();
       // Bail if the typed `@<query>` can't be verifiably removed, since the
-      // tile would then follow its own partial text.
-      if (!deleteTokenBeforeCursor(el, beforeToken)) return false;
+      // tile would then sit beside its own partial text.
+      if (!deleteTokenAtCursor(el, token)) return false;
       insertNodeAtCursorUtil(el, createMentionTile(mention));
       insertTextAtCursorUtil(el, " ");
       syncFromDOM();
@@ -948,7 +950,7 @@ export function useContentEditable({
     mentions,
     setMessage,
     clearMessage,
-    deleteBeforeToken,
+    deleteToken,
     handleInput,
     handleCompositionStart,
     handleCompositionEnd,

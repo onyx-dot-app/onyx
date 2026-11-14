@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "スキル選択"
         },
-        "empty": {
-          "text": "一致するスキルはありません"
-        },
         "mcpServersGroup": {
           "label": "MCP サーバー"
         },

@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "منتقي المهارات"
         },
-        "empty": {
-          "text": "لا توجد مهارات مطابقة"
-        },
         "mcpServersGroup": {
           "label": "خوادم MCP"
         },

@@ -33,27 +33,52 @@ export function setCursorBeforeNode(node: Node): void {
 // Stands in for an atomic tile, so a tile's text never reads as typed text.
 const TILE_PLACEHOLDER = "\uFFFC";
 
-/** Plain text from the start of `element` to the caret, with each rich tile as
- * one placeholder character, or null without a caret inside it. */
-export function getTextBeforeCursor(element: HTMLElement): string | null {
+/** Text split at the caret: `before` ends at the caret, `after` starts there. */
+export interface CaretText {
+  before: string;
+  after: string;
+}
+
+/** The plain text of `element` split at the caret, with each rich tile as one
+ * placeholder character, or null without a caret inside it. `after` stops at
+ * the first whitespace after the caret. */
+export function getTextAroundCursor(element: HTMLElement): CaretText | null {
   const selection = window.getSelection();
   if (!selection || selection.rangeCount === 0) return null;
-  const range = selection.getRangeAt(0);
-  if (!element.contains(range.startContainer)) return null;
-  const before = range.cloneRange();
-  before.selectNodeContents(element);
-  before.setEnd(range.startContainer, range.startOffset);
-  const container = document.createElement("div");
-  container.appendChild(before.cloneContents());
-  container
-    .querySelectorAll("[data-rich-tile]")
-    .forEach((tile) => tile.replaceWith(TILE_PLACEHOLDER));
-  return getTextContent(container);
+  const { startContainer: node, startOffset: offset } = selection.getRangeAt(0);
+  if (!element.contains(node)) return null;
+  const read = (clipAtCaret: (range: Range) => void): string => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    clipAtCaret(range);
+    const container = document.createElement("div");
+    container.appendChild(range.cloneContents());
+    container
+      .querySelectorAll("[data-rich-tile]")
+      .forEach((tile) => tile.replaceWith(TILE_PLACEHOLDER));
+    return getTextContent(container);
+  };
+  // The caret's word usually ends inside its own text node, so `after` copies
+  // the rest of the input only when it does not.
+  const tail =
+    node.nodeType === Node.TEXT_NODE
+      ? (node.textContent ?? "").slice(offset)
+      : "";
+  const wordEnd = tail.search(/\s/);
+  let after = tail.slice(0, wordEnd);
+  if (wordEnd === -1) {
+    const rest = read((range) => range.setStart(node, offset));
+    after = rest.slice(0, rest.search(/\s|$/));
+  }
+  return {
+    before: read((range) => range.setEnd(node, offset)),
+    after,
+  };
 }
 
 /** Whether the whitespace-delimited token before the caret can contain
  * `char`. Reads only the caret's text node, so callers can skip the copy that
- * `getTextBeforeCursor` makes. */
+ * `getTextAroundCursor` makes. */
 export function caretTokenMayContain(
   element: HTMLElement,
   char: string
@@ -374,41 +399,44 @@ export function stripLeadingBr(el: HTMLElement): boolean {
 // ─── Token Deletion (rich-tile insertion) ───────────────────────────────────
 
 /**
- * Delete `token` immediately before the collapsed cursor, but only after
- * verifying the characters to remove equal it (else bail + restore the caret).
- * Returns whether the token was removed.
+ * Delete `token` around the collapsed cursor: `token.before` ends at the caret
+ * and `token.after` starts there. Verifies that the characters to remove equal
+ * it first, else bails and restores the caret. Returns whether it was removed.
  */
-export function deleteTokenBeforeCursor(
+export function deleteTokenAtCursor(
   el: HTMLElement,
-  token: string
+  token: CaretText
 ): boolean {
-  const n = token.length;
-  if (n <= 0) return false;
+  if (!token.before) return false;
+  const text = token.before + token.after;
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return false;
   const range = sel.getRangeAt(0);
   if (!range.collapsed || !el.contains(range.startContainer)) return false;
 
   const { startContainer, startOffset } = range;
+  const start = startOffset - token.before.length;
 
   // Fast path: the token lives entirely within the caret's text node.
   if (
     startContainer.nodeType === Node.TEXT_NODE &&
-    startOffset >= n &&
-    startContainer.textContent?.slice(startOffset - n, startOffset) === token
+    start >= 0 &&
+    startContainer.textContent?.slice(start, start + text.length) === text
   ) {
-    range.setStart(startContainer, startOffset - n);
+    range.setStart(startContainer, start);
+    range.setEnd(startContainer, start + text.length);
     range.deleteContents();
     sel.removeAllRanges();
     sel.addRange(range);
     return true;
   }
 
-  // Fallback for node-spanning tokens; modify is absent in jsdom.
+  // Fallback for node-spanning tokens; modify is absent in jsdom. Steps count
+  // code points, not UTF-16 units.
   if (typeof sel.modify !== "function") return false;
-  const steps = Array.from(token).length; // code points, not UTF-16 units
-  for (let i = 0; i < steps; i++) sel.modify("extend", "backward", "character");
-  if (sel.toString() === token) {
+  for (const _ of token.after) sel.modify("move", "forward", "character");
+  for (const _ of text) sel.modify("extend", "backward", "character");
+  if (sel.toString() === text) {
     sel.deleteFromDocument();
     return true;
   }

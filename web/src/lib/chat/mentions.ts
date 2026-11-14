@@ -1,8 +1,23 @@
 import type { Mention } from "@/lib/chat/types";
-import { startsToken } from "@/lib/skills/picker";
+import { startsToken, type PickerSections } from "@/lib/skills/picker";
 
 /** Opens the chat's `@` menu; a picked mention shows as `@name` in the text. */
 export const MENTION_TRIGGER = "@";
+
+/** The `@` menu's match: the skills whose name starts with the query,
+ * ignoring case. */
+export function filterMentionEntries(
+  entries: PickerSections,
+  query: string
+): PickerSections {
+  const prefix = query.toLowerCase();
+  return {
+    ...entries,
+    skills: entries.skills.filter((skill) =>
+      skill.name.toLowerCase().startsWith(prefix)
+    ),
+  };
+}
 
 export interface PlacedMention {
   index: number;

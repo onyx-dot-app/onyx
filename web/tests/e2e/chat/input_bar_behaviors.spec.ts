@@ -791,6 +791,60 @@ test.describe("Skill Mentions", () => {
       }
     }
   });
+
+  test("the picker searches the whole word, and a click inside a word does not open it", async ({
+    chatPage,
+  }) => {
+    const name = uniqueSkillName("mention-word");
+    const skill = await createSkill(chatPage.page.request, name, "Unused.");
+    try {
+      await chatPage.goto();
+      await chatPage.inputBar.typeText(`@${name}xyz`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+
+      // The caret sits after the skill name, but the word is still `<name>xyz`.
+      await chatPage.inputBar.clickAtTextOffset(`@${name}`.length);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await chatPage.page.keyboard.press("Backspace");
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+
+      // Typing completes the name with the caret inside the word, and a pick
+      // replaces the whole word.
+      await chatPage.inputBar.clear();
+      await chatPage.inputBar.typeText(`@${name.charAt(0)}${name.slice(2)}`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await chatPage.inputBar.clickAtTextOffset(2);
+      await chatPage.page.keyboard.type(name.charAt(1));
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+      await expect(chatPage.inputBar.textbox).toHaveText(`@${name}`);
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
+  });
+
+  test("a click in the word closes the open picker, and input in the word opens it again", async ({
+    chatPage,
+  }) => {
+    const name = uniqueSkillName("mention-click");
+    const skill = await createSkill(chatPage.page.request, name, "Unused.");
+    try {
+      await chatPage.goto();
+      const typed = `@${name.slice(0, 6)}`;
+      await chatPage.inputBar.typeText(typed);
+      await expect(chatPage.inputBar.skillPicker).toBeVisible();
+
+      await chatPage.inputBar.clickAtTextOffset(typed.length - 1);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      // Unlike Esc, the click does not hide the word: deleting its last
+      // character is input that opens the picker again.
+      await chatPage.page.keyboard.press("Delete");
+      await expect(chatPage.inputBar.skillPicker).toBeVisible();
+      await expect(chatPage.inputBar.textbox).toHaveText(typed.slice(0, -1));
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
+  });
 });
 
 test.describe("Visual Regression", () => {

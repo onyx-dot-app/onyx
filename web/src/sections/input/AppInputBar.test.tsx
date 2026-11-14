@@ -25,7 +25,7 @@ import {
 } from "@/sections/plugins/__tests__/memberPluginFixtures";
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
-import type { PickerSkill } from "@/lib/skills/picker";
+import type { PickerSections } from "@/lib/skills/picker";
 import { draftKey } from "@/hooks/useDraft";
 
 jest.mock("@/lib/hooks", () => ({
@@ -35,7 +35,8 @@ let mockUser: { preferences: { shortcut_enabled: boolean } } | null = null;
 jest.mock("@/providers/UserProvider", () => ({
   useUser: () => ({ user: mockUser, isAdmin: false }),
 }));
-let mockChatSkills: PickerSkill[] = [];
+const NO_SKILLS: PickerSections = { skills: [], apps: [], mcpServers: [] };
+let mockChatSkills = NO_SKILLS;
 jest.mock("@/lib/skills/hooks", () => ({
   ...jest.requireActual("@/lib/skills/hooks"),
   useChatSkills: () => mockChatSkills,
@@ -174,7 +175,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   mockUser = null;
-  mockChatSkills = [];
+  mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
@@ -348,14 +349,17 @@ describe("`@` skill mentions", () => {
 
   beforeEach(() => {
     mockUser = { preferences: { shortcut_enabled: true } };
-    mockChatSkills = [
-      {
-        kind: "skill",
-        slug: "code-review",
-        name: "code-review",
-        description: "Review code",
-      },
-    ];
+    mockChatSkills = {
+      ...NO_SKILLS,
+      skills: [
+        {
+          kind: "skill",
+          slug: "code-review",
+          name: "code-review",
+          description: "Review code",
+        },
+      ],
+    };
   });
 
   async function pickCodeReview(user: ReturnType<typeof setupUser>) {
@@ -383,6 +387,131 @@ describe("`@` skill mentions", () => {
     );
     await user.type(input, "x");
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  /** Clicks the input's text with the caret before character `offset`.
+   * user-event ignores a pointer offset in a contentEditable. */
+  function clickAt(offset: number) {
+    const input = screen.getByRole("textbox");
+    const text = input.firstChild;
+    if (!(text instanceof Text)) throw new Error("Expected one text node");
+    fireEvent.mouseDown(input);
+    window.getSelection()?.collapse(text, offset);
+    fireEvent.mouseUp(input);
+  }
+
+  test("a click inside a word that matches nothing does not open it", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@codebar");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+
+    await user.click(document.body);
+    clickAt("@code".length);
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  test("the query is the whole word around the caret", async () => {
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@codebar");
+    clickAt("@code".length);
+
+    // `@cod|bar` searches for `codbar`, which matches nothing.
+    await user.keyboard("{Backspace}");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(skillTiles()).toHaveLength(0);
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "@codbar",
+      mentions: [],
+    });
+  });
+
+  test("deleting the rest of a word opens it on the match", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@codebar");
+    await user.keyboard("{Backspace}{Backspace}{Backspace}");
+    expect(await screen.findByTestId("skill-picker-popover")).toHaveTextContent(
+      "@code-review"
+    );
+  });
+
+  test("a caret move closes it and does not change its query", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@code");
+    await screen.findByTestId("skill-picker-popover");
+
+    await user.keyboard("{ArrowLeft}");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{ArrowRight}");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  test("a caret move without key or mouse events closes it", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@code");
+    await screen.findByTestId("skill-picker-popover");
+    // The `selectionchange` that follows the input keeps it open.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
+
+    const text = screen.getByRole("textbox").firstChild;
+    if (!(text instanceof Text)) throw new Error("Expected one text node");
+    act(() => window.getSelection()?.collapse(text, 1));
+    await waitFor(() =>
+      expect(screen.queryByTestId("skill-picker-popover")).toBeNull()
+    );
+  });
+
+  test("Esc hides it until its `@` is deleted", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "@co");
+    await screen.findByTestId("skill-picker-popover");
+
+    await user.keyboard("{Escape}d");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Backspace}{Backspace}{Backspace}{Backspace}@co");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+  });
+
+  test("a click in the input closes it without hiding the word", async () => {
+    render(<Composer plugins={[]} />);
+    const user = setupUser();
+    const input = screen.getByRole("textbox");
+    await user.type(input, "@cod");
+    await screen.findByTestId("skill-picker-popover");
+    // The menu listens for outside pointer downs after it opens.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+
+    fireEvent.pointerDown(input);
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("e");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+  });
+
+  test("a pick by Enter replaces the whole word around the caret", async () => {
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "use @cde");
+    clickAt("use @c".length);
+    await user.keyboard("o");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+
+    await user.keyboard("{Enter}");
+    expect(skillTiles()).toHaveLength(1);
+    expect(screen.getByRole("textbox")).toHaveTextContent(/^use @code-review$/);
+    await user.keyboard("now{Enter}");
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "use @code-review now",
+      mentions: [{ type: "skill", name: "code-review" }],
+    });
   });
 
   test("hides the `/` prompt shortcuts while it is open", async () => {

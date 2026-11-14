@@ -4,6 +4,7 @@ import type {
 } from "@/app/craft/v1/apps/registry";
 import type { SkillsList } from "@/lib/skills/types";
 import type { MCPServer } from "@/lib/mcp/types";
+import type { CaretText } from "@/lib/contentEditable";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
 
@@ -118,7 +119,11 @@ export function toPickerSections(
 
 export interface PickerTrigger {
   triggerIndex: number;
+  /** The whole word after the trigger, through the caret to the next
+   * whitespace. */
   query: string;
+  /** The trigger and query split at the caret: the text a pick replaces. */
+  token: CaretText;
 }
 
 /** Opens Craft's picker; a picked skill becomes a `/slug` prompt prefix. */
@@ -130,20 +135,25 @@ export function startsToken(text: string, index: number): boolean {
   return index === 0 || /\s/.test(text.charAt(index - 1));
 }
 
-// The trigger must start a token; the query (chars between the trigger and the
-// cursor) must not contain whitespace.
+// The trigger must start the caret's word, before the caret. The query runs
+// from the trigger to the next whitespace, so the caret can sit inside it.
 export function detectPickerTrigger(
-  textBeforeCursor: string,
+  text: CaretText,
   trigger: string
 ): PickerTrigger | null {
-  const triggerIndex = textBeforeCursor.lastIndexOf(trigger);
-  if (triggerIndex === -1 || !startsToken(textBeforeCursor, triggerIndex))
+  const triggerIndex = text.before.lastIndexOf(trigger);
+  if (triggerIndex === -1 || !startsToken(text.before, triggerIndex))
     return null;
 
-  const query = textBeforeCursor.slice(triggerIndex + 1);
-  if (/\s/.test(query)) return null;
+  const before = text.before.slice(triggerIndex);
+  if (/\s/.test(before)) return null;
+  const after = text.after.slice(0, text.after.search(/\s|$/));
 
-  return { triggerIndex, query };
+  return {
+    triggerIndex,
+    query: before.slice(trigger.length) + after,
+    token: { before, after },
+  };
 }
 
 function matchesQuery(entry: PickerEntry, query: string): boolean {

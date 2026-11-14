@@ -40,12 +40,9 @@ import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
-import {
-  flattenSections,
-  type PickerEntry,
-  type PickerSections,
-} from "@/lib/skills/picker";
-import { MENTION_TRIGGER } from "@/lib/chat/mentions";
+import type { PickerEntry } from "@/lib/skills/picker";
+import type { CaretText } from "@/lib/contentEditable";
+import { filterMentionEntries, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
@@ -240,31 +237,20 @@ const AppInputBar = React.memo(
     );
     const chatSkills = useChatSkills();
     const insertMention = useCallback(
-      (entry: PickerEntry, token: string) => {
+      (entry: PickerEntry, token: CaretText) => {
         // Each mention kind maps its picker entry kind; chat mentions skills.
         if (entry.kind === "skill")
           insertMentionTile({ type: "skill", name: entry.slug }, token);
       },
       [insertMentionTile]
     );
-    const mentionPicker = useEntryPicker({
-      onSelect: insertMention,
-      trigger: MENTION_TRIGGER,
-    });
-    // One section per mention source, as in the Craft picker.
-    const mentionSections = useMemo((): PickerSections => {
-      const query = mentionPicker.query.toLowerCase();
-      return {
-        skills: chatSkills.filter((skill) =>
-          skill.name.toLowerCase().startsWith(query)
-        ),
-        apps: [],
-        mcpServers: [],
-      };
-    }, [chatSkills, mentionPicker.query]);
     // While open, the mention picker wins over the `/` prompt shortcuts popover.
-    const mentionPickerOpen =
-      mentionPicker.open && flattenSections(mentionSections).length > 0;
+    const mentionPicker = useEntryPicker({
+      trigger: MENTION_TRIGGER,
+      entries: chatSkills,
+      filter: filterMentionEntries,
+      onSelect: insertMention,
+    });
 
     // Clearing or replacing the input in code fires no input event.
     useEffect(() => {
@@ -751,7 +737,7 @@ const AppInputBar = React.memo(
       if (
         !user?.preferences?.shortcut_enabled ||
         !showPrompts ||
-        mentionPickerOpen
+        mentionPicker.open
       )
         return;
 
@@ -1251,7 +1237,7 @@ const AppInputBar = React.memo(
                 open={
                   user?.preferences?.shortcut_enabled &&
                   showPrompts &&
-                  !mentionPickerOpen
+                  !mentionPicker.open
                 }
                 onOpenChange={setShowPrompts}
               >
@@ -1283,8 +1269,6 @@ const AppInputBar = React.memo(
                       onBlur={() => queueNav.setHighlightedId(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
-                      onKeyUp={mentionPicker.onSelectionChange}
-                      onMouseUp={mentionPicker.onSelectionChange}
                       onCompositionStart={handleCompositionStart}
                       onCompositionEnd={handleCompositionEnd}
                       className="p-[2px] w-full h-full outline-hidden bg-transparent whitespace-pre-wrap wrap-break-word overflow-y-auto"
@@ -1309,7 +1293,7 @@ const AppInputBar = React.memo(
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
-                          !mentionPickerOpen &&
+                          !mentionPicker.open &&
                           !event.shiftKey &&
                           !event.nativeEvent.isComposing
                         ) {
@@ -1439,12 +1423,13 @@ const AppInputBar = React.memo(
               />
             )}
             <EntryPickerPopover
-              open={mentionPickerOpen}
+              open={mentionPicker.open}
               anchorRect={mentionPicker.anchorRect}
               query={mentionPicker.query}
-              sections={mentionSections}
+              sections={mentionPicker.sections}
               onSelect={mentionPicker.onSelect}
-              onClose={mentionPicker.onClose}
+              onEscape={mentionPicker.onEscape}
+              onDismiss={mentionPicker.reset}
               trigger={MENTION_TRIGGER}
             />
           </div>

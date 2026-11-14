@@ -57,8 +57,15 @@
   Craft sandbox. Chat cannot open a skill's other files or run its scripts.
   In the chat input, `@` at the start of a word opens a picker of these
   skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
-  filtered by name prefix without case. A pick puts a mention tile that
-  reads `@name` in the input. The tiles are the mentions: only a pick
+  filtered by name prefix without case. The query is the whole word, from
+  the `@` through the caret to the next whitespace. Only typing or deleting
+  opens the picker or changes its query. A paste never opens it. Any other
+  caret move, such as a click, an arrow key or a paste, closes it, and a word
+  that matches no skill closes it. Esc hides it until the user deletes the
+  `@`. A pick replaces the whole word with a mention tile that reads `@name`.
+  Craft's `/` pickers, in the input bar and in the scheduled task prompt,
+  follow the same rules and match a substring
+  (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
   mentions a skill, so typed or pasted `@name` text does not. Removing a tile
   by delete or cut removes its mention, and undo brings it back. A message
   with mentions that the user sends while a response runs is queued instead,

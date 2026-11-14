@@ -15,6 +15,7 @@ import {
 } from "react";
 import { useTranslations } from "next-intl";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
+import type { CaretText } from "@/lib/contentEditable";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
@@ -37,8 +38,8 @@ export interface BaseInputBarHandle {
   focus: () => void;
   setMessage: (message: string) => void;
   pasteText: (text: string) => void;
-  /** Delete `token` immediately before the caret (e.g. `"/pptx"`). */
-  deleteBeforeToken: (token: string) => boolean;
+  /** Delete `token` around the caret (e.g. `/pp` before it, `tx` after). */
+  deleteToken: (token: CaretText) => boolean;
 }
 
 export interface BaseInputBarProps {
@@ -69,8 +70,6 @@ export interface BaseInputBarProps {
   onPasteFiles?: (files: File[]) => void;
   onContentChange?: (text: string) => void;
   onInputCallback?: (event: SyntheticEvent<HTMLDivElement>) => void;
-  /** Called after the caret may have moved (key up, mouse up). */
-  onSelectionChange?: (event: SyntheticEvent<HTMLDivElement>) => void;
 }
 
 const BaseInputBar = memo(
@@ -97,7 +96,6 @@ const BaseInputBar = memo(
         onPasteFiles,
         onContentChange,
         onInputCallback,
-        onSelectionChange,
       },
       ref
     ) => {
@@ -116,7 +114,7 @@ const BaseInputBar = memo(
         message,
         setMessage,
         clearMessage,
-        deleteBeforeToken,
+        deleteToken,
         handleInput: onInput,
         handleCompositionStart,
         handleCompositionEnd,
@@ -162,7 +160,7 @@ const BaseInputBar = memo(
         },
         setMessage: (msg: string) => setMessage(msg),
         pasteText: (text: string) => pasteText(text),
-        deleteBeforeToken,
+        deleteToken,
       }));
 
       const handlePaste = useCallback(
@@ -298,8 +296,6 @@ const BaseInputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
-                onKeyUp={onSelectionChange}
-                onMouseUp={onSelectionChange}
                 onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",

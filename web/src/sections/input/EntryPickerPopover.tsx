@@ -25,10 +25,15 @@ interface EntryPickerPopoverProps {
   anchorRect: DOMRect | null;
   /** The typed query; a change highlights the first row again. */
   query: string;
-  /** The entries to show, already filtered by the caller. */
+  /** The entries to show, already filtered by the caller; never empty while
+   * open. */
   sections: PickerSections;
   onSelect: (entry: PickerEntry) => void;
-  onClose: () => void;
+  /** Esc: hides the picker until its trigger is deleted. */
+  onEscape: () => void;
+  /** Any other close, such as a pointer down outside the menu, including in
+   * the input: ends the session without hiding the word. */
+  onDismiss: () => void;
   /** The character that opened the picker; skill rows show it before the name. */
   trigger: string;
 }
@@ -39,7 +44,8 @@ function EntryPickerPopover({
   query,
   sections,
   onSelect,
-  onClose,
+  onEscape,
+  onDismiss,
   trigger,
 }: EntryPickerPopoverProps) {
   const t = useTranslations("chat.input");
@@ -79,34 +85,28 @@ function EntryPickerPopover({
       if (e.key === "ArrowDown") {
         e.preventDefault();
         e.stopPropagation();
-        if (flatEntries.length === 0) return;
         setSelectedIndex((i) => (i + 1) % flatEntries.length);
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
         e.stopPropagation();
-        if (flatEntries.length === 0) return;
         setSelectedIndex(
           (i) => (i - 1 + flatEntries.length) % flatEntries.length
         );
       } else if (e.key === "Enter" || e.key === "Tab") {
         e.preventDefault();
         e.stopPropagation();
-        if (flatEntries.length === 0) {
-          onClose();
-          return;
-        }
         const entry = flatEntries[selectedIndex] ?? flatEntries[0];
         if (entry) onSelect(entry);
       } else if (e.key === "Escape") {
         e.preventDefault();
         e.stopPropagation();
-        onClose();
+        onEscape();
       }
     }
 
     document.addEventListener("keydown", handleKeyDown, true);
     return () => document.removeEventListener("keydown", handleKeyDown, true);
-  }, [open, flatEntries, selectedIndex, onSelect, onClose]);
+  }, [open, flatEntries, selectedIndex, onSelect, onEscape]);
 
   if (!anchorRect) return null;
 
@@ -119,7 +119,7 @@ function EntryPickerPopover({
     <Popover
       open={open}
       onOpenChange={(next) => {
-        if (!next) onClose();
+        if (!next) onDismiss();
       }}
     >
       <Popover.Anchor asChild>
@@ -140,18 +140,18 @@ function EntryPickerPopover({
         align="start"
         width={70}
         onOpenAutoFocus={(e) => e.preventDefault()}
+        // The keydown handler above owns Esc.
+        onEscapeKeyDown={(e) => e.preventDefault()}
         data-testid="skill-picker-popover"
         aria-label={t("entryPickerPopover.content.ariaLabel")}
       >
         <Popover.Menu scrollContainerRef={scrollContainerRef}>
           {buildMenuChildren({
             sections,
-            flatEntries,
             selectedIndex,
             onSelect,
             onHover: setSelectedIndex,
             trigger,
-            emptyMessage: t("entryPickerPopover.empty.text"),
             groupLabels: {
               skills: t("entryPickerPopover.skillsGroup.label"),
               apps: t("entryPickerPopover.appsGroup.label"),
@@ -167,37 +167,23 @@ function EntryPickerPopover({
 
 interface BuildMenuChildrenArgs {
   sections: PickerSections;
-  flatEntries: PickerEntry[];
   selectedIndex: number;
   onSelect: (entry: PickerEntry) => void;
   onHover: (idx: number) => void;
   trigger: string;
   /** Translated copy: this helper is not a component, so it cannot call `t`. */
-  emptyMessage: string;
   groupLabels: { skills: string; apps: string; mcpServers: string };
 }
 
 // `Popover.Menu` renders a literal `null` between children as a divider.
 function buildMenuChildren({
   sections,
-  flatEntries,
   selectedIndex,
   onSelect,
   onHover,
   trigger,
-  emptyMessage,
   groupLabels,
 }: BuildMenuChildrenArgs): ReactNode[] {
-  if (flatEntries.length === 0) {
-    return [
-      <div key="empty" className="p-2">
-        <Text font="secondary-body" color="text-03">
-          {emptyMessage}
-        </Text>
-      </div>,
-    ];
-  }
-
   // Groups must stay in `flattenSections` order — keyboard nav indexes into that
   // flat list, so a running index is what keeps the two aligned.
   const groups: { key: string; label: string; entries: PickerEntry[] }[] = [

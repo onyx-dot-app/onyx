@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Skill-Auswahl"
         },
-        "empty": {
-          "text": "Keine passenden Skills"
-        },
         "mcpServersGroup": {
           "label": "MCP-Server"
         },

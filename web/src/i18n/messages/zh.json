@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "技能选择器"
         },
-        "empty": {
-          "text": "没有匹配的技能"
-        },
         "mcpServersGroup": {
           "label": "MCP 服务器"
         },

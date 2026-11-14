@@ -18,59 +18,78 @@ import {
 import type { SkillsList } from "@/lib/skills/types";
 
 describe("detectPickerTrigger", () => {
+  /** The text with the caret at its end. */
+  const atEnd = (before: string) => ({ before, after: "" });
+
   it("returns null when no slash present", () => {
-    expect(detectPickerTrigger("hello world", "/")).toBeNull();
+    expect(detectPickerTrigger(atEnd("hello world"), "/")).toBeNull();
   });
 
   it("matches a leading slash with empty query", () => {
-    expect(detectPickerTrigger("/", "/")).toEqual({
+    expect(detectPickerTrigger(atEnd("/"), "/")).toEqual({
       triggerIndex: 0,
       query: "",
-    });
-  });
-
-  it("matches a leading slash with a query", () => {
-    expect(detectPickerTrigger("/sla", "/")).toEqual({
-      triggerIndex: 0,
-      query: "sla",
+      token: { before: "/", after: "" },
     });
   });
 
   it("matches a slash after whitespace", () => {
-    expect(detectPickerTrigger("hello /sl", "/")).toEqual({
+    expect(detectPickerTrigger(atEnd("hello /sl"), "/")).toEqual({
       triggerIndex: 6,
       query: "sl",
+      token: { before: "/sl", after: "" },
     });
   });
 
+  it("queries the whole word, through the caret to the next whitespace", () => {
+    expect(
+      detectPickerTrigger({ before: "hi /sl", after: "ack now" }, "/")
+    ).toEqual({
+      triggerIndex: 3,
+      query: "slack",
+      token: { before: "/sl", after: "ack" },
+    });
+    expect(detectPickerTrigger({ before: "/", after: "pptx" }, "/")).toEqual({
+      triggerIndex: 0,
+      query: "pptx",
+      token: { before: "/", after: "pptx" },
+    });
+  });
+
+  it("rejects a caret before the trigger", () => {
+    expect(detectPickerTrigger({ before: "", after: "/pptx" }, "/")).toBeNull();
+  });
+
   it("rejects a slash not preceded by whitespace", () => {
-    expect(detectPickerTrigger("http://x", "/")).toBeNull();
+    expect(detectPickerTrigger(atEnd("http://x"), "/")).toBeNull();
   });
 
   it("rejects when query contains whitespace", () => {
-    expect(detectPickerTrigger("/foo bar", "/")).toBeNull();
+    expect(detectPickerTrigger(atEnd("/foo bar"), "/")).toBeNull();
   });
 
   describe("with a `@` trigger", () => {
     it("matches a leading or space-preceded `@`", () => {
-      expect(detectPickerTrigger("@", "@")).toEqual({
+      expect(detectPickerTrigger(atEnd("@"), "@")).toEqual({
         triggerIndex: 0,
         query: "",
+        token: { before: "@", after: "" },
       });
-      expect(detectPickerTrigger("use @code-re", "@")).toEqual({
+      expect(detectPickerTrigger(atEnd("use @code-re"), "@")).toEqual({
         triggerIndex: 4,
         query: "code-re",
+        token: { before: "@code-re", after: "" },
       });
     });
 
     it("rejects a mid-word `@`, as in an email", () => {
-      expect(detectPickerTrigger("a@b", "@")).toBeNull();
-      expect(detectPickerTrigger("@@b", "@")).toBeNull();
-      expect(detectPickerTrigger("(@b", "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("a@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("@@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("(@b"), "@")).toBeNull();
     });
 
     it("ignores `/` tokens", () => {
-      expect(detectPickerTrigger("/pptx", "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("/pptx"), "@")).toBeNull();
     });
   });
 });

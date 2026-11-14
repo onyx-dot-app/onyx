@@ -4,7 +4,8 @@
 
 import {
   getTextContent,
-  deleteTokenBeforeCursor,
+  getTextAroundCursor,
+  deleteTokenAtCursor,
   stripLeadingBr,
 } from "@/lib/contentEditable";
 import {
@@ -239,13 +240,64 @@ function mount(html: string): HTMLDivElement {
   return el;
 }
 
-describe("deleteTokenBeforeCursor", () => {
+describe("getTextAroundCursor", () => {
+  it("ends `after` at the first whitespace in the caret's text node", () => {
+    const el = mount("hi @co de now");
+    caretAt(el.firstChild as Text, "hi @co".length);
+    expect(getTextAroundCursor(el)).toEqual({ before: "hi @co", after: "" });
+    caretAt(el.firstChild as Text, "hi @c".length);
+    expect(getTextAroundCursor(el)).toEqual({ before: "hi @c", after: "o" });
+    el.remove();
+  });
+
+  it("follows the word across nodes and reads a tile as one placeholder", () => {
+    const el = mount("@c<b>od</b>e");
+    el.appendChild(
+      createRichInputTileNode({
+        type: "paste",
+        text: "tile",
+        preview: "tile",
+        meta: "",
+      })
+    );
+    el.appendChild(document.createTextNode("x y"));
+    caretAt(el.firstChild as Text, 1);
+    expect(getTextAroundCursor(el)).toEqual({
+      before: "@",
+      after: "code\uFFFCx",
+    });
+    caretAt(el.lastChild as Text, 1);
+    expect(getTextAroundCursor(el)).toEqual({
+      before: "@code\uFFFCx",
+      after: "",
+    });
+    el.remove();
+  });
+});
+
+describe("deleteTokenAtCursor", () => {
   it("removes the exact token before the caret and returns true", () => {
     const el = mount("hi /pptx");
     const text = el.firstChild as Text;
     caretAt(text, text.length);
-    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(true);
+    expect(deleteTokenAtCursor(el, { before: "/pptx", after: "" })).toBe(true);
     expect(getTextContent(el)).toBe("hi ");
+    el.remove();
+  });
+
+  it("removes the whole token around a caret inside it", () => {
+    const el = mount("hi /pptx now");
+    caretAt(el.firstChild as Text, 6);
+    expect(deleteTokenAtCursor(el, { before: "/pp", after: "tx" })).toBe(true);
+    expect(getTextContent(el)).toBe("hi  now");
+    el.remove();
+  });
+
+  it("returns false when the chars after the caret don't match", () => {
+    const el = mount("hi /pptx");
+    caretAt(el.firstChild as Text, 6);
+    expect(deleteTokenAtCursor(el, { before: "/pp", after: "ty" })).toBe(false);
+    expect(getTextContent(el)).toBe("hi /pptx");
     el.remove();
   });
 
@@ -253,7 +305,7 @@ describe("deleteTokenBeforeCursor", () => {
     const el = mount("hello");
     const text = el.firstChild as Text;
     caretAt(text, text.length);
-    expect(deleteTokenBeforeCursor(el, "/x")).toBe(false);
+    expect(deleteTokenAtCursor(el, { before: "/x", after: "" })).toBe(false);
     expect(getTextContent(el)).toBe("hello");
     el.remove();
   });
@@ -261,14 +313,14 @@ describe("deleteTokenBeforeCursor", () => {
   it("returns false for an empty token", () => {
     const el = mount("hi");
     caretAt(el.firstChild as Text, 2);
-    expect(deleteTokenBeforeCursor(el, "")).toBe(false);
+    expect(deleteTokenAtCursor(el, { before: "", after: "" })).toBe(false);
     el.remove();
   });
 
   it("returns false when fewer chars than the token precede the caret", () => {
     const el = mount("/x");
     caretAt(el.firstChild as Text, 1);
-    expect(deleteTokenBeforeCursor(el, "/x")).toBe(false);
+    expect(deleteTokenAtCursor(el, { before: "/x", after: "" })).toBe(false);
     expect(getTextContent(el)).toBe("/x");
     el.remove();
   });
@@ -282,7 +334,7 @@ describe("deleteTokenBeforeCursor", () => {
     r.setEnd(text, text.length);
     sel.removeAllRanges();
     sel.addRange(r);
-    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(false);
+    expect(deleteTokenAtCursor(el, { before: "/pptx", after: "" })).toBe(false);
     expect(getTextContent(el)).toBe("hi /pptx");
     el.remove();
   });
@@ -291,7 +343,7 @@ describe("deleteTokenBeforeCursor", () => {
     const el = mount("hi /pptx");
     const outside = mount("/pptx");
     caretAt(outside.firstChild as Text, 5);
-    expect(deleteTokenBeforeCursor(el, "/pptx")).toBe(false);
+    expect(deleteTokenAtCursor(el, { before: "/pptx", after: "" })).toBe(false);
     expect(getTextContent(el)).toBe("hi /pptx");
     el.remove();
     outside.remove();
