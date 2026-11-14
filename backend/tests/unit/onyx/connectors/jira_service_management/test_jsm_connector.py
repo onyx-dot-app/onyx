@@ -280,11 +280,11 @@ def test_everything_scope_filter_applies_to_slim_listing(
     assert jsm_connector._include_issue_in_slim_listing(software_issue) is True
 
 
-def test_project_permissions_use_jsm_group_prefix(
+def test_project_permissions_pass_through_to_jira_base(
     jsm_connector: JiraServiceManagementConnector,
 ) -> None:
-    """Prefixed project permissions for JSM must rewrite ``jira_`` group prefixes
-    to ``jira_service_management_`` without modifying shared EE code."""
+    """Project permissions for JSM delegate directly to the base Jira connector
+    without rewriting ``jira_`` group prefixes."""
     from onyx.access.models import ExternalAccess
 
     raw_prefixed = ExternalAccess(
@@ -306,7 +306,7 @@ def test_project_permissions_use_jsm_group_prefix(
         unprefixed = jsm_connector._get_project_permissions("HELP", add_prefix=False)
 
     assert prefixed.external_user_group_ids == {
-        "jira_service_management_support-agents",
+        "jira_support-agents",
         "other_group",
     }
     assert unprefixed.external_user_group_ids == {"support-agents"}
