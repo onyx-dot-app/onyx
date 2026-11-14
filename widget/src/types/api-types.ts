@@ -155,7 +155,7 @@ export interface IntermediateReportStart {
   type: "intermediate_report_start";
 }
 
-/** A tool call waits for the user's decision; the run pauses until then. */
+/** A tool call waits for the user's decision. */
 export interface ToolApprovalRequest {
   type: "tool_approval_request";
   approval_id: string;
@@ -163,14 +163,12 @@ export interface ToolApprovalRequest {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
-  // ISO 8601 UTC; only shown as the deadline. The server resolves expiry.
-  expires_at: string;
 }
 
 export interface ToolApprovalResolved {
   type: "tool_approval_resolved";
   approval_id: string;
-  // approved | approved_for_chat | rejected | expired | disabled | cancelled;
+  // approved | approved_for_chat | rejected | disabled | cancelled;
   // anything else is ignored
   outcome: string;
 }
@@ -181,8 +179,12 @@ export interface ApprovalDecisionResponse {
   decided_via: string;
 }
 
+/** The stream's last packet. */
 export interface Stop {
   type: "stop";
+  // "awaiting_approval": the response waits for decisions and continues on a
+  // new stream after them
+  stop_reason?: string | null;
 }
 
 export interface OverallStop {

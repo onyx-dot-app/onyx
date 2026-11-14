@@ -11,13 +11,15 @@ import type { ChatMessage } from "@/types/widget-types";
 /** `error_code` of the 409 a send gets while the chat waits for a decision. */
 export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
+/** `stop_reason` of a stream that stops while the response waits for decisions. */
+export const AWAITING_APPROVAL_STOP_REASON = "awaiting_approval";
+
 export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
 
 export type ApprovalOutcome =
   | "approved"
   | "approved_for_chat"
   | "rejected"
-  | "expired"
   | "disabled"
   | "cancelled";
 
@@ -32,7 +34,6 @@ export type ApprovalStatus =
   | "approved"
   | "approvedForSession"
   | "rejected"
-  | "expired"
   | "disabled"
   | "closed";
 
@@ -46,7 +47,6 @@ const OUTCOMES: ReadonlySet<string> = new Set<ApprovalOutcome>([
   "approved",
   "approved_for_chat",
   "rejected",
-  "expired",
   "disabled",
   "cancelled",
 ]);
@@ -60,18 +60,16 @@ export function readOutcome(value: unknown): ApprovalOutcome | null {
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision from
- * this widget decides it; a stopped response closes the request. A response
- * stops only when the server ends it, not when this widget loses its stream.
- * The deadline never decides: the server resolves an expired request.
+ * this widget decides it; a response that ended closes the request.
  */
 export function approvalStatus(
   entry: ApprovalEntry,
   localStatus: ApprovalStatus | undefined,
-  stopped: boolean
+  ended: boolean
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return localStatus ?? (stopped ? "closed" : "pending");
+      return localStatus ?? (ended ? "closed" : "pending");
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -92,6 +90,14 @@ export function decidedStatus(
     : "approved";
 }
 
+/**
+ * The server ended the response. A stop while it waits for decisions does not
+ * end it, and neither does a stream this widget lost.
+ */
+export function responseEnded(message: ChatMessage): boolean {
+  return !message.isStreaming && !message.awaitingApproval;
+}
+
 /** The first request that still waits for this user. */
 export function findPendingApproval(
   messages: ChatMessage[],
@@ -103,7 +109,7 @@ export function findPendingApproval(
         approvalStatus(
           entry,
           localStatuses.get(entry.request.approval_id),
-          !message.isStreaming
+          responseEnded(message)
         ) === "pending"
     );
     if (pending) return pending;
@@ -125,27 +131,11 @@ export function approvalRecord(
       return `Approved for this chat: ${toolName}`;
     case "rejected":
       return `Not approved: ${toolName}`;
-    case "expired":
-      return `Timed out: ${toolName}`;
     case "disabled":
       return `Disabled: ${toolName}`;
     case "closed":
       return `No longer waiting: ${toolName}`;
   }
-}
-
-/** "Approve by 3:45 PM" in the visitor's locale, or null for a bad date. */
-export function approvalDeadline(
-  expiresAt: string,
-  locale?: string
-): string | null {
-  const date = new Date(expiresAt);
-  if (Number.isNaN(date.getTime())) return null;
-  const time = new Intl.DateTimeFormat(locale, {
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-  return `Approve by ${time}`;
 }
 
 // Past this length a string value shows Show more.

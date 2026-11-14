@@ -704,13 +704,6 @@ export const widgetStyles = css`
     font-weight: var(--onyx-weight-medium);
   }
 
-  .approval-deadline {
-    flex-shrink: 0;
-    white-space: nowrap;
-    font-size: var(--onyx-font-size-secondary);
-    opacity: 0.7;
-  }
-
   .approval-body {
     display: flex;
     flex-direction: column;

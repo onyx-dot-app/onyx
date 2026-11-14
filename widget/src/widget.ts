@@ -35,7 +35,6 @@ import {
   ApprovalDecision,
   ApprovalEntry,
   ApprovalStatus,
-  approvalDeadline,
   approvalRecord,
   approvalStatus,
   ARGUMENT_ROWS_SHOWN,
@@ -44,6 +43,7 @@ import {
   decidedStatus,
   findPendingApproval,
   readOutcome,
+  responseEnded,
 } from "./services/approvals";
 import { MessageIDs, processPacket } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
@@ -228,9 +228,9 @@ export class OnyxChatWidget extends LitElement {
       if (!stored) return;
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
-      // A response that still runs, e.g. one waiting for a decision, shows
-      // again, even when the page closed before it saved any of it.
-      await this.resumeStream(stored.sessionId);
+      // A response that still runs or waits for a decision shows again, even
+      // when the page closed before it saved any of it.
+      await this.resumeStream(stored.sessionId, { showLatest: true });
     })();
   }
 
@@ -510,7 +510,8 @@ export class OnyxChatWidget extends LitElement {
       id,
       status
     );
-    // The run goes on after the decision; follow it when no stream does.
+    // After the last decision the response continues on a new stream; follow
+    // it when no stream is followed.
     if (this.abortController === undefined && this.chatSessionId) {
       void this.resumeStream(this.chatSessionId);
     }
@@ -548,9 +549,13 @@ export class OnyxChatWidget extends LitElement {
     // A stream another client started while this one was saved
     let nextStream: number | null = null;
     const follow = newFollow(null);
-    // Set when the response runs on without this stream: the server reports a
-    // waiting request this widget does not show, or the stream ended first.
+    // Set when the response runs on without this stream: it ended first, or
+    // the user decided before it stopped for decisions.
     let reattach = false;
+    // The stream stopped for decisions
+    let awaiting = false;
+    // A send the server blocked for a waiting request this widget may not show
+    let blocked = false;
     const userMessage: ChatMessage = {
       id: `msg-${Date.now()}`,
       role: "user",
@@ -627,12 +632,15 @@ export class OnyxChatWidget extends LitElement {
           );
         }
       );
-      reattach = acknowledged && !follow.ended;
+      awaiting = follow.message?.awaitingApproval === true;
+      reattach =
+        acknowledged &&
+        (!follow.ended || (awaiting && this.pendingApproval === null));
     } catch (err: unknown) {
       if (!stillOurs()) return;
       console.error("Failed to send message:", err);
       if (!(err instanceof Error && err.name === "AbortError")) {
-        const blocked =
+        blocked =
           err instanceof ApiError &&
           err.errorCode === APPROVAL_PENDING_ERROR_CODE;
         reattach = blocked || (acknowledged && !follow.ended);
@@ -649,8 +657,9 @@ export class OnyxChatWidget extends LitElement {
         }
       }
     } finally {
-      // A waiting response keeps the session busy until the user decides.
-      if (stillOurs() && sentSessionId && !reattach) {
+      // The server can still save the turn after its stream ends. A stream
+      // that stopped for decisions leaves following to the decision.
+      if (stillOurs() && sentSessionId && !reattach && !awaiting) {
         const sentStream = reservedAssistantId;
         try {
           const next = await this.apiService.waitForSessionIdle(
@@ -688,23 +697,37 @@ export class OnyxChatWidget extends LitElement {
       sentSessionId &&
       this.abortController === undefined
     ) {
-      await this.resumeStream(sentSessionId, reservedAssistantId, nextStream);
+      await this.resumeStream(sentSessionId, {
+        reservedAssistantId,
+        startStreamId: nextStream,
+        showLatest: blocked,
+      });
     }
   }
 
   /**
-   * Follows the session's running response, so a request that waits for a
-   * decision can be decided after a reload, a blocked send, or a lost stream.
-   * A stream that ends before the response does is attached again from its
-   * last cursor while the session still runs it; a new stream is followed
-   * from its start. `reservedAssistantId` names an answer that this widget
-   * has not shown yet. `startStreamId` names the stream to follow from its
-   * start, else the current one.
+   * Follows the session's running response after a reload, a blocked send, a
+   * lost stream, or a decision. A stream that ends before the response does
+   * is attached again from its last cursor while the session still runs it;
+   * a new stream, such as the continuation after decisions, is followed from
+   * its start. A stream that stops for decisions ends the follow until a
+   * decision. `reservedAssistantId` names an answer that this widget has not
+   * shown yet. `startStreamId` names the stream to follow from its start,
+   * else the current one. `showLatest` also shows the session's latest saved
+   * answer when the transcript lacks it, such as one that waits for a
+   * decision.
    */
   private async resumeStream(
     sessionId: string,
-    reservedAssistantId: number | null = null,
-    startStreamId: number | null = null
+    {
+      reservedAssistantId = null,
+      startStreamId = null,
+      showLatest = false,
+    }: {
+      reservedAssistantId?: number | null;
+      startStreamId?: number | null;
+      showLatest?: boolean;
+    } = {}
   ) {
     if (this.abortController) return;
     const controller = new AbortController();
@@ -752,6 +775,9 @@ export class OnyxChatWidget extends LitElement {
           console.warn("The response stream ended early:", err);
         }
         if (!stillOurs()) return;
+        // A decision follows the continuation; one made during this stream
+        // follows it now.
+        if (follow.message?.awaitingApproval && this.pendingApproval) return;
         if (follow.ended) {
           // The server can still save the turn after its stream ends, and
           // another client can start a new response meanwhile.
@@ -787,12 +813,12 @@ export class OnyxChatWidget extends LitElement {
           follow = newFollow(next);
         }
       }
-      // The response ended before this widget saw it end: there was no
-      // replay (a 404, e.g. the run finished while the page was closed), or
-      // the replay buffer ended early. The server's saved copy finishes the
-      // response, and answers or removes a saved question with no answer
-      // after it. On a failure the snapshot stays unfinished, so the next
-      // load tries again.
+      // The response ended or stopped for decisions before this widget saw
+      // it: there was no replay (a 404, e.g. the run finished while the page
+      // was closed), or the replay buffer ended early. The server's saved
+      // copy finishes the response or shows its waiting requests, and
+      // answers or removes a saved question with no answer after it. On a
+      // failure the snapshot stays unfinished, so the next load tries again.
       const unanswered = this.messages
         .filter(
           (message, index) =>
@@ -802,7 +828,7 @@ export class OnyxChatWidget extends LitElement {
         .map((message) => message.id)
         .filter((id): id is number => typeof id === "number");
       const recoverIds = this.messages
-        .filter((message) => message.isStreaming)
+        .filter((message) => message.isStreaming || message.awaitingApproval)
         .map((message) => message.id)
         .filter((id): id is number => typeof id === "number");
       if (
@@ -813,7 +839,8 @@ export class OnyxChatWidget extends LitElement {
       }
       if (
         stillOurs() &&
-        (recoverIds.length > 0 ||
+        (showLatest ||
+          recoverIds.length > 0 ||
           unanswered.length > 0 ||
           this.messages.some((message) => message.isStreaming))
       ) {
@@ -836,6 +863,15 @@ export class OnyxChatWidget extends LitElement {
           } else if (!recoverIds.includes(answer.message_id)) {
             recoverIds.push(answer.message_id);
           }
+        }
+        const latest = assistants[assistants.length - 1]?.message_id;
+        if (
+          showLatest &&
+          latest !== undefined &&
+          !recoverIds.includes(latest) &&
+          !this.messages.some((message) => message.id === latest)
+        ) {
+          recoverIds.push(latest);
         }
         for (const assistantMessageId of recoverIds) {
           const index = assistants.findIndex(
@@ -1216,7 +1252,7 @@ export class OnyxChatWidget extends LitElement {
                   approvalStatus(
                     entry,
                     this.localApprovalStatuses.get(entry.request.approval_id),
-                    !msg.isStreaming
+                    responseEnded(msg)
                   )
                 )
               )}
@@ -1260,7 +1296,6 @@ export class OnyxChatWidget extends LitElement {
     const record = approvalRecord(status, name);
     const title = `Approval requested: ${name}`;
     const submitting = this.submittingApprovals.has(request.approval_id);
-    const deadline = approvalDeadline(request.expires_at);
     let rows = this.argumentRowCache.get(request);
     if (!rows) {
       rows = argumentRows(request.arguments);
@@ -1291,11 +1326,6 @@ export class OnyxChatWidget extends LitElement {
                     >${ICON_LOADER}</span
                   >
                   <span class="approval-title" title=${title}>${title}</span>
-                  ${
-                    deadline
-                      ? html`<span class="approval-deadline">${deadline}</span>`
-                      : ""
-                  }
                 </div>
                 <div class="approval-body">
                   ${

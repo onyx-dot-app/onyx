@@ -4,7 +4,10 @@
 
 import { Packet, Message, SearchDocument } from "@/types/api-types";
 import { ChatMessage } from "@/types/widget-types";
-import { readOutcome } from "@/services/approvals";
+import {
+  AWAITING_APPROVAL_STOP_REASON,
+  readOutcome,
+} from "@/services/approvals";
 
 export interface ParsedMessage {
   message: ChatMessage;
@@ -196,7 +199,7 @@ export function processPacket(
       };
 
     case "tool_approval_request": {
-      // The run pauses until the user decides; a tool call can come first
+      // A tool call can come first
       const base: ChatMessage = currentMessage ?? {
         id: `msg-${Date.now()}`,
         role: "assistant",
@@ -238,12 +241,15 @@ export function processPacket(
 
     case "stop":
     case "overall_stop":
-      // End of stream - mark message as complete
+      // End of stream - mark message as complete, or as waiting for decisions
       if (currentMessage) {
         return {
           message: {
             ...currentMessage,
             isStreaming: false,
+            awaitingApproval:
+              obj.type === "stop" &&
+              obj.stop_reason === AWAITING_APPROVAL_STOP_REASON,
           },
         };
       }

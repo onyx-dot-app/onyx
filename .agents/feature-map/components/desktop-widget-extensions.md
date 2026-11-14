@@ -87,19 +87,27 @@ send → ApiService                                   services/api-service.ts
   │         └─ saveSession to sessionStorage, scoped by credential identity
   ├─ finally: waitForSessionIdle again, then enable Send; a stream id other
   │    than the reserved assistant id (the sent stream's id) → resumeStream
+  ├─ stop with stop_reason "awaiting_approval" → cards stay actionable, no
+  │    idle wait; the decision follows the continuation
   └─ stream ended before its response, or 409 APPROVAL_PENDING → resumeStream
+       (409 also shows the session's latest saved answer, the waiting one)
 restore / resumeStream / decision with no stream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (cursor lines track stream_id
   │    and next_cursor; only a 404 stops requests for that stream)
+  ├─ stop with "awaiting_approval" while a card waits → stop following; after
+  │    a decision, resume-stream?cursor=0 follows the continuation, a new
+  │    stream of the same response
   ├─ a replayed user_message whose question the transcript lacks inserts it
   │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
   ├─ after its stop → waitForSessionIdle; a new stream id → follow from 0
-  └─ idle with a response unfinished, an acknowledged answer not shown, or a
-       question with no answer after it → GET /chat/get-chat-session/{id},
-       replay the saved answers (by parent_message for questions; a question
-       with none is removed); on failure it stays unfinished for the next load
+  └─ idle with a response unfinished or waiting for decisions, an
+       acknowledged answer not shown, a question with no answer after it, or
+       (restore, 409) a latest answer not shown → GET
+       /chat/get-chat-session/{id}, replay the saved answers (by
+       parent_message for questions; a question with none is removed); on
+       failure it stays unfinished for the next load
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The

@@ -1,9 +1,12 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { ApiError, ApiService } from "../src/services/api-service";
+import {
+  ApiError,
+  ApiService,
+  type ResumeEnd,
+} from "../src/services/api-service";
 import {
   APPROVAL_PENDING_ERROR_CODE,
   type ApprovalEntry,
-  approvalDeadline,
   approvalRecord,
   approvalStatus,
   ARGUMENT_ROWS_SHOWN,
@@ -34,7 +37,6 @@ function request(id: string, tool = "send_email"): ToolApprovalRequest {
     tool_name: tool,
     display_name: "Send email",
     arguments: { to: "a@example.com" },
-    expires_at: "2026-11-13T15:45:00Z",
   };
 }
 
@@ -111,12 +113,6 @@ describe("approval status", () => {
     expect(approvalStatus(entry("a"), undefined, false)).toBe("pending");
   });
 
-  it("never closes a request by the device clock", () => {
-    const expired = entry("a");
-    expired.request.expires_at = "2000-01-01T00:00:00Z";
-    expect(approvalStatus(expired, undefined, false)).toBe("pending");
-  });
-
   it("finds the first request that still waits", () => {
     const messages = [
       { ...streamingMessage([entry("old")]), isStreaming: false },
@@ -124,13 +120,25 @@ describe("approval status", () => {
     ];
     const local = new Map([["a", "approved" as const]]);
     expect(findPendingApproval(messages, local)?.request.approval_id).toBe("b");
-    // A stopped response closes what still waits.
+    // A response that ended closes what still waits.
     expect(
       findPendingApproval(
         messages.map((message) => ({ ...message, isStreaming: false })),
         local
       )
     ).toBeNull();
+  });
+
+  it("keeps requests pending after a stop for decisions, not after other stops", () => {
+    const waiting = streamingMessage([entry("a")]);
+    const stop = (stop_reason: string | null) =>
+      processPacket({ obj: { type: "stop", stop_reason } }, waiting).message!;
+    expect(
+      findPendingApproval([stop("awaiting_approval")], new Map())?.request
+        .approval_id
+    ).toBe("a");
+    expect(findPendingApproval([stop(null)], new Map())).toBeNull();
+    expect(findPendingApproval([stop("user_cancelled")], new Map())).toBeNull();
   });
 
   it.each([
@@ -145,7 +153,7 @@ describe("approval status", () => {
     }
   );
 
-  it("writes one-line records and the deadline", () => {
+  it("writes one-line records", () => {
     expect(approvalRecord("approvedForSession", "Send email")).toBe(
       "Approved for this chat: Send email"
     );
@@ -156,10 +164,6 @@ describe("approval status", () => {
       "Disabled: Send email"
     );
     expect(approvalRecord("pending", "Send email")).toBeNull();
-    expect(approvalDeadline("2026-11-13T15:45:00Z", "en-US")).toMatch(
-      /^Approve by \d{1,2}:\d{2}\s?[AP]M$/
-    );
-    expect(approvalDeadline("not a date")).toBeNull();
   });
 
   it("truncates long values and shows nested values as JSON", () => {
@@ -409,31 +413,36 @@ describe("widget while a request waits", () => {
     expect(widget["pendingApproval"]?.request.approval_id).toBe("b");
   });
 
-  it("keeps a decision through streamed packets until the server resolves it", async () => {
+  it("stops reading at a stop for decisions, then follows the new stream after the decision", async () => {
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
-    api.waitForSessionIdle = mock(async () => {});
+    api.waitForSessionIdle = mock(async () => null);
     api.submitApprovalDecision = mock(async () => ({
       decision: "APPROVED" as const,
       decided_via: "SESSION_GRANT",
     }));
-    let decide!: () => void;
-    const decided = new Promise<void>((resolve) => (decide = resolve));
-    let resolve!: () => void;
-    const resolution = new Promise<void>((done) => (resolve = done));
-    // Set once the widget has applied the packets streamed after the decision
-    let streamedAfterDecision = false;
     api.streamMessage = mock(async function* (): AsyncGenerator<Packet> {
       yield {
         obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
       };
       yield { obj: request("a") };
-      await decided;
-      yield { obj: { type: "heartbeat" } } as unknown as Packet;
-      yield { obj: { type: "message_start" } };
-      streamedAfterDecision = true;
+      yield { obj: { type: "stop", stop_reason: "awaiting_approval" } };
+    });
+    let resolve!: () => void;
+    const resolution = new Promise<void>((done) => (resolve = done));
+    // Set once the widget has applied the continuation's replayed request
+    let replayed = false;
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor
+    > {
+      yield { stream_id: 9, next_cursor: 0, replay_complete: false };
+      yield {
+        obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+      };
+      yield { obj: request("a") };
+      replayed = true;
       await resolution;
       yield {
         obj: {
@@ -442,16 +451,27 @@ describe("widget while a request waits", () => {
           outcome: "approved_for_chat",
         },
       };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Sent." } };
       yield { obj: { type: "stop" } };
+      return "ended";
     });
     widget["apiService"] = api;
     widget["inputValue"] = "send it";
 
-    const sending = widget["sendMessage"]();
-    while (!widget["pendingApproval"]) await Bun.sleep(1);
-    await widget["decideApproval"](request("a"), "approve_session");
-    decide();
-    while (!streamedAfterDecision) await Bun.sleep(1);
+    await widget["sendMessage"]();
+    expect(widget["isStreaming"]).toBe(false);
+    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(api.waitForSessionIdle).not.toHaveBeenCalled();
+    expect(api.resumeStream).not.toHaveBeenCalled();
+
+    const deciding = widget["decideApproval"](request("a"), "approve_session");
+    while (!replayed) await Bun.sleep(1);
+    expect(api.resumeStream).toHaveBeenCalledWith(
+      "session",
+      expect.anything(),
+      null
+    );
     const status = () =>
       approvalStatus(
         widget["messages"].at(-1)!.approvals![0]!,
@@ -462,9 +482,14 @@ describe("widget while a request waits", () => {
     expect(status()).toBe("approvedForSession");
 
     resolve();
-    await sending;
+    await deciding;
+    while (widget["isStreaming"]) await Bun.sleep(1);
     expect(widget["localApprovalStatuses"].size).toBe(0);
     expect(status()).toBe("approvedForSession");
+    expect(widget["messages"].map((m) => [m.id, m.content])).toEqual([
+      [1, "send it"],
+      [2, "Sent."],
+    ]);
   });
 
   it("records an approval of a tool disabled meanwhile as disabled", async () => {
@@ -497,48 +522,71 @@ describe("widget while a request waits", () => {
     api.streamMessage = mock(async function* () {
       throw new ApiError("waiting", 409, APPROVAL_PENDING_ERROR_CODE);
     });
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
-    let pending: ApprovalEntry | null = null;
-    api.resumeStream = mock(async function* (): AsyncGenerator<Packet> {
-      yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
-      yield { obj: request("a") };
-      pending = widget["pendingApproval"];
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+      ],
+      packets: [
+        [
+          { obj: request("a") },
+          { obj: { type: "stop", stop_reason: "awaiting_approval" } },
+        ],
+      ],
+    }));
+    // The waiting response has no running stream.
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet,
+      ResumeEnd
+    > {
+      return "noBuffer";
     });
     widget["apiService"] = api;
     widget["inputValue"] = "blocked";
     await widget["sendMessage"]();
     expect(widget["inputValue"]).toBe("blocked");
     expect(widget["error"]).toContain("waits for your decision");
-    // The waiting request shows again, so the user can decide it.
-    expect(api.resumeStream).toHaveBeenCalledWith(
-      "session",
-      expect.anything(),
-      null
-    );
-    expect(pending?.request.approval_id).toBe("a");
+    // The waiting request shows from the saved session, so the user can decide it.
+    expect(api.getChatSession).toHaveBeenCalled();
+    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
     expect(widget["messages"].map((message) => message.id)).toEqual([2]);
   });
 
-  it("shows a restored waiting request again", async () => {
+  it("shows a waiting request that the restored snapshot lacks from the saved session", async () => {
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
     const api = new ApiService("https://onyx.test/api", async () => "key");
-    let pending: ApprovalEntry | null = null;
-    api.resumeStream = mock(async function* (): AsyncGenerator<Packet> {
-      yield { obj: { user_message_id: 1, reserved_assistant_message_id: 7 } };
-      yield { obj: request("a") };
-      pending = widget["pendingApproval"];
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet,
+      ResumeEnd
+    > {
+      return "noBuffer";
     });
-    api.waitForSessionIdle = mock(async () => {});
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    api.waitForSessionIdle = mock(async () => null);
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 6, message_type: "user" },
+        { message_id: 7, message_type: "assistant", parent_message: 6 },
+      ],
+      packets: [
+        [
+          { obj: { type: "user_message", id: "sdk-1", message: "Email Bo" } },
+          { obj: request("a") },
+          { obj: { type: "stop", stop_reason: "awaiting_approval" } },
+        ],
+      ],
+    }));
     widget["apiService"] = api;
     // Saved before the request was
     widget["messages"] = [];
 
-    await widget["resumeStream"]("session");
+    await widget["resumeStream"]("session", { showLatest: true });
 
-    expect(pending?.request.approval_id).toBe("a");
-    expect(widget["messages"]).toHaveLength(1);
+    expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
+    expect(widget["messages"].map((m) => [m.id, m.role])).toEqual([
+      [6, "user"],
+      [7, "assistant"],
+    ]);
   });
 
   /** A sessionStorage stand-in; returns its contents and a cleanup. */
