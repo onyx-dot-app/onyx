@@ -55,11 +55,14 @@
 - **A tool call needs approval.** An approval card shows in the answer with
   the tool's arguments and a deadline. The user approves once, approves for
   the chat, or rejects; the card then becomes a one-line record of the
-  outcome, or of "No longer waiting" when the server returns 409 or 404. Once
-  the stop packet arrives, an undecided card reads as no longer waiting
-  (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The stop that the client
-  adds when it loses the stream does not count: the node's `streamLost` mark
-  keeps the card open, because the server can still wait for the decision.
+  outcome, or of "No longer waiting" when the server returns 409 or 404. A
+  Stop rejects the requests that wait, and the record reads "Not approved".
+  Once the stop packet arrives, a card without a resolution reads as no longer
+  waiting (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The stop that the
+  client adds when it loses the stream does not count: the node's `streamLost`
+  mark keeps the card open, because the server can still wait for the
+  decision. The saved answer replays the same records, so they stay after the
+  answer settles and after a reload.
   While the card waits, the timeline header reads "Waiting for your approval",
   also after a preamble and for parallel tool calls, and its timer leaves out
   the wait.

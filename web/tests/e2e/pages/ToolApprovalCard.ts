@@ -60,33 +60,32 @@ export class ToolApprovalCard {
     await expect(this.card).toBeInViewport();
   }
 
-  /** A decided or closed request leaves a one-line record. */
-  async expectRecord(prefix: string, timeout?: number): Promise<void> {
+  /**
+   * A decided request leaves a one-line record that names the tool. The
+   * saved response shows the same record after the answer settles and after
+   * a reload.
+   */
+  async expectRecord(
+    record: string,
+    toolName: string,
+    timeout?: number
+  ): Promise<void> {
     await expect(this.card.getByRole("status")).toHaveText(
-      new RegExp(`^${prefix}: `),
+      `${record}: ${toolName}`,
       { timeout }
     );
     await expect(this.approveButton).toHaveCount(0);
   }
 
-  async expectApproved(): Promise<void> {
-    await this.expectRecord("Approved");
+  async expectApproved(toolName: string): Promise<void> {
+    await this.expectRecord("Approved", toolName);
   }
 
-  async expectApprovedForChat(): Promise<void> {
-    await this.expectRecord("Approved for this chat");
+  async expectApprovedForChat(toolName: string): Promise<void> {
+    await this.expectRecord("Approved for this chat", toolName);
   }
 
-  async expectNotApproved(): Promise<void> {
-    await this.expectRecord("Not approved");
-  }
-
-  /**
-   * The request stopped waiting without a decision, e.g. after Stop. The card
-   * shows "No longer waiting" until the saved response, which shows no card,
-   * replaces the streamed one.
-   */
-  async expectClosed(): Promise<void> {
-    await expect(this.approveButton).toHaveCount(0, { timeout: 30_000 });
+  async expectNotApproved(toolName: string, timeout?: number): Promise<void> {
+    await this.expectRecord("Not approved", toolName, timeout);
   }
 }

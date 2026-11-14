@@ -174,18 +174,23 @@ The user selects one of these options:
 | --- | --- |
 | **Approve once** | The call runs with the arguments that the card shows. |
 | **Approve for this chat** | The call runs. Later calls of the same tool in the same chat run without a card. |
-| **Reject** | The call does not run. The agent does not retry it, tells the user, and asks how to continue. |
+| **Reject** | The call does not run. The agent is told that the user rejected the call. |
 
 After the decision, the card becomes a one-line record: **Approved**, **Approved for this chat**, **Not approved**,
 **Timed out**, **Disabled**, or **No longer waiting**.
+The record stays in the answer after the answer finishes and when the user opens the chat again.
 
 While a card waits for a decision, the user can type a message but cannot send it.
 Onyx keeps the draft and shows the card that waits. If the user reloads the page or opens the chat again,
 the card that waits shows again.
 
 If the user does not decide within 10 minutes, the call does not run, and the agent continues the answer.
-The agent does not treat the timeout as a refusal. If the user stops the answer, or the API server restarts,
-the request ends and the call does not run.
+The agent is told that the request expired before the user answered.
+
+If the user stops the answer while a card waits, Onyx saves the stop as a rejection. The call does not run,
+and the record shows **Not approved**. In the next message, the agent sees that the user rejected the call.
+If the API server restarts while a card waits, the request ends, the call does not run,
+and the record shows **No longer waiting**.
 
 If a tool becomes **Disabled** while its card waits, an approval saves a rejection. The call does not run,
 the record shows **Disabled**, and the agent is told that the tool is disabled.
@@ -198,8 +203,8 @@ The mobile app, the widget, the [Onyx CLI](/overview/onyx_anywhere/cli),
 and [Chat API](/developers/guides/chat_new_guide#tool-approvals) clients also show approval requests.
 
 <Note>
-  The Slack and Discord bots cannot show approval requests yet. In their answers,
-  a tool with the **Ask** policy runs without approval. A tool with the **Disabled** policy is not available to them.
+  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
+  They cannot use tools with the **Disabled** policy.
 </Note>
 
 In some chats, a tool call cannot wait for approval. There, a tool with the **Ask** policy does not run,

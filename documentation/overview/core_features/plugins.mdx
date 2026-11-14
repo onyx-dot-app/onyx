@@ -109,16 +109,18 @@ and the arguments of the call. Select one of these options:
 | --- | --- |
 | **Approve once** | The call runs with the arguments that the card shows. |
 | **Approve for this chat** | The call runs. Later calls of the same tool in this chat run without a card. |
-| **Reject** | The call does not run. The agent does not retry it. It tells you and asks how to continue. |
+| **Reject** | The call does not run. The agent is told that you rejected the call. |
 
-After your decision, the card becomes a one-line record of the result. If you do not decide in time,
+After your decision, the card becomes a one-line record of the result.
+The record stays when the answer finishes and when you open the chat again. If you do not decide in time,
 the call does not run, and the card shows **Timed out**. If your admin disables the tool before you approve,
-the call does not run, and the card shows **Disabled**. If you stop the answer, the call does not run.
+the call does not run, and the card shows **Disabled**. If you stop the answer, Onyx rejects the call,
+and the card shows **Not approved**.
 
 The Onyx web app, the mobile app, the website widget, and the Onyx CLI show approval requests.
-The Slack and Discord bots cannot show them yet: in their answers, a tool with the **Ask** policy runs without approval.
+The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
 Incognito chats can block approvals, if your admin sets them to keep no content. There,
-a tool that needs approval does not run, and the agent tells you why.
+a tool that needs approval does not run, and the agent is told why.
 
 OpenAPI plugin tools and MCP tools with the **Auto-approve** policy run without a card.
 Check the result in the service after a change.

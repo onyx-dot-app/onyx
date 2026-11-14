@@ -140,10 +140,14 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     await card.approve();
 
-    await card.expectApproved();
+    await card.expectApproved(toolDisplayName);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
     await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
+    await card.expectApproved(toolDisplayName);
+
+    await chat.reload();
+    await card.expectApproved(toolDisplayName);
   });
 
   test("Reject skips the tool and the answer continues", async ({ page }) => {
@@ -155,7 +159,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.expectPending(toolDisplayName);
     await card.reject();
 
-    await card.expectNotApproved();
+    await card.expectNotApproved(toolDisplayName);
     const chat = new ChatPage(page);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
@@ -182,7 +186,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
     await card.approveForChat();
-    await card.expectApprovedForChat();
+    await card.expectApprovedForChat(toolDisplayName);
     const chat = new ChatPage(page);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(first.answer)).toBeVisible();
@@ -215,13 +219,13 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     await card.expectPending(toolDisplayName);
     await card.approve();
-    await card.expectApproved();
+    await card.expectApproved(toolDisplayName);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
     await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
   });
 
-  test("Stop closes a waiting card and the chat takes new messages", async ({
+  test("Stop rejects a waiting call and the chat takes new messages", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -232,7 +236,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.expectPending(toolDisplayName);
     const chat = new ChatPage(page);
     await chat.stop();
-    await card.expectClosed();
+    await card.expectNotApproved(toolDisplayName, 30_000);
     await chat.inputBar.expectIdle(30_000);
 
     const nonce = mockLlmNonce();
@@ -245,5 +249,10 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await chat.inputBar.send();
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(`Hello again ${nonce}`, 1)).toBeVisible();
+
+    // The stopped answer has settled; its record stays, also after a reload.
+    await card.expectNotApproved(toolDisplayName);
+    await chat.reload();
+    await card.expectNotApproved(toolDisplayName);
   });
 });
