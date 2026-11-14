@@ -2186,9 +2186,10 @@ craft:
       # Set it if another scrape configuration collects the agent metrics.
       job: ""
     # Alert rules (monitoring.prometheusRules.enabled). The thresholds are
-    # proposed defaults; tune them per deployment. Runbooks: microvm/RUNBOOKS.md.
+    # proposed defaults; tune them per deployment.
     alerts:
-      runbookUrl: https://github.com/onyx-dot-app/onyx/blob/main/microvm/RUNBOOKS.md
+      # Each alert links to <runbookUrl>#<alert name in lower case>.
+      runbookUrl: https://docs.onyx.app/deployment/kubernetes/craft-firecracker-operations
       # Labels added to every rule (for example team or routing labels).
       extraLabels: {}
       # Failed Creates (start failed after admission) / admitted Creates, 15 m.

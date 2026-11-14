@@ -1487,10 +1487,14 @@ matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

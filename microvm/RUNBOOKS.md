@@ -62,7 +62,7 @@ kubectl $K -n $NS logs "$(pod_on <node>)" --previous --tail=100   # after a rest
 ```
 
 - `host agent failed` in the log: the agent stopped at start-up. The error names the failed
-  check (for example XFS reflink, cgroup v2, `/dev/kvm`, artifacts SHA256).
+  check (for example reflink or the loop store, cgroup v2, `/dev/kvm`, artifacts SHA256).
 - `/metrics has no token` in the log: the metrics token Secret is empty or missing. Compare
   `craft.hostAgent.metrics.authExistingSecret` (or the chart copy) with `auth.metricsAuth`.
 - The pod is Running and the log is clean: check the scrape target in Prometheus
@@ -272,8 +272,8 @@ kernel log), or when host processes other than VMs use the memory.
 `TEMPLATE_INCOMPATIBLE`, or a `BuildTemplate` call failed. The node cannot start VMs for that
 template.
 
-The start-up template build has no metric. The api_server skips a node with no template, so this
-alert does not see a failed start-up build. Read the agent log after each agent start.
+The alert also fires when `craft_fc_host_agent_template_ready` is 0: the node has no usable
+template from its root drive, for example after a failed start-up build. The agent log names the cause.
 
 **Check.**
 
@@ -295,18 +295,17 @@ agent NodeInfo   # templates on the node and their keys
 
 ### Drain a node
 
-Running VMs keep running during a drain. The api_server does not move them yet. Stop them after
-their sessions are saved.
+Running VMs keep running during a drain. The api_server saves the session of each VM on a
+draining node, then stops the VM.
 
 1. Set the manual drain flag first. It stays set across agent restarts:
    `agent SetDrain '{"drain": true}'`.
 2. Cordon the node: `kubectl $K cordon <node>`. The agent sees the taint within
    `--drain-poll-interval` (10 s).
 3. New Creates on the node now get `NODE_DRAINING`, and the api_server uses other nodes.
-4. List the VMs (`agent List`). Make sure that the api_server saved each session. Then stop each VM:
-   `agent Stop '{"sandbox_id": "<id>", "attempt": <n>, "generation": <n>}'`.
-5. Wait until `agent NodeInfo` shows `drain.state` `DRAINED`. Then remove or repair the node.
-6. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
+4. Wait until `agent NodeInfo` shows `drain.state` `DRAINED` (`agent List` shows the VMs that
+   are left). Then remove or repair the node.
+5. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
 
 ### Rebuild a template
 
@@ -337,8 +336,8 @@ Escalate before you remove a record of a VM that a user can still use.
 ### Restore a user session
 
 The api_server owns session saves and restores: it calls `CaptureSession`, `UploadCapture` and
-`RestoreSession` with presigned URLs. Automatic saves before a stop are not built yet. There is no
-operator command to restore a session by hand. If a user lost a session, escalate with the
+`RestoreSession` with presigned URLs. It saves a session automatically before it stops the VM on a
+draining node. There is no operator command to restore a session by hand. If a user lost a session, escalate with the
 sandbox ID, the tenant ID and the time.
 
 ### Purge data
