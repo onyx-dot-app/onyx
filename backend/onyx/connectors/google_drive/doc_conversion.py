@@ -1,5 +1,5 @@
 import io
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import NamedTuple, cast
@@ -682,10 +682,14 @@ def convert_drive_item_to_document(
     retriever_emails: list[str],
     file: GoogleDriveFileType,
     raw_file_callback: RawFileCallback | None = None,
+    folder_path: list[str] | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
     in order. returns upon a successful retrieval or a non-403 error.
+
+    `folder_path` is the path the listing built. Without it, the path is
+    built here from the file's parents.
 
     We used to always get the user email from the file owners when available,
     but this was causing issues with shared folders where the owner was not included in the service account
@@ -709,6 +713,7 @@ def convert_drive_item_to_document(
             file,
             permission_sync_context,
             raw_file_callback,
+            folder_path,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
@@ -839,6 +844,7 @@ def _convert_drive_item_to_document(
     # will also be a no-op if EE is not enabled
     permission_sync_context: PermissionSyncContext | None,
     raw_file_callback: RawFileCallback | None = None,
+    folder_path: list[str] | None = None,
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -908,7 +914,11 @@ def _convert_drive_item_to_document(
 
         # Build full folder path by walking up the parent chain
         # Pass retriever_email to determine if file is in "My Drive" vs "Shared with me"
-        source_path = build_folder_path(file, ops, retriever_email, drive_id)
+        source_path = (
+            folder_path
+            if folder_path is not None
+            else build_folder_path(file, ops, retriever_email, drive_id)
+        )
 
         doc_metadata = {
             "hierarchy": {
@@ -1049,11 +1059,39 @@ def drive_file_skip_reason(
     return None
 
 
+def _domain_readers(file: GoogleDriveFileType, retriever_email: str) -> list[str]:
+    """Users in the listing user's domain who can read the file: its owners
+    and the users its permissions name. Only domain users can be
+    impersonated. Permissions are present only when the listing asked for
+    them."""
+    domain = retriever_email.split("@")[-1].lower()
+    emails = [owner.get("emailAddress") for owner in file.get("owners") or []] + [
+        permission.get("emailAddress")
+        for permission in file.get("permissions") or []
+        if permission.get("type") == "user"
+    ]
+    readers: list[str] = []
+    for email in emails:
+        if (
+            email
+            and email.split("@")[-1].lower() == domain
+            and email.lower() != retriever_email.lower()
+            and email not in readers
+        ):
+            readers.append(email)
+    return readers
+
+
 def build_slim_document_stub(
     ops: GoogleDriveSourceOperations,
     file: GoogleDriveFileType,
     permission_sync_context: PermissionSyncContext | None,
     retriever_email: str,
+    # The path from the folders the listing returned. None when a parent is
+    # not listed yet: conversion then builds the path itself.
+    folder_path: list[str] | None = None,
+    # More users who can read the file, for example the shared drive's members.
+    other_reader_emails: Sequence[str] = (),
 ) -> SlimDocumentStub | None:
     """`build_slim_document`, plus what a later conversion needs."""
     slim = build_slim_document(ops, file, permission_sync_context, retriever_email)
@@ -1071,5 +1109,21 @@ def build_slim_document_stub(
         ),
         mime_type=file.get("mimeType") or None,
         size_bytes=drive_file_size(file),
-        listing_payload=DriveListingPayload(retriever_email=retriever_email),
+        listing_payload=DriveListingPayload(
+            retriever_email=retriever_email,
+            drive_file=dict(file),
+            folder_path=folder_path,
+            reader_emails=list(
+                dict.fromkeys(
+                    [
+                        *_domain_readers(file, retriever_email),
+                        *(
+                            email
+                            for email in other_reader_emails
+                            if email.lower() != retriever_email.lower()
+                        ),
+                    ]
+                )
+            ),
+        ),
     )
