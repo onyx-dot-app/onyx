@@ -19,20 +19,20 @@ class AgentWaitDetails(BaseModel):
     agent_ids: list[str] | None
 
 
-class SpawnAgentInput(BaseModel):
+class SpawnAgentArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, description="Short name.")
     instruction: str = Field(min_length=1, description="Self-contained task.")
 
 
-class SubagentSelection(BaseModel):
+class AgentSelectionArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agent_id: str = Field(min_length=1, description="From list_agents.")
 
 
-class AgentMessageInput(SubagentSelection):
+class SendMessageArguments(AgentSelectionArguments):
     delivery: Literal[MessageDelivery.SEND, MessageDelivery.QUEUE] = Field(
         default=MessageDelivery.SEND,
         description="send: next step; queue: after completion.",
@@ -40,7 +40,7 @@ class AgentMessageInput(SubagentSelection):
     message: str = Field(min_length=1)
 
 
-class ListAgentsInput(BaseModel):
+class ListAgentsArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     path_prefix: str | None = Field(
@@ -53,7 +53,7 @@ class ListAgentsInput(BaseModel):
     )
 
 
-class WaitAgentsInput(BaseModel):
+class WaitAgentsArguments(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     agent_ids: list[str] | None = Field(
