@@ -94,6 +94,26 @@ def provider_name(db_session: Session) -> Generator[str, None, None]:
     _cleanup_provider(db_session, name)
 
 
+@pytest.fixture
+def restore_vision_default(db_session: Session) -> Generator[None, None, None]:
+    """Put back the deployment's vision default after a test changes it. A
+    default on a test provider goes away when the provider is removed."""
+    previous = fetch_default_model(db_session, LLMModelFlowType.VISION)
+    previous_default = (
+        (previous.llm_provider_id, previous.name) if previous is not None else None
+    )
+    yield
+    db_session.rollback()
+    if previous_default is not None:
+        provider_id, model_name = previous_default
+        update_default_model(
+            db_session=db_session,
+            provider_id=provider_id,
+            model=model_name,
+            flow_type=LLMModelFlowType.VISION,
+        )
+
+
 _CATALOG_PATH = "onyx.llm.well_known_providers.llm_provider_options.fetch_latest_models_for_provider"
 
 
@@ -293,7 +313,9 @@ def test_aggregators_do_not_get_auto_update(
 
 
 def test_sync_stores_image_support_for_released_models(
-    db_session: Session, provider_name: str
+    db_session: Session,
+    provider_name: str,
+    restore_vision_default: None,  # noqa: ARG001
 ) -> None:
     provider = _create_provider(
         db_session,
@@ -322,7 +344,9 @@ def test_sync_stores_image_support_for_released_models(
 
 
 def test_vision_default_accepts_a_model_stored_without_image_support(
-    db_session: Session, provider_name: str
+    db_session: Session,
+    provider_name: str,
+    restore_vision_default: None,  # noqa: ARG001
 ) -> None:
     provider = _create_provider(
         db_session,
