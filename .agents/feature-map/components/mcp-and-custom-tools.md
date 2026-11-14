@@ -393,7 +393,8 @@ calls run with no row unless the policy is now DENY.
     lost key and expires overdue rows, so expiry can be up to that interval
     late. `ChatRunStore.release` expires a run's open rows by response;
     `withdraw_approval` expires one by ID. When the response has no owner, the
-    route expires its requests and returns 409. When the API server starts to
+    route expires its pending requests, saves no decision, and returns 409
+    unless the body repeats the saved decision. When the API server starts to
     shut down, `backend/onyx/main.py:_end_approval_waits_on_exit_signal` (chained to
     uvicorn's SIGTERM and SIGINT handlers, because uvicorn waits for open
     responses before the lifespan shutdown) calls
@@ -414,8 +415,9 @@ calls run with no row unless the policy is now DENY.
     returns 200; the model reads that the tool is disabled, and the card's
     outcome is `disabled`. Deleting the tool's server deletes its rows; the
     owner's next read (`db/approval_request.py:settle_approval_requests__no_commit`)
-    answers a call whose row is gone as `disabled`. While the response runs, an approval of a row that
-    is already approved returns 200 with the row's `decided_via`. An
+    answers a call whose row is gone as `disabled`. A decision that repeats
+    the saved one returns 200 with the row's `decided_via`, also after the
+    response ends, so a client can retry a decision whose reply it lost. An
     `approve_session` on a row the user approved once upgrades it to a session
     grant and approves the waiting sibling requests; every request that a grant
     decides ends with the outcome `approved_for_chat`
@@ -514,10 +516,15 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   server. The Community downgrade ([[billing]]) makes only group-restricted
   servers public, so a server restricted to named users fails every access
   edit until an admin makes it public.
-- A saved chat shows no approval history. The approval packets come only from
-  live runtime events; replay (`chat/presentation.py:replay_response`) renders
-  saved results, so a reload after the response shows the call's result or
-  error with no card.
+- A running response's approval cards come only from its stream, live or
+  through resume-stream; the chat session replays approval records only after
+  the response ends ([[#chat-approval-records-replay]]). A request that opens
+  after the stream buffer stops (`chat/stream_buffer.py`: over
+  `CHAT_STREAM_BUFFER_MAX_BYTES` compressed, or a cache write fails) is not
+  buffered, so resume-stream ends at the gap or returns 404. A client that
+  reconnects then cannot show the request: the call waits until
+  `TOOL_APPROVAL_TIMEOUT` expires it, and sends stay blocked
+  ([[#waiting-approval-blocks-send]]) unless the user stops the turn.
 
 ---
 

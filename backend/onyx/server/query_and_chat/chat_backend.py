@@ -1795,16 +1795,17 @@ def decide_approval(
     """Approve or reject an action in a chat that waits for the user.
 
     The decision is saved, then its waiter is woken to continue the action.
-    Repeating a decision returns it; a different one, or a request that is no
-    longer waiting, is a conflict. Approving an action that the current action
+    Repeating a saved decision returns it, also after the response ends; a
+    different one, or a request that is no longer waiting, is a conflict. Approving an action that the current action
     policies now block saves a rejection by the policy (`decided_via` POLICY).
     """
     approval = get_approval_request_for_user(db_session, approval_id, user.id)
     if approval is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
     cache = get_cache_backend()
-    if _expire_ownerless_approvals(db_session, cache, [approval.chat_message_id]):
-        raise OnyxError(OnyxErrorCode.CONFLICT, "This request is no longer waiting")
+    ownerless = _expire_ownerless_approvals(
+        db_session, cache, [approval.chat_message_id]
+    )
     blocked = (
         current_action_policy(
             db_session,
@@ -1825,12 +1826,18 @@ def decide_approval(
         if body.decision == ApprovalChoice.APPROVE_SESSION
         else ApprovalDecidedVia.USER
     )
-    decided_responses = record_approval_decision__no_commit(
-        db_session, approval, decision, decided_via, timeout=TOOL_APPROVAL_TIMEOUT
+    # Nothing waits for an ownerless response's decision, so none is saved.
+    decided_responses = (
+        set()
+        if ownerless
+        else record_approval_decision__no_commit(
+            db_session, approval, decision, decided_via, timeout=TOOL_APPROVAL_TIMEOUT
+        )
     )
     if not decided_responses:
         db_session.refresh(approval)
-        # An earlier answer, e.g. a session grant from another request, decided it.
+        # An earlier answer, e.g. a session grant from another request or a
+        # retry after the response ended, decided it.
         if approval.decision != decision or approval.decided_via is None:
             raise OnyxError(
                 OnyxErrorCode.CONFLICT,

@@ -1,8 +1,8 @@
 """What chat approval requests do that integration tests cannot reach: expiry,
 shutdown, stopped program calls, unwatched runs, how the response owner learns
-of decisions, and which requests a non-streaming response returns. Integration
-tests cover the decision API, policies, session grants, lost owners and
-blocked sends."""
+of decisions, and which requests a non-streaming response returns. Also a
+decision repeated after its response ends. Integration tests cover the
+decision API, policies, session grants, lost owners and blocked sends."""
 
 import datetime
 import json
@@ -41,7 +41,7 @@ from onyx.chat.tool_approvals import (
 from onyx.configs.constants import MessageType
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
-from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind
 from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ApprovalRequest,
@@ -68,7 +68,10 @@ from onyx.llm.models import (
 )
 from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.query_and_chat.chat_backend import decide_approval
-from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.models import (
+    ApprovalDecisionResponse,
+    MessageResponseIDInfo,
+)
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
@@ -134,8 +137,8 @@ class ApprovalChat(BaseModel):
 
     def decide(
         self, db_session: Session, approval_id: UUID | str, decision: ApprovalChoice
-    ) -> None:
-        decide_approval(
+    ) -> ApprovalDecisionResponse:
+        return decide_approval(
             approval_id=UUID(str(approval_id)),
             body=DecisionBody(decision=decision),
             user=self.user,
@@ -628,6 +631,48 @@ def test_deleting_the_server_ends_the_wait_of_its_calls(
 
     assert owned.run.result(timeout=10).output.text == "done"
     assert "no longer available" in owned.first_result("send")
+
+
+def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
+    db_session: Session, chat: ApprovalChat
+) -> None:
+    """A retry whose first attempt saved the decision, but lost its HTTP
+    response, gets the saved decision once the response has no owner."""
+    approval_id, _created_at = create_approval_request__no_commit(
+        db_session,
+        chat_session_id=chat.chat_session_id,
+        chat_message_id=chat.response_id,
+        gated_app_id=chat.gated_app_id,
+        action_id=ACTION,
+        tool_call_id="send",
+        tool_name=ACTION,
+        display_name="Send email",
+    )
+    db_session.execute(
+        update(ApprovalRequest)
+        .where(ApprovalRequest.id == approval_id)
+        .values(
+            decision=ApprovalDecision.APPROVED,
+            decided_via=ApprovalDecidedVia.SESSION_GRANT,
+        )
+    )
+    db_session.commit()
+    assert run_store.ownerless_response_ids(get_cache_backend(), [chat.response_id])
+
+    repeated = chat.decide(db_session, approval_id, ApprovalChoice.APPROVE_ONCE)
+
+    assert (repeated.decision, repeated.decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.SESSION_GRANT,
+    )
+    with pytest.raises(OnyxError) as conflict:
+        chat.decide(db_session, approval_id, ApprovalChoice.REJECT)
+    assert conflict.value.error_code == OnyxErrorCode.CONFLICT
+    [row] = chat.rows(db_session)
+    assert (row.decision, row.decided_via) == (
+        ApprovalDecision.APPROVED,
+        ApprovalDecidedVia.SESSION_GRANT,
+    )
 
 
 def test_a_non_streaming_response_returns_with_every_request_that_waits(
