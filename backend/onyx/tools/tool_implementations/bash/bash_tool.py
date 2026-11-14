@@ -10,12 +10,15 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.code_interpreter import fetch_code_interpreter_server
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
     BashArguments,
     CodeModeExposure,
     LlmBashExecutionResult,
-    ToolCallException,
     ToolContext,
 )
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
@@ -25,8 +28,6 @@ from onyx.tools.tool_implementations.utils import truncate_output as _truncate_o
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-CMD_FIELD = "cmd"
 
 
 class BashTool(Tool):
@@ -93,47 +94,11 @@ class BashTool(Tool):
             )
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    CMD_FIELD: {
-                        "type": "string",
-                        "description": "Bash command to execute in the session.",
-                    },
-                },
-                "required": [CMD_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, BashArguments, strict=True
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        if CMD_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{CMD_FIELD}' parameter in bash tool call",
-                llm_facing_message=(
-                    f"The bash tool requires a '{CMD_FIELD}' parameter containing "
-                    f"the bash command to execute. Please provide like: "
-                    f'{{"cmd": "ls -la"}}'
-                ),
-            )
-        cmd = invocation.arguments[CMD_FIELD]
-        if not isinstance(cmd, str):
-            raise ToolCallException(
-                message=(
-                    f"'{CMD_FIELD}' must be a string in bash tool call, "
-                    f"got {type(cmd).__name__}"
-                ),
-                llm_facing_message=(
-                    f"The bash tool requires '{CMD_FIELD}' to be a string "
-                    f"(got {type(cmd).__name__}). Pass a single shell "
-                    f'command, e.g. {{"cmd": "ls -la"}}.'
-                ),
-            )
-
         cmd = parse_tool_arguments(BashArguments, invocation.arguments).cmd
 
         adapter = TypeAdapter(LlmBashExecutionResult)

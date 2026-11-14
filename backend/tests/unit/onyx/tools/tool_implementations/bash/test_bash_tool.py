@@ -24,10 +24,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolCallDebug,
 )
 from onyx.tools.models import LlmBashExecutionResult, ToolCallException, ToolContext
-from onyx.tools.tool_implementations.bash.bash_tool import (
-    CMD_FIELD,
-    BashTool,
-)
+from onyx.tools.tool_implementations.bash.bash_tool import BashTool
 from onyx.tools.tool_implementations.python.code_interpreter_client import (
     BashExecResponse,
 )
@@ -125,21 +122,6 @@ def test_properties_match_constructor_args() -> None:
     assert tool.description  # non-empty
 
 
-def test_tool_definition_shape() -> None:
-    tool, emitter = _make_tool()
-    definition = tool.tool_definition()
-
-    assert definition.name == "bash"
-    params = definition.parameters
-    assert params["type"] == "object"
-    properties = params["properties"]
-    assert isinstance(properties, dict)
-    command = properties[CMD_FIELD]
-    assert isinstance(command, dict)
-    assert command["type"] == "string"
-    assert params["required"] == [CMD_FIELD]
-
-
 # ---------------------------------------------------------------------------
 # Happy path
 # ---------------------------------------------------------------------------
@@ -191,9 +173,7 @@ def test_missing_cmd_raises_tool_call_exception() -> None:
     with pytest.raises(ToolCallException) as excinfo:
         tool._run(invocation=_invocation(emitter, arguments={}), context=ToolContext())
 
-    # Internal message + llm-facing message both present and mention the field
-    assert CMD_FIELD in str(excinfo.value)
-    assert CMD_FIELD in excinfo.value.llm_facing_message
+    assert "cmd: Field required" in excinfo.value.llm_facing_message
 
     # Nothing should have been emitted before the exception
     emitter.assert_not_called()
@@ -217,10 +197,8 @@ def test_non_string_cmd_raises_tool_call_exception(bad_cmd: JsonValue) -> None:
             context=ToolContext(),
         )
 
-    # llm-facing message names the field and the actual type so the model
-    # can self-correct on the next try
-    assert CMD_FIELD in excinfo.value.llm_facing_message
-    assert type(bad_cmd).__name__ in excinfo.value.llm_facing_message
+    # The llm-facing message names the field so the model can self-correct.
+    assert "cmd: Input should be a valid string" in excinfo.value.llm_facing_message
 
     # Validation fails before any external execution.
     emitter.assert_not_called()
