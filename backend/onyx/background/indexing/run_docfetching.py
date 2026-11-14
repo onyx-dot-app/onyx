@@ -1,7 +1,7 @@
 import sys
 import time
 import traceback
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypeVar
 
@@ -175,6 +175,7 @@ def _get_connector_runner(
     include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
     raw_file_callback: RawFileCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll and checkpointed
@@ -225,6 +226,7 @@ def _get_connector_runner(
                 connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
+                should_stop=should_stop,
             )
 
             # The drain needs the pair and the attempt, which are the run's,
@@ -760,6 +762,7 @@ def connector_document_extraction(
             end_time=window_end,
             include_permissions=should_fetch_permissions_during_indexing,
             raw_file_callback=raw_file_callback,
+            should_stop=callback.should_stop if callback is not None else None,
         )
 
         # don't use a checkpoint if we're explicitly indexing from

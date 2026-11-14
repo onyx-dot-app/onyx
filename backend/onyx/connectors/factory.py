@@ -1,4 +1,5 @@
 import importlib
+from collections.abc import Callable
 from enum import Enum
 from typing import Any, Type
 from uuid import UUID
@@ -8,6 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
+from onyx.background.indexing.source_api_limiter import build_source_api_limiter
 from onyx.configs.app_configs import INTEGRATION_TESTS_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
@@ -206,6 +208,8 @@ def instantiate_connector(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     raw_file_callback: RawFileCallback | None = None,
+    # Ends a wait for the shared source-API budget, for example on cancel.
+    should_stop: Callable[[], bool] | None = None,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -249,6 +253,10 @@ def instantiate_connector(
 
     if raw_file_callback is not None:
         connector.set_raw_file_callback(raw_file_callback)
+
+    source_api_limiter = build_source_api_limiter(source, credential.id, should_stop)
+    if source_api_limiter is not None:
+        connector.set_source_api_limiter(source_api_limiter)
 
     return connector
 

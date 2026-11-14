@@ -76,6 +76,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
+    attach_source_api_limiter,
 )
 from onyx.connectors.google_utils.google_utils import (
     get_file_owners,
@@ -98,6 +99,7 @@ from onyx.connectors.interfaces import (
     SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -497,6 +499,12 @@ class GoogleDriveConnector(
 
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
 
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        self.source_api_limiter = limiter
+        if self._ops is not None:
+            attach_source_api_limiter(self._ops, limiter)
+
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
 
@@ -578,6 +586,8 @@ class GoogleDriveConnector(
                 None, DocumentSource.GOOGLE_DRIVE.value, credentials
             )
         )
+        if self.source_api_limiter is not None:
+            attach_source_api_limiter(self._ops, self.source_api_limiter)
         auth = self._ops.authenticate()
         self._is_service_account = auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT
 

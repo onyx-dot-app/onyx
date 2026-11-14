@@ -14,11 +14,10 @@ import threading
 import time
 from collections.abc import Callable, Iterator
 
-from redis.exceptions import RedisError
-
 from onyx.configs.app_configs import EMBEDDING_RATE_LIMIT_MAX_WAIT_SECONDS
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_rate_window import RateWindow, RedisRateWindows
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
@@ -26,28 +25,10 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-_WINDOW_KEY = "embedding_rate_limit:request_times"
-
-# The window is a list of request start times in ms, newest first, trimmed to
-# the limit, so it works as a ring buffer. The script reads the Redis clock, so
-# clock skew between pods has no effect. It returns 0 when the request took a
-# slot, else the ms until the oldest request leaves the window.
-_ACQUIRE_SCRIPT = """
-local t = redis.call('TIME')
-local now = tonumber(t[1]) * 1000 + math.floor(tonumber(t[2]) / 1000)
-local limit = tonumber(ARGV[1])
-local period = tonumber(ARGV[2])
-if redis.call('LLEN', KEYS[1]) >= limit then
-  local oldest = tonumber(redis.call('LINDEX', KEYS[1], limit - 1))
-  if oldest and oldest > now - period then
-    return oldest + period - now
-  end
-end
-redis.call('LPUSH', KEYS[1], now)
-redis.call('LTRIM', KEYS[1], 0, limit - 1)
-redis.call('PEXPIRE', KEYS[1], period)
-return 0
-"""
+# The window's key in Redis. Before the shared rate window, the key was
+# "embedding_rate_limit:request_times" with another data type, so this one
+# has a new name. During a rolling upgrade, old and new pods count apart.
+_WINDOW_KEY = "embedding_rate_limit:window"
 
 # Self-hosted: a blocked request tries again about once a minute, for up to
 # six hours. Cloud workers are shared by all tenants, so one tenant's limit must
@@ -133,7 +114,10 @@ class EmbeddingRateLimiter:
     ) -> None:
         self.max_requests = max_requests
         self.period_seconds = period_seconds
-        self._redis = get_redis_client(tenant_id=tenant_id)
+        self.window = RateWindow(
+            key=_WINDOW_KEY, limit=max_requests, period_seconds=period_seconds
+        )
+        self._windows = RedisRateWindows(get_redis_client(tenant_id=tenant_id))
 
     def acquire(
         self,
@@ -175,19 +159,7 @@ class EmbeddingRateLimiter:
 
     def _try_acquire(self) -> float:
         """Takes a slot and returns 0, or returns the seconds until a slot frees."""
-        try:
-            wait_ms = self._redis.eval(
-                _ACQUIRE_SCRIPT,
-                keys=[_WINDOW_KEY],
-                args=[self.max_requests, int(self.period_seconds * 1000)],
-            )
-        except RedisError:
-            logger.warning(
-                "The embedding rate limiter cannot reach Redis; the request is not limited.",
-                exc_info=True,
-            )
-            return 0
-        return int(wait_ms) / 1000
+        return self._windows.try_acquire([self.window])
 
     def _sleeps(
         self, should_stop: Callable[[], bool] | None, started_at: float
