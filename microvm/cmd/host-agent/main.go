@@ -103,6 +103,8 @@ type flags struct {
 	watchDrain     bool
 	drainTaints    string
 	drainPoll      time.Duration
+	guardScale     bool
+	guardGrace     time.Duration
 	advertise      string
 	captureTTL     time.Duration
 	captureMax     int64
@@ -170,6 +172,8 @@ func main() {
 	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
 	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
 	flag.DurationVar(&f.drainPoll, "drain-poll-interval", 10*time.Second, "how often --watch-node-drain reads the Node")
+	flag.BoolVar(&f.guardScale, "scale-down-guard", false, "annotate this pod's Node (--node-id) with "+nodewatch.ScaleDownDisabledKey+"=true while it runs VMs, so the cluster autoscaler does not remove it; needs RBAC get and patch on nodes")
+	flag.DurationVar(&f.guardGrace, "scale-down-guard-grace", 10*time.Minute, "how long the node has no VMs before --scale-down-guard removes the annotation")
 	flag.StringVar(&f.advertise, "advertise-address", "", "host:port the api_server dials for --listen, sent with the node key registration (default $POD_IP:<--listen port>)")
 	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
 	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
@@ -311,6 +315,10 @@ func run(f flags, log *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	guard, err := newScaleDownGuard(f, m, log)
+	if err != nil {
+		return err
+	}
 	t0 := time.Now()
 	rep, err := m.Recover(context.Background(), launcher)
 	if err != nil {
@@ -320,6 +328,11 @@ func run(f flags, log *slog.Logger) error {
 		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
 		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
 		"ms", time.Since(t0).Milliseconds())
+	if guard != nil {
+		// After Recover, so adopted VMs count from the first check.
+		go guard.Run(ctx)
+		log.Info("scale-down guard on", "node", f.nodeID, "annotation", nodewatch.ScaleDownDisabledKey, "grace", f.guardGrace)
+	}
 	ports, err := parsePorts(f.dialPorts)
 	if err != nil {
 		return err
@@ -604,6 +617,26 @@ func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.L
 	return w, nil
 }
 
+// scaleDownGuardInterval is how often --scale-down-guard counts the VMs.
+const scaleDownGuardInterval = 10 * time.Second
+
+// newScaleDownGuard returns the guard that keeps the cluster autoscaler from
+// removing the node while it runs VMs, or nil when --scale-down-guard is
+// off. A failed Node patch is logged and never blocks VMs.
+func newScaleDownGuard(f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.ScaleDownGuard, error) {
+	if !f.guardScale {
+		return nil, nil
+	}
+	c, err := nodewatch.NewInCluster(f.nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("--scale-down-guard: %w", err)
+	}
+	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.ScaleDownHolds, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
+	// A new VM is guarded at once, not at the next tick.
+	m.OnAdmit(g.Kick)
+	return g, nil
+}
+
 // pushers are the key registration and node state report loops. They
 // start after the metrics exist, so the first result is counted.
 type pushers struct {
@@ -872,6 +905,9 @@ func checkRanges(f flags) error {
 	}
 	if f.maxScratchGiB > math.MaxUint32 {
 		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)
+	}
+	if f.guardGrace < 0 {
+		return fmt.Errorf("--scale-down-guard-grace %v must be 0 or more", f.guardGrace)
 	}
 	return nil
 }

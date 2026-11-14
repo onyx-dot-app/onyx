@@ -307,6 +307,27 @@ draining node, then stops the VM.
    are left). Then remove or repair the node.
 5. To put the node back: `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
 
+### The cluster autoscaler does not remove an idle KVM node
+
+The agent blocks scale-down while VMs run: it sets
+`cluster-autoscaler.kubernetes.io/scale-down-disabled=true` on its Node, and removes it when the
+node has had no VMs for `--scale-down-guard-grace` (chart `craft.hostAgent.scaleDownGuard.grace`,
+10 m).
+
+1. Check the annotation and its owner mark:
+   `kubectl $K get node <node> -o jsonpath='{.metadata.annotations}'`. The agent sets
+   `onyx.app/craft-fc-scale-down-guard=true` next to its value.
+2. If `agent NodeInfo` shows `vm_slots_used` 0 for longer than the grace and the annotation stays,
+   read the agent log for `scale-down guard`. A `patch` error with HTTP 403 means the agent has no
+   `patch` on nodes: check the ClusterRole whose name ends in `craft-fc-host-agent-node-annotate`.
+3. Without the owner mark, someone else set the annotation; the agent leaves it. Remove it by hand
+   if it is not needed: `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
+4. To remove a node that runs VMs, use "Drain a node". The annotation goes after the grace, then
+   the autoscaler can remove the node.
+5. If you turn the guard off (`craft.hostAgent.scaleDownGuard.enabled=false`) or remove the agent
+   while a node has the annotation, the annotation and its mark stay. Remove both by hand:
+   `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled- onyx.app/craft-fc-scale-down-guard-`.
+
 ### Rebuild a template
 
 The agent builds its template from the root drive at start-up and on `BuildTemplate`. A valid
