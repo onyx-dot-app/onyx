@@ -536,26 +536,38 @@ def _remove_unfilled_stub_nodes(
     will not be filled: its folder is not in the source, or the connector
     cannot see it. Move what is under it to the source root and remove it,
     so nothing stays hidden from the tree. A failed or canceled attempt
-    keeps its STUBs, because the next attempt can still fill them."""
+    keeps its STUBs, because the next attempt can still fill them. A STUB
+    that a failed cleanup keeps is removed by the next successful attempt."""
     source = cc_pair.connector.source
+    # The attempt is complete. A cleanup error must not undo that.
     try:
         removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
             db_session, source, cc_pair.connector_id, cc_pair.credential_id
         )
-        if removed:
-            # Cached parent chains can go through a removed STUB.
-            invalidate_hierarchy_cache_for_source(get_redis_client(), source)
-            logger.info(
-                "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
-                len(removed),
-                cc_pair.id,
-            )
+        failed = False
     except Exception:
-        # The attempt is complete. A cleanup error must not undo that.
         db_session.rollback()
         logger.exception(
             "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
             cc_pair.id,
+        )
+        removed = []
+        failed = True
+    if removed:
+        logger.info(
+            "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+            len(removed),
+            cc_pair.id,
+        )
+    if not removed and not failed:
+        return
+    try:
+        # Cached parent chains can go through a removed STUB. Batches commit
+        # one at a time, so a failed cleanup can also have removed some.
+        invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+    except Exception:
+        logger.exception(
+            "Could not invalidate the hierarchy cache of source %s", source
         )
 
 
@@ -624,7 +636,9 @@ def check_indexing_completion(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
 
-        if attempt.status == IndexingStatus.SUCCESS:
+        # A backfill can run with a partial config, so it does not list
+        # every parent.
+        if attempt.status == IndexingStatus.SUCCESS and not attempt.is_backfill:
             _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value

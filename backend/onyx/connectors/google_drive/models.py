@@ -366,6 +366,10 @@ class DriveListingState(BaseModel):
     # folder listing has yielded yet. After the listing, only the ones still
     # missing are read with files.get. Its size follows the folders.
     unresolved_parent_emails: dict[str, str] = {}
+    # Folder id -> the user who listed it, for folders yielded with no parent
+    # because that user cannot see the parent. A later copy with the parent,
+    # or a read after the listing, yields the folder again with it.
+    parentless_folder_emails: dict[str, str] = {}
 
     @property
     def is_done(self) -> bool:
