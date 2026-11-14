@@ -163,13 +163,13 @@ onyx-cli ask --agent-id 5 "Summarize our Q4 roadmap"
 
 When a tool call needs approval and stderr is a terminal, `ask` shows the request on stderr and prompts: `[y]
 approve once / [a] approve for session / [N] reject`. If the server ends the request first, for example at its deadline,
-the prompt ends and `ask` shows the outcome.
+the prompt ends and `ask` shows the outcome. `ask` ignores input that you typed before the prompt showed.
 
 Without a terminal, in CI, or with `--json`, `ask` does not wait for input. It uses `--approve` instead:
 
 - `fail` rejects the tool call, stops the response, and exits with code `10`.
 - `reject` rejects the tool call and continues the response without it.
-- `once` and `session` approve the tool call.
+- `once` and `session` approve every tool call in the response that needs approval.
 
 If you set `--approve`, `ask` uses it on a terminal too.
 

@@ -87,6 +87,26 @@ func TestStreamFailsWhenServerGoesSilent(t *testing.T) {
 	}
 }
 
+func TestStreamFailsWhenAnErrorBodyStalls(t *testing.T) {
+	release := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprint(w, `{"detail":"upstream`)
+		w.(http.Flusher).Flush()
+		<-release
+	}))
+	defer server.Close()
+	defer close(release)
+
+	events := collectEvents(t, idleTestClient(server.URL, 100*time.Millisecond).SendMessageStream(t.Context(), "hi", nil, 0, nil, nil, nil))
+	if len(events) != 1 {
+		t.Fatalf("events = %#v, want one error", events)
+	}
+	if e, ok := events[0].(models.ErrorEvent); !ok || e.StatusCode != http.StatusBadGateway {
+		t.Fatalf("event = %#v, want the 502 error", events[0])
+	}
+}
+
 func TestResumeReplaysTheRunningResponse(t *testing.T) {
 	var path string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

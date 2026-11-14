@@ -259,13 +259,18 @@ func (v *viewport) addError(msg string) {
 }
 
 // setApproval replaces the entry for an approval request, or appends one.
-// rendered must already be sanitized.
+// A new entry follows the text streamed before it. rendered must already be
+// sanitized.
 func (v *viewport) setApproval(approvalID, rendered string) {
 	for i := range v.entries {
 		if v.entries[i].kind == entryApproval && v.entries[i].approvalID == approvalID {
 			v.entries[i].rendered = rendered
 			return
 		}
+	}
+	if v.streaming && v.streamBuf != "" {
+		v.finishAgent()
+		v.streaming = true
 	}
 	v.entries = append(v.entries, chatEntry{kind: entryApproval, rendered: rendered, approvalID: approvalID})
 }
