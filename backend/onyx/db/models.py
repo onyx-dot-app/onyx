@@ -110,10 +110,12 @@ from onyx.db.enums import (
     IndexModelStatus,
     IndexReclaimStatus,
     IntegrationActionPolicyValue,
+    IntegrationActionSource,
     IntegrationAuthMethod,
     IntegrationAuthMode,
     IntegrationConnectionStatus,
     IntegrationKind,
+    IntegrationOAuthProviderMode,
     LLMModelFlowType,
     MarketplaceKind,
     MCPAuthenticationPerformer,
@@ -4714,6 +4716,17 @@ class Tool(Base):
         Integer, ForeignKey("oauth_config.id", ondelete="SET NULL"), nullable=True
     )
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Set on an OpenAPI custom tool: the integration whose spec this row holds.
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_tool_integration_id",
+        ),
+        nullable=True,
+        unique=True,
+    )
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
     oauth_config: Mapped["OAuthConfig | None"] = relationship(
@@ -5971,8 +5984,10 @@ class UserPluginPreference(Base):
 
 
 class Integration(Base):
-    """A connection from Onyx to one service: an MCP server or an app. Its
-    home plugin gives its owner, scope and access."""
+    """A connection from Onyx to one service: an MCP server or an HTTP API. Its
+    home plugin gives its owner, scope and access. The settings of each kind
+    stay on the kind's own table (``mcp_server``, ``external_app``, or the
+    OpenAPI ``tool`` row), which points here through ``integration_id``."""
 
     __tablename__ = "integration"
 
@@ -5996,16 +6011,6 @@ class Integration(Base):
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
     )
-    config: Mapped[dict[str, Any]] = mapped_column(
-        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
-    )
-    # The tool list of an MCP server. NULL for an app.
-    actions: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        PGJSONB(), nullable=True
-    )
-    actions_synced_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
     auth_mode: Mapped[IntegrationAuthMode] = mapped_column(
         Enum(
             IntegrationAuthMode,
@@ -6022,29 +6027,16 @@ class Integration(Base):
         ),
         nullable=True,
     )
-    oauth_client_id: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
-    )
-    oauth_client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
-        EncryptedString(), nullable=True
-    )
-    oauth_settings: Mapped[dict[str, Any] | None] = mapped_column(
-        PGJSONB(), nullable=True
-    )
+    # The fields a person fills for an api_key connection.
     credential_fields: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True
     )
+    # How a credential goes on a request, e.g. {"Authorization": "Bearer {api_key}"}.
     header_template: Mapped[dict[str, str] | None] = mapped_column(
         PGJSONB(), nullable=True
     )
     users_can_save_always_allow: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=text("true")
-    )
-    # The old tool id of an integration made from a custom tool, so the public
-    # API inputs that take tool ids still work. Not a foreign key: tool ids and
-    # integration ids are different sequences.
-    legacy_tool_id: Mapped[int | None] = mapped_column(
-        Integer, nullable=True, unique=True
     )
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -6056,8 +6048,22 @@ class Integration(Base):
         nullable=False,
     )
 
+    actions: Mapped[list["IntegrationAction"]] = relationship(
+        "IntegrationAction",
+        back_populates="integration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    oauth_client: Mapped["IntegrationOAuthClient | None"] = relationship(
+        "IntegrationOAuthClient",
+        back_populates="integration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
     __table_args__ = (
-        CheckConstraint("kind IN ('mcp_server', 'app')", name="ck_integration_kind"),
+        CheckConstraint("kind IN ('mcp_server', 'api')", name="ck_integration_kind"),
         CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",
             name="ck_integration_auth_mode",
@@ -6065,6 +6071,146 @@ class Integration(Base):
         CheckConstraint(
             "auth_method IN ('oauth2', 'api_key', 'onyx_login', 'managed')",
             name="ck_integration_auth_method",
+        ),
+    )
+
+
+class IntegrationAction(Base):
+    """One action of an integration: an MCP tool, an OpenAPI operation, or an
+    entry of a built-in provider catalog. Policies key on ``key``."""
+
+    __tablename__ = "integration_action"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    # The MCP tool name, the OpenAPI operationId, or the provider action id.
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[IntegrationActionSource] = mapped_column(
+        Enum(
+            IntegrationActionSource,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_only: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # The value the catalog or spec starts the action at. An admin policy row
+    # overrides it.
+    default_policy: Mapped[IntegrationActionPolicyValue | None] = mapped_column(
+        Enum(
+            IntegrationActionPolicyValue,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # False: the admin did not select the action, so no one can use it.
+    admin_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Set: chat can offer the action as an LLM tool.
+    input_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    output_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # OpenAPI only: the egress proxy matches a request on these.
+    http_method: Mapped[str | None] = mapped_column(String, nullable=True)
+    path_template: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    integration: Mapped["Integration"] = relationship(
+        "Integration", back_populates="actions"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "integration_id", "key", name="uq_integration_action_integration_key"
+        ),
+        CheckConstraint(
+            "source IN ('mcp_sync', 'openapi_spec', 'preset_catalog')",
+            name="ck_integration_action_source",
+        ),
+        CheckConstraint(
+            "default_policy IN ('allow', 'auto', 'ask', 'blocked')",
+            name="ck_integration_action_default_policy",
+        ),
+    )
+
+
+class IntegrationOAuthClient(Base):
+    """The OAuth client of an integration with ``auth_method = oauth2``."""
+
+    __tablename__ = "integration_oauth_client"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider_mode: Mapped[IntegrationOAuthProviderMode] = mapped_column(
+        Enum(
+            IntegrationOAuthProviderMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    # NULL for preset and discovery: code or discovery gives the endpoints.
+    authorization_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # NULL: the provider or discovery default.
+    scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    additional_params: Mapped[dict[str, str] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # NULL: the provider or the MCP client decides.
+    pkce: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    cimd_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    client_id: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    # Dynamic client registration: registration_access_token and
+    # registration_client_uri.
+    registration: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    integration: Mapped["Integration"] = relationship(
+        "Integration", back_populates="oauth_client"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "provider_mode IN ('preset', 'manual', 'discovery')",
+            name="ck_integration_oauth_client_provider_mode",
         ),
     )
 
@@ -7291,6 +7437,17 @@ class MCPServer(Base):
     )
     last_refreshed_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+    # The integration whose MCP settings this row holds.
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_mcp_server_integration_id",
+        ),
+        nullable=True,
+        unique=True,
     )
 
     # Relationships
@@ -8743,6 +8900,17 @@ class ExternalApp(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
+    )
+    # The integration whose API settings this row holds.
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_external_app_integration_id",
+        ),
+        nullable=True,
+        unique=True,
     )
 
     associated_skills: Mapped[list["Skill"]] = relationship(

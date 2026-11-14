@@ -1051,7 +1051,8 @@ class PluginInstallationPolicy(str, PyEnum):
 
 class IntegrationKind(str, PyEnum):
     MCP_SERVER = "mcp_server"
-    APP = "app"
+    # An HTTP API: an OpenAPI custom tool or an external app.
+    API = "api"
 
 
 class IntegrationAuthMode(str, PyEnum):
@@ -1068,6 +1069,23 @@ class IntegrationAuthMethod(str, PyEnum):
     # Onyx sends the user's own Onyx login token.
     ONYX_LOGIN = "onyx_login"
     MANAGED = "managed"
+
+
+class IntegrationActionSource(str, PyEnum):
+    """What writes an integration_action row, and rewrites it on a sync."""
+
+    MCP_SYNC = "mcp_sync"
+    OPENAPI_SPEC = "openapi_spec"
+    PRESET_CATALOG = "preset_catalog"
+
+
+class IntegrationOAuthProviderMode(str, PyEnum):
+    # Provider code owns the endpoints (a built-in external app).
+    PRESET = "preset"
+    # The admin entered the endpoints.
+    MANUAL = "manual"
+    # MCP auto-discovery, with dynamic client registration or CIMD.
+    DISCOVERY = "discovery"
 
 
 class IntegrationConnectionStatus(str, PyEnum):

@@ -38,7 +38,8 @@ PREVIOUS_REVISION = "7c00f53ab75f"
 REVISION = "730bce2814a0"
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
-# Old tables the migration reads. Their rows must not change.
+# Old tables the migration reads. Their rows must not change, except the new
+# integration_id of each kind table.
 OLD_TABLES = (
     "gated_app",
     "external_app",
@@ -55,11 +56,37 @@ OLD_TABLES = (
     "scheduled_task_action_policy",
 )
 
+ISSUE_SCHEMA = {"type": "object", "properties": {"title": {"type": "string"}}}
 OPENAPI_SCHEMA = {
     "openapi": "3.0.0",
     "info": {"title": "t", "version": "1"},
     "servers": [{"url": "https://api.example.com"}],
-    "paths": {},
+    "paths": {
+        "/issues/{id}": {
+            # A path-level key, not an operation.
+            "parameters": [{"name": "id", "in": "path", "schema": {"type": "string"}}],
+            "get": {
+                "operationId": "getIssue",
+                "summary": "Get an issue",
+                "parameters": [
+                    {"name": "id", "in": "path", "schema": {"type": "string"}},
+                    {"name": "fields", "in": "query", "schema": {"type": "string"}},
+                    {"name": "X-Trace", "in": "header", "schema": {"type": "string"}},
+                ],
+            },
+        },
+        "/issues": {
+            "post": {
+                "operationId": "createIssue",
+                "description": "Create an issue",
+                "requestBody": {
+                    "content": {"application/json": {"schema": ISSUE_SCHEMA}}
+                },
+            },
+            # No operationId: openapi_to_method_specs refuses it, so no action.
+            "delete": {"summary": "Delete all"},
+        },
+    },
 }
 
 
@@ -208,6 +235,15 @@ def _seed(conn: Connection) -> Seeded:
     mcp_public = mcp(names["shared"], owner_email, True, "OAUTH", "PER_USER")
     mcp_private = mcp(names["private"], owner_email, False, "API_TOKEN", "ADMIN")
     mcp_orphan = mcp(names["orphan"], f"gone-{s}@example.com", False, "NONE", "ADMIN")
+    conn.execute(
+        text(
+            "UPDATE mcp_server SET oauth_scopes_override = "
+            'CAST(\'["repo", "read:org"]\' AS jsonb), '
+            'oauth_additional_auth_params = CAST(\'{"prompt": "consent"}\' AS jsonb) '
+            "WHERE id = :id"
+        ),
+        {"id": mcp_public},
+    )
 
     def mcp_tool(server: int, name: str, read_only: bool, enabled: bool) -> int:
         return _insert(
@@ -496,7 +532,8 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
         conn.execute(
             text(
                 "DELETE FROM plugin WHERE id IN (SELECT plugin_id FROM integration "
-                "WHERE id = ANY(:gated) OR legacy_tool_id = ANY(:tools))"
+                "WHERE id = ANY(:gated) OR id IN "
+                "(SELECT integration_id FROM tool WHERE id = ANY(:tools)))"
             ),
             {"gated": list(seeded.gated.values()), "tools": custom_tools},
         )
@@ -550,13 +587,18 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
 
 
-def _fingerprint(engine: Engine, tables: tuple[str, ...]) -> dict[str, str]:
-    """md5 of every row of each table, in a stable order."""
+def _fingerprint(
+    engine: Engine, tables: tuple[str, ...], ignore: str | None = None
+) -> dict[str, str]:
+    """md5 of every row of each table, in a stable order, without the column
+    ``ignore``."""
+    row = "(to_jsonb(t) - :ignore)::text" if ignore else "t::text"
     result: dict[str, str] = {}
     with engine.connect() as conn:
         for table in tables:
             rows = conn.execute(
-                text(f"SELECT t::text FROM {table} t ORDER BY t::text")
+                text(f"SELECT {row} AS r FROM {table} t ORDER BY r"),
+                {"ignore": ignore} if ignore else {},
             ).scalars()
             result[table] = hashlib.md5("\n".join(rows).encode()).hexdigest()
     return result
@@ -583,14 +625,10 @@ class Copied:
     author_user_id: UUID | None
     published: bool
     installation_policy: str | None
-    config: dict[str, Any]
-    actions: list[dict[str, Any]] | None
     auth_mode: str
     auth_method: str | None
-    oauth_settings: dict[str, Any] | None
     header_template: dict[str, str] | None
     users_can_save_always_allow: bool
-    legacy_tool_id: int | None
 
 
 def _copied(conn: Connection, where: str, **params: Any) -> Copied:
@@ -599,15 +637,51 @@ def _copied(conn: Connection, where: str, **params: Any) -> Copied:
             "SELECT i.id, i.kind, i.name, i.plugin_id, p.name AS plugin_name, "
             "p.marketplace_id, m.kind AS marketplace_kind, p.author_user_id, "
             "p.published_version_id IS NOT NULL AS published, "
-            "p.installation_policy, i.config, i.actions, i.auth_mode, "
-            "i.auth_method, i.oauth_settings, i.header_template, "
-            "i.users_can_save_always_allow, i.legacy_tool_id "
+            "p.installation_policy, i.auth_mode, "
+            "i.auth_method, i.header_template, "
+            "i.users_can_save_always_allow "
             "FROM integration i JOIN plugin p ON p.id = i.plugin_id "
             f"JOIN plugin_marketplace m ON m.id = p.marketplace_id WHERE {where}"
         ),
         params,
     ).one()
     return Copied(**row._asdict())
+
+
+TOOL_INTEGRATION = "i.id = (SELECT integration_id FROM tool WHERE id = :t)"
+
+
+def _kind_integration(conn: Connection, table: str, row_id: int) -> int | None:
+    return conn.execute(
+        text(f"SELECT integration_id FROM {table} WHERE id = :id"), {"id": row_id}
+    ).scalar_one()
+
+
+def _actions(conn: Connection, integration_id: int) -> list[dict[str, Any]]:
+    return [
+        dict(row._mapping)
+        for row in conn.execute(
+            text(
+                "SELECT key, source, display_name, description, read_only, "
+                "default_policy, admin_enabled, input_schema, output_schema, "
+                "http_method, path_template FROM integration_action "
+                "WHERE integration_id = :id ORDER BY key"
+            ),
+            {"id": integration_id},
+        )
+    ]
+
+
+def _oauth_client(conn: Connection, integration_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        text(
+            "SELECT provider_mode, authorization_url, token_url, scopes, "
+            "additional_params, pkce, cimd_enabled, client_id, client_secret, "
+            "registration FROM integration_oauth_client WHERE integration_id = :id"
+        ),
+        {"id": integration_id},
+    ).one_or_none()
+    return dict(row._mapping) if row else None
 
 
 def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) -> Any:
@@ -620,33 +694,34 @@ def _settings(conn: Connection, table: str, key: str, owner: Any, plugin: UUID) 
 
 
 def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
-    before = _fingerprint(engine, OLD_TABLES)
+    before = _fingerprint(engine, OLD_TABLES, ignore="integration_id")
     with engine.connect() as conn:
         max_gated = conn.execute(text("SELECT max(id) FROM gated_app")).scalar_one()
 
     _migrate("upgrade", REVISION)
 
-    assert _fingerprint(engine, OLD_TABLES) == before
+    assert _fingerprint(engine, OLD_TABLES, ignore="integration_id") == before
     with engine.connect() as conn:
         public = _copied(conn, "i.id = :id", id=seeded.gated["mcp_public"])
         private = _copied(conn, "i.id = :id", id=seeded.gated["mcp_private"])
         orphan = _copied(conn, "i.id = :id", id=seeded.gated["mcp_orphan"])
         slack = _copied(conn, "i.id = :id", id=seeded.gated["app_slack"])
         app_custom = _copied(conn, "i.id = :id", id=seeded.gated["app_custom"])
+        tool_ids = {
+            "private": seeded.custom_private,
+            "shared": seeded.custom_shared,
+            "default": seeded.custom_default,
+            "oauth": seeded.custom_oauth,
+            "disabled": seeded.custom_disabled,
+        }
         custom = {
-            key: _copied(conn, "i.legacy_tool_id = :t", t=tool_id)
-            for key, tool_id in (
-                ("private", seeded.custom_private),
-                ("shared", seeded.custom_shared),
-                ("default", seeded.custom_default),
-                ("oauth", seeded.custom_oauth),
-                ("disabled", seeded.custom_disabled),
-            )
+            key: _copied(conn, TOOL_INTEGRATION, t=tool_id)
+            for key, tool_id in tool_ids.items()
         }
 
         # Ids: a gated_app keeps its id; a custom tool takes the next id.
         assert sorted(c.id for c in custom.values()) == [
-            c.id for c in sorted(custom.values(), key=lambda c: c.legacy_tool_id or 0)
+            custom[key].id for key in sorted(custom, key=lambda k: tool_ids[k])
         ]
         assert min(c.id for c in custom.values()) > max_gated
         next_id = conn.execute(
@@ -698,56 +773,151 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         assert custom["shared"].installation_policy is None
         assert custom["private"].author_user_id == seeded.owner
 
-        # Kind, config and sign-in settings, with no secret.
+        # Each kind table points at its integration.
+        for table, row_id, copied in (
+            ("mcp_server", seeded.mcp_public, public),
+            ("mcp_server", seeded.mcp_private, private),
+            ("mcp_server", seeded.mcp_orphan, orphan),
+            ("external_app", seeded.app_slack, slack),
+            ("external_app", seeded.app_custom, app_custom),
+        ):
+            assert _kind_integration(conn, table, row_id) == copied.id
+        for tool_id in (
+            seeded.tool_read,
+            seeded.tool_write,
+            seeded.tool_unselected,
+            seeded.tool_selected,
+        ):
+            assert _kind_integration(conn, "tool", tool_id) is None
+
+        # Kind, actions and sign-in settings, with no secret.
         assert public.kind == "mcp_server"
-        assert public.config == {
-            "server_url": f"https://{seeded.names['shared']}.example.com/mcp",
-            "transport": "STREAMABLE_HTTP",
-        }
         assert (public.auth_mode, public.auth_method) == ("individual", "oauth2")
-        assert public.oauth_settings is not None
-        assert public.oauth_settings["token_url"] == "https://auth.example.com/t"
-        assert public.actions == [
+        assert _oauth_client(conn, public.id) == {
+            "provider_mode": "discovery",
+            "authorization_url": "https://auth.example.com/a",
+            "token_url": "https://auth.example.com/t",
+            "scopes": ["repo", "read:org"],
+            "additional_params": {"prompt": "consent"},
+            "pkce": True,
+            "cimd_enabled": True,
+            "client_id": None,
+            "client_secret": None,
+            "registration": None,
+        }
+        mcp_action = {
+            "source": "mcp_sync",
+            "description": "d",
+            "default_policy": None,
+            "input_schema": {"type": "object"},
+            "output_schema": None,
+            "http_method": None,
+            "path_template": None,
+        }
+        assert _actions(conn, public.id) == [
             {
-                "name": "create_issue",
-                "description": "d",
-                "input_schema": {"type": "object"},
-                "output_schema": None,
+                **mcp_action,
+                "key": "create_issue",
+                "display_name": "create_issue",
                 "read_only": False,
+                "admin_enabled": True,
             },
             {
-                "name": "list_issues",
-                "description": "d",
-                "input_schema": {"type": "object"},
-                "output_schema": None,
+                **mcp_action,
+                "key": "list_issues",
+                "display_name": "list_issues",
                 "read_only": True,
+                "admin_enabled": True,
             },
         ]
+        # The admin did not select drop_table, so it stays unusable.
+        assert [(a["key"], a["admin_enabled"]) for a in _actions(conn, private.id)] == [
+            ("drop_table", False),
+            ("query", True),
+        ]
         assert (private.auth_mode, private.auth_method) == ("shared", "api_key")
+        assert _oauth_client(conn, private.id) is None
         assert (orphan.auth_mode, orphan.auth_method) == ("none", None)
-        assert slack.kind == "app"
-        assert slack.config == {
-            "preset": "slack",
-            "url_patterns": ["https://slack.com/api/.*"],
-        }
+        assert _actions(conn, orphan.id) == []
+        assert slack.kind == "api"
         assert (slack.auth_mode, slack.auth_method) == ("individual", "oauth2")
+        assert _oauth_client(conn, slack.id) == {
+            "provider_mode": "preset",
+            "authorization_url": None,
+            "token_url": None,
+            "scopes": None,
+            "additional_params": None,
+            "pkce": None,
+            "cimd_enabled": False,
+            "client_id": None,
+            "client_secret": None,
+            "registration": None,
+        }
+        # The provider catalog is code; the U3 sync writes its actions.
+        assert _actions(conn, slack.id) == []
         assert slack.header_template == {"Authorization": "Bearer {token}"}
         assert not slack.users_can_save_always_allow
+        assert app_custom.kind == "api"
         assert (app_custom.auth_mode, app_custom.auth_method) == ("none", None)
-        assert custom["private"].config == {"openapi_schema": OPENAPI_SCHEMA}
+        assert _oauth_client(conn, app_custom.id) is None
+        assert custom["private"].kind == "api"
+        assert _actions(conn, custom["private"].id) == [
+            {
+                "key": "createIssue",
+                "source": "openapi_spec",
+                "display_name": "createIssue",
+                "description": "Create an issue",
+                "read_only": False,
+                "default_policy": None,
+                "admin_enabled": True,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"requestBody": ISSUE_SCHEMA},
+                },
+                "output_schema": None,
+                "http_method": "POST",
+                "path_template": "/issues",
+            },
+            {
+                "key": "getIssue",
+                "source": "openapi_spec",
+                "display_name": "getIssue",
+                "description": "Get an issue",
+                "read_only": True,
+                "default_policy": None,
+                "admin_enabled": True,
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "fields": {"type": "string"},
+                        "id": {"type": "string"},
+                    },
+                },
+                "output_schema": None,
+                "http_method": "GET",
+                "path_template": "/issues/{id}",
+            },
+        ]
         assert (custom["private"].auth_mode, custom["private"].auth_method) == (
             "shared",
             "api_key",
         )
+        assert _oauth_client(conn, custom["private"].id) is None
         assert (custom["oauth"].auth_mode, custom["oauth"].auth_method) == (
             "individual",
             "oauth2",
         )
-        assert custom["oauth"].oauth_settings == {
+        assert _oauth_client(conn, custom["oauth"].id) == {
+            "provider_mode": "manual",
             "authorization_url": "https://o.example.com/a",
             "token_url": "https://o.example.com/t",
             "scopes": ["read"],
+            "additional_params": None,
             "pkce": True,
+            "cimd_enabled": False,
+            "client_id": None,
+            "client_secret": None,
+            "registration": None,
         }
         assert (
             conn.execute(
@@ -788,8 +958,8 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
         }
         assert policies == {
             (public.id, "create_issue", None): "ask",
-            # The admin did not select it, so blocked wins over the old ALWAYS.
-            (private.id, "drop_table", None): "blocked",
+            # admin_enabled keeps drop_table unusable; the policy is as saved.
+            (private.id, "drop_table", None): "allow",
             (slack.id, "slack.messages.write", None): "blocked",
             (public.id, "list_issues", seeded.other): "allow",
         }
@@ -924,6 +1094,8 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
     _migrate("upgrade", REVISION)
     new_tables = (
         "integration",
+        "integration_action",
+        "integration_oauth_client",
         "integration_action_policy",
         "persona__plugin",
         "scheduled_task__plugin",
@@ -932,9 +1104,13 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
         "plugin__user",
         "plugin__user_group",
         "user_plugin_preference",
+        # With their integration_id.
+        "mcp_server",
+        "external_app",
+        "tool",
     )
     first = _fingerprint(engine, new_tables)
-    old = _fingerprint(engine, OLD_TABLES)
+    old = _fingerprint(engine, OLD_TABLES, ignore="integration_id")
 
     _migrate("downgrade", PREVIOUS_REVISION)
     with engine.connect() as conn:
@@ -952,7 +1128,18 @@ def test_downgrade_then_upgrade_gives_the_same_rows(
             ).scalar_one()
             == 0
         )
-    assert _fingerprint(engine, OLD_TABLES) == old
+        for table in ("mcp_server", "external_app", "tool"):
+            assert (
+                conn.execute(
+                    text(
+                        "SELECT count(*) FROM information_schema.columns "
+                        "WHERE table_name = :t AND column_name = 'integration_id'"
+                    ),
+                    {"t": table},
+                ).scalar_one()
+                == 0
+            )
+    assert _fingerprint(engine, OLD_TABLES, ignore="integration_id") == old
 
     _migrate("upgrade", REVISION)
     assert _fingerprint(engine, new_tables) == first
@@ -1003,7 +1190,13 @@ def test_share_publish_and_delete_a_home_plugin(engine: Engine, seeded: Seeded) 
         )
 
         conn.execute(text("DELETE FROM plugin WHERE id = :id"), {"id": plugin_id})
-        for table in ("integration", "integration_action_policy"):
+        # The MCP server stays; old code still reads it.
+        assert _kind_integration(conn, "mcp_server", seeded.mcp_private) is None
+        for table in (
+            "integration",
+            "integration_action",
+            "integration_action_policy",
+        ):
             column = "id" if table == "integration" else "integration_id"
             assert (
                 conn.execute(
@@ -1034,7 +1227,7 @@ def test_user_delete_keeps_private_integrations_for_their_people(
                     "SELECT p.marketplace_id, p.installation_policy, "
                     "p.published_version_id = p.current_version_id AS published, "
                     "p.author_user_id FROM integration i "
-                    "JOIN plugin p ON p.id = i.plugin_id WHERE i.legacy_tool_id = :t"
+                    f"JOIN plugin p ON p.id = i.plugin_id WHERE {TOOL_INTEGRATION}"
                 ),
                 {"t": tool_id},
             ).one()
@@ -1053,7 +1246,7 @@ def test_publishing_a_skill_named_like_an_integration(
         integration_name = conn.execute(
             text(
                 "SELECT p.name FROM integration i JOIN plugin p ON p.id = i.plugin_id "
-                "WHERE i.legacy_tool_id = :t"
+                f"WHERE {TOOL_INTEGRATION}"
             ),
             {"t": seeded.custom_shared},
         ).scalar_one()

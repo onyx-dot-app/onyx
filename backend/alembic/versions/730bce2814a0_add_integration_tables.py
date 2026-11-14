@@ -1,8 +1,9 @@
 """Add the integration tables and copy each MCP server, external app and
 OpenAPI custom tool into them, with a home plugin for each.
 
-The migration only adds. It reads the old tables and changes none of them, so
-a rollback finds them as they were. It moves no secret: the credential import
+The old tables stay the tables of each kind: mcp_server, external_app and the
+OpenAPI tool row each get an integration_id. That is the only change to them,
+and a rollback drops it. The migration moves no secret: the credential import
 (U3) does that in app code.
 
 Revision ID: 730bce2814a0
@@ -25,6 +26,8 @@ depends_on = None
 ORGANIZATION_LIBRARY_ID = "00000000-0000-4000-8000-00000000011b"
 # Records of a gated action. Each gets the integration of its gated_app_id.
 RECORD_TABLES = ("action_receipt", "action_approval", "approval_request")
+# The table of each kind, which points at its integration.
+KIND_TABLES = ("mcp_server", "external_app", "tool")
 # Created-at of a row whose source has no timestamp (tool rows have none).
 FALLBACK_CREATED_AT = "2026-11-13 00:00:00+00"
 
@@ -63,19 +66,8 @@ def _create_tables() -> None:
         sa.Column(
             "enabled", sa.Boolean(), server_default=sa.text("true"), nullable=False
         ),
-        sa.Column(
-            "config",
-            postgresql.JSONB(),
-            server_default=sa.text("'{}'::jsonb"),
-            nullable=False,
-        ),
-        sa.Column("actions", postgresql.JSONB(), nullable=True),
-        sa.Column("actions_synced_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("auth_mode", sa.String(), nullable=False),
         sa.Column("auth_method", sa.String(), nullable=True),
-        sa.Column("oauth_client_id", sa.LargeBinary(), nullable=True),
-        sa.Column("oauth_client_secret", sa.LargeBinary(), nullable=True),
-        sa.Column("oauth_settings", postgresql.JSONB(), nullable=True),
         sa.Column("credential_fields", postgresql.JSONB(), nullable=True),
         sa.Column("header_template", postgresql.JSONB(), nullable=True),
         sa.Column(
@@ -84,9 +76,8 @@ def _create_tables() -> None:
             server_default=sa.text("true"),
             nullable=False,
         ),
-        sa.Column("legacy_tool_id", sa.Integer(), nullable=True, unique=True),
         *_timestamps(),
-        sa.CheckConstraint("kind IN ('mcp_server', 'app')", name="ck_integration_kind"),
+        sa.CheckConstraint("kind IN ('mcp_server', 'api')", name="ck_integration_kind"),
         sa.CheckConstraint(
             "auth_mode IN ('none', 'shared', 'individual')",
             name="ck_integration_auth_mode",
@@ -96,6 +87,90 @@ def _create_tables() -> None:
             name="ck_integration_auth_method",
         ),
     )
+
+    op.create_table(
+        "integration_action",
+        sa.Column("id", sa.Integer(), primary_key=True),
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            nullable=False,
+        ),
+        sa.Column("key", sa.String(), nullable=False),
+        sa.Column("source", sa.String(), nullable=False),
+        sa.Column("display_name", sa.String(), nullable=False),
+        sa.Column("description", sa.Text(), nullable=True),
+        sa.Column("read_only", sa.Boolean(), nullable=True),
+        sa.Column("default_policy", sa.String(), nullable=True),
+        sa.Column(
+            "admin_enabled",
+            sa.Boolean(),
+            server_default=sa.text("true"),
+            nullable=False,
+        ),
+        sa.Column("input_schema", postgresql.JSONB(), nullable=True),
+        sa.Column("output_schema", postgresql.JSONB(), nullable=True),
+        sa.Column("http_method", sa.String(), nullable=True),
+        sa.Column("path_template", sa.String(), nullable=True),
+        *_timestamps(),
+        sa.UniqueConstraint(
+            "integration_id", "key", name="uq_integration_action_integration_key"
+        ),
+        sa.CheckConstraint(
+            "source IN ('mcp_sync', 'openapi_spec', 'preset_catalog')",
+            name="ck_integration_action_source",
+        ),
+        sa.CheckConstraint(
+            "default_policy IN ('allow', 'auto', 'ask', 'blocked')",
+            name="ck_integration_action_default_policy",
+        ),
+    )
+
+    op.create_table(
+        "integration_oauth_client",
+        sa.Column(
+            "integration_id",
+            sa.Integer(),
+            sa.ForeignKey("integration.id", ondelete="CASCADE"),
+            primary_key=True,
+        ),
+        sa.Column("provider_mode", sa.String(), nullable=False),
+        sa.Column("authorization_url", sa.Text(), nullable=True),
+        sa.Column("token_url", sa.Text(), nullable=True),
+        sa.Column("scopes", postgresql.ARRAY(sa.String()), nullable=True),
+        sa.Column("additional_params", postgresql.JSONB(), nullable=True),
+        sa.Column("pkce", sa.Boolean(), nullable=True),
+        sa.Column(
+            "cimd_enabled",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column("client_id", sa.LargeBinary(), nullable=True),
+        sa.Column("client_secret", sa.LargeBinary(), nullable=True),
+        sa.Column("registration", sa.LargeBinary(), nullable=True),
+        *_timestamps(),
+        sa.CheckConstraint(
+            "provider_mode IN ('preset', 'manual', 'discovery')",
+            name="ck_integration_oauth_client_provider_mode",
+        ),
+    )
+
+    # Small tables: the FK and unique checks scan few rows.
+    for table in KIND_TABLES:
+        op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
+        op.create_unique_constraint(
+            f"{table}_integration_id_key", table, ["integration_id"]
+        )
+        op.create_foreign_key(
+            f"fk_{table}_integration_id",
+            table,
+            "integration",
+            ["integration_id"],
+            ["id"],
+            ondelete="SET NULL",
+        )
 
     op.create_table(
         "integration_connection",
@@ -299,20 +374,13 @@ _CREATE_SOURCES = f"""
         SELECT
             g.id AS gated_app_id,
             CASE WHEN g.id IS NULL THEN 1 END AS ungated_rank,
-            'app' AS kind,
+            'api' AS kind,
             a.id AS external_app_id,
             NULL::integer AS mcp_server_id,
             NULL::integer AS tool_id,
             a.name,
             NULL::text AS description,
             a.enabled,
-            jsonb_build_object(
-                'preset',
-                CASE WHEN a.app_type <> 'CUSTOM' THEN lower(a.app_type) END,
-                'url_patterns', to_jsonb(a.upstream_url_patterns)
-            ) AS config,
-            NULL::jsonb AS actions,
-            NULL::timestamptz AS actions_synced_at,
             CASE
                 WHEN a.app_type <> 'CUSTOM' THEN 'individual'
                 WHEN a.auth_template = '{{}}'::jsonb THEN 'none'
@@ -322,11 +390,18 @@ _CREATE_SOURCES = f"""
                 WHEN a.app_type <> 'CUSTOM' THEN 'oauth2'
                 WHEN a.auth_template <> '{{}}'::jsonb THEN 'api_key'
             END AS auth_method,
-            NULL::jsonb AS oauth_settings,
+            -- Provider code owns the endpoints of a built-in app.
+            CASE WHEN a.app_type <> 'CUSTOM' THEN 'preset' END
+                AS oauth_provider_mode,
+            NULL::text AS oauth_authorization_url,
+            NULL::text AS oauth_token_url,
+            NULL::varchar[] AS oauth_scopes,
+            NULL::jsonb AS oauth_additional_params,
+            NULL::boolean AS oauth_pkce,
+            false AS oauth_cimd_enabled,
             NULLIF(a.auth_template, '{{}}'::jsonb) AS header_template,
             coalesce(g.users_can_manage_policies, true)
                 AS users_can_save_always_allow,
-            NULL::integer AS legacy_tool_id,
             'organization_library' AS placement,
             NULL::uuid AS author_user_id,
             -- An admin turns each app on again.
@@ -348,27 +423,6 @@ _CREATE_SOURCES = f"""
             m.name,
             m.description,
             true,
-            jsonb_strip_nulls(jsonb_build_object(
-                'server_url', m.server_url, 'transport', m.transport
-            )),
-            coalesce(
-                (
-                    SELECT jsonb_agg(
-                        jsonb_build_object(
-                            'name', t.name,
-                            'description', t.description,
-                            'input_schema', t.mcp_input_schema,
-                            'output_schema', t.mcp_output_schema,
-                            'read_only', t.mcp_read_only
-                        )
-                        ORDER BY t.name, t.id
-                    )
-                    FROM tool t
-                    WHERE t.mcp_server_id = m.id
-                ),
-                '[]'::jsonb
-            ),
-            m.last_refreshed_at,
             CASE
                 WHEN coalesce(m.auth_type, 'NONE') = 'NONE' THEN 'none'
                 WHEN m.auth_type = 'PT_OAUTH' THEN 'individual'
@@ -380,19 +434,25 @@ _CREATE_SOURCES = f"""
                 WHEN 'OAUTH' THEN 'oauth2'
                 WHEN 'PT_OAUTH' THEN 'onyx_login'
             END,
-            CASE WHEN m.auth_type = 'OAUTH' THEN jsonb_strip_nulls(
-                jsonb_build_object(
-                    'provider_mode', m.oauth_provider_mode,
-                    'authorization_url', m.oauth_authorization_endpoint,
-                    'token_url', m.oauth_token_endpoint,
-                    'scopes', m.oauth_scopes_override,
-                    'additional_params', m.oauth_additional_auth_params,
-                    'cimd_enabled', m.oauth_cimd_enabled
-                )
-            ) END,
+            CASE WHEN m.auth_type = 'OAUTH' THEN
+                CASE m.oauth_provider_mode
+                    WHEN 'AUTO_DISCOVERY' THEN 'discovery'
+                    ELSE 'manual'
+                END
+            END,
+            m.oauth_authorization_endpoint,
+            m.oauth_token_endpoint,
+            CASE WHEN jsonb_typeof(m.oauth_scopes_override) = 'array' THEN
+                ARRAY(
+                    SELECT jsonb_array_elements_text(m.oauth_scopes_override)
+                )::varchar[]
+            END,
+            m.oauth_additional_auth_params,
+            -- The MCP OAuth flow always sends a PKCE challenge.
+            true,
+            m.oauth_cimd_enabled,
             NULL::jsonb,
             coalesce(m.users_can_manage_policies, true),
-            NULL,
             CASE
                 WHEN m.is_public OR m.shared_with_basic
                     OR m.owner_user_id IS NULL
@@ -420,16 +480,13 @@ _CREATE_SOURCES = f"""
         SELECT
             NULL,
             2,
-            'app',
+            'api',
             NULL,
             NULL,
             t.id,
             coalesce(nullif(t.display_name, ''), t.name),
             t.description,
             true,
-            jsonb_build_object('openapi_schema', t.openapi_schema),
-            NULL,
-            NULL,
             CASE
                 WHEN t.oauth_config_id IS NOT NULL OR t.passthrough_auth
                     THEN 'individual'
@@ -445,20 +502,17 @@ _CREATE_SOURCES = f"""
                     AND jsonb_array_length(t.custom_headers) > 0
                     THEN 'api_key'
             END,
-            (
-                SELECT jsonb_strip_nulls(jsonb_build_object(
-                    'authorization_url', o.authorization_url,
-                    'token_url', o.token_url,
-                    'scopes', o.scopes,
-                    'additional_params', o.additional_params,
-                    'pkce', o.supports_pkce
-                ))
-                FROM oauth_config o
-                WHERE o.id = t.oauth_config_id
-            ),
+            CASE WHEN o.id IS NOT NULL THEN 'manual' END,
+            o.authorization_url,
+            o.token_url,
+            CASE WHEN jsonb_typeof(o.scopes) = 'array' THEN
+                ARRAY(SELECT jsonb_array_elements_text(o.scopes))::varchar[]
+            END,
+            o.additional_params,
+            o.supports_pkce,
+            false,
             NULL,
             true,
-            t.id,
             CASE
                 WHEN t.user_id IS NULL OR is_shared.value
                     THEN 'organization_library'
@@ -469,6 +523,7 @@ _CREATE_SOURCES = f"""
             TIMESTAMPTZ '{FALLBACK_CREATED_AT}',
             TIMESTAMPTZ '{FALLBACK_CREATED_AT}'
         FROM openapi_tool t
+        LEFT JOIN oauth_config o ON o.id = t.oauth_config_id
         CROSS JOIN LATERAL (
             SELECT t.enabled AND t.id IN (SELECT tool_id FROM default_chat_tool)
                 AS value
@@ -608,17 +663,123 @@ _INSERT_VERSIONS = """
 
 _INSERT_INTEGRATIONS = """
     INSERT INTO integration (
-        id, kind, name, description, plugin_id, enabled, config, actions,
-        actions_synced_at, auth_mode, auth_method, oauth_settings,
-        header_template, users_can_save_always_allow, legacy_tool_id,
+        id, kind, name, description, plugin_id, enabled, auth_mode,
+        auth_method, header_template, users_can_save_always_allow,
         created_at, updated_at
     )
     SELECT
-        id, kind, name, description, plugin_id, enabled, config, actions,
-        actions_synced_at, auth_mode, auth_method, oauth_settings,
-        header_template, users_can_save_always_allow, legacy_tool_id,
+        id, kind, name, description, plugin_id, enabled, auth_mode,
+        auth_method, header_template, users_can_save_always_allow,
         created_at, updated_at
     FROM integration_source
+"""
+
+_SET_KIND_INTEGRATIONS = [
+    f"""
+    UPDATE {table} k SET integration_id = src.id
+    FROM integration_source src
+    WHERE src.{column} = k.id
+    """
+    for table, column in (
+        ("mcp_server", "mcp_server_id"),
+        ("external_app", "external_app_id"),
+        ("tool", "tool_id"),
+    )
+]
+
+# The client settings of each OAuth integration, with no secret.
+_INSERT_OAUTH_CLIENTS = """
+    INSERT INTO integration_oauth_client (
+        integration_id, provider_mode, authorization_url, token_url, scopes,
+        additional_params, pkce, cimd_enabled, created_at, updated_at
+    )
+    SELECT
+        id, oauth_provider_mode,
+        CASE WHEN oauth_provider_mode <> 'preset' THEN oauth_authorization_url END,
+        CASE WHEN oauth_provider_mode <> 'preset' THEN oauth_token_url END,
+        oauth_scopes, oauth_additional_params, oauth_pkce, oauth_cimd_enabled,
+        created_at, updated_at
+    FROM integration_source
+    WHERE auth_method = 'oauth2'
+"""
+
+# Each MCP tool row. A tool that the admin did not select stays unusable.
+_INSERT_MCP_ACTIONS = """
+    INSERT INTO integration_action (
+        integration_id, key, source, display_name, description, read_only,
+        admin_enabled, input_schema, output_schema, created_at, updated_at
+    )
+    SELECT
+        src.id, t.name, 'mcp_sync', coalesce(nullif(t.display_name, ''), t.name),
+        t.description, t.mcp_read_only, t.enabled, t.mcp_input_schema,
+        t.mcp_output_schema, src.created_at, src.updated_at
+    FROM integration_source src
+    JOIN tool t ON t.mcp_server_id = src.mcp_server_id
+    ORDER BY src.id, t.id
+    ON CONFLICT DO NOTHING
+"""
+
+# Each operation of an OpenAPI tool, as openapi_to_method_specs reads it. The
+# input schema is MethodSpec.to_tool_definition: the JSON request body, then
+# each query and each path parameter, a later name in place of an earlier one.
+_INSERT_OPENAPI_ACTIONS = """
+    INSERT INTO integration_action (
+        integration_id, key, source, display_name, description, read_only,
+        admin_enabled, input_schema, http_method, path_template,
+        created_at, updated_at
+    )
+    SELECT
+        src.id, op.value ->> 'operationId', 'openapi_spec',
+        op.value ->> 'operationId',
+        coalesce(
+            nullif(op.value ->> 'summary', ''), op.value ->> 'description'
+        ),
+        upper(op.key) = 'GET',
+        true,
+        jsonb_build_object('type', 'object', 'properties', props.value),
+        upper(op.key), path.key, src.created_at, src.updated_at
+    FROM integration_source src
+    JOIN tool t ON t.id = src.tool_id
+    CROSS JOIN LATERAL jsonb_each(
+        CASE WHEN jsonb_typeof(t.openapi_schema -> 'paths') = 'object'
+            THEN t.openapi_schema -> 'paths' ELSE '{}'::jsonb END
+    ) path
+    CROSS JOIN LATERAL jsonb_each(
+        CASE WHEN jsonb_typeof(path.value) = 'object'
+            THEN path.value ELSE '{}'::jsonb END
+    ) op
+    CROSS JOIN LATERAL (
+        SELECT coalesce(
+            jsonb_object_agg(field.name, field.schema ORDER BY field.rank, field.n),
+            '{}'::jsonb
+        ) AS value
+        FROM (
+            SELECT 0 AS rank, 0::bigint AS n, 'requestBody' AS name,
+                op.value -> 'requestBody' -> 'content' -> 'application/json'
+                    -> 'schema' AS schema
+            WHERE jsonb_typeof(
+                op.value -> 'requestBody' -> 'content' -> 'application/json'
+                    -> 'schema'
+            ) = 'object'
+              AND op.value -> 'requestBody' -> 'content' -> 'application/json'
+                    -> 'schema' <> '{}'::jsonb
+            UNION ALL
+            SELECT CASE param.value ->> 'in' WHEN 'query' THEN 1 ELSE 2 END,
+                param.n, param.value ->> 'name', param.value -> 'schema'
+            FROM jsonb_array_elements(
+                CASE WHEN jsonb_typeof(op.value -> 'parameters') = 'array'
+                    THEN op.value -> 'parameters' ELSE '[]'::jsonb END
+            ) WITH ORDINALITY AS param(value, n)
+            WHERE param.value ->> 'in' IN ('query', 'path')
+              AND param.value ? 'schema'
+              AND param.value ->> 'name' IS NOT NULL
+        ) field
+    ) props
+    WHERE lower(op.key) IN ('get', 'post', 'put', 'delete', 'patch')
+      AND jsonb_typeof(op.value) = 'object'
+      AND coalesce(op.value ->> 'operationId', '') <> ''
+    ORDER BY src.id, path.key, op.key
+    ON CONFLICT DO NOTHING
 """
 
 _SET_INTEGRATION_SEQUENCE = """
@@ -637,7 +798,7 @@ _CREATE_TOOL_INTEGRATIONS = """
         src.plugin_id, src.kind
     FROM integration_source src
     JOIN tool t
-      ON t.id = src.legacy_tool_id OR t.mcp_server_id = src.mcp_server_id
+      ON t.id = src.tool_id OR t.mcp_server_id = src.mcp_server_id
 """
 
 # A private MCP server keeps its people. Basic makes the server public (it is
@@ -681,21 +842,6 @@ _POLICY_VALUE = """
     END
 """
 
-# An MCP tool that the admin did not select is offered nowhere today. Blocked
-# keeps it so; this row wins over a policy row for the same tool.
-_INSERT_UNSELECTED_MCP_TOOLS = """
-    INSERT INTO integration_action_policy
-        (integration_id, action, user_id, policy, created_at, updated_at)
-    SELECT ti.integration_id, ti.tool_name, NULL, 'blocked',
-        src.created_at, src.updated_at
-    FROM tool_integration ti
-    JOIN integration_source src ON src.id = ti.integration_id
-    JOIN tool t ON t.id = ti.tool_id
-    WHERE ti.kind = 'mcp_server' AND NOT t.enabled
-    ORDER BY ti.integration_id, ti.tool_name
-    ON CONFLICT DO NOTHING
-"""
-
 _INSERT_ADMIN_POLICIES = f"""
     INSERT INTO integration_action_policy
         (integration_id, action, user_id, policy, created_at, updated_at)
@@ -726,7 +872,7 @@ _INSERT_PREFERENCES = """
     UNION ALL
     SELECT p.user_id, src.plugin_id, p.enabled_in_chat, NULL::timestamptz
     FROM tool_user_preference p
-    JOIN integration_source src ON src.legacy_tool_id = p.tool_id
+    JOIN integration_source src ON src.tool_id = p.tool_id
 """
 
 # A plugin is off for the user on that agent when the user turned off each
@@ -792,7 +938,7 @@ _INSERT_PERSONA_PLUGINS = f"""
     JOIN tool t ON t.id = ti.tool_id
     LEFT JOIN ({_BOT_PERSONAS}) bot ON bot.persona_id = pt.persona_id
     -- The default agent leaves out an OpenAPI tool that the admin turned off.
-    WHERE NOT (pt.persona_id = 0 AND ti.kind = 'app' AND NOT t.enabled)
+    WHERE NOT (pt.persona_id = 0 AND ti.kind = 'api' AND NOT t.enabled)
     GROUP BY pt.persona_id, ti.plugin_id, ti.kind, bot.persona_id
 """
 
@@ -837,10 +983,13 @@ def _copy_integrations() -> None:
         _INSERT_VERSIONS,
         _INSERT_INTEGRATIONS,
         _SET_INTEGRATION_SEQUENCE,
+        *_SET_KIND_INTEGRATIONS,
+        _INSERT_OAUTH_CLIENTS,
+        _INSERT_MCP_ACTIONS,
+        _INSERT_OPENAPI_ACTIONS,
         _CREATE_TOOL_INTEGRATIONS,
         _INSERT_MCP_USER_SHARES,
         _INSERT_MCP_GROUP_SHARES,
-        _INSERT_UNSELECTED_MCP_TOOLS,
         _INSERT_ADMIN_POLICIES,
         _INSERT_USER_POLICIES,
         _INSERT_PREFERENCES,
@@ -863,11 +1012,15 @@ def downgrade() -> None:
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
     for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")
+    for table in reversed(KIND_TABLES):
+        op.drop_column(table, "integration_id")
     for table in (
         "scheduled_task__plugin",
         "persona__plugin",
         "integration_action_policy",
         "integration_connection",
+        "integration_oauth_client",
+        "integration_action",
     ):
         op.drop_table(table)
     # Each home plugin goes with its integration.
