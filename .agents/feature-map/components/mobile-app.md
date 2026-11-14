@@ -150,7 +150,10 @@ decision, `components/chat/ToolApprovalCard.tsx` starts `recoverChatSession`
 with no stream when no reader runs and no request of the latest turn waits.
 The poll then finds the continuation stream. That stream can reuse the paused
 stream's id, so after a paused stream recovery and the send path follow the
-same id again, from cursor 0.
+same id again, from cursor 0. While the chat is idle and a request waits,
+`InputBar` shows Stop instead of Send. Stop then calls `stop-chat-session`
+without a stream id and starts the same recovery, which follows the cancel
+stream or loads the saved session with the rejected outcome.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

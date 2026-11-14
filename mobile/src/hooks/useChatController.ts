@@ -348,6 +348,8 @@ export interface ChatController {
     onCreated?: () => void,
   ) => void;
   stop: () => void;
+  // The chat is idle while its latest turn waits for approval decisions; Stop ends that turn.
+  awaitingApproval: boolean;
   isHydrating: boolean;
   // The persona the backend says owns this session. The sessions list can't answer this for a
   // project chat (it is fetched with only_non_project_chats=true), so the hydrated session is the
@@ -401,6 +403,12 @@ export function useChatController(
     [sessionData],
   );
   const chatState: ChatState = sessionData?.chatState ?? "input";
+  // Reruns on decisions made here, which change what still waits.
+  const awaitingApproval = useToolApprovalUi(
+    () =>
+      chatState === "input" &&
+      findPendingToolApprovalIds(sessionData?.messageTree).length > 0,
+  );
 
   const submit = useCallback(
     async (
@@ -549,7 +557,35 @@ export function useChatController(
     if (sessionId == null) return;
     const store = useChatSessionStore.getState();
     const current = store.sessions.get(sessionId);
-    if (!current?.abortController || current.stopRequested) return;
+    if (!current) return;
+    if (!current.abortController) {
+      // A turn that waits for approval has no reader. The server rejects its requests and ends it
+      // in a new stream, which the recovery follows.
+      if (
+        current.chatState !== "input" ||
+        findPendingToolApprovalIds(current.messageTree).length === 0
+      ) {
+        return;
+      }
+      store.updateChatState(sessionId, "settling");
+      stopChatSession(sessionId).then(
+        () =>
+          recoverChatSession(
+            sessionId,
+            null,
+            serverUrl,
+            queryClient,
+            new AbortController(),
+          ),
+        (error: unknown) => {
+          console.warn("Could not stop the waiting response", error);
+          store.updateChatState(sessionId, "input");
+          toast.error("Could not stop the response. Try again.");
+        },
+      );
+      return;
+    }
+    if (current.stopRequested) return;
     store.setStopRequested(sessionId, true);
     // Keep reading until acknowledgement, so Stop cannot target a later request.
     if (current.streamId !== null) {
@@ -575,13 +611,14 @@ export function useChatController(
     controller.signal.addEventListener("abort", () => clearTimeout(timeout), {
       once: true,
     });
-  }, [sessionId]);
+  }, [sessionId, serverUrl, queryClient]);
 
   return {
     messages,
     chatState,
     submit,
     stop,
+    awaitingApproval,
     isHydrating: needsHydration && hydration.isLoading,
     // Query keeps serving this once hydration is disabled, so it survives revisiting the chat.
     conversationPersonaId: hydration.data?.persona_id ?? null,

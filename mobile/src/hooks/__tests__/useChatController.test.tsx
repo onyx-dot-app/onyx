@@ -284,6 +284,57 @@ describe("useChatController", () => {
     expect(getSessionMock).not.toHaveBeenCalled();
   });
 
+  it("stops a turn that waits for approval and loads its rejected outcome", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    streamMock.mockReturnValueOnce(
+      scripted([
+        idInfo,
+        approvalRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.AWAITING_APPROVAL,
+          },
+        } as StreamEvent,
+      ]),
+    );
+    stopSessionMock.mockResolvedValue();
+    getSessionMock.mockResolvedValue(
+      savedTurn([
+        approvalRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_RESOLVED,
+            approval_id: "a1",
+            outcome: "rejected",
+          },
+        },
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.USER_CANCELLED,
+          },
+        },
+      ]),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+    await waitFor(() => expect(result.current.awaitingApproval).toBe(true));
+
+    act(() => result.current.stop());
+
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalledWith("s1"));
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(stopSessionMock.mock.calls).toEqual([["s1"]]);
+    expect(result.current.awaitingApproval).toBe(false);
+  });
+
   it("reattaches to the run when the connection drops while an approval waits", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     useChatSessionStore.setState({ currentSessionId: "s1" });
