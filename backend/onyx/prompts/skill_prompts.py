@@ -11,8 +11,8 @@ is the list of skills that you can use. Each entry has a name and a description.
 ### How to use skills
 - Trigger rules: If the user names a skill OR the task clearly matches a \
 skill's description shown above, you must use that skill for that turn. A \
-skill the user picked for a message comes right before it in a <skill> \
-block. Multiple mentions mean use them all. Do not carry skills across turns \
+skill the user picked for a message follows it in a <skill> block. Multiple \
+mentions mean use them all. Do not carry skills across turns \
 unless they are mentioned again.
 - Missing or blocked: If a named skill is not in the list or cannot be read, \
 say so briefly and continue with the best fallback. If the list says that \

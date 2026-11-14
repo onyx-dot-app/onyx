@@ -14,6 +14,7 @@ from onyx.agents.models import (
     RunStatus,
     StepInput,
 )
+from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent
 from onyx.chat.models import PersonaPromptConfig
 from onyx.chat.restoration import restore_chat_agent
@@ -293,7 +294,7 @@ def _chat_agent(
     )
 
 
-def _suspended(agent: ChatAgent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
+def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint:
     return ExecutionCheckpoint(
         agent_state=agent.state,
         run_state=RunState(
@@ -377,3 +378,32 @@ def test_restored_chat_offers_the_skill_tools_once() -> None:
 
     names, _, _ = _offered(llm)
     assert names == [EchoTool().name, "skills_list", "skills_read"]
+
+
+def test_restored_deep_research_offers_skills_read_like_the_original() -> None:
+    llm = ScriptedLLM([])
+    skills = [ChatSkill(name="triage", description="Sort.", version_id=uuid4())]
+    original = DeepResearchAgent(
+        messages=[],
+        allowed_tools=[SkillsListTool(skills), SkillsReadTool(skills, uuid4())],
+        llm=llm,
+        token_counter=len,
+        user_identity=None,
+        language_section="",
+        reasoning_effort=ReasoningEffort.LOW,
+        all_injected_file_metadata={},
+        skip_clarification=True,
+    )
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, original.capture_state().model_dump(mode="json")),
+        llm=llm,
+        tools=original.application_tools,
+        user_identity=None,
+    )
+
+    names = [tool.definition.name for tool in original.tools]
+    assert "skills_read" in names and "skills_list" not in names
+    assert [tool.definition for tool in rebuilt.tools] == [
+        tool.definition for tool in original.tools
+    ]

@@ -240,7 +240,9 @@ its background task end ([[#pure-asgi-middleware]]).
    block. Calls under a parent tool always take a new
    `sub_turn_index`. Saved-session replay uses the same renderer, so a change
    here changes reloads too. An accepted human instruction gets a `user_message`
-   packet in its own section before the next model step. Its placement orders
+   packet in its own section before the next model step. The packet carries
+   the `mentions` that the instruction's acceptance recorded, live and on
+   replay. Its placement orders
    the user bubble relative to assistant and tool output, both live and on replay.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's

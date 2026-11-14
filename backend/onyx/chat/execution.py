@@ -685,6 +685,7 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
+            skill_instructions=setup.skill_instructions,
             create_subagent=chat_subagent_factory(
                 setup=setup,
                 llm=llm,
@@ -824,6 +825,14 @@ def create_chat_agent(
             search_usage_forcing_setting=setup.search_params.search_usage,
         )
         tools = [tool for tool_list in tools_by_type.values() for tool in tool_list]
+        # Every user with a chat skill gets the skill tools, whatever the
+        # agent's tool selection. Restored and child agents receive them with
+        # the other configured tools.
+        if setup.chat_skills:
+            tools += [
+                SkillsListTool(setup.chat_skills),
+                SkillsReadTool(setup.chat_skills, user.id),
+            ]
 
         preferred_tool_id = setup.preferred_tool_id
         if preferred_tool_id is not None and preferred_tool_id not in {
@@ -865,6 +874,7 @@ def create_chat_agent(
                 all_injected_file_metadata=setup.all_injected_file_metadata,
                 skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
                 or setup.skip_clarification,
+                skill_instructions=setup.skill_instructions,
                 checkpoint=setup.checkpoint,
                 previous_run_id=setup.previous_run_id,
             )
@@ -874,20 +884,7 @@ def create_chat_agent(
             setup.previous_run_id,
             setup=setup,
             llm=llm,
-            # Every user with a chat skill gets the skill tools, whatever the
-            # agent's tool selection. Restored and child agents receive them
-            # with the other configured tools.
-            tools=[
-                *tools,
-                *(
-                    [
-                        SkillsListTool(setup.chat_skills),
-                        SkillsReadTool(setup.chat_skills, user.id),
-                    ]
-                    if setup.chat_skills
-                    else []
-                ),
-            ],
+            tools=tools,
             inject_memories=user.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,

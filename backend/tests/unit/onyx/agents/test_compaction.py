@@ -385,7 +385,6 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
-        skill_instructions={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -394,7 +393,6 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
-        skill_instructions={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -854,7 +852,6 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
-        skill_instructions={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -1024,9 +1021,7 @@ def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
         response_messages=[],
     )
     source: list[Message] = [
-        *convert_chat_history(
-            [question], files=[], skill_instructions={version_id: "Sort by area."}
-        ).messages,
+        *convert_chat_history([question], files=[]).messages,
         AssistantMessage(
             id="work", content=[TextContent(text="Earlier research context. " * 1000)]
         ),
@@ -1044,11 +1039,21 @@ def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
         CompactionCheckpoint(summary="Summary", covered_through_message_id="work"),
         input_start=0,
     )
+    prompt = prepare_prompt(
+        remaining,
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+        skill_instructions={version_id: "Sort by area."},
+    )
 
-    # The question stays the user's task; its skill text is summarized away.
-    assert [message.text for message in remaining] == [
+    # The question stays the user's task, and its skill follows it.
+    assert [message.text for message in prompt] == [
         "Conversation summary:\nSummary",
         TASK,
+        "<skill>\n<name>triage</name>\nSort by area.\n</skill>",
         "Child research findings",
     ]
 

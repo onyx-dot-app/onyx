@@ -1,10 +1,14 @@
 import re
-from typing import Any, Final
+from typing import Annotated, Any, Final
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
+SKILL_NAME_MAX_LENGTH: Final = 64
+SkillName = Annotated[
+    str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
+]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
 
 
@@ -28,8 +32,8 @@ class SkillMetadata(BaseModel):
     @field_validator("name")
     @classmethod
     def validate_name(cls, value: str) -> str:
-        if len(value) > 64:
-            raise ValueError("must be at most 64 characters")
+        if len(value) > SKILL_NAME_MAX_LENGTH:
+            raise ValueError(f"must be at most {SKILL_NAME_MAX_LENGTH} characters")
         if not SKILL_NAME_PATTERN.fullmatch(value):
             raise ValueError(
                 "must contain only lowercase letters, numbers, and single hyphens"

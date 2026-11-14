@@ -59,6 +59,7 @@ from onyx.prompts.deep_research.research_agent import (
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
+from onyx.tools.constants import SKILLS_READ_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -95,7 +96,12 @@ class ResearchAgent(Agent, RestorableFeature):
         previous_run_id: str | None = None,
         agent_id: str | None = None,
     ) -> None:
-        allowed_tools = {SearchTool.NAME, WebSearchTool.NAME, OpenURLTool.NAME}
+        allowed_tools = {
+            SearchTool.NAME,
+            WebSearchTool.NAME,
+            OpenURLTool.NAME,
+            SKILLS_READ_TOOL_NAME,
+        }
         self.application_tools = [tool for tool in tools if tool.name in allowed_tools]
         self.search_context = SearchContext()
         self.started = time.monotonic()

@@ -575,7 +575,8 @@ def list_runtime_skills_for_user(
 
 def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
     """The custom skills the user runs, by name, with the name, description
-    and id of the version the user runs, in one query. Built-in skills and
+    (its `metadata.short-description` when it has one) and id of the version
+    the user runs, in one query. Built-in skills and
     skills of an external app need the Craft sandbox, so chat leaves them out.
     Anonymous users have none."""
     if user.is_anonymous:
@@ -588,7 +589,15 @@ def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
         _where_user_runs_skill(
             select(
                 name,
+                # As Codex lists skills, a short description wins.
                 func.coalesce(
+                    func.nullif(
+                        frontmatter_in_version(
+                            ("metadata", "short-description"),
+                            run_version.id.expression,
+                        ),
+                        "",
+                    ),
                     frontmatter_in_version("description", run_version.id.expression),
                     Skill.description,
                 ),

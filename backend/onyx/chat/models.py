@@ -1,4 +1,4 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from enum import Enum
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -19,6 +19,7 @@ from onyx.agents.models import (
     AgentInfo,
     CompactionCheckpoint,
     CompactionMetadata,
+    InputMessageMetadata,
     MessageDelivery,
     RunFailure,
     RunFailureKind,
@@ -29,7 +30,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
-from onyx.chat.mention_models import Mention, RecordedMention
+from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
@@ -89,7 +90,7 @@ class PendingChatMessage(BaseModel):
     target_response_id: int | None
     deep_research: bool = False
     llm_override: LLMOverride | None = None
-    mentions: list[Mention]
+    mentions: Mentions
 
 
 class QueuedChatTurn(BaseModel):
@@ -106,8 +107,45 @@ class PromptMetadata(CompactionMetadata):
     should_cache: bool = False
     file_id: str | None = None
     is_reminder: bool = False
-    # Set on the SKILL.md message before the question that invoked it.
-    skill_name: str | None = None
+    # What a question picked. Prompt assembly puts the SKILL.md of each picked
+    # skill after the question.
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class ChatInputMetadata(InputMessageMetadata):
+    """A user message accepted between steps, with what it picked. Prompt
+    assembly puts the SKILL.md of each picked skill after the message."""
+
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class AcceptedSkillInstructions(BaseModel):
+    """The SKILL.md text of the skills an accepted message picked, read with
+    the user's access at acceptance. It reaches step preparation only."""
+
+    instructions: dict[UUID, str]
+
+
+def accepted_skill_instructions(messages: Sequence[Message]) -> dict[UUID, str]:
+    """The SKILL.md text that accepted messages carry to step preparation."""
+    return {
+        version_id: instructions
+        for message in messages
+        if isinstance(message.metadata, InputMessageMetadata)
+        and isinstance(message.metadata.content_metadata, AcceptedSkillInstructions)
+        for version_id, instructions in (
+            message.metadata.content_metadata.instructions.items()
+        )
+    }
+
+
+def recorded_mentions(message: Message) -> list[RecordedMention]:
+    """What a question or an accepted message picked."""
+    return (
+        message.metadata.mentions
+        if isinstance(message.metadata, (PromptMetadata, ChatInputMetadata))
+        else []
+    )
 
 
 class FileContextResult(BaseModel):
@@ -793,6 +831,8 @@ class ChatTurnSetup(BaseModel):
     user_memory_context: UserMemoryContext
     # The custom skills the user runs, for the catalog and the skill tools.
     chat_skills: list[ChatSkill]
+    # The SKILL.md text of each picked skill version the user can see now.
+    skill_instructions: dict[UUID, str]
     # For deep research: was the last assistant message a clarification request?
     skip_clarification: bool
     cache: CacheBackend

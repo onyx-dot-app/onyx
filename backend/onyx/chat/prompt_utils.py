@@ -16,6 +16,7 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     PromptMetadata,
     SearchPassages,
+    recorded_mentions,
 )
 from onyx.chat.prompt_formatting import (
     count_message_tokens,
@@ -59,6 +60,11 @@ from onyx.prompts.prompt_utils import (
     get_company_context,
     substitute_user_placeholders,
 )
+from onyx.prompts.skill_prompts import (
+    MENTIONED_SKILL_PROMPT,
+    MENTIONED_SKILL_TRUNCATED_NOTE,
+    MENTIONED_SKILL_UNAVAILABLE,
+)
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     GENERATE_IMAGE_GUIDANCE,
@@ -83,6 +89,7 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
+from onyx.skills.chat import MAX_SKILL_PROMPT_BYTES
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import LlmPythonExecutionResult
@@ -612,10 +619,34 @@ def prepare_prompt(
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
     context_file_citations: Mapping[str, int] | None = None,
+    skill_instructions: Mapping[UUID, str] | None = None,
 ) -> list[Message]:
-    """Assemble detached prompt messages without modifying borrowed inputs."""
+    """Assemble detached prompt messages without modifying borrowed inputs.
+
+    The SKILL.md of each skill that a message picked follows the message, from
+    ``skill_instructions``; a version missing there gets a note that the skill
+    is unavailable. History holds only the record of the picks."""
     # Nested payloads stay read-only until output formatting detaches them.
-    history = [message.model_copy() for message in messages]
+    history: list[Message] = []
+    for message in messages:
+        history.append(message.model_copy())
+        for mention in recorded_mentions(message):
+            instructions = (skill_instructions or {}).get(mention.version_id)
+            if instructions is None:
+                instructions = MENTIONED_SKILL_UNAVAILABLE
+            elif len(encoded := instructions.encode()) > MAX_SKILL_PROMPT_BYTES:
+                kept = encoded[:MAX_SKILL_PROMPT_BYTES].decode(errors="ignore")
+                instructions = kept + MENTIONED_SKILL_TRUNCATED_NOTE.format(
+                    name=mention.name, start_char=len(kept)
+                )
+            history.append(
+                UserMessage(
+                    id=f"{message.id}:skill:{mention.version_id}",
+                    content=MENTIONED_SKILL_PROMPT.format(
+                        name=mention.name, instructions=instructions
+                    ),
+                )
+            )
     _deduplicate_search_passages(history)
     for message in history:
         metadata = prompt_metadata(message).model_copy()

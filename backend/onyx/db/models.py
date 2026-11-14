@@ -3791,6 +3791,8 @@ class AcceptedChatInput(BaseModel):
     source: InputSource
     source_run_id: str | None = None
     content: str
+    # What a user message picked, as its acceptance resolved it.
+    mentions: list[RecordedMention] = Field(default_factory=list)
 
 
 class ChatResponseItem(Base):

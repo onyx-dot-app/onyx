@@ -42,11 +42,7 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import incognito_session_ended
-from onyx.chat.mention_models import (
-    RecordedMention,
-    RecordedSkillMention,
-    SkillMention,
-)
+from onyx.chat.mention_models import RecordedSkillMention, resolve_mentions
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
@@ -58,6 +54,7 @@ from onyx.chat.models import (
     QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
+    recorded_mentions,
 )
 from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
@@ -338,17 +335,7 @@ def prepare_chat_turn(
             # One read serves the catalog, the skill tools and the skills the
             # user tagged in an accepted question.
             chat_skills = list_chat_skills(db_session, user)
-            skills_by_name = {skill.name: skill for skill in chat_skills}
-            # A mention the user cannot use is ignored, not rejected.
-            mentions: list[RecordedMention] = []
-            for mention in dict.fromkeys(new_msg_req.mentions):
-                match mention:
-                    case SkillMention(name=name) if name in skills_by_name:
-                        mentions.append(
-                            RecordedSkillMention(
-                                name=name, version_id=skills_by_name[name].version_id
-                            )
-                        )
+            mentions = resolve_mentions(new_msg_req.mentions, chat_skills)
             accepted_text = None
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
@@ -496,8 +483,8 @@ def prepare_chat_turn(
                     ),
                     # A mention identifies a record, such as a skill's name and
                     # version, not conversation content, so a content-free
-                    # question keeps its mentions and its skill messages stay on
-                    # the branch.
+                    # question keeps its mentions and later turns still get its
+                    # skills.
                     mentions=mentions,
                     db_session=db_session,
                     commit=False,
@@ -664,11 +651,17 @@ def prepare_chat_turn(
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
             )
+            # The skills picked by questions and by messages accepted
+            # between steps, read with the user's current access.
             skill_instructions = read_versions_instructions(
                 {
                     mention.version_id
                     for message in captured_history
-                    for mention in message.mentions
+                    for picked in (
+                        message.mentions,
+                        *map(recorded_mentions, message.response_messages),
+                    )
+                    for mention in picked
                     if isinstance(mention, RecordedSkillMention)
                 },
                 user.id,
@@ -722,7 +715,6 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
-            skill_instructions=skill_instructions,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -797,6 +789,7 @@ def prepare_chat_turn(
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
             chat_skills=chat_skills,
+            skill_instructions=skill_instructions,
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,

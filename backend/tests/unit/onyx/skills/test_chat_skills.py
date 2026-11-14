@@ -1,9 +1,12 @@
 from uuid import UUID, uuid4
 
+from onyx.agents.models import InputSource
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.mention_models import RecordedSkillMention, SkillMention
-from onyx.chat.models import ChatHistoryMessage
+from onyx.chat.models import ChatHistoryMessage, ChatInputMetadata
+from onyx.chat.prompt_utils import prepare_prompt
 from onyx.configs.constants import MessageType
+from onyx.llm.models import Message, UserMessage
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
@@ -104,22 +107,46 @@ def _mentioning_question(
     )
 
 
-def test_mentioned_skills_precede_their_question() -> None:
-    triage = RecordedSkillMention(name="triage", version_id=uuid4())
-    report = RecordedSkillMention(name="report", version_id=uuid4())
-
-    history = convert_chat_history(
-        [_mentioning_question(7, triage, report)],
-        files=[],
-        skill_instructions={triage.version_id: "Sort.", report.version_id: "Write."},
+def _assembled(messages: list[Message], instructions: dict[UUID, str]) -> list[Message]:
+    return prepare_prompt(
+        messages,
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+        skill_instructions=instructions,
     )
 
-    assert [message.id for message in history.messages] == [
+
+def test_picked_skills_follow_their_question_and_accepted_message() -> None:
+    triage = RecordedSkillMention(name="triage", version_id=uuid4())
+    report = RecordedSkillMention(name="report", version_id=uuid4())
+    history = convert_chat_history(
+        [_mentioning_question(7, triage, report)], files=[]
+    ).messages
+    accepted = UserMessage(
+        id="sent",
+        content="Now the report.",
+        metadata=ChatInputMetadata(source=InputSource.HUMAN, mentions=[report]),
+    )
+
+    assembled = _assembled(
+        [*history, accepted],
+        {triage.version_id: "Sort.", report.version_id: "Write."},
+    )
+
+    # History holds the record only; assembly puts each SKILL.md after its
+    # message, in picked order.
+    assert [message.id for message in history] == ["chat:7"]
+    assert [message.id for message in assembled] == [
+        "chat:7",
         f"chat:7:skill:{triage.version_id}",
         f"chat:7:skill:{report.version_id}",
-        "chat:7",
+        "sent",
+        f"sent:skill:{report.version_id}",
     ]
-    assert history.messages[0].text == "<skill>\n<name>triage</name>\nSort.\n</skill>"
+    assert assembled[1].text == "<skill>\n<name>triage</name>\nSort.\n</skill>"
 
 
 def test_mentioned_skill_is_cut_at_the_byte_limit_with_a_pointer() -> None:
@@ -143,13 +170,8 @@ def test_unreadable_mentioned_skill_says_it_is_unavailable() -> None:
 
 
 def _rendered_skill(skill: RecordedSkillMention, instructions: dict[UUID, str]) -> str:
-    return (
-        convert_chat_history(
-            [_mentioning_question(1, skill)], files=[], skill_instructions=instructions
-        )
-        .messages[0]
-        .text
-    )
+    history = convert_chat_history([_mentioning_question(1, skill)], files=[])
+    return _assembled(history.messages, instructions)[1].text
 
 
 def test_send_request_accepts_a_recorded_mention_on_resend() -> None:

@@ -2,6 +2,7 @@ import time
 from collections.abc import Callable, Mapping
 from functools import partial
 from threading import Lock
+from uuid import UUID
 
 from pydantic import JsonValue
 
@@ -27,7 +28,7 @@ from onyx.chat.citation_utils import (
     message_citation_sources,
     remap_received_citations,
 )
-from onyx.chat.models import PromptMetadata
+from onyx.chat.models import PromptMetadata, accepted_skill_instructions
 from onyx.chat.prompt_utils import prepare_prompt, with_language_section
 from onyx.configs.chat_configs import (
     DR_REPORT_LLM_TIMEOUT_S,
@@ -78,8 +79,10 @@ from onyx.prompts.deep_research.orchestration_layer import (
 )
 from onyx.prompts.deep_research.research_agent import MAX_RESEARCH_CYCLES
 from onyx.prompts.prompt_utils import get_current_llm_day_time
+from onyx.tools.constants import SKILLS_READ_TOOL_NAME
 from onyx.tools.file_snapshot import SavedContextFiles
 from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
@@ -115,8 +118,12 @@ class DeepResearchAgent(Agent, RestorableFeature):
         agent_id: str | None = None,
         additional_context: str | None = None,
         context_files: ExtractedContextFiles | None = None,
+        skill_instructions: Mapping[UUID, str] | None = None,
     ) -> None:
         self.application_tools = allowed_tools
+        # The SKILL.md text of the skills that messages picked, read with the
+        # user's access when the turn started or a message was accepted.
+        self.skill_instructions = dict(skill_instructions or {})
         self.token_counter = token_counter
         self.user_identity = user_identity
         self.language_section = language_section
@@ -160,6 +167,12 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 else THINK_TOOL_RESPONSE_MESSAGE,
             )
             for definition in get_orchestrator_tools(not self.is_reasoning_model)
+        ]
+        # A picked skill's SKILL.md can continue past what its question shows.
+        research_tools += [
+            tool.bind(ToolContext)
+            for tool in self.application_tools
+            if tool.name == SKILLS_READ_TOOL_NAME
         ]
         super().__init__(
             llm,
@@ -289,6 +302,9 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 FINAL_REPORT_PROMPT.format(current_datetime=now), self.language_section
             )
             reminder = USER_FINAL_REPORT_QUERY.format(research_plan=plan)
+        self.skill_instructions.update(
+            accepted_skill_instructions(state.received_inputs)
+        )
         with self._citation_lock:
             received = remap_received_citations(
                 state.received_inputs, self.citation_mapping
@@ -332,6 +348,7 @@ class DeepResearchAgent(Agent, RestorableFeature):
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata
                 else None,
+                skill_instructions=self.skill_instructions,
             ),
         )
 

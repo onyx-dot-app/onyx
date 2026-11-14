@@ -35,12 +35,17 @@ from tests.external_dependency_unit.craft.db_helpers import (
 )
 
 
-def _bundle(name: str, version: str) -> bytes:
+def _bundle(name: str, version: str, short_description: str | None = None) -> bytes:
+    metadata = (
+        f"metadata:\n  short-description: {short_description}\n"
+        if short_description
+        else ""
+    )
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as bundle_zip:
         bundle_zip.writestr(
             "SKILL.md",
-            f"---\nname: {name}\ndescription: Skill {version}\n---\n\n"
+            f"---\nname: {name}\ndescription: Skill {version}\n{metadata}---\n\n"
             f"Instructions {version}\n",
         )
     return output.getvalue()
@@ -106,7 +111,10 @@ def test_chat_skills_use_the_version_each_user_runs(
     assert plugin is not None
     first_version_id: UUID = plugin.current_version_id
     second = ingest_skill_bundle(
-        _bundle(name, "two"), f"{name}.zip", file_store, expected_name=name
+        _bundle(name, "two", short_description="Short two"),
+        f"{name}.zip",
+        file_store,
+        expected_name=name,
     )
     bundle_ids.append(second.bundle_file_id)
     replace_skill_bundle(
@@ -125,7 +133,8 @@ def test_chat_skills_use_the_version_each_user_runs(
     }
     org_skills = {skill.name: skill for skill in list_chat_skills(db_session, org_only)}
 
-    assert author_skills[name].description == "Skill two"
+    # A version's short description replaces its description.
+    assert author_skills[name].description == "Short two"
     assert org_skills[name].description == "Skill one"
     assert read_versions_instructions(
         [author_skills[name].version_id, org_skills[name].version_id],

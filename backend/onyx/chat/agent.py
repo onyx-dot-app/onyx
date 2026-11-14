@@ -1,6 +1,7 @@
 import time
 from collections.abc import Callable, Mapping
 from functools import partial
+from uuid import UUID
 
 from pydantic import JsonValue
 
@@ -32,6 +33,7 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     PromptMetadata,
     StagedChatFiles,
+    accepted_skill_instructions,
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
@@ -124,6 +126,7 @@ class ChatAgent(Agent, RestorableFeature):
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
         skills: list[ChatSkill] | None = None,
+        skill_instructions: Mapping[UUID, str] | None = None,
     ) -> None:
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
@@ -140,6 +143,9 @@ class ChatAgent(Agent, RestorableFeature):
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
         self.skills = list(skills or [])
+        # The SKILL.md text of the skills that messages picked, read with the
+        # user's access when the turn started or a message was accepted.
+        self.skill_instructions = dict(skill_instructions or {})
         self.skills_catalog_message = (
             SystemMessage(content=catalog)
             if (
@@ -349,6 +355,9 @@ class ChatAgent(Agent, RestorableFeature):
                     self._update_tool_context([message])
             # Query expansion applies to the current turn only.
             self.has_called_search_tool = False
+        self.skill_instructions.update(
+            accepted_skill_instructions(state.received_inputs)
+        )
         received = remap_received_citations(
             state.received_inputs, self.citation_processor.citation_to_doc
         )
@@ -430,6 +439,7 @@ class ChatAgent(Agent, RestorableFeature):
                 else None,
                 llm_config=self.llm.config,
                 available_tool_names=available_tool_names,
+                skill_instructions=self.skill_instructions,
             ),
         )
 
@@ -566,6 +576,7 @@ def build_chat_agent(
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
         skills=setup.chat_skills,
+        skill_instructions=setup.skill_instructions,
     )
 
 

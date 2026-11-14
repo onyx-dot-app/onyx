@@ -1,7 +1,7 @@
 """Rebuild chat agents and persist file resources needed to resume them."""
 
 import hashlib
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from io import BytesIO
 from typing import Annotated
 from uuid import UUID
@@ -97,6 +97,7 @@ def restore_chat_agent(
     tools: list[Tool],
     user_identity: LLMUserIdentity | None,
     create_subagent: Callable[[], Agent] | None = None,
+    skill_instructions: Mapping[UUID, str] | None = None,
 ) -> Agent:
     """Build feature code and resources; Agent.resume restores saved execution state."""
     snapshot = checkpoint.run_state
@@ -129,6 +130,7 @@ def restore_chat_agent(
             inject_memories_in_prompt=state.inject_memories,
             reminders_enabled=state.reminders_enabled,
             skills=state.skills,
+            skill_instructions=skill_instructions,
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
@@ -159,6 +161,7 @@ def restore_chat_agent(
         reasoning_effort=state.reasoning_effort,
         all_injected_file_metadata=state.file_metadata,
         skip_clarification=state.skip_clarification,
+        skill_instructions=skill_instructions,
         checkpoint=context.checkpoint,
         previous_run_id=snapshot.previous_run_id,
         agent_id=snapshot.agent_id,

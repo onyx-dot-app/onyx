@@ -18,6 +18,7 @@ from onyx.agents.models import (
 )
 from onyx.chat.models import (
     ChatExecutionRecord,
+    ChatInputMetadata,
     ChatResponseSnapshot,
     MessageRendering,
     ResponseRecord,
@@ -26,6 +27,7 @@ from onyx.chat.models import (
     SavedResponse,
     ToolRecordReference,
     ToolReplayData,
+    recorded_mentions,
 )
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
@@ -852,7 +854,15 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
                 UserMessage(
                     id=item.id,
                     content=item.content,
-                    metadata=InputMessageMetadata(
+                    # Only a message that picked skills has the chat metadata,
+                    # as when it was accepted.
+                    metadata=ChatInputMetadata(
+                        source=item.source,
+                        source_run_id=item.source_run_id,
+                        mentions=item.mentions,
+                    )
+                    if item.mentions
+                    else InputMessageMetadata(
                         source=item.source, source_run_id=item.source_run_id
                     ),
                 )
@@ -919,6 +929,7 @@ def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
                 if isinstance(origin, InputMessageMetadata)
                 else None,
                 content=sanitize_string(message.content),
+                mentions=recorded_mentions(message),
             )
         )
     if len({item.id for item in inputs}) != len(inputs):

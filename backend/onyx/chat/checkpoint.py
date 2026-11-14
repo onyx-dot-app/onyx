@@ -17,6 +17,7 @@ from onyx.agents.models import (
 from onyx.agents.tools import HumanToolAnswer
 from onyx.chat.models import (
     ChatCodeModeResult,
+    ChatInputMetadata,
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
@@ -41,6 +42,7 @@ _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
     "agent.input.v1": InputMessageMetadata,
+    "chat.input.v1": ChatInputMetadata,
     "prompt.metadata.v1": PromptMetadata,
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,

@@ -22,7 +22,7 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
 )
-from onyx.chat.mention_models import Mention
+from onyx.chat.mention_models import Mention, PickedMentions
 from onyx.chat.models import (
     AgentInboxWork,
     AgentResultState,
@@ -921,6 +921,9 @@ def read_run_inputs(
                     source=row.source,
                     source_run_id=str(row.source_response_id)
                     if row.source_response_id is not None
+                    else None,
+                    content_metadata=PickedMentions(mentions=row.mentions)
+                    if row.mentions
                     else None,
                 ),
             )
