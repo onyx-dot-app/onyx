@@ -12596,6 +12596,19 @@
           "tooltip": "이 타일을 전체 텍스트로 바꿔 입력창에 넣습니다"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} 제거"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "붙여넣은 텍스트: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "붙여넣은 텍스트 제거"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "추가 메뉴 열기",

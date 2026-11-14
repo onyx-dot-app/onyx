@@ -337,14 +337,12 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
           : undefined;
 
-      // If we already have messages (chat session started), always use chat mode
-      // (matches AppPage behavior where existing sessions bypass classification)
       const selectedModels = multiModel.isMultiModelActive
         ? multiModel.selectedModels
         : undefined;
 
-      // Search cannot use mentions, so a message with mentions routes to chat.
-      if (hasMessages || composed.mentions.length > 0) {
+      // Build an onChat closure that captures additionalContext for this submission
+      const onChat = () => {
         onSubmit({
           ...composed,
           currentMessageFiles: currentMessageFiles,
@@ -352,25 +350,21 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
           additionalContext,
           selectedModels,
         });
+      };
+      // If we already have messages (chat session started), always use chat mode
+      // (matches AppPage behavior where existing sessions bypass classification)
+      if (hasMessages) {
+        onChat();
         return;
       }
-
-      // Build an onChat closure that captures additionalContext for this submission
-      const onChat = (chatMessage: string) => {
-        onSubmit({
-          message: chatMessage,
-          mentions: [],
-          currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
-          additionalContext,
-          selectedModels,
-        });
-      };
 
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets phase to "searching"/"search-results" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(composed.message, onChat);
+      // Search cannot use mentions, so a message with mentions routes to chat.
+      await submitQuery(composed.message, onChat, {
+        chatOnly: composed.mentions.length > 0,
+      });
     },
     [
       hasMessages,

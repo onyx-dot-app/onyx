@@ -12596,6 +12596,19 @@
           "tooltip": "このタイルを全文に置き換えて入力欄に表示します"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} を削除"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "貼り付けたテキスト: {preview}、{meta}",
+          "removeButton": {
+            "ariaLabel": "貼り付けたテキストを削除"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "追加メニューを開く",

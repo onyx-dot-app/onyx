@@ -12596,6 +12596,19 @@
           "tooltip": "在输入框中用完整文本替换此卡片"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "移除 {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "粘贴的文本：{preview}，{meta}",
+          "removeButton": {
+            "ariaLabel": "移除粘贴的文本"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "打开添加菜单",

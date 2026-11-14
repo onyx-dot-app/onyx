@@ -1,5 +1,5 @@
-import type { Mention } from "@/lib/chat/types";
-import { startsToken, type PickerSections } from "@/lib/skills/picker";
+import type { ComposedMention, Mention, PlacedMention } from "@/lib/chat/types";
+import type { PickerSections } from "@/lib/skills/picker";
 
 /** Opens the chat's `@` menu; a picked mention shows as `@name` in the text. */
 export const MENTION_TRIGGER = "@";
@@ -19,45 +19,59 @@ export function filterMentionEntries(
   };
 }
 
-export interface PlacedMention {
-  index: number;
-  mention: Mention;
-}
-
-/** Each `@name` in `text` that is a whole token for one of `mentions`, in
- * text order. Text never mentions anything; this only places picked
- * mentions. */
-export function findMentions(
+/** Where each mention's tile goes in `text`, in text order. A mention with
+ * an `index` stays there when `text` has its `@name` there. Any other mention
+ * takes the first `@name` that no other tile holds, wherever it is in a word,
+ * so a recorded mention keeps its tile beside `(` or a word typed against it.
+ * Longer names go first, so `@code` never takes the start of `@code-review`.
+ * Each mention gets at most one tile, and one whose `@name` is gone gets
+ * none. Text never mentions anything; this only places picked mentions. */
+export function placeMentions(
   text: string,
-  mentions: readonly Mention[]
+  mentions: readonly ComposedMention[]
 ): PlacedMention[] {
   const placed: PlacedMention[] = [];
-  if (mentions.length === 0) return placed;
-  for (
-    let index = text.indexOf(MENTION_TRIGGER);
-    index !== -1;
-    index = text.indexOf(MENTION_TRIGGER, index + 1)
-  ) {
-    if (!startsToken(text, index)) continue;
-    const mention = mentions.find(
-      ({ name }) =>
-        text.startsWith(name, index + 1) &&
-        !/[\w-]/.test(text.charAt(index + 1 + name.length))
+  const isFree = (index: number, length: number) =>
+    placed.every(
+      (tile) =>
+        index + length <= tile.index ||
+        tile.index + MENTION_TRIGGER.length + tile.name.length <= index
     );
-    if (mention !== undefined) placed.push({ index, mention });
+  const unplaced: ComposedMention[] = [];
+  for (const mention of mentions) {
+    const token = `${MENTION_TRIGGER}${mention.name}`;
+    if (
+      mention.index !== undefined &&
+      text.startsWith(token, mention.index) &&
+      isFree(mention.index, token.length)
+    )
+      placed.push({
+        type: mention.type,
+        name: mention.name,
+        index: mention.index,
+      });
+    else unplaced.push(mention);
   }
-  return placed;
+  unplaced.sort((a, b) => b.name.length - a.name.length);
+  for (const mention of unplaced) {
+    const token = `${MENTION_TRIGGER}${mention.name}`;
+    let index = text.indexOf(token);
+    while (index !== -1 && !isFree(index, token.length))
+      index = text.indexOf(token, index + 1);
+    if (index !== -1)
+      placed.push({ type: mention.type, name: mention.name, index });
+  }
+  return placed.sort((a, b) => a.index - b.index);
 }
 
-/** The `mentions` whose `@name` is still in `text`, in `mentions` order. An
- * edited question keeps the recorded mentions that its new text still
- * has. */
-export function mentionsInText(
-  text: string,
-  mentions: readonly Mention[]
+/** The mentions the server gets: each one once, in order, without its
+ * place in the text. */
+export function uniqueMentions(
+  mentions: readonly ComposedMention[]
 ): Mention[] {
-  const present = new Set(
-    findMentions(text, mentions).map((placed) => placed.mention)
-  );
-  return mentions.filter((mention) => present.has(mention));
+  const unique = new Map<string, Mention>();
+  for (const { type, name } of mentions)
+    if (!unique.has(`${type}:${name}`))
+      unique.set(`${type}:${name}`, { type, name });
+  return [...unique.values()];
 }

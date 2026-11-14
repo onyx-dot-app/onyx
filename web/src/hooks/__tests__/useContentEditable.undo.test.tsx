@@ -1,4 +1,4 @@
-import { act, render } from "@testing-library/react";
+import { act, render } from "@tests/setup/test-utils";
 import "@testing-library/jest-dom";
 import { useRef } from "react";
 import {

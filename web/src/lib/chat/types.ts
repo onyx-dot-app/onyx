@@ -23,12 +23,21 @@ export interface RecordedSkillMention extends SkillMention {
  * in `backend/onyx/chat/mention_models.py`. */
 export type RecordedMention = RecordedSkillMention;
 
+/** A mention as a question holds it: one per picked tile, with `index`, where
+ * its `@name` starts in the message. A mention known only from the server,
+ * such as a recorded or queued one, has no `index`. The server gets each
+ * mention once, without `index` (`lib/chat/mentions.ts:uniqueMentions`). */
+export type ComposedMention = Mention & { index?: number };
+
+/** A mention at a known place in its message. */
+export type PlacedMention = Mention & { index: number };
+
 /** A question as the user wrote it: its text and what the user tagged in it.
  * Mentions come only from the `@` menu; the text holds an `@name` for each,
  * and plain `@name` text mentions nothing. */
 export interface ComposedMessage {
   message: string;
-  mentions: Mention[];
+  mentions: ComposedMention[];
 }
 
 /** A question that did not reach the server, to put back in the composer. */
@@ -79,8 +88,8 @@ export interface ChatSessionQueue {
   /**
    * A queued or interrupting message's turn starts as Deep Research when
    * `deepResearch` is set, with `llmOverride` as its model and the SKILL.md
-   * files of its mentioned skills before its question. A `send` into a
-   * running response applies no mentions.
+   * files of its mentioned skills before its question. A `send` gives its
+   * mentions to the running response.
    */
   submit: (
     composed: ComposedMessage,

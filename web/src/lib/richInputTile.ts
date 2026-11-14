@@ -124,6 +124,9 @@ export interface RichTileConfig {
   /** Set for mention tiles. Stored as data-mention-type and
    * data-mention-name. */
   mention?: Mention;
+  /** Translated accessible names of the tile and its remove button. */
+  label: string;
+  removeLabel: string;
 }
 
 export function createRichInputTileNode(
@@ -151,12 +154,7 @@ export function createRichInputTileNode(
     : config.text.length > 200
       ? config.text.slice(0, 200) + "…"
       : config.text;
-  tile.setAttribute(
-    "aria-label",
-    mention
-      ? config.preview
-      : "Pasted text: " + config.preview + ", " + config.meta
-  );
+  tile.setAttribute("aria-label", config.label);
 
   const icon = createSvgIcon(
     spec.icon.paths,
@@ -188,10 +186,7 @@ export function createRichInputTileNode(
   removeBtn.className = "rich-input-tile-remove";
   removeBtn.setAttribute("data-rich-tile-remove", "");
   removeBtn.setAttribute("role", "button");
-  removeBtn.setAttribute(
-    "aria-label",
-    mention ? `Remove ${config.preview}` : "Remove pasted text"
-  );
+  removeBtn.setAttribute("aria-label", config.removeLabel);
   removeBtn.appendChild(createSvgIcon([X_PATH], "0 0 28 28", 10, 2.5));
   tile.appendChild(removeBtn);
 

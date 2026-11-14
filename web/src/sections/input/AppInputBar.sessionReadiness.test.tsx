@@ -912,7 +912,7 @@ test("an edited queued message is saved as the draft before the composer shows i
   );
 });
 
-test("an edited queued message keeps its picks, and a send with picks queues", async () => {
+test("an edited queued message keeps its picks, and a send carries them into the running response", async () => {
   pending = [
     {
       ...pending[0]!,
@@ -935,12 +935,11 @@ test("an edited queued message keeps its picks, and a send with picks queues", a
     1
   );
 
-  // A send into the running response would apply no skills.
   await user.type(textbox, "{Enter}");
   await waitFor(() => expect(pending).toHaveLength(1));
   expect(pending[0]).toMatchObject({
     message: "@code-review queued",
-    delivery: "queue",
+    delivery: "send",
     mentions: [{ type: "skill", name: "code-review" }],
   });
 });

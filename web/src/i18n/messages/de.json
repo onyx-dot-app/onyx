@@ -12596,6 +12596,19 @@
           "tooltip": "Diese Kachel durch ihren vollständigen Text ersetzen"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "{name} entfernen"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Eingefügter Text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Eingefügten Text entfernen"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Hinzufügen-Menü öffnen",

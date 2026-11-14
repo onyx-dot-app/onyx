@@ -49,7 +49,8 @@
 - **In chat**, the agent sees the names and descriptions of the user's
   enabled custom skills. It reads a skill's SKILL.md with `skills_read` when
   the task matches. A skill the user mentions in a question adds that
-  SKILL.md before the question, at the version the user ran when they sent it; a later
+  SKILL.md before the question, at the version the user ran when the
+  question was sent or, for a queued question, when it was accepted; a later
   edit does not change what earlier turns see. After the skill is deleted or
   the user can no longer see it, earlier turns get a short "no longer
   available" note instead. Built-in skills
@@ -67,10 +68,13 @@
   follow the same rules and match a substring
   (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
   mentions a skill, so typed or pasted `@name` text does not. Removing a tile
-  by delete or cut removes its mention, and undo brings it back. A message
-  with mentions that the user sends while a response runs is queued instead,
-  because a send into a running response applies no mentions. While the
-  picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
+  by delete or cut removes its mention, and undo brings it back. A draft,
+  a failed send's restore and voice input keep each tile where it was, also
+  against other text such as `(` or a word typed after it, and leave typed
+  `@name` text as text. A message with picks that the user sends while a
+  response runs carries its mentions like any pending input: a send gives
+  them to the running response, and a queued or interrupting message to its
+  own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
   view, a sent question shows each skill it mentioned as a chip, first from
   the picks and then from the recorded mentions. A shared view of the chat
   gets no mentions, and Craft shows plain text.
@@ -189,9 +193,9 @@ discriminated union on `type`, and a skill (`SkillMention`, `{type: "skill",
 name}`) is its only kind. Later kinds, such as plugins and MCP servers, join
 the union; the request rejects a kind it does not know. The client sends the
 mentions in `SendMessageRequest.mentions`, or in
-`PendingChatMessageRequest.mentions`, which `ChatInput.mentions` keeps until
-a queued or interrupting message's turn starts; a send into a running
-response ignores them. The server never parses message text. When
+`PendingChatMessageRequest.mentions`, which `ChatInput.mentions` keeps for
+the pending message; a send into a running response gives them to that
+response. The server never parses message text. When
 `prepare_chat_turn` accepts the question, it resolves each mention by type:
 a skill against `list_chat_skills`. It ignores skills the user cannot use and
 records each resolved skill with its version id (`RecordedSkillMention`) in
@@ -200,14 +204,22 @@ and the message detail carry the recorded mentions (`ChatTurnSetup.mentions`).
 The composer (`sections/input/AppInputBar.tsx`) holds the mentions as
 mention tiles in its input (`hooks/useContentEditable.ts`), so undo, cut and
 code that replaces the text change them with the text. A send reads the text
-and the tiles as one `lib/chat/types.ts:ComposedMessage`. Its draft, a failed
-send's restore and a withdrawn queued message keep that pair and rebuild a
-tile for each mention's `@name` (`lib/chat/mentions.ts`). The `@` menu uses
+and the tiles as one `lib/chat/types.ts:ComposedMessage`: one mention per
+tile, each with `index`, where its `@name` starts in the text
+(`lib/contentEditable.ts:readContent`). The server gets each mention once,
+without `index` (`lib/chat/mentions.ts:uniqueMentions`). The draft, a failed
+send's restore and voice transcription keep the indexes, so
+`useContentEditable`'s `setMessage` puts each tile back at its index. Only
+server data has no index: a withdrawn queued message, an edited question and
+the chips of a sent question place each recorded mention on the first
+`@name` of its skill that no other tile holds, longer names first
+(`lib/chat/mentions.ts:placeMentions`). Older drafts, plain text or mentions
+without an index, restore by that rule too. The `@` menu uses
 the Craft picker's `PickerSections`: chat fills only `skills`, and a new kind
-adds its section and maps its picker entry to a mention. A mention and the
-picker's `@` follow one rule, `lib/skills/picker.ts:startsToken`. An edit
-sends the recorded mentions that its text still has, and a resend or
-regeneration sends the recorded mentions. The agent preview passes its skill mentions to
+adds its section and maps its picker entry to a mention. The picker opens at
+a token start (`lib/skills/picker.ts:startsToken`), but a tile can sit
+against any text. An edit sends the recorded mentions that its text still
+has, and a resend or regeneration sends the recorded mentions. The agent preview passes its skill mentions to
 the new chat in the `skills` URL parameter. Chat history
 adds each recorded SKILL.md before its question ([[context-assembly]]), read
 for all questions in one query by `skills/content.py:read_versions_instructions`.

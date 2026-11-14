@@ -27,6 +27,8 @@ import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
 import { draftKey } from "@/hooks/useDraft";
+import type MicrophoneButton from "@/sections/input/MicrophoneButton";
+import type { ComposedMessage } from "@/lib/chat/types";
 
 jest.mock("@/lib/hooks", () => ({
   useLlmManager: () => ({ isLoadingProviders: true }),
@@ -51,8 +53,17 @@ jest.mock("@/providers/QueryControllerProvider", () => ({
 jest.mock("@/providers/VoiceModeProvider", () => ({
   useVoiceMode: () => ({ stopTTS: jest.fn() }),
 }));
+let mockSttEnabled = false;
 jest.mock("@/hooks/useVoiceStatus", () => ({
-  useVoiceStatus: () => ({ sttEnabled: false }),
+  useVoiceStatus: () => ({ sttEnabled: mockSttEnabled }),
+}));
+let mockMicrophone: React.ComponentProps<typeof MicrophoneButton> | null = null;
+jest.mock("@/sections/input/MicrophoneButton", () => ({
+  __esModule: true,
+  default: (props: React.ComponentProps<typeof MicrophoneButton>) => {
+    mockMicrophone = props;
+    return null;
+  },
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -177,6 +188,8 @@ beforeEach(() => {
   mockUser = null;
   mockChatSkills = NO_SKILLS;
   mockIncognitoEnabled = false;
+  mockSttEnabled = false;
+  mockMicrophone = null;
   mockProjectsContext.currentMessageFiles = [];
   mockProjectsContext.setCurrentMessageFiles.mockClear();
 });
@@ -281,7 +294,7 @@ describe("restore after a failed send", () => {
     await setupUser().type(input, "{Enter}");
     expect(onSubmit).toHaveBeenCalledWith({
       message: "failed @code-review message",
-      mentions: [{ type: "skill", name: "code-review" }],
+      mentions: [{ type: "skill", name: "code-review", index: 7 }],
     });
   });
 
@@ -510,7 +523,7 @@ describe("`@` skill mentions", () => {
     await user.keyboard("now{Enter}");
     expect(onSubmit).toHaveBeenCalledWith({
       message: "use @code-review now",
-      mentions: [{ type: "skill", name: "code-review" }],
+      mentions: [{ type: "skill", name: "code-review", index: 4 }],
     });
   });
 
@@ -538,7 +551,7 @@ describe("`@` skill mentions", () => {
 
     expect(onSubmit).toHaveBeenCalledWith({
       message: "use @code-review now",
-      mentions: [{ type: "skill", name: "code-review" }],
+      mentions: [{ type: "skill", name: "code-review", index: 4 }],
     });
   });
 
@@ -584,7 +597,7 @@ describe("`@` skill mentions", () => {
     await user.type(screen.getByRole("textbox"), "{Enter}");
     expect(onSubmit).toHaveBeenCalledWith({
       message: "use @code-review ",
-      mentions: [{ type: "skill", name: "code-review" }],
+      mentions: [{ type: "skill", name: "code-review", index: 4 }],
     });
   });
 
@@ -633,10 +646,109 @@ describe("`@` skill mentions", () => {
 
       expect(onSubmit).toHaveBeenCalledWith({
         message: "use @code-review now",
-        mentions: [{ type: "skill", name: "code-review" }],
+        mentions: [{ type: "skill", name: "code-review", index: 4 }],
       });
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  /** Puts the caret before character `offset` of the input's first text
+   * node. */
+  function caretAt(offset: number) {
+    const text = screen.getByRole("textbox").firstChild;
+    if (!(text instanceof Text)) throw new Error("Expected a text node first");
+    act(() => window.getSelection()?.collapse(text, offset));
+  }
+
+  // Each composition is sent, then saved as a draft and restored, then put
+  // back after a failed send; every time the tiles stay where they were.
+  test.each<
+    [
+      string,
+      (user: ReturnType<typeof setupUser>) => Promise<void>,
+      ComposedMessage,
+    ]
+  >([
+    [
+      "a tile with `(` before it and a word typed against it",
+      async (user) => {
+        await pickCodeReview(user);
+        await user.type(screen.getByRole("textbox"), "{Backspace}now)");
+        caretAt("use ".length);
+        await user.keyboard("(");
+      },
+      {
+        message: "use (@code-reviewnow)",
+        mentions: [{ type: "skill", name: "code-review", index: 5 }],
+      },
+    ],
+    [
+      "typed `@name` text beside a tile of the same skill",
+      async (user) => {
+        await user.paste("@code-review vs ");
+        await pickCodeReview(user);
+      },
+      {
+        message: "@code-review vs use @code-review ",
+        mentions: [{ type: "skill", name: "code-review", index: 20 }],
+      },
+    ],
+  ])(
+    "%s survives the draft and a failed send",
+    async (_name, compose, expected) => {
+      jest.useFakeTimers();
+      try {
+        const user = setupUser({ advanceTimers: jest.advanceTimersByTime });
+        const first = render(<Composer plugins={[]} />);
+        await compose(user);
+        expect(skillTiles()).toHaveLength(expected.mentions.length);
+        // The draft saves after a delay.
+        act(() => jest.advanceTimersByTime(300));
+        first.unmount();
+
+        const inputBarRef = createRef<AppInputBarHandle>();
+        const onSubmit = jest.fn(() => inputBarRef.current?.reset());
+        render(
+          <Composer
+            plugins={[]}
+            inputBarRef={inputBarRef}
+            onSubmit={onSubmit}
+          />
+        );
+        expect(skillTiles()).toHaveLength(expected.mentions.length);
+        await user.type(screen.getByRole("textbox"), "{Enter}");
+        expect(onSubmit).toHaveBeenLastCalledWith(expected);
+
+        act(() => inputBarRef.current?.restore({ ...expected, files: [] }));
+        expect(skillTiles()).toHaveLength(expected.mentions.length);
+        await user.type(screen.getByRole("textbox"), "{Enter}");
+        expect(onSubmit).toHaveBeenCalledTimes(2);
+        expect(onSubmit).toHaveBeenLastCalledWith(expected);
+      } finally {
+        jest.useRealTimers();
+      }
+    }
+  );
+
+  test("voice input keeps the tiles, and its auto-send sends them", async () => {
+    mockSttEnabled = true;
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    await pickCodeReview(setupUser());
+
+    const microphone = mockMicrophone;
+    if (!microphone) throw new Error("The microphone button did not render");
+    act(() => microphone.onTranscription("use @code-review  please"));
+    expect(screen.getByRole("textbox")).toHaveTextContent(
+      "use @code-review please"
+    );
+    expect(skillTiles()).toHaveLength(1);
+
+    act(() => microphone.onAutoSend?.("use @code-review  please now"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "use @code-review  please now",
+      mentions: [{ type: "skill", name: "code-review", index: 4 }],
+    });
   });
 });

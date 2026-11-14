@@ -51,6 +51,8 @@ describe("skill mention tile stays in sync with the Opal Badge + sparkle icon", 
       preview: "@pptx",
       meta: "",
       mention: { type: "skill", name: "pptx" },
+      label: "@pptx",
+      removeLabel: "Remove @pptx",
     });
   }
 
@@ -70,6 +72,8 @@ describe("paste tile stays in sync with the Opal Badge + clipboard icon", () => 
       text: "some long pasted text",
       preview: "some long pasted…",
       meta: "21 chars",
+      label: "Pasted text",
+      removeLabel: "Remove pasted text",
     });
   }
 

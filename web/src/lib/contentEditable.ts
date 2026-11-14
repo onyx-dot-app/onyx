@@ -352,28 +352,46 @@ const BLOCK_TAGS = new Set([
   "H6",
 ]);
 
-export function getTextContent(element: HTMLElement): string {
-  const parts: string[] = [];
-  const nodes = Array.from(element.childNodes);
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]!;
-    if (node.nodeType === Node.TEXT_NODE) {
-      parts.push(node.textContent ?? "");
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as HTMLElement;
-      if (el.hasAttribute("data-rich-tile")) {
-        parts.push(el.getAttribute("data-text") ?? "");
-      } else if (el.tagName === "BR") {
-        parts.push("\n");
-      } else {
-        if (i > 0 && BLOCK_TAGS.has(el.tagName)) {
-          parts.push("\n");
+/** A rich tile and where its text starts in the input's text. */
+export interface TextTile {
+  tile: HTMLElement;
+  index: number;
+}
+
+/** The input's text, where each rich tile reads as its `data-text`, and the
+ * tiles in text order. */
+export function readContent(element: HTMLElement): {
+  text: string;
+  tiles: TextTile[];
+} {
+  let text = "";
+  const tiles: TextTile[] = [];
+  function walk(parent: HTMLElement) {
+    const nodes = parent.childNodes;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent ?? "";
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.hasAttribute("data-rich-tile")) {
+          tiles.push({ tile: el, index: text.length });
+          text += el.getAttribute("data-text") ?? "";
+        } else if (el.tagName === "BR") {
+          text += "\n";
+        } else {
+          if (i > 0 && BLOCK_TAGS.has(el.tagName)) text += "\n";
+          walk(el);
         }
-        parts.push(getTextContent(el));
       }
     }
   }
-  return parts.join("");
+  walk(element);
+  return { text, tiles };
+}
+
+export function getTextContent(element: HTMLElement): string {
+  return readContent(element).text;
 }
 
 /**

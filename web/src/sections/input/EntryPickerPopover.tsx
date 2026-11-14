@@ -18,7 +18,7 @@ import {
   type PickerSections,
 } from "@/lib/skills/picker";
 import { pickerEntryIcon } from "@/lib/skills/pickerIcons";
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 
 interface EntryPickerPopoverProps {
   open: boolean;
@@ -243,7 +243,7 @@ function buildMenuChildren({
   return children;
 }
 
-function SectionHeader({ label }: { label: string }) {
+function SectionHeader({ label }: { label: string | RichStr }) {
   return (
     <div className="px-2 pt-1 pb-0.5">
       <Text font="secondary-action" color="text-03">
@@ -254,9 +254,9 @@ function SectionHeader({ label }: { label: string }) {
 }
 
 interface SkillRowProps {
-  title: string;
+  title: string | RichStr;
   slug: string;
-  description: string;
+  description: string | RichStr;
   selected: boolean;
   onHover: () => void;
   onPick: () => void;
@@ -297,7 +297,7 @@ function SkillRow({
 
 interface ConnectableRowProps {
   logo: IconFunctionComponent;
-  name: string;
+  name: string | RichStr;
   authenticated: boolean;
   testId: string;
   selected: boolean;

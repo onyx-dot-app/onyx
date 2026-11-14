@@ -12596,6 +12596,19 @@
           "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Quitar {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texto pegado: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Quitar texto pegado"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Abrir el menú de añadir",

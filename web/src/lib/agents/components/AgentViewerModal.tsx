@@ -32,6 +32,7 @@ import { InputSwitch } from "@opal/components";
 import { Button } from "@opal/components";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import type { ComposedMessage } from "@/lib/chat/types";
+import { uniqueMentions } from "@/lib/chat/mentions";
 import AppInputBar from "@/sections/input/AppInputBar";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { useLlmManager } from "@/lib/hooks";
@@ -208,7 +209,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
         [SEARCH_PARAM_NAMES.SEND_ON_LOAD]: "true",
       });
       // Skill mentions travel as skill names.
-      const skills = mentions
+      const skills = uniqueMentions(mentions)
         .filter((mention) => mention.type === "skill")
         .map((mention) => mention.name);
       if (skills.length > 0)

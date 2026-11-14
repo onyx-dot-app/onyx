@@ -87,6 +87,7 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
+import { uniqueMentions } from "@/lib/chat/mentions";
 import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
@@ -699,7 +700,10 @@ export default function useChatController({
           messageToResend
         );
         // The chips show at once; the server's record replaces them.
-        initialUserNode = { ...result.initialUserNode, mentions };
+        initialUserNode = {
+          ...result.initialUserNode,
+          mentions: uniqueMentions(mentions),
+        };
         initialAgentNode = result.initialAgentNode;
 
         // In multi-model mode, create N assistant placeholder nodes (one per model).
@@ -1062,7 +1066,7 @@ export default function useChatController({
           signal: controller.signal,
           message: currMessage,
           fileDescriptors: effectiveFileDescriptors,
-          mentions,
+          mentions: uniqueMentions(mentions),
           parentMessageId: (() => {
             const parentId =
               regenerationRequest?.parentMessage.messageId ??

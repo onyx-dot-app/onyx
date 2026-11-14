@@ -131,7 +131,7 @@ export interface AppInputBarProps {
   queue: ChatSessionQueue;
 }
 
-// Older drafts are plain text.
+// Older drafts are plain text, or have mentions without an `index`.
 type StoredChatDraft = ComposedMessage | string;
 
 function toChatDraft(draft: StoredChatDraft): ComposedMessage {
@@ -487,12 +487,18 @@ const AppInputBar = React.memo(
       const newer = isOpen
         ? composedRef.current
         : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
+      const offset = returned.message.length + 2;
       const combined: ComposedMessage = newer.message.trim()
         ? {
             message: `${returned.message}\n\n${newer.message}`,
-            // Restoring the draft rebuilds one tile per mention, so repeats
-            // here are harmless.
-            mentions: [...returned.mentions, ...newer.mentions],
+            mentions: [
+              ...returned.mentions,
+              ...newer.mentions.map((mention) =>
+                mention.index === undefined
+                  ? mention
+                  : { ...mention, index: mention.index + offset }
+              ),
+            ],
           }
         : returned;
       if (!isOpen) {
@@ -519,11 +525,7 @@ const AppInputBar = React.memo(
       if (
         await queue.submit(
           { ...composed, message: composed.message.trim() },
-          // A send into the running response applies no mentions, so a
-          // message with mentions waits for its own turn.
-          delivery === "send" && composed.mentions.length > 0
-            ? "queue"
-            : delivery,
+          delivery,
           {
             deepResearch: deepResearchEnabled && showDeepResearch,
             // The turn uses the model the picker shows, as a normal send does.
@@ -1015,7 +1017,12 @@ const AppInputBar = React.memo(
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton
-                onTranscription={(text) => setMessage(text)}
+                // The transcript follows the text that was there when
+                // recording started, so the tiles in that text keep their
+                // places.
+                onTranscription={(text) =>
+                  setMessage(text, composedRef.current.mentions)
+                }
                 disabled={disabled || chatState === "streaming"}
                 autoSend={user?.preferences?.voice_auto_send ?? false}
                 autoListen={user?.preferences?.voice_auto_playback ?? false}
@@ -1025,9 +1032,12 @@ const AppInputBar = React.memo(
                 stopRecordingRef={stopRecordingRef}
                 currentMessage={message}
                 onRecordingStart={() => {}}
-                onAutoSend={(text) => {
-                  submitMessage({ message: text, mentions: [] });
-                }}
+                onAutoSend={(text) =>
+                  submitMessage({
+                    message: text,
+                    mentions: composedRef.current.mentions,
+                  })
+                }
                 onMuteChange={setIsMuted}
                 setMutedRef={setMutedRef}
                 onAudioLevel={setAudioLevel}

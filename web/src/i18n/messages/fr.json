@@ -12596,6 +12596,19 @@
           "tooltip": "Remplacer cette vignette par son texte complet en ligne"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Retirer {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texte collé : {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Retirer le texte collé"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Ouvrir le menu d'ajout",

@@ -12596,6 +12596,19 @@
           "tooltip": "استبدال هذه البطاقة بنصها الكامل مباشرة"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "إزالة {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "نص ملصق: {preview}، {meta}",
+          "removeButton": {
+            "ariaLabel": "إزالة النص الملصق"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "فتح قائمة الإضافة",

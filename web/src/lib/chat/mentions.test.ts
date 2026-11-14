@@ -1,34 +1,56 @@
-import { findMentions, mentionsInText } from "@/lib/chat/mentions";
+import { placeMentions, uniqueMentions } from "@/lib/chat/mentions";
 import type { Mention } from "@/lib/chat/types";
 
 const skill = (name: string): Mention => ({ type: "skill", name });
+const at = (name: string, index: number) => ({ ...skill(name), index });
 
-describe("findMentions", () => {
-  it("finds whole-token mentions in text order", () => {
-    const triage = skill("triage");
-    const report = skill("pdf-report");
-    expect(
-      findMentions("@triage then @pdf-report, and\n@triage", [report, triage])
-    ).toEqual([
-      { index: 0, mention: triage },
-      { index: 13, mention: report },
-      { index: 30, mention: triage },
+describe("placeMentions", () => {
+  it("keeps a mention at its index, next to any text", () => {
+    expect(placeMentions("(@triage)x and @triage", [at("triage", 1)])).toEqual([
+      at("triage", 1),
     ]);
   });
 
-  // The `@` menu opens on the same token starts.
-  it("skips emails, mid-token mentions, longer names and other triggers", () => {
+  it("keeps a plain `@name` beside a tile of the same skill as text", () => {
+    expect(placeMentions("@triage then @triage", [at("triage", 13)])).toEqual([
+      at("triage", 13),
+    ]);
+  });
+
+  it("places a mention without an index on its first free `@name`", () => {
+    const triage = skill("triage");
+    const report = skill("pdf-report");
     expect(
-      findMentions("a@triage (@triage @triage-v2 @@triage $triage", [
-        skill("triage"),
-      ])
-    ).toEqual([]);
+      placeMentions("a@triagez, @pdf-report and @triage", [report, triage])
+    ).toEqual([at("triage", 1), at("pdf-report", 11)]);
+  });
+
+  it("places a mention whose index no longer holds its `@name` like one without", () => {
+    expect(placeMentions("say @triage", [at("triage", 0)])).toEqual([
+      at("triage", 4),
+    ]);
+  });
+
+  it("places longer names first and never overlaps tiles", () => {
+    expect(
+      placeMentions("@code-review @code", [skill("code"), skill("code-review")])
+    ).toEqual([at("code-review", 0), at("code", 13)]);
+    expect(
+      placeMentions("@code-review", [at("code-review", 0), skill("code")])
+    ).toEqual([at("code-review", 0)]);
+  });
+
+  it("drops a mention whose `@name` is gone", () => {
+    expect(placeMentions("@b and @a", [skill("a"), skill("gone")])).toEqual([
+      at("a", 7),
+    ]);
   });
 });
 
-describe("mentionsInText", () => {
-  it("keeps the mentions whose name is still in the text, in their order", () => {
-    const [a, gone, b] = [skill("a"), skill("gone"), skill("b")];
-    expect(mentionsInText("@b and @a", [a, gone, b])).toEqual([a, b]);
+describe("uniqueMentions", () => {
+  it("sends each mention once, in order, without its index", () => {
+    expect(
+      uniqueMentions([at("b", 0), skill("a"), at("b", 9), at("a", 4)])
+    ).toEqual([skill("b"), skill("a")]);
   });
 });

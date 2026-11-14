@@ -12596,6 +12596,19 @@
           "tooltip": "Replace this tile with its full text inline"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Remove {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Pasted text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Remove pasted text"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Open add menu",

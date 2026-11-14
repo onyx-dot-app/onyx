@@ -94,8 +94,7 @@ writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
 The two ID lines also carry `mentions`, what the saved question tagged with
 `@` as its turn recorded it ([[skills]]). Each mention has a `type`; `skill`
 is the only kind. A queued or interrupting turn sends them in the first line
-of its own stream. A `user_message` packet carries none, because a `send`
-into a running response applies no mentions. Session history returns the
+of its own stream. Session history returns the
 same field on the question, and an empty list in a shared view. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,

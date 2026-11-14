@@ -19,6 +19,7 @@ import {
   QueryControllerValue,
   QueryState,
   AppMode,
+  SubmitQueryOptions,
 } from "@/providers/QueryControllerProvider";
 
 interface QueryControllerProviderProps {
@@ -173,7 +174,7 @@ export function QueryControllerProvider({
     async (
       submitQuery: string,
       onChat: (query: string) => void,
-      filters?: BaseFilters
+      { filters, chatOnly = false }: SubmitQueryOptions = {}
     ): Promise<void> => {
       setQuery(submitQuery);
       setError(null);
@@ -185,7 +186,9 @@ export function QueryControllerProvider({
       // 2. Admin has disabled the Search UI
       // 3. Not in the "New Session" tab
       // 4. In "New Session" tab but app-mode is "Chat"
+      // 5. The caller needs chat
       if (
+        chatOnly ||
         !businessTier ||
         !searchUiEnabled ||
         !appPosition.isNewSession() ||

@@ -193,6 +193,8 @@ describe("createRichInputTileNode: mention tiles", () => {
       preview: "@pptx",
       meta: "",
       mention: { type: "skill", name: "pptx" },
+      label: "@pptx",
+      removeLabel: "Remove @pptx",
     });
   }
 
@@ -258,6 +260,8 @@ describe("getTextAroundCursor", () => {
         text: "tile",
         preview: "tile",
         meta: "",
+        label: "tile",
+        removeLabel: "Remove tile",
       })
     );
     el.appendChild(document.createTextNode("x y"));

@@ -10,11 +10,7 @@ import { Badge, Button, CopyButton, Text } from "@opal/components";
 import { SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
-import {
-  findMentions,
-  mentionsInText,
-  MENTION_TRIGGER,
-} from "@/lib/chat/mentions";
+import { placeMentions, MENTION_TRIGGER } from "@/lib/chat/mentions";
 import type { ComposedMessage, Mention } from "@/lib/chat/types";
 import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
@@ -112,11 +108,11 @@ export function HumanMessageBubble({
     if (!mentions?.length) return content;
     const parts: React.ReactNode[] = [];
     let textStart = 0;
-    for (const { index, mention } of findMentions(content, mentions)) {
+    for (const mention of placeMentions(content, mentions)) {
       parts.push(
-        content.slice(textStart, index),
+        content.slice(textStart, mention.index),
         <span
-          key={index}
+          key={mention.index}
           data-testid="mention-chip"
           data-mention-type={mention.type}
           className="inline-block align-middle"
@@ -129,7 +125,7 @@ export function HumanMessageBubble({
           />
         </span>
       );
-      textStart = index + MENTION_TRIGGER.length + mention.name.length;
+      textStart = mention.index + MENTION_TRIGGER.length + mention.name.length;
     }
     parts.push(content.slice(textStart));
     return richNodes(parts);
@@ -304,7 +300,7 @@ const HumanMessage = React.memo(function HumanMessage({
               onEdit?.(
                 {
                   message: editedContent,
-                  mentions: mentionsInText(editedContent, mentions ?? []),
+                  mentions: placeMentions(editedContent, mentions ?? []),
                 },
                 messageId
               );

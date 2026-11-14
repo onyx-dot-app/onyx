@@ -709,21 +709,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
-      // Incognito always routes to chat: the search path runs its own
-      // persistence and none of the incognito safeguards. Search cannot use
-      // mentions, so a message with mentions routes to chat too.
-      if (incognitoEnabledRef.current || composed.mentions.length > 0) {
-        onChat(composed);
-        return;
-      }
-
       // For new sessions, let the query controller handle routing.
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
-      await submitQuery(composed.message, (query) =>
-        onChat({ message: query, mentions: [] })
-      );
+      // Incognito always routes to chat: the search path runs its own
+      // persistence and none of the incognito safeguards. Search cannot use
+      // mentions, so a message with mentions routes to chat too.
+      await submitQuery(composed.message, () => onChat(composed), {
+        chatOnly: incognitoEnabledRef.current || composed.mentions.length > 0,
+      });
     },
     [
       currentChatSessionId,

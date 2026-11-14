@@ -52,8 +52,7 @@ export function useChatSkills(): PickerSections {
   const { user } = useUser();
   const { data } = useSWR<ChatSkill[]>(
     user ? SWR_KEYS.chatSkills : null,
-    errorHandlingFetcher,
-    { revalidateOnFocus: false }
+    errorHandlingFetcher
   );
   return useMemo(
     () => ({

@@ -792,6 +792,51 @@ test.describe("Skill Mentions", () => {
     }
   });
 
+  test("a pick next to other text keeps its tile through a reload and invokes its skill", async ({
+    chatPage,
+  }) => {
+    const nonce = mockLlmNonce();
+    const name = uniqueSkillName("mention-glued");
+    const instructions = `Answer in one line. ${nonce}`;
+    const skill = await createSkill(chatPage.page.request, name, instructions);
+    try {
+      await addMockLlmConversation({
+        name: nonce,
+        conditions: {
+          prompt_contains: [
+            `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`,
+          ],
+        },
+        replies: [{ text: `Answered with the skill. ${nonce}` }],
+      });
+      await chatPage.goto();
+
+      await chatPage.inputBar.typeText(`use @${name.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      // A word typed against the tile, without the space the pick added.
+      await chatPage.page.keyboard.press("Backspace");
+      await chatPage.page.keyboard.type("now)");
+      // `(` typed against the tile's other side.
+      await chatPage.inputBar.clickAtTextOffset("use".length);
+      await chatPage.page.keyboard.press("ArrowRight");
+      await chatPage.page.keyboard.type("(");
+      await expect(chatPage.inputBar.textbox).toHaveText(`use (@${name}now)`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+
+      // The draft brings the tile back in its place.
+      await chatPage.reload();
+      await expect(chatPage.inputBar.textbox).toHaveText(`use (@${name}now)`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(`Answered with the skill. ${nonce}`);
+      await chatPage.expectHumanMessage(`use (@${name}now)`);
+      await expect(chatPage.skillMentionChips(0)).toHaveText([`@${name}`]);
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
+  });
+
   test("the picker searches the whole word, and a click inside a word does not open it", async ({
     chatPage,
   }) => {
