@@ -138,13 +138,15 @@ README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modu
     ```
 
     Onyx does not start without `auth.userauth`: the API server stops with `USER_AUTH_SECRET is empty`.
-    Helm refuses to render the chart without the OpenSearch password. Keep this file private,
+    Helm refuses to render the chart without the OpenSearch password.
+    See also [Base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values). Keep this file private,
     or put the values in your own Secrets with `existingSecret`.
     Then add the file store values in [Azure Blob Storage file store](#azure-blob-storage-file-store).
   </Step>
 
   <Step title="Configure Helm">
-    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
   </Step>
 </Steps>
@@ -183,7 +185,8 @@ README](https://github.com/onyx-dot-app/onyx/blob/main/deployment/terraform/modu
   </Step>
 
   <Step title="Configure Helm">
-    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
   </Step>
 </Steps>
@@ -215,7 +218,11 @@ shared key access can stay off.
   </Step>
 
   <Step title="Set up the workload identity">
-    The Onyx `azure/onyx` module does this step for you. On your own cluster:
+    Every installation needs the pod label `azure.workload.identity/use:
+    "true"` on the API server and on each Celery worker, under their `podLabels` values.
+    The `azure/onyx` module cannot set it. Without the label, the pods get no token, and the Blob Storage calls fail.
+
+    The `azure/onyx` module does the other parts of this step for you. On your own cluster:
 
     - Turn on the OIDC issuer and Workload Identity on the cluster
     (`az aks update --enable-oidc-issuer --enable-workload-identity`).
@@ -225,8 +232,6 @@ shared key access can stay off.
     Use the same namespace and name in the federated credential subject
     (`system:serviceaccount:onyx:onyx-workload-access`).
     - Set `serviceAccount.create: false` and `serviceAccount.name` to that service account in your Helm values.
-    - Add the pod label `azure.workload.identity/use: "true"` to the API server and to each Celery worker,
-    under their `podLabels` values.
   </Step>
 
   <Step title="Grant the storage role">

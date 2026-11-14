@@ -126,13 +126,20 @@ check_max_map_count() {
 	fi
 }
 
+# XFS is in the kernel, or a module that modprobe can load.
+xfs_available() {
+	grep -qw xfs /proc/filesystems || modprobe -n -q xfs 2>/dev/null
+}
+
 check_data_dir() {
 	local fstype probe avail_kib
 	if [ ! -d "$DATA_DIR" ]; then
 		fail data-dir "$DATA_DIR does not exist (apply makes it)"
 		return
 	fi
-	fstype=$(stat -f -c %T "$DATA_DIR" 2>/dev/null || echo unknown)
+	# stat -f names ext4 "ext2/ext3"; df names the mount type.
+	fstype=$(df --output=fstype "$DATA_DIR" 2>/dev/null | tail -n 1)
+	[ -n "$fstype" ] || fstype=$(stat -f -c %T "$DATA_DIR" 2>/dev/null || echo unknown)
 	if ! probe=$(mktemp -d "$DATA_DIR/reflink-probe.XXXXXX" 2>/dev/null); then
 		fail data-dir "$DATA_DIR is not writable. Run as root."
 		return
@@ -140,11 +147,13 @@ check_data_dir() {
 	head -c 65536 /dev/zero >"$probe/a"
 	if cp --reflink=always "$probe/a" "$probe/b" 2>/dev/null; then
 		pass data-dir "$DATA_DIR is $fstype with reflink"
-	elif [ -e /dev/loop-control ]; then
+	elif [ ! -e /dev/loop-control ]; then
+		fail data-dir "$DATA_DIR is '$fstype' without reflink and /dev/loop-control does not exist. Load the loop module (apply loads it), or mount an XFS disk with reflink (apply --xfs-device)."
+	elif ! xfs_available; then
+		fail data-dir "$DATA_DIR is '$fstype' without reflink and the kernel has no XFS support for the loop store. Use a kernel with XFS, or mount an XFS disk with reflink (apply --xfs-device)."
+	else
 		# Same result as the chart preflight check: the agent makes a loop store.
 		warn data-dir "$DATA_DIR is '$fstype' without reflink. The host agent makes a sparse XFS loop store ($DATA_DIR/.craft-fc-store.img). An XFS disk with reflink (apply --xfs-device) is faster."
-	else
-		fail data-dir "$DATA_DIR is '$fstype' without reflink and /dev/loop-control does not exist. Load the loop module (apply loads it), or mount an XFS disk with reflink (apply --xfs-device)."
 	fi
 	rm -rf "$probe"
 	avail_kib=$(df -Pk "$DATA_DIR" | awk 'NR == 2 {print $4}')
@@ -174,6 +183,7 @@ cmd_check() {
 apply_modules() {
 	local modules=()
 	[ -e /dev/loop-control ] || modules+=(loop)
+	grep -qw xfs /proc/filesystems || ! modprobe -n -q xfs 2>/dev/null || modules+=(xfs)
 	if [ ! -e /dev/kvm ]; then
 		if grep -qw vmx /proc/cpuinfo; then
 			modules+=(kvm_intel)
@@ -290,11 +300,12 @@ cmd_label() {
 	local k=(kubectl --context "$context")
 	for node in "$@"; do
 		if [ "$pod_sandbox" -eq 1 ]; then
-			run "${k[@]}" label node "$node" onyx.app/workload=sandbox --overwrite
 			run "${k[@]}" taint node "$node" workload=sandbox:NoSchedule --overwrite
+			run "${k[@]}" label node "$node" onyx.app/workload=sandbox --overwrite
 		else
-			run "${k[@]}" label node "$node" onyx.app/workload=sandbox onyx.app/kvm=true --overwrite
+			# Taints first, so that no pod sandbox lands on the node between the two calls.
 			run "${k[@]}" taint node "$node" workload=sandbox:NoSchedule onyx.app/kvm=true:NoSchedule --overwrite
+			run "${k[@]}" label node "$node" onyx.app/workload=sandbox onyx.app/kvm=true --overwrite
 		fi
 	done
 }

@@ -93,23 +93,59 @@ so the scheduler must keep other pods off the KVM nodes.
 | **Firecracker** | `onyx.app/workload=sandbox`, `onyx.app/kvm=true` | `workload=sandbox:NoSchedule`, `onyx.app/kvm=true:NoSchedule` | The host agent and the preflight check |
 | **Pod sandbox** | `onyx.app/workload=sandbox` | `workload=sandbox:NoSchedule` | Pod sandboxes and the sandbox image prepuller |
 
+<Warning>
+  The cluster autoscaler does not see microVMs: they are not pods. It can remove a KVM node that runs microVMs,
+  and the changes after the last session save are lost.
+  Set the minimum node count of the Firecracker pool to the number of KVM nodes that you need,
+  so that the autoscaler does not remove them.
+</Warning>
+
 Only the host agent and the preflight check tolerate the `onyx.app/kvm` taint.
 The chart refuses a `sandboxPod.tolerations` value that tolerates it.
 
 The Onyx Terraform modules make both pools. To prepare nodes yourself, use these commands:
 
 ```bash
-# Firecracker nodes
-kubectl label node <kvm-node> onyx.app/workload=sandbox onyx.app/kvm=true
+# Firecracker nodes: taint first, so that no pod sandbox lands on the node
 kubectl taint node <kvm-node> workload=sandbox:NoSchedule onyx.app/kvm=true:NoSchedule
+kubectl label node <kvm-node> onyx.app/workload=sandbox onyx.app/kvm=true
 
 # Pod sandbox nodes
-kubectl label node <pod-node> onyx.app/workload=sandbox
 kubectl taint node <pod-node> workload=sandbox:NoSchedule
+kubectl label node <pod-node> onyx.app/workload=sandbox
 ```
 
 The [node preparation script](/deployment/kubernetes/craft-firecracker-bare-metal#prepare-the-nodes)
 checks the node and sets the labels and taints.
+
+### Base chart values
+
+A new Onyx install needs the base chart Secrets before the first start. Without `auth.userauth`,
+the API server stops with `USER_AUTH_SECRET is empty`. Without the OpenSearch password,
+or the object store keys when the chart runs the bundled object store, Helm refuses to render the chart.
+Put the values in a private values file, for example `craft-fc-secrets.yaml`:
+
+```yaml
+auth:
+  userauth:
+    enabled: true
+    values:
+      user_auth_secret: "<openssl rand -hex 32>"
+  opensearch:
+    values:
+      opensearch_admin_password: "<uppercase, lowercase, digit, and special character>"
+  # Only with the bundled object store. rootUser and rootPassword must match the S3 keys.
+  objectstorage:
+    values:
+      s3_aws_access_key_id: "<access key>"
+      rootUser: "<access key>"
+      s3_aws_secret_access_key: "<secret key>"
+      rootPassword: "<secret key>"
+```
+
+With an external file store that uses workload identity, set `auth.objectstorage.enabled: false` instead.
+For all base Secrets, and for `existingSecret` with your own Secrets,
+see [Security Hardening](/deployment/production/security#credentials). An existing install already has these values.
 
 ### Data directory
 
@@ -139,7 +175,8 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
 
 <Steps>
   <Step title="Prepare Craft on Kubernetes">
-    Follow [Craft on Kubernetes](/deployment/local/craft_kubernetes) first. Firecracker uses the same `ENABLE_CRAFT`,
+    Follow [Craft on Kubernetes](/deployment/local/craft_kubernetes) first,
+    and set the [base chart values](#base-chart-values) for a new install. Firecracker uses the same `ENABLE_CRAFT`,
     `SANDBOX_BACKEND`, sandbox push Secret, and sandbox proxy.
   </Step>
 
@@ -148,6 +185,7 @@ instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extra
     The API server refuses every registration until the value is set. Make a random value:
 
     ```bash
+    umask 077   # make the files readable only by you
     openssl rand -base64 48 | tr -d '\n' > sandbox-node-registration.txt
     ```
 
@@ -337,7 +375,9 @@ the host agent accepts every client certificate that its CA signed.
       | grep -E 'host agent ready|template ready|node signing key regist|"level":"ERROR"'
     ```
 
-    Each agent must log `template ready` and `node signing key registered`.
+    Each agent must log `template ready` and `node signing key registered`. After a host agent restart,
+    `template ready` can come about 10 seconds after `host agent ready`,
+    with `"built":false` (the template exists from an earlier start).
     The DaemonSet name is `<fullname>-craft-fc-host-agent` (`onyx-craft-fc-host-agent` for the release `onyx`).
   </Step>
 

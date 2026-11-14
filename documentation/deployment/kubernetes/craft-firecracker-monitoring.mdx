@@ -104,8 +104,15 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
     ```bash
     helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
     helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-      -n monitoring --create-namespace -f kps-values.yaml
+      --version <chart version> -n monitoring --create-namespace -f kps-values.yaml
     ```
+
+    For a new install, choose a chart version and pin it with `--version`. If kube-prometheus-stack runs already,
+    add the sidecar values to your existing values file, and use the installed chart version.
+    With only `kps-values.yaml`, `helm upgrade` drops your other overrides.
+
+    The host agent ServiceMonitor is in the host agent namespace, and the alert rules are in the Onyx release namespace.
+    If your Prometheus limits `serviceMonitorNamespaceSelector` or `ruleNamespaceSelector`, include these namespaces.
   </Step>
 
   <Step title="Upgrade Onyx">
@@ -164,4 +171,6 @@ To add routing labels to every rule, set `craft.hostAgent.alerts.extraLabels`.
 
 If your Prometheus does not use the chart ServiceMonitor,
 set `craft.hostAgent.metrics.job` to the `job` label of the host agent series. The dashboard and the alert rules use it.
-Keep a `node` label with the Kubernetes node name on each host agent series.
+Keep these labels on each host agent series, also on `up`: `node` with the Kubernetes node name,
+and `namespace` with the host agent namespace (`craft.hostAgent.namespace`, default `onyx-sandbox-runtime`).
+Set them with target labels or relabeling. Without the `namespace` label, `CraftFcHostAgentDown` never fires.

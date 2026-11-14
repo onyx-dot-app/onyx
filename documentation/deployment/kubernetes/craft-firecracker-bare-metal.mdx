@@ -19,10 +19,11 @@ and kubeadm clusters on Intel hosts with KVM. After the nodes are ready, configu
 | Sysctl | `vm.max_map_count` of `1048576` or more |
 | Data directory | `/var/lib/craft-fc` on XFS with reflink, or on another file system with free space for the host agent loop store |
 | Network | A CNI that enforces NetworkPolicy |
+| Other nodes | At least one node without the sandbox taints for the Onyx pods, and nodes for the pod sandbox pool. A KVM node cannot run the Onyx pods. |
 
 | Distribution | NetworkPolicy |
 | --- | --- |
-| k3s | The embedded network policy controller enforces it. Do not start k3s with `--disable-network-policy`. |
+| k3s | The embedded network policy controller enforces it. Do not start k3s with `--disable-network-policy`. A new pod can be blocked for about 2 seconds while the controller adds it. |
 | RKE2 | The default CNI, Canal, enforces it. |
 | kubeadm | Install a CNI that enforces it, for example Calico or Cilium. Flannel alone does not. |
 
@@ -80,6 +81,21 @@ It never erases a disk.
     ```
 
     Add `--dry-run` to show the `kubectl` commands first.
+
+    On k3s, the bundled add-ons (for example traefik) can start on a node before you taint it,
+    and `NoSchedule` does not move them. To prevent this, join each KVM node with the labels and taints:
+
+    ```bash
+    k3s agent --node-label onyx.app/workload=sandbox --node-label onyx.app/kvm=true \
+      --node-taint workload=sandbox:NoSchedule --node-taint onyx.app/kvm=true:NoSchedule
+    ```
+
+    On a node that already joined, list its pods. Delete the pods that are not DaemonSet pods,
+    so that they start on another node:
+
+    ```bash
+    kubectl get pods -A -o wide --field-selector spec.nodeName=<kvm-node>
+    ```
   </Step>
 </Steps>
 
@@ -88,7 +104,8 @@ It never erases a disk.
 {/* depends: chart PR (--transfer-allow-http with the bundled object store) */}
 The object store that the Onyx chart bundles works as it is. Its traffic stays inside the cluster and uses HTTP.
 When the bundled store is on and `FILE_STORE_BACKEND` is `s3` (the default),
-the chart lets the host agent accept HTTP presigned URLs.
+the chart lets the host agent accept HTTP presigned URLs. If the DNS domain of your cluster is not `cluster.local`,
+set `global.clusterDomain` to it.
 
 An external store must use HTTPS: the host agent refuses plain HTTP URLs for it.
 To use an external S3-compatible store that KVM nodes reach, set the S3 file store values:
@@ -108,7 +125,8 @@ If the endpoint uses a private CA, the KVM nodes and the Onyx pods must trust it
 
 ## Configure Helm
 
-Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm). On bare metal,
+For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm). On bare metal,
 also set the microVM limit for your hosts:
 
 ```yaml

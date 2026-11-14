@@ -90,24 +90,23 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
   </Step>
 
   <Step title="Add the first Firecracker node">
-    {/* depends: GKE pool PR (initial node count of the Firecracker pool) */} The Firecracker pool is tainted,
-    so it starts with 0 nodes. The host agent, the preflight check, and the image prepuller are DaemonSets,
-    and DaemonSet pods do not make the cluster autoscaler add a node.
-    Resize the managed instance group of the pool to 1 node in each zone:
+    {/* depends: GKE pool PR #17823 (Firecracker and pod sandbox pools start with one node) */} The host agent,
+    the preflight check, and the image prepuller are DaemonSets.
+    DaemonSet pods never make the cluster autoscaler add a node, so an empty tainted pool stays empty.
+    Do this step only for a pool that has no nodes:
 
     ```bash
-    gcloud container node-pools list --cluster=<cluster> --location=<region>   # the pool name starts with sandbox-
-    gcloud container node-pools describe <sandbox pool> --cluster=<cluster> --location=<region> \
-      --format='value(instanceGroupUrls)'
-    gcloud compute instance-groups managed resize <instance group> --size=1 --zone=<zone>
+    kubectl get nodes -l onyx.app/kvm=true          # Firecracker pool
+    gcloud container node-pools list --cluster=<cluster> --location=<region>   # names start with sandbox-
+    gcloud container clusters resize <cluster> --node-pool=<pool> --num-nodes=1 --location=<region>
     ```
 
-    Run the `resize` command for each instance group that the `describe` command shows.
-    The `instanceGroupUrls` value ends with the zone and the group name.
+    Do not resize a pool that already has nodes. A resize to fewer nodes removes nodes and stops the microVMs on them.
   </Step>
 
   <Step title="Configure Helm">
-    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
   </Step>
 </Steps>
@@ -157,7 +156,8 @@ for example with GKE Dataplane V2 (`--enable-dataplane-v2` when you create the c
   </Step>
 
   <Step title="Configure Helm">
-    Follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
+    For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+    Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm)
     and [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
   </Step>
 </Steps>
@@ -195,8 +195,16 @@ gcloud services enable iamcredentials.googleapis.com --project=<project>
 ```
 
 Then make the same setup:
-a Google service account with `roles/iam.serviceAccountTokenCreator` on itself and write access to the file store
-bucket, mapped to the Onyx Kubernetes service account.
+a Google service account with `roles/iam.serviceAccountTokenCreator` on itself and read and write access to the file
+store bucket (for example `roles/storage.objectUser`), mapped to the Onyx Kubernetes service account.
+Write access alone, for example `roles/storage.objectCreator`, is not sufficient: session restores need read access.
+
+The mapping needs Workload Identity Federation for GKE on the cluster (`--workload-pool=<project>.svc.id.goog`)
+and the GKE metadata server (`--workload-metadata=GKE_METADATA`)
+on the node pools that run the API server and the workers.
+The two sandbox pools do not change these settings on your other pools.
+See the Google Cloud guide [Use Workload Identity Federation for
+GKE](https://cloud.google.com/kubernetes-engine/docs/how-to/workload-identity).
 
 ## Google Cloud security findings
 

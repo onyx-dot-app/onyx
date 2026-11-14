@@ -174,8 +174,10 @@ The registration value lets host agents register their node signing keys. Change
 
 <Steps>
   <Step title="Write the new value">
-    Update `auth.sandboxNodeRegistration` (your private values file, or the Secret in the release namespace).
-    With `registrationExistingSecret`, update the Secret in the host agent namespace too. Then run `helm upgrade`.
+    If the chart makes the Secrets, change `auth.sandboxNodeRegistration.values` in your private values file.
+    The chart then writes the new value in both namespaces. Do not edit these Secrets directly. With `existingSecret`,
+    update your Secret in the release namespace. With `registrationExistingSecret`,
+    also update your Secret in the host agent namespace. Then run `helm upgrade`.
   </Step>
 
   <Step title="Restart the API server, then the host agents">
