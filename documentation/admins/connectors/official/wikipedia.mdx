@@ -1,0 +1,39 @@
+---
+title: "Wikipedia"
+description: "Access public articles from Wikipedia"
+---
+
+## How it works
+
+The Wikipedia connector indexes articles from a Wikipedia language edition. You pick the categories and pages to index.
+Each article becomes one document with a link back to Wikipedia.
+
+The connector reads public content only. It needs no credential.
+
+Permission sync is not available. **Document Access** can be **Everyone in Your Organization** or **Specific Groups**.
+**Specific Groups** is a paid feature: the Business and Enterprise tiers on Onyx Cloud,
+and the Enterprise Edition when self-hosted.
+
+The connector is available in all editions: Community Edition, Business, Enterprise, and Onyx Cloud.
+
+## Setting up
+
+<Steps>
+  <Step title="Choose what to index">
+    In the Admin Panel, go to **Connectors** and select **Wikipedia**.
+    - **Language Code**: The Wikipedia language edition, for example `en` for English or `de` for German.
+    - **Categories to Index**: Category names, without the `Category:` prefix. Onyx indexes every page in each category.
+    - **Pages**: Individual page titles to index.
+    - **Recursion Depth**: How many levels of subcategories to follow. Enter `0` to index only the listed categories,
+    or `-1` to follow all subcategories.
+  </Step>
+
+  <Step title="Set access and create">
+    Under **Connector Settings**, choose **Document Access** and click **Create Connector**.
+  </Step>
+</Steps>
+
+<Warning>
+  A high **Recursion Depth** on a large category can pull in many thousands of pages.
+  Start small and widen the scope after the first index attempt completes.
+</Warning>
