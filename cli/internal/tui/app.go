@@ -60,11 +60,8 @@ type Model struct {
 	// resumeCursor continues the followed response streamID after its last
 	// complete batch.
 	resumeCursor *int
-	// streamAnswered marks a stream that delivered a cursor packet or an
-	// error. A resume stream that ends without either has no buffer.
-	streamAnswered bool
-	// unbufferedStreamID is a response whose stream has no buffer. It is not
-	// requested again.
+	// unbufferedStreamID is a response that the server has no stream for. It
+	// is not requested again.
 	unbufferedStreamID *int
 	// reloading keeps input blocked while the session loads again to show
 	// its response from the saved messages and the stream's start.
@@ -204,7 +201,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.streamID != nil && *m.streamID == *running && m.resumeCursor != nil {
 					// Continue after the last complete batch, so no event repeats.
 					m.settling = false
-					m.streamAnswered = false
 					if m.streamCancel != nil {
 						m.streamCancel()
 					}
@@ -215,7 +211,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// Show the running response from its start over the saved session.
 				m.reloading = true
-				return cmdResume(m, msg.sessionID)
+				return cmdResume(m, msg.sessionID, m.streamCh)
 			}
 			if msg.err != nil && !m.readinessUnconfirmed {
 				m.readinessUnconfirmed = true
@@ -225,7 +221,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.following && !m.stopReceived {
 			m.reloading = true
-			return cmdResume(m, msg.sessionID)
+			return cmdResume(m, msg.sessionID, m.streamCh)
 		}
 		return m.finishStream(nil)
 
@@ -391,7 +387,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 				m.viewport.pickerActive = false
 				switch m.viewport.pickerType {
 				case pickerSession:
-					return cmdResume(m, item.id)
+					return cmdResume(m, item.id, nil)
 				case pickerAgent:
 					return cmdSelectAgentByID(m, item.id)
 				case pickerModel:
@@ -516,7 +512,6 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 	m.stopReceived = false
 	m.stopRequested = false
 	m.resumeCursor = nil
-	m.streamAnswered = false
 	m.isStreaming = true
 	m.readinessUnconfirmed = false
 	m.agentStarted = false
@@ -550,7 +545,10 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	switch e := msg.Event.(type) {
 	case models.SessionCreatedEvent:
 		m.chatSessionID = &e.ChatSessionID
-		m.needsRename = true
+		// A followed response replays the creation of a session that has a name.
+		if !m.following {
+			m.needsRename = true
+		}
 		m.status.setSession(e.ChatSessionID)
 
 	case models.MessageIDEvent:
@@ -632,8 +630,12 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		// Delivery completion does not confirm the save. Drain the stream.
 		m.stopReceived = true
 
+	case models.StreamUnavailableEvent:
+		if m.streamID != nil {
+			m.unbufferedStreamID = m.streamID
+		}
+
 	case models.StreamCursorEvent:
-		m.streamAnswered = true
 		if m.streamID == nil {
 			m.streamID = &e.StreamID
 		}
@@ -642,7 +644,6 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case models.ErrorEvent:
-		m.streamAnswered = true
 		if m.input.textInput.Value() == "" {
 			m.input.textInput.SetValue(m.submittedMessage)
 		}
@@ -687,9 +688,6 @@ func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.chatSessionID == nil {
 		return m.finishStream(msg.Err)
-	}
-	if m.following && !m.streamAnswered && m.streamID != nil {
-		m.unbufferedStreamID = m.streamID
 	}
 	m.settling = true
 	return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
@@ -895,9 +893,13 @@ func (m Model) handleSessionsLoaded(msg SessionsLoadedMsg) (tea.Model, tea.Cmd) 
 }
 
 func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) {
+	if msg.Origin != nil && (!m.reloading || msg.Origin != m.streamCh) {
+		// The chat moved on from the stream that asked for this reload.
+		return m, nil
+	}
 	if msg.Err != nil {
 		m.viewport.addError("Could not load session: " + msg.Err.Error())
-		if m.reloading {
+		if msg.Origin != nil {
 			return m.finishStream(nil)
 		}
 		return m, nil

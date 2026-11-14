@@ -464,7 +464,7 @@ func TestResumeFollowsTheSessionWhenItsStatusIsUnknown(t *testing.T) {
 		saved:     &models.ChatSessionDetailResponse{ChatSessionID: sessionID},
 		statusErr: errors.New("connection reset"),
 	}
-	_, cmd := cmdResume(NewModel(config.DefaultConfig(), client), sessionID)
+	_, cmd := cmdResume(NewModel(config.DefaultConfig(), client), sessionID, nil)
 	if msg := cmd().(SessionResumedMsg); !msg.Status.IsProcessing {
 		t.Fatal("a failed status query skips the stream that shows a waiting request")
 	}

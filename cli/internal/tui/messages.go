@@ -22,6 +22,9 @@ type SessionResumedMsg struct {
 	// Status reports a response that still runs, such as one that waits for
 	// an approval.
 	Status models.ChatSessionStatus
+	// Origin is the stream that asked to reload its session, or nil when the
+	// user opened the session.
+	Origin <-chan models.StreamEvent
 	Err    error
 }
 

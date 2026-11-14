@@ -42,7 +42,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/sessions", "/resume":
 		if strings.TrimSpace(arg) != "" {
-			return cmdResume(m, arg)
+			return cmdResume(m, arg, nil)
 		}
 		return cmdSessions(m)
 
@@ -306,7 +306,9 @@ func cmdSessions(m Model) (Model, tea.Cmd) {
 	}
 }
 
-func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
+// cmdResume loads a session. origin is the stream that asks to reload its
+// session, or nil when the user opens one.
+func cmdResume(m Model, sessionIDStr string, origin <-chan models.StreamEvent) (Model, tea.Cmd) {
 	client := m.client
 	return m, func() tea.Msg {
 		targetID := sessionIDStr
@@ -315,7 +317,7 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 		if len(sessionIDStr) < 36 {
 			sessions, err := client.ListChatSessions(context.Background())
 			if err != nil {
-				return SessionResumedMsg{Err: err}
+				return SessionResumedMsg{Err: err, Origin: origin}
 			}
 			for _, s := range sessions {
 				if strings.HasPrefix(s.ID, sessionIDStr) {
@@ -327,12 +329,12 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 
 		detail, err := client.GetChatSession(context.Background(), targetID)
 		if err != nil {
-			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr)}
+			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr), Origin: origin}
 		}
 		// A failed status query counts as running. Following a session that
 		// runs nothing ends at once, and its readiness check reports the failure.
 		status, _ := client.ChatSessionStatus(context.Background(), detail.ChatSessionID)
-		return SessionResumedMsg{Detail: detail, Status: status}
+		return SessionResumedMsg{Detail: detail, Status: status, Origin: origin}
 	}
 }
 

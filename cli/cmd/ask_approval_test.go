@@ -522,3 +522,42 @@ func TestAsk_NoPromptForARequestResolvedWhileAnotherWaited(t *testing.T) {
 		t.Fatalf("a2's outcome is not reported: %q", stderr)
 	}
 }
+
+func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
+	for _, args := range [][]string{{"--approve=once"}, {"--approve=once", "--json"}} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			stopped := make(chan string, 1)
+			mux := http.NewServeMux()
+			mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
+				fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
+				fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
+				fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
+				w.(http.Flusher).Flush()
+				<-r.Context().Done()
+			})
+			mux.HandleFunc("/api/chat/approvals/a1/decision", func(w http.ResponseWriter, r *http.Request) {
+				http.Error(w, `{"detail":"boom"}`, http.StatusInternalServerError)
+			})
+			mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
+				stopped <- r.URL.Query().Get("stream_id")
+			})
+			srv := httptest.NewServer(mux)
+			t.Cleanup(srv.Close)
+			testutil.IsolateConfig(t, srv.URL)
+			t.Setenv("CI", "")
+			ios, _, _ := pipedIOS()
+
+			if err := runApprovalAsk(t, ios, args...); exitCode(err) == exitcodes.Success {
+				t.Fatal("a failed decision must fail the run")
+			}
+			select {
+			case id := <-stopped:
+				if id != "2" {
+					t.Fatalf("Stop stream_id = %q, want 2", id)
+				}
+			default:
+				t.Fatal("ask returned before the response was stopped")
+			}
+		})
+	}
+}

@@ -294,7 +294,9 @@ its background task end ([[#pure-asgi-middleware]]).
    from requesting that stream again ([[#buffer-gap-ends-resume]]).
    `cli/internal/api/stream.go:ResumeChatStream` delivers events only in
    complete batches, each ending with its `StreamCursor` line, so the CLI chat
-   can continue from the last cursor without a repeated packet.
+   can continue from the last cursor without a repeated packet. It reports a
+   404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
+   the response again, and a clean end before the first cursor is retried.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool

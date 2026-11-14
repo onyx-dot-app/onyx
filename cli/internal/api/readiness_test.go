@@ -15,6 +15,41 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/testutil"
 )
 
+func TestCancellingAResumeOfAKnownStreamStopsItOnce(t *testing.T) {
+	requested := make(chan struct{})
+	stopped := make(chan string, 2)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/chat/stop-chat-session/session" {
+			stopped <- r.URL.Query().Get("stream_id")
+			return
+		}
+		// The connection stalls before the first cursor.
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		close(requested)
+		<-r.Context().Done()
+	}))
+	defer server.Close()
+	ctx, cancel := context.WithCancel(t.Context())
+	streamID := 7
+	events := testutil.NewClient(server.URL).ResumeChatStream(ctx, "session", &streamID, 3)
+	<-requested
+	cancel()
+	select {
+	case id := <-stopped:
+		if id != "7" {
+			t.Fatalf("Stop id = %s", id)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("no Stop for the known stream")
+	}
+	for range events {
+	}
+	if len(stopped) != 0 {
+		t.Fatal("Stop was sent twice")
+	}
+}
+
 func TestCancellationWaitsForAcknowledgement(t *testing.T) {
 	started := make(chan struct{})
 	acknowledge := make(chan struct{})

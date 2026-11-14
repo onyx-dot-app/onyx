@@ -141,7 +141,9 @@ with code 10.`,
 			var sessionID string
 			var lastErr error
 			gotStop := false
-			// approvalErr ends the run after --approve=fail rejected a tool call.
+			// approvalErr ends the run after --approve=fail rejected a tool call
+			// or a decision failed. The stream is cancelled and drained first, so
+			// its owner stops the turn before the process exits.
 			var approvalErr error
 			// The titles of the requests shown here, by approval id.
 			asked := map[string]string{}
@@ -190,7 +192,7 @@ with code 10.`,
 			// In quiet mode, buffer everything and print once at the end.
 			ow := &overflow.Writer{Limit: truncateAt, Quiet: askQuiet, Out: ios.Out, ErrOut: ios.ErrOut}
 
-			answerApproval := func(req models.ToolApprovalRequestEvent) error {
+			answerApproval := func(req models.ToolApprovalRequestEvent) {
 				title := approval.Title(req)
 				if !askJSON {
 					if isTTY {
@@ -209,7 +211,7 @@ with code 10.`,
 				if promptLines != nil {
 					if ended[req.ApprovalID] {
 						// The outer loop reports the queued resolution.
-						return nil
+						return
 					}
 					const promptText = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject: "
 					fmt.Fprint(ios.ErrOut, promptText)
@@ -222,11 +224,11 @@ with code 10.`,
 						select {
 						case <-ctx.Done():
 							// Interrupted: stream cancellation stops the turn.
-							return nil
+							return
 						case event, ok := <-ch:
 							if !ok {
 								fmt.Fprintln(ios.ErrOut)
-								return nil
+								return
 							}
 							deferred = append(deferred, event)
 							if resolved, isResolved := event.(models.ToolApprovalResolvedEvent); isResolved {
@@ -235,7 +237,7 @@ with code 10.`,
 							// The server ended the request, e.g. at its deadline.
 							if ended[req.ApprovalID] {
 								fmt.Fprintln(ios.ErrOut)
-								return nil
+								return
 							}
 						case line := <-promptLines:
 							reading = false
@@ -272,14 +274,15 @@ with code 10.`,
 				_, err := client.DecideApproval(ctx, req.ApprovalID, decision)
 				switch {
 				case err == nil || ctx.Err() != nil:
-					return nil
 				case api.IsApprovalNoLongerWaiting(err):
 					if !askJSON {
 						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.NoLongerWaiting, title)
 					}
-					return nil
 				default:
-					return apiErrorToExit(err, "cannot send the approval decision")
+					if approvalErr == nil {
+						approvalErr = apiErrorToExit(err, "cannot send the approval decision")
+					}
+					cancelStream()
 				}
 			}
 
@@ -319,9 +322,7 @@ with code 10.`,
 					}
 					fmt.Fprintln(ios.Out, string(data))
 					if req, ok := event.(models.ToolApprovalRequestEvent); ok {
-						if err := answerApproval(req); err != nil {
-							return err
-						}
+						answerApproval(req)
 					}
 					if errEvt, ok := event.(models.ErrorEvent); ok {
 						if errEvt.StatusCode != 0 {
@@ -363,10 +364,7 @@ with code 10.`,
 						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
 					}
 				case models.ToolApprovalRequestEvent:
-					if err := answerApproval(e); err != nil {
-						ow.Finish()
-						return err
-					}
+					answerApproval(e)
 				case models.ToolApprovalResolvedEvent:
 					if title, ok := asked[e.ApprovalID]; ok {
 						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.OutcomeLabel(e.Outcome), title)

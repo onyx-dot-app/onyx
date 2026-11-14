@@ -31,6 +31,7 @@ const (
 	EventToolApprovalRequest  = "tool_approval_request"
 	EventToolApprovalResolved = "tool_approval_resolved"
 	EventStreamCursor         = "stream_cursor"
+	EventStreamUnavailable    = "stream_unavailable"
 	EventUnknown              = "unknown"
 )
 
@@ -232,6 +233,13 @@ type StreamCursorEvent struct {
 }
 
 func (e StreamCursorEvent) EventType() string { return EventStreamCursor }
+
+// StreamUnavailableEvent reports that the server has nothing to serve at the
+// requested cursor of a resumed response: no running response, another
+// response, or no buffer. Requesting the same response again does not help.
+type StreamUnavailableEvent struct{}
+
+func (e StreamUnavailableEvent) EventType() string { return EventStreamUnavailable }
 
 // UnknownEvent is a catch-all for unrecognized stream data.
 type UnknownEvent struct {

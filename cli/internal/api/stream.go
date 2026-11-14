@@ -50,7 +50,7 @@ func (c *Client) SendMessageStream(
 		payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
 	}
 	body, err := json.Marshal(payload)
-	return c.stream(ctx, sessionID, false, func(requestCtx context.Context) (*http.Request, error) {
+	return c.stream(ctx, sessionID, false, nil, func(requestCtx context.Context) (*http.Request, error) {
 		if err != nil {
 			return nil, fmt.Errorf("marshal: %w", err)
 		}
@@ -65,25 +65,28 @@ func (c *Client) SendMessageStream(
 // ResumeChatStream replays the session's running response from cursor and
 // then follows it, like SendMessageStream. A nil streamID follows whichever
 // response runs. Events arrive in complete batches, each ending with a
-// StreamCursorEvent, so a request from the last cursor repeats no event. The
-// channel closes without events when the response has no stream to follow.
+// StreamCursorEvent, so a request from the last cursor repeats no event. A
+// StreamUnavailableEvent reports that the server has nothing to serve at the
+// cursor. Cancelling ctx stops streamID at once when it is known.
 func (c *Client) ResumeChatStream(ctx context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent {
 	query := url.Values{"cursor": {strconv.Itoa(cursor)}}
 	if streamID != nil {
 		query.Set("stream_id", strconv.Itoa(*streamID))
 	}
-	return c.stream(ctx, sessionID, true, func(requestCtx context.Context) (*http.Request, error) {
+	return c.stream(ctx, sessionID, true, streamID, func(requestCtx context.Context) (*http.Request, error) {
 		return c.newRequest(requestCtx, "GET", "/chat/chat-session/"+url.PathEscape(sessionID)+"/resume-stream?"+query.Encode(), nil)
 	})
 }
 
 // stream delivers the events of one streaming response. Cancelling ctx stops
-// the response once the server reports its IDs. A resume response that is 404
-// ends without events, and it delivers events only in complete batches.
+// knownStream, or the response that the server reports. A resume response
+// that is 404 delivers only a StreamUnavailableEvent, and a resume response
+// delivers events only in complete batches.
 func (c *Client) stream(
 	ctx context.Context,
 	sessionID string,
 	resume bool,
+	knownStream *int,
 	newRequest func(context.Context) (*http.Request, error),
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
@@ -105,6 +108,9 @@ func (c *Client) stream(
 			stream  int
 		}
 		acknowledged := make(chan identity, 1)
+		if knownStream != nil {
+			acknowledged <- identity{sessionID, *knownStream}
+		}
 		stopAcknowledged := func(id identity) {
 			stopCtx, stopCancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer stopCancel()
@@ -181,6 +187,7 @@ func (c *Client) stream(
 		defer func() { _ = resp.Body.Close() }()
 
 		if resume && resp.StatusCode == http.StatusNotFound {
+			ch <- models.StreamUnavailableEvent{}
 			return
 		}
 		if err := checkResponse(resp); err != nil {

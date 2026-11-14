@@ -160,13 +160,21 @@ func TestResumeFromCursorDropsTheCutBatch(t *testing.T) {
 	}
 }
 
-func TestResumeEndsQuietlyWhenNothingRuns(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.Error(w, `{"detail":"No resumable stream"}`, http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	if events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0)); len(events) != 0 {
-		t.Fatalf("events = %#v", events)
+func TestResumeReportsOnlyA404AsUnavailable(t *testing.T) {
+	for status, want := range map[int][]models.StreamEvent{
+		http.StatusNotFound: {models.StreamUnavailableEvent{}},
+		// A clean end before the first cursor leaves the response resumable.
+		http.StatusOK: nil,
+	} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if status == http.StatusNotFound {
+				http.Error(w, `{"detail":"No resumable stream"}`, status)
+			}
+		}))
+		events := collectEvents(t, idleTestClient(server.URL, time.Second).ResumeChatStream(t.Context(), "session-1", nil, 0))
+		server.Close()
+		if len(events) != len(want) || (len(want) > 0 && events[0] != want[0]) {
+			t.Fatalf("HTTP %d: events = %#v, want %#v", status, events, want)
+		}
 	}
 }
