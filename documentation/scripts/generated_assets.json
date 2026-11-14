@@ -1,0 +1,279 @@
+{
+  "$comment": "SVGs generated from web/lib/opal by web/lib/opal/scripts/export-svgs.tsx. Paths are relative to documentation/.",
+  "assets": [
+    {
+      "out": "assets/overview/core_features/connectors/airtable.svg",
+      "src": "logos/airtable"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/asana.svg",
+      "src": "logos/asana"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/axero.svg",
+      "src": "logos/axero"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/azure_datalake.svg",
+      "src": "logos/azure"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/bitbucket.svg",
+      "src": "logos/bitbucket"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/bookstack.svg",
+      "src": "logos/bookstack"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/box.svg",
+      "src": "logos/box"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/braintrust.svg",
+      "src": "logos/braintrust"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/canvas.svg",
+      "src": "logos/canvas"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/clickup.svg",
+      "src": "logos/clickup"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/coda.svg",
+      "src": "logos/coda"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/confluence.svg",
+      "src": "logos/confluence"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/discord.svg",
+      "src": "logos/discord"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/discourse.svg",
+      "src": "logos/discourse"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/document360.svg",
+      "src": "logos/document360"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/dropbox.svg",
+      "src": "logos/dropbox"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/drupal_wiki.svg",
+      "src": "logos/drupal"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/egnyte.svg",
+      "src": "logos/egnyte"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/file.svg",
+      "src": "icons/file-text",
+      "color": "#6B7280"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/fireflies.svg",
+      "src": "logos/fireflies"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/freshdesk.svg",
+      "src": "logos/freshdesk"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/gitbook.svg",
+      "src": "logos/gitbook"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/github.svg",
+      "src": "logos/github"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/gitlab.svg",
+      "src": "logos/gitlab"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/gmail.svg",
+      "src": "logos/gmail"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/gong.svg",
+      "src": "logos/gong"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/google_drive.svg",
+      "src": "logos/google-drive"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/google_sites.svg",
+      "src": "logos/google-sites"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/google_storage.svg",
+      "src": "logos/google-cloud"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/guru.svg",
+      "src": "logos/guru"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/highspot.svg",
+      "src": "logos/highspot"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/hubspot.svg",
+      "src": "logos/hubspot"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/imap.svg",
+      "src": "icons/mail",
+      "color": "#6B7280"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/jira.svg",
+      "src": "logos/jira"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/linear.svg",
+      "src": "logos/linear"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/loopio.svg",
+      "src": "logos/loopio"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/lumapps.svg",
+      "src": "logos/lumapps"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/mediawiki.svg",
+      "src": "logos/mediawiki"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/notion.svg",
+      "src": "logos/notion"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/oci_storage.svg",
+      "src": "logos/oracle"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/onedrive.svg",
+      "src": "logos/onedrive"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/outline.svg",
+      "src": "logos/outline"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/outlook.svg",
+      "src": "logos/outlook"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/productboard.svg",
+      "src": "logos/productboard"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/r2.svg",
+      "src": "logos/cloudflare"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/s3.svg",
+      "src": "logos/aws"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/salesforce.svg",
+      "src": "logos/salesforce"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/sharepoint.svg",
+      "src": "logos/sharepoint"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/slab.svg",
+      "src": "logos/slab"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/slack.svg",
+      "src": "logos/slack"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/teams.svg",
+      "src": "logos/teams"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/testrail.svg",
+      "src": "logos/testrail"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/web.svg",
+      "src": "icons/globe",
+      "color": "#6B7280"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/wikipedia.svg",
+      "src": "logos/wikipedia"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/xenforo.svg",
+      "src": "logos/xenforo"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/youtrack.svg",
+      "src": "logos/youtrack"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/zendesk.svg",
+      "src": "logos/zendesk"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/zoom.svg",
+      "src": "logos/zoom"
+    },
+    {
+      "out": "assets/overview/core_features/connectors/zulip.svg",
+      "src": "logos/zulip"
+    },
+    {
+      "out": "assets/icons/alert_triangle.svg",
+      "src": "icons/alert-triangle",
+      "color": "#EC5B13",
+      "size": 16
+    },
+    {
+      "out": "assets/icons/check_circle.svg",
+      "src": "icons/check-circle",
+      "color": "#00A43F",
+      "size": 16
+    },
+    {
+      "out": "assets/icons/x_octagon.svg",
+      "src": "icons/x-octagon",
+      "color": "#DC2626",
+      "size": 16
+    },
+    {
+      "out": "assets/logo/onyx_logo.svg",
+      "src": ["logos/onyx-logo", "logos/onyx-wordmark"],
+      "gapRatio": 0.3125,
+      "size": 32
+    },
+    {
+      "out": "assets/logo/onyx_logo_inverted.svg",
+      "src": ["logos/onyx-logo", "logos/onyx-wordmark"],
+      "theme": "dark",
+      "gapRatio": 0.3125,
+      "size": 32
+    },
+    {
+      "out": "assets/logo/onyx_favicon.svg",
+      "src": "logos/onyx-logo"
+    }
+  ]
+}

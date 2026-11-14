@@ -1,0 +1,38 @@
+---
+title: "Users & Groups"
+description: "Accounts, access requests, and permission groups"
+icon: "users"
+---
+
+Two sections under **Admin → Permissions**: **Users & Requests** for individual accounts,
+and **Groups** for permission groups.
+
+## Users
+
+The first account created on a new instance becomes the admin. After that,
+how people get accounts depends on your [authentication configuration](/agent-wiki/deployment/configuration)
+— email and password by default, or OIDC against your identity provider.
+`ALLOWED_EMAILS` restricts who may sign up at all.
+
+Admins bypass page-level permission checks, so keep the admin set small.
+
+## Groups and page permissions
+
+Groups are how you grant access to parts of the wiki without naming individuals on every page.
+Permissions are stored per path, and a grant on a folder cascades to everything beneath it.
+But unlike [update policies](/agent-wiki/using/update_policies), grants are **additive, with no deny**:
+a more specific grant can open up extra access on one page,
+but you can't grant a folder and then carve a single page out of it. When part of a folder needs to stay restricted,
+grant at the narrower scopes from the start.
+
+## Permissions reach further than the page
+
+Worth understanding before you restrict anything,
+because access controls affect features that aren't obviously about access:
+
+- **Search** results are filtered to what you can read.
+- **Agents** act as the user whose API key they hold, so an agent sees exactly what that person sees — an admin's key
+  makes an admin's agent.
+- **Auto Organize** never pairs pages across a visibility boundary, so a proposal can't reveal that a restricted page
+  exists. A duplicate spanning a boundary that nobody can see both sides of simply goes undetected.
+- **Triggers** require read access to everything they watch.
