@@ -1,8 +1,9 @@
 import {
-  SvgTerminalSmall,
+  SvgActions,
+  SvgTerminal,
   SvgFileText,
   SvgEdit,
-  SvgSearch,
+  SvgSearchMenu,
   SvgCpu,
   SvgCheckSquare,
   SvgAlertCircle,
@@ -17,18 +18,18 @@ import type {
 export function getToolIcon(kind: ToolCallKind): IconFunctionComponent {
   switch (kind) {
     case "execute":
-      return SvgTerminalSmall;
+      return SvgTerminal;
     case "read":
       return SvgFileText;
     case "edit":
       return SvgEdit;
     case "search":
-      return SvgSearch;
+      return SvgSearchMenu;
     case "task":
       return SvgCpu;
     case "other":
     default:
-      return SvgEdit;
+      return SvgActions;
   }
 }
 
