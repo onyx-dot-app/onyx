@@ -16,17 +16,26 @@ from enum import Enum
 from uuid import UUID
 
 from psycopg2.errors import QueryCanceled
-from sqlalchemy import Select, any_, distinct, func, select, true
+from sqlalchemy import Select, and_, any_, distinct, func, select, true
 from sqlalchemy.engine import Result
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import InstrumentedAttribute, Session
 from sqlalchemy.sql.elements import ColumnElement
 
-from onyx.configs.constants import DocumentSource
+from onyx.configs.constants import DocumentSource, MessageType
 from onyx.db.document_access import apply_document_access_filter
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.hierarchy import escape_like_pattern
-from onyx.db.models import Connector, ConnectorCredentialPair, Document, HierarchyNode
+from onyx.db.models import (
+    ChatMessage,
+    ChatMessage__SearchDoc,
+    ChatSession,
+    Connector,
+    ConnectorCredentialPair,
+    Document,
+    HierarchyNode,
+    SearchDoc,
+)
 from onyx.db.postgres_tool_models import GroupCount
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -79,7 +88,8 @@ def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
 
 
 def _ilike_contains(
-    column: InstrumentedAttribute[str], substring: str
+    column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None],
+    substring: str,
 ) -> ColumnElement[bool]:
     pattern = f"%{escape_like_pattern(substring)}%"
     return column.ilike(pattern, escape="\\")
@@ -445,3 +455,359 @@ def count_hierarchy_nodes_for_tool(
         parent_id=parent_id,
         node_type=node_type,
     )
+
+
+# ============================= ChatSession =============================
+
+
+def _month_label(column: InstrumentedAttribute[datetime]) -> ColumnElement[str]:
+    return func.to_char(column, "YYYY-MM")
+
+
+def _owned_history_session(user_id: UUID | None) -> ColumnElement[bool]:
+    """Sessions the user sees in their own chat history: owned, not
+    soft-deleted, not incognito, and not a subagent's child session."""
+    return and_(
+        ChatSession.user_id == user_id,
+        ChatSession.deleted.is_(False),
+        ChatSession.incognito_record_mode.is_(None),
+        ChatSession.spawned_by_message_id.is_(None),
+    )
+
+
+def _apply_chat_session_filters(
+    stmt: Select,
+    user_id: UUID | None,
+    *,
+    description_contains: str | None,
+    created_after: datetime | None,
+    created_before: datetime | None,
+    exclude_chat_session_id: UUID | None,
+) -> Select:
+    """Chat history is ownership-scoped: only the owner's sessions qualify.
+
+    `user_id` None means an auth-disabled deployment where sessions are stored
+    with NULL user_id (`==` renders IS NULL). OnyxBot (Slack) sessions are
+    included deliberately — they are still the user's own history. `exclude_chat_session_id` drops the
+    in-flight conversation, which would otherwise top-hit any search about
+    itself (the user's question is persisted before the tool runs).
+    """
+    stmt = stmt.where(_owned_history_session(user_id))
+    if description_contains is not None:
+        stmt = stmt.where(
+            _ilike_contains(ChatSession.description, description_contains)
+        )
+    if created_after is not None:
+        stmt = stmt.where(ChatSession.time_created >= created_after)
+    if created_before is not None:
+        stmt = stmt.where(ChatSession.time_created < created_before)
+    if exclude_chat_session_id is not None:
+        stmt = stmt.where(ChatSession.id != exclude_chat_session_id)
+    return stmt
+
+
+def query_chat_sessions_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    description_contains: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+    limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
+) -> list[ChatSession]:
+    """The user's chat sessions matching the filters, newest first, capped."""
+    stmt = select(ChatSession)
+    stmt = _apply_chat_session_filters(
+        stmt,
+        user_id,
+        description_contains=description_contains,
+        created_after=created_after,
+        created_before=created_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    stmt = stmt.order_by(ChatSession.time_created.desc(), ChatSession.id.desc()).limit(
+        _clamp_limit(limit)
+    )
+    return list(_execute_with_timeout(db_session, stmt).scalars().all())
+
+
+def count_chat_sessions_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    description_contains: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+) -> int:
+    """Exact count of the user's chat sessions matching the filters."""
+    stmt = select(func.count()).select_from(ChatSession)
+    stmt = _apply_chat_session_filters(
+        stmt,
+        user_id,
+        description_contains=description_contains,
+        created_after=created_after,
+        created_before=created_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    return _execute_with_timeout(db_session, stmt).scalar_one()
+
+
+def count_chat_sessions_by_month_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    description_contains: str | None = None,
+    created_after: datetime | None = None,
+    created_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+) -> list[GroupCount]:
+    """Per-month (YYYY-MM of creation) counts of matching sessions, newest first."""
+    month_col = _month_label(ChatSession.time_created).label("month")
+    count_col = func.count().label("count")
+    stmt = select(month_col, count_col).select_from(ChatSession)
+    stmt = _apply_chat_session_filters(
+        stmt,
+        user_id,
+        description_contains=description_contains,
+        created_after=created_after,
+        created_before=created_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    stmt = stmt.group_by(month_col).order_by(month_col.desc())
+    rows = _execute_with_timeout(db_session, stmt).all()
+    return [GroupCount(group=month, count=count) for month, count in rows]
+
+
+# ============================= ChatMessage =============================
+
+
+def _apply_chat_message_filters(
+    stmt: Select,
+    user_id: UUID | None,
+    *,
+    chat_session_id: UUID | None,
+    content_contains: str | None,
+    message_type: MessageType | None,
+    sent_after: datetime | None,
+    sent_before: datetime | None,
+    exclude_chat_session_id: UUID | None,
+) -> Select:
+    """Ownership is enforced by joining through the message's session (same
+    semantics as `_apply_chat_session_filters`).
+
+    Only USER/ASSISTANT messages with non-empty content qualify: the first
+    message of every session is an empty root node, and SYSTEM /
+    TOOL_CALL_RESPONSE rows are plumbing, not conversation. Edited-away tree
+    branches may still surface — acceptable; they were real messages.
+    """
+    stmt = stmt.join(ChatSession, ChatMessage.chat_session_id == ChatSession.id).where(
+        _owned_history_session(user_id),
+        ChatMessage.message_type.in_([MessageType.USER, MessageType.ASSISTANT]),
+        ChatMessage.message != "",
+    )
+    if chat_session_id is not None:
+        stmt = stmt.where(ChatMessage.chat_session_id == chat_session_id)
+    if content_contains is not None:
+        stmt = stmt.where(_ilike_contains(ChatMessage.message, content_contains))
+    if message_type is not None:
+        stmt = stmt.where(ChatMessage.message_type == message_type)
+    if sent_after is not None:
+        stmt = stmt.where(ChatMessage.time_sent >= sent_after)
+    if sent_before is not None:
+        stmt = stmt.where(ChatMessage.time_sent < sent_before)
+    if exclude_chat_session_id is not None:
+        stmt = stmt.where(ChatMessage.chat_session_id != exclude_chat_session_id)
+    return stmt
+
+
+def query_chat_messages_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    chat_session_id: UUID | None = None,
+    content_contains: str | None = None,
+    message_type: MessageType | None = None,
+    sent_after: datetime | None = None,
+    sent_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+    limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
+) -> list[ChatMessage]:
+    """The user's chat messages matching the filters, newest first, capped."""
+    stmt = select(ChatMessage)
+    stmt = _apply_chat_message_filters(
+        stmt,
+        user_id,
+        chat_session_id=chat_session_id,
+        content_contains=content_contains,
+        message_type=message_type,
+        sent_after=sent_after,
+        sent_before=sent_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    stmt = stmt.order_by(ChatMessage.time_sent.desc(), ChatMessage.id.desc()).limit(
+        _clamp_limit(limit)
+    )
+    return list(_execute_with_timeout(db_session, stmt).scalars().all())
+
+
+def count_chat_messages_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    chat_session_id: UUID | None = None,
+    content_contains: str | None = None,
+    message_type: MessageType | None = None,
+    sent_after: datetime | None = None,
+    sent_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+) -> int:
+    """Exact count of the user's chat messages matching the filters."""
+    stmt = select(func.count()).select_from(ChatMessage)
+    stmt = _apply_chat_message_filters(
+        stmt,
+        user_id,
+        chat_session_id=chat_session_id,
+        content_contains=content_contains,
+        message_type=message_type,
+        sent_after=sent_after,
+        sent_before=sent_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    return _execute_with_timeout(db_session, stmt).scalar_one()
+
+
+def count_chat_messages_by_month_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    *,
+    chat_session_id: UUID | None = None,
+    content_contains: str | None = None,
+    message_type: MessageType | None = None,
+    sent_after: datetime | None = None,
+    sent_before: datetime | None = None,
+    exclude_chat_session_id: UUID | None = None,
+) -> list[GroupCount]:
+    """Per-month (YYYY-MM sent) counts of matching messages, newest first."""
+    month_col = _month_label(ChatMessage.time_sent).label("month")
+    count_col = func.count().label("count")
+    stmt = select(month_col, count_col).select_from(ChatMessage)
+    stmt = _apply_chat_message_filters(
+        stmt,
+        user_id,
+        chat_session_id=chat_session_id,
+        content_contains=content_contains,
+        message_type=message_type,
+        sent_after=sent_after,
+        sent_before=sent_before,
+        exclude_chat_session_id=exclude_chat_session_id,
+    )
+    stmt = stmt.group_by(month_col).order_by(month_col.desc())
+    rows = _execute_with_timeout(db_session, stmt).all()
+    return [GroupCount(group=month, count=count) for month, count in rows]
+
+
+# ============================== SearchDoc ==============================
+
+
+def _get_owned_chat_message(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_message_id: int,
+) -> ChatMessage | None:
+    """The message, only if it belongs to one of the user's history sessions."""
+    stmt = (
+        select(ChatMessage)
+        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
+        .where(
+            ChatMessage.id == chat_message_id,
+            _owned_history_session(user_id),
+        )
+    )
+    return _execute_with_timeout(db_session, stmt).scalar_one_or_none()
+
+
+def _cited_search_doc_ids(message: ChatMessage) -> list[int]:
+    """SearchDoc ids actually cited by the message, in citation-number order.
+
+    `citations` maps citation number -> SearchDoc id; JSONB round-trips the
+    integer keys as strings.
+    """
+    citations = message.citations or {}
+    return [
+        int(search_doc_id)
+        for _, search_doc_id in sorted(citations.items(), key=lambda kv: int(kv[0]))
+    ]
+
+
+def query_search_docs_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_message_id: int,
+    *,
+    cited_only: bool = True,
+    limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
+) -> list[SearchDoc]:
+    """SearchDoc snapshots for a past message the user owns.
+
+    A SearchDoc is a point-in-time retrieval snapshot with no ACL columns of
+    its own — access is scoped purely by ownership of the message, never by
+    re-checking the live Document's ACL (the user already saw this content).
+
+    `cited_only` (default) returns the docs the answer actually cited, in
+    citation order; `cited_only=False` widens to everything retrieved for the
+    message. Returns empty if the message isn't the user's.
+    """
+    message = _get_owned_chat_message(db_session, user_id, chat_message_id)
+    if message is None:
+        return []
+
+    if cited_only:
+        ordered_ids = _cited_search_doc_ids(message)[: _clamp_limit(limit)]
+        if not ordered_ids:
+            return []
+        docs = (
+            _execute_with_timeout(
+                db_session, select(SearchDoc).where(SearchDoc.id.in_(ordered_ids))
+            )
+            .scalars()
+            .all()
+        )
+        docs_by_id = {doc.id: doc for doc in docs}
+        return [docs_by_id[i] for i in ordered_ids if i in docs_by_id]
+
+    stmt = (
+        select(SearchDoc)
+        .join(
+            ChatMessage__SearchDoc,
+            ChatMessage__SearchDoc.search_doc_id == SearchDoc.id,
+        )
+        .where(ChatMessage__SearchDoc.chat_message_id == chat_message_id)
+        .order_by(SearchDoc.id)
+        .limit(_clamp_limit(limit))
+    )
+    return list(_execute_with_timeout(db_session, stmt).scalars().all())
+
+
+def count_search_docs_for_tool(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_message_id: int,
+    *,
+    cited_only: bool = True,
+) -> int:
+    """Count of cited (default) or retrieved SearchDocs for a message the user owns."""
+    message = _get_owned_chat_message(db_session, user_id, chat_message_id)
+    if message is None:
+        return 0
+
+    if cited_only:
+        return len(_cited_search_doc_ids(message))
+
+    stmt = (
+        select(func.count())
+        .select_from(ChatMessage__SearchDoc)
+        .where(ChatMessage__SearchDoc.chat_message_id == chat_message_id)
+    )
+    return _execute_with_timeout(db_session, stmt).scalar_one()
