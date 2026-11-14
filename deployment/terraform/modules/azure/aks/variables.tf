@@ -201,8 +201,8 @@ variable "node_pools" {
   # answer does not change with the flags that enable them.
   validation {
     condition = length(setintersection(
-      toset(concat(keys(var.node_pools), ["gpu", "sandbox"])),
-      toset([for k in concat(keys(var.node_pools), ["gpu", "sandbox"]) : substr("${substr(k, 0, 6)}${substr(sha1(k), 0, 6)}", 0, 12)]),
+      toset(concat(keys(var.node_pools), ["gpu", "sandbox", "sandboxpod"])),
+      toset([for k in concat(keys(var.node_pools), ["gpu", "sandbox", "sandboxpod"]) : substr("${substr(k, 0, 6)}${substr(sha1(k), 0, 6)}", 0, 12)]),
     )) == 0
     error_message = "A node pool is named the same as another pool's generated rotation name, which would break rotation for that pool. Rename it."
   }
@@ -273,7 +273,7 @@ variable "sandbox_node_disk_size_gb" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size. Craft still runs sandboxes as pods until its Firecracker backend ships. See \"Craft sandboxes on Firecracker\" in the azure module README."
+  description = "Prepares the sandbox pool for Craft Firecracker: \"pod\" or \"firecracker\". \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size. Opencode sessions still run as pods; see enable_craft_pod_sandbox_node_pool. See \"Craft sandboxes on Firecracker\" in the azure module README."
   default     = "pod"
 
   validation {
@@ -286,6 +286,50 @@ variable "craft_sandbox_runtime" {
   validation {
     condition     = var.craft_sandbox_runtime != "firecracker" || can(regex("^standard_[de][0-9]+(-[0-9]+)?[bdilmst]*_v[5-7]$", lower(var.sandbox_node_vm_size)))
     error_message = "craft_sandbox_runtime = \"firecracker\" needs an Intel D or E v5, v6 or v7 sandbox_node_vm_size, such as Standard_D8ds_v5. AMD (\"a\") and Arm (\"p\") sizes have no nested virtualization; keep craft_sandbox_runtime = \"pod\" on them."
+  }
+}
+
+variable "enable_craft_pod_sandbox_node_pool" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox pool named \"sandboxpod\" (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker pool carries the onyx.app/kvm taint."
+  default     = false
+
+  validation {
+    condition     = !var.enable_craft_pod_sandbox_node_pool || (var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker")
+    error_message = "enable_craft_pod_sandbox_node_pool needs enable_sandbox_node_pool = true and craft_sandbox_runtime = \"firecracker\". With the pod runtime, the sandbox pool already runs pod sandboxes."
+  }
+
+  validation {
+    condition     = !var.enable_craft_pod_sandbox_node_pool || !contains(keys(var.node_pools), "sandboxpod")
+    error_message = "enable_craft_pod_sandbox_node_pool adds a pool named \"sandboxpod\", which node_pools already defines. Rename yours so the pod sandbox pool does not replace it."
+  }
+}
+
+variable "craft_pod_sandbox_node_vm_size" {
+  type        = string
+  description = "VM size for the pod sandbox pool next to a Firecracker pool. One pod sandbox requests about 1.1 vCPU, 2.3 GiB and 5.5 GiB of ephemeral storage. The OS disk is sandbox_node_disk_size_gb."
+  default     = "Standard_D4ds_v5"
+}
+
+variable "craft_pod_sandbox_node_min_count" {
+  type        = number
+  description = "Minimum nodes in the pod sandbox pool"
+  default     = 1
+
+  validation {
+    condition     = var.craft_pod_sandbox_node_min_count >= 0
+    error_message = "craft_pod_sandbox_node_min_count must be 0 or more."
+  }
+}
+
+variable "craft_pod_sandbox_node_max_count" {
+  type        = number
+  description = "Maximum nodes in the pod sandbox pool"
+  default     = 2
+
+  validation {
+    condition     = var.craft_pod_sandbox_node_max_count >= 1 && var.craft_pod_sandbox_node_max_count >= var.craft_pod_sandbox_node_min_count
+    error_message = "craft_pod_sandbox_node_max_count must be 1 or more and at least craft_pod_sandbox_node_min_count."
   }
 }
 
