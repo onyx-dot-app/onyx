@@ -443,7 +443,11 @@ def test_vision_default_repair_ignores_another_providers_flow(
             )
         db_session.commit()
 
-        with pytest.raises(ValueError, match="not a valid model"):
+        # The image check matches rows by provider type, so it may read either
+        # row. Both outcomes refuse the model.
+        with pytest.raises(
+            ValueError, match="not a valid model|does not support image input"
+        ):
             update_default_vision_provider(
                 provider.id, "unknown-image-model", db_session
             )
