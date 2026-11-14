@@ -159,6 +159,21 @@ result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
 
+**Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
+and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
+chat agent's configured tools when the turn's user has a chat skill
+([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
+remove them. Restored and child agents receive them with the other configured
+tools. `skills_read` checks that the user can still see the skill. They have no
+catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
+a short JSON summary, not the SKILL.md text.
+
+**Argument models.** A tool declares its arguments as one Pydantic
+`*Arguments` model. `parse_tool_arguments` validates calls with it, and
+`tools/interface.py:tool_definition_from_arguments` makes the tool's
+definition from its JSON schema without titles, so the schema and the parser
+cannot drift. The skill and subagent tools use it.
+
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
 `chat/agent.py:build_chat_agent` gives one when `with_subagents` is set: the turn's caller

@@ -35,6 +35,14 @@ export async function createSkill(
   return res.json();
 }
 
+export async function deleteSkill(
+  request: APIRequestContext,
+  skillId: string
+): Promise<void> {
+  const res = await request.delete(`/api/skills/custom/${skillId}`);
+  expect(res.ok(), await res.text()).toBeTruthy();
+}
+
 export async function editSkillInstructions(
   request: APIRequestContext,
   skillId: string,

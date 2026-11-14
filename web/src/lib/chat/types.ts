@@ -1,5 +1,40 @@
 import type { Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
+import type { ProjectFile } from "@/lib/projects/types";
+
+/** A chat skill the user picked with `@`, by name. */
+export interface SkillMention {
+  type: "skill";
+  name: string;
+}
+
+/** What the user tagged in a message with `@`. Mirrors `Mention` in
+ * `backend/onyx/chat/mention_models.py`: each kind is one member of the union
+ * on `type`, and skills are the only kind. */
+export type Mention = SkillMention;
+
+/** A picked skill at the version the user ran when its question was
+ * accepted. */
+export interface RecordedSkillMention extends SkillMention {
+  version_id: string;
+}
+
+/** A mention as its question's turn resolved it. Mirrors `RecordedMention`
+ * in `backend/onyx/chat/mention_models.py`. */
+export type RecordedMention = RecordedSkillMention;
+
+/** A question as the user wrote it: its text and what the user tagged in it.
+ * Mentions come only from the `@` menu; the text holds an `@name` for each,
+ * and plain `@name` text mentions nothing. */
+export interface ComposedMessage {
+  message: string;
+  mentions: Mention[];
+}
+
+/** A question that did not reach the server, to put back in the composer. */
+export interface UnsentMessage extends ComposedMessage {
+  files: ProjectFile[];
+}
 
 /** Composer choices that a queued or interrupting message's turn starts with. */
 export interface PendingTurnSettings {
@@ -15,6 +50,7 @@ export interface PendingChatMessage {
   target_response_id: number | null;
   deep_research: boolean;
   llm_override: LLMOverride | null;
+  mentions: Mention[];
 }
 
 export interface ChatHistoryPage {
@@ -42,10 +78,12 @@ export interface ChatSessionQueue {
   needsResponseSelection: boolean;
   /**
    * A queued or interrupting message's turn starts as Deep Research when
-   * `deepResearch` is set, with `llmOverride` as its model.
+   * `deepResearch` is set, with `llmOverride` as its model and the SKILL.md
+   * files of its mentioned skills before its question. A `send` into a
+   * running response applies no mentions.
    */
   submit: (
-    message: string,
+    composed: ComposedMessage,
     delivery: PendingChatMessage["delivery"],
     turn: PendingTurnSettings
   ) => Promise<boolean>;

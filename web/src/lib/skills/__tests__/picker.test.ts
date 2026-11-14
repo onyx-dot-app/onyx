@@ -1,6 +1,6 @@
 import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
-  detectSlashTrigger,
+  detectPickerTrigger,
   filterPickerSections,
   flattenSections,
   pickerEntryConnectionPath,
@@ -17,32 +17,61 @@ import {
 } from "@/lib/skills/__fixtures__/picker";
 import type { SkillsList } from "@/lib/skills/types";
 
-describe("detectSlashTrigger", () => {
+describe("detectPickerTrigger", () => {
   it("returns null when no slash present", () => {
-    expect(detectSlashTrigger("hello world")).toBeNull();
+    expect(detectPickerTrigger("hello world", "/")).toBeNull();
   });
 
   it("matches a leading slash with empty query", () => {
-    expect(detectSlashTrigger("/")).toEqual({ slashIndex: 0, query: "" });
+    expect(detectPickerTrigger("/", "/")).toEqual({
+      triggerIndex: 0,
+      query: "",
+    });
   });
 
   it("matches a leading slash with a query", () => {
-    expect(detectSlashTrigger("/sla")).toEqual({ slashIndex: 0, query: "sla" });
+    expect(detectPickerTrigger("/sla", "/")).toEqual({
+      triggerIndex: 0,
+      query: "sla",
+    });
   });
 
   it("matches a slash after whitespace", () => {
-    expect(detectSlashTrigger("hello /sl")).toEqual({
-      slashIndex: 6,
+    expect(detectPickerTrigger("hello /sl", "/")).toEqual({
+      triggerIndex: 6,
       query: "sl",
     });
   });
 
   it("rejects a slash not preceded by whitespace", () => {
-    expect(detectSlashTrigger("http://x")).toBeNull();
+    expect(detectPickerTrigger("http://x", "/")).toBeNull();
   });
 
   it("rejects when query contains whitespace", () => {
-    expect(detectSlashTrigger("/foo bar")).toBeNull();
+    expect(detectPickerTrigger("/foo bar", "/")).toBeNull();
+  });
+
+  describe("with a `@` trigger", () => {
+    it("matches a leading or space-preceded `@`", () => {
+      expect(detectPickerTrigger("@", "@")).toEqual({
+        triggerIndex: 0,
+        query: "",
+      });
+      expect(detectPickerTrigger("use @code-re", "@")).toEqual({
+        triggerIndex: 4,
+        query: "code-re",
+      });
+    });
+
+    it("rejects a mid-word `@`, as in an email", () => {
+      expect(detectPickerTrigger("a@b", "@")).toBeNull();
+      expect(detectPickerTrigger("@@b", "@")).toBeNull();
+      expect(detectPickerTrigger("(@b", "@")).toBeNull();
+    });
+
+    it("ignores `/` tokens", () => {
+      expect(detectPickerTrigger("/pptx", "@")).toBeNull();
+    });
   });
 });
 

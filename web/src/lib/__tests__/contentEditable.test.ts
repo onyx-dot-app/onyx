@@ -184,48 +184,36 @@ describe("getTextContent", () => {
   });
 });
 
-describe("createRichInputTileNode: skill tiles", () => {
-  // Skill tiles are built with a "Skill: <name>" preview and an empty meta.
-  it("marks the tile type and stores the skill slug", () => {
-    const tile = createRichInputTileNode({
-      type: "skill",
-      text: "/pptx ",
-      preview: "Skill: Slides",
+describe("createRichInputTileNode: mention tiles", () => {
+  function mentionTile() {
+    return createRichInputTileNode({
+      type: "mention",
+      text: "@pptx",
+      preview: "@pptx",
       meta: "",
-      skillSlug: "pptx",
+      mention: { type: "skill", name: "pptx" },
     });
-    expect(tile.getAttribute("data-tile-type")).toBe("skill");
-    expect(tile.getAttribute("data-skill-slug")).toBe("pptx");
+  }
+
+  it("marks the tile type and stores the mention", () => {
+    const tile = mentionTile();
+    expect(tile.getAttribute("data-tile-type")).toBe("mention");
+    expect(tile.getAttribute("data-mention-type")).toBe("skill");
+    expect(tile.getAttribute("data-mention-name")).toBe("pptx");
   });
 
-  it("serializes to the legacy `/<slug> ` literal via getTextContent", () => {
-    // This is the contract that keeps the submitted payload identical to the
-    // pre-tile behavior, so the backend needs no changes.
+  it("serializes to its `@name` via getTextContent", () => {
     const el = document.createElement("div");
     el.appendChild(document.createTextNode("make me "));
-    el.appendChild(
-      createRichInputTileNode({
-        type: "skill",
-        text: "/pptx ",
-        preview: "Skill: Slides",
-        meta: "",
-        skillSlug: "pptx",
-      })
-    );
-    el.appendChild(document.createTextNode("about cats"));
-    expect(getTextContent(el)).toBe("make me /pptx about cats");
+    el.appendChild(mentionTile());
+    el.appendChild(document.createTextNode(" about cats"));
+    expect(getTextContent(el)).toBe("make me @pptx about cats");
   });
 
-  it("renders the 'Skill: <name>' preview and omits the meta when empty", () => {
-    const tile = createRichInputTileNode({
-      type: "skill",
-      text: "/pptx ",
-      preview: "Skill: Slides",
-      meta: "",
-      skillSlug: "pptx",
-    });
+  it("renders the `@name` preview and omits the meta when empty", () => {
+    const tile = mentionTile();
     expect(tile.querySelector(".rich-input-tile-preview")?.textContent).toBe(
-      "Skill: Slides"
+      "@pptx"
     );
     expect(tile.querySelector(".rich-input-tile-meta")).toBeNull();
   });
@@ -312,7 +300,7 @@ describe("deleteTokenBeforeCursor", () => {
 
 describe("stripLeadingBr", () => {
   function tileHtml(): string {
-    return '<span data-rich-tile data-tile-type="skill">Skill: X</span>';
+    return '<span data-rich-tile data-tile-type="mention">@x</span>';
   }
 
   it("removes a leading <br> that precedes a rich tile", () => {

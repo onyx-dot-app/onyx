@@ -12,6 +12,8 @@ export const SEARCH_PARAM_NAMES = {
   STRUCTURED_MODEL: "structured-model",
   // user message
   USER_PROMPT: "user-prompt",
+  // Comma-separated names of the chat skills the user prompt mentions.
+  SKILLS: "skills",
   SUBMIT_ON_LOAD: "submit-on-load",
   // chat title
   TITLE: "title",

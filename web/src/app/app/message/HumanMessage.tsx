@@ -4,13 +4,19 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FileDescriptor } from "@/app/app/types";
 import "katex/dist/katex.min.css";
 import MessageSwitcher from "@/app/app/message/MessageSwitcher";
-import { cn } from "@opal/utils";
+import { cn, richNodes } from "@opal/utils";
 import useScreenSize from "@/hooks/useScreenSize";
-import { CopyButton, Text } from "@opal/components";
-import { Button } from "@opal/components";
-import { SvgEdit } from "@opal/icons";
+import { Badge, Button, CopyButton, Text } from "@opal/components";
+import { SvgEdit, SvgSparkle } from "@opal/icons";
 import { Hoverable } from "@opal/core";
 import FileDisplay from "./FileDisplay";
+import {
+  findMentions,
+  mentionsInText,
+  MENTION_TRIGGER,
+} from "@/lib/chat/mentions";
+import type { ComposedMessage, Mention } from "@/lib/chat/types";
+import type { IconFunctionComponent } from "@opal/types";
 import { useTranslations } from "next-intl";
 
 interface MessageEditingProps {
@@ -87,7 +93,48 @@ function MessageEditing({
   );
 }
 
-export function HumanMessageBubble({ content }: { content: string }) {
+// The chip icon of each mention kind.
+const MENTION_CHIP_ICONS: Record<Mention["type"], IconFunctionComponent> = {
+  skill: SvgSparkle,
+};
+
+interface HumanMessageBubbleProps {
+  content: string;
+  // What the question mentioned; each `@name` shows as a chip.
+  mentions?: Mention[];
+}
+
+export function HumanMessageBubble({
+  content,
+  mentions,
+}: HumanMessageBubbleProps) {
+  const body = useMemo(() => {
+    if (!mentions?.length) return content;
+    const parts: React.ReactNode[] = [];
+    let textStart = 0;
+    for (const { index, mention } of findMentions(content, mentions)) {
+      parts.push(
+        content.slice(textStart, index),
+        <span
+          key={index}
+          data-testid="mention-chip"
+          data-mention-type={mention.type}
+          className="inline-block align-middle"
+        >
+          <Badge
+            icon={MENTION_CHIP_ICONS[mention.type]}
+            title={`${MENTION_TRIGGER}${mention.name}`}
+            color="info"
+            size={5}
+          />
+        </span>
+      );
+      textStart = index + MENTION_TRIGGER.length + mention.name.length;
+    }
+    parts.push(content.slice(textStart));
+    return richNodes(parts);
+  }, [content, mentions]);
+
   return (
     <div data-testid="human-message-bubble" className="md:max-w-150">
       <div
@@ -107,8 +154,9 @@ export function HumanMessageBubble({ content }: { content: string }) {
         }}
       >
         <div className="inline-block align-middle">
-          <Text as="p" dir="auto" font="main-content-body" color="text-04">
-            {content}
+          {/* Not a `p`: the chips' badges are blocks. */}
+          <Text dir="auto" font="main-content-body" color="text-04">
+            {body}
           </Text>
         </div>
       </div>
@@ -120,6 +168,7 @@ interface HumanMessageProps {
   // Content and display
   content: string;
   files?: FileDescriptor[];
+  mentions?: Mention[];
 
   // Message navigation - nodeId for tree position, messageId for editing
   nodeId: number;
@@ -127,8 +176,8 @@ interface HumanMessageProps {
   otherMessagesCanSwitchTo?: number[];
   onMessageSelection?: (nodeId: number) => void;
 
-  // Editing functionality - takes (editedContent, messageId) to allow stable callback reference
-  onEdit?: (editedContent: string, messageId: number) => void;
+  // Editing functionality - takes (edited, messageId) to allow stable callback reference
+  onEdit?: (edited: ComposedMessage, messageId: number) => void;
 
   // Streaming and generation
   stopGenerating?: () => void;
@@ -145,6 +194,7 @@ function arePropsEqual(
     prev.nodeId === next.nodeId &&
     prev.messageId === next.messageId &&
     prev.files === next.files &&
+    prev.mentions === next.mentions &&
     prev.disableSwitchingForStreaming === next.disableSwitchingForStreaming &&
     prev.otherMessagesCanSwitchTo === next.otherMessagesCanSwitchTo &&
     prev.onEdit === next.onEdit
@@ -155,6 +205,7 @@ function arePropsEqual(
 const HumanMessage = React.memo(function HumanMessage({
   content: initialContent,
   files,
+  mentions,
   nodeId,
   messageId,
   otherMessagesCanSwitchTo,
@@ -248,7 +299,15 @@ const HumanMessage = React.memo(function HumanMessage({
                 setIsEditing(false);
                 return;
               }
-              onEdit?.(editedContent, messageId);
+              // The edit has no `@` menu, so it keeps the recorded mentions
+              // that its text still has and adds no new ones.
+              onEdit?.(
+                {
+                  message: editedContent,
+                  mentions: mentionsInText(editedContent, mentions ?? []),
+                },
+                messageId
+              );
               setContent(editedContent);
               setIsEditing(false);
             }}
@@ -257,7 +316,7 @@ const HumanMessage = React.memo(function HumanMessage({
         ) : (
           <div className="flex justify-end">
             {!isMobile && copyEditButton}
-            <HumanMessageBubble content={content} />
+            <HumanMessageBubble content={content} mentions={mentions} />
           </div>
         )}
         <div className="flex justify-end pt-1">

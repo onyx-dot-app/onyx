@@ -90,7 +90,13 @@ It turns a failure in setup or start into one `StreamingError` line.
 
 **Line kinds.** `chat/models.py:AnswerStreamPart` lists what the backend
 writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
-`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement. A
+`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement.
+The two ID lines also carry `mentions`, what the saved question tagged with
+`@` as its turn recorded it ([[skills]]). Each mention has a `type`; `skill`
+is the only kind. A queued or interrupting turn sends them in the first line
+of its own stream. A `user_message` packet carries none, because a `send`
+into a running response applies no mentions. Session history returns the
+same field on the question, and an empty list in a shared view. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It

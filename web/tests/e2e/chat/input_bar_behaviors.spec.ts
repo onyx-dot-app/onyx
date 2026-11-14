@@ -5,6 +5,16 @@ import {
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import {
+  createSkill,
+  deleteSkill,
+  uniqueSkillName,
+} from "@tests/e2e/utils/skills";
+import {
+  addMockLlmConversation,
+  MOCK_LLM_DEFAULT_RESPONSE,
+  mockLlmNonce,
+} from "@tests/e2e/utils/mockLlm";
 
 const LARGE_TEXT = "line 1\nline 2\nline 3\nline 4";
 const LARGE_TEXT_B = "alpha\nbeta\ngamma\ndelta";
@@ -713,6 +723,73 @@ test.describe("Paste Tiles: User Setting", () => {
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(1);
     await chatPage.inputBar.expectTileData(LARGE_TEXT);
+  });
+});
+
+test.describe("Skill Mentions", () => {
+  test("`@` mentions chat skills; their chips show and the model gets their SKILL.md, while typed mention text mentions nothing", async ({
+    chatPage,
+  }) => {
+    const nonce = mockLlmNonce();
+    const first = uniqueSkillName("mention-a");
+    const second = uniqueSkillName("mention-b");
+    const instructions = `Answer in one line. ${nonce}`;
+    const skills = [
+      await createSkill(chatPage.page.request, first, instructions),
+      await createSkill(chatPage.page.request, second, instructions),
+    ];
+    try {
+      // The skill text stays in later turns' history, so only the first turn
+      // takes this reply; the second gets the default one.
+      await addMockLlmConversation({
+        name: nonce,
+        conditions: {
+          prompt_contains: [first, second].map(
+            (name) => `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`
+          ),
+        },
+        replies: [{ text: `Answered with the skills. ${nonce}` }],
+      });
+      await chatPage.goto();
+
+      await chatPage.inputBar.typeText(`use @${first.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(first, "click");
+      // Enter picks the highlighted skill without sending.
+      await chatPage.inputBar.typeText(`and @${second.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(second, "Enter");
+      await chatPage.inputBar.typeText("for $5");
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await expect(chatPage.inputBar.tile).toHaveCount(2);
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(
+        `Answered with the skills. ${nonce}`
+      );
+      await chatPage.inputBar.expectIdle();
+
+      // Typed mention text is not a pick.
+      await chatPage.inputBar.typeText(`now @${first} for $5`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await expect(chatPage.inputBar.tile).toHaveCount(0);
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(MOCK_LLM_DEFAULT_RESPONSE);
+
+      for (const view of ["live", "reloaded"]) {
+        if (view === "reloaded") await chatPage.reload();
+        await chatPage.expectHumanMessage(
+          `use @${first} and @${second} for $5`
+        );
+        await expect(chatPage.skillMentionChips(0)).toHaveText([
+          `@${first}`,
+          `@${second}`,
+        ]);
+        await chatPage.expectHumanMessage(`now @${first} for $5`, 1);
+        await expect(chatPage.skillMentionChips(1)).toHaveCount(0);
+      }
+    } finally {
+      for (const skill of skills) {
+        await deleteSkill(chatPage.page.request, skill.id);
+      }
+    }
   });
 });
 

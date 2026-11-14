@@ -459,6 +459,12 @@ export class ChatPage {
     await expect(this.humanMessage(index)).toContainText(text);
   }
 
+  skillMentionChips(index = 0): Locator {
+    return this.humanMessage(index).locator(
+      '[data-testid="mention-chip"][data-mention-type="skill"]'
+    );
+  }
+
   async expectNoHumanMessages(): Promise<void> {
     await expect(this.humanMessages).toHaveCount(0);
   }
