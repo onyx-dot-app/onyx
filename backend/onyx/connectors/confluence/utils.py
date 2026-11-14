@@ -51,16 +51,12 @@ def validate_attachment_filetype(
     Validates if the attachment is a supported file type.
     """
     media_type = attachment.get("metadata", {}).get("mediaType", "")
-    # An image media type that Onyx does not read wins over the title.
-    if (
-        media_type.startswith("image/")
-        and media_type not in OnyxMimeTypes.IMAGE_MIME_TYPES
-    ):
-        return False
+    # An image media type wins over the title. The match is case-sensitive,
+    # as in process_attachment, which routes on the same prefix.
+    if media_type.startswith("image/"):
+        return media_type in OnyxMimeTypes.IMAGE_MIME_TYPES
     # allow_images is applied by the callers.
-    return is_indexable_file_type(
-        attachment.get("title", ""), media_type, allow_images=True
-    )
+    return is_indexable_file_type(attachment.get("title", ""), None, allow_images=True)
 
 
 class AttachmentProcessingResult(BaseModel):

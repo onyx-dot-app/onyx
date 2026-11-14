@@ -15,6 +15,10 @@ from onyx.connectors.confluence.utils import validate_attachment_filetype
         ("photo.jpg", "application/octet-stream", True),
         ("archive.zip", "application/zip", False),
         ("notes", "text/plain", False),
+        # process_attachment routes images by the lowercase prefix only, so the
+        # title extension decides for an uppercase image media type.
+        ("diagram", "IMAGE/PNG", False),
+        ("diagram.png", "IMAGE/PNG", True),
     ],
 )
 def test_validate_attachment_filetype(
