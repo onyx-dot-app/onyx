@@ -35,8 +35,7 @@ See [Terraform](/deployment/local/terraform) for the full module.
       source = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/onyx?ref=<tag>"
       # ... your existing settings
 
-      manage_core_addons                 = true # new clusters only
-      enable_network_policy              = true
+      manage_core_addons                 = true # new clusters; also turns on NetworkPolicy enforcement
       enable_craft                       = true
       craft_sandbox_runtime              = "firecracker"
       craft_sandbox_node_instance_types  = ["m8i.4xlarge"]
@@ -51,9 +50,13 @@ See [Terraform](/deployment/local/terraform) for the full module.
     }
     ```
 
-    {/* depends: #17838 (manage_core_addons) */} On a new cluster, set `manage_core_addons = true`.
-    The EKS module v21 makes a cluster without vpc-cni, kube-proxy, and CoreDNS,
-    and the nodes do not become Ready without them. Keep `false` on an existing cluster.
+    {/* depends: #17838 (manage_core_addons) */} This block is for a new cluster. Set `manage_core_addons = true`:
+    the EKS module v21 makes a cluster without vpc-cni, kube-proxy, and CoreDNS,
+    and the nodes do not become Ready without them.
+    `manage_core_addons` also turns on NetworkPolicy enforcement in the VPC CNI add-on,
+    which Firecracker and pod sandboxes need. Do not also set `enable_network_policy`:
+    Terraform refuses the combination, because it would replace the running CNI. On an existing cluster,
+    keep `manage_core_addons = false` and follow [Existing EKS clusters](#existing-eks-clusters).
 
     With `craft_sandbox_runtime = "firecracker"`, the module:
 
@@ -64,10 +67,7 @@ See [Terraform](/deployment/local/terraform) for the full module.
 
     The module refuses a blocked instance type, and a group that mixes `.metal` and nested virtualization types.
 
-    `enable_network_policy = true` turns on NetworkPolicy enforcement in the VPC CNI add-on.
-    Firecracker and pod sandboxes need it. On an existing cluster,
-    set `vpc_cni_addon_version` to the VPC CNI version that the cluster runs,
-    so that the apply does not upgrade the CNI. Check the add-on settings after the apply:
+    Check the add-on settings after the apply:
 
     ```bash
     aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni \
@@ -156,8 +156,9 @@ On a cluster that already runs pod sandboxes, do the steps in this order:
     with the instance types from [Option 1](#option-1-onyx-terraform-modules).
     The module accepts the pod sandbox node group only with the Firecracker runtime, so set both in the same change.
 
-    If NetworkPolicy enforcement is off, also set `enable_network_policy = true`,
-    and set `vpc_cni_addon_version` to the version that runs now:
+    Keep `manage_core_addons = false`. If NetworkPolicy enforcement is off, set `enable_network_policy = true`,
+    and set `vpc_cni_addon_version` to the version that runs now, so that the apply does not upgrade the CNI.
+    Do not set `manage_core_addons` and `enable_network_policy` together: Terraform refuses the combination.
 
     ```bash
     aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni --query 'addon.addonVersion' --output text
