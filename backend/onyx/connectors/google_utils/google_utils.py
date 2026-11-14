@@ -127,6 +127,9 @@ def _execute_with_retry(request: Any) -> Any:
                 time.sleep(sleep_time)
 
             else:
+                if error.resp.status >= 500:
+                    # The caller may retry it, so count it as pushback here.
+                    record_pushback()
                 raise
 
     # If we've exhausted all attempts
