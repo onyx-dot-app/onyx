@@ -8,7 +8,7 @@ import {
 } from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
-import { SvgEditBig, SvgMaximize2 } from "@opal/icons";
+import { SvgEdit, SvgMaximize2 } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { Button, Text } from "@opal/components";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
@@ -46,7 +46,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
   if (!hasStarted) {
     return children([
       {
-        icon: SvgEditBig,
+        icon: SvgEdit,
         status: t("memory.default.status"),
         content: <div />,
         supportsCollapsible: false,
@@ -87,7 +87,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
     return children([
       {
-        icon: SvgEditBig,
+        icon: SvgEdit,
         status: t("memory.default.status"),
         supportsCollapsible: false,
         timelineLayout: "timeline",
@@ -159,7 +159,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
 
   return children([
     {
-      icon: SvgEditBig,
+      icon: SvgEdit,
       status: statusLabel,
       supportsCollapsible: false,
       timelineLayout: "timeline",

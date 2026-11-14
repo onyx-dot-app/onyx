@@ -3,7 +3,13 @@
 import type { ReactNode } from "react";
 import { Text } from "@opal/components";
 import { cn } from "@opal/utils";
-import { SvgAlertCircle, SvgLoader, SvgSparkle } from "@opal/icons";
+import {
+  SvgAlertCircle,
+  SvgEdit,
+  SvgGlobe,
+  SvgLoader,
+  SvgSparkle,
+} from "@opal/icons";
 import type { IconFunctionComponent, IconProps } from "@opal/types";
 import BashBody from "@/lib/timeline/craft/components/tool-cards/BashBody";
 import DiffBody from "@/lib/timeline/craft/components/tool-cards/DiffBody";
@@ -162,5 +168,8 @@ export function getToolCallStepIcon(
   if (isSkillInvocation(toolCall) && toolCall.status === "completed") {
     return SvgSparkle;
   }
+  // Chat's icons for the same steps.
+  if (toolCall.toolName === "websearch") return SvgGlobe;
+  if (toolCall.toolName === "webfetch") return SvgEdit;
   return getToolIcon(toolCall.kind);
 }
