@@ -10,6 +10,7 @@ import pytest
 from onyx.connectors.google_drive import parallel_listing
 from onyx.connectors.google_drive.file_retrieval import (
     RESOLVED_FROM_SHORTCUT_KEY,
+    TARGET_MODIFIED_TIME_KEY,
     DriveFileFieldType,
 )
 from onyx.connectors.google_drive.models import (
@@ -197,11 +198,16 @@ def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
 
 
 def _shortcut_target(file_id: str, owner: str, modified_ms: int) -> GoogleDriveFileType:
+    """A target as ``resolve_file_or_shortcut`` returns it: modifiedTime is
+    the shortcut's time, which is in the window, and the target's own time
+    is under its own key."""
     stamp = datetime.fromtimestamp(modified_ms / 1000, tz=timezone.utc)
+    shortcut_stamp = datetime.fromtimestamp((_WINDOW_T0 + _DAY) / 1000, tz=timezone.utc)
     return {
         "id": file_id,
         "owners": [{"emailAddress": owner}],
-        "modifiedTime": stamp.isoformat(),
+        "modifiedTime": shortcut_stamp.isoformat(),
+        TARGET_MODIFIED_TIME_KEY: stamp.isoformat(),
         RESOLVED_FROM_SHORTCUT_KEY: "shortcut",
     }
 

@@ -2574,11 +2574,12 @@ class GoogleDriveConnector(
             self._retrieved_folder_and_drive_ids = (
                 checkpoint.retrieved_folder_and_drive_ids
             )
-            # The shard engine lists [start, end). Pruning reads a missing
-            # file as deleted, but a file edited during the listing moves past
-            # the end. So pruning ends with a pass with no upper bound, and
-            # the listing is complete only after that pass.
-            last_pass = for_pruning and end is None
+            # The shard engine lists [start, end). A file edited during the
+            # listing moves past the end. Pruning reads a missing file as
+            # deleted, and permission sync would keep its old permissions. So
+            # a listing with no end from the caller finishes with a pass with
+            # no upper bound, and it is complete only after that pass.
+            last_pass = end is None
             while True:
                 while checkpoint.completion_stage != DriveRetrievalStage.DONE:
                     yield from self._extract_slim_docs_from_google_drive(

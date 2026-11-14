@@ -247,6 +247,9 @@ def _get_single_file_fields(field_type: DriveFileFieldType) -> str:
 
 # Set on a shortcut's resolved target, holding the shortcut's id.
 RESOLVED_FROM_SHORTCUT_KEY = "onyxResolvedFromShortcutId"
+# Set on a shortcut's resolved target, holding the target's own modifiedTime.
+# The target's modifiedTime field holds the shortcut's time.
+TARGET_MODIFIED_TIME_KEY = "onyxTargetModifiedTime"
 
 
 def _is_drive_shortcut(file: GoogleDriveFileType) -> bool:
@@ -324,6 +327,9 @@ def resolve_file_or_shortcut(
     # it, so this preserves the invariant that a retrieved item's modifiedTime
     # lies within the requested time range — the target's can sit far outside
     # it, which would corrupt the checkpoint frontier and re-poll windows.
+    # The target's own time stays under a separate key: it says if the
+    # listing of the target's own partition returns the target.
+    target[TARGET_MODIFIED_TIME_KEY] = target.get(GoogleFields.MODIFIED_TIME.value)
     listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
     if listing_modified_time is not None:
         target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
