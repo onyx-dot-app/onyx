@@ -322,7 +322,7 @@ class LlmOpenUrlResult(BaseCiteableToolResult):
 
 
 class PythonArguments(BaseModel):
-    code: str
+    code: str = Field(description="Python source code to execute")
 
 
 class PythonExecutionFile(BaseModel):
@@ -355,7 +355,7 @@ class LlmPythonExecutionResult(BaseModel):
 
 
 class BashArguments(BaseModel):
-    cmd: str
+    cmd: str = Field(description="Bash command to execute in the session.")
 
 
 class LlmBashExecutionResult(BaseModel):
