@@ -106,6 +106,67 @@ def test_owned_tool_schema_is_strict(definition: ToolDefinition) -> None:
     _check_closed_objects(schema)
 
 
+def _strict_parameters(**properties: JsonValue) -> dict[str, JsonValue]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": properties,
+        "required": list(properties),
+    }
+
+
+def _nullable(schema: dict[str, JsonValue], description: str) -> JsonValue:
+    return {"anyOf": [schema, {"type": "null"}], "description": description}
+
+
+_STRING: dict[str, JsonValue] = {"type": "string"}
+_INTEGER: dict[str, JsonValue] = {"type": "integer"}
+
+
+@pytest.mark.parametrize(
+    ("tool_class", "parameters"),
+    [
+        (
+            FileReaderTool,
+            _strict_parameters(
+                file_id={**_STRING, "description": "The UUID of the file to read."},
+                start_char=_nullable(
+                    _INTEGER,
+                    "Character offset to start reading from. Use null for the "
+                    "default of 0.",
+                ),
+                num_chars=_nullable(
+                    _INTEGER,
+                    "Number of characters to return (max 16000). Use null for the "
+                    "default of 16000.",
+                ),
+            ),
+        ),
+        (
+            KnowledgeGraphTool,
+            _strict_parameters(query={**_STRING, "description": "What to search for"}),
+        ),
+        (
+            MemoryTool,
+            _strict_parameters(
+                memory={
+                    **_STRING,
+                    "description": "The text of the memory to add or update. "
+                    "Should be a concise, standalone statement that captures the "
+                    "key information. For example: 'User prefers dark mode' or "
+                    "'User's favorite frontend framework is React'.",
+                }
+            ),
+        ),
+    ],
+    ids=lambda value: value.__name__ if isinstance(value, type) else "",
+)
+def test_builtin_tool_parameters_come_from_arguments(
+    tool_class: type[Tool], parameters: dict[str, JsonValue]
+) -> None:
+    assert _builtin_definition(tool_class).parameters == parameters
+
+
 def test_openapi_tool_preserves_external_schema_and_stays_non_strict() -> None:
     external_schema: dict[str, JsonValue] = {
         "type": "object",
