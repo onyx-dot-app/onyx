@@ -297,7 +297,7 @@ class TestSlimPoolWidth:
         with (
             patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_WORKERS", 64),
             patch.object(
-                connector, "_fetch_drive_items", return_value=iter([retrieved])
+                connector, "_fetch_drive_items", return_value=(f for f in [retrieved])
             ),
             patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
             patch(

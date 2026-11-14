@@ -1,15 +1,18 @@
-"""An in-memory Drive tenant for exercising the phased retrieval engine.
+"""An in-memory Drive tenant for exercising the listing engines.
 
 It replaces the listing functions and the gateway operations the connector
 calls (not the raw Google client), so tests control who sees what and how
-listings paginate without emulating the Drive query language. Page tokens are
-scoped to the listing that issued them; reusing one for a different principal
-or partition fails the test.
+listings paginate. For the shard engine it reads only the parts of the query
+that engine writes: the owner terms and the modifiedTime range. Page tokens
+are scoped to the listing that issued them; reusing one for a different
+principal or partition fails the test.
 """
 
+import re
 from collections.abc import Iterator
 from contextlib import ExitStack
 from dataclasses import dataclass, field
+from datetime import datetime
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -27,6 +30,7 @@ from onyx.connectors.google_drive.models import (
     RetrievedDriveFile,
 )
 from onyx.connectors.google_drive.source_operations import (
+    DriveCorpus,
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
@@ -35,6 +39,9 @@ from onyx.connectors.models import ConnectorFailure, Document, HierarchyNode
 
 DOMAIN = "co.com"
 PAGE_SIZE = 2
+
+_OWNER_TERM = re.compile(r"'([^']+)' in owners")
+_TIME_TERM = re.compile(r"modifiedTime (>=|<) '([^']+)'")
 
 
 def drive_file(
@@ -153,15 +160,7 @@ class FakeTenant:
         email = user_email
         if email in self.broken_users:
             raise GoogleDriveRefreshError("token_refresh_failed")
-        role = self._drive_role(email, drive_id)
-        if role is None:
-            return
-        drive = self.shared_drives[drive_id]
-        ids = list(drive.files)
-        if role is DriveRole.ORGANIZER:
-            ids += drive.restricted_files
-        files = [drive_file(file_id, drive_id=drive_id) for file_id in ids]
-        files += drive.shortcuts
+        files = self._drive_listing(email, drive_id)
         yield from _paged(files, f"drive:{drive_id}:{email}", max_num_pages, page_token)
 
     def get_all_files_in_my_drive_and_shared(
@@ -221,12 +220,70 @@ class FakeTenant:
                 parent_id=parent_id,
             )
 
+    def list_files(
+        self,
+        *,
+        variant: DriveCorpus,
+        user_email: str,
+        query: str | None = None,
+        drive_id: str | None = None,
+        page_token: str | None = None,
+        page_size: int | None = None,
+        max_num_pages: int | None = None,
+        **_kwargs: object,
+    ) -> Iterator[dict[str, Any] | str]:
+        """files.list as the shard engine calls it."""
+        if user_email in self.broken_users:
+            raise GoogleDriveRefreshError("token_refresh_failed")
+        query = query or ""
+        if variant is DriveCorpus.DRIVE and drive_id is not None:
+            files = self._drive_listing(user_email, drive_id)
+        elif "not 'me' in owners" in query:
+            files = list(self.shared_with.get(user_email, []))
+        else:
+            files = list(self.my_drive.get(user_email, []))
+        owners = [owner for owner in _OWNER_TERM.findall(query) if owner != "me"]
+        if owners:
+            files = [
+                file
+                for file in files
+                if any(
+                    entry.get("emailAddress") in owners
+                    for entry in file.get("owners", [])
+                )
+            ]
+        for operator, stamp in _TIME_TERM.findall(query):
+            bound = datetime.fromisoformat(stamp)
+            files = [
+                file
+                for file in files
+                if (datetime.fromisoformat(file["modifiedTime"]) >= bound)
+                == (operator == ">=")
+            ]
+        scope = f"list:{variant.value}:{drive_id}:{user_email}:{query}"
+        yield from _paged(
+            files, scope, max_num_pages or 10**9, page_token, page_size or PAGE_SIZE
+        )
+
+    def _drive_listing(self, email: str, drive_id: str) -> list[dict[str, Any]]:
+        role = self._drive_role(email, drive_id)
+        if role is None:
+            return []
+        drive = self.shared_drives[drive_id]
+        ids = list(drive.files)
+        if role is DriveRole.ORGANIZER:
+            ids += drive.restricted_files
+        return [drive_file(file_id, drive_id=drive_id) for file_id in ids] + list(
+            drive.shortcuts
+        )
+
     def ops(self) -> MagicMock:
         """A gateway whose operations read this tenant."""
         ops = MagicMock(spec=GoogleDriveSourceOperations)
         ops.get_root_folder_id.side_effect = self.get_root_folder_id
         ops.can_list_drive.side_effect = self.can_list_drive
         ops.probe_target.side_effect = self.probe_target
+        ops.list_files.side_effect = self.list_files
         return ops
 
     def patch(self, connector: GoogleDriveConnector) -> ExitStack:
@@ -288,6 +345,7 @@ def _paged(
     scope: str,
     max_num_pages: int,
     page_token: str | None,
+    page_size: int = PAGE_SIZE,
 ) -> Iterator[dict[str, Any] | str]:
     offset = 0
     if page_token is not None:
@@ -302,8 +360,8 @@ def _paged(
         if pages >= max_num_pages:
             yield f"{scope}@{offset}"
             return
-        yield from files[offset : offset + PAGE_SIZE]
-        offset += PAGE_SIZE
+        yield from files[offset : offset + page_size]
+        offset += page_size
         pages += 1
 
 
