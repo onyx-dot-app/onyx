@@ -8,7 +8,7 @@ indexing run never breaks on JSM being unavailable.
 """
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.jira.connector import JiraConnector
@@ -301,10 +301,23 @@ def test_project_permissions_pass_through_to_jira_base(
     with patch(
         "onyx.connectors.jira.connector.get_project_permissions",
         side_effect=[raw_prefixed, raw_unprefixed],
-    ):
+    ) as mock_perms:
         prefixed = jsm_connector._get_project_permissions("HELP", add_prefix=True)
         unprefixed = jsm_connector._get_project_permissions("HELP", add_prefix=False)
 
+    assert mock_perms.call_count == 2
+    assert mock_perms.call_args_list == [
+        call(
+            source_operations=jsm_connector.source_operations,
+            jira_project="HELP",
+            add_prefix=True,
+        ),
+        call(
+            source_operations=jsm_connector.source_operations,
+            jira_project="HELP",
+            add_prefix=False,
+        ),
+    ]
     assert prefixed.external_user_group_ids == {
         "jira_support-agents",
         "other_group",
