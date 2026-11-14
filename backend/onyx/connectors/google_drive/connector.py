@@ -2064,9 +2064,8 @@ class GoogleDriveConnector(
         inline: bool = False,
     ) -> Generator[RetrievedDriveFile, None, None]:
         """One call of the listing. The listing is ``ParallelDriveLister``,
-        except for OAuth with requested folders, which uses the serial
-        listing. ``field_type`` is for the serial listing. The shard engine
-        asks for permissions only when
+        for a service account and for OAuth. ``field_type`` is for the serial
+        listing. The shard engine asks for permissions only when
         ``include_permissions`` or the link-only filter needs them. With
         ``inline``, the caller converts each file in this call (see
         ``ParallelDriveLister``)."""
@@ -3004,21 +3003,14 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None,
     ) -> bool:
         """Sets up ``checkpoint.listing`` for this call. Returns False when
-        the connector must use the serial listing: OAuth with requested
-        folders. With no ``end``, a new listing ends now and a started one
-        keeps its end.
+        the connector must use the serial listing. With no ``end``, a new
+        listing ends now and a started one keeps its end.
 
         The first call plans the partitions: shared drives, then My Drives,
         then the files shared with each user, then the requested folders
         (including requested drive ids that are folders). An OAuth credential
         lists as its one user."""
-        oauth = not self._is_service_account
-        if oauth and self._requested_folder_ids:
-            return False
         state = checkpoint.listing
-        if oauth and state is None and checkpoint.folder_ids_to_retrieve:
-            # The serial listing lists a requested drive id that is a folder.
-            return False
         if state is None and (
             checkpoint.phase_progress is not None
             or checkpoint.completion_stage is not DriveRetrievalStage.START
@@ -3045,9 +3037,6 @@ class GoogleDriveConnector(
             return True
 
         self._run_inventory(checkpoint)
-        if oauth and checkpoint.folder_ids_to_retrieve:
-            # A requested drive id that is a folder.
-            return False
         partitions = [
             ListingPartition(kind=ListingPartitionKind.SHARED_DRIVE, key=drive_id)
             for drive_id in checkpoint.drive_ids_to_retrieve or []
@@ -3162,6 +3151,16 @@ class GoogleDriveConnector(
         def plan_folder_target(
             folder_id: str, covered_drive_ids: Collection[str]
         ) -> FolderTargetPlan:
+            if not self._is_service_account:
+                # The OAuth user is the only principal.
+                metadata = self.ops.probe_target(
+                    user_email=self.primary_admin_email, target_id=folder_id
+                )
+                if metadata is None:
+                    return FolderTargetPlan()
+                if metadata.get("driveId") in covered_drive_ids:
+                    return FolderTargetPlan(covered=True)
+                return FolderTargetPlan(principals=[self.primary_admin_email])
             found = self._find_target_viewer(folder_id, checkpoint)
             if found is None:
                 return FolderTargetPlan()

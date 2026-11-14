@@ -36,6 +36,12 @@ from tests.external_dependency_unit.connectors.google_drive.test_drive_entry_poi
     _perm_sync_with_stops,
     _slim_ids,
 )
+from tests.external_dependency_unit.connectors.google_drive.test_drive_oauth_listing import (
+    _EMAIL as _OAUTH_EMAIL,
+)
+from tests.external_dependency_unit.connectors.google_drive.test_drive_oauth_listing import (
+    _oauth_connector,
+)
 
 _BASE_CORPUS: dict[str, Any] = {
     "num_users": 3,
@@ -456,3 +462,59 @@ def test_a_serial_folder_checkpoint_is_dropped(own_mock_drive: MockDrive) -> Non
     assert run.final is not None
     assert run.final.phase_progress is None
     assert run.final.listing is not None and run.final.listing.is_done
+
+
+@pytest.mark.usefixtures("small_calls", "db_session", "tenant_context")
+def test_oauth_lists_exactly_a_requested_folder(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """OAuth walks a requested folder as its one user, through the same
+    shortcuts and cycle as a service account. A requested folder that the
+    user cannot see fails the prune."""
+    own_mock_drive.set_corpus(
+        {
+            **_BASE_CORPUS,
+            "folder_trees": [
+                {"container": "my_drive", "index": 1, "depth": 1},
+                {
+                    "container": "my_drive",
+                    "index": 1,
+                    "depth": 2,
+                    "cycle_shortcut": True,
+                    "shortcut_to_tree": 0,
+                },
+                # In another user's My Drive and not shared with the OAuth
+                # user.
+                {"container": "my_drive", "index": 2, "depth": 1},
+            ],
+        }
+    )
+    assert _OAUTH_EMAIL == "user1@onyx-mock.test"
+    linked_root, root_id, hidden_root = _summary(own_mock_drive)["folder_tree_root_ids"]
+    expected = _content_ids(own_mock_drive, root_id)
+    assert _content_ids(own_mock_drive, linked_root) <= expected
+
+    def connector(*folder_ids: str) -> GoogleDriveConnector:
+        return _oauth_connector(
+            own_mock_drive,
+            shared_folder_urls=",".join(_folder_url(f) for f in folder_ids),
+        )
+
+    walked = _record_walked_folders(monkeypatch)
+    inline = _index_inline(connector(root_id))
+    stubs = list_with_resume(connector(root_id))
+    pruning = _slim_ids(connector(root_id).retrieve_all_slim_docs())
+    perm_sync, _ = _perm_sync_with_stops(connector(root_id))
+
+    assert inline.failures == []
+    assert stubs.failures == []
+    _assert_exact("inline", inline.document_ids, expected)
+    _assert_exact("stubs", [stub.id for stub in stubs.stubs], expected)
+    _assert_exact("pruning", pruning, expected)
+    _assert_exact("permission sync", perm_sync, expected)
+    assert root_id in walked
+    assert inline.final is not None and inline.final.listing is not None
+    assert inline.final.listing.is_done
+
+    with pytest.raises(UnreachableTargetsError, match=hidden_root):
+        list(connector(root_id, hidden_root).retrieve_all_slim_docs())
