@@ -1,0 +1,16 @@
+---
+title: "Handle Send Chat Message"
+openapi: "POST /chat/send-chat-message"
+---
+
+<Info>
+  **Required permission:** Chat &mdash; Write (`write:chat`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Chat &mdash; Write scope.
+  A service account in no group also holds it. Anonymous users can call this when anonymous access is enabled.
+</Info>
+
+<Note>
+  **Multi-model requests must stream.** Passing `llm_overrides` with more than one entry runs the models in parallel and
+  requires `stream=true`; combining it with `stream=false` returns `400 {"error_code": "INVALID_INPUT"}`.
+  A single-entry `llm_overrides` list is ignored &mdash; use `llm_override` for an ordinary single-model override.
+</Note>
