@@ -197,6 +197,8 @@ then its `tool_approval_resolved` packet, at the placement of the call's card. I
 
 An answer that still runs has no approval packets in the chat session.
 Read its requests from `GET /chat/chat-session/{chat_session_id}/resume-stream`.
+A `200` stream starts with a cursor line. A `404` means that the stream cannot continue from your cursor;
+read the chat session instead.
 
 ### Send a decision
 
@@ -214,8 +216,8 @@ The response contains `approval_id`, `decision` (`APPROVED` or `REJECTED`) and `
 | `SESSION_GRANT` | `approve_session` approved this call, from this request or an earlier request for the same tool in the chat session. |
 | `POLICY` | The tool is disabled now, so Onyx saved `REJECTED` for your approval. The `outcome` is `disabled`. |
 
-Only the user who owns the chat session can decide. Other users get a `404`. While the answer runs,
-a repeated decision returns `200` with the saved decision.
+Only the user who owns the chat session can decide. Other users get a `404`.
+A repeated decision returns `200` with the saved decision, also after the answer ends or the tool's policy changes.
 A `409` means that the request has a different decision or no longer waits,
 for example because the API server that ran the answer restarted.
 

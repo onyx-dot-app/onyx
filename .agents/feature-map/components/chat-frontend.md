@@ -70,7 +70,9 @@
   the wait.
   While a card waits, the user can type but not send: the composer keeps
   the draft, scrolls to the card, shakes it and shows a toast
-  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). A 409
+  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). In a multi-model turn,
+  `MultiModelResponseView` first shows the card's panel: it unhides a hidden
+  panel and moves the narrow carousel to it. A 409
   `APPROVAL_PENDING` from the server, for example for a turn that
   another tab started, gets the same treatment.
   What each decision does is in [[mcp-and-custom-tools]].
@@ -360,9 +362,12 @@ reader. If the reader ended without a stop, or marked its answers
 same stream still runs, it attaches a new reader to it through
 `prepareSavedChat` and `followChatSession`: from the stream node's
 `replayCursor`, or from cursor 0 into reset rows when the send stream had no
-cursor. A reader that got a 4xx from `resume-stream`, or a response that ended
-before its first cursor, passes `streamUnavailable`; settlement then does not
-reattach to that stream, because it has no buffer. Otherwise
+cursor. The store keeps the received rows until the replay publishes its first
+batch, so an unavailable replay loses no output. Only a 404 from
+`resume-stream` passes `streamUnavailable`; settlement then does not reattach
+to that stream, because it has no buffer. A network error, a 5xx, a 429 or an
+end before the first cursor reattaches after the next status read; a 401 or
+403 surfaces through the failed status read. Otherwise
 `lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
 until that response releases ownership. The status includes the current stream
 ID. A queued response can take ownership without making the session idle;

@@ -24,6 +24,8 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { cn } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { PacketType } from "@/app/app/services/streamingModels";
+import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
 
 export interface MultiModelResponseViewProps {
   responses: MultiModelResponse[];
@@ -571,6 +573,40 @@ export default function MultiModelResponseView({
     }
   }, [showNarrowCarousel, preferredCarouselPos]);
   const clampedCarouselPos = Math.min(carouselPos, lastCarouselPos);
+
+  // A blocked send nudges a waiting approval card. Show the panel that holds
+  // it: a hidden panel does not mount its card, and scrolling cannot move the
+  // carousel.
+  const nudge = useToolApprovalUi((state) => state.nudge);
+  const revealedNudgeRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (readOnly || !nudge || revealedNudgeRef.current === nudge.seq) return;
+    const position = responses.findIndex((response) =>
+      response.packets.some(
+        (packet) =>
+          packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST &&
+          packet.obj.approval_id === nudge.approvalId
+      )
+    );
+    const response = responses[position];
+    if (!response) return;
+    revealedNudgeRef.current = nudge.seq;
+    if (hiddenPanels.has(response.modelIndex)) {
+      const next = new Set(hiddenPanels);
+      next.delete(response.modelIndex);
+      setHiddenPanels(next);
+      onHiddenPanelsChange?.(next);
+    }
+    if (showNarrowCarousel) navToCarouselPos(position);
+  }, [
+    nudge,
+    readOnly,
+    responses,
+    hiddenPanels,
+    onHiddenPanelsChange,
+    showNarrowCarousel,
+    navToCarouselPos,
+  ]);
   const currentCarouselResponse = responses[clampedCarouselPos];
 
   // Feed the send path's response-in-view rule from the carousel position.

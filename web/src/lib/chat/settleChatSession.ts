@@ -24,7 +24,7 @@ interface SettleChatSessionOptions {
   errorMessage: string;
   mode?: "completion" | "recovery";
   refreshHistory?: boolean;
-  /** The reader found no buffer for its stream, so it cannot reattach. */
+  /** Resume returned 404: the stream has no buffer, so it cannot reattach. */
   streamUnavailable?: boolean;
 }
 
@@ -283,7 +283,8 @@ export async function settleChatSession({
       if (!ownsSettlement()) return;
     }
     // A reader that lost a running stream reattaches: from its saved cursor,
-    // or from the start into reset rows.
+    // or from the start into reset rows. The received rows stay on screen
+    // until the replay delivers its first batch.
     const local = useChatSessionStore.getState().sessions.get(sessionId);
     if (
       typeof streamId === "number" &&
@@ -314,7 +315,6 @@ export async function settleChatSession({
         );
         if (replayStreamId !== null) {
           useChatSessionStore.getState().updateSessionData(sessionId, {
-            messageTree,
             chatState: "streaming",
             uncaughtError:
               current.uncaughtError?.error === errorMessage
@@ -496,9 +496,8 @@ export async function followChatSession({
       .updateSessionMessageTree(sessionId, new Map(messageMap));
   };
   const abortController = new AbortController();
-  // A stream without a buffer is not retried; a new stream can follow it.
+  // Only a 404 means the stream has no buffer; a new stream can follow it.
   let streamUnavailable = false;
-  let receivedCursor = false;
   try {
     for await (const rawPacket of resumeStream(
       sessionId,
@@ -511,10 +510,8 @@ export async function followChatSession({
       }
       if ("next_cursor" in rawPacket) {
         if (rawPacket.stream_id !== streamId) {
-          streamUnavailable = true;
           throw new Error("Replay cursor belongs to another response");
         }
-        receivedCursor = true;
         if (restoring) {
           responses.forEach((response, index) => {
             response.restoredPacketCount = accumulated[index]!.length;
@@ -575,10 +572,8 @@ export async function followChatSession({
         for (const output of accumulated) output.push(packet);
       else accumulated[modelIndex ?? 0]?.push(packet);
     }
-    // A response that ends before its first cursor has no buffer to replay.
-    streamUnavailable = !receivedCursor;
   } catch (error) {
-    if (error instanceof FetchError && error.status < 500)
+    if (error instanceof FetchError && error.status === 404)
       streamUnavailable = true;
     console.error("Failed to resume in-flight run", { streamId, error });
   } finally {

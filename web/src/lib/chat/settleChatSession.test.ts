@@ -946,6 +946,189 @@ describe("with a scripted fetch", () => {
     expect(resumeStream).toHaveBeenCalledTimes(1);
   });
 
+  test.each([
+    ["a rate limit", 51, () => Response.json({}, { status: 429 })],
+    ["a server error", 53, () => Response.json({}, { status: 503 })],
+    ["an end before the first cursor", 55, () => new Response("")],
+  ])(
+    "a resume that fails with %s reattaches while the same stream runs",
+    async (_failure, questionId, firstResume) => {
+      const log = jest.spyOn(console, "error").mockImplementation(() => {});
+      const streamId = questionId + 1;
+      const raw = [
+        {
+          ...savedMessage(questionId, "user", "Question"),
+          latest_child_message: streamId,
+        },
+        savedMessage(streamId, "assistant", ""),
+      ];
+      const tree = processRawChatHistory(raw, [[]]);
+      useChatSessionStore.getState().updateSessionData("session", {
+        chatState: "streaming",
+        messageTree: tree,
+      });
+      const resumes = [
+        firstResume(),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(stream) {
+              const lines = [
+                approvalRequest("approval"),
+                { stream_id: streamId, next_cursor: 1, replay_complete: true },
+              ];
+              stream.enqueue(
+                new TextEncoder().encode(
+                  lines.map((line) => JSON.stringify(line) + "\n").join("")
+                )
+              );
+            },
+          })
+        ),
+      ];
+      jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/status"))
+          return Response.json({
+            is_processing: true,
+            current_stream: { stream_id: streamId },
+          });
+        const resume = url.includes("resume-stream") && resumes.shift();
+        return resume || new Promise<Response>(() => {});
+      });
+      const controller = useChatSessionStore
+        .getState()
+        .sessions.get("session")!.abortController;
+
+      await followChatSession({
+        sessionId: "session",
+        controller,
+        errorMessage,
+        streamId,
+        messageMap: tree,
+      });
+
+      const answer = () =>
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")!
+          .messageTree.get(streamId);
+      for (let tick = 0; tick < 300 && answer()?.replayCursor !== 1; tick++)
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      log.mockRestore();
+      expect(resumes).toEqual([]);
+      expect(
+        findPendingToolApprovalId(
+          useChatSessionStore.getState().sessions.get("session")!.messageTree
+        )
+      ).toBe("approval");
+    }
+  );
+
+  test("a resume the server refuses for auth leaves the chat unconfirmed", async () => {
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    const raw = [
+      { ...savedMessage(61, "user", "Question"), latest_child_message: 62 },
+      savedMessage(62, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => Response.json({}, { status: 401 }));
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get("session")!.abortController;
+
+    await followChatSession({
+      sessionId: "session",
+      controller,
+      errorMessage,
+      streamId: 62,
+      messageMap: tree,
+    });
+
+    const session = () =>
+      useChatSessionStore.getState().sessions.get("session")!;
+    for (
+      let tick = 0;
+      tick < 300 && session().chatState !== "unconfirmed";
+      tick++
+    )
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    log.mockRestore();
+    expect(session().chatState).toBe("unconfirmed");
+    expect(session().uncaughtError).toEqual({ error: errorMessage });
+    expect(
+      jest.mocked(global.fetch).mock.calls.map(([url]) => String(url))
+    ).toEqual([
+      expect.stringContaining("resume-stream"),
+      expect.stringContaining("/status"),
+    ]);
+  });
+
+  test("an incognito lost send keeps its received output when replay is unavailable", async () => {
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    const raw = [
+      { ...savedMessage(71, "user", "Question"), latest_child_message: 72 },
+      savedMessage(72, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    const partial: Packet = {
+      placement: { turn_index: 0 },
+      obj: { type: "message_delta", content: "Partial" },
+    };
+    const localStop: Packet = {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop" },
+    };
+    tree.set(72, {
+      ...tree.get(72)!,
+      type: "error",
+      message: "Partial",
+      errorMessage: "network error",
+      streamLost: true,
+      packets: [partial, localStop],
+    });
+    const store = useChatSessionStore.getState();
+    const controller = store.sessions.get("session")!.abortController;
+    store.updateSessionData("session", {
+      incognito: true,
+      chatState: "streaming",
+      messageTree: tree,
+      sendAcknowledged: Promise.resolve(72),
+      readerFinished: Promise.resolve(),
+    });
+    const statuses = [
+      { is_processing: true, current_stream: { stream_id: 72 } },
+      { is_processing: false, current_stream: null },
+    ];
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/status")) return Response.json(statuses.shift());
+      return Response.json(
+        { detail: "No resumable stream for this chat session" },
+        { status: 404 }
+      );
+    });
+
+    await settleChatSession({ sessionId: "session", controller, errorMessage });
+
+    const session = () =>
+      useChatSessionStore.getState().sessions.get("session")!;
+    for (let tick = 0; tick < 300 && session().chatState !== "input"; tick++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    log.mockRestore();
+    expect(session().chatState).toBe("input");
+    expect(session().messageTree.get(72)).toMatchObject({
+      message: "Partial",
+      packets: [partial, localStop],
+      streamLost: undefined,
+    });
+  });
+
   test("a waiting approval of a lost stream stays open until its run ends", () => {
     const raw = [
       { ...savedMessage(1, "user", "Question"), latest_child_message: 2 },
