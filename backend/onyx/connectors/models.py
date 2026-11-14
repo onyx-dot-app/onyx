@@ -6,7 +6,14 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Literal, cast
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializeAsAny,
+    field_validator,
+    model_validator,
+)
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import INDEX_SEPARATOR, RETURN_SEPARATOR, DocumentSource
@@ -467,6 +474,35 @@ class SlimDocument(BaseModel):
     parent_hierarchy_raw_node_id: str | None = None
     # UTC source creation time.
     doc_created_at: datetime | None = None
+
+
+class ListingPayload(BaseModel):
+    """What a connector's listing knows about one document that its conversion
+    step needs. A connector that needs one defines a subclass.
+
+    A stub loaded from JSON holds this base class, with the subclass fields
+    kept as extra fields. The connector reads them with ``as_type``."""
+
+    model_config = ConfigDict(extra="allow")
+
+    def as_type[P: "ListingPayload"](self, payload_type: type[P]) -> P:
+        """This payload as the connector's subclass."""
+        if isinstance(self, payload_type):
+            return self
+        return payload_type.model_validate(self.model_dump())
+
+
+class SlimDocumentStub(SlimDocument):
+    """A listed document whose content is not fetched yet. It has what a
+    later step needs to decide if the document changed and to fetch it.
+    Pruning and permission sync read only the ``SlimDocument`` fields."""
+
+    # UTC source modification time.
+    doc_updated_at: datetime | None = None
+    mime_type: str | None = None
+    # None when the source lists no size.
+    size_bytes: int | None = None
+    listing_payload: SerializeAsAny[ListingPayload] | None = None
 
 
 class HierarchyNode(BaseModel):

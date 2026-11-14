@@ -58,6 +58,20 @@ with drives and users. Only the dedup set grows with files
 stages for its one user (`DriveRetrievalStage`). Indexing and the slim
 listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 
+**Checkpointed slim listing.**
+`GoogleDriveConnector.retrieve_slim_docs_from_checkpoint` runs one pass of the
+slim listing and returns the checkpoint. It yields `SlimDocumentStub`s with a
+`DriveListingPayload` (the user who listed the file).
+
+**Indexability.** `connectors/google_drive/doc_conversion.py:drive_file_skip_reason` is the metadata
+check: shortcut or folder, `exclude_domain_link_only`, size, images and the
+tabular rule. It reads `_MIME_HANDLERS`, the mime type to handler table that
+conversion dispatches through, and calls `file_processing/file_types.py:is_indexable_file_type`
+for other types. Every listing applies it (indexing, stubs, pruning, permission
+sync), so pruning removes documents of files that indexing skips. Conversion
+runs it first. `_post_download_skip_reason` covers what only the content shows
+(export over the size cap, Forms API off, no text).
+
 **Document id.** The id comes from the file's web view link
 (`connectors/google_drive/doc_conversion.py:onyx_document_id_from_drive_file`).
 `GoogleDriveConnector.normalize_url` returns several candidate ids for a pasted
