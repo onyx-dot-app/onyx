@@ -270,6 +270,10 @@ CheckpointOutput: TypeAlias = Generator[
 
 HierarchyOutput: TypeAlias = Generator[HierarchyNode, None, None]
 
+SlimCheckpointOutput: TypeAlias = Generator[
+    SlimDocument | HierarchyNode | ConnectorFailure, None, CT
+]
+
 
 class CheckpointedConnector(BaseConnector[CT]):
     @abc.abstractmethod
@@ -318,6 +322,38 @@ class CheckpointedConnectorWithPermSync(CheckpointedConnector[CT]):
         end: SecondsSinceUnixEpoch,
         checkpoint: CT,
     ) -> CheckpointOutput[CT]:
+        raise NotImplementedError
+
+
+class CheckpointedSlimConnector(BaseConnector[CT]):
+    """Optional. A slim listing that can stop and continue, with the same
+    contract as ``CheckpointedConnector``. One call lists a part of the
+    source, and the checkpoint it returns covers exactly what it yielded.
+
+    A connector that also implements ``CheckpointedConnector`` uses one
+    checkpoint model for the two listings. Do not move one checkpoint between
+    them."""
+
+    @abc.abstractmethod
+    def retrieve_slim_docs_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: CT,
+        include_permissions: bool = False,
+    ) -> SlimCheckpointOutput[CT]:
+        """Yields slim documents, hierarchy nodes and failures. Returns the
+        next checkpoint. The listing is complete when its ``has_more`` is
+        False. A connector can yield ``SlimDocumentStub`` for a document that
+        the indexing filters keep."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def build_dummy_checkpoint(self) -> CT:
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def validate_checkpoint_json(self, checkpoint_json: str) -> CT:
         raise NotImplementedError
 
 

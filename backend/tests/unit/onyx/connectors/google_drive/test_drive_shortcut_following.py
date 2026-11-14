@@ -429,7 +429,7 @@ def test_traversed_parent_still_crawls_untraversed_child_folder() -> None:
     assert "child_folder" in traversed
 
 
-def test_raw_shortcut_conversion_logs_bug_guard(
+def test_raw_shortcut_conversion_is_skipped(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     caplog.set_level("INFO")
@@ -445,4 +445,4 @@ def test_raw_shortcut_conversion_logs_bug_guard(
     )
 
     assert result is None
-    assert "bug: raw shortcut/folder reached document conversion" in caplog.text
+    assert "a shortcut or folder is not a document" in caplog.text

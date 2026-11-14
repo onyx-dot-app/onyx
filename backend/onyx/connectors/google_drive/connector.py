@@ -29,7 +29,9 @@ from onyx.connectors.google_drive.doc_conversion import (
     WEB_VIEW_LINK_KEY,
     PermissionSyncContext,
     build_slim_document,
+    build_slim_document_stub,
     convert_drive_item_to_document,
+    drive_file_skip_reason,
     onyx_document_id_from_drive_file,
 )
 from onyx.connectors.google_drive.drive_access import (
@@ -48,7 +50,6 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_by_web_view_links_batch,
     get_files_in_shared_drive,
     get_folder_metadata,
-    has_link_only_permission,
 )
 from onyx.connectors.google_drive.models import (
     DriveRetrievalPhase,
@@ -83,11 +84,13 @@ from onyx.connectors.google_utils.shared_constants import (
 )
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
+    CheckpointedSlimConnector,
     CheckpointOutput,
     GenerateSlimDocumentOutput,
     NormalizationResult,
     Resolver,
     SecondsSinceUnixEpoch,
+    SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
 )
@@ -288,6 +291,30 @@ def _stop_or_report_progress(
     callback.progress(tag, 1)
 
 
+def _retrieval_failure(retrieved_file: RetrievedDriveFile) -> ConnectorFailure:
+    failure_stage = retrieved_file.completion_stage.value
+    logger.error(
+        "retrieval failure during stage: %s, user: %s, "
+        "parent drive/folder: %s, error: %s",
+        failure_stage,
+        retrieved_file.user_email,
+        retrieved_file.parent_id,
+        retrieved_file.error,
+    )
+    return ConnectorFailure(
+        failed_entity=EntityFailure(
+            entity_id=retrieved_file.drive_file.get("id", failure_stage),
+        ),
+        failure_message=(
+            f"retrieval failure during stage: {failure_stage}, "
+            f"user: {retrieved_file.user_email}, "
+            f"parent drive/folder: {retrieved_file.parent_id}, "
+            f"error: {retrieved_file.error}"
+        ),
+        exception=retrieved_file.error,
+    )
+
+
 def _public_access() -> ExternalAccess:
     return ExternalAccess(
         external_user_emails=set(),
@@ -403,6 +430,7 @@ class UnreachableTargetsError(RuntimeError):
 class GoogleDriveConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
+    CheckpointedSlimConnector[GoogleDriveCheckpoint],
     CheckpointedConnectorWithPermSync[GoogleDriveCheckpoint],
     Resolver,
 ):
@@ -2026,6 +2054,18 @@ class GoogleDriveConnector(
             end=end,
         )
 
+    def _listing_skip_reason(self, drive_file: GoogleDriveFileType) -> str | None:
+        """The metadata check for a listed file. Every listing applies it, so
+        pruning removes the documents of files that indexing skips."""
+        return drive_file_skip_reason(
+            drive_file,
+            allow_images=self.allow_images,
+            size_threshold=self.size_threshold,
+            # Indexing always stages raw files, and conversion checks again.
+            has_raw_file_callback=True,
+            exclude_domain_link_only=self.exclude_domain_link_only,
+        )
+
     def _convert_retrieved_files_to_documents(
         self,
         drive_files_iter: Iterator[RetrievedDriveFile],
@@ -2059,12 +2099,10 @@ class GoogleDriveConnector(
         ) as runner:
             for retrieved_file in drive_files_iter:
                 yield from _converted(runner.ready())
-                if self.exclude_domain_link_only and has_link_only_permission(
-                    retrieved_file.drive_file
-                ):
-                    continue
                 if retrieved_file.error is not None:
                     yield _retrieval_failure(retrieved_file)
+                    continue
+                if self._listing_skip_reason(retrieved_file.drive_file) is not None:
                     continue
 
                 files_batch.append(retrieved_file)
@@ -2322,6 +2360,7 @@ class GoogleDriveConnector(
                 completion_stage=DriveRetrievalStage.DONE,
             )
             for file in batch_result.files.values()
+            if self._listing_skip_reason(file) is None
         ]
 
         yield from self._get_new_ancestors_for_files(
@@ -2356,7 +2395,13 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
+        stub_failures: list[ConnectorFailure] | None = None,
     ) -> GenerateSlimDocumentOutput:
+        """Lists the files that indexing would index. With ``stub_failures``,
+        the listing is for indexing: it yields ``SlimDocumentStub``s and adds a
+        retrieval error to ``stub_failures``. Without it, a retrieval error is
+        raised."""
+        for_indexing = stub_failures is not None
         files_batch: list[RetrievedDriveFile] = []
         slim_batch: list[SlimDocument | HierarchyNode] = []
 
@@ -2389,7 +2434,11 @@ class GoogleDriveConnector(
                     run_functions_tuples_in_parallel(
                         [
                             (
-                                build_slim_document,
+                                (
+                                    build_slim_document_stub
+                                    if for_indexing
+                                    else build_slim_document
+                                ),
                                 (
                                     self.ops,
                                     file.drive_file,
@@ -2420,10 +2469,11 @@ class GoogleDriveConnector(
             end=end,
         ):
             if file.error is not None:
-                raise file.error
-            if self.exclude_domain_link_only and has_link_only_permission(
-                file.drive_file
-            ):
+                if stub_failures is None:
+                    raise file.error
+                stub_failures.append(_retrieval_failure(file))
+                continue
+            if self._listing_skip_reason(file.drive_file) is not None:
                 continue
             files_batch.append(file)
 
@@ -2518,6 +2568,45 @@ class GoogleDriveConnector(
             checkpoint=checkpoint,
             on_checkpoint=on_checkpoint,
         )
+
+    @override
+    def retrieve_slim_docs_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: GoogleDriveCheckpoint,
+        include_permissions: bool = False,
+    ) -> SlimCheckpointOutput[GoogleDriveCheckpoint]:
+        """One pass of the slim listing, for indexing. It ends where the
+        listing saves a page token or finishes a partition, so the returned
+        checkpoint covers exactly the stubs this call yielded."""
+        if self._ops is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+        checkpoint = copy.deepcopy(checkpoint)
+        self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
+        failures: list[ConnectorFailure] = []
+        try:
+            for batch in self._extract_slim_docs_from_google_drive(
+                checkpoint=checkpoint,
+                start=start,
+                end=end,
+                include_permissions=include_permissions,
+                stub_failures=failures,
+            ):
+                yield from failures
+                failures.clear()
+                yield from batch
+            yield from failures
+        except Exception as e:
+            if MISSING_SCOPES_ERROR_STR in str(e):
+                raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
+            raise
+        checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
+        if checkpoint.completion_stage == DriveRetrievalStage.DONE:
+            checkpoint.has_more = False
+        return checkpoint
 
     def validate_connector_settings(self) -> None:
         if self._ops is None:

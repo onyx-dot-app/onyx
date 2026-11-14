@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_valid
 
 from onyx.connectors.google_utils.shared_constants import GoogleCredentialKind
 from onyx.connectors.interfaces import ConnectorCheckpoint, SecondsSinceUnixEpoch
+from onyx.connectors.models import ListingPayload
 from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 
@@ -254,6 +255,11 @@ class RetrievedDriveFile(BaseModel):
     error: Exception | None = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+
+class DriveListingPayload(ListingPayload):
+    # The user whose listing returned the file. This user can read it.
+    retriever_email: str
 
 
 class GoogleDriveCheckpoint(ConnectorCheckpoint):

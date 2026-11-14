@@ -4,7 +4,11 @@ from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.file_retrieval import has_link_only_permission
-from onyx.connectors.google_drive.models import DriveRetrievalStage, RetrievedDriveFile
+from onyx.connectors.google_drive.models import (
+    DriveRetrievalStage,
+    GDriveMimeType,
+    RetrievedDriveFile,
+)
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
@@ -25,6 +29,7 @@ def _build_retrieved_file(
         drive_file={
             "id": "file-id",
             "name": "Test File",
+            "mimeType": GDriveMimeType.DOC.value,
             "permissions": permissions,
         },
         user_email="user@example.com",
