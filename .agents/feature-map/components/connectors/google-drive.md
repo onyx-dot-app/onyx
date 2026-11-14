@@ -97,6 +97,15 @@ checkpoint covers exactly what the call yielded. The entry points:
   later. A file edited during the listing moves past the end, and pruning
   would read it as deleted.
 
+**Hierarchy.** On the shard engine, each partition also has a `FOLDERS` shard:
+a folder-only query with no time range, which does not split. Listed folders
+become hierarchy nodes. A parent that no folder listing returned goes into
+`DriveListingState.unresolved_parent_emails`. When the listing is done, those
+parents are read one tree level at a time, each once, up to a folder already
+yielded or a drive root. A document that arrives before its folder gets a STUB
+parent in docfetching. The serial crawl and reindex walk the ancestors of each
+file batch (`_get_new_ancestors_for_files`).
+
 A service account checkpoint of the serial crawl (`phase_progress` or a stage)
 is dropped: the attempt lists again from its window start.
 
