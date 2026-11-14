@@ -376,6 +376,11 @@ run "the_sandbox_pool_runs_pods_by_default" {
     ]
     error_message = "Pod-runtime sandbox pools carry only the workload taint, so pod sandboxes still land there."
   }
+
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].initial_node_count == 0
+    error_message = "A pod-runtime sandbox pool starts empty: sandbox pods make the autoscaler add a node."
+  }
 }
 
 run "firecracker_turns_on_nested_virtualization" {
@@ -427,6 +432,13 @@ run "firecracker_turns_on_nested_virtualization" {
   assert {
     condition     = !contains(keys(google_container_node_pool.this), "sandboxpod")
     error_message = "The pod sandbox pool is opt-in."
+  }
+
+  # Only the host agent DaemonSet runs here, and DaemonSets never make the
+  # autoscaler add a node.
+  assert {
+    condition     = google_container_node_pool.this["sandbox"].initial_node_count == 1
+    error_message = "The Firecracker pool must start with a node, or the host agent never gets one."
   }
 }
 
@@ -484,6 +496,11 @@ run "firecracker_with_pod_sandbox_pool" {
     )
     error_message = "The Firecracker pool keeps its own label and taint next to the pod pool."
   }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 1
+    error_message = "The pod sandbox pool must start with a node for the image prepuller DaemonSet."
+  }
 }
 
 run "the_pod_sandbox_pool_can_be_sized" {
@@ -505,6 +522,31 @@ run "the_pod_sandbox_pool_can_be_sized" {
       one(google_container_node_pool.this["sandboxpod"].autoscaling).total_max_node_count == 4
     )
     error_message = "The pod sandbox pool should take the given machine type and counts."
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 0
+    error_message = "A pod sandbox pool with min 0 starts empty."
+  }
+}
+
+run "a_caller_pool_named_sandboxpod_still_starts_empty" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    node_pools = {
+      main = {}
+      sandboxpod = {
+        taints = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      }
+    }
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 0
+    error_message = "Only the module's own pod sandbox pool starts with a node; a caller's tainted pool starts empty."
   }
 }
 
