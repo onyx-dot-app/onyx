@@ -594,10 +594,11 @@ export class OnyxChatWidget extends LitElement {
       this.streamingStatus = "";
       this.messages = [...this.messages, userMessage];
 
-      // The parent is the latest saved message, the one with a numeric ID
+      // The parent is the latest saved answer: the backend treats a question
+      // as the parent of a regeneration, not of a new question.
       const parentMessage = [...this.messages]
         .reverse()
-        .find((m) => typeof m.id === "number");
+        .find((m) => m.role === "assistant" && typeof m.id === "number");
       const parentMessageId =
         parentMessage && typeof parentMessage.id === "number"
           ? parentMessage.id

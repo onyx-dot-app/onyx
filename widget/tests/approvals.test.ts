@@ -755,7 +755,7 @@ describe("widget while a request waits", () => {
     expect(saved).toEqual(expected);
   });
 
-  it("sends under the latest saved message", async () => {
+  it("sends a new question under the latest saved answer, not an unanswered question", async () => {
     const widget = restoredWidget();
     widget["chatSessionId"] = "session";
     widget["messages"] = [
@@ -773,7 +773,7 @@ describe("widget while a request waits", () => {
     await widget["sendMessage"]();
 
     expect(api.streamMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ parentMessageId: 3 })
+      expect.objectContaining({ parentMessageId: 2 })
     );
   });
 
