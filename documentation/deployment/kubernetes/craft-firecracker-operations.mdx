@@ -228,8 +228,8 @@ The API server deletes the Firecracker data of a session or a user when you dele
 A save that is in progress during the delete does not commit, and the API server deletes its archive.
 If a delete step fails,
 the API server logs `sandbox_fc_session_purge_failed` or `sandbox_fc_sandbox_purge_failed` and continues with the other
-steps. If a microVM stop fails, the API server still removes the sandbox record,
-and the API server stops the microVM as an orphan at the next node report of the host agent.
+steps. If a microVM stop fails, the API server still removes the sandbox record.
+It then stops the microVM as an orphan at the next node report of the host agent.
 
 ## Monitoring
 

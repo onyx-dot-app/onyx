@@ -442,7 +442,7 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
     - `/dev/kvm`: the node has no KVM. Use bare metal or a VM size with nested virtualization.
     - cgroup v2: use a node image with the unified cgroup hierarchy.
     - reflink or loop store: the data directory has no reflink, and the host agent cannot make its loop store.
-    The error names the cause: less than 20 GiB free, no `/dev/loop-control`, no XFS in the node kernel,
+    The error names the cause: too little free disk, no `/dev/loop-control`, no XFS in the node kernel,
     or `--loop-store=off`.
   </Accordion>
 
