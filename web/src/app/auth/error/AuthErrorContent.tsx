@@ -2,6 +2,7 @@
 
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import { Button, Text } from "@opal/components";
+import { useNavigation } from "@opal/navigation";
 import { cn, richNodes } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -55,6 +56,7 @@ interface AuthErrorContentProps {
 
 function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
   const t = useTranslations("auth");
+  const navigation = useNavigation();
   // "Join your team" swaps the question for its next step.
   const [joinChosen, setJoinChosen] = useState(false);
   const errorCodeMessages = {
@@ -135,7 +137,10 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
 
         {isTeamChoice ? (
           <>
-            <Button href={signupPath({ startNewTeam: true })} width="full">
+            <Button
+              {...navigation.linkTo(signupPath({ startNewTeam: true }))}
+              width="full"
+            >
               {t("error.startNewTeamButton.label")}
             </Button>
             <Button
@@ -158,7 +163,7 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
             </Button>
             <Button
               prominence="secondary"
-              href={loginPath({ autoRedirectToSso: false })}
+              {...navigation.linkTo(loginPath({ autoRedirectToSso: false }))}
               width="full"
             >
               {t("error.returnToLoginButton.label")}
@@ -166,7 +171,10 @@ function AuthErrorContent({ message: rawMessage }: AuthErrorContentProps) {
           </>
         ) : (
           /* Held on the button: the IdP just failed, so no bounce back to it. */
-          <Button href={loginPath({ autoRedirectToSso: false })} width="full">
+          <Button
+            {...navigation.linkTo(loginPath({ autoRedirectToSso: false }))}
+            width="full"
+          >
             {t("error.returnToLoginButton.label")}
           </Button>
         )}
