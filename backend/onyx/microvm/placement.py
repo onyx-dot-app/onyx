@@ -70,7 +70,9 @@ from onyx.microvm.models import (
 from onyx.microvm.registry import (
     SandboxPlacement,
     SandboxReservation,
+    claim_sandbox_daemon_key,
     clear_sandbox_daemon_key,
+    clear_sandbox_daemon_key_if,
     clear_sandbox_placement_if,
     get_live_node,
     get_sandbox_daemon_key,
@@ -80,7 +82,6 @@ from onyx.microvm.registry import (
     list_live_nodes,
     release_sandbox_reservation,
     reserve_sandbox,
-    set_sandbox_daemon_key,
     touch_sandbox_placement,
     unindex_sandbox_placement,
     write_sandbox_placement,
@@ -91,7 +92,7 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 _PLACEMENT_LOCK_PREFIX = "sandbox_fc:place_lock:"
-_LOCK_WAIT_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 15
+PLACEMENT_LOCK_WAIT_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 15
 _LOCK_LEASE_SECONDS = SANDBOX_FC_AGENT_CREATE_TIMEOUT_SECONDS + 30
 
 # Capacity reasons that are not agent ErrorReasons.
@@ -187,7 +188,7 @@ def sandbox_placement_lock(
         _PLACEMENT_LOCK_PREFIX + str(sandbox_id), timeout=_LOCK_LEASE_SECONDS
     )
     acquired = (
-        lock.acquire(blocking_timeout=_LOCK_WAIT_SECONDS)
+        lock.acquire(blocking_timeout=PLACEMENT_LOCK_WAIT_SECONDS)
         if blocking
         else lock.acquire(blocking=False)
     )
@@ -480,6 +481,14 @@ def _rank(
                     ),
                 )
             )
+        elif info.max_vms and info.vm_slots_used >= info.max_vms:
+            refusals.append(
+                NodeRefusal(
+                    node_id=node.node_id,
+                    reason=HostAgentErrorReason.CAPACITY_VM_SLOTS.value,
+                    detail=f"{info.vm_slots_used} VMs, the node cap is {info.max_vms}",
+                )
+            )
         else:
             eligible.append((node, info))
     return sorted(eligible, key=lambda pair: pair[1].mem_available_mib, reverse=True)
@@ -674,17 +683,45 @@ def _place_new(
     return None
 
 
-def _key_for_attempt(tenant_cache: CacheBackend, request: VmRequest) -> SecretStr:
-    """The attempt's stored key, or a new one, stored before Create sends it."""
-    key = get_sandbox_daemon_key(
-        tenant_cache, request.sandbox_id, attempt=request.attempt
+def _key_for_attempt(
+    tenant_cache: CacheBackend, request: VmRequest, reservation: _Reservation
+) -> tuple[SecretStr, bytes]:
+    """The attempt's stored key, or a new one, stored under this placement's
+    reservation owner before Create sends it. Returns the stored value."""
+    claimed = claim_sandbox_daemon_key(
+        tenant_cache,
+        request.sandbox_id,
+        attempt=request.attempt,
+        owner=reservation.current.owner,
+        new_key=new_sandboxd_key(),
     )
-    if key is None:
-        key = new_sandboxd_key()
-        set_sandbox_daemon_key(
-            tenant_cache, request.sandbox_id, attempt=request.attempt, key=key
+    if claimed is None:
+        raise SandboxProvisionContentionError(
+            f"Sandbox {request.sandbox_id} daemon key changed during placement"
         )
-    return key
+    return claimed
+
+
+def _release_refused(
+    tenant_cache: CacheBackend,
+    request: VmRequest,
+    reservation: _Reservation,
+    key_raw: bytes,
+    refusals: list[NodeRefusal],
+    pinned: RegisteredNode | None,
+) -> None:
+    """Every node refused. Delete the attempt's key, then the reservation. A
+    placement that took over the reservation stored the key again under its
+    own owner first, so this delete misses it. The key stays when the pinned
+    node was skipped without a Create: its VM of this attempt may run."""
+    skipped_pinned = pinned is not None and any(
+        r.node_id == pinned.node_id
+        and r.reason == HostAgentErrorReason.TEMPLATE_MISSING.value
+        for r in refusals
+    )
+    if not skipped_pinned:
+        clear_sandbox_daemon_key_if(tenant_cache, request.sandbox_id, key_raw)
+    reservation.release(tenant_cache)
 
 
 def discard_unusable_vm(
@@ -815,7 +852,7 @@ def place_sandbox_vm(
         request = request.model_copy(update={"attempt": reservation.current.attempt})
         refusals: list[NodeRefusal] = []
         for _ in range(_MAX_ATTEMPTS):
-            key = _key_for_attempt(tenant_cache, request)
+            key, key_raw = _key_for_attempt(tenant_cache, request, reservation)
             try:
                 placed = _place_new(
                     tenant_cache,
@@ -845,7 +882,9 @@ def place_sandbox_vm(
                 pinned = None
                 continue
             if placed is None:
-                reservation.release(tenant_cache)
+                _release_refused(
+                    tenant_cache, request, reservation, key_raw, refusals, pinned
+                )
                 raise capacity_unavailable_error(refusals)
             if not record_placement(
                 shared_cache,

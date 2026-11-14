@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "인증"
       },
+      "codingAgentIncognito": {
+        "tooltip": "시크릿 모드에서는 코딩 에이전트를 사용할 수 없습니다"
+      },
       "configure": {
         "tooltip": "구성"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "작업 검색..."
       },
+      "selectionSaveFailed": "이 채팅의 도구 선택을 저장할 수 없습니다.",
       "serverFallback": {
         "label": "서버"
       },
@@ -5181,6 +5185,27 @@
       "unavailable": {
         "description": "Craft는 Onyx가 배포별로 사용 설정합니다. 접근하려면 Onyx 담당자에게 문의하세요.",
         "title": "이 배포에서는 Craft를 사용할 수 없습니다"
+      },
+      "publishing": {
+        "title": "스킬 게시",
+        "open": {
+          "label": "열림",
+          "description": "스킬 작성자가 조직에 바로 게시합니다."
+        },
+        "requiresReview": {
+          "label": "검토 필요",
+          "description": "관리자가 각 게시와 각 업데이트를 승인합니다."
+        },
+        "off": {
+          "label": "끄기",
+          "description": "관리자만 스킬을 조직에 게시합니다."
+        },
+        "saveSuccess": {
+          "message": "게시 설정을 저장했습니다."
+        },
+        "saveError": {
+          "message": "게시 설정을 저장할 수 없습니다."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12168,10 @@
         },
         "organization": {
           "label": "조직"
+        },
+        "unpublished": {
+          "label": "게시되지 않은 변경 사항",
+          "tooltip": "조직은 아직 버전 {number}을(를) 사용합니다."
         }
       },
       "toggle": {
@@ -12424,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "하위 에이전트 작업 중",
         "attachFilesButton": {
           "tooltip": "파일 첨부"
         },
@@ -12432,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "다중 모델 모드에서는 Deep Research를 사용할 수 없습니다",
+          "incognitoTooltip": "시크릿 모드에서는 Deep Research를 사용할 수 없습니다",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12460,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "음성 설정",
           "tooltip": "음성이 구성되지 않았습니다. 관리자 설정에서 구성하세요."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter로 전송 · Ctrl 또는 Command + Enter로 대기열에 추가",
+          "multiModelHint": "모델을 비교하는 동안에는 대기열에 추가할 수 없습니다. 대기열을 사용하려면 모델을 하나 선택하세요.",
+          "attachmentsHint": "이 응답이 끝난 후 첨부 파일을 보내세요.",
+          "chooseResponseHint": "메시지를 대기열에 추가하기 전에 응답을 선택하세요.",
+          "incognitoHint": "시크릿 채팅에서는 응답이 끝날 때까지 기다리세요.",
+          "sendHint": "이 응답의 다음 단계에서 전송",
+          "interruptHint": "현재 작업을 중단하고 이 메시지 전송",
+          "sendLabel": "전송",
+          "queueLabel": "대기열",
+          "interruptKeyboardHint": "Enter로 중단 · Ctrl 또는 Command + Enter로 대기열에 추가",
+          "interruptLabel": "중단",
+          "waitHint": "응답이 끝날 때까지 기다리세요.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "하위 에이전트 중지"
         }
       },
       "baseInputBar": {
@@ -12558,16 +12607,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "대기 중인 메시지 제거"
+          "tooltip": "대기 중인 메시지 제거",
+          "ariaLabel": "대기 중인 메시지 삭제: {message}"
         },
         "editHint": {
           "label": "편집 ·"
         },
-        "item": {
-          "ariaLabel": "대기 중인 메시지 전환"
-        },
         "removeHint": {
           "label": "제거"
+        },
+        "editButton": {
+          "tooltip": "대기열 메시지 편집",
+          "clearDraftTooltip": "대기열 메시지를 편집하려면 초안을 비우세요",
+          "ariaLabel": "대기 중인 메시지 편집: {message}"
+        },
+        "sendButton": {
+          "tooltip": "현재 작업을 중단하고 이 메시지 전송",
+          "ariaLabel": "지금 보내기: {message}"
+        },
+        "sendHint": {
+          "label": "지금 전송 ·"
         }
       },
       "sharedAppInputBar": {
@@ -12577,6 +12636,14 @@
         "startSessionButton": {
           "label": "새 세션 시작"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "메시지를 전송하지 못했습니다.",
+        "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
+        "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
+        "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
+        "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
       }
     },
     "mcpApiKey": {
@@ -12672,6 +12739,9 @@
         "timedOut": {
           "text": "응답이 시간 제한에 도달하여 중지되었습니다."
         }
+      },
+      "agentResults": {
+        "received": "하위 에이전트 결과를 받았습니다"
       },
       "codeBlock": {
         "copyButton": {
@@ -12820,11 +12890,6 @@
         },
         "stoppedStatus": {
           "text": "이미지 생성 중지됨"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "표 복사"
         }
       },
       "memoizedLink": {
@@ -14482,7 +14547,7 @@
         "promote": {
           "cancelButton": "취소",
           "confirmButton": "조직 전체에 공개",
-          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 이 변경 사항은 앱을 저장할 때 적용됩니다.",
+          "description": "앱에 연결된 스킬은 모든 사용자가 사용할 수 있어야 합니다. 앱을 저장하면 스킬이 조직에 게시됩니다. 게시는 취소할 수 없습니다.",
           "title": "\"{name}\"을(를) 조직 전체에 공개할까요?"
         },
         "search": {
@@ -16418,6 +16483,12 @@
       "title": "채팅",
       "toasts": {
         "saveFailed": "환경설정을 저장하지 못했습니다"
+      },
+      "sendBehavior": {
+        "title": "작업 중 전송 동작",
+        "description": "응답 중 Enter 키와 전송 버튼의 동작을 선택하세요. Ctrl/Cmd+Enter는 항상 후속 메시지를 대기열에 추가합니다.",
+        "afterStep": "현재 단계 후",
+        "interrupt": "현재 작업 중단"
       }
     },
     "connectors": {
@@ -17130,6 +17201,13 @@
         "savingChanges": "변경 사항 저장 중...",
         "savingSkill": "스킬 저장 중..."
       },
+      "staleVersion": {
+        "description": "다른 사용자가 새 버전을 저장했습니다. 새로고침하여 가져오세요. 저장하지 않은 변경 사항은 사라집니다.",
+        "reload": {
+          "label": "새로고침"
+        },
+        "title": "이 스킬은 연 이후에 변경되었습니다"
+      },
       "toasts": {
         "created": "\"{name}\"을(를) 생성했습니다",
         "deleteFailed": "스킬을 삭제하지 못했습니다",
@@ -17330,9 +17408,6 @@
           "message": "공유 정보를 불러오는 중..."
         },
         "noOwnerTitle": "활성 소유자 없음",
-        "organizationPermissionMenu": {
-          "ariaLabel": "조직 권한 변경"
-        },
         "ownerLabel": "소유자",
         "permissionMenu": {
           "ariaLabel": "{name}의 접근 권한 변경"
@@ -17373,14 +17448,77 @@
         "peopleTitle": "액세스 권한이 있는 사용자",
         "manageIndividualAccess": "개별 액세스 관리",
         "individualAccessTitle": "개별 액세스",
-        "ownershipTitle": "소유권"
+        "ownershipTitle": "소유권",
+        "published": {
+          "title": "조직",
+          "description": "게시됨. 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다."
+        },
+        "publishWarning": {
+          "title": "게시는 취소할 수 없습니다",
+          "description": "저장하면 조직의 모든 사용자가 이 스킬을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다.",
+          "reviewDescription": "관리자가 요청을 승인할 때까지 스킬은 비공개로 유지됩니다. 승인 후에는 다시 비공개로 만들 수 없습니다."
+        },
+        "reviewRequestedToast": {
+          "message": "게시 요청을 관리자에게 보냈습니다."
+        },
+        "publishOff": {
+          "title": "게시가 꺼져 있습니다",
+          "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 스킬 게시를 요청하세요."
+        }
       },
       "placeholders": {
         "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
       },
       "tabs": {
         "details": "세부 정보",
-        "sharing": "공유"
+        "sharing": "공유",
+        "versions": "버전"
+      },
+      "versions": {
+        "tableLabel": "스킬 버전",
+        "columns": {
+          "version": "버전",
+          "madeBy": "만든 사람",
+          "date": "날짜"
+        },
+        "versionLabel": "버전 {number}",
+        "currentBadge": "현재",
+        "unknownAuthor": "알 수 없음",
+        "previewRow": {
+          "ariaLabel": "버전 {number} 미리 보기"
+        },
+        "restore": {
+          "label": "복원",
+          "ariaLabel": "버전 {number} 복원",
+          "successToast": "버전 {number}을(를) 버전 {newNumber}(으)로 복원했습니다.",
+          "unchangedToast": "버전 {number}의 파일이 현재 버전과 같습니다.",
+          "failedToast": "이 버전을 복원할 수 없습니다.",
+          "unsavedChanges": {
+            "title": "먼저 변경 사항을 저장하세요",
+            "description": "버전을 복원하기 전에 편집기의 변경 사항을 저장하거나 삭제하세요."
+          }
+        },
+        "loadError": {
+          "title": "버전을 불러올 수 없습니다",
+          "description": "나중에 다시 시도하세요."
+        },
+        "preview": {
+          "back": "모든 버전",
+          "loadError": {
+            "title": "이 버전을 불러올 수 없습니다"
+          }
+        },
+        "status": {
+          "pending": "검토 대기",
+          "published": "게시됨"
+        },
+        "publishUpdate": {
+          "label": "업데이트 게시",
+          "successToast": "버전 {number}을(를) 조직에 게시했습니다.",
+          "failedToast": "이 업데이트를 게시할 수 없습니다.",
+          "sentForReviewToast": "버전 {number}을(를) 관리자에게 검토 요청했습니다.",
+          "offNotice": "게시가 꺼져 있습니다. 관리자에게 이 업데이트 게시를 요청하세요."
+        }
       }
     },
     "page": {
@@ -17533,10 +17671,41 @@
       "shareDescription": "선택한 모든 스킬에 변경 사항을 적용합니다. 변경하지 않은 설정은 현재 값을 유지합니다.",
       "unchanged": "변경하지 않음",
       "everyone": "조직의 모든 사용자",
-      "invitedOnly": "초대한 사용자 및 그룹",
       "addAccessDescription": "선택한 모든 스킬에 이 사용자와 그룹을 추가합니다. 지정한 사용자와 그룹에는 선택한 권한이 적용됩니다. 그 외 사용자는 현재 액세스 권한을 유지합니다.",
       "apply": "{count, plural, one {스킬 #개에 적용} other {스킬 #개에 적용}}",
-      "moreActions": "추가 작업"
+      "moreActions": "추가 작업",
+      "publishWarning": {
+        "title": "게시는 취소할 수 없습니다",
+        "description": "적용하면 조직의 모든 사용자가 선택한 스킬을 사용할 수 있습니다. 게시된 스킬은 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다."
+      }
+    },
+    "reviewRequests": {
+      "title": "게시 요청",
+      "description": "조직에 스킬을 게시하는 요청을 승인하거나 거부합니다.",
+      "columns": {
+        "skill": "스킬",
+        "version": "버전",
+        "author": "작성자",
+        "saved": "저장됨"
+      },
+      "unnamedSkill": "이름 없는 스킬",
+      "review": {
+        "label": "검토",
+        "ariaLabel": "{name} 검토"
+      },
+      "approve": {
+        "label": "승인"
+      },
+      "deny": {
+        "label": "거부"
+      },
+      "approvedToast": "{name}의 버전 {number}을(를) 게시했습니다.",
+      "deniedToast": "{name}의 버전 {number}을(를) 거부했습니다.",
+      "failedToast": "이 요청을 업데이트할 수 없습니다.",
+      "version": {
+        "firstPublish": "v{number} · 첫 게시",
+        "update": "v{number} · v{published}에서 업데이트"
+      }
     }
   },
   "opensearchHealth": {

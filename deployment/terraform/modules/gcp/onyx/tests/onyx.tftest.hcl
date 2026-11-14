@@ -273,6 +273,21 @@ run "firecracker_grants_the_bucket_to_the_signing_service_account" {
   }
 }
 
+run "the_pod_sandbox_pool_reaches_the_gke_module" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool           = true
+    craft_sandbox_runtime              = "firecracker"
+    enable_craft_pod_sandbox_node_pool = true
+  }
+
+  assert {
+    condition     = contains(keys(module.gke.node_pool_names), "sandboxpod") && contains(keys(module.gke.node_pool_names), "sandbox")
+    error_message = "The composition should pass the pod sandbox pool flag to the gke module."
+  }
+}
+
 run "redis_and_cloud_armor_are_on_by_default" {
   command = plan
 

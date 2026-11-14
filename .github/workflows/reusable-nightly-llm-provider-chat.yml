@@ -136,9 +136,6 @@ jobs:
         uses: ./.github/actions/build-devcontainer-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
-          ref-name: ${{ github.ref_name }}
-          pr-number: ${{ github.event.pull_request.number }}
-          github-sha: ${{ github.sha }}
           run-id: ${{ github.run_id }}
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 

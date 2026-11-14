@@ -1,5 +1,9 @@
-import type { Tag } from "@/lib/types";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type {
+  SearchFiltersRequest,
+  TagSelection,
+} from "@/lib/searchFilters/types";
 
 export interface MethodSpec {
   /* Defines a single method that is part of a custom tool. Each method maps to a single
@@ -48,6 +52,7 @@ export interface ToolSnapshot {
   default_enabled: boolean;
   default_chat_enabled?: boolean | null;
   user_enabled_in_chat?: boolean;
+  default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
@@ -129,7 +134,18 @@ export interface ChatSearchFilters {
   /** `uniqueKey`s of the sources switched on; `null` means untouched (all on). */
   selectedSources: readonly string[] | null;
   documentSets: readonly string[];
-  tags: readonly Tag[];
-  /** ISO datetime strings, kept serializable rather than as `Date`s. */
-  timeRange: { from: string; to: string } | null;
+  tags: readonly TagSelection[];
+  /** An ISO datetime string, kept serializable rather than as a `Date`. */
+  timeRange: { from: string } | null;
+}
+
+/**
+ * The tools and search filters saved on an existing chat. The server owns
+ * them: the chat-session detail returns them, and the tool-selection PATCH is
+ * their only writer. Turns the server starts use them.
+ */
+export interface ChatToolSelection {
+  allowed_tool_ids: number[] | null;
+  preferred_tool_id: number | null;
+  internal_search_filters: SearchFiltersRequest | null;
 }

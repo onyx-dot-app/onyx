@@ -1,13 +1,16 @@
-"""Deleting a user removes the user's Craft snapshot blobs from the file store."""
+"""Deleting a user removes the user's Craft snapshot blobs from the file store
+and purges the user's Firecracker harness sandbox."""
 
 from __future__ import annotations
 
 import io
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
+from onyx.db import users as users_module
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, Snapshot, User
 from onyx.db.users import delete_user_from_db
@@ -88,3 +91,34 @@ def test_delete_user_removes_sandbox_blobs(
         for user in users:
             delete_user_from_db(user, db_session)
         delete_sandbox_blobs_best_effort(seeded_paths)
+
+
+def test_delete_user_purges_the_harness_sandbox(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purged: list[dict[UUID, list[UUID]]] = []
+    monkeypatch.setattr(
+        users_module, "purge_harness_sandboxes_in_background", purged.append
+    )
+    user = make_user(db_session, standard_account=True)
+    try:
+        sandbox = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING)
+        session_row = BuildSession(
+            id=uuid4(),
+            user_id=user.id,
+            name="harness-purge",
+            status=BuildSessionStatus.ACTIVE,
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        sandbox_id, session_id = sandbox.id, session_row.id
+
+        delete_user_from_db(user, db_session)
+
+        assert purged == [{sandbox_id: [session_id]}]
+    finally:
+        db_session.rollback()
+        if db_session.get(User, user.id) is not None:
+            delete_user_from_db(user, db_session)

@@ -12,6 +12,7 @@ import pytest
 from fastapi import FastAPI, HTTPException
 from fastapi.exceptions import RequestValidationError
 from fastapi.testclient import TestClient
+from opensearchpy.exceptions import ConnectionTimeout
 from pydantic import BaseModel
 from sqlalchemy.exc import DataError
 
@@ -58,6 +59,10 @@ def client() -> TestClient:
     @app.get("/client-status-error")
     def _client_status_error() -> None:
         raise _ClientConflictError("Name already taken")
+
+    @app.get("/search-timeout")
+    def _search_timeout() -> None:
+        raise ConnectionTimeout("TIMEOUT", "Read timed out", Exception())
 
     @app.post("/validated")
     def _validated(body: _Body) -> None:  # noqa: ARG001
@@ -138,6 +143,16 @@ class TestUnhandledExceptionContract:
         assert response.json() == {
             "error_code": "CONFLICT",
             "detail": "Name already taken",
+        }
+
+    def test_a_non_integer_status_is_a_500(self, client: TestClient) -> None:
+        """opensearch-py sets status_code to "TIMEOUT" on a connection timeout."""
+        response = client.get("/search-timeout")
+
+        assert response.status_code == 500
+        assert response.json() == {
+            "error_code": "INTERNAL_ERROR",
+            "detail": "An internal server error occurred.",
         }
 
 

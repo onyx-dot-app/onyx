@@ -25,11 +25,14 @@ export class ChatPage {
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
+  readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
+  readonly agentResultsDividers: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  readonly errorBanners: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -48,12 +51,18 @@ export class ChatPage {
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
+    this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.agentResultsDividers = this.scrollContainer.getByText(
+      "Subagent results received",
+      { exact: true }
+    );
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
+    this.errorBanners = page.getByTestId("chat-error-banner");
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -92,7 +101,6 @@ export class ChatPage {
 
   async goto(sessionId?: string): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
   }
 
@@ -154,45 +162,36 @@ export class ChatPage {
     await expect(table.getByRole("row")).toHaveCount(rows);
   }
 
-  /** The answer table is wider than the answer column but stays in the chat area. */
-  async expectAnswerTableBrokenOut(): Promise<void> {
-    const message = this.aiMessage();
-    const card = message.locator(".markdown-table-card");
-    await expect
-      .poll(async () => {
-        const [cardBox, answerBox, scrollBox] = await Promise.all([
-          card.boundingBox(),
-          message.boundingBox(),
-          this.scrollContainer.boundingBox(),
-        ]);
-        if (!cardBox || !answerBox || !scrollBox) return false;
-        return (
-          cardBox.width > answerBox.width &&
-          cardBox.x >= scrollBox.x &&
-          cardBox.x + cardBox.width <= scrollBox.x + scrollBox.width
-        );
-      })
-      .toBe(true);
-  }
-
-  /** Hovers the answer table and clicks its copy button. */
-  async copyAnswerTable(): Promise<void> {
-    const message = this.aiMessage();
-    await message.locator(".markdown-table-card").hover();
-    await message.getByTestId("markdown-table-copy-button").click();
-  }
-
-  /** Needs the clipboard-read permission. */
-  async expectClipboardText(text: string): Promise<void> {
-    await expect
-      .poll(() => this.page.evaluate(() => navigator.clipboard.readText()))
-      .toBe(text);
-  }
-
   async expectAnswerListItem(text: string): Promise<void> {
     await expect(
       this.aiMessage().getByRole("listitem").filter({ hasText: text })
     ).toHaveCount(1);
+  }
+
+  async copyAnswerHtml(): Promise<string> {
+    // Capture the clipboard boundary without depending on the host clipboard.
+    await this.page.evaluate(() => {
+      sessionStorage.removeItem("test:copied-answer");
+      navigator.clipboard.write = async (items) => {
+        const [item] = items;
+        if (!item) throw new Error("Answer was not copied");
+        sessionStorage.setItem(
+          "test:copied-answer",
+          await (await item.getType("text/html")).text()
+        );
+      };
+    });
+    await this.aiMessage().getByTestId("AgentMessage/copy-button").click();
+    let html = "";
+    await expect
+      .poll(async () => {
+        html = await this.page.evaluate(
+          () => sessionStorage.getItem("test:copied-answer") || ""
+        );
+        return html;
+      })
+      .not.toBe("");
+    return html;
   }
 
   async expectCopyButton(): Promise<void> {
@@ -225,6 +224,27 @@ export class ChatPage {
     }
   }
 
+  /**
+   * Checks a failed answer at message row `row`: it keeps its partial text and
+   * shows an error banner, with Regenerate only while it is the latest answer.
+   */
+  async expectFailedAnswer(
+    row: number,
+    partialText: string,
+    canRegenerate: boolean
+  ): Promise<void> {
+    const failedRow = this.messageRows.nth(row);
+    await expect(failedRow).toContainText(partialText);
+    await expect(failedRow.getByTestId("chat-error-banner")).toBeVisible();
+    await expect(
+      failedRow.getByRole("button", { name: "Regenerate", exact: true })
+    ).toHaveCount(canRegenerate ? 1 : 0);
+  }
+
+  async expectRowText(row: number, text: string): Promise<void> {
+    await expect(this.messageRows.nth(row)).toContainText(text);
+  }
+
   async expectAnswerAbsent(text: string): Promise<void> {
     await expect(this.scrollContainer).not.toContainText(text);
   }
@@ -236,6 +256,8 @@ export class ChatPage {
     await expect(
       this.messageRows.last().getByTestId("onyx-ai-message").first()
     ).toBeVisible({ timeout });
+    // Text sent before the turn settles joins it as pending input.
+    await this.inputBar.expectIdle(timeout);
   }
 
   /**
@@ -404,6 +426,14 @@ export class ChatPage {
     await this.openModelSettings(modelName);
     await this.modelPopover.getByRole("slider").first().press("End");
     await this.page.keyboard.press("Escape");
+  }
+
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
   }
 
   async editHumanMessage(text: string, index = 0): Promise<void> {

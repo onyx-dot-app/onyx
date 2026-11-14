@@ -3,7 +3,28 @@ import {
   getToolPacketCounts,
   sendMessageAndCaptureStreamPackets,
 } from "@tests/e2e/utils/chatStream";
-import { addMockLlmConversation, mockLlmNonce } from "@tests/e2e/utils/mockLlm";
+import {
+  addMockLlmConversation,
+  mockLlmNonce,
+  mockLlmToolCallReply,
+} from "@tests/e2e/utils/mockLlm";
+
+/** The name the LLM sees for an MCP tool; it matches `MCPTool.name` in the backend. */
+export function qualifiedMcpToolName(
+  serverId: number,
+  serverName: string,
+  toolName: string
+): string {
+  const sanitize = (name: string): string =>
+    name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const qualified = `mcp__${serverId}__${sanitize(serverName)}__${toolName}`;
+  if (sanitize(qualified) !== qualified || qualified.length > 64) {
+    throw new Error(
+      `Use a shorter MCP tool name without symbols: ${qualified}`
+    );
+  }
+  return qualified;
+}
 
 /**
  * Send a chat message and return the tool's invocation packet counts. The mock LLM
@@ -19,12 +40,9 @@ export async function sendMcpToolCall(
     name: `mcp-${nonce}`,
     conditions: { prompt_contains: [nonce] },
     replies: [
-      {
-        tool_calls: [
-          { id: callId, name: toolName, arguments: { name: nonce } },
-        ],
-        conditions: { offers: [toolName] },
-      },
+      mockLlmToolCallReply([
+        { id: callId, name: toolName, arguments: { name: nonce } },
+      ]),
       { text: "Done.", conditions: { has_results_for: [callId] } },
     ],
   });

@@ -238,7 +238,6 @@ def test_cancel_with_sigint_signals_and_returns_no_result(guest: Guest) -> None:
     assert sent.result is None
     assert not sent.already_ended
     assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT
-    assert execution.result is None
 
 
 def test_cancel_of_an_unknown_execution_raises_not_found(guest: Guest) -> None:

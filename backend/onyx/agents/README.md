@@ -152,6 +152,13 @@ The coordinator calls its `RunStore` to save output after the result becomes ava
 
 `prepare_step(StepInput)` returns a `PreparedStep` for an allowed model call.
 It receives conversation history, this run's input and output, the step budget, and the previous completed step.
+`StepInput.received_inputs` contains submitted instructions and unread background results.
+The runtime accepts them before the next model call, including when no preparation callback exists.
+A feature can return `PreparedStep.input_messages` to transform their content, for example to remap citations.
+Preserve each input's identity, provenance, and order. The runtime records accepted inputs with their step.
+Each input needs `InputMessageMetadata`; the runtime rejects untagged input, because compaction keeps the latest untagged user message as the task.
+`InputMessageMetadata.content_metadata` reaches preparation only; accepted history keeps the source and source run.
+Acceptance belongs to `RunOwnership.accept_inputs`; if it declines, the runtime prepares the step again.
 The input is detached from runtime state. `previous` references the matching messages within that input.
 Without this callback, the agent uses its configured instructions, tools, and model options.
 A custom callback supplies the step's instructions and generation options; the runtime does not merge those defaults into it.
@@ -281,7 +288,8 @@ On restore, a call that a lost owner left running runs again, unless the tool se
 `interrupted_result`; then the run saves that result as the call's result instead (status `error` for an error result).
 Errors in runtime coordination or tool hooks can fail the run.
 The runtime produces error results for unknown tool names, malformed arguments, and
-arguments the model truncated. The default loop stops when all results in a step set `terminate=True`.
+arguments the model truncated. A step whose results all set `terminate=True` ends the run, whatever `after_step` returns,
+and its unread messages wait for the next run.
 A custom `after_step` function chooses whether to continue.
 
 ## Subagents
@@ -306,19 +314,60 @@ The runtime suspends the parent while it waits, then calls this function without
 The function receives failed and cancelled snapshots too, so the feature can choose how to report them.
 A successful completion callback marks those child failures as handled.
 
-Spawning returns both an `agent_id` and a `run_id`. Use `agent_id` to start another run on that child.
-Use `run_id` to inspect, wait for, or cancel one execution. Paths are readable labels and may repeat.
-`wait_run` supports synchronous waits; it returns `None` on timeout without cancelling the child.
-Remote reads run on the calling tool thread. Their I/O timeouts bound a blocked read.
-Live and archived failures raise `RunFailed`. Waiting for a cancelled child raises `ChildRunCancelled`.
-Tools can handle that exception; otherwise, it becomes a tool error and the parent can continue.
-Cancelling the parent still interrupts its wait with `AgentCancelled`.
+Spawning returns an `agent_id` for later messages and a `run_id` for that execution.
+Agents nest at most `MAX_CHILD_DEPTH` levels below the root: the root, its children, and their children.
+An agent at that depth is built without `spawn_agent`; it keeps the tools that reach existing agents.
+An active background agent is an unfinished run (running or suspended) with a result row; only `spawn_agent` runs have one.
+Chat runs at most `MAX_RUNNING_AGENTS` active background agents on a branch; a spawn beyond that is a tool error,
+and inbox work for an idle agent waits until a run finishes.
+Every run checks the chat owner's token rate limits: a user's turn when it is sent or leaves the queue,
+and a run that an agent starts when the run store reserves it. Inbox work checks capacity first, so it waits while the branch is full;
+work over the limit becomes a failed run that its sender sees.
+`POST /chat/chat-session/{session_id}/stop-subagents` takes the chat lock, drops pending work for agents below the root,
+and stops every active background agent on the selected branch. The root turn and its foreground workers keep running.
+A parent's Stop blocks its later spawns. A stopped run records `RunFailureKind.STOPPED_BY_USER`:
+`list_agents` shows "stopped by the user", and its result wakes no agent; the root reads it as a notice at its next step.
+Return `ChildRunWait` to wait for results without holding a tool thread.
+Paths are readable labels and may repeat.
 
 Foreground children are the default. The parent waits for their terminal results and cancels them on failure or cancellation.
 Failed child cancellation records an error without skipping sibling cancellation or releasing locally owned work before it drains.
 A suspended foreground child releases the parent's worker without cancelling its siblings.
 Pass `lifetime=AgentLifetime.BACKGROUND` to let a child continue after its parent finishes.
 Background children do not hold the parent's cleanup open. The application must retain their coordinator.
+`ChildRunWait` can observe a background child without changing its lifetime.
+Stopping that parent stops the wait; `interrupt_agent` stops the child.
+
+`invocation.agents.discover_agents()` lists the visible agent tree, including the root and the caller, with each agent's parent.
+An agent can message any other agent in that tree. Results still go only to the spawner, whichever agent started the run.
+`invocation.agents.send_message(agent_id, message=..., max_steps=...)` stores an instruction through `RunOwnership.submit_message`.
+The application delivers it: a running agent receives it before its next model step, and an idle agent starts a fresh run with the supplied step limit.
+`send_message(..., delivery=MessageDelivery.QUEUE)` requests a later run. Normal completion and the step limit drain the queue; Stop and errors pause it.
+An explicit send can start fresh work after a pause.
+Messages to the root wait in its inbox until a root run reads them at a model step; they never start a root run.
+A message run continues the recipient's latest run on the selected branch. When the sender's turn is older than that run, the new run belongs to the newer turn.
+Chat prefixes a message with its sender's path unless the sender spawned the recipient.
+`invocation.agents.interrupt_agent(agent_id)` cancels the agent's current run, including its in-flight tool calls and foreground children.
+Agents it started in the background keep running.
+Any agent except the caller and the root can be interrupted.
+The interrupted run reports no result: `RunOwnership.withdraw_result` drops it before the cancellation, so it wakes no agent.
+A spawner waiting on that run stops waiting. Conversations remain, and queued messages stay paused until an explicit send.
+Messaging requires run ownership. Pending input is distinct from accepted conversation history.
+
+Background results arrive automatically before the spawner's next model step.
+`RunOwnership.receive_inputs` reads sent messages and the finished results of children the agent spawned;
+the application formats each result as a message. `RunOwnership.accept_inputs` marks them read when a step accepts them.
+Chat starts a follow-up response when an idle parent has unread child results.
+`AgentCoordinator.start_message_run` starts an agent's next run, from a message or its results, through the agent's spawner;
+it returns None while the previous run drains.
+`RunOwnership.delegated_runs` lists the children whose results a subagent has not accepted, with their statuses.
+A subagent waits for those results before finishing, or before its last step, and suspends while they are pending;
+this releases its execution thread until it can incorporate the results.
+The root can finish its response while background children continue.
+
+Chat's root can also end its turn with `wait_agents` and get one follow-up for those children;
+`.agents/feature-map/components/chat-persistence.md` describes the wait rule.
+Foreground tools retain their `ChildRunWait` result path.
 
 Use `add_completion_cleanup(run_id, callback)` for resources that must survive suspension, such as a coding workspace.
 Register cleanup immediately after spawning the child. It runs after local execution finishes or releases ownership, once its workers drain.
@@ -335,6 +384,7 @@ These interfaces work even when the spawning parent no longer observes the child
 
 Reuse a coordinator to retain children across root runs. Create a fresh `view` when parent resources or branch bindings change.
 Each view uses an `AgentDirectory` to authorize lookups and restore saved agents while sharing local execution ownership.
+`RunOwnership` owns the inbox: received inputs, unread results, withdrawn results and submitted messages.
 Views authorize each archived run against their selected history, including runs already cached by another view.
 The application can grant a new view access to live background runs with `visible_run_ids`.
 A view without a new directory retains its source view’s access scope.
@@ -353,8 +403,8 @@ Foreground children must finish before the parent can transfer. Rejected transfe
 `close()` cancels all owned runs and waits for execution, terminal handling, and resource cleanup.
 A timeout leaves unfinished work owned. The coordinator is process-local; storage and cross-pod control belong to the application.
 
-Chat still creates coordination per response. Its factory can use an existing owner to build fresh parent bindings.
-That factory lives in `onyx/chat/subagents.py`; generic background chat integration remains separate.
+Chat creates coordination per response. Its directory rebuilds saved children from their feature configuration,
+current authorized tools, and selected conversation history. It does not require a resident parent agent.
 
 ## Watching a run
 
@@ -405,13 +455,13 @@ Partial tool updates are transient. Saved history contains accepted tool results
 A `RunState` is available at any moment — mid-run, after failure, after cancellation.
 `run.snapshot()` returns an isolated record for that execution.
 It holds the run's input messages and recorded steps, including partial output.
-Each `StepRecord` contains an assistant `message`, its `generation_status`, and tool executions keyed by tool-call ID.
+Each `StepRecord` contains received `input_messages`, an assistant `message`, its `generation_status`, and tool executions keyed by tool-call ID.
 Each `ToolExecutionRecord` contains a status and an optional result. An unfinished tool can have no result.
 A call without an execution entry has not started.
 `ExecutionStatus` describes a generation or tool: running, complete, cancelled, or error.
 `RunStatus` also describes run-level outcomes such as suspension and the step limit.
 
-`RunState.messages` derives a flat view: each assistant message followed by available results in tool-call order.
+`RunState.messages` derives a flat view: each step's received inputs, assistant message, then available results in tool-call order.
 Changing this list does not add or remove recorded messages. Its message objects belong to the state.
 Use `run.snapshot()` to inspect an isolated copy while execution continues.
 `AgentStep` supplies the current index and limit to callbacks; `StepRecord` stores what happened during that step.
@@ -476,7 +526,7 @@ Validate it with the feature's model before retaining or changing the data.
 The fields survive a direct `ExecutionCheckpoint` JSON round trip without a feature-type registry in the SDK.
 
 `spawn_agent(restoration_config=...)` accepts application-owned settings for rebuilding a saved child
-for another run. Chat stores `ResearchConfiguration` directly; the SDK passes these settings to the application.
+for another run. Chat stores its child-kind marker or research settings; the SDK passes these settings to the application.
 Handoff releases the ownership adapter's reservation after saving suspended state.
 The SDK invokes release once; applications implement the storage operation.
 If release fails, handoff, local waiters, and pending parent dependencies report the cleanup error.
@@ -524,8 +574,24 @@ and references the parent response that created it. The root controls access, sh
 The runtime agent ID identifies this session.
 
 An assistant `chat_message` owns one complete or partial response, its outcome, and feedback.
-Its user-message parent owns the input. `chat_response_item` stores each assistant model generation in step order.
+Its question parent owns the input: a `USER` message, or a hidden `AGENT_RESULTS` message with no text.
+An `AGENT_RESULTS` question starts an automatic follow-up; that response's first step receives the results.
+`chat_response_item` stores each assistant model generation in step order.
 These items retain message identity, content, generation status, and provider metadata, including empty messages.
+Each item's `inputs` column keeps the messages its generation accepted, with their identity and source.
+An input accepted between steps belongs to the step that read it. It is stored in that step's
+`chat_response_item.inputs` and does not become a `chat_message` row; the surrounding assistant
+response is the only `chat_message`. History, replay, rendering, and exports must show the input at
+the step where the model read it, and acceptance happens exactly once, in that step's transaction.
+`.agents/feature-map/components/chat-persistence.md` gives the routing rule for each input.
+Agent messages follow the same two paths. Child results go into the recipient's `inputs`. An
+automatic follow-up starts under a hidden `AGENT_RESULTS` `chat_message` instead of a USER one.
+
+`chat_input` is the inbox of pending messages and unread child results. Consuming a row deletes it.
+A step deletes its rows in the transaction that saves the step, so each message is accepted once.
+Starting a new run moves its instruction into the question tree in one transaction.
+A child's result row exists from the reservation of its response and becomes readable when that response finishes.
+The row names the root response of the spawning invocation. A result is visible only on branches that contain that root.
 `tool_call` stores the result payload, execution status, and a queryable copy of the call arguments.
 Argument parsing details remain in the saved assistant message; tool rows do not store another copy.
 
@@ -533,10 +599,11 @@ The runtime selects final-answer content when its completion decision finishes e
 The application derives formatted answer text for existing clients from the selected assistant message.
 Chat rendering settings belong to assistant rows and do not affect model input.
 
-A child instruction references its parent tool invocation and the child response it continues.
+Every child question, including a follow-up, references its parent tool invocation and the child response it continues.
 Restoring a child follows the selected root branch. Separate root branches can continue the
 same child without combining their histories. Predecessor links must form one chain within
 the selected branch; restoration selects its final response. Stored child instructions support text.
+An active child is one shared execution: sending to it changes that run for every branch that can see it.
 Root attachments use the existing user-message file associations.
 
 ## Compaction
@@ -583,7 +650,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
 Approval policies, question forms, and their HTTP endpoints are future product work.
-The SDK does not accept new user messages during a run. Steering remains future work.
+The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
 
@@ -612,6 +679,8 @@ Chat persistence receives the tool IDs and citation metadata needed to save thei
 Chat keeps accepted output in `ChatMessage`, `ChatResponseItem`, and `ToolCall`.
 The assistant `ChatMessage.id` identifies its SDK run throughout execution, storage, and resumption.
 Chat reserves child question and response rows before constructing their runs.
+A reserved child response is running, and its execution lease is taken before the reservation commits,
+so another reservation for that agent sees it and repair sees its owner.
 The ownership implementation supplies that identity; the SDK treats it as an opaque string.
 Ownership tokens and checkpoint versions distinguish execution owners across API pods.
 `ResponseRecord` retains the run identity and ancestry from `RunState`.
@@ -621,8 +690,12 @@ The execution worker consumes model streams directly.
 Cancellation takes effect when a blocked provider read returns or times out; the run retains ownership until then.
 Total generation deadlines are checked between events. They do not interrupt a blocked synchronous read.
 Stop puts the input in “Stopping…” until execution, foreground child work, tools, and saves finish.
-Drafts remain editable; sending and queued follow-ups wait for the session to become idle.
-Current chat tools use foreground children. Background chat execution needs separate admission and control ownership.
+Messages sent while a turn runs wait in the inbox; a queued message starts a later turn when the session is idle.
+Chat agent tools start background children. The root response can finish while they run;
+the turn's control worker keeps their leases until they release. Only callers that deliver follow-up responses,
+for a client that shows them (`SendMessageRequest.accepts_follow_ups`, set by the web chat), offer agent tools,
+and only in single-model turns: results follow one answer. Each step reads at most `MAX_AGENT_COMPLETIONS_PER_STEP` finished results;
+a run whose read hit that bound, or a root follow-up that answers results, keeps stepping until it has read the rest, then answers. Other results start the recipient's next run. Loaded agents are evicted least recently used first; only idle ones leave memory.
 The event worker also writes replay batches to the configured cache. Slow cache writes delay later events, but control polling remains independent.
 The execution worker saves terminal output. Suspension releases the worker; new input can start another worker to resume execution.
 One control worker per chat turn renews ownership, reads Stop, and refreshes the processing marker in sequence.
@@ -636,7 +709,7 @@ Stream-status refresh failures log and retry. Active session admission expires a
 Preparation renews its 120-second lease between stages. If one stage exceeds the lease, preparation fails at its next ownership check.
 Ownership is checked before accepting the user message, reserving responses, and publishing the stream.
 A process crash can block a new send until the last lease expires.
-Chat releases session admission after workers, saves, and delivery finish. Save-timeout warnings do not release admission.
+Chat releases session admission after workers and saves finish, before delivery finishes, so a client that sees the stream end can send at once. Save-timeout warnings do not release admission.
 Admission is claimed before loading history. Another tab or pod cannot start a turn while that claim remains active.
 The browser checks session readiness after stream errors and reloads; stream closure alone does not confirm completion.
 Execution leases remain separate and retain ownership until work drains or is explicitly transferred.
@@ -648,9 +721,9 @@ Its application interfaces provide access to saved data and execution ownership:
 
 | Interface | Responsibility |
 | --- | --- |
-| `AgentDirectory` | Authorize agent lookup, restore saved agents, and read or cancel runs on the selected branch. |
+| `AgentDirectory` | List the branch's agent tree, authorize direct-child lookup, restore saved agents, and read or cancel runs. |
 | `RunStore` | Save terminal output before dependent runs receive completion. |
-| `RunOwnership` | Reserve execution before starting work; release it after workers drain. |
+| `RunOwnership` | Reserve execution before starting work and release it after workers drain. It owns the inbox: stored messages, step inputs and their acceptance, unread child results, pending delegations, and the withdrawn results of interrupted runs. |
 
 Chat supplies `ChatRunStore` for both saving and ownership when durable checkpoints are enabled.
 Without checkpoints, `ChatResponsePersistence` supplies saving alone. Saved output can be available before worker cleanup finishes.
@@ -667,6 +740,13 @@ Database sessions and cache locks cover short state updates, never model or tool
 Bind authorized history lookup and the feature factory with
 `ChatRunStore.bind(coordinator, directory=..., build_agent=...)`.
 Application control calls `poll_control()` while `has_owned_work` is true, including during reconstruction.
+Each poll scans the inbox after a notification and while children run on the branch.
+`read_chat_inbox` reads the work: the next root turn, idle children's queued messages, and their result follow-ups.
+A store dispatches only while its response is on the selected branch, so it starts inbox work from each agent's newest run.
+A dispatch failure never stops the turn. Transient errors retry at a later poll. Work that cannot start becomes a failed run; if even that fails, the work is dropped.
+When child work can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
+The host prepares the selected response's configuration without a root run, starts the work, and holds the leases until the runs release.
+Any API pod can start it; chat admission keeps hosts and turns from starting the same work.
 `handoff()` requires a suspended, idle run and saves a `ChatResponseCheckpoint` beside its response history.
 Its foreground children must have terminal results before transfer.
 The checkpoint contains execution progress and callback payloads omitted from normal conversation history.
@@ -687,14 +767,14 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
-There is no durable generic control ledger. The store does not accept approval answers or steering messages.
+There is no durable generic control ledger. The store does not accept approval answers. Human messages sent to a running response are stored in `chat_input`, as described above.
 SDK tests exercise pending requests and early answers directly. Future product adapters must persist decisions before acknowledging them.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 
 Released runs have no local execution owner. Stop requests use the application’s run-ID route.
 Closing the old coordinator does not cancel execution claimed by another pod.
-Content-free incognito runs keep local ownership and do not write durable execution checkpoints or child conversations to PostgreSQL.
+Incognito runs have no child agents. `USAGE_ONLY` incognito runs keep only local ownership, have no directory, and write no durable execution checkpoints or child conversations to PostgreSQL. `FULL_HISTORY` incognito runs keep content, so `ChatRunStore` gives them run ownership and the agent directory.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
 Deleting the chat removes those files. Tool execution loads file contents when needed.

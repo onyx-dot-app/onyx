@@ -193,7 +193,7 @@ for one object and one method. The default TTL is 5 minutes and the maximum is
   file ID and returns a PUT request and a pending upload ID. It writes no
   `file_record` row. The pending upload is kept in the cache backend.
 - Uploads are at most 5 GiB (`FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES`), the largest
-  single S3 PUT.
+  single S3 PUT. Azure allows at most 5000 MiB, the largest single Put Blob.
 - `presign_download` checks no user. Authorize the caller before you hand out
   the URL.
 - `finalize_presigned_upload(pending_upload_id)` checks the size and SHA-256 of
@@ -249,8 +249,15 @@ URL. Temporary errors (network, metadata server) are raised as they are.
 - An account key (`AZURE_STORAGE_ACCOUNT_KEY`, or `AccountKey` in the connection
   string) signs a service SAS.
 - Workload Identity or a managed identity (`DefaultAzureCredential`) signs a
-  user delegation SAS. The identity needs `Storage Blob Delegator` on the storage
-  account, in addition to `Storage Blob Data Contributor`.
+  user delegation SAS. No account key is needed, so shared key access can stay
+  off. The store gets a delegation key for 1 hour and keeps it until less than
+  the maximum TTL remains.
+- The identity needs `Storage Blob Data Contributor` on the storage account.
+  That role has `generateUserDelegationKey` and the blob read and write rights
+  that the SAS uses. Assign it at the account scope: a container-scope
+  assignment cannot get a delegation key. Without it, the presign methods raise
+  `PresignedUrlsNotSupportedError`. `deployment/terraform/modules/azure/aks`
+  assigns this role.
 - Each SAS is for one blob, with one permission (`r` for downloads, `c` for
   uploads) and a short expiry. Create permission cannot overwrite a blob. A SAS
   cannot limit the size or content, so finalize checks the size and reads the

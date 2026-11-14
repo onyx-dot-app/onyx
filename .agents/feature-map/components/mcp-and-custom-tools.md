@@ -191,7 +191,11 @@ Policy precedence is in [[craft-external-apps]].
    member route `user_list_mcp_tools_by_id` discovers but never writes. OpenAPI
    tools need no sync. The same sync saves the tool's declared `outputSchema`
    in `Tool.mcp_output_schema`, and sets it to NULL when the server declares
-   none.
+   none. It also saves `annotations.readOnlyHint` in `Tool.mcp_read_only` (NULL
+   when absent), which sets the Craft default policy
+   ([[craft-external-apps]]). `server.action_policies` holds only stored
+   overrides, so `MCPServerToolsEditor` reads each tool's default from
+   `ToolSnapshot.default_action_policy` on the tool snapshot route.
 6. `sync-matches-by-name` **Sync matches tools by name.**
    `server/features/mcp/api.py:_sync_mcp_server_tools` treats a tool that the
    remote server renames as a new tool: it is deleted and inserted again with
@@ -303,7 +307,6 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
 - `MCPTransport.STDIO` is accepted by `MCPToolCreateRequest`, but the client
   has no STDIO path and uses `sse_client` for it. Do not remove the enum value:
   the column is a non-native enum, and a stored `STDIO` row would fail to load.
-- OpenAPI tool names can collide on one agent. See [[tools-framework]].
 - A per-tool OAuth token replaces a static `Authorization` header with only a
   log warning (`tools/tool_implementations/custom/custom_tool.py:CustomTool`).
   Save rejects that pair only for `passthrough_auth`

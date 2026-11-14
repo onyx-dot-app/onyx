@@ -1,6 +1,6 @@
 module github.com/onyx-dot-app/onyx/cli
 
-go 1.27.1
+go 1.27.4
 
 require (
 	charm.land/bubbles/v2 v2.1.0

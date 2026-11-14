@@ -18,6 +18,8 @@ from onyx.agents.events import (
 from onyx.agents.models import (
     AgentInfo,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     RunFailure,
     RunFailureKind,
     RunState,
@@ -52,9 +54,14 @@ from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
 from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    OverallStop,
+    Packet,
+    UserMessagePacket,
+)
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -77,6 +84,8 @@ def _collect_tool_history(
     snapshot: RunState,
     tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
+    *,
+    include_parent: bool = False,
 ) -> ToolHistorySnapshot:
     """Project completed and interrupted operations from one execution tree.
 
@@ -108,6 +117,7 @@ def _collect_tool_history(
                     snapshot,
                     step_index,
                     index,
+                    include_parent=include_parent,
                 )
             )
             sources = tool_result_sources(result.details) if result else None
@@ -117,7 +127,7 @@ def _collect_tool_history(
                 documents.setdefault(document.document_id, document)
             citations.update_citation_mapping(sources.citations)
     for child in snapshot.child_runs:
-        child_history = _collect_tool_history(child, tool_ids)
+        child_history = _collect_tool_history(child, tool_ids, include_parent=True)
         records.extend(child_history.tool_calls)
         documents.update(child_history.all_search_docs)
     return ToolHistorySnapshot(
@@ -135,6 +145,8 @@ def _tool_record(
     snapshot: RunState,
     turn: int,
     index: int,
+    *,
+    include_parent: bool,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
     sources = tool_result_sources(data)
@@ -167,8 +179,8 @@ def _tool_record(
 
     return ToolCallInfo(
         message_id=_message_identity(output),
-        parent_message_id=snapshot.parent_message_id,
-        parent_tool_call_id=snapshot.parent_tool_call_id,
+        parent_message_id=snapshot.parent_message_id if include_parent else None,
+        parent_tool_call_id=snapshot.parent_tool_call_id if include_parent else None,
         turn_index=turn,
         tab_index=index,
         tool_name=tool_call.name,
@@ -361,6 +373,29 @@ def _project_response_display(
     return response.model_copy(update={"presentation": presentation})
 
 
+def user_message_packets(
+    messages: Sequence[UserMessage],
+    layout: ResponseLayout,
+    parent: Placement | None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+    for message in messages:
+        if (
+            not isinstance(message.metadata, InputMessageMetadata)
+            or message.metadata.source != InputSource.HUMAN
+        ):
+            continue
+        if message.id is None:
+            raise ValueError("Accepted user message has no identity")
+        packets.append(
+            Packet(
+                placement=layout.next_section(parent),
+                obj=UserMessagePacket(id=message.id, message=message.text),
+            )
+        )
+    return packets
+
+
 class ResponsePresenter:
     """Translate SDK events into chat packets, with child output inside tool tabs."""
 
@@ -386,6 +421,9 @@ class ResponsePresenter:
             )
         )
         if isinstance(event, MessageStartEvent):
+            output = user_message_packets(
+                event.input_messages, self.layout, parent.placement if parent else None
+            )
             if event.parent_run_id is None:
                 self.emitter.llm_step_started()
             if parent is not None:
@@ -413,13 +451,16 @@ class ResponsePresenter:
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
                 self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
-                    call, tool_placement, self.tool_ids.get(call.name)
+                    call,
+                    tool_placement,
+                    self.tool_ids.get(call.name),
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             if isinstance(event, ToolStartEvent):
+                tool.display_name = event.display_name
                 output = tool.start()
             elif isinstance(event, ToolUpdateEvent):
                 output = tool.update(event.progress.details, event.progress.content)
@@ -441,6 +482,7 @@ class ResponsePresenter:
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
+                    event.display_name,
                 )
             output = tool.amend(event.result)
         elif isinstance(event, AgentEndEvent):
@@ -487,6 +529,7 @@ def replay_response(
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
     for step in response.steps:
+        packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
         setting = settings.get(message_id, MessageRendering(mode=default_mode))
@@ -526,12 +569,17 @@ def replay_response(
                 )
                 result = result.model_copy(update={"details": restored})
             renderer_of_call = tool_renderer(
-                call, tool_placement, record.tool_id if record is not None else None
+                call,
+                tool_placement,
+                record.tool_id if record is not None else None,
+                execution.display_name if execution is not None else None,
             )
             packets.extend(renderer_of_call.start())
             for child in response.child_runs:
+                # Agent tools start background runs, whose output arrives separately.
                 if (
-                    child.parent_message_id != message_id
+                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+                    or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue

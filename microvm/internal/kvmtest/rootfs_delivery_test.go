@@ -5,6 +5,7 @@ package kvmtest
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
@@ -26,7 +27,9 @@ const (
 	rdCurl = `curl -sS --max-time 30 https://example.com/ 2>&1; echo "rc=$?"`
 	rdPy   = `for p in /opt/onyx/python/bin/python3 /usr/local/bin/python3 /usr/bin/python3; do [ -x $p ] && exec $p -c 'import urllib.request; print(urllib.request.urlopen("https://pypi.org/", timeout=30).read().decode().strip())' 2>&1; done; echo no python`
 	rdNode = `node -e 'fetch("https://registry.npmjs.org/").then(r=>r.text()).then(t=>console.log(t.trim())).catch(e=>{console.log(String(e.cause||e));process.exit(1)})' 2>&1; echo "rc=$?"`
-	rdNSS  = `runuser -u sandbox -- certutil -L -d sql:/home/sandbox/.pki/nssdb 2>&1 | grep -c craft-egress-ca; stat -c 'owner=%U' /home/sandbox/.pki/nssdb/cert9.db`
+	rdNSS  = `certutil -L -d sql:/home/sandbox/.pki/nssdb 2>&1 | grep -c craft-egress-ca; stat -c 'owner=%U' /home/sandbox/.pki/nssdb/cert9.db`
+	// The default root drive runs commands as the sandbox user, not root.
+	rdUser = `echo "uid=$(id -u) gid=$(id -g) home=$HOME user=$USER"; touch ws-probe && echo ws-ok; touch /tmp/probe && echo tmp-ok; touch /usr/local/share/ca-certificates/probe 2>/dev/null || echo ca-store-denied; pwd`
 )
 
 // TestRootfsDeliveryKVM checks rootfs delivery through the agent binary: the root
@@ -178,8 +181,16 @@ func TestRootfsDeliveryKVM(t *testing.T) {
 	expect(v1, "node, CA 1", rdNode, "mitm-ok deployment-one registry.npmjs.org", true)
 	expect(v1, "NSS database", rdNSS, "1\nowner=sandbox", true)
 	expect(v1, "curl again", rdCurl, "mitm-ok deployment-one", true)
-	expect(v1, "update-ca-certificates", "update-ca-certificates 2>&1 | tail -3; grep -c BEGIN /etc/ssl/certs/ca-certificates.crt", "done", true)
-	expect(v1, "after update-ca-certificates", rdCurl, "mitm-ok deployment-one", true)
+	sessionID := newUUID()
+	r, err := sd.Run(vmCtx(ctx, v1.id, v1.key), &sdpb.RunRequest{Command: &sdpb.Command{Argv: []string{"bash", "-c", rdUser}, SessionId: sessionID}})
+	if err != nil {
+		t.Fatalf("command user: %v", err)
+	}
+	ur, err := ptCollect(r)
+	want := fmt.Sprintf("uid=1000 gid=1000 home=/home/sandbox user=sandbox\nws-ok\ntmp-ok\nca-store-denied\n/home/onyx/workspaces/%s\n", sessionID)
+	if err != nil || ur.stdout != want {
+		t.Errorf("command user: got %q %v, want %q (stderr %q)", ur.stdout, err, want, ur.stderr)
+	}
 	mitm.SetCA(ca2)
 	expect(v1, "VM 1 refuses CA 2", rdCurl, "mitm-ok", false)
 	mitm.SetCA(ca1)

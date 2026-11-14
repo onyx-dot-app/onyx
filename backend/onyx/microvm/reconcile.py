@@ -9,7 +9,8 @@ have no TTL, so a pass that runs out of time loses nothing; the next report
 goes on.
 
 Per reported VM:
-- The record names it: keep it. A running VM goes to the idle evictor. An
+- The record names it: keep it. A running VM goes to the idle evictor (on
+  a draining node, without the idle timeout). An
   exited VM ended: clear its record and stop it (frees the node).
 - The record or the reservation has a newer attempt, or the record names
   another instance of the same attempt: a stale orphan. Stop it.
@@ -202,7 +203,9 @@ class _Pass:
         report: ReconcileReport,
         check_lease: Callable[[], None] | None,
         deadline: float | None,
+        draining: bool = False,
     ) -> None:
+        self.draining = draining
         self.shared_cache = shared_cache
         self.client_factory = client_factory
         self.checkpointer = checkpointer
@@ -425,6 +428,14 @@ class _Pass:
             # A placement in progress writes the record itself.
             if lock is None:
                 return
+            # A placement that ended after the report read its state wrote
+            # the record and released the reservation: nothing to adopt.
+            record = get_sandbox_placement(tenant_cache, sandbox_id)
+            found = get_sandbox_reservation(tenant_cache, sandbox_id)
+            if (record is not None and record.attempt >= vm.attempt) or (
+                found is None or found[1] != adoption.reservation_raw
+            ):
+                return
             try:
                 installed = self.install_key(vm, adoption.key)
             except _OutOfTime as e:
@@ -599,6 +610,7 @@ class _Pass:
             sandbox_id=sandbox_id,
             last_active=record.last_active,
             now=self.now,
+            draining=self.draining,
         )
         if outcome is VmStopOutcome.NOT_IDLE:
             return
@@ -715,13 +727,15 @@ def reconcile_node(
     now: int | None = None,
     check_lease: Callable[[], None] | None = None,
     deadline: float | None = None,
+    draining: bool = False,
 ) -> ReconcileReport:
     """One reconcile pass over the state that `node` reported. `check_lease`
     runs before each step and raises to end the pass. `deadline`
     (`time.monotonic()`) bounds the key install calls of adoptions; a call
     that the deadline cuts ends the pass with `TimeoutError`.
     `HostAgentConfigError` also ends the pass and is raised. Any other error
-    ends only its step."""
+    ends only its step. `draining`: the node drains, so each running VM is
+    saved and stopped without the idle timeout."""
     report = ReconcileReport()
     run = _Pass(
         shared_cache,
@@ -733,6 +747,7 @@ def reconcile_node(
         report,
         check_lease,
         deadline,
+        draining,
     )
     try:
         run.run(vms, ended or [])

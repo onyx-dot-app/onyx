@@ -1,6 +1,9 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { PendingChatMessage } from "@/lib/chat/types";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
@@ -237,6 +240,8 @@ export async function* sendMessage({
     // Default to "unknown" for consistency with backend; callers should set explicitly
     origin: origin ?? "unknown",
     additional_context: additionalContext ?? null,
+    // The web chat shows responses that background agents start later.
+    accepts_follow_ups: true,
   };
 
   const body = JSON.stringify(payload);
@@ -291,7 +296,29 @@ export async function* sendMessage({
     throw new Error(message);
   }
 
-  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+  yield* withoutHeartbeats(
+    readChatStream<PacketType>(chatSessionId, response, signal)
+  );
+}
+
+// Both readers of a turn pass through here, so either one removes the pending
+// input a turn accepts.
+async function* readChatStream<T extends PacketType | StreamCursor>(
+  chatSessionId: string,
+  response: Response,
+  signal?: AbortSignal
+): AsyncGenerator<T, void, unknown> {
+  for await (const packet of handleSSEStream<T>(response, signal)) {
+    if ("obj" in packet && packet.obj.type === "user_message") {
+      const { id } = packet.obj;
+      void mutate<PendingChatMessage[]>(
+        SWR_KEYS.pendingChatMessages(chatSessionId),
+        (current) => current?.filter((message) => message.id !== id),
+        { revalidate: false }
+      );
+    }
+    yield packet;
+  }
 }
 
 // Drops keepalive heartbeats so stream consumers only ever see run state.
@@ -323,7 +350,11 @@ export async function* resumeStream(
     throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
   }
 
-  yield* handleSSEStream<PacketType | StreamCursor>(response, signal);
+  yield* readChatStream<PacketType | StreamCursor>(
+    chatSessionId,
+    response,
+    signal
+  );
 }
 
 export async function setPreferredResponse(
@@ -497,7 +528,7 @@ export function processRawChatHistory(
       type:
         messageInfo.error_info || messageInfo.error
           ? "error"
-          : (messageInfo.message_type as "user" | "assistant"),
+          : (messageInfo.message_type as Message["type"]),
       files: messageInfo.files,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null

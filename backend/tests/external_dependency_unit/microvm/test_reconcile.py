@@ -5,13 +5,15 @@ ended list. State model: microvm/README.md, "Sandbox state model".
 """
 
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 import grpc
 import pytest
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.microvm import reconcile
 from onyx.microvm.agent_client import (
     HostAgentClient,
@@ -49,6 +51,7 @@ from onyx.microvm.registry import (
     get_sandbox_placement,
     get_sandbox_reservation,
     list_indexed_placements,
+    release_sandbox_reservation,
     reserve_sandbox,
     set_sandbox_daemon_key,
     write_sandbox_placement,
@@ -67,7 +70,14 @@ NOW = int(time.time())
 
 
 class AlwaysSaved(SandboxCheckpointer):
-    def save_checkpoint(self, *, tenant_id: str, sandbox_id: UUID, vm: AgentVm) -> bool:  # noqa: ARG002
+    def save_checkpoint(
+        self,
+        *,
+        tenant_id: str,  # noqa: ARG002
+        sandbox_id: UUID,  # noqa: ARG002
+        vm: AgentVm,  # noqa: ARG002
+        renew_lease: Callable[[], None],  # noqa: ARG002
+    ) -> bool:
         return True
 
 
@@ -262,6 +272,57 @@ def test_vm_named_by_its_reservation_is_adopted(
     # One repeat Create checks that the guest holds this key.
     assert node.agent.stop_calls == [] and node.agent.create_calls == 1
     assert _report(shared_cache, client_factory, node_id).adopted == []
+
+
+def test_placement_that_ends_during_the_pass_is_not_adopted(
+    shared_cache: CacheBackend,
+    tenant_cache: CacheBackend,
+    client_factory: InsecureClientFactory,
+    add_node: AddNode,
+    new_sandbox_id: NewSandboxId,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_id = _node("inflight")
+    node = add_node(node_id)
+    sandbox_id = new_sandbox_id()
+    raw = reserve_sandbox(
+        tenant_cache,
+        sandbox_id,
+        SandboxReservation(attempt=1, node_id=node_id, owner="placing"),
+        replaces=None,
+    )
+    assert raw is not None
+    key = new_sandboxd_key()
+    set_sandbox_daemon_key(tenant_cache, sandbox_id, attempt=1, key=key)
+    vm = node.agent.add_vm(
+        sandbox_id=str(sandbox_id),
+        tenant_id=TENANT_ID,
+        attempt=1,
+        daemon_key=key.get_secret_value(),
+    )
+    real_lock = reconcile.sandbox_placement_lock
+
+    @contextmanager
+    def placed_first(
+        cache: CacheBackend, sid: UUID, blocking: bool
+    ) -> Iterator[CacheLock | None]:
+        # The placement writes its record and releases its reservation
+        # after the report read them.
+        _place(
+            shared_cache, tenant_cache, sandbox_id, node_id, generation=vm.generation
+        )
+        release_sandbox_reservation(tenant_cache, sandbox_id, raw)
+        with real_lock(cache, sid, blocking=blocking) as lock:
+            yield lock
+
+    monkeypatch.setattr(reconcile, "sandbox_placement_lock", placed_first)
+
+    report = _report(shared_cache, client_factory, node_id)
+
+    assert report.adopted == []
+    assert node.agent.create_calls == 0
+    record = get_sandbox_placement(tenant_cache, sandbox_id)
+    assert record is not None and record.names(node_id, 1, vm.generation)
 
 
 def test_adoption_installs_the_key_that_the_daemon_did_not_take(

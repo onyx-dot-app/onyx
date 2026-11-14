@@ -581,6 +581,8 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
 
     `DISABLE_INDEX_UPDATE_ON_SWAP`: Disable primary index updates during embedding model swaps
 
+    `DOCUMENT_CLEANUP_BATCH_SIZE`: Documents per connector deletion or pruning cleanup task (default 500)
+
     `ENABLE_MULTIPASS_INDEXING`: Enable multipass indexing for better accuracy
 
     `ENABLE_CONTEXTUAL_RAG`: Enable contextual retrieval
@@ -645,6 +647,9 @@ Read [Deploying Craft](/deployment/local/craft) before enabling Craft in self-ho
     `OAUTH_GOOGLE_DRIVE_CLIENT_SECRET`: Google Drive OAuth client secret
 
     `GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD`: File size threshold for Google Drive
+
+    `GOOGLE_DRIVE_CONVERSION_WORKERS`:
+    Number of Google Drive files that one indexing run downloads and converts at the same time. The default is 32.
 
     **SharePoint Connector**
 

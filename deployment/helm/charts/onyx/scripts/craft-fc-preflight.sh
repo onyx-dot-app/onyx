@@ -85,12 +85,10 @@ check_filesystem() {
 	if ! err=$(dd if=/dev/zero of="$probe/a" bs=64k count=16 2>&1 >/dev/null); then
 		err=$(echo "$err" | grep -m 1 '^dd:')
 		fail filesystem "$SCRATCH_HOST_PATH is not writable or full (${err##*: })"
-	elif [ "$fstype" != "xfs" ]; then
-		warn filesystem "$SCRATCH_HOST_PATH is '${fstype:-unknown}', not XFS. The host agent will use an XFS loop file."
 	elif err=$(cp --reflink=always "$probe/a" "$probe/b" 2>&1); then
-		pass filesystem "$SCRATCH_HOST_PATH is XFS with reflink"
+		pass filesystem "$SCRATCH_HOST_PATH is ${fstype:-unknown} with reflink"
 	else
-		fail filesystem "$SCRATCH_HOST_PATH is XFS without reflink (${err##*: }). Format it with 'mkfs.xfs -m reflink=1'."
+		warn filesystem "$SCRATCH_HOST_PATH is '${fstype:-unknown}' without reflink. The host agent makes a sparse XFS loop store (<data dir>/.craft-fc-store.img); it needs the loop driver and XFS in the node kernel. An XFS disk with reflink (mkfs.xfs -m reflink=1) at the data dir is faster."
 	fi
 	rm -rf "$probe"
 }

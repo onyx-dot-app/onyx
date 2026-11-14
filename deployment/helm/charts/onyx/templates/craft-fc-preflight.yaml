@@ -28,7 +28,7 @@ backend/tests/external_dependency_unit/craft_helm/test_craft_fc_preflight.py.
 {{- $sandboxPod := .Values.sandboxPod | default dict }}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-preflight") }}
 {{- $image := $preflight.image | default (include "onyx.sandboxImage" .) }}
-{{- $scratchHostPath := $preflight.scratchHostPath | default "/var/lib/onyx-craft-fc-preflight" }}
+{{- $scratchHostPath := $preflight.scratchHostPath | default (dig "hostAgent" "dataDir" "" (.Values.craft | default dict)) | default "/var/lib/craft-fc" }}
 {{- $kvmResource := $preflight.kvmDeviceResource }}
 {{- $nodeSelector := deepCopy (index $sandboxPod "nodeSelector" | default (dict "onyx.app/workload" "sandbox")) }}
 {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}

@@ -360,37 +360,3 @@ pre[class*="language-"] {
 .markdown-table-breakout td:last-child {
   padding-inline-end: 0.75rem;
 }
-
-/* Copy button in the top inline-end corner, above the fade overlay. */
-.markdown-table-copy {
-  position: absolute;
-  top: 0.25rem;
-  inset-inline-end: 0.25rem;
-  z-index: 3;
-  border-radius: 0.5rem;
-  background: var(--background-neutral-01);
-}
-
-/*
- * Wide answer tables grow past the prose column, up to the chat area width.
- * ChatUI is the size container and marks single-answer rows with
- * .chat-table-breakout; multi-model panes keep tables in their pane. Only
- * top-level tables grow, so tables in lists and quotes stay in place.
- */
-@media (min-width: 48rem) {
-  /* Flex centering overflows both sides equally, in LTR and RTL. */
-  .chat-table-breakout [data-agent-answer] .prose > .markdown-table-frame {
-    display: flex;
-    justify-content: center;
-  }
-  .chat-table-breakout
-    [data-agent-answer]
-    .prose
-    > .markdown-table-frame
-    > .markdown-table-card {
-    flex: none;
-    width: max-content;
-    min-width: 100%;
-    max-width: 100cqw;
-  }
-}

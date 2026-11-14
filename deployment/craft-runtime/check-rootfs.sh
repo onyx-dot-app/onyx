@@ -53,10 +53,13 @@ done
 local_ref="${address}/craft-runtime:check"
 docker tag "$checked_id" "$local_ref"
 docker push "$local_ref" >/dev/null
+# ROOTFS_DAEMON_CMD: a --daemon-cmd for a test drive (check-kvm.sh).
+daemon_cmd=()
+[ -z "${ROOTFS_DAEMON_CMD:-}" ] || daemon_cmd=(--daemon-cmd "$ROOTFS_DAEMON_CMD")
 bash "$repo/deployment/craft-fc/rootfs/build-rootfs.sh" \
   --image "$local_ref" \
   --daemon-bin "$work/guest-daemon" --relay-bin "$work/egress-relay" \
-  --out "$work/rootfs"
+  "${daemon_cmd[@]}" --out "$work/rootfs"
 
 pinned="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["source_image"]["pinned"])' "$work/rootfs/manifest.json")"
 if [ "$(docker image inspect --format '{{.Id}}' "$pinned")" != "$checked_id" ]; then
@@ -74,7 +77,11 @@ for item in usr/sbin/craft-init craft-fc/lib/attach craft-fc/etc/init.conf craft
 done
 cmp "$repo/deployment/craft-fc/rootfs/craft-init" "$work/craft-init.extracted"
 cmp "$repo/deployment/craft-fc/rootfs/attach.sh" "$work/attach.extracted"
-cmp "$repo/deployment/craft-fc/rootfs/init.conf" "$work/init.conf.extracted"
+{
+  cat "$repo/deployment/craft-fc/rootfs/init.conf"
+  [ -z "${ROOTFS_DAEMON_CMD:-}" ] || printf '\n# Set by build-rootfs.sh --daemon-cmd.\nDAEMON_CMD="%s"\n' "$ROOTFS_DAEMON_CMD"
+} >"$work/init.conf.expected"
+cmp "$work/init.conf.expected" "$work/init.conf.extracted"
 
 docker image inspect --format '{{json .Config.Env}}' "$checked_id" > "$work/source-env.json"
 python3 - "$work/rootfs" "$local_ref" "$work/guest.env.extracted" "$work/source-env.json" <<'PY'

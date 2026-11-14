@@ -14,11 +14,11 @@ import abc
 import hashlib
 import secrets
 import threading
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import datetime, timezone
 from pathlib import Path
 from types import TracebackType
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypeVar
 
 import grpc
 from google.protobuf.message import Message
@@ -69,11 +69,18 @@ _SWAP_TIMEOUT_PER_VM_SECONDS = 30.0
 # The managed mount of a swap that names none; every agent supports it.
 SKILLS_MOUNT = "skills"
 _MANAGED_CHUNK_BYTES = 1 << 20
+# How often a cancellable call checks its cancel condition.
+_CANCEL_POLL_SECONDS = 1.0
+_R = TypeVar("_R", bound=Message)
 
 
 def new_sandboxd_key() -> SecretStr:
     """A new random guest daemon key for one Create attempt."""
     return SecretStr(secrets.token_hex(_SANDBOXD_KEY_BYTES))
+
+
+class HostAgentCallCancelledError(Exception):
+    """The caller cancelled a call in progress (`cancelled` returned True)."""
 
 
 class HostAgentError(Exception):
@@ -275,6 +282,38 @@ def _swap_result(msg: hostagent_pb2.SwapResult) -> ManagedSwapResult:
     )
 
 
+def _call(
+    method: grpc.UnaryUnaryMultiCallable,
+    request: Message,
+    response_type: type[_R],
+    *,
+    timeout: float,
+    cancelled: Callable[[], bool] | None,
+) -> _R:
+    """A unary call; with `cancelled`, checked every second while it runs."""
+    result: object = None
+    if cancelled is None:
+        result = method(request, timeout=timeout)
+    else:
+        future = method.future(request, timeout=timeout)
+        done = False
+        try:
+            while not done:
+                try:
+                    result = future.result(timeout=_CANCEL_POLL_SECONDS)
+                    done = True
+                except grpc.FutureTimeoutError:
+                    if cancelled():
+                        raise HostAgentCallCancelledError()
+        finally:
+            if not done:
+                # Cancel, or a failed `cancelled` check, ends the agent call.
+                future.cancel()
+    if not isinstance(result, response_type):
+        raise TypeError(f"unexpected response {type(result).__name__}")
+    return result
+
+
 class HostAgentClient:
     """One agent. Thread-safe; closing it closes the channel."""
 
@@ -402,6 +441,8 @@ class HostAgentClient:
                     guest_kernel=t.guest_kernel,
                     firecracker_version=t.firecracker_version,
                     managed_mounts=list(t.managed_mounts),
+                    compatible=t.compatible,
+                    built_at=proto_time(t, "built_at"),
                 )
                 for t in r.templates
             ],
@@ -410,6 +451,10 @@ class HostAgentClient:
             host_kernel=r.host_kernel,
             agent_version=r.agent_version,
             disk_free_mib=r.disk_free_mib,
+            max_vms=r.max_vms,
+            vm_slots_used=r.vm_slots_used,
+            draining=r.drain.state
+            in (hostagent_pb2.DRAIN_STATE_DRAINING, hostagent_pb2.DRAIN_STATE_DRAINED),
         )
 
     def close_connections(
@@ -441,9 +486,12 @@ class HostAgentClient:
         roots: list[str] | None = None,
         exclude_names: list[str] | None = None,
         limits: ArchiveLimits | None = None,
+        cancelled: Callable[[], bool] | None = None,
     ) -> SessionCapture:
         """Archive the session's capture roots and spool it on the node.
-        Empty roots / exclude_names mean the daemon defaults."""
+        Empty roots / exclude_names mean the daemon defaults. When
+        `cancelled` returns True the call ends with
+        HostAgentCallCancelledError; the agent then drops the partial spool."""
         request = hostagent_pb2.CaptureSessionRequest(
             sandbox_id=vm.sandbox_id,
             attempt=vm.attempt,
@@ -455,8 +503,12 @@ class HostAgentClient:
             limits=_limits_proto(limits),
         )
         try:
-            r: hostagent_pb2.CaptureSessionResponse = self._stub.CaptureSession(
-                request, timeout=_TRANSFER_TIMEOUT_SECONDS
+            r = _call(
+                self._stub.CaptureSession,
+                request,
+                hostagent_pb2.CaptureSessionResponse,
+                timeout=_TRANSFER_TIMEOUT_SECONDS,
+                cancelled=cancelled,
             )
         except grpc.RpcError as e:
             raise _session_error(e) from e
@@ -476,16 +528,24 @@ class HostAgentClient:
         )
 
     def upload_capture(
-        self, *, capture_id: str, request: PresignedRequest
+        self,
+        *,
+        capture_id: str,
+        request: PresignedRequest,
+        cancelled: Callable[[], bool] | None = None,
     ) -> CaptureUpload:
-        """PUT a spooled capture. On failure the spool stays until its TTL,
-        so a retry with a new URL works. CAPTURE_NOT_FOUND: capture again."""
+        """PUT a spooled capture. On failure or cancel the spool stays until
+        its TTL, so a retry with a new URL works. CAPTURE_NOT_FOUND: capture
+        again."""
         try:
-            r: hostagent_pb2.UploadCaptureResponse = self._stub.UploadCapture(
+            r = _call(
+                self._stub.UploadCapture,
                 hostagent_pb2.UploadCaptureRequest(
                     capture_id=capture_id, request=_presigned_proto(request)
                 ),
+                hostagent_pb2.UploadCaptureResponse,
                 timeout=_TRANSFER_TIMEOUT_SECONDS,
+                cancelled=cancelled,
             )
         except grpc.RpcError as e:
             raise _error_from_rpc(e) from e

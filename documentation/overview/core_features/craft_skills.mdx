@@ -170,8 +170,46 @@ Open a personal Skill to edit its name, description, or instructions. Under **Su
 - Upload content that includes `SKILL.md` to replace the current name, description, instructions, and files. Onyx asks
   you to confirm before replacing the existing Skill content.
 
-Changes are synchronized to people who can use the Skill. You can also disable the Skill without deleting it,
-change its sharing, transfer ownership, or delete it.
+Changes are synchronized to the people you shared the Skill with. For a Skill that is published to the organization,
+the rest of the organization keeps the published version until the author publishes the update.
+See [Publish an update](#publish-an-update). You can also disable the Skill without deleting it, change its sharing,
+transfer ownership, or delete it. Only an admin can delete a Skill that is published to the organization.
+This needs the organization-wide `manage:plugins` permission.
+
+If another person saves the Skill while you edit it, Onyx does not save your change.
+The editor shows **This skill changed since you opened it**. Select **Reload** to get the newest version,
+then make your change again. Reload discards your unsaved changes.
+
+### Version history
+
+Each save of a custom Skill makes a new version. To see earlier versions,
+open the Skill and select the **Versions** tab. The author, editors,
+and admins with the organization-wide `manage:plugins` permission can see this tab. Each row shows the version number,
+who made it, and when. A row can also show these badges:
+
+| Badge | What it means |
+| --- | --- |
+| **Current** | The newest version. |
+| **Published** | The version that the organization uses. |
+| **Pending review** | The author asked to publish this version, and an admin must approve it. |
+
+- Select a row to preview the description and instructions of that version.
+- Select **Restore** to copy that version into a new version. The old versions stay in the list.
+  If the restored files are the same as the current files, Onyx makes no new version.
+- If the Skill editor has unsaved changes, save or discard them before you restore a version.
+- If another person saves the Skill while you restore a version, Onyx shows **This skill changed since you opened it**.
+  Select **Reload**, then try again.
+
+### Publish an update
+
+When you save a published Skill, the new version does not go to the organization at once.
+The Skill card shows **Unpublished changes**. To send the newest version to the organization,
+open the **Versions** tab and select **Publish update**.
+
+Only the author of the Skill and users with the organization-wide `manage:plugins` permission can publish an update.
+Your admin can require a review before a publish, or turn publishing off.
+If you save a newer version while a version waits for review,
+select **Publish update** to send the newer version for review in its place.
 
 ### Share a Skill
 
@@ -180,9 +218,14 @@ Custom Skill cards show **Personal**, **Shared**, or **Organization** access.
 
 Open a Skill to view its instructions.
 Owners and editors can switch between **Details** and **Sharing** to manage access.
-Only admins can change how a Skill is installed.
-Choose who can use it and give each person or group **Can use** or **Can edit** access. Under **Installation**,
-choose how the Skill is installed for people with access:
+Only admins can change how a Skill is installed, because this needs the organization-wide `manage:plugins` permission.
+Choose who can use it and give each person or group **Can use** or **Can edit** access.
+The organization can only get **Can use** access.
+
+Publishing a Skill to the organization cannot be undone. The dialog tells you this before you save.
+After you publish a Skill, it shows **Organization**, and you cannot make it private again.
+
+Under **Installation**, choose how the Skill is installed for people with access:
 
 | Option | Effect |
 | --- | --- |
@@ -210,6 +253,10 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
     If the skill depends on a model or deployment feature, ask an admin to configure that dependency.
   </Accordion>
 
+  <Accordion title="My change was not saved because the Skill changed">
+    Another person saved the Skill after you opened it. Select **Reload** in the editor, then make your change again.
+  </Accordion>
+
   <Accordion title="My Skill will not upload">
     Keep one Skill in each ZIP. You can upload several ZIP files together.
     Put `SKILL.md` at the top level of the folder. In a ZIP,
@@ -217,6 +264,11 @@ See [Manage several Skills](/admins/managing_features/craft_skills#manage-severa
     Confirm that its frontmatter contains non-empty `name` and `description` fields. For a folder or ZIP,
     check that its name is lowercase and hyphenated. If you started from scratch, try a different Skill name.
     A custom Skill cannot use the same identifier as an existing or built-in Skill.
+  </Accordion>
+
+  <Accordion title="My SKILL.md is too large">
+    A `SKILL.md` can be at most 256 KiB. This limit applies to uploads, GitHub imports, and edits.
+    Split the instructions into several files in the Skill, and link them from `SKILL.md`.
   </Accordion>
 </AccordionGroup>
 

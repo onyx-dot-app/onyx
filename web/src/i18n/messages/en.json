@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Authenticate"
       },
+      "codingAgentIncognito": {
+        "tooltip": "Coding agent isn't available in incognito mode"
+      },
       "configure": {
         "tooltip": "Configure"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "Search actions..."
       },
+      "selectionSaveFailed": "Could not save the tool selection for this chat.",
       "serverFallback": {
         "label": "server"
       },
@@ -5181,6 +5185,27 @@
       "unavailable": {
         "description": "Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access.",
         "title": "Craft isn't available on this deployment"
+      },
+      "publishing": {
+        "title": "Skill Publishing",
+        "open": {
+          "label": "Open",
+          "description": "Skill authors publish to the organization at once."
+        },
+        "requiresReview": {
+          "label": "Requires review",
+          "description": "An admin approves each publish and each publish update."
+        },
+        "off": {
+          "label": "Off",
+          "description": "Only admins publish skills to the organization."
+        },
+        "saveSuccess": {
+          "message": "Publishing setting saved."
+        },
+        "saveError": {
+          "message": "Couldn't save the Publishing setting."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12168,10 @@
         },
         "organization": {
           "label": "Organization"
+        },
+        "unpublished": {
+          "label": "Unpublished changes",
+          "tooltip": "The organization still runs version {number}."
         }
       },
       "toggle": {
@@ -12424,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12432,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "Deep Research is disabled in multi-model mode",
+          "incognitoTooltip": "Deep Research isn't available in incognito mode",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12460,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Set up voice",
           "tooltip": "Voice not configured. Set up in admin settings."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter to send · Ctrl or Command + Enter to queue",
+          "multiModelHint": "Queueing is unavailable while comparing models. Choose one model to queue messages.",
+          "attachmentsHint": "Send attached files after this response finishes.",
+          "chooseResponseHint": "Choose a response before queueing a message.",
+          "incognitoHint": "Wait for the response to finish in incognito chat.",
+          "sendHint": "Send at the next step of this response",
+          "interruptHint": "Interrupt current work and send this message",
+          "sendLabel": "Send",
+          "queueLabel": "Queue",
+          "interruptKeyboardHint": "Enter to interrupt · Ctrl or Command + Enter to queue",
+          "interruptLabel": "Interrupt",
+          "waitHint": "Wait for the response to finish.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Stop subagents"
         }
       },
       "baseInputBar": {
@@ -12558,16 +12607,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Remove queued message"
+          "tooltip": "Remove queued message",
+          "ariaLabel": "Remove queued message: {message}"
         },
         "editHint": {
           "label": "edit ·"
         },
-        "item": {
-          "ariaLabel": "Toggle queued message"
-        },
         "removeHint": {
           "label": "remove"
+        },
+        "editButton": {
+          "tooltip": "Edit queued message",
+          "clearDraftTooltip": "Clear your draft to edit a queued message",
+          "ariaLabel": "Edit queued message: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrupt current work and send this message",
+          "ariaLabel": "Send now: {message}"
+        },
+        "sendHint": {
+          "label": "send now ·"
         }
       },
       "sharedAppInputBar": {
@@ -12577,6 +12636,14 @@
         "startSessionButton": {
           "label": "Start New Session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Could not submit the message.",
+        "withdrawFailed": "Could not remove the pending message.",
+        "loadFailed": "Could not load pending messages.",
+        "alreadyAccepted": "This message was already accepted and is no longer pending.",
+        "interruptFailed": "Could not send this message now. It remains pending.",
+        "stopSubagentsFailed": "Could not stop the subagents."
       }
     },
     "mcpApiKey": {
@@ -12672,6 +12739,9 @@
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
         }
+      },
+      "agentResults": {
+        "received": "Subagent results received"
       },
       "codeBlock": {
         "copyButton": {
@@ -12820,11 +12890,6 @@
         },
         "stoppedStatus": {
           "text": "Image generation stopped"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "Copy table"
         }
       },
       "memoizedLink": {
@@ -14482,7 +14547,7 @@
         "promote": {
           "cancelButton": "Cancel",
           "confirmButton": "Make organization-wide",
-          "description": "App-associated skills must be available to everyone. This change is applied when you save the app.",
+          "description": "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone.",
           "title": "Make “{name}” organization-wide?"
         },
         "search": {
@@ -16418,6 +16483,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Failed to save preferences"
+      },
+      "sendBehavior": {
+        "title": "Send Behavior While Working",
+        "description": "Choose what Enter and the send button do while an answer is in progress. Ctrl/Cmd+Enter always queues a follow-up.",
+        "afterStep": "After the current step",
+        "interrupt": "Interrupt current work"
       }
     },
     "connectors": {
@@ -17130,6 +17201,13 @@
         "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
       },
+      "staleVersion": {
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
+        "reload": {
+          "label": "Reload"
+        },
+        "title": "This skill changed since you opened it"
+      },
       "toasts": {
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
@@ -17330,9 +17408,6 @@
           "message": "Loading sharing details..."
         },
         "noOwnerTitle": "No active owner",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Change organization permission"
-        },
         "ownerLabel": "Owner",
         "permissionMenu": {
           "ariaLabel": "Update access for {name}"
@@ -17373,14 +17448,77 @@
         "peopleTitle": "People with access",
         "manageIndividualAccess": "Manage individual access",
         "individualAccessTitle": "Individual access",
-        "ownershipTitle": "Ownership"
+        "ownershipTitle": "Ownership",
+        "published": {
+          "title": "Organization",
+          "description": "Published. Everyone in the organization can use this skill."
+        },
+        "publishWarning": {
+          "title": "Publishing cannot be undone",
+          "description": "After you save, everyone in the organization can use this skill. You cannot make it private again. Only an admin can delete it.",
+          "reviewDescription": "The skill stays private until an admin approves the request. After approval, you cannot make it private again."
+        },
+        "reviewRequestedToast": {
+          "message": "Your publish request went to an admin for review."
+        },
+        "publishOff": {
+          "title": "Publishing is turned off",
+          "description": "An admin turned off publishing to the organization. Ask an admin to publish this skill."
+        }
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
       },
       "tabs": {
         "details": "Details",
-        "sharing": "Sharing"
+        "sharing": "Sharing",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Skill versions",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Made by",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Current",
+        "unknownAuthor": "Unknown",
+        "previewRow": {
+          "ariaLabel": "Preview version {number}"
+        },
+        "restore": {
+          "label": "Restore",
+          "ariaLabel": "Restore version {number}",
+          "successToast": "Restored version {number} as version {newNumber}.",
+          "unchangedToast": "Version {number} has the same files as the current version.",
+          "failedToast": "Couldn't restore this version.",
+          "unsavedChanges": {
+            "title": "Save your changes first",
+            "description": "Save or discard the changes in the editor before you restore a version."
+          }
+        },
+        "loadError": {
+          "title": "Couldn't load versions",
+          "description": "Try again later."
+        },
+        "preview": {
+          "back": "All versions",
+          "loadError": {
+            "title": "Couldn't load this version"
+          }
+        },
+        "status": {
+          "pending": "Pending review",
+          "published": "Published"
+        },
+        "publishUpdate": {
+          "label": "Publish update",
+          "successToast": "Published version {number} to the organization.",
+          "failedToast": "Couldn't publish this update.",
+          "sentForReviewToast": "Version {number} went to an admin for review.",
+          "offNotice": "Publishing is turned off. Ask an admin to publish this update."
+        }
       }
     },
     "page": {
@@ -17533,10 +17671,41 @@
       "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
       "unchanged": "Keep unchanged",
       "everyone": "Everyone in the organization",
-      "invitedOnly": "Invited people and groups",
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "publishWarning": {
+        "title": "Publishing cannot be undone",
+        "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
+      }
+    },
+    "reviewRequests": {
+      "title": "Publish Requests",
+      "description": "Approve or deny requests to publish skills to the organization.",
+      "columns": {
+        "skill": "Skill",
+        "version": "Version",
+        "author": "Author",
+        "saved": "Saved"
+      },
+      "unnamedSkill": "Unnamed skill",
+      "review": {
+        "label": "Review",
+        "ariaLabel": "Review {name}"
+      },
+      "approve": {
+        "label": "Approve"
+      },
+      "deny": {
+        "label": "Deny"
+      },
+      "approvedToast": "Published version {number} of {name}.",
+      "deniedToast": "Denied version {number} of {name}.",
+      "failedToast": "Couldn't update this request.",
+      "version": {
+        "firstPublish": "v{number} · First publish",
+        "update": "v{number} · Update from v{published}"
+      }
     }
   },
   "opensearchHealth": {

@@ -1116,6 +1116,7 @@ class CodeCell:
             id=f"{self._call_id}:{external.index}",
             tool_name=function.tool.name,
             tool_id=function.tool.id,
+            display_name=function.tool.display_name,
             function_name=function.function_name,
             arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS, copied.text),
             state="running",
@@ -1368,6 +1369,12 @@ class CodeCells:
             max_tokens=max_tokens,
             terminate=terminate,
         )
+
+    @property
+    def has_open(self) -> bool:
+        """Whether a cell's end has not been observed yet; ending the run stops it."""
+        with self._lock:
+            return any(not cell.closed for cell in self._cells.values())
 
     def finish(self, results: Sequence[ToolResultMessage]) -> list[ToolResultAmendment]:
         """Stop every open cell and return the final records of the response's

@@ -1,3 +1,8 @@
+# Publishes onyxdotapp/craft-runtime on each Onyx tag. On stable and beta
+# version tags it also publishes the Craft Firecracker images under the same
+# tag, which the Helm chart defaults to:
+#   onyxdotapp/craft-fc-host-agent:<tag>
+#   onyxdotapp/craft-fc-artifacts:rootfs-<tag> (from craft-runtime:<tag>)
 name: Release Craft Runtime
 
 on:
@@ -15,6 +20,7 @@ jobs:
     outputs:
       build-sandbox: ${{ steps.classify.outputs.build-sandbox }}
       is-stable: ${{ steps.classify.outputs.is-stable }}
+      is-beta: ${{ steps.classify.outputs.is-beta }}
       is-latest: ${{ steps.classify.outputs.is-latest }}
       is-beta-standalone: ${{ steps.classify.outputs.is-beta-standalone }}
       is-test-run: ${{ steps.classify.outputs.is-test-run }}
@@ -105,8 +111,13 @@ jobs:
             runtime.cache-from=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:edge
             runtime.cache-from+=type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/craft-runtime:latest
             runtime.cache-to=type=inline
-      - name: Audit browser
-        run: bash .github/scripts/audit-sandbox-browser.sh onyxdotapp/craft-runtime:release-check
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e
+        with:
+          go-version-file: tools/ods/go.mod
+          cache: false
+      - name: Audit runtime and supplemental inventory
+        working-directory: tools/ods
+        run: go run ./odsaudit image onyxdotapp/craft-runtime:release-check --sbom /opt/chrome/browser.cdx.json --sbom-only --strict --update-policy s3://onyx-internal-tools/audit/updates.json
       - name: Check runtime offline
         run: |
           docker run --rm --network none --shm-size=256m \
@@ -194,3 +205,28 @@ jobs:
             docker tag onyxdotapp/craft-runtime:release-check "$tag"
             docker push "$tag"
           done
+
+  publish-craft-fc-host-agent:
+    needs: determine-builds
+    if: needs.determine-builds.outputs.is-test-run != 'true' && (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta == 'true')
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/craft-fc-host-agent.yml
+    with:
+      release-tag: ${{ github.ref_name }}
+    secrets:
+      AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+
+  # Converts the craft-runtime image that the publish job pushed.
+  publish-craft-fc-rootfs:
+    needs: [determine-builds, publish]
+    if: needs.determine-builds.outputs.is-test-run != 'true' && (needs.determine-builds.outputs.is-stable == 'true' || needs.determine-builds.outputs.is-beta == 'true')
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/craft-fc-rootfs.yml
+    with:
+      release-tag: ${{ github.ref_name }}
+    secrets:
+      AWS_OIDC_ROLE_ARN: ${{ secrets.AWS_OIDC_ROLE_ARN }}

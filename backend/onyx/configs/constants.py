@@ -258,6 +258,9 @@ CELERY_USER_FILE_DELETE_TASK_EXPIRES = 60  # 1 minute (in seconds)
 # re-enqueued on the next document index sync beat pass, so dropping it is safe.
 CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
+# Generous: a big prune can queue thousands of cleanup tasks on a busy fleet.
+CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES = 6 * 60 * 60  # 6 hours (in seconds)
+
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
 
@@ -420,6 +423,8 @@ class MessageType(str, Enum):
     SUMMARY = "summary"
     TOOL_CALL_RESPONSE = "tool_call_response"
     USER_REMINDER = "user_reminder"  # Custom Onyx message type which is translated into a USER message when passed to the LLM
+    # Hidden question of an automatic follow-up; its response's first step accepts the results.
+    AGENT_RESULTS = "agent_results"
 
 
 class TokenRateLimitScope(str, Enum):
@@ -741,6 +746,7 @@ class OnyxCeleryTask:
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
     DOCUMENT_BY_CC_PAIR_CLEANUP_TASK = "document_by_cc_pair_cleanup_task"
+    DOCUMENT_BATCH_BY_CC_PAIR_CLEANUP_TASK = "document_batch_by_cc_pair_cleanup_task"
     DOCUMENT_INDEX_METADATA_SYNC_TASK = "document_index_metadata_sync_task"
 
     # Credential capability checks (granular runs of the registered checks)
@@ -784,6 +790,7 @@ class OnyxCeleryTask:
 
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
+    RECONCILE_SANDBOX_RUNTIMES = "reconcile_sandbox_runtimes"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"

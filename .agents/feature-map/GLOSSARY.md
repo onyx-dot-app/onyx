@@ -17,7 +17,7 @@ owns the rules.
 | Onyx | Danswer | Some identifiers and comments say Danswer. It is the same product. |
 | Craft | `build` | The product is Craft. The backend directory `backend/onyx/server/features/build/`, the `/build` API paths and `BUILD_MODE_FEATURE_ID` say build. |
 | Action | `Tool` | Some UI text calls tools "Actions". The code calls them Tools. |
-| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. The `plugin` table (`db/models.py:Plugin`) is different: a package of custom skills, not read by app code yet. See [[skills#plugin-tables-unused]]. |
+| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. The `plugin` table (`db/models.py:Plugin`) is different: a package of custom skills. Access reads for custom skills come from it. See [[skills#plugin-tables]]. |
 | Free plan | `Tier.COMMUNITY` | The web UI shows the Community tier as the Free plan. |
 | Workspace | the tenant | The tenant-wide scope, as in workspace setting, workspace default and workspace policy. An admin sets it. Not the session workspace (see Craft vocabulary). See [[multi-tenancy]]. |
 
@@ -189,7 +189,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
 | Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), `start_run`, and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |

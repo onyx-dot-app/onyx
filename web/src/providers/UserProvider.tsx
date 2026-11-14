@@ -59,6 +59,7 @@ export interface UserContextType {
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
+  updateUserInterruptOnSend: (enabled: boolean) => Promise<void>;
   toggleAgentPinnedStatus: (
     currentPinnedAgentIDs: number[],
     agentId: number,
@@ -427,6 +428,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateUserInterruptOnSend = async (enabled: boolean) => {
+    const response = await fetch(
+      `/api/interrupt-on-send?interrupt_on_send=${enabled}`,
+      { method: "PATCH" }
+    );
+    if (!response.ok) throw new Error("Failed to update send behavior");
+    await refreshUser();
+  };
+
   const updateUserAutoScroll = async (autoScroll: boolean) => {
     try {
       const response = await fetch("/api/auto-scroll", {
@@ -762,6 +772,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserAutoScroll,
         updateUserShortcuts,
         updateUserPasteAsTile,
+        updateUserInterruptOnSend,
         updateUserTemperatureOverrideEnabled,
         updateUserTemperatureDefault,
         updateUserReasoningEffortDefault,

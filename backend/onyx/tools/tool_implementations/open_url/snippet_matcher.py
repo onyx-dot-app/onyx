@@ -15,6 +15,10 @@ class SnippetMatchResult(BaseModel):
 
 NegativeSnippetMatchResult = SnippetMatchResult(snippet_located=False)
 
+# Fuzzy alignment time grows with the square of the snippet length and holds the
+# GIL. Long snippets align by this many leading characters.
+MAX_FUZZY_SNIPPET_CHARS = 256
+
 
 def find_snippet_in_content(content: str, snippet: str) -> SnippetMatchResult:
     """
@@ -216,28 +220,26 @@ def _token_based_match(
     """
     Performs a token based fuzzy search for the snippet in the content.
 
+    A snippet longer than MAX_FUZZY_SNIPPET_CHARS aligns by its leading
+    characters, and the match keeps the full snippet length.
+
     min_threshold exists in the range [0, 1]
     """
     if not content or not snippet:
         return NegativeSnippetMatchResult
 
     res = fuzz.partial_ratio_alignment(
-        content, snippet, processor=utils.default_process
+        content,
+        snippet[:MAX_FUZZY_SNIPPET_CHARS],
+        processor=utils.default_process,
     )
 
-    if not res:
+    if not res or res.score < min_threshold * 100:
         return NegativeSnippetMatchResult
 
-    score = res.score
-
-    if score >= (min_threshold * 100):
-        start_idx = res.src_start
-        end_idx = res.src_end
-
-        return SnippetMatchResult(
-            snippet_located=True,
-            start_idx=start_idx,
-            end_idx=end_idx,
-        )
-
-    return NegativeSnippetMatchResult
+    end_idx = res.src_end
+    if len(snippet) > MAX_FUZZY_SNIPPET_CHARS:
+        end_idx = max(end_idx, min(res.src_start + len(snippet), len(content)))
+    return SnippetMatchResult(
+        snippet_located=True, start_idx=res.src_start, end_idx=end_idx
+    )

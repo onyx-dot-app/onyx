@@ -29,16 +29,20 @@ from onyx.db.models import (
 )
 from tests.external_dependency_unit.craft.db_helpers import make_group, make_user
 
-_MIGRATION_PATH = (
-    Path(__file__).parents[3]
-    / "alembic/versions/cdec9dd9ca3d_add_plugin_tables_and_backfill.py"
+_VERSIONS = Path(__file__).parents[3] / "alembic/versions"
+_MIGRATION_FILE = "cdec9dd9ca3d_add_plugin_tables_and_backfill.py"
+# Later migrations that depend on the plugin tables, newest first. The test
+# downgrades them before it drops the tables.
+_LATER_MIGRATION_FILES = (
+    "414dfccc5e24_drop_deferrable_foreign_keys.py",
+    "26ff9e3664f0_add_pending_version_to_plugins.py",
 )
 _ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _T0 = datetime.datetime(2026, 1, 1, tzinfo=datetime.timezone.utc)
 
 
-def _load_migration() -> ModuleType:
-    spec = importlib.util.spec_from_file_location("plugin_migration", _MIGRATION_PATH)
+def _load_migration(filename: str = _MIGRATION_FILE) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(filename, _VERSIONS / filename)
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
@@ -302,6 +306,8 @@ def test_backfill_maps_each_custom_skill_to_one_plugin(
     try:
         skill_shape = _skill_table_shape(db_session)
         with _migration_ops(db_session):
+            for filename in _LATER_MIGRATION_FILES:
+                _load_migration(filename).downgrade()
             migration.downgrade()
         assert not _table_exists(db_session, "plugin")
 

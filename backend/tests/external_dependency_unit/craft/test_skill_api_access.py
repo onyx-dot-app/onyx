@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
 from types import SimpleNamespace
 from typing import cast
 from unittest.mock import MagicMock, patch
@@ -11,7 +12,7 @@ from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from pydantic import ValidationError
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
@@ -19,8 +20,13 @@ from onyx.db.enums import (
     SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User, UserSkillPreference
-from onyx.db.skill import set_skill_enabled_for_user, skill_user_states
+from onyx.db.models import PluginVersion, Skill, User, UserSkillPreference
+from onyx.db.skill import (
+    set_skill_enabled_for_user,
+    set_skill_installation_policy,
+    skill_user_states,
+)
+from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -39,8 +45,10 @@ from onyx.server.features.skill.api import (
 from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillPatchRequest,
+    SkillResponse,
     SkillShareRequest,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -367,7 +375,7 @@ def test_remove_file_authorizes_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -396,7 +404,7 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -421,8 +429,7 @@ def test_admin_can_set_installation_policy(
 ) -> None:
     admin = make_user(db_session, is_admin=True)
     skill = make_skill(db_session, is_public=True)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     push = MagicMock()
     monkeypatch.setattr("onyx.server.features.skill.api.push_skills_for_users", push)
     response = share_current_user_skill(
@@ -454,18 +461,17 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
     db_session: Session,
 ) -> None:
     owner = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
     response = patch_current_user_skill(
         skill.id,
-        SkillPatchRequest(public_permission=None),
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
         user=owner,
         db_session=db_session,
     )
-    assert response.public_permission is None
+    assert response.public_permission == SkillSharePermission.VIEWER
     assert response.installation_policy == SkillInstallationPolicy.REQUIRED
 
 
@@ -540,7 +546,7 @@ def test_sharing_metadata_requires_edit_access_without_reading_bundle(
         side_effect=AssertionError("Sharing must not read the bundle")
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes", read_bundle
+        "onyx.server.features.skill.api.read_skill_bundle_blob", read_bundle
     )
     if editor:
         response = fetch_custom_skill_sharing(
@@ -604,8 +610,7 @@ def test_sharing_without_policy_preserves_existing_policy(
 ) -> None:
     owner = make_user(db_session, is_admin=is_admin, standard_account=not is_admin)
     skill = make_skill(db_session, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
     )
@@ -620,9 +625,30 @@ def test_sharing_without_policy_preserves_existing_policy(
     assert skill.installation_policy == SkillInstallationPolicy.REQUIRED
 
 
-def test_sharing_rejects_explicit_null_policy() -> None:
-    with pytest.raises(ValidationError):
+def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> None:
+    assert SkillShareRequest.model_validate({}).to_change().installation_policy is UNSET
+    assert (
         SkillShareRequest.model_validate({"installation_policy": None})
+        .to_change()
+        .installation_policy
+        is None
+    )
+
+
+def test_built_in_skill_response_reports_available_policy(
+    db_session: Session,
+) -> None:
+    built_in_skill_id, definition = next(iter(BUILT_IN_SKILLS.items()))
+    skill = Skill(
+        id=uuid4(),
+        name=built_in_skill_id,
+        description="A built-in skill",
+        built_in_skill_id=built_in_skill_id,
+    )
+    response = SkillResponse.from_builtin(
+        skill, definition, db_session, enabled=True, can_toggle=True
+    )
+    assert response.installation_policy == SkillInstallationPolicy.AVAILABLE
 
 
 def test_creation_response_includes_saved_group_shares(
@@ -670,7 +696,7 @@ def test_full_replacement_upload_does_not_read_current_bundle(
     )
     current_read = MagicMock(side_effect=AssertionError("current bundle was read"))
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         current_read,
     )
 
@@ -687,3 +713,52 @@ def test_full_replacement_upload_does_not_read_current_bundle(
     current_read.assert_not_called()
     editable_response.assert_called_once()
     assert editable_response.call_args.args[0].description == "New"
+
+
+def test_adding_an_unchanged_file_to_a_version_without_a_file_list_adds_none(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    name = f"unchanged-{uuid4().hex[:8]}"
+    skill_md = build_skill_md(
+        name=name, description="Same files.", instructions_markdown="Do it."
+    ).encode("utf-8")
+    # A stored, uncompressed ZIP with its own timestamps: a rewrite of the
+    # same files gives other bytes and another hash.
+    original = io.BytesIO()
+    with zipfile.ZipFile(original, "w", compression=zipfile.ZIP_STORED) as archive:
+        for path, content in ((SKILL_MD_NAME, skill_md), ("notes.txt", b"notes")):
+            archive.writestr(
+                zipfile.ZipInfo(path, date_time=(2001, 2, 3, 4, 5, 6)), content
+            )
+    created = create_custom_skill(
+        bundle=_upload(f"{name}.zip", original.getvalue()),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    # A version copied from a legacy skill row has no file list.
+    db_session.execute(
+        update(PluginVersion)
+        .where(PluginVersion.plugin_id == created.id)
+        .values(file_manifest=None)
+    )
+    db_session.flush()
+
+    with patch("onyx.server.features.skill.api._editable_skill_response"):
+        upload_current_user_skill_files(
+            created.id,
+            upload=_upload("notes.txt", b"notes"),
+            user=owner,
+            db_session=db_session,
+        )
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(PluginVersion)
+            .where(PluginVersion.plugin_id == created.id)
+        )
+        == 1
+    )

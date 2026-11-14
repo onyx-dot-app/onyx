@@ -31,7 +31,7 @@ from onyx.file_processing.extract_file_text import (
     extract_text_and_images,
     get_file_ext,
 )
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import RawFileCallback
@@ -105,7 +105,7 @@ def _process_file(
     # Get file extension and determine file type
     extension = get_file_ext(file_name)
 
-    if extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+    if not is_indexable_file_type(file_name, None, allow_images=True):
         logger.warning(
             "Skipping file '%s' with unrecognized extension '%s'", file_name, extension
         )

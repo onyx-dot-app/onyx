@@ -34,9 +34,9 @@ class QueryProcessingResponse(BaseModel):
 class QueryProcessingSpec(HookPointSpec):
     """Hook point that runs on every user query before it enters the pipeline.
 
-    Call site: inside handle_stream_message_objects() in
-    backend/onyx/chat/process_message.py, immediately after message_text is
-    assigned from the request and before create_new_chat_message() saves it.
+    chat/process_message.py:process_chat_query applies this hook during normal
+    turn preparation and pending-message submission, before either saves text.
+    Queued execution and regeneration reuse the processed text.
 
     This is the earliest possible point in the query pipeline:
     - Raw query — unmodified, exactly as the user typed it

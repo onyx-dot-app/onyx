@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/onyx-dot-app/onyx/microvm/proto/sandboxd/v1"
 )
@@ -328,7 +327,6 @@ func TestRestoreKVM(t *testing.T) {
 		key := randHex(32)
 		req := initRequest(fmt.Sprintf("clone-%d", i))
 		s = time.Now()
-		req.HostTime = timestamppb.New(s)
 		ir, err := keyInit(ctx, c, key, req)
 		if err != nil {
 			t.Fatal(err)

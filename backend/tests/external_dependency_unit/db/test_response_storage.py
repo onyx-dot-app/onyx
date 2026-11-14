@@ -15,6 +15,7 @@ from sqlalchemy.orm.unitofwork import UOWTransaction
 
 from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
 from ee.onyx.server.reporting.usage_export_models import FlowType
+from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.compaction import working_messages
 from onyx.agents.events import (
     MessageEndEvent,
@@ -25,10 +26,14 @@ from onyx.agents.events import (
 )
 from onyx.agents.models import (
     AgentInfo,
+    AgentMessageRequest,
     AgentState,
     CompactionCheckpoint,
     ExecutionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
+    MessageDelivery,
     RunAction,
     RunFailure,
     RunFailureKind,
@@ -39,7 +44,9 @@ from onyx.agents.models import (
     ToolExecutionRecord,
     messages_from_steps,
 )
+from onyx.agents.runtime import Run
 from onyx.agents.tools import InputMode, PendingToolInput, ToolProgress
+from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -56,13 +63,16 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
+from onyx.chat.process_message import read_repaired_chat_inbox
 from onyx.chat.response import response_record, response_snapshot
+from onyx.chat.run_store import ChatRunStore
 from onyx.chat.tool_results import tool_result_sources
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
 from onyx.db import chat_subagents
 from onyx.db.chat import (
+    MAX_AGENT_DEPTH,
     checkpoint_from_summary,
     delete_chat_session,
     delete_messages_and_files_from_chat_session,
@@ -80,10 +90,26 @@ from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     publish_checkpoint__no_commit,
 )
+from onyx.db.chat_inputs import (
+    MAX_PENDING_MESSAGE_BYTES,
+    active_agent_response_ids,
+    agent_queue_paused,
+    agent_result_states,
+    can_start_input,
+    consume_inputs__no_commit,
+    enqueue_message,
+    fail_inbox_start__no_commit,
+    latest_agent_response,
+    lock_agent,
+    pending_inputs,
+    read_chat_inbox,
+    read_run_inputs,
+)
 from onyx.db.chat_response import (
     read_chat_execution,
     read_response__no_commit,
     read_response_replay_data,
+    read_response_status__no_commit,
     read_response_steps,
     reserve_child_response__no_commit,
     save_chat_response_to_db,
@@ -96,9 +122,11 @@ from onyx.db.chat_subagents import (
     _load_history,
     load_session_agent_metadata,
     lookup_session_agent,
+    read_agent_completions,
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
+    ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
     ChatResponseCheckpoint,
@@ -114,6 +142,8 @@ from onyx.deep_research.models import (
     ResearchMessageMetadata,
     ResearchPhase,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.llm.models import (
     AssistantMessage,
@@ -168,7 +198,9 @@ from onyx.tools.tool_implementations.images.models import FinalImageGenerationRe
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.threadpool_concurrency import start_thread_future
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 
 
 def _steps(
@@ -264,6 +296,7 @@ def _response(
     previous: ChatMessage | None = None,
     question: ChatMessage | None = None,
 ) -> ChatMessage:
+    selects_response = question is None
     if question is None:
         question = ChatMessage(
             chat_session_id=conversation.id,
@@ -274,6 +307,8 @@ def _response(
         )
         db_session.add(question)
         db_session.flush()
+        if previous is not None:
+            previous.latest_child_message_id = question.id
     response = ChatMessage(
         chat_session_id=conversation.id,
         parent_message_id=question.id,
@@ -283,6 +318,10 @@ def _response(
     )
     db_session.add(response)
     db_session.flush()
+    if selects_response:
+        # A new turn's response is the selected one, as when a turn reserves it.
+        question.latest_child_message_id = response.id
+        db_session.flush()
     return response
 
 
@@ -318,13 +357,14 @@ def _child_record(
     previous: str | None = None,
     *,
     path: str | None = None,
+    tool_name: str = "delegate",
 ) -> ResponseRecord:
     path = path or f"{parent.agent_path}/research"
     parent.steps = _steps(
         parent.run_id,
         [
             AssistantMessage(
-                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+                content=[ToolCall(id="delegate", name=tool_name, arguments={})]
             )
         ],
     )
@@ -350,6 +390,7 @@ def _child_record(
             parent_response_id=int(parent.run_id),
             parent_message_id=f"{parent.run_id}:0",
             parent_tool_call_id="delegate",
+            delivers_result=tool_name in ("spawn_agent", "send_message"),
         )
     )
     child = ResponseRecord(
@@ -369,6 +410,366 @@ def _child_record(
     )
     parent.child_runs.append(child)
     return child
+
+
+def _result_input(run_id: str) -> UserMessage:
+    return UserMessage(
+        id=f"agent-result:{run_id}",
+        content="Result",
+        metadata=InputMessageMetadata(
+            source=InputSource.AGENT_RESULT, source_run_id=run_id
+        ),
+    )
+
+
+@pytest.mark.parametrize("background", [False, True])
+def test_agent_results_are_scoped_to_spawner_and_root_branch(
+    db_session: Session, conversation: ChatSession, background: bool
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session,
+        parent,
+        uuid4(),
+        "Child report",
+        tool_name="spawn_agent" if background else "research_agent",
+    )
+    grandchild = _child_record(
+        db_session, child, uuid4(), "Grandchild report", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    branch = [response.id]
+
+    def unread(visible: list[int], recipient: UUID) -> dict[int, RunStatus]:
+        return {
+            result.response_id: result.status
+            for result in agent_result_states(db_session, visible, recipient)
+        }
+
+    assert unread(branch, conversation.id) == (
+        {int(child.run_id): RunStatus.COMPLETE} if background else {}
+    )
+    assert unread(branch, UUID(child.agent_id or "")) == {
+        int(grandchild.run_id): RunStatus.COMPLETE
+    }
+    # A sibling root branch neither lists nor consumes the result.
+    sibling = _response(db_session, conversation)
+    _save(db_session, sibling, _record(sibling))
+    assert unread([sibling.id], conversation.id) == {}
+    assert unread([sibling.id], UUID(child.agent_id or "")) == {}
+    if not background:
+        return
+    sibling.response_status = RunStatus.RUNNING
+    assert not consume_inputs__no_commit(
+        db_session,
+        sibling.id,
+        [_result_input(child.run_id)],
+        [sibling.id],
+        ownership_version=None,
+    )
+    assert consume_inputs__no_commit(
+        db_session,
+        sibling.id,
+        [_result_input(child.run_id)],
+        branch,
+        ownership_version=None,
+    )
+    assert unread(branch, conversation.id) == {}
+
+
+def test_later_child_run_keeps_earlier_unread_result(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "First assignment", tool_name="spawn_agent"
+    )
+    grandchild = _child_record(
+        db_session, child, uuid4(), "Evidence", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    assert child.agent_id is not None
+    later_response = _response(db_session, conversation, previous=response)
+    later_parent = _record(later_response)
+    another_assignment = _child_record(
+        db_session,
+        later_parent,
+        UUID(child.agent_id),
+        "Second assignment",
+        child.run_id,
+        tool_name="send_message",
+    )
+    _save(db_session, later_response, later_parent)
+    branch = [response.id, later_response.id]
+    expected = {
+        int(child.run_id): RunStatus.COMPLETE,
+        int(another_assignment.run_id): RunStatus.COMPLETE,
+    }
+    assert {
+        result.response_id: result.status
+        for result in agent_result_states(db_session, branch, conversation.id)
+    } == expected
+    later_response.response_status = RunStatus.RUNNING
+    assert consume_inputs__no_commit(
+        db_session,
+        later_response.id,
+        [_result_input(run_id) for run_id in (child.run_id, another_assignment.run_id)],
+        branch,
+        ownership_version=None,
+    )
+    assert agent_result_states(db_session, branch, conversation.id) == []
+
+    # A running follow-up whose owner is gone is saved as interrupted.
+    orphan_id = reserve_child_response__no_commit(
+        db_session,
+        response.id,
+        agent=AgentInfo(
+            id=grandchild.agent_id or "",
+            path=grandchild.agent_path,
+            parent_id=child.agent_id,
+            description="",
+            restoration_config=None,
+        ),
+        instruction=None,
+        previous_response_id=int(grandchild.run_id),
+        parent_response_id=int(child.run_id),
+        parent_message_id=f"{child.run_id}:0",
+        parent_tool_call_id="delegate",
+        delivers_result=True,
+    )
+    orphan = db_session.get(ChatMessage, orphan_id)
+    assert orphan is not None and orphan.parent_message is not None
+    assert orphan.parent_message.message_type == MessageType.AGENT_RESULTS
+    orphan.response_status = RunStatus.RUNNING
+    db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    owner = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=conversation.id,
+        response_id=later_response.id,
+        visible_response_ids=branch,
+        cache=cache,
+        follow_up_steps=4,
+        user=User(),
+        control_cache=cache,
+    )
+    coordinator = AgentCoordinator()
+    owner.bind(
+        coordinator,
+        build_agent=lambda _: pytest.fail("No execution should be restored"),
+    )
+    try:
+        owner.poll_control()
+        db_session.refresh(orphan)
+        assert orphan.response_status == RunStatus.ERROR
+        assert orphan.response_failure is not None
+        assert orphan.response_failure.kind == RunFailureKind.EXECUTION
+    finally:
+        assert coordinator.close(timeout=10)
+
+
+def test_agent_result_is_accepted_once_by_concurrent_consumers(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Report", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    response.response_status = RunStatus.RUNNING
+    db_session.commit()
+    response_id = response.id
+    barrier = threading.Barrier(2)
+
+    def consume() -> bool:
+        with Session(db_session.get_bind()) as session:
+            barrier.wait(10)
+            accepted = consume_inputs__no_commit(
+                session,
+                response_id,
+                [_result_input(child.run_id)],
+                [response_id],
+                ownership_version=None,
+            )
+            session.commit()
+            return accepted
+
+    workers = [
+        start_thread_future(consume, name=f"test-consume-{index}") for index in range(2)
+    ]
+    assert sorted(worker.result(timeout=20) for worker in workers) == [False, True]
+
+
+def test_only_spawned_agents_are_active_background_agents(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """The cap and Stop subagents skip foreground workers, such as research agents."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    background = _child_record(
+        db_session, parent, uuid4(), "Background", tool_name="spawn_agent"
+    )
+    foreground = _child_record(
+        db_session, parent, uuid4(), "Foreground", tool_name="research_agent"
+    )
+    _save(db_session, response, parent)
+    for record in (background, foreground):
+        row = db_session.get(ChatMessage, int(record.run_id))
+        assert row is not None
+        row.response_status = RunStatus.RUNNING
+    db_session.flush()
+    assert active_agent_response_ids(db_session, [response.id]) == [
+        int(background.run_id)
+    ]
+
+
+def test_the_agent_cap_counts_suspended_background_agents(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A suspended agent resumes without a capacity check, so it keeps its slot."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Partial output", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    for status, expected in (
+        (RunStatus.RUNNING, 1),
+        (RunStatus.SUSPENDED, 1),
+        (RunStatus.COMPLETE, 0),
+    ):
+        child_row.response_status = status
+        db_session.flush()
+        assert len(active_agent_response_ids(db_session, [response.id])) == expected
+
+
+def test_abandoned_background_child_is_delivered_as_failure(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Partial output", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    child_row.response_status = RunStatus.RUNNING
+    db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    run_store = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=conversation.id,
+        response_id=response.id,
+        visible_response_ids=[response.id],
+        cache=cache,
+        follow_up_steps=4,
+        user=User(),
+        control_cache=cache,
+    )
+    coordinator = AgentCoordinator()
+    run_store.bind(
+        coordinator, build_agent=lambda _: pytest.fail("No execution is restored")
+    )
+
+    # A control poll saves the lost child as failed; the root's next step receives it.
+    try:
+        run_store.poll_control()
+    finally:
+        assert coordinator.close(timeout=10)
+    [received] = run_store.receive_inputs(
+        Run.from_snapshot(
+            RunState(
+                run_id=str(response.id),
+                agent_id=str(conversation.id),
+                status=RunStatus.COMPLETE,
+            )
+        )
+    )
+    assert isinstance(received.metadata, InputMessageMetadata)
+    assert received.metadata.source_run_id == child.run_id
+    assert '"status": "error"' in received.text
+    db_session.expire_all()
+    stored = db_session.get(ChatMessage, int(child.run_id))
+    assert stored is not None and stored.response_status == RunStatus.ERROR
+    assert stored.response_failure is not None
+    assert stored.response_failure.kind == RunFailureKind.EXECUTION
+
+
+def test_agent_completion_preserves_cited_output_and_durable_input_receipt(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Child source [2].", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None
+    snapshot = response_snapshot(child)
+    snapshot.steps[0].message.metadata = ChatMessageMetadata(
+        sources={2: _source_doc("child-source")}
+    )
+    projected = project_response(snapshot, tool_ids={})
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=child_row,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+    answer = db_session.scalar(
+        select(ChatResponseItem).where(ChatResponseItem.chat_message_id == child_row.id)
+    )
+    assert answer is not None
+    db_session.expire(answer, ["inputs"])
+    [completion] = read_agent_completions(db_session, [child_row.id])
+    assert "inputs" in inspect(answer).unloaded
+    assert completion.run_id == child.run_id
+    assert completion.agent_path == "/root/research"
+    assert completion.output is not None
+    assert completion.output.text == "Child source [2]."
+    assert message_citation_sources(completion.output)[2].document_id == "child-source"
+
+    # A receipt is retained with the generation that consumed the result.
+    follow_up = _response(db_session, conversation, previous=response)
+    record = _record(follow_up, "Parent source [5].")
+    record.steps[0].input_messages = [
+        UserMessage(id=completion.message_id, content="Child source [5].")
+    ]
+    restored = response_snapshot(record)
+    restored.steps[0].message.metadata = ChatMessageMetadata(
+        sources={5: _source_doc("child-source")}
+    )
+    projected = project_response(restored, tool_ids={})
+    save_chat_turn(
+        message_text=projected.answer or "",
+        reasoning_tokens=projected.reasoning,
+        tool_calls=projected.tool_calls,
+        citation_to_doc=projected.citation_to_doc,
+        all_search_docs=projected.all_search_docs,
+        db_session=db_session,
+        assistant_message=follow_up,
+        response_record=projected.response,
+        presentation=projected.presentation,
+    )
+    db_session.expire_all()
+    [history] = capture_chat_history([follow_up], {}, len)
+    incoming, answer = history.response_messages
+    assert incoming.id == completion.message_id
+    assert incoming.text == "Child source [5]."
+    assert message_citation_sources(answer)[5].document_id == "child-source"
 
 
 @pytest.mark.parametrize("citation_only", [False, True])
@@ -765,6 +1166,13 @@ def test_suspended_search_result_restores_after_database_round_trip(
         input_messages=[instruction],
         steps=[
             StepRecord(
+                input_messages=[
+                    UserMessage(
+                        id="follow-up-instruction",
+                        content="Include the supporting evidence.",
+                        metadata=InputMessageMetadata(source=InputSource.HUMAN),
+                    )
+                ],
                 message=AssistantMessage(
                     id="generation",
                     content=[
@@ -1005,6 +1413,12 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     answer_index = 2
 
     record.steps = _steps(record.run_id, messages, ExecutionStatus(record.status.value))
+    record.steps[1].input_messages = [
+        UserMessage(id="agent-result:child-one", content="First child completed")
+    ]
+    record.steps[2].input_messages = [
+        UserMessage(id="agent-result:child-two", content="Second child completed")
+    ]
 
     record.answer_step_index = answer_index
     _save(db_session, response, record)
@@ -1021,7 +1435,7 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     assert isinstance(first, AssistantMessage)
     assert first.content[0] == record.messages[0].content[0]
     assert restored.answer_step_index == 2
-    assert restored.messages[4].text == "Final answer"
+    assert restored.messages[6].text == "Final answer"
     items = messages_from_steps(read_response_steps(response))
     assert items == restored.messages
     tools = list(
@@ -1394,15 +1808,21 @@ def test_root_history_and_metadata_do_not_consume_child_history_limit(
     for _ in range(6):
         latest = _response(db_session, conversation, previous=latest)
         _save(db_session, latest, _record(latest))
-    restored = chat_subagents.load_agent_history(latest.id, str(conversation.id))
+    restored = chat_subagents.load_agent_history(
+        chat_subagents.load_chat_branch(latest.id), str(conversation.id)
+    )
     assert restored.previous_run_id == str(latest.id)
     assert sum(isinstance(message, UserMessage) for message in restored.messages) == 7
     assert restored.messages[0].id == f"chat:{first.parent_message_id}"
-    restored_child = chat_subagents.load_agent_history(latest.id, str(child_id))
+    restored_child = chat_subagents.load_agent_history(
+        chat_subagents.load_chat_branch(latest.id), str(child_id)
+    )
     assert restored_child.previous_run_id == child.run_id
     monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 0)
     with pytest.raises(ValueError, match="response limit"):
-        chat_subagents.load_agent_history(latest.id, str(child_id))
+        chat_subagents.load_agent_history(
+            chat_subagents.load_chat_branch(latest.id), str(child_id)
+        )
     monkeypatch.setattr("onyx.db.chat_subagents.MAX_AGENT_HISTORY_RUNS", 2)
     metadata = {agent.id: agent for agent in load_session_agent_metadata(latest.id)}
     assert metadata[str(conversation.id)].latest_run_id == str(latest.id)
@@ -1451,18 +1871,38 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
         (sibling, set()),
     ):
         branch = chat_subagents.load_chat_branch(selected.id)
-        store = get_chat_history_store(
-            message_id=selected.id,
-            chat_session_id=conversation.id,
-            persist_content=True,
-            branch=branch,
-        )
-        assert {agent.id for agent in store.list_agents()} == expected
+        assert {
+            agent.id
+            for agent in load_session_agent_metadata(
+                selected.id, branch=branch, include_root=False
+            )
+        } == expected
+    # Only a direct parent can address a child.
     assert (
-        lookup_session_agent(base.id, str(grandchild_id), str(conversation.id)) is None
+        lookup_session_agent(
+            chat_subagents.load_chat_branch(base.id),
+            str(grandchild_id),
+            str(conversation.id),
+        )
+        is None
+    )
+    descendant = lookup_session_agent(
+        chat_subagents.load_chat_branch(base.id), str(grandchild_id), str(child_id)
+    )
+    assert descendant is not None
+    assert descendant.parent_id == str(child_id)
+    assert (
+        lookup_session_agent(
+            chat_subagents.load_chat_branch(base.id), str(child_id), str(grandchild_id)
+        )
+        is None
     )
     with pytest.raises(ValueError, match="unavailable"):
-        lookup_session_agent(sibling.id, str(grandchild_id), str(child_id))
+        lookup_session_agent(
+            chat_subagents.load_chat_branch(sibling.id),
+            str(grandchild_id),
+            str(child_id),
+        )
 
     branches = [_response(db_session, conversation, previous=base) for _ in range(2)]
     for index in [1, 0] if reverse_save_order else [0, 1]:
@@ -1493,7 +1933,90 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
             for message in history.messages
             if isinstance(message, AssistantMessage)
         ] == ["Base", f"Branch {index}"]
-        assert lookup_session_agent(branch.id, str(grandchild_id), str(child_id))
+        assert lookup_session_agent(
+            chat_subagents.load_chat_branch(branch.id),
+            str(grandchild_id),
+            str(child_id),
+        )
+
+
+def test_any_agent_in_the_visible_tree_is_listed_and_addressable(
+    db_session: Session, conversation: ChatSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "onyx.db.chat_subagents.get_session_with_current_tenant",
+        lambda: nullcontext(db_session),
+    )
+    base = _response(db_session, conversation)
+    parent = _record(base)
+    child_id, sibling_id, grandchild_id = uuid4(), uuid4(), uuid4()
+    child = _child_record(
+        db_session, parent, child_id, "Child", tool_name="spawn_agent"
+    )
+    _child_record(
+        db_session,
+        child,
+        grandchild_id,
+        "Leaf",
+        path="/root/research/facts",
+        tool_name="spawn_agent",
+    )
+    _save(db_session, base, parent)
+    _child_record(db_session, parent, sibling_id, "Sibling", path="/root/review")
+    _save(db_session, base, parent)
+    for agent_id in (child_id, sibling_id, grandchild_id):
+        agent = db_session.get(ChatSession, agent_id)
+        assert agent is not None
+        agent.restoration_config = ChatConfiguration(kind="chat")
+    db_session.flush()
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[base.id])
+    assert {
+        info.path: info.parent_id for info in load_session_agent_metadata(base.id)
+    } == {
+        "/root": None,
+        "/root/research": str(conversation.id),
+        "/root/review": str(conversation.id),
+        "/root/research/facts": str(child_id),
+    }
+
+    def send(sender: ResponseRecord, recipient: UUID, text: str) -> ChatInput:
+        receipt = enqueue_message(
+            db_session,
+            branch,
+            AgentMessageRequest(
+                agent_id=str(recipient),
+                parent_id=sender.agent_id or "",
+                message=UserMessage(id=str(uuid4()), content=text),
+                delivery=MessageDelivery.SEND,
+                max_steps=2,
+                parent_run_id=sender.run_id,
+                parent_message_id=f"{sender.run_id}:0",
+                parent_tool_call_id="delegate",
+            ),
+            base.id,
+        )
+        row = db_session.scalar(
+            select(ChatInput).where(ChatInput.message_id == receipt.id)
+        )
+        assert row is not None
+        return row
+
+    # The root addresses its grandchild; a child addresses its sibling and the root.
+    assert send(parent, grandchild_id, "Check").content.startswith(
+        "Message from agent /root "
+    )
+    assert send(child, sibling_id, "Compare").content.startswith(
+        "Message from agent /root/research "
+    )
+    to_root = send(child, conversation.id, "Halfway")
+    assert (to_root.target_response_id, to_root.delivery) == (
+        None,
+        MessageDelivery.SEND,
+    )
+    # A spawner's instruction keeps its text.
+    assert send(parent, child_id, "Continue").content == "Continue"
+    with pytest.raises(ValueError, match="cannot message itself"):
+        send(child, child_id, "Loop")
 
 
 @pytest.mark.parametrize("reverse_history", [False, True])
@@ -1621,6 +2144,7 @@ def test_child_multimodal_input_is_rejected_before_child_storage(
             parent_response_id=int(parent.run_id),
             parent_message_id=f"{parent.run_id}:0",
             parent_tool_call_id="delegate",
+            delivers_result=False,
         )
     assert db_session.get(ChatSession, child_id) is None
 
@@ -2130,13 +2654,11 @@ def test_discovery_batches_response_metadata(
     executed_sql.clear()
 
     if reuse_branch:
-        metadata = get_chat_history_store(
-            message_id=message_id,
-            chat_session_id=branch.chat_session_id,
-            persist_content=True,
-            branch=branch,
-        ).list_agents()
-        assert len(executed_sql) == (3 if child_count else 1)
+        metadata = load_session_agent_metadata(
+            message_id, branch=branch, include_root=False
+        )
+        # Children add ancestry, their responses and the user's latest message.
+        assert len(executed_sql) == (4 if child_count else 1)
     else:
         metadata = load_session_agent_metadata(message_id)
 
@@ -2149,6 +2671,75 @@ def test_discovery_batches_response_metadata(
         "WITH RECURSIVE session_ancestors" in query for query in executed_sql
     ) == bool(child_count)
     assert not any("chat_response_item" in query for query in executed_sql)
+
+
+@pytest.mark.parametrize("child_count", [1, 4])
+def test_coordinator_discovery_reads_no_content_or_inbox(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+    child_count: int,
+) -> None:
+    response = _response(db_session, conversation)
+    record = _record(response)
+    for index in range(child_count):
+        child = _child_record(
+            db_session,
+            record,
+            uuid4(),
+            f"Answer {index}",
+            path=f"/root/research_{index}",
+        )
+        if index == 0:
+            child.status = RunStatus.LIMIT
+    _save(db_session, response, record)
+    session_id = conversation.id
+    response_id = response.id
+    branch = ChatBranch(chat_session_id=session_id, message_ids=[response_id])
+    for child in record.child_runs:
+        child_row = db_session.get(ChatMessage, int(child.run_id))
+        assert child_row is not None and child.agent_id is not None
+        child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+        enqueue_message(
+            db_session,
+            branch,
+            AgentMessageRequest(
+                agent_id=child.agent_id,
+                parent_id=str(session_id),
+                message=UserMessage(content=f"Follow up {child.agent_path}"),
+                delivery=MessageDelivery.QUEUE,
+                max_steps=3,
+                parent_run_id=record.run_id,
+                parent_message_id=f"{record.run_id}:0",
+                parent_tool_call_id="delegate",
+            ),
+            response_id,
+        )
+    db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+    store = ChatRunStore(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        chat_session_id=session_id,
+        response_id=response_id,
+        visible_response_ids=[response_id],
+        cache=cache,
+        follow_up_steps=4,
+        user=User(),
+        control_cache=cache,
+    )
+    coordinator = AgentCoordinator(directory=store)
+    executed_sql.clear()
+
+    agents = coordinator.discover_agents()
+    children = [agent for agent in agents if agent.parent_id is not None]
+
+    # Sessions, the root's latest response, ancestry, child responses, and the
+    # user's latest message.
+    assert len(executed_sql) == 5
+    assert len(agents) == child_count + 1
+    assert len(children) == child_count
+    assert not any("chat_response_item" in query for query in executed_sql)
+    assert not any("chat_input" in query for query in executed_sql)
 
 
 def test_child_reload_batches_siblings(
@@ -2595,6 +3186,7 @@ def test_content_free_sessions_reject_incremental_content_writes(
                 parent_response_id=response.id,
                 parent_message_id="message",
                 parent_tool_call_id="call",
+                delivers_result=False,
             )
         else:
             save_response_record__no_commit(db_session, response.id, record)
@@ -3073,3 +3665,637 @@ def test_invalid_checkpoint_publication_leaves_state_unchanged(
         assert saved.ownership_version == 1
     else:
         assert saved is None
+
+
+def test_agent_inbox_acceptance_preserves_content_and_source(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.response_status = RunStatus.RUNNING
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="Check the second source"),
+        delivery=MessageDelivery.SEND,
+        max_steps=3,
+        total_timeout_s=30,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    receipt = enqueue_message(db_session, branch, request, response.id)
+    [received] = read_run_inputs(db_session, child.agent_id, child.run_id, None, None)[
+        0
+    ]
+    assert received.id == receipt.id
+    assert isinstance(received.metadata, InputMessageMetadata)
+    assert received.metadata.source_run_id == parent.run_id
+    assert consume_inputs__no_commit(
+        db_session,
+        int(child.run_id),
+        [received],
+        branch.message_ids,
+        ownership_version=None,
+    )
+    child.steps.append(
+        StepRecord(
+            input_messages=[received],
+            message=AssistantMessage(id=f"{child.run_id}:1"),
+            generation_status=ExecutionStatus.RUNNING,
+        )
+    )
+    write_response_items(db_session, child_row, child, {})
+    db_session.flush()
+    assert pending_inputs(db_session, branch, child.agent_id) == []
+    db_session.expire_all()
+    [accepted] = read_response_steps(child_row)[-1].input_messages
+    assert accepted.content == request.message.content
+    assert accepted.id == receipt.id
+    assert isinstance(accepted.metadata, InputMessageMetadata)
+    assert accepted.metadata.source == InputSource.AGENT
+    assert (
+        db_session.scalar(select(ChatInput).where(ChatInput.message_id == receipt.id))
+        is None
+    )
+
+
+def test_agent_message_over_the_byte_limit_is_not_stored(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.response_status = RunStatus.RUNNING
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    # Two-byte characters: the text fits the limit in characters but not in bytes.
+    content = "\u00e9" * (MAX_PENDING_MESSAGE_BYTES // 2 + 1)
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content=content),
+        delivery=MessageDelivery.SEND,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    with pytest.raises(OnyxError) as error:
+        enqueue_message(db_session, branch, request, response.id)
+    assert error.value.error_code == OnyxErrorCode.PAYLOAD_TOO_LARGE
+    assert pending_inputs(db_session, branch, child.agent_id) == []
+
+
+def test_unreceived_send_starts_the_next_child_run(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+    child_row.response_status = RunStatus.RUNNING
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="Pending steering"),
+        delivery=MessageDelivery.SEND,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    late = enqueue_message(db_session, branch, request, response.id)
+    assert late.run_id == child.run_id
+    assert read_run_inputs(db_session, child.agent_id, child.run_id, None, None)[0]
+    child_row.response_status = RunStatus.ERROR
+    idle = enqueue_message(db_session, branch, request, response.id)
+    assert idle.run_id is None
+    queued = enqueue_message(
+        db_session,
+        branch,
+        request.model_copy(update={"delivery": MessageDelivery.QUEUE}),
+        response.id,
+    )
+
+    def can_start(receipt_id: str) -> bool:
+        row = by_id[receipt_id]
+        return can_start_input(
+            row.delivery,
+            row.target_response_id,
+            child_row.response_status,
+            queue_paused=agent_queue_paused(child_row.response_status),
+        )
+
+    by_id = {
+        row.message_id: row
+        for row in pending_inputs(db_session, branch, child.agent_id)
+    }
+    # A send that its run never read waits like queued input after a failure.
+    assert not can_start(late.id)
+    assert can_start(idle.id)
+    assert not can_start(queued.id)
+    child_row.response_status = RunStatus.COMPLETE
+    assert can_start(late.id) and can_start(queued.id)
+
+
+def test_status_repair_finishes_an_ownerless_agent_that_messages_wait_for(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A child left running without a result row and an owner still gets repaired."""
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+    child_row.response_status = RunStatus.RUNNING
+    response.response_status = RunStatus.COMPLETE
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="Continue"),
+        delivery=MessageDelivery.QUEUE,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    enqueue_message(db_session, branch, request, response.id)
+    db_session.commit()
+    assert read_chat_inbox(db_session, conversation.id).waiting_response_ids == [
+        child_row.id
+    ]
+
+    inbox = read_repaired_chat_inbox(
+        conversation.id,
+        get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
+    )
+
+    assert inbox.waiting_response_ids == []
+    db_session.expire_all()
+    repaired = db_session.get(ChatMessage, child_row.id)
+    assert repaired is not None and repaired.response_status == RunStatus.ERROR
+
+
+def test_existing_descendant_accepts_an_ancestor_invocation_without_reparenting(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "Child answer")
+    grandchild_id = uuid4()
+    grandchild = _child_record(db_session, child, grandchild_id, "Grandchild answer")
+    sibling = _child_record(db_session, parent, uuid4(), "Sibling answer")
+    _save(db_session, response, parent)
+    descendant_session = db_session.get(ChatSession, grandchild_id)
+    assert descendant_session is not None
+    original_creation_id = descendant_session.spawned_by_message_id
+    later_response = _response(db_session, conversation, previous=response)
+    later_parent = _record(later_response)
+    followup = _child_record(
+        db_session,
+        later_parent,
+        grandchild_id,
+        "Direct followup",
+        previous=grandchild.run_id,
+        path=grandchild.agent_path,
+    )
+    _save(db_session, later_response, later_parent)
+    assert descendant_session.spawned_by_message_id == original_creation_id
+    stored = db_session.get(ChatMessage, int(followup.run_id))
+    assert stored is not None and stored.parent_message is not None
+    assert stored.parent_message.parent_message_id == int(grandchild.run_id)
+    assert stored.parent_message.invoking_tool_call is not None
+    assert (
+        stored.parent_message.invoking_tool_call.parent_chat_message_id
+        == later_response.id
+    )
+    db_session.commit()
+    cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
+
+    def owner(response_id: int, visible: list[int]) -> ChatRunStore:
+        return ChatRunStore(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            chat_session_id=conversation.id,
+            response_id=response_id,
+            visible_response_ids=visible,
+            cache=cache,
+            follow_up_steps=4,
+            user=User(),
+            control_cache=cache,
+        )
+
+    later_owner = owner(later_response.id, [response.id])
+    assert child.agent_id is not None and sibling.agent_id is not None
+    assert (
+        later_owner.read_run_status(followup.run_id, child.agent_id)
+        == RunStatus.COMPLETE
+    )
+    with pytest.raises(ValueError, match="unavailable to this parent"):
+        later_owner.read_run_status(followup.run_id, sibling.agent_id)
+    with pytest.raises(ValueError, match="unavailable on this branch"):
+        owner(response.id, []).read_run_status(followup.run_id, child.agent_id)
+
+
+def test_unrestorable_agent_rejects_queue_and_start_failure_has_durable_result(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "Initial answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=child.agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="A new task"),
+        delivery=MessageDelivery.QUEUE,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    for delivery in (MessageDelivery.SEND, MessageDelivery.QUEUE):
+        with pytest.raises(ValueError, match="cannot start another run"):
+            enqueue_message(
+                db_session,
+                branch,
+                request.model_copy(update={"delivery": delivery}),
+                response.id,
+            )
+    assert pending_inputs(db_session, branch, child.agent_id) == []
+    child_row.chat_session.restoration_config = ChatConfiguration(kind="chat")
+    receipt = enqueue_message(db_session, branch, request, response.id)
+    fail_inbox_start__no_commit(db_session, branch, child.agent_id, receipt.id)
+    db_session.flush()
+    assert pending_inputs(db_session, branch, child.agent_id) == []
+    failed = latest_agent_response(db_session, branch, child.agent_id)
+    assert failed is not None and failed.id != child_row.id
+    assert failed.response_status == RunStatus.ERROR
+    assert failed.response_failure is not None
+    assert failed.parent_message is not None
+    assert failed.parent_message.message == "A new task"
+    assert failed.parent_message.parent_message_id == child_row.id
+    # A second owner must not reserve another failed response for the same request.
+    fail_inbox_start__no_commit(db_session, branch, child.agent_id, receipt.id)
+    latest = latest_agent_response(db_session, branch, child.agent_id)
+    assert latest is not None and latest.id == failed.id
+
+
+@pytest.mark.parametrize("operation", ["accept", "save"])
+def test_agent_input_submission_does_not_deadlock_response_updates(
+    db_session: Session, conversation: ChatSession, operation: str
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(db_session, parent, uuid4(), "First answer")
+    _save(db_session, response, parent)
+    child_row = db_session.get(ChatMessage, int(child.run_id))
+    assert child_row is not None and child.agent_id is not None
+    child_row.response_status = RunStatus.RUNNING
+    response_id = child_row.id
+    agent_id = child.agent_id
+    branch = ChatBranch(chat_session_id=conversation.id, message_ids=[response.id])
+    request = AgentMessageRequest(
+        agent_id=agent_id,
+        parent_id=str(conversation.id),
+        message=UserMessage(content="Follow this instruction"),
+        delivery=MessageDelivery.SEND,
+        max_steps=3,
+        parent_run_id=parent.run_id,
+        parent_message_id=f"{parent.run_id}:0",
+        parent_tool_call_id="delegate",
+    )
+    db_session.commit()
+    if operation == "save":
+        check_checkpoint_owner__no_commit(db_session, response_id, None)
+    else:
+        lock_agent(db_session, agent_id)
+    backend_pid: Queue[int] = Queue()
+
+    def update_response() -> None:
+        with Session(db_session.get_bind()) as session:
+            pid = session.scalar(select(func.pg_backend_pid()))
+            assert pid is not None
+            backend_pid.put(pid)
+            if operation == "accept":
+                assert consume_inputs__no_commit(
+                    session, response_id, [], [], ownership_version=None
+                )
+            else:
+                enqueue_message(session, branch, request, branch.message_ids[0])
+            session.commit()
+
+    worker = start_thread_future(update_response, name="test-input-transaction")
+    try:
+        pid = backend_pid.get(timeout=10)
+        pause = threading.Event()
+        blocked = False
+        for _ in range(500):
+            blocked = bool(
+                db_session.scalar(select(func.cardinality(func.pg_blocking_pids(pid))))
+            )
+            if blocked:
+                break
+            pause.wait(0.01)
+        assert blocked, "Concurrent input operation did not reach its lock"
+        if operation == "save":
+            child.steps[0].message.content.append(
+                ToolCall(id="search", name="search", arguments={})
+            )
+            write_response_items(db_session, child_row, child, {})
+        else:
+            enqueue_message(db_session, branch, request, response.id)
+        db_session.commit()
+        worker.result(timeout=10)
+    finally:
+        db_session.rollback()
+        worker.result(timeout=10)
+
+
+def test_agents_that_message_each_other_keep_their_turn(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """Messages between agents chain more runs than the spawn depth allows."""
+    response = _response(db_session, conversation)
+    root = _record(response)
+    first = _child_record(
+        db_session, root, uuid4(), "first", path="/root/a", tool_name="spawn_agent"
+    )
+    second = _child_record(
+        db_session, root, uuid4(), "second", path="/root/b", tool_name="spawn_agent"
+    )
+    for record in (first, second):
+        save_response_record__no_commit(db_session, response.id, record)
+    latest = {first.agent_id: first, second.agent_id: second}
+    sender = second
+    for hop in range(MAX_AGENT_DEPTH + 2):
+        recipient = latest[
+            first.agent_id if sender.agent_id == second.agent_id else second.agent_id
+        ]
+        reply = _child_record(
+            db_session,
+            sender,
+            UUID(recipient.agent_id),
+            f"hop {hop}",
+            previous=recipient.run_id,
+            path=recipient.agent_path,
+            tool_name="send_message",
+        )
+        save_response_record__no_commit(db_session, response.id, reply)
+        latest[reply.agent_id] = reply
+        sender = reply
+    last = db_session.get(ChatMessage, int(sender.run_id))
+    assert last is not None
+    assert root_response_id(db_session, last) == response.id
+    status = read_response_status__no_commit(db_session, last.id)
+    assert status is not None and status.root_message_id == response.id
+    branch = ChatBranch(
+        chat_session_id=conversation.id,
+        message_ids=visible_message_ids(db_session, response),
+    )
+    selected = latest_agent_response(db_session, branch, sender.agent_id or "")
+    assert selected is not None and selected.id == last.id
+
+
+def test_a_later_turns_run_saves_under_an_earlier_turns_sender(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """A message from an agent of an earlier turn continues a run of a later turn."""
+    first_turn = _response(db_session, conversation)
+    sender = _child_record(
+        db_session,
+        _record(first_turn),
+        uuid4(),
+        "sender",
+        path="/root/sender",
+        tool_name="spawn_agent",
+    )
+    later_turn = _response(db_session, conversation, "Later", previous=first_turn)
+    recipient = _child_record(
+        db_session,
+        _record(later_turn),
+        uuid4(),
+        "recipient",
+        path="/root/recipient",
+        tool_name="spawn_agent",
+    )
+    save_response_record__no_commit(db_session, later_turn.id, recipient)
+    sender.steps = _steps(
+        sender.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="message", name="send_message", arguments={})]
+            )
+        ],
+    )
+    save_response_record__no_commit(db_session, first_turn.id, sender)
+    run_id = reserve_child_response__no_commit(
+        db_session,
+        later_turn.id,
+        agent=AgentInfo(
+            id=recipient.agent_id or "",
+            path=recipient.agent_path,
+            parent_id=str(conversation.id),
+            description="",
+            restoration_config=None,
+        ),
+        instruction=UserMessage(content="Continue"),
+        previous_response_id=int(recipient.run_id),
+        parent_response_id=int(sender.run_id),
+        parent_message_id=f"{sender.run_id}:0",
+        parent_tool_call_id="message",
+        delivers_result=True,
+    )
+    save_response_record__no_commit(
+        db_session,
+        later_turn.id,
+        ResponseRecord(
+            agent_id=recipient.agent_id,
+            agent_path=recipient.agent_path,
+            run_id=str(run_id),
+            previous_run_id=recipient.run_id,
+            parent_run_id=sender.run_id,
+            parent_message_id=f"{sender.run_id}:0",
+            parent_tool_call_id="message",
+            status=RunStatus.RUNNING,
+            input_messages=[
+                UserMessage(id=f"run:{run_id}:input:0", content="Continue")
+            ],
+            steps=_steps(
+                str(run_id), [AssistantMessage(content=[TextContent(text="Partial")])]
+            ),
+        ),
+    )
+    saved = db_session.get(ChatMessage, run_id)
+    assert saved is not None
+    assert [item.message.text for item in saved.response_items] == ["Partial"]
+
+
+def test_a_run_whose_previous_run_is_off_the_branch_is_not_selected(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """An earlier turn's agent can continue a later turn's agent; a sibling of
+    the later turn sees neither run."""
+    first_turn = _response(db_session, conversation)
+    sender = _child_record(
+        db_session,
+        _record(first_turn),
+        uuid4(),
+        "sender",
+        path="/root/sender",
+        tool_name="spawn_agent",
+    )
+    later_turn = _response(db_session, conversation, "Later", previous=first_turn)
+    recipient = _child_record(
+        db_session,
+        _record(later_turn),
+        uuid4(),
+        "recipient",
+        path="/root/recipient",
+        tool_name="spawn_agent",
+    )
+    save_response_record__no_commit(db_session, later_turn.id, recipient)
+    sender.steps = _steps(
+        sender.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="message", name="send_message", arguments={})]
+            )
+        ],
+    )
+    save_response_record__no_commit(db_session, first_turn.id, sender)
+    run_id = reserve_child_response__no_commit(
+        db_session,
+        later_turn.id,
+        agent=AgentInfo(
+            id=recipient.agent_id or "",
+            path=recipient.agent_path,
+            parent_id=str(conversation.id),
+            description="",
+            restoration_config=None,
+        ),
+        instruction=UserMessage(content="Continue"),
+        previous_response_id=int(recipient.run_id),
+        parent_response_id=int(sender.run_id),
+        parent_message_id=f"{sender.run_id}:0",
+        parent_tool_call_id="message",
+        delivers_result=True,
+    )
+    db_session.flush()
+    agent_id = recipient.agent_id or ""
+    later_branch = ChatBranch(
+        chat_session_id=conversation.id, message_ids=[first_turn.id, later_turn.id]
+    )
+    latest = chat_subagents.latest_agent_response(db_session, later_branch, agent_id)
+    assert latest is not None and latest.id == run_id
+
+    sibling_branch = ChatBranch(
+        chat_session_id=conversation.id, message_ids=[first_turn.id]
+    )
+    assert (
+        chat_subagents.latest_agent_response(db_session, sibling_branch, agent_id)
+        is None
+    )
+
+
+def test_a_run_that_continues_a_later_turn_belongs_to_that_turn(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    """An earlier turn's agent continues a later turn's agent; the new run, and
+    any run after it, belongs to the later turn."""
+    first_turn = _response(db_session, conversation)
+    sender = _child_record(
+        db_session,
+        _record(first_turn),
+        uuid4(),
+        "sender",
+        path="/root/sender",
+        tool_name="spawn_agent",
+    )
+    later_turn = _response(db_session, conversation, "Later", previous=first_turn)
+    recipient = _child_record(
+        db_session,
+        _record(later_turn),
+        uuid4(),
+        "recipient",
+        path="/root/recipient",
+        tool_name="spawn_agent",
+    )
+    save_response_record__no_commit(db_session, later_turn.id, recipient)
+    sender.steps = _steps(
+        sender.run_id,
+        [
+            AssistantMessage(
+                content=[ToolCall(id="message", name="send_message", arguments={})]
+            )
+        ],
+    )
+    save_response_record__no_commit(db_session, first_turn.id, sender)
+    run_id = reserve_child_response__no_commit(
+        db_session,
+        later_turn.id,
+        agent=AgentInfo(
+            id=recipient.agent_id or "",
+            path=recipient.agent_path,
+            parent_id=str(conversation.id),
+            description="",
+            restoration_config=None,
+        ),
+        instruction=UserMessage(content="Continue"),
+        previous_response_id=int(recipient.run_id),
+        parent_response_id=int(sender.run_id),
+        parent_message_id=f"{sender.run_id}:0",
+        parent_tool_call_id="message",
+        delivers_result=True,
+    )
+    db_session.flush()
+    continued = db_session.get(ChatMessage, run_id)
+    assert continued is not None
+    # The invocation traces to the first turn; the previous run to the later one.
+    assert root_response_id(db_session, continued) == later_turn.id
+    status = read_response_status__no_commit(db_session, run_id)
+    assert status is not None and status.root_message_id == later_turn.id
+    sender_row = db_session.get(ChatMessage, int(sender.run_id))
+    assert sender_row is not None
+    assert root_response_id(db_session, sender_row) == first_turn.id
+
+
+def test_a_result_stopped_by_the_user_does_not_wake_its_reader(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation)
+    parent = _record(response)
+    child = _child_record(
+        db_session, parent, uuid4(), "Report", tool_name="spawn_agent"
+    )
+    _save(db_session, response, parent)
+    stopped = db_session.get(ChatMessage, int(child.run_id))
+    assert stopped is not None
+    stopped.response_status = RunStatus.CANCELLED
+    stopped.response_failure = RunFailure(
+        kind=RunFailureKind.STOPPED_BY_USER, message="Stopped by the user"
+    )
+    db_session.commit()
+
+    [result] = read_run_inputs(
+        db_session, str(conversation.id), str(response.id), [response.id], [response.id]
+    )[1]
+    assert result.failure is not None
+    assert not result.wakes_recipient

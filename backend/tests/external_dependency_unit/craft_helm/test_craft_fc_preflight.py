@@ -5,12 +5,16 @@ The preflight is only useful if it lands on the sandbox nodes, sees the host
 those mistakes fail at runtime: the pod still prints a log, just for the wrong
 node or the wrong filesystem."""
 
+import os
+import subprocess
+from pathlib import Path
 from typing import Any
 
 import pytest
 import yaml
 
 from tests.external_dependency_unit.craft_helm.rendering import (
+    CHART_DIR,
     render_chart,
     skip_or_fail,
 )
@@ -18,6 +22,7 @@ from tests.external_dependency_unit.craft_helm.rendering import (
 _TEMPLATE = "templates/craft-fc-preflight.yaml"
 _PODTEMPLATE_TEMPLATE = "templates/sandbox-podtemplate.yaml"
 _ENABLED = ["--set", "craft.firecrackerPreflight.enabled=true"]
+_SCRIPT = CHART_DIR / "scripts" / "craft-fc-preflight.sh"
 
 
 def _render(extra_args: list[str], template: str = _TEMPLATE) -> list[dict[str, Any]]:
@@ -146,3 +151,62 @@ def test_preflight_carries_a_deny_all_network_policy() -> None:
 
 def test_preflight_has_no_service_account_token() -> None:
     assert _pod_spec()["automountServiceAccountToken"] is False
+
+
+def test_preflight_checks_the_agent_data_dir_by_default() -> None:
+    env = {
+        e["name"]: e.get("value")
+        for e in _pod_spec(["--set-string", "craft.hostAgent.dataDir=/data/fc"])[
+            "containers"
+        ][0]["env"]
+    }
+    assert env["SCRATCH_HOST_PATH"] == "/data/fc"
+    default_env = {
+        e["name"]: e.get("value") for e in _pod_spec()["containers"][0]["env"]
+    }
+    assert default_env["SCRATCH_HOST_PATH"] == "/var/lib/craft-fc"
+
+
+def _filesystem_line(tmp_path: Path, reflink: bool) -> str:
+    """Runs the chart's preflight script with stub stat and cp, and returns its
+    filesystem line."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    scratch = tmp_path / "scratch"
+    scratch.mkdir()
+    stubs = {
+        "stat": "#!/bin/sh\necho ext2/ext3\n",
+        "cp": (
+            "#!/bin/sh\nexit 0\n"
+            if reflink
+            else "#!/bin/sh\necho 'cp: failed to clone: Operation not supported' >&2\nexit 1\n"
+        ),
+    }
+    for name, body in stubs.items():
+        stub = bin_dir / name
+        stub.write_text(body)
+        stub.chmod(0o755)
+    result = subprocess.run(
+        ["sh", str(_SCRIPT)],
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{bin_dir}:{os.environ['PATH']}",
+            "SCRATCH_DIR": str(scratch),
+            "SCRATCH_HOST_PATH": "/var/lib/craft-fc",
+        },
+    )
+    return next(line for line in result.stdout.splitlines() if " filesystem: " in line)
+
+
+def test_preflight_warns_without_reflink(tmp_path: Path) -> None:
+    """The agent makes a loop store on ext4, so no reflink is a WARN, not a FAIL."""
+    line = _filesystem_line(tmp_path, reflink=False)
+    assert line.startswith("WARN  filesystem:")
+    assert "'ext2/ext3' without reflink" in line
+    assert ".craft-fc-store.img" in line
+
+
+def test_preflight_passes_with_reflink(tmp_path: Path) -> None:
+    line = _filesystem_line(tmp_path, reflink=True)
+    assert line == "PASS  filesystem: /var/lib/craft-fc is ext2/ext3 with reflink"

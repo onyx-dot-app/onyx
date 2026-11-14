@@ -190,6 +190,7 @@ def create_image_generation_packets(
 
 def create_custom_tool_packets(
     tool_name: str,
+    display_name: str,
     response_type: str,
     turn_index: int,
     tab_index: int = 0,
@@ -204,7 +205,9 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
-            obj=CustomToolStart(tool_name=tool_name, tool_id=tool_id),
+            obj=CustomToolStart(
+                tool_name=tool_name, display_name=display_name, tool_id=tool_id
+            ),
         )
     )
 
@@ -808,7 +811,8 @@ def translate_assistant_message_to_packets(
                         }
                         turn_tool_packets.extend(
                             create_custom_tool_packets(
-                                tool_name=tool.display_name or tool.name,
+                                tool_name=tool.name,
+                                display_name=tool.display_name or tool.name,
                                 response_type=custom_response_type,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,

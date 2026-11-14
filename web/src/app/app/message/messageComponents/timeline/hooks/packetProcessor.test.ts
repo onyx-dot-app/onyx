@@ -272,7 +272,11 @@ describe("packetProcessor", () => {
       };
       const start: Packet = {
         placement: { turn_index: 0 },
-        obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+        obj: {
+          type: PacketType.CUSTOM_TOOL_START,
+          tool_name: "Lookup",
+          display_name: "Lookup",
+        },
       };
       const pending = processPackets(createInitialState(1), [debug]);
       expect(pending.toolGroupKeys.size).toBe(0);

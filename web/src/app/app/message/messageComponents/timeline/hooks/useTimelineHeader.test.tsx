@@ -48,13 +48,37 @@ describe("useTimelineHeader", () => {
           debug,
           {
             placement: { turn_index: 0 },
-            obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+            obj: {
+              type: PacketType.CUSTOM_TOOL_START,
+              tool_name: "Lookup",
+              display_name: "Lookup",
+            },
           },
         ])
       )
     );
     expect(result.current.headerText).toBe(
       "header.executingNamedTool.label:Lookup"
+    );
+  });
+
+  it("names a qualified external tool by its display name", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.CUSTOM_TOOL_START,
+              tool_name: "mcp__3__my__srv__create_issue",
+              display_name: "create_issue",
+            },
+          },
+        ])
+      )
+    );
+    expect(result.current.headerText).toBe(
+      "header.executingNamedTool.label:create_issue"
     );
   });
 

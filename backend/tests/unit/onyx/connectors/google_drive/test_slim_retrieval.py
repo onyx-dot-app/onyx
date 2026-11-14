@@ -13,7 +13,10 @@ import pytest
 
 from onyx.access.models import ExternalAccess
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
-from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.connector import (
+    DRIVE_FETCH_WORKERS,
+    GoogleDriveConnector,
+)
 from onyx.connectors.google_drive.doc_conversion import (
     PermissionSyncContext,
     build_slim_document,
@@ -37,6 +40,7 @@ _ADMIN_EMAIL = "admin@example.com"
 _EXTERNAL_OWNER_EMAIL = "owner@external.example"
 _RETRIEVER_EMAIL = "retriever@example.com"
 _DOC_CONVERSION_MODULE = "onyx.connectors.google_drive.doc_conversion"
+_CONN_MODULE = "onyx.connectors.google_drive.connector"
 
 
 def _make_done_checkpoint() -> GoogleDriveCheckpoint:
@@ -274,6 +278,35 @@ class TestRetrieveAllSlimDocsPermSync:
             kwargs.get("include_permissions") is None
             or kwargs.get("include_permissions") is True
         )
+
+
+class TestSlimPoolWidth:
+    def test_slim_build_uses_fetch_pool_not_conversion_pool(self) -> None:
+        """The conversion setting must not widen the slim (permission sync) pool."""
+        connector = _make_connector()
+        retrieved = RetrievedDriveFile(
+            drive_file={"id": "f1"},
+            user_email=_ADMIN_EMAIL,
+            completion_stage=DriveRetrievalStage.DONE,
+        )
+        with (
+            patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_WORKERS", 64),
+            patch.object(
+                connector, "_fetch_drive_items", return_value=iter([retrieved])
+            ),
+            patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
+            patch(
+                f"{_CONN_MODULE}.run_functions_tuples_in_parallel", return_value=[]
+            ) as mock_parallel,
+        ):
+            list(
+                connector._extract_slim_docs_from_google_drive(
+                    checkpoint=_make_done_checkpoint(), include_permissions=False
+                )
+            )
+
+        mock_parallel.assert_called_once()
+        assert mock_parallel.call_args.kwargs["max_workers"] == DRIVE_FETCH_WORKERS
 
 
 class TestCeleryUtilsRouting:

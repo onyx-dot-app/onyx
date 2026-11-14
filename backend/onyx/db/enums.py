@@ -743,6 +743,11 @@ class HookFailStrategy(str, PyEnum):
     SOFT = "soft"  # log error, return original input, pipeline continues
 
 
+# Old values read as their new member. Remove "manage:skills" in the release after
+# the one that renamed it.
+LEGACY_PERMISSION_ALIASES: dict[str, str] = {"manage:skills": "manage:plugins"}
+
+
 class Permission(str, PyEnum):
     """
     Permission tokens for group-based authorization and PAT scoping.
@@ -784,7 +789,7 @@ class Permission(str, PyEnum):
     # Toggle tokens
     READ_AGENT_ANALYTICS = "read:agent_analytics"
     MANAGE_ACTIONS = "manage:actions"
-    MANAGE_SKILLS = "manage:skills"
+    MANAGE_PLUGINS = "manage:plugins"
     READ_QUERY_HISTORY = "read:query_history"
     MANAGE_USER_GROUPS = "manage:user_groups"
     CREATE_USER_API_KEYS = "create:user_api_keys"
@@ -801,6 +806,12 @@ class Permission(str, PyEnum):
     # Permissions that are implied by other grants and must never be stored
     # directly in the permission_grant table.
     IMPLIED: ClassVar[frozenset[Permission]]
+
+    @classmethod
+    def _missing_(cls, value: object) -> Permission | None:
+        if isinstance(value, str) and value in LEGACY_PERMISSION_ALIASES:
+            return cls(LEGACY_PERMISSION_ALIASES[value])
+        return None
 
 
 Permission.IMPLIED = frozenset(
@@ -1015,6 +1026,15 @@ class MarketplaceKind(str, PyEnum):
     USER_UPLOADS = "user_uploads"
     # One for each tenant. A plugin here is published to the organization.
     ORGANIZATION_LIBRARY = "organization_library"
+
+
+class PluginPublishingPolicy(str, PyEnum):
+    """The admin Publishing setting. It governs owners and editors; an
+    organization-wide plugin manager always publishes at once."""
+
+    OPEN = "OPEN"
+    REQUIRES_REVIEW = "REQUIRES_REVIEW"
+    OFF = "OFF"
 
 
 class PluginInstallationPolicy(str, PyEnum):

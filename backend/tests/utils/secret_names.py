@@ -102,6 +102,10 @@ class TestSecret(StrEnum):
     BOX_USER_EMAIL = "box-user-email"
     BOX_COLLABORATOR_EMAIL = "box-collaborator-email"
     LINEAR_API_KEY = "linear-api-key"
+    EGNYTE_CLIENT_ID = "egnyte-client-id"
+    EGNYTE_CLIENT_SECRET = "egnyte-client-secret"
+    EGNYTE_TEST_USERNAME = "egnyte-test-username"
+    EGNYTE_TEST_PASSWORD = "egnyte-test-password"
 
     @classmethod
     def aws_prefix(cls) -> str:

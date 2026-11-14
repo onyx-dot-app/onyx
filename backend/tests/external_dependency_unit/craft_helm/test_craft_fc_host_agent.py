@@ -40,6 +40,8 @@ _FIRECRACKER = [
     "--set",
     "craft.sandboxRuntime=firecracker",
     "--set-string",
+    "global.version=v5.2.0",
+    "--set-string",
     "craft.hostAgent.image.tag=0.1.0",
     "--set-string",
     "craft.hostAgent.tls.existingSecret=host-agent-tls",
@@ -158,6 +160,7 @@ def test_agent_pod_spec() -> None:
     assert "--dial-ports=3010" in args
     assert "--relay-max-conns=256" in args
     assert "--dial-max-streams=64" in args
+    assert "--max-vms=60" in args
     assert not [a for a in args if a.startswith("--client-allowed-sans")]
     # The agent joins $POD_IP and the listen port itself (it brackets IPv6).
     assert not [a for a in args if a.startswith("--advertise-address")]
@@ -298,18 +301,14 @@ def test_egress_ca_overrides() -> None:
     assert role["rules"][0]["resourceNames"] == ["my-ca"]
 
 
-def test_no_rootfs_image_has_no_init_container() -> None:
-    spec = _by_kind(_render(_FIRECRACKER), "DaemonSet")["spec"]["template"]["spec"]
-    assert "initContainers" not in spec
-    assert not [a for a in spec["containers"][0]["args"] if "rootfs" in a]
-
-
 def test_rootfs_image_copies_the_drive_into_the_rootfs_dir() -> None:
     docs = _render(
         [
             *_FIRECRACKER,
             "--set-string",
             "craft.hostAgent.rootfs.image.tag=rootfs-0.1.0",
+            "--set-string",
+            "configMap.SANDBOX_FC_TEMPLATE=v5.1.0",
             "--set-string",
             "craft.hostAgent.dataDir=/data/craft-fc",
         ]
@@ -421,6 +420,16 @@ def test_agent_overrides() -> None:
     assert "--advertise-address=agent.example:7443" in args
 
 
+@pytest.mark.parametrize("max_vms", ["0", "120"])
+def test_max_vms_override_keeps_zero(max_vms: str) -> None:
+    docs = _render([*_FIRECRACKER, "--set", f"craft.hostAgent.maxVms={max_vms}"])
+    args = _by_kind(docs, "DaemonSet")["spec"]["template"]["spec"]["containers"][0][
+        "args"
+    ]
+
+    assert f"--max-vms={max_vms}" in args
+
+
 def test_headless_service_targets_agent_pods() -> None:
     docs = _render(_FIRECRACKER)
     service = _by_kind(docs, "Service")
@@ -470,7 +479,6 @@ def test_only_agent_clients_reach_agent_listener() -> None:
 @pytest.mark.parametrize(
     ("extra_args", "message"),
     [
-        (["--set-string", "craft.hostAgent.image.tag="], "craft.hostAgent.image.tag"),
         (
             ["--set-string", "craft.hostAgent.tls.existingSecret="],
             "craft.hostAgent.tls.existingSecret",

@@ -316,12 +316,24 @@ def test_restored_chat_keeps_the_saved_code_mode(
     original = _chat_agent(llm, code_mode=saved_code_mode)
     state = original.capture_state().model_dump(mode="json")
     rebuilt = restore_chat_agent(
-        _suspended(original, state), llm=llm, tools=[EchoTool()], user_identity=None
+        _suspended(original, state),
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        create_subagent=lambda: _chat_agent(llm),
     )
     assert isinstance(rebuilt, ChatAgent)
     assert (rebuilt.code_cells is not None) == saved_code_mode
     rebuilt.restore_state(state)
     run_agent(rebuilt, max_steps=3, messages=[UserMessage(content="Go")])
     names, choice, request_text = _offered(llm)
-    assert (names, choice) == (offered, ToolChoiceOptions.AUTO)
+    assert names == [
+        *offered,
+        "spawn_agent",
+        "list_agents",
+        "interrupt_agent",
+        "send_message",
+        "wait_agents",
+    ]
+    assert choice == ToolChoiceOptions.AUTO
     assert f"selected these operations for this request: {preferred}." in request_text

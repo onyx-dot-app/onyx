@@ -8,13 +8,10 @@ import {
   setPreferredResponse,
   updateLlmOverrideForChatSession,
 } from "@/app/app/services/lib";
-import { getConfiguredSources } from "@/lib/connectors/utils";
-import { type SourceMetadata } from "@/lib/connectors/types/source";
 import {
   applyPreferredResponse,
   chooseImplicitPreferred,
   getMostVisibleResponseId,
-  getMultiModelChildren,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
 import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
@@ -23,7 +20,6 @@ import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
 import {
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
   MessageTreeState,
   upsertMessages,
@@ -33,7 +29,6 @@ import {
 } from "@/app/app/services/messageTree";
 import { MinimalAgent } from "@/lib/agents/types";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { OnyxDocument } from "@/lib/search/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import {
@@ -62,12 +57,7 @@ import {
   CurrentMessageFIFO,
   updateCurrentMessageFIFO,
 } from "@/app/app/services/currentMessageFIFO";
-import {
-  agentDeclaresOwnSources,
-  buildFilters,
-  effectiveAvailableSourcesFor,
-  selectedSourcesFrom,
-} from "@/lib/searchFilters/utils";
+import { useChatSearchFiltersRequest } from "@/lib/searchFilters/hooks";
 import { toast } from "@opal/layouts";
 import {
   isStillOnLocation,
@@ -79,6 +69,7 @@ import { getExtensionContext } from "@/lib/extension/utils";
 import useChatSessions from "@/hooks/useChatSessions";
 import { usePinnedAgents } from "@/lib/agents/hooks";
 import {
+  SessionError,
   useChatSessionStore,
   useCurrentMessageTree,
   useCurrentMessageHistory,
@@ -94,7 +85,6 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { useAvailableSources } from "@/lib/connectors/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import {
   stopChatSession,
@@ -114,7 +104,6 @@ export interface OnSubmitProps {
   // optional params
   messageIdToResend?: number;
   queryOverride?: string;
-  preferSearch?: boolean;
   isSeededChat?: boolean;
   modelOverride?: LlmDescriptor;
   regenerationRequest?: RegenerationRequest | null;
@@ -127,7 +116,6 @@ export interface OnSubmitProps {
 interface RegenerationRequest {
   messageId: number;
   parentMessage: Message;
-  preferSearch?: boolean;
 }
 
 interface UseChatControllerProps {
@@ -157,24 +145,10 @@ export default function useChatController({
   restoreInputBar,
 }: UseChatControllerProps) {
   const t = useTranslations("chat.app");
-  // The chat's search filters ride the tool configuration, resolved against
-  // the sources the active agent can reach. An explicit selection resolves
-  // only against a complete roster — `settled` allows stale data (a failed
-  // revalidation must not drop a restriction) but never a partial first
-  // load, which would narrow the send wrongly. An agent declaring its own
-  // knowledge_sources carries its complete roster and never waits.
-  const { availableSources, settled: sourcesSettled } = useAvailableSources();
-  const selectedSearchSources = useMemo<SourceMetadata[] | null>(
-    () =>
-      activeAgent && (sourcesSettled || agentDeclaresOwnSources(activeAgent))
-        ? selectedSourcesFrom(
-            toolConfiguration.filters,
-            getConfiguredSources(
-              effectiveAvailableSourcesFor(activeAgent, availableSources)
-            )
-          )
-        : null,
-    [activeAgent, sourcesSettled, availableSources, toolConfiguration.filters]
+  // The chat's search filters ride the tool configuration.
+  const searchFilters = useChatSearchFiltersRequest(
+    activeAgent,
+    toolConfiguration.filters
   );
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -194,9 +168,6 @@ export default function useChatController({
   // Store actions - these don't cause re-renders
   const updateChatStateAction = useChatSessionStore(
     (state) => state.updateChatState
-  );
-  const setLatestMessageRenderComplete = useChatSessionStore(
-    (state) => state.setLatestMessageRenderComplete
   );
   const updateRegenerationStateAction = useChatSessionStore(
     (state) => state.updateRegenerationState
@@ -388,7 +359,6 @@ export default function useChatController({
       deepResearch,
       messageIdToResend,
       queryOverride,
-      preferSearch,
       isSeededChat,
       modelOverride,
       regenerationRequest,
@@ -405,9 +375,6 @@ export default function useChatController({
       const submissionSessionId = getCurrentSessionId();
       if (submissionSessionId) {
         submissionStore.setAbortController(submissionSessionId, controller);
-        submissionStore.updateSessionData(submissionSessionId, {
-          queuedMessagesPaused: false,
-        });
       }
       // Read at submit time so no caller can capture a stale value.
       const incognito = incognitoEnabledRef.current ?? false;
@@ -434,80 +401,9 @@ export default function useChatController({
       setUncaughtError(frozenSessionId, null);
       setLoadingError(frozenSessionId, null);
 
-      // Check if the last message was an error and remove it before proceeding with a new message
-      // Ensure this isn't a regeneration or resend, as those operations should preserve the history leading up to the point of regeneration/resend.
       let currentMessageTreeLocal =
         currentMessageTree || new Map<number, Message>();
-      let currentHistory = getLatestMessageChain(currentMessageTreeLocal);
-      let lastMessage = currentHistory[currentHistory.length - 1];
-
-      // A multi-model turn whose chain-tip panel errored can still have usable
-      // siblings. Keep the turn so the implicit-preferred pick below can
-      // continue the chain through a successful sibling.
-      const errorTurnUserMsg =
-        lastMessage?.type === "error" && lastMessage.parentNodeId != null
-          ? currentMessageTreeLocal.get(lastMessage.parentNodeId)
-          : undefined;
-      const errorTurnHasUsableSibling = errorTurnUserMsg
-        ? (getMultiModelChildren(
-            errorTurnUserMsg,
-            currentMessageTreeLocal
-          )?.some((m) => m.type === "assistant" && m.messageId != null) ??
-          false)
-        : false;
-
-      if (
-        lastMessage &&
-        lastMessage.type === "error" &&
-        !messageIdToResend &&
-        !regenerationRequest &&
-        !errorTurnHasUsableSibling
-      ) {
-        const newMessageTree = new Map(currentMessageTreeLocal);
-        const parentNodeId = lastMessage.parentNodeId;
-
-        // Remove the error message itself
-        newMessageTree.delete(lastMessage.nodeId);
-
-        // Remove the parent message + update the parent of the parent to no longer
-        // link to the parent
-        if (parentNodeId !== null && parentNodeId !== undefined) {
-          const parentOfError = newMessageTree.get(parentNodeId);
-          if (parentOfError) {
-            const grandparentNodeId = parentOfError.parentNodeId;
-            if (grandparentNodeId !== null && grandparentNodeId !== undefined) {
-              const grandparent = newMessageTree.get(grandparentNodeId);
-              if (grandparent) {
-                // Update grandparent to no longer link to parent
-                const updatedGrandparent = {
-                  ...grandparent,
-                  childrenNodeIds: (grandparent.childrenNodeIds || []).filter(
-                    (id: number) => id !== parentNodeId
-                  ),
-                  latestChildNodeId:
-                    grandparent.latestChildNodeId === parentNodeId
-                      ? null
-                      : grandparent.latestChildNodeId,
-                };
-                newMessageTree.set(grandparentNodeId, updatedGrandparent);
-              }
-            }
-            // Remove the parent message
-            newMessageTree.delete(parentNodeId);
-          }
-        }
-        // Update the state immediately so subsequent logic uses the cleaned map
-        updateSessionMessageTree(frozenSessionId, newMessageTree);
-        console.log(
-          "Removed previous error message ID:",
-          lastMessage.messageId
-        );
-
-        // update state for the new world (with the error message removed)
-        currentHistory = getLatestMessageChain(newMessageTree);
-        currentMessageTreeLocal = newMessageTree;
-        lastMessage = currentHistory[currentHistory.length - 1];
-      }
+      const currentHistory = getLatestMessageChain(currentMessageTreeLocal);
 
       // Auto-pin the agent to sidebar when sending a message if not already pinned
       if (activeAgent) {
@@ -633,9 +529,12 @@ export default function useChatController({
       // set the ability to cancel the request
       setAbortController(currChatSessionId, controller);
 
-      const messageToResend = currentHistory.find(
-        (message) => message.messageId === messageIdToResend
-      );
+      const messageToResend =
+        messageIdToResend === undefined
+          ? undefined
+          : currentHistory.find(
+              (message) => message.messageId === messageIdToResend
+            );
       if (messageIdToResend && regenerationRequest) {
         updateRegenerationState(
           { regenerating: true, finalMessageIndex: messageIdToResend + 1 },
@@ -675,9 +574,7 @@ export default function useChatController({
       ];
 
       updateChatStateAction(frozenSessionId, "loading");
-      setLatestMessageRenderComplete(frozenSessionId, false);
 
-      // find the parent
       const currMessageHistory =
         messageToResendIndex !== null
           ? currentHistory.slice(0, messageToResendIndex)
@@ -732,8 +629,7 @@ export default function useChatController({
                 return;
               }
               // Clear only the preference so the retry re-runs the PUT. The
-              // chain tip stays on the assumed response, keeping the failed
-              // follow-up reachable in the rendered chat.
+              // chain tip stays on the assumed response.
               const reverted = applyPreferredResponse(
                 currentMessageTreeLocal,
                 originalUserMessage.nodeId,
@@ -756,12 +652,15 @@ export default function useChatController({
         }
       }
 
+      // A failed turn the server saved stays in the conversation, so the next
+      // message continues after it. A turn the server rejected before saving
+      // has no row to continue from.
       let parentMessage =
         messageToResendParent ||
         implicitPreference?.message ||
-        (currMessageHistory.length > 0
-          ? currMessageHistory[currMessageHistory.length - 1]
-          : null) ||
+        currMessageHistory.findLast(
+          (message) => message.messageId !== undefined
+        ) ||
         (currentMessageTreeLocal.size === 1
           ? Array.from(currentMessageTreeLocal.values())[0]
           : null);
@@ -828,22 +727,50 @@ export default function useChatController({
         chatSessionId: frozenSessionId,
       });
       resetInputBar();
-      const discardUnsentTurn = () => {
+      // The server saved nothing for this turn: drop its nodes, restore the
+      // links of the node they hung from, and give the text back for a retry.
+      // Other live changes, such as a preference pick, stay.
+      const restoreTreeBeforeSend = () => {
         const store = useChatSessionStore.getState();
-        if (
-          controller.signal.reason !== STOP_BEFORE_DISPATCH ||
-          store.sessions.get(frozenSessionId)?.abortController !== controller
-        )
-          return;
-        // No request reached the server; restore the branch before its placeholders.
-        currentMessageTreeLocal = historyBeforeSend;
-        store.updateSessionMessageTree(frozenSessionId, historyBeforeSend);
+        const live =
+          store.sessions.get(frozenSessionId)?.messageTree ??
+          currentMessageTreeLocal;
+        const restored = new Map(
+          [...live].filter(([nodeId]) => historyBeforeSend.has(nodeId))
+        );
+        const anchorNodeId = regenerationRequest
+          ? initialUserNode.nodeId
+          : initialUserNode.parentNodeId;
+        const anchorBefore =
+          anchorNodeId == null
+            ? undefined
+            : historyBeforeSend.get(anchorNodeId);
+        const anchorLive =
+          anchorNodeId == null ? undefined : restored.get(anchorNodeId);
+        if (anchorBefore && anchorLive) {
+          restored.set(anchorBefore.nodeId, {
+            ...anchorLive,
+            childrenNodeIds: anchorBefore.childrenNodeIds,
+            latestChildNodeId: anchorBefore.latestChildNodeId,
+          });
+        }
+        currentMessageTreeLocal = restored;
+        store.updateSessionMessageTree(frozenSessionId, restored);
         if (
           store.currentSessionId === frozenSessionId &&
           !regenerationRequest
         ) {
           restoreInputBar(message, currentMessageFiles);
         }
+      };
+      const discardUnsentTurn = () => {
+        if (
+          controller.signal.reason !== STOP_BEFORE_DISPATCH ||
+          useChatSessionStore.getState().sessions.get(frozenSessionId)
+            ?.abortController !== controller
+        )
+          return;
+        restoreTreeBeforeSend();
       };
       controller.signal.addEventListener("abort", discardUnsentTurn, {
         once: true,
@@ -1065,6 +992,8 @@ export default function useChatController({
 
       let streamSucceeded = false;
       let saveFailed = false;
+      let stack: CurrentMessageFIFO | null = null;
+      let rejectedSendError: SessionError | null = null;
       let resolveReaderFinished: () => void = () => {};
       const readerFinished = new Promise<void>((resolve) => {
         resolveReaderFinished = resolve;
@@ -1092,25 +1021,13 @@ export default function useChatController({
           }
         }
 
-        const lastSuccessfulMessageId = getLastSuccessfulMessageId(
-          currentMessageTreeLocal
-        );
-
-        // Find the search tool's numeric ID for preferSearch
-        const searchToolNumericId = activeAgent?.tools.find(
-          (tool) => tool.in_code_tool_id === SEARCH_TOOL_ID
-        )?.id;
-
-        // Search regeneration takes precedence over the composer's tool preference.
-        const requestedPreferredToolId = preferSearch
-          ? (searchToolNumericId ?? null)
-          : toolConfiguration.preferredToolId;
         const effectivePreferredToolId = deepResearch
           ? null
           : effectiveChatPreferredToolId({
-              requestedToolId: requestedPreferredToolId,
+              requestedToolId: toolConfiguration.preferredToolId,
               agent: activeAgent,
               plugins: memberPlugins ?? [],
+              incognito,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1119,7 +1036,7 @@ export default function useChatController({
         const messageOrigin = isExtension ? "chrome_extension" : "webapp";
 
         if (controller.signal.aborted || !ownsStream()) return;
-        const stack = new CurrentMessageFIFO();
+        stack = new CurrentMessageFIFO();
         useChatSessionStore.getState().updateSessionData(frozenSessionId, {
           sendAcknowledged: stack.acknowledged,
           readerFinished,
@@ -1130,22 +1047,15 @@ export default function useChatController({
           fileDescriptors: effectiveFileDescriptors,
           parentMessageId: (() => {
             const parentId =
-              regenerationRequest?.parentMessage.messageId ||
-              messageToResendParent?.messageId ||
-              lastSuccessfulMessageId;
+              regenerationRequest?.parentMessage.messageId ??
+              parentMessage?.messageId ??
+              null;
             // Don't send SYSTEM_MESSAGE_ID (-3) as parent, use null instead
             // The backend expects null for "the first message in the chat"
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: buildFilters(
-            selectedSearchSources,
-            toolConfiguration.filters.documentSets,
-            toolConfiguration.filters.timeRange
-              ? { from: toolConfiguration.filters.timeRange.from }
-              : null,
-            toolConfiguration.filters.tags
-          ),
+          filters: searchFilters,
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1487,70 +1397,85 @@ export default function useChatController({
         if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
         const errorMsg = e.message;
-        for (const output of isMultiModel
-          ? packetsPerModel.filter(
-              (_, index) => !erroredModelIndices.has(index)
-            )
-          : [packets]) {
-          if (!output.some((packet) => packet.obj.type === "stop")) {
-            output.push({
-              placement: { turn_index: 0, tab_index: 0 },
-              obj: { type: "stop" },
-            });
+        // Null: the server answered without admitting the turn.
+        const admission = stack
+          ? await stack.acknowledged.catch(() => undefined)
+          : null;
+        if (controller.signal.aborted || !ownsStream()) return;
+        if (admission === null) {
+          restoreTreeBeforeSend();
+          rejectedSendError = {
+            error: errorMsg,
+            errorCode: errorCode ?? undefined,
+            isRetryable,
+            details: errorDetails ?? undefined,
+            stackTrace,
+          };
+        } else {
+          for (const output of isMultiModel
+            ? packetsPerModel.filter(
+                (_, index) => !erroredModelIndices.has(index)
+              )
+            : [packets]) {
+            if (!output.some((packet) => packet.obj.type === "stop")) {
+              output.push({
+                placement: { turn_index: 0, tab_index: 0 },
+                obj: { type: "stop" },
+              });
+            }
           }
-        }
-        const userErrorNode: Message = {
-          nodeId: initialUserNode.nodeId,
-          message: currMessage,
-          type: "user",
-          files: effectiveFileDescriptors,
-          toolCall: null,
-          parentNodeId: parentMessage?.nodeId || SYSTEM_NODE_ID,
-          packets: [],
-          packetCount: 0,
-        };
+          // Keep the live question node: a regenerated question keeps its
+          // other answers, and a new one gets its saved ID.
+          const liveUserNode =
+            currentMessageTreeLocal.get(initialUserNode.nodeId) ??
+            initialUserNode;
+          const userErrorNode: Message = {
+            ...liveUserNode,
+            messageId: newUserMessageId ?? liveUserNode.messageId,
+          };
 
-        // In multi-model mode, mark non-errored assistant nodes as errors.
-        // Skip models that already have their own per-model error state.
-        // In single-model mode, mark the one agent node.
-        const errorAssistantNodes: Message[] = isMultiModel
-          ? buildNonErroredNodes({
-              errorMessage: errorMsg,
-              type: "error" as const,
-              stackTrace,
-              errorCode,
-              isRetryable,
-              errorDetails,
-              is_generating: false,
-            })
-          : [
-              {
-                ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
-                  initialAgentNode),
-                messageId: newAgentMessageId ?? undefined,
-                message: answer,
+          // In multi-model mode, mark non-errored assistant nodes as errors.
+          // Skip models that already have their own per-model error state.
+          // In single-model mode, mark the one agent node.
+          const errorAssistantNodes: Message[] = isMultiModel
+            ? buildNonErroredNodes({
                 errorMessage: errorMsg,
                 type: "error" as const,
-                files: aiMessageImages || [],
-                documents,
-                citations,
-                toolCall,
-                parentNodeId: initialUserNode.nodeId,
+                stackTrace,
+                errorCode,
+                isRetryable,
+                errorDetails,
                 is_generating: false,
-                packets,
-                packetCount: packets.length,
-                stackTrace: stackTrace,
-                errorCode: errorCode,
-                isRetryable: isRetryable,
-                errorDetails: errorDetails,
-              },
-            ];
+              })
+            : [
+                {
+                  ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
+                    initialAgentNode),
+                  messageId: newAgentMessageId ?? undefined,
+                  message: answer,
+                  errorMessage: errorMsg,
+                  type: "error" as const,
+                  files: aiMessageImages || [],
+                  documents,
+                  citations,
+                  toolCall,
+                  parentNodeId: initialUserNode.nodeId,
+                  is_generating: false,
+                  packets,
+                  packetCount: packets.length,
+                  stackTrace: stackTrace,
+                  errorCode: errorCode,
+                  isRetryable: isRetryable,
+                  errorDetails: errorDetails,
+                },
+              ];
 
-        currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: [userErrorNode, ...errorAssistantNodes],
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId,
-        });
+          currentMessageTreeLocal = upsertToCompleteMessageTree({
+            messages: [userErrorNode, ...errorAssistantNodes],
+            completeMessageTreeOverride: currentMessageTreeLocal,
+            chatSessionId: frozenSessionId,
+          });
+        }
       } finally {
         try {
           // Finish every successful panel before Stop can release the input.
@@ -1571,11 +1496,6 @@ export default function useChatController({
         }
       }
 
-      if (saveFailed || !streamSucceeded) {
-        useChatSessionStore
-          .getState()
-          .updateSessionData(frozenSessionId, { queuedMessagesPaused: true });
-      }
       const wasCancelling =
         useChatSessionStore.getState().sessions.get(frozenSessionId)
           ?.chatState === "cancelling";
@@ -1584,8 +1504,18 @@ export default function useChatController({
         controller,
         errorMessage: tReadiness("checkFailed"),
         refreshHistory: !streamSucceeded || saveFailed || wasCancelling,
-        completeRendering: !streamSucceeded || wasCancelling,
       });
+      // Set after settlement, which clears session errors once history loads.
+      const settled = useChatSessionStore
+        .getState()
+        .sessions.get(frozenSessionId);
+      if (
+        rejectedSendError &&
+        settled?.abortController === controller &&
+        !settled.uncaughtError
+      ) {
+        setUncaughtError(frozenSessionId, rejectedSendError);
+      }
 
       // Name the chat now that we have the first AI response (navigation already happened before streaming)
       if (shouldAutoNameChatSessionAfterResponse) {
@@ -1594,7 +1524,7 @@ export default function useChatController({
     },
     [
       // Narrow to stable fields from managers to avoid re-creation
-      selectedSearchSources,
+      searchFilters,
       llmManager.currentLlm,
       llmManager.temperature,
       llmManager.hasTemperatureOverride,

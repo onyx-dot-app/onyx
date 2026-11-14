@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useShareableGroups, {
@@ -12,6 +12,7 @@ import useShareableGroups, {
 import useShareableUsers from "@/hooks/useShareableUsers";
 import { Content, Section, toast } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Modal } from "@opal/components";
 import { AddPeoplePicker } from "@/sections/modals/AddPeoplePicker";
 import { ShareAccessRow } from "@/sections/modals/ShareAccessRow";
@@ -36,18 +37,28 @@ import {
 import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
 import type {
   CustomSkill,
+  SkillEditableDetail,
   SkillSharePermission,
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
 import {
+  canChangeOrganizationAccess,
   serializeSkillSharing,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
-import type { MinimalUserSnapshot } from "@/lib/types";
-import { Button, Card, SelectCard, Tabs, Text } from "@opal/components";
+import { Permission, type MinimalUserSnapshot } from "@/lib/types";
+import {
+  Button,
+  Card,
+  MessageCard,
+  SelectCard,
+  Tabs,
+  Text,
+} from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
+  SvgBubbleText,
   SvgLock,
   SvgOrganization,
   SvgBlocks,
@@ -57,8 +68,12 @@ import {
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
 import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
+import { usePublishAction } from "@/lib/skills/hooks";
+import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
 
 type ShareModalView = "share" | "transfer";
+
+type SkillDialogTab = "details" | "sharing" | "versions";
 
 type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
 
@@ -74,9 +89,13 @@ type ShareSkillModalProps = {
   | {
       mode: "edit";
       skillId: string;
-      initialTab?: "details" | "sharing";
+      initialTab?: SkillDialogTab;
       fallbackTitle?: string | RichStr;
       onSaved: () => void;
+      /** Lets an open editor take the fields of a restored version. */
+      onVersionRestored?: (restored: SkillEditableDetail) => void;
+      /** The open editor has unsaved changes, so Restore is off. */
+      restoreBlocked?: boolean;
     }
 );
 
@@ -84,7 +103,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
   const initialTab =
     props.mode === "edit" ? (props.initialTab ?? "sharing") : "sharing";
-  const [tab, setTab] = useState<"details" | "sharing">(initialTab);
+  const [tab, setTab] = useState<SkillDialogTab>(initialTab);
   const [detailsVisited, setDetailsVisited] = useState(
     initialTab === "details"
   );
@@ -111,6 +130,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   });
   const { data: shareableGroupsData } = useShareableGroups();
   const { isAdmin, user: currentUser } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
+  const { mutate } = useSWRConfig();
+  const publishAction = usePublishAction();
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
     null
@@ -150,7 +174,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     const nextState: SkillShareDraftState = {
       groupShares: skill.group_shares,
       isPublic: skill.public_permission !== null,
-      publicPermission: skill.public_permission ?? "VIEWER",
+      // The organization can only view; editors are named users and groups.
+      publicPermission: "VIEWER",
       userShares: skill.user_shares,
     };
     setInstallationPolicy(skill.installation_policy);
@@ -178,9 +203,15 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    !skill?.external_app &&
-    (skill?.user_permission === "OWNER" ||
-      (isAdmin && skill?.user_permission === "EDITOR"));
+    !!skill &&
+    !skill.external_app &&
+    canChangeOrganizationAccess(skill, isOrganizationManager);
+  // Publishing is one-way: a saved published skill shows no private option.
+  const isPublished = props.mode === "edit" && initialState?.isPublic === true;
+  const isPublishing = !!effectiveState?.isPublic && !isPublished;
+  const viewerLabel = permissionOptions.find(
+    (option) => option.value === "VIEWER"
+  )?.label;
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
@@ -338,10 +369,22 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(nextDraft, isAdmin);
-      await updateSkillShares(props.skillId, payload);
+      const payload = serializeSkillSharing(
+        nextDraft,
+        isAdmin,
+        isOrganizationManager
+      );
+      const saved = await updateSkillShares(props.skillId, payload);
       void refreshSkill();
-      toast.success(t("share.savedToast.message"));
+      if (
+        isPublishing &&
+        saved.public_permission === null &&
+        saved.pending_version_number !== null
+      ) {
+        toast.info(t("share.reviewRequestedToast.message"));
+      } else {
+        toast.success(t("share.savedToast.message"));
+      }
       props.onSaved();
       closeModal();
     } catch (err) {
@@ -352,6 +395,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     } finally {
       setSaving(false);
     }
+  }
+
+  function handleVersionsChanged() {
+    if (props.mode !== "edit") return;
+    void refreshSkill();
+    void mutate(SWR_KEYS.userSkillPreview(props.skillId));
+    props.onSaved();
   }
 
   async function handleTransfer() {
@@ -391,43 +441,68 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.accessTitle")} />
           <Card border="solid" padding={2}>
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              wrap
-              gap={2}
-              height="auto"
-              padding={2}
-            >
-              <SharePermissionMenu
-                ariaLabel={t("share.scopeMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
-                onChange={(scope) => {
-                  setDraftState((currentDraftState) =>
-                    currentDraftState
-                      ? { ...currentDraftState, isPublic: scope === "PUBLIC" }
-                      : currentDraftState
-                  );
-                }}
-                options={scopeOptions}
-                showTriggerIcon
-                value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+            {isPublished ? (
+              <ShareAccessRow
+                icon={SvgOrganization}
+                title={t("share.published.title")}
+                description={t("share.published.description")}
+                rightChildren={
+                  viewerLabel ? (
+                    <StaticPermissionLabel
+                      icon={SvgBubbleText}
+                      label={viewerLabel}
+                    />
+                  ) : undefined
+                }
               />
-              <SharePermissionMenu
-                ariaLabel={t("share.organizationPermissionMenu.ariaLabel")}
-                disabled={!canEditOrgVisibility}
-                onChange={(permission) => {
-                  setDraftState((currentDraftState) =>
-                    currentDraftState
-                      ? { ...currentDraftState, publicPermission: permission }
-                      : currentDraftState
-                  );
-                }}
-                options={permissionOptions}
-                value={effectiveState.publicPermission}
-              />
-            </Section>
+            ) : (
+              <Section
+                flexDirection="row"
+                justifyContent="between"
+                wrap
+                gap={2}
+                height="auto"
+                padding={2}
+              >
+                <SharePermissionMenu
+                  ariaLabel={t("share.scopeMenu.ariaLabel")}
+                  disabled={!canEditOrgVisibility}
+                  onChange={(scope) => {
+                    setDraftState((currentDraftState) =>
+                      currentDraftState
+                        ? { ...currentDraftState, isPublic: scope === "PUBLIC" }
+                        : currentDraftState
+                    );
+                  }}
+                  options={scopeOptions}
+                  showTriggerIcon
+                  value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
+                />
+              </Section>
+            )}
           </Card>
+          {isPublishing && publishAction === "off" && (
+            <MessageCard
+              variant="error"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("share.publishOff.title")}
+              description={t("share.publishOff.description")}
+            />
+          )}
+          {isPublishing && publishAction !== "off" && (
+            <MessageCard
+              variant="warning"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("share.publishWarning.title")}
+              description={
+                publishAction === "review"
+                  ? t("share.publishWarning.reviewDescription")
+                  : t("share.publishWarning.description")
+              }
+            />
+          )}
           {skill.external_app && (
             <Text color="text-03" font="secondary-body">
               {t("share.externalAppNotice", {
@@ -735,7 +810,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               variant="contained"
               gap={6}
               onValueChange={(value) => {
-                if (saving || (value !== "details" && value !== "sharing"))
+                if (
+                  saving ||
+                  (value !== "details" &&
+                    value !== "sharing" &&
+                    value !== "versions")
+                )
                   return;
                 setTab(value);
                 if (value === "details") setDetailsVisited(true);
@@ -748,6 +828,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                 <Tabs.Trigger value="sharing" disabled={saving}>
                   {t("tabs.sharing")}
                 </Tabs.Trigger>
+                {canEditShares && (
+                  <Tabs.Trigger value="versions" disabled={saving}>
+                    {t("tabs.versions")}
+                  </Tabs.Trigger>
+                )}
               </Tabs.List>
               <Tabs.Content
                 value="details"
@@ -768,6 +853,22 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               >
                 {renderSharingContent()}
               </Tabs.Content>
+              {canEditShares && (
+                <Tabs.Content value="versions">
+                  {loadedSkill && (
+                    <SkillVersionsTab
+                      skill={loadedSkill}
+                      canPublish={canChangeOrganizationAccess(
+                        loadedSkill,
+                        isOrganizationManager
+                      )}
+                      onChanged={handleVersionsChanged}
+                      onRestored={props.onVersionRestored}
+                      restoreBlocked={props.restoreBlocked}
+                    />
+                  )}
+                </Tabs.Content>
+              )}
             </Tabs>
           ) : (
             renderSharingContent()
@@ -799,7 +900,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               {view === "transfer" ||
               (canEditShares && (tab === "sharing" || isDirty))
                 ? t("share.cancelButton.label")
-                : props.mode === "edit" && tab === "details"
+                : props.mode === "edit" && tab !== "sharing"
                   ? t("preview.closeButton.label")
                   : t("share.doneButton.label")}
             </Button>
@@ -814,7 +915,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               </Button>
             ) : canEditShares && (tab === "sharing" || isDirty) ? (
               <Button
-                disabled={!isDirty || saving || !!loadError}
+                disabled={
+                  !isDirty ||
+                  saving ||
+                  !!loadError ||
+                  (isPublishing && publishAction === "off")
+                }
                 onClick={handleSave}
               >
                 {t("share.saveButton.label")}

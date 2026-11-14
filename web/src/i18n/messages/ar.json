@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "مصادقة"
       },
+      "codingAgentIncognito": {
+        "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
+      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -817,6 +820,7 @@
       "search": {
         "placeholder": "البحث في الإجراءات..."
       },
+      "selectionSaveFailed": "تعذر حفظ اختيار الأدوات لهذه المحادثة.",
       "serverFallback": {
         "label": "الخادم"
       },
@@ -5181,6 +5185,27 @@
       "unavailable": {
         "description": "يُفعَّل Craft لكل نشر بواسطة Onyx. تواصل مع ممثل Onyx الخاص بك للحصول على صلاحية الوصول.",
         "title": "Craft غير متاح في هذا النشر"
+      },
+      "publishing": {
+        "title": "نشر المهارات",
+        "open": {
+          "label": "مفتوح",
+          "description": "ينشر مؤلفو المهارات في المؤسسة فورًا."
+        },
+        "requiresReview": {
+          "label": "يتطلب مراجعة",
+          "description": "يوافق مسؤول على كل نشر وكل تحديث."
+        },
+        "off": {
+          "label": "متوقف",
+          "description": "المسؤولون فقط ينشرون المهارات في المؤسسة."
+        },
+        "saveSuccess": {
+          "message": "تم حفظ إعداد النشر."
+        },
+        "saveError": {
+          "message": "تعذّر حفظ إعداد النشر."
+        }
       }
     },
     "credentials": {
@@ -12143,6 +12168,10 @@
         },
         "organization": {
           "label": "المؤسسة"
+        },
+        "unpublished": {
+          "label": "تغييرات غير منشورة",
+          "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
       },
       "toggle": {
@@ -12424,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "الوكلاء الفرعيون يعملون",
         "attachFilesButton": {
           "tooltip": "إرفاق ملفات"
         },
@@ -12432,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "البحث المعمق معطّل في وضع النماذج المتعددة",
+          "incognitoTooltip": "البحث المعمق غير متاح في وضع التخفي",
           "label": "بحث معمق"
         },
         "incognitoNotice": {
@@ -12460,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "إعداد الصوت",
           "tooltip": "الصوت غير مهيأ. قم بإعداده في إعدادات المسؤول."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter للإرسال · Ctrl أو Command + Enter للإضافة إلى القائمة",
+          "multiModelHint": "لا يمكن إضافة الرسائل إلى قائمة الانتظار أثناء مقارنة النماذج. اختر نموذجًا واحدًا لاستخدام قائمة الانتظار.",
+          "attachmentsHint": "أرسل الملفات المرفقة بعد انتهاء هذا الرد.",
+          "chooseResponseHint": "اختر ردًا قبل إضافة رسالة إلى قائمة الانتظار.",
+          "incognitoHint": "انتظر انتهاء الرد في المحادثة المتخفية.",
+          "sendHint": "الإرسال في الخطوة التالية من هذه الاستجابة",
+          "interruptHint": "مقاطعة العمل الحالي وإرسال هذه الرسالة",
+          "sendLabel": "إرسال",
+          "queueLabel": "إضافة للقائمة",
+          "interruptKeyboardHint": "Enter للمقاطعة · Ctrl أو Command + Enter للإضافة إلى القائمة",
+          "interruptLabel": "مقاطعة",
+          "waitHint": "انتظر حتى ينتهي الرد.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "إيقاف الوكلاء الفرعيين"
         }
       },
       "baseInputBar": {
@@ -12558,16 +12607,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "إزالة الرسالة من قائمة الانتظار"
+          "tooltip": "إزالة الرسالة من قائمة الانتظار",
+          "ariaLabel": "إزالة الرسالة من قائمة الانتظار: {message}"
         },
         "editHint": {
           "label": "تعديل ·"
         },
-        "item": {
-          "ariaLabel": "تبديل الرسالة في قائمة الانتظار"
-        },
         "removeHint": {
           "label": "إزالة"
+        },
+        "editButton": {
+          "tooltip": "تعديل رسالة في قائمة الانتظار",
+          "clearDraftTooltip": "امسح المسودة لتعديل رسالة في قائمة الانتظار",
+          "ariaLabel": "تعديل الرسالة في قائمة الانتظار: {message}"
+        },
+        "sendButton": {
+          "tooltip": "مقاطعة العمل الحالي وإرسال هذه الرسالة",
+          "ariaLabel": "إرسال الآن: {message}"
+        },
+        "sendHint": {
+          "label": "إرسال الآن ·"
         }
       },
       "sharedAppInputBar": {
@@ -12577,6 +12636,14 @@
         "startSessionButton": {
           "label": "بدء جلسة جديدة"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "تعذر إرسال الرسالة.",
+        "withdrawFailed": "تعذر إزالة الرسالة المعلقة.",
+        "loadFailed": "تعذر تحميل الرسائل المعلقة.",
+        "alreadyAccepted": "تم قبول هذه الرسالة بالفعل ولم تعد قيد الانتظار.",
+        "interruptFailed": "تعذر إرسال هذه الرسالة الآن. لا تزال قيد الانتظار.",
+        "stopSubagentsFailed": "تعذّر إيقاف الوكلاء الفرعيين."
       }
     },
     "mcpApiKey": {
@@ -12672,6 +12739,9 @@
         "timedOut": {
           "text": "توقف الرد لأنه بلغ الحد الزمني."
         }
+      },
+      "agentResults": {
+        "received": "تم استلام نتائج الوكيل الفرعي"
       },
       "codeBlock": {
         "copyButton": {
@@ -12820,11 +12890,6 @@
         },
         "stoppedStatus": {
           "text": "تم إيقاف توليد الصورة"
-        }
-      },
-      "markdownTable": {
-        "copyButton": {
-          "label": "نسخ الجدول"
         }
       },
       "memoizedLink": {
@@ -14482,7 +14547,7 @@
         "promote": {
           "cancelButton": "إلغاء",
           "confirmButton": "إتاحتها على مستوى المؤسسة",
-          "description": "يجب أن تكون المهارات المرتبطة بالتطبيق متاحة للجميع. يُطبَّق هذا التغيير عند حفظ التطبيق.",
+          "description": "يجب أن تكون المهارات المرتبطة بالتطبيق متاحة للجميع. عند حفظ التطبيق، تُنشر المهارة في المؤسسة. لا يمكن التراجع عن النشر.",
           "title": "هل تريد جعل «{name}» متاحة على مستوى المؤسسة؟"
         },
         "search": {
@@ -16418,6 +16483,12 @@
       "title": "المحادثات",
       "toasts": {
         "saveFailed": "فشل حفظ التفضيلات"
+      },
+      "sendBehavior": {
+        "title": "سلوك الإرسال أثناء العمل",
+        "description": "اختر إجراء Enter وزر الإرسال أثناء الرد. يضيف Ctrl/Cmd+Enter دائمًا رسالة متابعة إلى قائمة الانتظار.",
+        "afterStep": "بعد الخطوة الحالية",
+        "interrupt": "مقاطعة العمل الحالي"
       }
     },
     "connectors": {
@@ -17130,6 +17201,13 @@
         "savingChanges": "جارٍ حفظ التغييرات...",
         "savingSkill": "جارٍ حفظ المهارة..."
       },
+      "staleVersion": {
+        "description": "حفظ شخص ما إصدارًا أحدث. أعد التحميل للحصول عليه. ستفقد التغييرات غير المحفوظة.",
+        "reload": {
+          "label": "إعادة التحميل"
+        },
+        "title": "تغيّرت هذه المهارة منذ فتحها"
+      },
       "toasts": {
         "created": "تم إنشاء \"{name}\"",
         "deleteFailed": "فشل حذف المهارة",
@@ -17330,9 +17408,6 @@
           "message": "جارٍ تحميل تفاصيل المشاركة..."
         },
         "noOwnerTitle": "لا يوجد مالك نشط",
-        "organizationPermissionMenu": {
-          "ariaLabel": "تغيير إذن المؤسسة"
-        },
         "ownerLabel": "مالك",
         "permissionMenu": {
           "ariaLabel": "تحديث صلاحية الوصول لـ {name}"
@@ -17373,14 +17448,77 @@
         "peopleTitle": "الأشخاص الذين لديهم حق الوصول",
         "manageIndividualAccess": "إدارة الوصول الفردي",
         "individualAccessTitle": "الوصول الفردي",
-        "ownershipTitle": "الملكية"
+        "ownershipTitle": "الملكية",
+        "published": {
+          "title": "المؤسسة",
+          "description": "منشورة. يمكن لكل شخص في المؤسسة استخدام هذه المهارة."
+        },
+        "publishWarning": {
+          "title": "لا يمكن التراجع عن النشر",
+          "description": "بعد الحفظ، يمكن لكل شخص في المؤسسة استخدام هذه المهارة. لا يمكنك جعلها خاصة مرة أخرى. يمكن للمسؤول فقط حذفها.",
+          "reviewDescription": "تبقى المهارة خاصة حتى يوافق مسؤول على الطلب. بعد الموافقة، لا يمكنك جعلها خاصة مرة أخرى."
+        },
+        "reviewRequestedToast": {
+          "message": "تم إرسال طلب النشر إلى مسؤول للمراجعة."
+        },
+        "publishOff": {
+          "title": "النشر متوقف",
+          "description": "أوقف مسؤول النشر إلى المؤسسة. اطلب من مسؤول نشر هذه المهارة."
+        }
       },
       "placeholders": {
         "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
       },
       "tabs": {
         "details": "التفاصيل",
-        "sharing": "المشاركة"
+        "sharing": "المشاركة",
+        "versions": "الإصدارات"
+      },
+      "versions": {
+        "tableLabel": "إصدارات المهارة",
+        "columns": {
+          "version": "الإصدار",
+          "madeBy": "أنشأها",
+          "date": "التاريخ"
+        },
+        "versionLabel": "الإصدار {number}",
+        "currentBadge": "الحالي",
+        "unknownAuthor": "غير معروف",
+        "previewRow": {
+          "ariaLabel": "معاينة الإصدار {number}"
+        },
+        "restore": {
+          "label": "استعادة",
+          "ariaLabel": "استعادة الإصدار {number}",
+          "successToast": "تمت استعادة الإصدار {number} بصفته الإصدار {newNumber}.",
+          "unchangedToast": "الإصدار {number} له نفس ملفات الإصدار الحالي.",
+          "failedToast": "تعذّرت استعادة هذا الإصدار.",
+          "unsavedChanges": {
+            "title": "احفظ تغييراتك أولاً",
+            "description": "احفظ التغييرات في المحرر أو تجاهلها قبل استعادة إصدار."
+          }
+        },
+        "loadError": {
+          "title": "تعذّر تحميل الإصدارات",
+          "description": "حاول مرة أخرى لاحقًا."
+        },
+        "preview": {
+          "back": "كل الإصدارات",
+          "loadError": {
+            "title": "تعذّر تحميل هذا الإصدار"
+          }
+        },
+        "status": {
+          "pending": "بانتظار المراجعة",
+          "published": "منشور"
+        },
+        "publishUpdate": {
+          "label": "نشر التحديث",
+          "successToast": "تم نشر الإصدار {number} للمؤسسة.",
+          "failedToast": "تعذّر نشر هذا التحديث.",
+          "sentForReviewToast": "تم إرسال الإصدار {number} إلى مسؤول للمراجعة.",
+          "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
+        }
       }
     },
     "page": {
@@ -17533,10 +17671,41 @@
       "shareDescription": "طبّق هذه التغييرات على كل مهارة محددة. تحتفظ الإعدادات التي لم تتغير بقيمها الحالية.",
       "unchanged": "الإبقاء دون تغيير",
       "everyone": "الجميع في المؤسسة",
-      "invitedOnly": "الأشخاص والمجموعات المدعوون",
       "addAccessDescription": "أضف هؤلاء الأشخاص والمجموعات إلى كل مهارة محددة. يحصل الأشخاص والمجموعات المدرجون على الصلاحية المختارة. ويحتفظ الآخرون بصلاحيات الوصول الحالية.",
       "apply": "{count, plural, zero {تطبيق} one {تطبيق على مهارة واحدة} two {تطبيق على مهارتين} few {تطبيق على # مهارات} many {تطبيق على # مهارة} other {تطبيق على # مهارة}}",
-      "moreActions": "المزيد من الإجراءات"
+      "moreActions": "المزيد من الإجراءات",
+      "publishWarning": {
+        "title": "لا يمكن التراجع عن النشر",
+        "description": "بعد التطبيق، يمكن لكل شخص في المؤسسة استخدام المهارات المحددة. لا يمكن جعل المهارات المنشورة خاصة مرة أخرى. يمكن للمسؤول فقط حذفها."
+      }
+    },
+    "reviewRequests": {
+      "title": "طلبات النشر",
+      "description": "وافق على طلبات نشر المهارات في المؤسسة أو ارفضها.",
+      "columns": {
+        "skill": "المهارة",
+        "version": "الإصدار",
+        "author": "المؤلف",
+        "saved": "تاريخ الحفظ"
+      },
+      "unnamedSkill": "مهارة بلا اسم",
+      "review": {
+        "label": "مراجعة",
+        "ariaLabel": "مراجعة {name}"
+      },
+      "approve": {
+        "label": "موافقة"
+      },
+      "deny": {
+        "label": "رفض"
+      },
+      "approvedToast": "تم نشر الإصدار {number} من {name}.",
+      "deniedToast": "تم رفض الإصدار {number} من {name}.",
+      "failedToast": "تعذّر تحديث هذا الطلب.",
+      "version": {
+        "firstPublish": "v{number} · أول نشر",
+        "update": "v{number} · تحديث من v{published}"
+      }
     }
   },
   "opensearchHealth": {

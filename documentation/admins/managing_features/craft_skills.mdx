@@ -11,7 +11,9 @@ Open **Craft → Skills** to manage your own library.
 <Note>
   Anyone with Craft access can create a Skill and manage the Skills they own or can edit.
   Admins can inspect and manage all custom Skills, including private personal Skills.
-  Only Admins set installation policies. Craft needs a Business or Enterprise plan, or Onyx Cloud.
+  Only Admins set installation policies, because this needs the organization-wide `manage:plugins` permission.
+  Group Managers hold `manage:plugins` only for their groups. They cannot set an installation policy,
+  not even for a Skill shared only with their group. Craft needs a Business or Enterprise plan, or Onyx Cloud.
 </Note>
 
 ## Understand the Skills library
@@ -102,12 +104,14 @@ Craft skips that Skill and logs a warning. The saved bundle stays unchanged. Oth
 | Maximum file count  | 500 files. Folders do not count.                                                                                                            |
 | Maximum file size   | 25 MiB per file in the extracted bundle.                                                                                                     |
 | Maximum bundle size | 100 MiB total in the extracted bundle.                                                                                                       |
+| Maximum `SKILL.md`  | 256 KiB. Split longer instructions into several files and link them from `SKILL.md`.                                                         |
 
 Onyx checks each limit separately and counts the bytes that it extracts.
 The file count includes metadata that Onyx removes: `__MACOSX/`, `.DS_Store`, `Thumbs.db`, and `._*` files.
 The ZIP limit applies to both the uploaded ZIP and the ZIP that Onyx stores after normalization.
 Standalone files use the per-file limit before compression.
 Each Skill from a GitHub repository must also pass these limits.
+The `SKILL.md` limit also applies to each edit of a saved Skill.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
 Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
 with a `reason` for each refusal. The ZIP file list (the names and metadata of all entries) must fit in 1 MiB.
@@ -147,8 +151,9 @@ Admins create Skills through the same personal creation flow as other users.
 Publishing means reviewing that Skill and then sharing it with the intended audience.
 
 <Note>
-  Sharing a Skill with the whole organization requires being its author or an Admin.
-  You can delete any Skill you own or can edit, and Admins can delete any custom Skill.
+  Publishing a Skill to the whole organization requires being its author or an Admin. Publishing cannot be undone:
+  a published Skill cannot become private again. Only Admins can delete a published Skill.
+  You can delete a private Skill that you own or can edit.
 </Note>
 
 <Steps>
@@ -164,9 +169,12 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
 
   <Step title="Choose who can use it">
     Select **Edit sharing**. Under **Who can access**,
-    share with the organization or use **Manage individual access** to grant **Can use** to specific users or groups.
+    publish to the organization or use **Manage individual access** to grant **Can use** to specific users or groups.
+    Before you publish, the dialog tells you that you cannot undo it.
     Grant **Can edit** only to people who maintain the Skill. Under **Installation**,
     choose how the Skill is installed for everyone with access.
+
+    <img className="rounded-image" src="/assets/admins/craft_skills/publish_warning.webp" alt="The sharing dialog warns that publishing a Skill to the organization cannot be undone"/>
   </Step>
 
   <Step title="Test with the intended audience">
@@ -175,23 +183,61 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
   </Step>
 </Steps>
 
+## Control who publishes
+
+The **Skill Publishing** setting controls how Skill authors publish to the organization. Open **Admin Panel**,
+select **Craft → Preferences**, and choose a value under **Skill Publishing**:
+
+| Value | Effect |
+| --- | --- |
+| **Open** | Authors publish a Skill and its updates to the organization at once. This is the default. |
+| **Requires review** | A publish or a **Publish update** makes a request. The Skill stays private, or the organization keeps the published version, until an Admin approves the request. |
+| **Off** | Authors cannot publish. Onyx shows an error when they try. |
+
+The setting applies to every way to publish: the sharing dialog, **Publish update**, bulk sharing, uploads, the editor,
+and GitHub import. Users with the organization-wide `manage:plugins` permission always publish at once.
+Linking a Skill to an App is not affected.
+
+### Review publish requests
+
+Under **Requires review**, a publish from an author makes a request, and the version shows **Pending review**.
+To review requests, open **Admin Panel → Skills**. **Publish Requests** shows each pending request with the Skill name,
+the version, the author, and when the version was saved. It does not show when there are no requests.
+Users with the organization-wide `manage:plugins` permission who are not admins see **Publish Requests** on the Craft
+**Skills** page.
+
+Select **Review** on a request to see the description and instructions of that version.
+Then select **Approve** to publish it, or **Deny** to remove the request. If another published Skill has the same name,
+Onyx refuses the approval and shows why. After a deny, the author can publish again later.
+
+A Skill has at most one pending request. A newer request replaces the older one.
+
 ## Choose sharing permissions
 
 | Scope               | Can use                                                   | Can edit                                                                                 |
 | ------------------- | --------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
 | **Specific people** | Selected users can use and preview the Skill.             | Selected users can also modify and manage the Skill.                                     |
 | **Groups**          | Members of selected groups can use and preview the Skill. | Members can also modify and manage the Skill.                                            |
-| **Organization**    | Everyone can use and preview the Skill.                   | Everyone can modify and manage it. Use this only for intentionally collaborative Skills. |
+| **Organization**    | Everyone can use and preview the Skill.                   | Not available. Give **Can edit** to specific people or groups.                           |
 
 Users with **Can edit** can change instructions and files, update sharing within their permissions,
-enable or disable the Skill, and delete it.
+and enable or disable the Skill. They can delete a private Skill. Only Admins can delete a published Skill.
+
+A save on a published Skill does not reach the organization at once.
+The organization keeps the published version until the author or an Admin selects **Publish update** in the Skill's
+**Versions** tab. Users with **Can edit** cannot publish an update.
 
 <Tip>
-  Prefer organization-wide **Can use** access with a small maintainer group that has **Can edit**.
-  This keeps the Skill broadly usable without making its behavior broadly editable.
+  Publish a Skill to the organization for broad use, and give **Can edit** to a small maintainer group.
 </Tip>
 
-A Skill that is associated with an App stays visible to the organization. You cannot make it private.
+A published Skill shows **Organization** in the sharing dialog. It has no option to make it private again.
+
+<img className="rounded-image" src="/assets/admins/craft_skills/published_skill_sharing.webp" alt="The sharing dialog of a published Skill shows Organization with Can use"/>
+
+Linking a Skill to an App publishes it to the organization. If another published Skill has the same name,
+Onyx refuses the link or the publish.
+Transferring a private Skill to a person who has a Skill with the same name is also refused.
 
 ## Choose an installation policy
 
@@ -240,9 +286,10 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
   </Step>
 
   <Step title="Configure access and installation">
-    Select **Share**. Choose **Everyone in the organization** to share all selected Skills with your staff.
-    You can also add specific people or groups. People and groups you list get the chosen permission.
-    Other existing grants remain in place. Settings left at **Keep unchanged** retain their current values.
+    Select **Share**. Choose **Everyone in the organization** to publish all selected Skills to your staff.
+    Publishing cannot be undone. You can also add specific people or groups.
+    People and groups you list get the chosen permission. Other existing grants remain in place.
+    Settings left at **Keep unchanged** retain their current values.
   </Step>
 
   <Step title="Apply the changes">
@@ -254,6 +301,8 @@ Do not transfer ownership to bots, service accounts, limited accounts, or inacti
 **Enable for me** and **Disable for me** change your personal library only.
 Use **Installed by default** or **Required** under **Installation** to deploy Skills to people with access.
 Open **More actions** for personal enablement and deletion. **Delete** removes selected Skills for everyone with access.
+Only an admin can delete a Skill that is published to the organization.
+This needs the organization-wide `manage:plugins` permission.
 The confirmation lists each selected Skill before deletion.
 
 ### Set access during import

@@ -10,6 +10,7 @@ import React, {
 import { Message } from "@/app/app/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -72,9 +73,7 @@ export interface ChatUIProps {
     regenerationRequest?: {
       messageId: number;
       parentMessage: Message;
-      preferSearch?: boolean;
     };
-    preferSearch?: boolean;
     selectedModels?: SelectedModel[];
   }) => Promise<void>;
   deepResearchEnabled: boolean;
@@ -191,11 +190,7 @@ const ChatUI = React.memo(
     }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
-      (regenerationRequest: {
-        messageId: number;
-        parentMessage: Message;
-        preferSearch?: boolean;
-      }) => {
+      (regenerationRequest: { messageId: number; parentMessage: Message }) => {
         return async function (modelOverride: LlmDescriptor) {
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
@@ -204,7 +199,6 @@ const ChatUI = React.memo(
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,
             regenerationRequest,
-            preferSearch: regenerationRequest.preferSearch,
           });
         };
       },
@@ -247,8 +241,7 @@ const ChatUI = React.memo(
             Multi-model responses use full width while normal messages stay centered. */}
         <div
           className={cn(
-            // Size container for answer tables that grow past the prose column.
-            "@container flex flex-col w-full h-full pt-4 pb-8 gap-12",
+            "flex flex-col w-full h-full pt-4 pb-8 gap-12",
             !fullWidthChat && "md:pe-1"
           )}
         >
@@ -321,6 +314,19 @@ const ChatUI = React.memo(
                   )}
                 </WindowedRow>
               );
+            } else if (message.type === "agent_results") {
+              return (
+                <WindowedRow
+                  id={messageReactComponentKey}
+                  key={messageReactComponentKey}
+                  className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
+                >
+                  <AgentResultsDivider />
+                </WindowedRow>
+              );
             } else if (
               message.type === "assistant" ||
               message.type === "error"
@@ -348,10 +354,7 @@ const ChatUI = React.memo(
                 <WindowedRow
                   id={messageReactComponentKey}
                   key={messageReactComponentKey}
-                  className={cn(
-                    "chat-table-breakout w-full self-center",
-                    msgWidth
-                  )}
+                  className={cn("w-full self-center", msgWidth)}
                   pinned={pinned}
                   initiallyMounted={initiallyMounted}
                   heightCache={rowHeightCache}
@@ -383,7 +386,9 @@ const ChatUI = React.memo(
                   {message.type === "error" && (
                     <ErrorBanner
                       resubmit={
-                        chatState === "input" && i === messages.length - 1
+                        chatState === "input" &&
+                        previousMessage?.type === "user" &&
+                        i === messages.length - 1
                           ? onResubmit
                           : undefined
                       }
@@ -400,11 +405,17 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {(error || loadError) && (
+          {error && (
+            <div className={cn("p-4 w-full self-center", msgWidth)}>
+              {/* A session error has no saved question to resend. */}
+              <ErrorBanner {...error} />
+            </div>
+          )}
+          {!error && loadError && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>
               <ErrorBanner
                 resubmit={chatState === "input" ? onResubmit : undefined}
-                error={error || loadError || ""}
+                error={loadError}
               />
             </div>
           )}

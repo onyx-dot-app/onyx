@@ -6,13 +6,10 @@ import io
 import os
 import random
 import zipfile
-from types import SimpleNamespace
-from typing import cast
 from unittest.mock import MagicMock
 
 import pytest
 
-from onyx.db.models import Skill
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
@@ -27,7 +24,7 @@ from onyx.skills.bundle import (
     rewrite_custom_bundle_skill_md,
     update_custom_bundle_files,
 )
-from onyx.skills.content import read_custom_skill_bundle_bytes
+from onyx.skills.content import read_skill_bundle_blob
 from onyx.skills.ingest import ingest_skill_bundle
 
 _MIB = 1024 * 1024
@@ -207,10 +204,6 @@ def test_skipped_limits_allow_bundles_saved_before_them() -> None:
     normalize_custom_bundle(zip_bytes, zip_max_bytes=None, max_file_count=None)
 
 
-def _stored_skill() -> Skill:
-    return cast(Skill, SimpleNamespace(name="limits", bundle_file_id="bundle"))
-
-
 def test_current_content_read_refuses_bundle_over_total_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -221,7 +214,7 @@ def test_current_content_read_refuses_bundle_over_total_limit(
     file_store.read_file.return_value = stream
 
     with pytest.raises(OnyxError) as caught:
-        read_custom_skill_bundle_bytes(_stored_skill(), file_store)
+        read_skill_bundle_blob("bundle", "limits", file_store)
 
     _assert_limit_error(caught.value, "zip_bytes", limit)
     assert stream.closed
@@ -232,7 +225,7 @@ def test_current_content_read_returns_bundle_within_allowance() -> None:
     file_store = MagicMock(spec=FileStore)
     file_store.read_file.return_value = io.BytesIO(stored)
 
-    assert read_custom_skill_bundle_bytes(_stored_skill(), file_store) == (stored)
+    assert read_skill_bundle_blob("bundle", "limits", file_store) == (stored)
 
 
 def test_full_replacement_does_not_read_existing_bundle() -> None:

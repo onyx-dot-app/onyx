@@ -1,4 +1,5 @@
 import time
+from collections.abc import Callable
 from uuid import UUID, uuid4
 
 from onyx.cache.interface import (
@@ -7,6 +8,7 @@ from onyx.cache.interface import (
     CacheLock,
     CacheLockLostError,
 )
+from onyx.chat.stop_signal_checker import request_stop
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -38,6 +40,19 @@ def _get_fence_key(chat_session_id: UUID) -> str:
     return f"{FENCE_PREFIX}_{chat_session_id}"
 
 
+def _preparation_stop_key(chat_session_id: UUID) -> str:
+    return f"{PREFIX}_preparation_stop_{chat_session_id}"
+
+
+def _admission_lock(cache: CacheBackend, session_id: UUID) -> CacheLock:
+    lock = cache.lock(
+        f"{PREFIX}_admission_lock_{session_id}", timeout=_ADMISSION_LOCK_TTL_SECONDS
+    )
+    if not lock.acquire(blocking_timeout=_ADMISSION_LOCK_WAIT_SECONDS):
+        raise RuntimeError("Could not lock chat session admission")
+    return lock
+
+
 class ChatTurnAdmission:
     """Keep one turn admitted until its execution and storage have drained.
 
@@ -52,20 +67,12 @@ class ChatTurnAdmission:
         self._last_refresh = time.monotonic()
         self._lease_seconds = PREPARATION_LEASE_SECONDS
 
-    def _lock(self, session_id: UUID) -> CacheLock:
-        lock = self.cache.lock(
-            f"{PREFIX}_admission_lock_{session_id}", timeout=_ADMISSION_LOCK_TTL_SECONDS
-        )
-        if not lock.acquire(blocking_timeout=_ADMISSION_LOCK_WAIT_SECONDS):
-            raise RuntimeError("Could not lock chat session admission")
-        return lock
-
     @staticmethod
     def _owner_key(session_id: UUID) -> str:
         return f"{PREFIX}_owner_{session_id}"
 
     def claim(self, session_id: UUID) -> None:
-        lock = self._lock(session_id)
+        lock = _admission_lock(self.cache, session_id)
         try:
             started = time.monotonic()
             self._session_id = session_id
@@ -78,6 +85,8 @@ class ChatTurnAdmission:
                 )
             self._last_refresh = started
             self.cache.set(_get_fence_key(session_id), 0, ex=self._lease_seconds)
+            # A Stop for an earlier turn that never published is not this turn's.
+            self.cache.delete(_preparation_stop_key(session_id))
         finally:
             lock.release()
 
@@ -120,12 +129,16 @@ class ChatTurnAdmission:
         if session_id is None:
             raise RuntimeError("Chat turn has no admission")
         self._check_deadline()
-        lock = self._lock(session_id)
+        lock = _admission_lock(self.cache, session_id)
         try:
             self._renew_owner(session_id, ACTIVE_LEASE_SECONDS)
             self.cache.set(
                 _get_fence_key(session_id), stream_id, ex=self._lease_seconds
             )
+            # A Stop that arrived during preparation applies to this stream.
+            if self.cache.exists(_preparation_stop_key(session_id)):
+                request_stop(session_id, self.cache, stream_id=stream_id)
+                self.cache.delete(_preparation_stop_key(session_id))
         finally:
             lock.release()
 
@@ -134,10 +147,11 @@ class ChatTurnAdmission:
         if session_id is None:
             raise RuntimeError("Chat turn has no admission")
         self._check_deadline()
-        lock = self._lock(session_id)
+        lock = _admission_lock(self.cache, session_id)
         try:
             self._renew_owner(session_id, self._lease_seconds)
             self.cache.expire(_get_fence_key(session_id), self._lease_seconds)
+            self.cache.expire(_preparation_stop_key(session_id), self._lease_seconds)
         finally:
             lock.release()
 
@@ -149,18 +163,64 @@ class ChatTurnAdmission:
         if self.cache.get(self._owner_key(session_id)) != self._token:
             raise CacheLockLostError("Chat session admission was lost")
 
-    def release(self) -> None:
+    def release(self, settle: Callable[[], None] | None = None) -> None:
+        """Release admission; `settle` runs first while this turn still owns it.
+
+        Stop takes the same lock, so `settle` sees every Stop that targeted this
+        turn, and queued work cannot start until `settle` returns.
+        """
         session_id = self._session_id
         if session_id is None:
             return
-        lock = self._lock(session_id)
+        lock = _admission_lock(self.cache, session_id)
         try:
             if self.cache.get(self._owner_key(session_id)) == self._token:
+                if settle is not None:
+                    settle()
                 self.cache.delete(_get_fence_key(session_id))
                 self.cache.delete(self._owner_key(session_id))
             self._session_id = None
         finally:
             lock.release()
+
+
+def current_turn_owner(chat_session_id: UUID, cache: CacheBackend) -> bytes | None:
+    """Identify the turn that holds admission, for a later `stop_current_turn`."""
+    return cache.get(ChatTurnAdmission._owner_key(chat_session_id))
+
+
+def stop_current_turn(
+    chat_session_id: UUID,
+    cache: CacheBackend,
+    *,
+    owner: bytes | None = None,
+    pause_queue: Callable[[], None] | None = None,
+) -> None:
+    """Stop the turn that holds admission, under the lock that releases and claims it.
+
+    With `owner`, only that turn stops; a turn that started later keeps running.
+    A turn that is still preparing stops when it publishes. `pause_queue` runs
+    first, so no queued turn can claim admission between the pause and the stop,
+    whether or not a turn holds admission.
+    """
+    lock = _admission_lock(cache, chat_session_id)
+    try:
+        if pause_queue is not None:
+            pause_queue()
+        current = current_turn_owner(chat_session_id, cache)
+        if current is None or (owner is not None and current != owner):
+            return
+        stream_id = get_processing_stream_id(chat_session_id, cache)
+        if stream_id is not None:
+            request_stop(chat_session_id, cache, stream_id=stream_id)
+        else:
+            cache.set(
+                _preparation_stop_key(chat_session_id),
+                1,
+                ex=PREPARATION_LEASE_SECONDS,
+            )
+    finally:
+        lock.release()
 
 
 def get_processing_stream_id(chat_session_id: UUID, cache: CacheBackend) -> int | None:

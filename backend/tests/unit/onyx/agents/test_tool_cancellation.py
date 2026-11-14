@@ -5,11 +5,11 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH, AgentCoordinator
 from onyx.agents.events import AgentEvent, ToolUpdateEvent
-from onyx.agents.models import RunStatus
+from onyx.agents.models import AgentInfo, RunState, RunStatus
 from onyx.agents.runtime import Agent, Run, RunFailed
-from onyx.agents.tools import AgentTool, ChildRunCancelled, ToolInvocation
+from onyx.agents.tools import AgentTool, ChildRunWait, ToolInvocation
 from onyx.llm.cancellation import (
     AgentCancelled,
     CancellationSignal,
@@ -41,7 +41,7 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
                 generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
             )
 
-        def execute(invocation: ToolInvocation) -> ToolResult:
+        def execute(invocation: ToolInvocation) -> ChildRunWait:
             submission = invocation.agents.spawn_agent(
                 nested(depth - 1),
                 name="child",
@@ -49,9 +49,7 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
                 max_steps=2,
                 messages=[],
             )
-            child = invocation.agents.wait_run(submission.run_id)
-            assert child is not None
-            return ToolResult(content=child.output.text)
+            return ChildRunWait(run_ids=[submission.run_id])
 
         def reply(
             request: GenerationRequest, _signal: CancellationSignal
@@ -73,11 +71,14 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
                         name="child", description="", parameters={}
                     ),
                     execute=execute,
+                    result_from_children=lambda _invocation, states: ToolResult(
+                        content=states[0].messages[-1].text
+                    ),
                 )
             ],
         )
 
-    root = nested(3)
+    root = nested(MAX_CHILD_DEPTH)
     events: list[AgentEvent] = []
     runs: list[Run] = []
     assert (
@@ -92,11 +93,14 @@ def test_nested_child_runs_complete_without_parent_deadlock() -> None:
     )
     snapshot = runs[-1].snapshot()
     assert snapshot is not None
-    assert len([event for event in events if event.type == "agent_start"]) == 4
+    assert (
+        len([event for event in events if event.type == "agent_start"])
+        == MAX_CHILD_DEPTH + 1
+    )
     assert [
         event.progress.content for event in events if event.type == "tool_update"
-    ] == ["leaf"] * 3
-    for _ in range(3):
+    ] == ["leaf"] * MAX_CHILD_DEPTH
+    for _ in range(MAX_CHILD_DEPTH):
         assert len(snapshot.child_runs) == 1
         child = snapshot.child_runs[0]
         assert child.parent_run_id == snapshot.run_id
@@ -145,21 +149,17 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
         ],
     )
 
-    def execute(invocation: ToolInvocation) -> ToolResult:
-        try:
-            submission = invocation.agents.spawn_agent(
-                child,
-                name="child",
-                description="Run child work",
-                max_steps=1,
-                messages=[],
-            )
-            while not cancel_child.is_set():
-                time.sleep(0.01)
-            invocation.agents.cancel_run(submission.run_id)
-            invocation.agents.wait_run(submission.run_id)
-        except ChildRunCancelled:
-            recovering.set()
+    def execute(invocation: ToolInvocation) -> ChildRunWait:
+        submission = invocation.agents.spawn_agent(
+            child, name="child", description="Run child work", max_steps=1, messages=[]
+        )
+        assert cancel_child.wait(3)
+        invocation.agents.interrupt_agent(submission.agent_id)
+        return ChildRunWait(run_ids=[submission.run_id])
+
+    def handle(_invocation: ToolInvocation, states: list[RunState]) -> ToolResult:
+        assert states[0].status == RunStatus.CANCELLED
+        recovering.set()
         replacement_started.set()
         return ToolResult(content="recovered")
 
@@ -181,6 +181,7 @@ def test_cancelled_child_does_not_block_independent_parent_work() -> None:
             AgentTool(
                 definition=ToolDefinition(name="child", description="", parameters={}),
                 execute=execute,
+                result_from_children=handle,
             )
         ],
     )
@@ -547,3 +548,43 @@ def test_cancelled_run_rejects_tool_result_while_waiting_for_child(
         release_tool.set()
         release_child.set()
         assert coordinator.close(3)
+
+
+def test_agents_at_the_nesting_limit_cannot_start_agents() -> None:
+    """The root, its children, and their children can run; no deeper agent."""
+    leaf = Agent(
+        FakeModelClient(lambda *_: AssistantMessage(content=[TextContent(text="x")])),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+    )
+    coordinator = AgentCoordinator()
+    parent_id = "root"
+    coordinator.register(
+        AgentInfo(
+            id=parent_id,
+            path="/root",
+            parent_id=None,
+            description="",
+            restoration_config=None,
+        )
+    )
+    for depth in range(MAX_CHILD_DEPTH):
+        child = Agent(
+            FakeModelClient(lambda *_: AssistantMessage(content=[])),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        )
+        coordinator.register_child(
+            child,
+            parent_id=parent_id,
+            name=f"level{depth + 1}",
+            description="",
+            restoration_config=None,
+        )
+        parent_id = child.id
+    with pytest.raises(ValueError, match="nesting limit"):
+        coordinator.register_child(
+            leaf,
+            parent_id=parent_id,
+            name="too-deep",
+            description="",
+            restoration_config=None,
+        )

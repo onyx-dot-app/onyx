@@ -1,7 +1,7 @@
 """External dependency unit tests for the file_id cleanup that runs alongside
 document deletion across the three deletion paths:
 
-    1. `document_by_cc_pair_cleanup_task` (pruning + connector deletion)
+    1. `document_batch_by_cc_pair_cleanup_task` (pruning + connector deletion)
     2. `delete_ingestion_doc` (public ingestion API DELETE)
     3. `delete_all_documents_for_connector_credential_pair` (index swap)
 
@@ -16,7 +16,9 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.orm import Session
 
-from onyx.background.celery.tasks.shared.tasks import document_by_cc_pair_cleanup_task
+from onyx.background.celery.tasks.shared.tasks import (
+    document_batch_by_cc_pair_cleanup_task,
+)
 from onyx.connectors.models import Document, IndexAttemptMetadata
 from onyx.db.document import (
     delete_all_documents_for_connector_credential_pair,
@@ -196,8 +198,8 @@ class TestDeleteIngestionDoc:
         assert get_filerecord(db_session, file_id) is None
 
 
-class TestDocumentByCcPairCleanupTask:
-    """Path 1: per-doc cleanup task fired by pruning / connector deletion."""
+class TestDocumentBatchCleanupTask:
+    """Path 1: batch cleanup task fired by pruning / connector deletion."""
 
     def test_count_1_branch_cleans_up_file(
         self,
@@ -219,9 +221,9 @@ class TestDocumentByCcPairCleanupTask:
         with patch(
             "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
-            result = document_by_cc_pair_cleanup_task.apply(
+            result = document_batch_by_cc_pair_cleanup_task.apply(
                 args=(
-                    doc.id,
+                    [doc.id],
                     cc_pair.connector_id,
                     cc_pair.credential_id,
                     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -260,9 +262,9 @@ class TestDocumentByCcPairCleanupTask:
             "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ):
             results = [
-                document_by_cc_pair_cleanup_task.apply(
+                document_batch_by_cc_pair_cleanup_task.apply(
                     args=(
-                        doc.id,
+                        [doc.id],
                         cc_pair.connector_id,
                         cc_pair.credential_id,
                         POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -314,9 +316,9 @@ class TestDocumentByCcPairCleanupTask:
             mock_get_document_index.return_value.update.side_effect = (
                 assert_relationship_removed
             )
-            result = document_by_cc_pair_cleanup_task.apply(
+            result = document_batch_by_cc_pair_cleanup_task.apply(
                 args=(
-                    doc.id,
+                    [doc.id],
                     cc_pair.connector_id,
                     cc_pair.credential_id,
                     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
@@ -347,22 +349,24 @@ class TestDocumentByCcPairCleanupTask:
         with patch(
             "onyx.background.celery.tasks.shared.tasks.get_default_document_index"
         ) as mock_get_document_index:
-            mock_get_document_index.return_value.delete.side_effect = RuntimeError(
-                "document index unavailable"
+            mock_get_document_index.return_value.delete_documents.side_effect = (
+                RuntimeError("document index unavailable")
             )
-            result = document_by_cc_pair_cleanup_task.apply(
+            result = document_batch_by_cc_pair_cleanup_task.apply(
                 args=(
-                    doc.id,
+                    [doc.id],
                     cc_pair.connector_id,
                     cc_pair.credential_id,
                     POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
                 ),
             )
-            delete_calls = mock_get_document_index.return_value.delete.call_count
+            delete_calls = (
+                mock_get_document_index.return_value.delete_documents.call_count
+            )
 
         assert result.successful(), result.traceback
         assert result.result is False
-        max_retries = document_by_cc_pair_cleanup_task.max_retries
+        max_retries = document_batch_by_cc_pair_cleanup_task.max_retries
         assert max_retries is not None
         assert delete_calls == max_retries + 1
 
