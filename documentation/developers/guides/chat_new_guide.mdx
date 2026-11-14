@@ -175,13 +175,28 @@ A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each req
 |-----------|---------|
 | `approved` | The user approved the call, and it runs. |
 | `approved_for_chat` | The user approved the tool for the chat session, with this request or an earlier one, and the call runs. |
-| `rejected` | The user rejected the call. It did not run. |
+| `rejected` | The user rejected the call, or stopped the answer while the call waited. It did not run. |
 | `expired` | No decision arrived before `expires_at`. The call did not run. |
 | `disabled` | The user approved the call, but the tool became disabled while the call waited. The call did not run. |
-| `cancelled` | The call stopped waiting, for example because the answer stopped. |
+| `cancelled` | The call stopped waiting without a decision, for example because its program ended or the API server restarted. |
 
-When you stop the answer, the stream can end with its `stop` packet before the `tool_approval_resolved` packet.
+When you stop the answer, Onyx rejects each call that waits.
+The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
+If you close the stream after you send the stop, record the requests that wait as rejected.
 Treat a request with no resolution as ended when its response stops. Ignore an `outcome` that you do not recognize.
+
+### Approvals in saved answers
+
+`GET /chat/get-chat-session/{chat_session_id}` returns the approval packets of each answer that has ended,
+so a client shows the same records after a reload. Each request has its `tool_approval_request` packet,
+then its `tool_approval_resolved` packet, at the placement of the call's card. In a saved answer:
+
+- `tool_call_id` is the ID of the call whose card shows the request. For a call that a code mode program made,
+  it is the ID of the program's call.
+- `arguments` is empty for a call that a code mode program made.
+
+An answer that still runs has no approval packets in the chat session.
+Read its requests from `GET /chat/chat-session/{chat_session_id}/resume-stream`.
 
 ### Send a decision
 
@@ -223,15 +238,14 @@ The answer continues on the server. Send the decision, then read the answer:
 - Read the live stream with `GET /chat/chat-session/{chat_session_id}/resume-stream`.
 
 More calls can need approval after the response returns, for example after your decision.
-Only the resume stream shows their `tool_approval_request` packets. The chat session does not show approval requests,
-so polling cannot find a later request. That call waits until its deadline.
-If the agent can ask for more than one approval in an answer, read the resume stream.
-A new message to the session gets a `409` with `APPROVAL_PENDING` while a call waits.
+Only the resume stream shows their `tool_approval_request` packets.
+The chat session does not show the requests of an answer that still runs, so polling cannot find a later request.
+That call waits until its deadline. If the agent can ask for more than one approval in an answer,
+read the resume stream. A new message to the session gets a `409` with `APPROVAL_PENDING` while a call waits.
 
 <Note>
-  The Slack and Discord bots cannot show approval requests yet.
-  Their answers run tools with the **Ask** policy without asking.
-  Tools with the **Disabled** policy are not available to them.
+  The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
+  They cannot use tools with the **Disabled** policy.
 </Note>
 
 ## Sample Request
