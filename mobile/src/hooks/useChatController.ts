@@ -41,7 +41,7 @@ import {
 } from "@/chat/streamingModels";
 import {
   APPROVAL_PENDING_ERROR_CODE,
-  findPendingToolApprovalId,
+  findPendingToolApprovalIds,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -95,6 +95,11 @@ async function stopAcknowledgedStream(
   streamId: number,
   controller: AbortController,
 ): Promise<void> {
+  // The server's Stop rejects the requests that wait. The cut stream does not
+  // deliver their resolutions, so this device records them.
+  const waiting = findPendingToolApprovalIds(
+    useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
+  );
   try {
     await stopChatSession(sessionId, streamId);
   } catch (error) {
@@ -103,7 +108,10 @@ async function stopAcknowledgedStream(
     if (store.sessions.get(sessionId)?.abortController === controller) {
       store.setStopRequested(sessionId, false);
     }
+    return;
   }
+  const { recordStatus } = useToolApprovalUi.getState();
+  for (const approvalId of waiting) recordStatus(approvalId, "rejected");
 }
 
 async function runChatStream(
@@ -385,9 +393,9 @@ export function useChatController(
       if (submittingRef.current) return;
       if (
         sessionId != null &&
-        findPendingToolApprovalId(
+        findPendingToolApprovalIds(
           useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
-        ) !== null
+        ).length > 0
       ) {
         showPendingApproval();
         return;
