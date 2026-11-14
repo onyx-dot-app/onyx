@@ -633,7 +633,9 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
 **Cluster autoscaler.** VMs are not pods, so the cluster autoscaler (GKE, AKS, the EKS
 cluster-autoscaler) sees a KVM node with VMs as empty and can remove it. With `--scale-down-guard`,
 the agent sets the Node annotation `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` while
-the node runs VMs (starting, running, template builds and processes in doubt). It checks when a Create
+the node runs VMs (starting, running, template builds and processes in doubt) and while no process
+scan has worked since the agent started; with processes in doubt, each check scans the processes
+again, so a doubt whose process exited stops holding the node. It checks when a Create
 or a template build takes a slot, and every 10 s from the first check after recovery; while VMs run,
 each check reads the Node and sets the annotation again if someone removed it. It removes the
 annotation when the node has had no VMs for `--scale-down-guard-grace` (default 10 m; after an agent

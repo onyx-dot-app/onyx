@@ -45,7 +45,7 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	}
 	_, _, err = f.m.BuildSlot("tpl-def", 1024)
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
-	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.VMSlotsUsed() != 2 {
+	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.ScaleDownHolds() != 2 {
 		t.Fatalf("NodeInfo with a build %+v %v", info, err)
 	}
 	if n := admits.Load(); n != 2 {
@@ -117,6 +117,33 @@ func TestMaxVMsRescansDoubtsAtTheCap(t *testing.T) {
 	table.set(nil, nil)
 	if _, _, err := f.m.Create(ctx, req(sb1, 1)); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// Processes in doubt and a scan that never worked hold scale-down until a
+// scan shows them gone.
+func TestScaleDownHoldsRescansDoubts(t *testing.T) {
+	f := newFixture(t, 10)
+	if n := f.m.ScaleDownHolds(); n != 0 {
+		t.Fatalf("idle node holds %d", n)
+	}
+	table := &fakeTable{cands: []Candidate{{ID: "kept", PID: 700, UID: 1000005}}}
+	f.m.mu.Lock()
+	f.m.adopter = table
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.needScan = true
+	f.m.mu.Unlock()
+	table.set(nil, errors.New("read /proc: permission denied"))
+	if n := f.m.ScaleDownHolds(); n != 2 {
+		t.Fatalf("failed scan: %d holds, want the doubt and the unknown processes", n)
+	}
+	table.set([]Candidate{{ID: "kept", PID: 700, UID: 1000005}}, nil)
+	if n := f.m.ScaleDownHolds(); n != 1 {
+		t.Fatalf("live doubt: %d holds", n)
+	}
+	table.set(nil, nil)
+	if n := f.m.ScaleDownHolds(); n != 0 {
+		t.Fatalf("process gone: %d holds", n)
 	}
 }
 

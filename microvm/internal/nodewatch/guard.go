@@ -2,6 +2,7 @@ package nodewatch
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync"
 	"time"
@@ -15,6 +16,9 @@ const (
 	ScaleDownDisabledKey = "cluster-autoscaler.kubernetes.io/scale-down-disabled"
 	GuardOwnerKey        = "onyx.app/craft-fc-scale-down-guard"
 )
+
+// errVMStarted stops a removal when a VM started during the check.
+var errVMStarted = errors.New("a VM started")
 
 // NodeAnnotator reads and annotates the agent's own Node.
 type NodeAnnotator interface {
@@ -78,6 +82,9 @@ func (g *ScaleDownGuard) Once(ctx context.Context) {
 	rctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if err := g.apply(rctx, block); err != nil {
+		if errors.Is(err, errVMStarted) {
+			return
+		}
 		if !g.failing {
 			if block {
 				g.Log.Error("scale-down guard: node annotation failed; the cluster autoscaler can remove this node while VMs run", "err", err)
@@ -131,6 +138,12 @@ func (g *ScaleDownGuard) apply(ctx context.Context, block bool) error {
 		g.foreign = false
 		g.Log.Info("scale-down guard: VMs run; the cluster autoscaler may not remove this node", "annotation", ScaleDownDisabledKey)
 	case ours:
+		// A VM can start during the Node read; Run checks again at once
+		// (Kick) if one starts during the patch.
+		if g.VMs() > 0 {
+			g.idleSince = time.Time{}
+			return errVMStarted
+		}
 		if err := g.Node.SetAnnotations(ctx, map[string]*string{ScaleDownDisabledKey: nil, GuardOwnerKey: nil}); err != nil {
 			return err
 		}
