@@ -159,7 +159,7 @@ def test_rate_limit_retry_waits_for_the_retry_after_header(
     ).encode()
     attempts = {"count": 0}
 
-    def execute() -> dict:
+    def execute() -> dict[str, list[dict[str, str]]]:
         attempts["count"] += 1
         if attempts["count"] == 1:
             raise HttpError(response, content)
