@@ -8,6 +8,7 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
+from onyx.agents.compaction import is_input_context
 from onyx.agents.models import CompactionCheckpoint
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.incognito_context import (
@@ -36,7 +37,8 @@ from onyx.llm.models import (
 def _selected_history(
     state: IncognitoState, canonical: Sequence[Message]
 ) -> tuple[list[Message], IncognitoAgentResponse | None]:
-    """Select saved content by the database branch, including a chosen model response."""
+    """Select saved content by the database branch, including a chosen model
+    response. A selected message keeps the input context after it."""
     if not state.messages:
         return [], None
     selected_ids = {
@@ -58,9 +60,14 @@ def _selected_history(
             continue
         selected_ids.update(response.message_ids)
         selected_response = response
-    return [
-        message for message in state.messages if message.id in selected_ids
-    ], selected_response
+    selected: list[Message] = []
+    owner_selected = False
+    for message in state.messages:
+        if not is_input_context(message):
+            owner_selected = message.id in selected_ids
+        if owner_selected:
+            selected.append(message)
+    return selected, selected_response
 
 
 class ChatHistoryStore(Protocol):
@@ -137,13 +144,26 @@ class RedisChatHistoryStore(ChatHistoryStore):
             }
         )
         if accepted_text is not None:
-            if not current_input or not isinstance(current_input[-1], UserMessage):
+            question_index = next(
+                (
+                    index
+                    for index in range(len(current_input) - 1, -1, -1)
+                    if not is_input_context(current_input[index])
+                ),
+                None,
+            )
+            if question_index is None or not isinstance(
+                current_input[question_index], UserMessage
+            ):
                 raise ValueError(
                     "Temporary history requires a question after its attachments"
                 )
             current_input = [
-                *current_input[:-1],
-                current_input[-1].model_copy(update={"content": accepted_text}),
+                *current_input[:question_index],
+                current_input[question_index].model_copy(
+                    update={"content": accepted_text}
+                ),
+                *current_input[question_index + 1 :],
             ]
             return (
                 history.model_copy(
@@ -158,15 +178,20 @@ class RedisChatHistoryStore(ChatHistoryStore):
         selected_id = f"chat:{self.message_id}"
         for index, message in enumerate(stored.messages):
             if isinstance(message, UserMessage) and message.id == selected_id:
-                # Regeneration reuses the exact saved question and attachment content.
+                # Regeneration reuses the exact saved question, attachment and
+                # skill content.
+                end = index + 1
+                while end < len(stored.messages) and is_input_context(
+                    stored.messages[end]
+                ):
+                    end += 1
                 return (
                     history.model_copy(
                         update={
                             "messages": [
                                 *selected_history,
                                 *stored.messages[
-                                    input_group_start(stored.messages, index) : index
-                                    + 1
+                                    input_group_start(stored.messages, index) : end
                                 ],
                             ],
                             "input_start": len(selected_history),

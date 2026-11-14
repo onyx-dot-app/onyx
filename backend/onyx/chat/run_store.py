@@ -38,18 +38,17 @@ from onyx.agents.runtime import Agent, AgentBusy, Run, RunNotTransferable
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
-from onyx.chat.mention_models import PickedMentions, resolve_mentions
+from onyx.chat.mention_models import PickedMentions
 from onyx.chat.models import (
-    AcceptedSkillInstructions,
     ChatBranch,
     ChatInbox,
-    ChatInputMetadata,
     CheckpointBinding,
     ResponseOwner,
     ResponseRecord,
     ResponseStatus,
     SavedAgentContext,
     SavedResponse,
+    accepted_input_messages,
 )
 from onyx.chat.presentation import project_response
 from onyx.chat.response import response_record, response_snapshot
@@ -93,13 +92,12 @@ from onyx.db.chat_subagents import (
     read_agent_completions,
 )
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import User
+from onyx.db.models import AcceptedChatInput, User
 from onyx.db.skill import list_chat_skills
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, UserMessage
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
-from onyx.skills.content import read_versions_instructions
-from onyx.skills.models import ChatSkill
+from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -486,12 +484,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
     def receive_inputs(self, run: Run) -> list[UserMessage]:
         """Read sent messages, then finished results of children this run's agent started.
 
-        A message's picked skills resolve here, as a question's do when its
-        turn starts: each is recorded at the version the user runs, and its
-        SKILL.md is read with the user's access.
+        A sent message's picks are accepted here, as a question's are when its
+        turn starts: each skill is recorded at the version the user runs, with
+        its SKILL.md text, and its `<skill>` message follows the message.
         """
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-            messages, results = read_run_inputs(
+            received, results = read_run_inputs(
                 session,
                 run.agent_id,
                 run.id,
@@ -499,40 +497,38 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
                 self._input_branch.message_ids,
                 follow_up=self._is_follow_up(run),
             )
-            chat_skills: list[ChatSkill] | None = None
-            for index, message in enumerate(messages):
-                origin = message.metadata
-                if not isinstance(origin, InputMessageMetadata) or not isinstance(
-                    origin.content_metadata, PickedMentions
-                ):
-                    continue
-                if chat_skills is None:
-                    chat_skills = list_chat_skills(session, self._user)
-                mentions = resolve_mentions(
-                    origin.content_metadata.mentions, chat_skills
+            picks = [
+                message.metadata.content_metadata.mentions
+                if isinstance(message.metadata, InputMessageMetadata)
+                and isinstance(message.metadata.content_metadata, PickedMentions)
+                else []
+                for message in received
+            ]
+            accepted = (
+                accept_picked_skills(
+                    picks, list_chat_skills(session, self._user), self._user.id, session
                 )
-                # A message without a skill the user can use keeps the plain
-                # metadata, as its saved record restores it.
-                messages[index] = message.model_copy(
-                    update={
-                        "metadata": InputMessageMetadata(
-                            source=origin.source, source_run_id=origin.source_run_id
-                        )
-                        if not mentions
-                        else ChatInputMetadata(
-                            source=origin.source,
-                            source_run_id=origin.source_run_id,
-                            mentions=mentions,
-                            content_metadata=AcceptedSkillInstructions(
-                                instructions=read_versions_instructions(
-                                    {mention.version_id for mention in mentions},
-                                    self._user.id,
-                                    session,
-                                )
-                            ),
-                        )
-                    }
+                if any(picks)
+                else [[] for _ in received]
+            )
+        messages: list[UserMessage] = []
+        for message, mentions in zip(received, accepted, strict=True):
+            if (
+                not mentions
+                or message.id is None
+                or not isinstance(message.metadata, InputMessageMetadata)
+            ):
+                messages.append(message)
+                continue
+            messages += accepted_input_messages(
+                AcceptedChatInput(
+                    id=message.id,
+                    source=message.metadata.source,
+                    source_run_id=message.metadata.source_run_id,
+                    content=message.text,
+                    mentions=mentions,
                 )
+            )
         finished = [
             result.response_id for result in results if result.status.is_terminal
         ]

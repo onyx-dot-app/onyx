@@ -52,7 +52,7 @@ from onyx.agents.tools import (
 )
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.files import build_file_context
-from onyx.chat.mention_models import RecordedSkillMention
+from onyx.chat.mention_models import AcceptedSkillMention
 from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
@@ -1008,8 +1008,8 @@ def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
     assert size == input_limit
 
 
-def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
-    version_id = uuid4()
+def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() -> None:
+    model = ContextModel()
     question = ChatHistoryMessage(
         id=1,
         message_type=MessageType.USER,
@@ -1017,13 +1017,17 @@ def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
         token_count=0,
         files=[],
         is_clarification=False,
-        mentions=[RecordedSkillMention(name="triage", version_id=version_id)],
+        mentions=[
+            AcceptedSkillMention(
+                name="triage", version_id=uuid4(), instructions="Sort by area."
+            )
+        ],
         response_messages=[],
     )
-    source: list[Message] = [
+    history: list[Message] = [
         *convert_chat_history([question], files=[]).messages,
         AssistantMessage(
-            id="work", content=[TextContent(text="Earlier research context. " * 1000)]
+            id="work", content=[TextContent(text="Earlier research context. " * 300)]
         ),
         UserMessage(
             id="child-delivery",
@@ -1033,27 +1037,28 @@ def test_compaction_keeps_the_question_that_mentioned_a_skill() -> None:
             ),
         ),
     ]
+    skill_text = "<skill>\n<name>triage</name>\nSort by area.\n</skill>"
+    assert [message.text for message in history[:2]] == [TASK, skill_text]
 
-    remaining = working_messages(
-        source,
-        CompactionCheckpoint(summary="Summary", covered_through_message_id="work"),
+    # A cut never falls between the question and its skill.
+    assert 1 not in history_boundaries(history, input_start=0)
+    checkpoint = compact_history(
+        model,
+        history,
+        None,
+        GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         input_start=0,
     )
-    prompt = prepare_prompt(
-        remaining,
-        system_prompt=None,
-        custom_agent_prompt=None,
-        reminder_message=None,
-        context_files=None,
-        token_counter=len,
-        skill_instructions={version_id: "Sort by area."},
-    )
 
-    # The question stays the user's task, and its skill follows it.
-    assert [message.text for message in prompt] == [
-        "Conversation summary:\nSummary",
+    # The summary reads the skill; compacted history keeps the question as the
+    # task and drops its skill.
+    assert checkpoint.covered_through_message_id == "work"
+    assert any(skill_text in summary.messages[0].text for summary in model.summaries)
+    assert [
+        message.text for message in working_messages(history, checkpoint, input_start=0)
+    ] == [
+        f"Conversation summary:\n{checkpoint.summary}",
         TASK,
-        "<skill>\n<name>triage</name>\nSort by area.\n</skill>",
         "Child research findings",
     ]
 

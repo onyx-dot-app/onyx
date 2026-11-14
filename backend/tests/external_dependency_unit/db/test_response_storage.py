@@ -16,7 +16,7 @@ from sqlalchemy.orm.unitofwork import UOWTransaction
 from ee.onyx.db.usage_export import get_empty_chat_messages_entries__paginated
 from ee.onyx.server.reporting.usage_export_models import FlowType
 from onyx.agents.agent_coordination import AgentCoordinator
-from onyx.agents.compaction import working_messages
+from onyx.agents.compaction import is_input_context, working_messages
 from onyx.agents.events import (
     MessageEndEvent,
     MessageStartEvent,
@@ -53,6 +53,7 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
+from onyx.chat.mention_models import AcceptedSkillMention
 from onyx.chat.models import (
     ChatBranch,
     ChatMessageMetadata,
@@ -61,6 +62,8 @@ from onyx.chat.models import (
     MessageRendering,
     ResponseCheckpoint,
     ResponseRecord,
+    accepted_input_messages,
+    picked_skill_messages,
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.process_message import read_repaired_chat_inbox
@@ -126,6 +129,7 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
+    AcceptedChatInput,
     ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -1226,6 +1230,84 @@ def test_suspended_search_result_restores_after_database_round_trip(
     assert saved is not None
     restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
     assert restored.run_state.model_dump() == snapshot.model_dump()
+
+
+def test_suspended_run_with_picked_skills_restores_after_database_round_trip(
+    db_session: Session, conversation: ChatSession
+) -> None:
+    response = _response(db_session, conversation, text="Write the notes")
+    assert response.parent_message is not None
+    question_id = f"chat:{response.parent_message.id}"
+    instruction = UserMessage(id=question_id, content=response.parent_message.message)
+    question_skill = AcceptedSkillMention(
+        name="notes", version_id=uuid4(), instructions="Group by area."
+    )
+    sent_skill = AcceptedSkillMention(
+        name="summary", version_id=uuid4(), instructions="Keep it short."
+    )
+    # The question and a send accepted during the run each picked a skill.
+    run_input = [instruction, *picked_skill_messages(question_id, [question_skill])]
+    sent = accepted_input_messages(
+        AcceptedChatInput(
+            id="sent",
+            source=InputSource.HUMAN,
+            content="Also summarize.",
+            mentions=[sent_skill],
+        )
+    )
+    snapshot = RunState(
+        run_id=str(response.id),
+        agent_id=str(conversation.id),
+        status=RunStatus.SUSPENDED,
+        input_messages=run_input,
+        steps=[
+            StepRecord(
+                input_messages=sent,
+                message=AssistantMessage(
+                    id="generation",
+                    content=[ToolCall(id="ask", name="ask", arguments={})],
+                ),
+                generation_status=ExecutionStatus.COMPLETE,
+            )
+        ],
+        progress=RunProgress(
+            tool_configuration_digest="test-tool-configuration",
+            step_limit=3,
+            action=RunAction.TOOLS,
+            options=GenerationOptions(),
+            previous_options=GenerationOptions(),
+            pending_tool_calls={
+                "ask": PendingToolInput(
+                    request_id="ask-user", prompt="Continue?", mode=InputMode.EXECUTE
+                )
+            },
+        ),
+    )
+    context = AgentState(messages=[])
+    record = response_record(snapshot)
+    binding = CheckpointBinding(tenant_id="public", response_id=str(response.id))
+    checkpoint = serialize_checkpoint(
+        ExecutionCheckpoint(agent_state=context, run_state=snapshot), record, binding
+    )
+    save_response_record__no_commit(db_session, response.id, record)
+    db_session.flush()
+    db_session.expire_all()
+    saved = read_response__no_commit(db_session, int(snapshot.run_id))
+    assert saved is not None
+
+    restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
+
+    assert restored.run_state.model_dump() == snapshot.model_dump()
+    # The send is saved once, with its skill text; its skill message is rebuilt
+    # from that text.
+    (row,) = response.response_items
+    assert [item.id for item in row.inputs] == ["sent"]
+    assert row.inputs[0].mentions == [sent_skill]
+    restored_inputs = restored.run_state.steps[0].input_messages
+    assert [message.text for message in restored_inputs] == [
+        message.text for message in sent
+    ]
+    assert is_input_context(restored_inputs[1])
 
 
 def test_response_tools_flush_together_and_keep_result_identity(

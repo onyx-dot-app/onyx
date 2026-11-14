@@ -133,9 +133,15 @@ def test_chat_skills_use_the_version_each_user_runs(
     }
     org_skills = {skill.name: skill for skill in list_chat_skills(db_session, org_only)}
 
-    # A version's short description replaces its description.
-    assert author_skills[name].description == "Short two"
-    assert org_skills[name].description == "Skill one"
+    # Each skill has its version's description and short description.
+    assert (
+        author_skills[name].description,
+        author_skills[name].short_description,
+    ) == ("Skill two", "Short two")
+    assert (
+        org_skills[name].description,
+        org_skills[name].short_description,
+    ) == ("Skill one", None)
     assert read_versions_instructions(
         [author_skills[name].version_id, org_skills[name].version_id],
         author.id,

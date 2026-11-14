@@ -32,7 +32,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.chat.errors import chat_error
-from onyx.chat.mention_models import RecordedMention
+from onyx.chat.mention_models import AcceptedMention
 from onyx.chat.models import (
     ChatBranch,
     HistoryLink,
@@ -1130,7 +1130,7 @@ def create_new_chat_message(
     message_type: MessageType,
     db_session: Session,
     files: list[FileDescriptor] | None = None,
-    mentions: Sequence[RecordedMention] = (),
+    mentions: Sequence[AcceptedMention] = (),
     error: str | None = None,
     commit: bool = True,
     reserved_message_id: int | None = None,
@@ -1399,7 +1399,7 @@ def translate_db_message_to_chat_message_detail(
         citations=converted_citations,
         time_sent=chat_message.time_sent,
         files=chat_message.files or [],
-        mentions=chat_message.mentions or [],
+        mentions=list(chat_message.mentions or []),
         error=error_info.error if error_info is not None else None,
         error_info=error_info,
         response_status=chat_message.response_status,

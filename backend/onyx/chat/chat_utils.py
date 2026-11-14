@@ -20,6 +20,7 @@ from onyx.chat.models import (
     ChatHistoryResult,
     MessageRendering,
     PromptMetadata,
+    picked_skill_messages,
 )
 from onyx.chat.prompt_formatting import count_message_tokens
 from onyx.chat.response import restore_response_sources
@@ -409,9 +410,12 @@ def convert_chat_history(
                         token_count=chat_message.token_count + image_token_count,
                         image_files=image_files or None,
                         image_token_count=image_token_count,
-                        mentions=chat_message.mentions,
                     ),
                 )
+            )
+            # The SKILL.md of each picked skill follows its question.
+            messages.extend(
+                picked_skill_messages(f"chat:{chat_message.id}", chat_message.mentions)
             )
 
         elif chat_message.message_type == MessageType.ASSISTANT:

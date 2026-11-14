@@ -42,7 +42,6 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import incognito_session_ended
-from onyx.chat.mention_models import RecordedSkillMention, resolve_mentions
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
@@ -54,7 +53,6 @@ from onyx.chat.models import (
     QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
-    recorded_mentions,
 )
 from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
@@ -129,8 +127,7 @@ from onyx.server.query_and_chat.token_limit import (
     check_token_rate_limits,
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
-from onyx.skills.chat import render_skills_catalog
-from onyx.skills.content import read_versions_instructions
+from onyx.skills.chat import accept_picked_skills, render_skills_catalog
 from onyx.tools.constants import (
     CODING_AGENT_TOOL_ID,
     FILE_READER_TOOL_ID,
@@ -332,10 +329,19 @@ def prepare_chat_turn(
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
             )
-            # One read serves the catalog, the skill tools and the skills the
-            # user tagged in an accepted question.
+            # One read serves the skill tools, their catalog and the skills
+            # that an accepted question picked.
             chat_skills = list_chat_skills(db_session, user)
-            mentions = resolve_mentions(new_msg_req.mentions, chat_skills)
+            # A question records its picks, with the SKILL.md text it gives
+            # the model, when it is accepted; regeneration reuses the record.
+            mentions = (
+                accept_picked_skills(
+                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                )[0]
+                if queued_turn is not None
+                or (not agent_host and parent_message.message_type != MessageType.USER)
+                else []
+            )
             accepted_text = None
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
@@ -481,11 +487,14 @@ def prepare_chat_turn(
                         if keeps_content
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
-                    # A mention identifies a record, such as a skill's name and
-                    # version, not conversation content, so a content-free
-                    # question keeps its mentions and later turns still get its
-                    # skills.
-                    mentions=mentions,
+                    # A content-free question keeps its picks for display, but
+                    # not their skill text, which is conversation content.
+                    mentions=mentions
+                    if keeps_content
+                    else [
+                        mention.model_copy(update={"instructions": None})
+                        for mention in mentions
+                    ],
                     db_session=db_session,
                     commit=False,
                 )
@@ -587,6 +596,14 @@ def prepare_chat_turn(
                 if user.use_memories
                 else memory.without_memories(),
                 base_system_prompt=base_system_prompt,
+            ) + sum(
+                # The SKILL.md text that the question's picks give the model.
+                token_counter(mention.instructions or "")
+                for mention in (
+                    mentions
+                    if accepted_text is not None
+                    else chat_history[-1].mentions or []
+                )
             )
             tools = get_tools(db_session)
             research_tool_id = next(
@@ -641,7 +658,9 @@ def prepare_chat_turn(
             if accepted_text is not None and not record_mode_persists_content(
                 incognito_record_mode
             ):
-                # Filenames belong to the live input, not the content-free database row.
+                # Filenames and skill text belong to the live input, not the
+                # content-free database row.
+                captured_history[-1].mentions = mentions
                 descriptors.update(
                     {
                         descriptor["id"]: descriptor
@@ -650,22 +669,6 @@ def prepare_chat_turn(
                 )
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
-            )
-            # The skills picked by questions and by messages accepted
-            # between steps, read with the user's current access.
-            skill_instructions = read_versions_instructions(
-                {
-                    mention.version_id
-                    for message in captured_history
-                    for picked in (
-                        message.mentions,
-                        *map(recorded_mentions, message.response_messages),
-                    )
-                    for mention in picked
-                    if isinstance(mention, RecordedSkillMention)
-                },
-                user.id,
-                db_session,
             )
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
@@ -765,7 +768,7 @@ def prepare_chat_turn(
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
-            mentions=captured_history[-1].mentions,
+            mentions=list(captured_history[-1].mentions),
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
                 if user.is_anonymous
@@ -789,7 +792,6 @@ def prepare_chat_turn(
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
             chat_skills=chat_skills,
-            skill_instructions=skill_instructions,
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,

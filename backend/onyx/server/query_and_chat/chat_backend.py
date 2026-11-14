@@ -191,6 +191,7 @@ from onyx.server.query_and_chat.session_loading import (
 from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamCursor,
+    UserMessagePacket,
     heartbeat_packet,
 )
 from onyx.server.query_and_chat.token_limit import (
@@ -516,9 +517,7 @@ def get_chat_session(
 
     # Convert messages to ChatMessageDetail format
     chat_message_details = [
-        # A shared view does not show what the owner tagged in a question.
-        detail.model_copy(update={"mentions": []}) if is_shared else detail
-        for detail in map(translate_db_message_to_chat_message_detail, session_messages)
+        translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
     current_stream: CurrentStreamInfo | None = None
@@ -545,6 +544,24 @@ def get_chat_session(
         for msg in session_messages
         if msg.message_type == MessageType.ASSISTANT
     ]
+    if is_shared:
+        # A shared view shows no skills the owner picked: not on questions and
+        # not on messages accepted during a response.
+        chat_message_details = [
+            detail.model_copy(update={"mentions": []})
+            for detail in chat_message_details
+        ]
+        replay_packet_lists = [
+            [
+                packet.model_copy(
+                    update={"obj": packet.obj.model_copy(update={"mentions": []})}
+                )
+                if isinstance(packet.obj, UserMessagePacket)
+                else packet
+                for packet in packets
+            ]
+            for packets in replay_packet_lists
+        ]
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,

@@ -27,6 +27,7 @@ SEND_MESSAGE_TOOL_NAME = "send_message"
 WAIT_AGENTS_TOOL_NAME = "wait_agents"
 SKILLS_LIST_TOOL_NAME = "skills_list"
 SKILLS_READ_TOOL_NAME = "skills_read"
+SKILL_TOOL_NAMES = frozenset({SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME})
 
 INTERNAL_SEARCH_TOOL_NAME = "internal_search"
 WEB_SEARCH_TOOL_NAME = "web_search"

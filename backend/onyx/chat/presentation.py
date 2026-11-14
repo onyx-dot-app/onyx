@@ -394,7 +394,7 @@ def user_message_packets(
                 obj=UserMessagePacket(
                     id=message.id,
                     message=message.text,
-                    mentions=recorded_mentions(message),
+                    mentions=list(recorded_mentions(message)),
                 ),
             )
         )

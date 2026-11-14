@@ -8,7 +8,12 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.agents.tools import ToolInvocation
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.llm.models import ToolDefinition, ToolResult
+from onyx.llm.models import SystemMessage, ToolDefinition, ToolResult
+from onyx.skills.chat import (
+    MAX_CATALOG_DESCRIPTION_CHARS,
+    render_skills_catalog,
+    truncate_skill_description,
+)
 from onyx.skills.content import read_versions_instructions
 from onyx.skills.models import ChatSkill
 from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
@@ -74,7 +79,13 @@ class SkillsListTool(_SkillTool):
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
         page = self.skills[request.offset : request.offset + SKILLS_PER_PAGE]
-        lines = [f"- {skill.name}: {skill.description}" for skill in page]
+        lines = [
+            f"- {skill.name}: "
+            + truncate_skill_description(
+                skill.description, MAX_CATALOG_DESCRIPTION_CHARS
+            )
+            for skill in page
+        ]
         end = request.offset + len(page)
         if end < len(self.skills):
             lines.append(f"{len(self.skills) - end} more skills: use offset={end}.")
@@ -129,3 +140,19 @@ class SkillsReadTool(_SkillTool):
                 f"Use start_char={end} to continue reading.]"
             )
         return ToolResult(content=content, details=self._summary({"skill": skill.name}))
+
+
+def skills_catalog_message(
+    tools: Sequence[Tool], context_window_tokens: int
+) -> SystemMessage | None:
+    """The catalog of the skills that an agent's `skills_list` lists, for its
+    prompt. Chat, Deep Research and research agents all build it here."""
+    catalog = next(
+        (
+            render_skills_catalog(tool.skills, context_window_tokens)
+            for tool in tools
+            if isinstance(tool, SkillsListTool)
+        ),
+        None,
+    )
+    return SystemMessage(content=catalog) if catalog is not None else None

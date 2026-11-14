@@ -1,7 +1,6 @@
 import time
 from collections.abc import Callable, Mapping
 from functools import partial
-from uuid import UUID
 
 from pydantic import JsonValue
 
@@ -33,7 +32,6 @@ from onyx.chat.models import (
     PersonaPromptConfig,
     PromptMetadata,
     StagedChatFiles,
-    accepted_skill_instructions,
 )
 from onyx.chat.prompt_utils import (
     build_chat_prompt,
@@ -61,7 +59,6 @@ from onyx.llm.models import (
     Message,
     NamedToolChoice,
     ReasoningEffort,
-    SystemMessage,
     ToolChoiceOptions,
     ToolResult,
     ToolResultMessage,
@@ -72,8 +69,6 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
-from onyx.skills.chat import render_skills_catalog
-from onyx.skills.models import ChatSkill
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -84,6 +79,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
 from onyx.tools.tool_implementations.subagents.subagent_tools import (
     InterruptAgentTool,
     ListAgentsTool,
@@ -125,8 +121,6 @@ class ChatAgent(Agent, RestorableFeature):
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
-        skills: list[ChatSkill] | None = None,
-        skill_instructions: Mapping[UUID, str] | None = None,
     ) -> None:
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
@@ -142,23 +136,12 @@ class ChatAgent(Agent, RestorableFeature):
         self.context_files = context_files.model_copy(deep=True)
         self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
-        self.skills = list(skills or [])
-        # The SKILL.md text of the skills that messages picked, read with the
-        # user's access when the turn started or a message was accepted.
-        self.skill_instructions = dict(skill_instructions or {})
-        self.skills_catalog_message = (
-            SystemMessage(content=catalog)
-            if (
-                catalog := render_skills_catalog(
-                    self.skills, llm.config.max_input_tokens
-                )
-            )
-            is not None
-            else None
-        )
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
         self.configured_tools = list(tools)
+        self.skills_catalog_message = skills_catalog_message(
+            self.configured_tools, llm.config.max_input_tokens
+        )
         self.code_mode = code_mode
         # Each agent instance has its own cells, so a restored run has none open.
         self.application_tools, self.code_cells = (
@@ -270,7 +253,6 @@ class ChatAgent(Agent, RestorableFeature):
             custom_prompt=self.custom_agent_prompt,
             request_context=self.additional_context,
             reminders_enabled=self.reminders_enabled,
-            skills=self.skills,
             elapsed_seconds=max(0.0, time.monotonic() - self.started),
             citation_sources=self.citation_processor.citation_to_doc,
             citation_mapping=self.citation_mapping,
@@ -296,7 +278,6 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.custom_prompt != self.custom_agent_prompt
             or saved.request_context != self.additional_context
             or saved.reminders_enabled != self.reminders_enabled
-            or saved.skills != self.skills
         ):
             raise ValueError("Chat restoration configuration does not match")
         self.search_context = saved.search_context
@@ -355,9 +336,6 @@ class ChatAgent(Agent, RestorableFeature):
                     self._update_tool_context([message])
             # Query expansion applies to the current turn only.
             self.has_called_search_tool = False
-        self.skill_instructions.update(
-            accepted_skill_instructions(state.received_inputs)
-        )
         received = remap_received_citations(
             state.received_inputs, self.citation_processor.citation_to_doc
         )
@@ -439,7 +417,6 @@ class ChatAgent(Agent, RestorableFeature):
                 else None,
                 llm_config=self.llm.config,
                 available_tool_names=available_tool_names,
-                skill_instructions=self.skill_instructions,
             ),
         )
 
@@ -575,8 +552,6 @@ def build_chat_agent(
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
-        skills=setup.chat_skills,
-        skill_instructions=setup.skill_instructions,
     )
 
 

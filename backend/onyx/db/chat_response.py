@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import delete, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
-from onyx.agents.compaction import count_tokens
+from onyx.agents.compaction import count_tokens, is_input_context
 from onyx.agents.execution_records import run_input_message_id
 from onyx.agents.models import (
     AgentInfo,
@@ -18,7 +18,6 @@ from onyx.agents.models import (
 )
 from onyx.chat.models import (
     ChatExecutionRecord,
-    ChatInputMetadata,
     ChatResponseSnapshot,
     MessageRendering,
     ResponseRecord,
@@ -27,6 +26,7 @@ from onyx.chat.models import (
     SavedResponse,
     ToolRecordReference,
     ToolReplayData,
+    accepted_input_messages,
     recorded_mentions,
 )
 from onyx.chat.response import restore_response_sources
@@ -851,22 +851,9 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
             raise ValueError("Response assistant identity or step is invalid")
         step = StepRecord(
             input_messages=[
-                UserMessage(
-                    id=item.id,
-                    content=item.content,
-                    # Only a message that picked skills has the chat metadata,
-                    # as when it was accepted.
-                    metadata=ChatInputMetadata(
-                        source=item.source,
-                        source_run_id=item.source_run_id,
-                        mentions=item.mentions,
-                    )
-                    if item.mentions
-                    else InputMessageMetadata(
-                        source=item.source, source_run_id=item.source_run_id
-                    ),
-                )
+                message
                 for item in row.inputs
+                for message in accepted_input_messages(item)
             ],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
@@ -916,6 +903,9 @@ def _invoking_message_id(invocation: ToolCall) -> str:
 def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
     inputs: list[AcceptedChatInput] = []
     for message in messages:
+        # The text of a picked skill is saved with its pick.
+        if is_input_context(message):
+            continue
         if message.id is None or not isinstance(message.content, str):
             raise ValueError("Saved response inputs require an identity and text")
         origin = message.metadata

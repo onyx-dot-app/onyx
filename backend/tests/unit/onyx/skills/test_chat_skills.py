@@ -1,39 +1,55 @@
-from uuid import UUID, uuid4
+from unittest.mock import Mock, patch
+from uuid import uuid4
 
-from onyx.agents.models import InputSource
-from onyx.chat.chat_utils import convert_chat_history
-from onyx.chat.mention_models import RecordedSkillMention, SkillMention
-from onyx.chat.models import ChatHistoryMessage, ChatInputMetadata
-from onyx.chat.prompt_utils import prepare_prompt
-from onyx.configs.constants import MessageType
-from onyx.llm.models import Message, UserMessage
+from onyx.agents.tools import ToolInvocation
+from onyx.chat.mention_models import SkillMention
+from onyx.llm.cancellation import CancellationSignal
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
     MAX_CATALOG_DESCRIPTION_CHARS,
     MAX_SKILL_PROMPT_BYTES,
+    accept_picked_skills,
     render_skills_catalog,
 )
 from onyx.skills.models import ChatSkill
+from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.skills.skill_tools import SkillsListTool
 
 
-def _skill(name: str, description: str = "Does a task.") -> ChatSkill:
-    return ChatSkill(name=name, description=description, version_id=uuid4())
+def _skill(
+    name: str, description: str = "Does a task.", short_description: str | None = None
+) -> ChatSkill:
+    return ChatSkill(
+        name=name,
+        description=description,
+        short_description=short_description,
+        version_id=uuid4(),
+    )
 
 
 def _catalog_lines(catalog: str) -> list[str]:
-    section = catalog.split("### Available skills\n", 1)[1].split("\n\n", 1)[0]
-    return section.splitlines()
+    section = catalog.split("### Available skills\n", 1)[1]
+    return section.split("\n### How to use skills", 1)[0].splitlines()
 
 
 def test_catalog_lists_every_skill_within_budget() -> None:
     catalog = render_skills_catalog(
-        [_skill("pdf-report", "Build a PDF\nreport."), _skill("triage", "")],
+        [
+            _skill("pdf-report", "Build a PDF\nreport."),
+            _skill("triage", ""),
+            _skill("notes", "Write long release notes.", short_description="Notes."),
+        ],
         200_000,
     )
 
     assert catalog is not None
-    assert _catalog_lines(catalog) == ["- pdf-report: Build a PDF report.", "- triage"]
+    # A short description wins.
+    assert _catalog_lines(catalog) == [
+        "- pdf-report: Build a PDF report.",
+        "- triage",
+        "- notes: Notes.",
+    ]
 
 
 def test_catalog_is_empty_without_skills() -> None:
@@ -52,7 +68,7 @@ def test_catalog_caps_one_description() -> None:
 def test_catalog_shortens_long_descriptions_to_one_limit_over_budget() -> None:
     skills = [_skill(f"skill-{index}", "y" * 400) for index in range(10)]
     skills.append(_skill("short", "Fits."))
-    # 2% of 20,000 tokens at four characters a token is 1,600 characters.
+    # 2% of 20,000 tokens at four bytes a token is 1,600 bytes.
     catalog = render_skills_catalog(skills, 20_000)
 
     assert catalog is not None
@@ -66,6 +82,19 @@ def test_catalog_shortens_long_descriptions_to_one_limit_over_budget() -> None:
     # The largest limit is used: one more character for each cut description
     # would not fit.
     assert total + len(lines) - 1 > 1600
+
+
+def test_catalog_budget_counts_utf8_bytes() -> None:
+    # Two bytes a character: the character count fits the budget, the byte
+    # count does not.
+    skills = [_skill(f"skill-{index}", "é" * 100) for index in range(10)]
+
+    catalog = render_skills_catalog(skills, 20_000)
+
+    assert catalog is not None
+    lines = _catalog_lines(catalog)
+    assert len("\n".join(lines).encode()) <= 1600
+    assert all(line.endswith("...") for line in lines)
 
 
 def test_catalog_omits_skills_when_names_do_not_fit() -> None:
@@ -82,7 +111,7 @@ def test_catalog_omits_skills_when_names_do_not_fit() -> None:
 
 
 def test_catalog_counts_one_omitted_skill_in_the_singular() -> None:
-    # 240 characters: two names and the omitted line fit, three names do not.
+    # 240 bytes: two names and the omitted line fit, three names do not.
     skills = [_skill("a" * 80), _skill("b" * 80), _skill("c" * 80)]
     catalog = render_skills_catalog(skills, 3_000)
 
@@ -92,86 +121,71 @@ def test_catalog_counts_one_omitted_skill_in_the_singular() -> None:
     )
 
 
-def _mentioning_question(
-    message_id: int, *skills: RecordedSkillMention
-) -> ChatHistoryMessage:
-    return ChatHistoryMessage(
-        id=message_id,
-        message_type=MessageType.USER,
-        message="Use the skills.",
-        token_count=3,
-        files=[],
-        is_clarification=False,
-        mentions=list(skills),
-        response_messages=[],
-    )
-
-
-def _assembled(messages: list[Message], instructions: dict[UUID, str]) -> list[Message]:
-    return prepare_prompt(
-        messages,
-        system_prompt=None,
-        custom_agent_prompt=None,
-        reminder_message=None,
-        context_files=None,
-        token_counter=len,
-        skill_instructions=instructions,
-    )
-
-
-def test_picked_skills_follow_their_question_and_accepted_message() -> None:
-    triage = RecordedSkillMention(name="triage", version_id=uuid4())
-    report = RecordedSkillMention(name="report", version_id=uuid4())
-    history = convert_chat_history(
-        [_mentioning_question(7, triage, report)], files=[]
-    ).messages
-    accepted = UserMessage(
-        id="sent",
-        content="Now the report.",
-        metadata=ChatInputMetadata(source=InputSource.HUMAN, mentions=[report]),
-    )
-
-    assembled = _assembled(
-        [*history, accepted],
-        {triage.version_id: "Sort.", report.version_id: "Write."},
-    )
-
-    # History holds the record only; assembly puts each SKILL.md after its
-    # message, in picked order.
-    assert [message.id for message in history] == ["chat:7"]
-    assert [message.id for message in assembled] == [
-        "chat:7",
-        f"chat:7:skill:{triage.version_id}",
-        f"chat:7:skill:{report.version_id}",
-        "sent",
-        f"sent:skill:{report.version_id}",
+def test_skills_list_shows_the_full_description_capped() -> None:
+    skills = [
+        _skill("notes", "Write release notes.", short_description="Notes."),
+        _skill("long", "z" * 2000),
     ]
-    assert assembled[1].text == "<skill>\n<name>triage</name>\nSort.\n</skill>"
+
+    result = SkillsListTool(skills)._run(
+        ToolInvocation(
+            call_id="list",
+            arguments={},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        ToolContext(),
+    )
+
+    notes, long = result.content.splitlines()
+    assert notes == "- notes: Write release notes."
+    assert long == "- long: " + "z" * (MAX_CATALOG_DESCRIPTION_CHARS - 3) + "..."
 
 
-def test_mentioned_skill_is_cut_at_the_byte_limit_with_a_pointer() -> None:
-    skill = RecordedSkillMention(name="triage", version_id=uuid4())
+def test_picked_skills_are_recorded_with_text_from_one_read() -> None:
+    triage = _skill("triage")
+    report = _skill("report")
+    unreadable = _skill("unreadable")
     # The byte limit falls inside a two-byte character, which is left out.
     kept = "a" + "é" * (MAX_SKILL_PROMPT_BYTES // 2 - 1)
+    read = Mock(
+        return_value={triage.version_id: "Sort.", report.version_id: kept + "é" * 10}
+    )
 
-    rendered = _rendered_skill(skill, {skill.version_id: kept + "é" * 10})
+    with patch("onyx.skills.chat.read_versions_instructions", read):
+        accepted = accept_picked_skills(
+            [
+                [
+                    SkillMention(name="report"),
+                    SkillMention(name="triage"),
+                    SkillMention(name="report"),
+                    SkillMention(name="unreadable"),
+                    SkillMention(name="missing"),
+                ],
+                [SkillMention(name="triage")],
+            ],
+            [triage, report, unreadable],
+            uuid4(),
+            Mock(),
+        )
 
-    assert f"<name>triage</name>\n{kept}\n\n[SKILL.md continues" in rendered
-    assert f'name="triage" and start_char={len(kept)}' in rendered
-
-
-def test_unreadable_mentioned_skill_says_it_is_unavailable() -> None:
-    skill = RecordedSkillMention(name="triage", version_id=uuid4())
-
-    rendered = _rendered_skill(skill, {})
-
-    assert rendered.startswith("<skill>\n<name>triage</name>\n")
-    assert "no longer available" in rendered
-
-
-def _rendered_skill(skill: RecordedSkillMention, instructions: dict[UUID, str]) -> str:
-    history = convert_chat_history([_mentioning_question(1, skill)], files=[])
-    return _assembled(history.messages, instructions)[1].text
+    # One read serves every message.
+    read.assert_called_once()
+    assert read.call_args.args[0] == {
+        triage.version_id,
+        report.version_id,
+        unreadable.version_id,
+    }
+    # A repeat counts once; a skill the user cannot use or read is left out.
+    assert [[(m.name, m.version_id) for m in message] for message in accepted] == [
+        [("report", report.version_id), ("triage", triage.version_id)],
+        [("triage", triage.version_id)],
+    ]
+    cut = accepted[0][0].instructions
+    assert cut is not None
+    assert cut.startswith(f"{kept}\n\n[SKILL.md continues")
+    assert f'name="report" and start_char={len(kept)}' in cut
+    assert accepted[0][1].instructions == "Sort."
 
 
 def test_send_request_accepts_a_recorded_mention_on_resend() -> None:

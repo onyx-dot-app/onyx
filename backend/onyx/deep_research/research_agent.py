@@ -59,7 +59,7 @@ from onyx.prompts.deep_research.research_agent import (
 )
 from onyx.prompts.prompt_utils import get_current_llm_day_time
 from onyx.prompts.tool_prompts import INTERNAL_SEARCH_GUIDANCE
-from onyx.tools.constants import SKILLS_READ_TOOL_NAME
+from onyx.tools.constants import SKILL_TOOL_NAMES
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -68,6 +68,7 @@ from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
     update_search_context,
 )
+from onyx.tools.tool_implementations.skills.skill_tools import skills_catalog_message
 from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet_map
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.tools.utils import generate_tools_description
@@ -100,9 +101,12 @@ class ResearchAgent(Agent, RestorableFeature):
             SearchTool.NAME,
             WebSearchTool.NAME,
             OpenURLTool.NAME,
-            SKILLS_READ_TOOL_NAME,
+            *SKILL_TOOL_NAMES,
         }
         self.application_tools = [tool for tool in tools if tool.name in allowed_tools]
+        self.skills_catalog_message = skills_catalog_message(
+            self.application_tools, llm.config.max_input_tokens
+        )
         self.search_context = SearchContext()
         self.started = time.monotonic()
         self.is_reasoning_model = model_is_reasoning_model(
@@ -288,6 +292,7 @@ class ResearchAgent(Agent, RestorableFeature):
             assemble_messages=partial(
                 prepare_prompt,
                 system_prompt=SystemMessage(content=system_prompt),
+                skills_catalog_message=self.skills_catalog_message,
                 custom_agent_prompt=None,
                 reminder_message=UserMessage(
                     content=reminder, metadata=PromptMetadata(is_reminder=True)

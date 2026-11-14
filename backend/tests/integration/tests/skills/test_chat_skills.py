@@ -1,6 +1,6 @@
 """A chat turn gets the user's custom skills: their catalog in the prompt, the
-skills tools, and the SKILL.md of each skill the user mentioned in a question,
-pinned to the version the question recorded."""
+skills tools, and the SKILL.md of each skill that a message picked, stored with
+the message when it is accepted and sent after it on every later turn."""
 
 import json
 import threading
@@ -14,7 +14,9 @@ import pytest
 from onyx.agents.models import MessageDelivery
 from onyx.chat.mention_models import RecordedMention, SkillMention
 from onyx.configs.constants import MessageType
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
+from onyx.db.models import ChatMessage
 from onyx.deep_research.tool_definitions import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
@@ -39,7 +41,11 @@ from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
-from tests.integration.common_utils.test_models import DATestChatSession, DATestUser
+from tests.integration.common_utils.test_models import (
+    DATestChatSession,
+    DATestUser,
+    StreamedResponse,
+)
 from tests.integration.mock_services.mock_llm_server.models import (
     RecordedRequest,
     Reply,
@@ -134,6 +140,7 @@ def test_picked_skill_pins_its_version_to_its_question(
     first_question = f"Use @{skill.name} for this week."
     second_question = f"Thanks. Use @{skill.name} for next week too."
     edited = f"Group the notes by team. Marker {uuid4().hex}."
+    read = ToolCall(id="call_read", name="skills_read", arguments={"name": skill.name})
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
     mock_llm.conversation(
         "chat",
@@ -144,10 +151,14 @@ def test_picked_skill_pins_its_version_to_its_question(
             ),
         ),
         Reply(
-            text="Second answer.",
+            tool_calls=[read],
             conditions=RequestConditions(
                 prompt_contains=[_injected(skill.name, edited)]
             ),
+        ),
+        Reply(
+            text="Second answer.",
+            conditions=RequestConditions(has_results_for=[read.id]),
         ),
     )
 
@@ -168,8 +179,8 @@ def test_picked_skill_pins_its_version_to_its_question(
     )
 
     assert first.error is None and second.error is None
-    first_request, second_request = mock_llm.requests_in("chat")
-    # The earlier question keeps the version it recorded, on every turn.
+    first_request, second_request, read_result = mock_llm.requests_in("chat")
+    # The earlier question keeps the text it stored, on every turn.
     for request in (first_request, second_request):
         assert _texts_after(request, first_question) == [
             _injected(skill.name, instructions)
@@ -177,6 +188,8 @@ def test_picked_skill_pins_its_version_to_its_question(
     assert _texts_after(second_request, second_question) == [
         _injected(skill.name, edited)
     ]
+    # `skills_read` reads the version the user runs now.
+    assert read_result.tool_result(read.id) == edited
     user_messages = [
         message
         for message in ChatSessionManager.get_chat_history(chat_session, admin_user)
@@ -188,7 +201,7 @@ def test_picked_skill_pins_its_version_to_its_question(
     ]
 
 
-def test_two_picked_skills_precede_their_question(
+def test_two_picked_skills_follow_their_question_in_picked_order(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     first_skill, _, first_instructions = _create_skill(admin_user)
@@ -274,7 +287,7 @@ def test_regenerated_answer_uses_the_version_its_question_recorded(
     ]
 
 
-def test_deep_research_reads_the_rest_of_a_long_picked_skill(
+def test_deep_research_has_the_skills_and_reads_the_rest_of_a_long_pick(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     # Longer than the injected part, with a marker past it.
@@ -312,6 +325,7 @@ def test_deep_research_reads_the_rest_of_a_long_picked_skill(
         Reply(text="1. Apply the skill."),
         conditions=RequestConditions(has_tools=False),
     )
+    catalog_entry = f"- {skill.name}: Review a long document."
     mock_llm.conversation(
         "orchestrator",
         Reply(tool_calls=[read_rest, research]),
@@ -320,8 +334,8 @@ def test_deep_research_reads_the_rest_of_a_long_picked_skill(
             conditions=RequestConditions(has_results_for=[read_rest.id, research.id]),
         ),
         conditions=RequestConditions(
-            offers=[RESEARCH_AGENT_TOOL_NAME, "skills_read"],
-            does_not_offer=["skills_list"],
+            offers=[RESEARCH_AGENT_TOOL_NAME, *sorted(_SKILLS_TOOLS)],
+            prompt_contains=[catalog_entry],
         ),
     )
     mock_llm.conversation(
@@ -334,8 +348,9 @@ def test_deep_research_reads_the_rest_of_a_long_picked_skill(
             conditions=RequestConditions(has_results_for=[child_read.id]),
         ),
         conditions=RequestConditions(
-            offers=["skills_read", GENERATE_REPORT_TOOL_NAME],
-            does_not_offer=[RESEARCH_AGENT_TOOL_NAME, "skills_list"],
+            offers=[*sorted(_SKILLS_TOOLS), GENERATE_REPORT_TOOL_NAME],
+            does_not_offer=[RESEARCH_AGENT_TOOL_NAME],
+            prompt_contains=[catalog_entry],
         ),
     )
     mock_llm.conversation(
@@ -522,15 +537,46 @@ def test_queued_message_uses_the_skills_mentioned_in_it(
     ] == [[], [("skill", skill.name)]]
 
 
-def test_message_sent_into_a_running_response_gets_its_picked_skill(
-    admin_user: DATestUser, mock_llm: MockLLMScript
-) -> None:
-    skill, _, instructions = _create_skill(admin_user)
-    sent = f"Also use @{skill.name} for the summary."
-    gate = f"running-{uuid4().hex}"
-    chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    mock_llm.conversation(
-        "chat",
+def _send_during_response(
+    mock_llm: MockLLMScript,
+    chat_session_id: UUID,
+    user: DATestUser,
+    gate: str,
+    sent: str,
+    skill: SkillResponse,
+) -> StreamedResponse:
+    """Start a response that pauses at `gate`, send `sent` with a pick of
+    `skill` into it, and return the response once it finishes."""
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        try:
+            held = executor.submit(
+                ChatSessionManager.send_message,
+                chat_session_id,
+                "Start the report.",
+                user,
+            )
+            deadline = time.monotonic() + 60
+            while not mock_llm.requests_in("chat"):
+                assert time.monotonic() < deadline, "The response did not start"
+                time.sleep(0.2)
+            client.post(
+                f"{API_SERVER_URL}/chat/chat-session/{chat_session_id}/pending-messages",
+                json=PendingChatMessageRequest(
+                    message=sent,
+                    delivery=MessageDelivery.SEND,
+                    mentions=[SkillMention(name=skill.name)],
+                ).model_dump(mode="json"),
+                headers=user.headers,
+            ).raise_for_status()
+        finally:
+            mock_llm.release_gate(gate)
+        return held.result(timeout=120)
+
+
+def _paused_then_answers(gate: str) -> tuple[Reply, Reply]:
+    """A first step that pauses at `gate` until a send arrives, then the
+    answer."""
+    return (
         Reply(
             text="Checking.",
             tool_calls=[ToolCall(id="call_list", name="skills_list")],
@@ -540,33 +586,25 @@ def test_message_sent_into_a_running_response_gets_its_picked_skill(
             text="Answer with the skill.",
             conditions=RequestConditions(has_results_for=["call_list"]),
         ),
-        Reply(text="Later answer."),
     )
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        try:
-            held = executor.submit(
-                ChatSessionManager.send_message,
-                chat_session.id,
-                "Start the report.",
-                admin_user,
-            )
-            deadline = time.monotonic() + 60
-            while not mock_llm.requests_in("chat"):
-                assert time.monotonic() < deadline, "The response did not start"
-                time.sleep(0.2)
-            client.post(
-                f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}/pending-messages",
-                json=PendingChatMessageRequest(
-                    message=sent,
-                    delivery=MessageDelivery.SEND,
-                    mentions=[SkillMention(name=skill.name)],
-                ).model_dump(mode="json"),
-                headers=admin_user.headers,
-            ).raise_for_status()
-        finally:
-            mock_llm.release_gate(gate)
-        first = held.result(timeout=120)
+
+def test_message_sent_into_a_running_response_gets_its_picked_skill(
+    admin_user: DATestUser, mock_llm: MockLLMScript
+) -> None:
+    skill, _, instructions = _create_skill(admin_user)
+    sent = f"Also use @{skill.name} for the summary."
+    gate = f"running-{uuid4().hex}"
+    chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+    mock_llm.conversation(
+        "chat", *_paused_then_answers(gate), Reply(text="Later answer.")
+    )
+
+    first = _send_during_response(
+        mock_llm, chat_session.id, admin_user, gate, sent, skill
+    )
+    # The accepted message stored its skill text, so later turns need no read.
+    SkillManager.delete_custom(skill, admin_user)
     later = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message="Continue.",
@@ -584,13 +622,14 @@ def test_message_sent_into_a_running_response_gets_its_picked_skill(
     assert [(m["type"], m["name"]) for m in accepted["mentions"]] == [
         ("skill", skill.name)
     ]
+    # Clients get the record of the pick, not its text.
+    assert "instructions" not in accepted["mentions"][0]
     _, next_step, later_request = mock_llm.requests_in("chat")
-    # The accepted message records its pick, so later turns keep the skill.
     for request in (next_step, later_request):
         assert _texts_after(request, sent) == [_injected(skill.name, instructions)]
 
 
-def test_deleted_mentioned_skill_does_not_fail_later_turns(
+def test_deleted_picked_skill_keeps_its_text_in_later_turns(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     skill, _, instructions = _create_skill(admin_user)
@@ -623,61 +662,11 @@ def test_deleted_mentioned_skill_does_not_fail_later_turns(
     assert first.error is None, f"Unexpected stream error: {first.error}"
     assert second.error is None, f"Unexpected stream error: {second.error}"
     assert second.full_message == "Second answer."
+    # The question keeps the text it stored, as in Codex.
     _, second_request = mock_llm.requests_in("chat")
-    (unavailable,) = _texts_after(second_request, question)
-    assert unavailable.startswith(f"<skill>\n<name>{skill.name}</name>\n")
-    assert "no longer available" in unavailable
-    assert instructions not in second_request.prompt_text
-
-
-def test_unshared_skill_stops_reaching_its_old_questions(
-    admin_user: DATestUser, mock_llm: MockLLMScript
-) -> None:
-    skill, _, instructions = _create_skill(admin_user)
-    user = UserManager.create(name=f"skill-viewer-{uuid4().hex[:8]}")
-    SkillManager.share(
-        skill,
-        admin_user,
-        user_shares=[
-            SkillUserShareRequest(
-                user_id=UUID(user.id), permission=SkillSharePermission.VIEWER
-            )
-        ],
-    )
-    SkillManager.set_enabled(skill, user, enabled=True)
-    question = f"Use @{skill.name} for this week."
-    chat_session_id = ChatSessionManager.create(user_performing_action=user).id
-    mock_llm.conversation(
-        "chat",
-        Reply(
-            text="First answer.",
-            conditions=RequestConditions(
-                prompt_contains=[_injected(skill.name, instructions)]
-            ),
-        ),
-        Reply(text="Second answer."),
-    )
-
-    first = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
-        message=question,
-        user_performing_action=user,
-        mentions=[SkillMention(name=skill.name)],
-    )
-    SkillManager.share(skill, admin_user, user_shares=[])
-    second = ChatSessionManager.send_message(
-        chat_session_id=chat_session_id,
-        message="Continue.",
-        user_performing_action=user,
-    )
-
-    assert first.error is None, f"Unexpected stream error: {first.error}"
-    assert second.error is None, f"Unexpected stream error: {second.error}"
-    _, second_request = mock_llm.requests_in("chat")
-    (unavailable,) = _texts_after(second_request, question)
-    assert unavailable.startswith(f"<skill>\n<name>{skill.name}</name>\n")
-    assert "no longer available" in unavailable
-    assert instructions not in second_request.prompt_text
+    assert _texts_after(second_request, question) == [
+        _injected(skill.name, instructions)
+    ]
 
 
 def test_shared_chat_does_not_show_the_owners_skills(
@@ -685,14 +674,19 @@ def test_shared_chat_does_not_show_the_owners_skills(
 ) -> None:
     skill, _, _ = _create_skill(admin_user)
     viewer = UserManager.create(name=f"chat-viewer-{uuid4().hex[:8]}")
+    gate = f"shared-{uuid4().hex}"
     chat_session = ChatSessionManager.create(user_performing_action=admin_user)
-    mock_llm.conversation("chat", Reply(text="Answer."))
+    mock_llm.conversation("chat", *_paused_then_answers(gate), Reply(text="Answer."))
+    running = _send_during_response(
+        mock_llm, chat_session.id, admin_user, gate, "Also summarize.", skill
+    )
     response = ChatSessionManager.send_message(
         chat_session_id=chat_session.id,
         message=f"Use @{skill.name}.",
         user_performing_action=admin_user,
         mentions=[SkillMention(name=skill.name)],
     )
+    assert running.error is None, f"Unexpected stream error: {running.error}"
     assert response.error is None, f"Unexpected stream error: {response.error}"
     client.patch(
         f"{API_SERVER_URL}/chat/chat-session/{chat_session.id}",
@@ -701,20 +695,28 @@ def test_shared_chat_does_not_show_the_owners_skills(
     ).raise_for_status()
 
     def mentions(user: DATestUser, is_shared: bool) -> list[list[str]]:
+        """The picks on each question, then on each message accepted during a
+        response."""
         detail = client.get(
             f"{API_SERVER_URL}/chat/get-chat-session/{chat_session.id}",
             params={"is_shared": str(is_shared).lower()},
             headers=user.headers,
         )
         detail.raise_for_status()
+        body = detail.json()
         return [
             [mention["name"] for mention in message["mentions"]]
-            for message in detail.json()["messages"]
+            for message in body["messages"]
             if message["message_type"] == MessageType.USER.value
+        ] + [
+            [mention["name"] for mention in packet["obj"]["mentions"]]
+            for packets in body["packets"]
+            for packet in packets
+            if packet["obj"]["type"] == StreamingType.USER_MESSAGE.value
         ]
 
-    assert mentions(admin_user, is_shared=False) == [[skill.name]]
-    assert mentions(viewer, is_shared=True) == [[]]
+    assert mentions(admin_user, is_shared=False) == [[], [skill.name], [skill.name]]
+    assert mentions(viewer, is_shared=True) == [[], [], []]
 
 
 @pytest.fixture
@@ -740,7 +742,7 @@ def usage_only_incognito(admin_user: DATestUser) -> Generator[None, None, None]:
     ).raise_for_status()
 
 
-def test_usage_only_incognito_builds_skill_text_from_the_recorded_mention(
+def test_usage_only_incognito_keeps_skill_text_in_temporary_history(
     admin_user: DATestUser,
     mock_llm: MockLLMScript,
     usage_only_incognito: None,  # noqa: ARG001
@@ -806,6 +808,12 @@ def test_usage_only_incognito_builds_skill_text_from_the_recorded_mention(
         question_row = next(
             message for message in history if message.message_type == MessageType.USER
         )
+        with get_session_with_current_tenant() as db_session:
+            stored_row = db_session.get(ChatMessage, question_row.id)
+            assert stored_row is not None
+            stored_instructions = [
+                mention.instructions for mention in stored_row.mentions
+            ]
         regenerated = ChatSessionManager.send_message(
             chat_session_id=chat_session_id,
             message=question,
@@ -820,19 +828,14 @@ def test_usage_only_incognito_builds_skill_text_from_the_recorded_mention(
 
     for response in (first, second, third, regenerated):
         assert response.error is None, f"Unexpected stream error: {response.error}"
-    _, second_request, third_request, regenerated_request = mock_llm.requests_in("chat")
-    # The content-free question row keeps the skill it mentioned at its
-    # pinned version.
+    # The content-free question row keeps the pick for display, but no text.
     assert _mentioned(question_row.mentions) == [("skill", skill.name)]
-    assert _texts_after(second_request, question) == [
-        _injected(skill.name, instructions)
-    ]
-    # After access ends, later turns and a regeneration get the note.
-    for request in (third_request, regenerated_request):
-        (unavailable,) = _texts_after(request, question)
-        assert unavailable.startswith(f"<skill>\n<name>{skill.name}</name>\n")
-        assert "no longer available" in unavailable
-        assert instructions not in request.prompt_text
+    assert stored_instructions == [None]
+    # The skill text is conversation content, so temporary history keeps it:
+    # after an edit and after access ends, later turns and a regeneration
+    # still get the text the question stored.
+    for request in mock_llm.requests_in("chat"):
+        assert _texts_after(request, question) == [_injected(skill.name, instructions)]
 
 
 def test_user_without_custom_skills_gets_no_skills_tools(

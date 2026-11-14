@@ -268,12 +268,10 @@ def _chat_agent(
     *,
     code_mode: bool = False,
     tools: list[Tool] | None = None,
-    skills: list[ChatSkill] | None = None,
 ) -> ChatAgent:
     return ChatAgent(
         messages=[],
         tools=tools or [EchoTool()],
-        skills=skills,
         code_mode=code_mode,
         custom_agent_prompt=None,
         base_system_prompt="Base instructions",
@@ -362,7 +360,6 @@ def test_restored_chat_offers_the_skill_tools_once() -> None:
     original = _chat_agent(
         llm,
         tools=[EchoTool(), SkillsListTool(skills), SkillsReadTool(skills, uuid4())],
-        skills=skills,
     )
     state = original.capture_state().model_dump(mode="json")
 
@@ -380,7 +377,7 @@ def test_restored_chat_offers_the_skill_tools_once() -> None:
     assert names == [EchoTool().name, "skills_list", "skills_read"]
 
 
-def test_restored_deep_research_offers_skills_read_like_the_original() -> None:
+def test_restored_deep_research_offers_the_skill_tools_like_the_original() -> None:
     llm = ScriptedLLM([])
     skills = [ChatSkill(name="triage", description="Sort.", version_id=uuid4())]
     original = DeepResearchAgent(
@@ -403,7 +400,11 @@ def test_restored_deep_research_offers_skills_read_like_the_original() -> None:
     )
 
     names = [tool.definition.name for tool in original.tools]
-    assert "skills_read" in names and "skills_list" not in names
+    assert {"skills_list", "skills_read"} <= set(names)
     assert [tool.definition for tool in rebuilt.tools] == [
         tool.definition for tool in original.tools
     ]
+    assert isinstance(rebuilt, DeepResearchAgent)
+    for agent in (original, rebuilt):
+        assert agent.skills_catalog_message is not None
+        assert "- triage: Sort." in agent.skills_catalog_message.text

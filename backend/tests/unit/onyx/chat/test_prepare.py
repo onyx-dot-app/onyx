@@ -16,6 +16,7 @@ from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
     ChatTurnAdmission,
 )
+from onyx.chat.mention_models import AcceptedSkillMention, SkillMention
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
@@ -52,6 +53,7 @@ from onyx.file_store.models import (
 )
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
+from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,
@@ -659,6 +661,53 @@ def test_an_agent_host_checks_the_owner_budget_for_every_model(
             agent_host=True,
         )
     assert raised.value.error_code == OnyxErrorCode.RATE_LIMITED
+
+
+def test_context_files_leave_room_for_the_questions_picked_skills(
+    monkeypatch: pytest.MonkeyPatch,
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    instructions = "Check every section. " * 400
+    monkeypatch.setattr(
+        "onyx.chat.process_message.accept_picked_skills",
+        lambda *_args: [
+            [
+                AcceptedSkillMention(
+                    name="review", version_id=uuid4(), instructions=instructions
+                )
+            ]
+        ],
+    )
+    reserved: list[int] = []
+
+    def extract(*, reserved_token_count: int, **_kwargs: object) -> object:
+        reserved.append(reserved_token_count)
+        return ExtractedContextFiles(
+            file_texts=[],
+            image_files=[],
+            use_as_search_filter=False,
+            total_token_count=0,
+            file_metadata=[],
+            uncapped_token_count=0,
+        )
+
+    monkeypatch.setattr("onyx.chat.process_message.extract_context_files", extract)
+
+    setup = prepare_chat_turn(
+        SendMessageRequest(
+            message="Review it.",
+            chat_session_id=chat_session.id,
+            mentions=[SkillMention(name="review")],
+        ),
+        User(id=uuid4(), email="reader@example.com"),
+        llm_overrides=None,
+    )
+    setup.admission.release()
+
+    # The reservation holds the system prompt and the skill text that the
+    # question gives the model.
+    assert reserved == [100 + get_llm_token_counter(ScriptedLLM([]))(instructions)]
 
 
 def test_regeneration_reuses_user_message_without_writing(

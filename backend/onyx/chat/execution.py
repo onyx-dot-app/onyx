@@ -685,7 +685,6 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
-            skill_instructions=setup.skill_instructions,
             create_subagent=chat_subagent_factory(
                 setup=setup,
                 llm=llm,
@@ -874,7 +873,6 @@ def create_chat_agent(
                 all_injected_file_metadata=setup.all_injected_file_metadata,
                 skip_clarification=SKIP_DEEP_RESEARCH_CLARIFICATION
                 or setup.skip_clarification,
-                skill_instructions=setup.skill_instructions,
                 checkpoint=setup.checkpoint,
                 previous_run_id=setup.previous_run_id,
             )

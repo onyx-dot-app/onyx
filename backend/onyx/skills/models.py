@@ -175,4 +175,7 @@ class ChatSkill(BaseModel):
 
     name: str
     description: str
+    # `metadata.short-description` in the frontmatter, which the catalog
+    # prefers.
+    short_description: str | None = None
     version_id: UUID

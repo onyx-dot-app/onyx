@@ -6,6 +6,7 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
@@ -186,7 +187,11 @@ def _response_digest(response: ResponseRecord) -> str:
                 "input": [
                     # The question is durable; attachment, skill and request context live in the checkpoint.
                     item.model_dump(mode="json")
-                    for item in response.input_messages[-1:]
+                    for item in [
+                        message
+                        for message in response.input_messages
+                        if not is_input_context(message)
+                    ][-1:]
                 ],
             },
             sort_keys=True,

@@ -62,7 +62,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.auth.schemas import UserRole
-from onyx.chat.mention_models import Mention, RecordedMention
+from onyx.chat.mention_models import AcceptedMention, Mention
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3699,11 +3699,11 @@ class ChatMessage(Base):
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
-    # What the user tagged in the question, as the turn resolved it. A skill
-    # is pinned to the version the user ran; history puts its SKILL.md before
-    # the question.
-    mentions: Mapped[list[RecordedMention]] = mapped_column(
-        PydanticListType(RecordedMention),
+    # What the user tagged in the question, as the turn accepted it. A skill
+    # keeps the version the user ran and the SKILL.md text the question gave
+    # the model; its `<skill>` message follows the question in history.
+    mentions: Mapped[list[AcceptedMention]] = mapped_column(
+        PydanticListType(AcceptedMention),
         default=list,
         server_default=text("'[]'::jsonb"),
     )
@@ -3791,8 +3791,8 @@ class AcceptedChatInput(BaseModel):
     source: InputSource
     source_run_id: str | None = None
     content: str
-    # What a user message picked, as its acceptance resolved it.
-    mentions: list[RecordedMention] = Field(default_factory=list)
+    # What a user message picked, with the text each pick gave the model.
+    mentions: list[AcceptedMention] = Field(default_factory=list)
 
 
 class ChatResponseItem(Base):

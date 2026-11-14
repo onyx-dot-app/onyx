@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -37,7 +38,7 @@ class MessageOrigin(str, Enum):
 class MessageResponseIDInfo(BaseModel):
     user_message_id: int | None
     reserved_assistant_message_id: int
-    # What the question tagged, as its turn resolved it.
+    # What the question tagged, as its turn accepted it.
     mentions: list[RecordedMention]
 
 
@@ -60,19 +61,19 @@ class MultiModelMessageResponseIDInfo(BaseModel):
 def response_id_info(
     user_message_id: int | None,
     responses: list[ModelResponseSlot],
-    mentions: list[RecordedMention],
+    mentions: Sequence[RecordedMention],
 ) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
     """The packet that names a turn's saved question and reserved responses."""
     if len(responses) > 1:
         return MultiModelMessageResponseIDInfo(
             user_message_id=user_message_id,
             responses=responses,
-            mentions=mentions,
+            mentions=list(mentions),
         )
     return MessageResponseIDInfo(
         user_message_id=user_message_id,
         reserved_assistant_message_id=responses[0].message_id,
-        mentions=mentions,
+        mentions=list(mentions),
     )
 
 
@@ -155,9 +156,10 @@ class SendMessageRequest(BaseModel):
         default_factory=list,
         description=(
             "What the user tagged in this message with `@`. A `skill` mention "
-            "names a chat skill; its SKILL.md goes to the model after the "
-            "question. Skills the user cannot use are ignored, and the message "
-            "text never tags anything."
+            "names a chat skill; its SKILL.md, as it is when the question is "
+            "accepted, goes to the model after the question in this turn and "
+            "later ones. Skills the user cannot use are ignored, and the "
+            "message text never tags anything."
         ),
     )
 
@@ -267,9 +269,10 @@ class PendingChatMessageRequest(BaseModel):
         default_factory=list,
         description=(
             "What the user tagged in this message with `@`. A `skill` mention "
-            "names a chat skill; its SKILL.md goes to the model after the "
-            "message, both when a turn starts with it and when a running "
-            "response accepts a send. Skills the user cannot use are ignored."
+            "names a chat skill; its SKILL.md, as it is when the message is "
+            "accepted, goes to the model after the message, both when a turn "
+            "starts with it and when a running response accepts a send. Skills "
+            "the user cannot use are ignored."
         ),
     )
 
