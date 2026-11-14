@@ -115,6 +115,11 @@ def test_stub_goes_through_json_with_its_payload(mock_drive: MockDrive) -> None:
     assert dumped["mime_type"] == stub.mime_type
     # Pruning and permission sync read a stub as a slim document.
     assert SlimDocument.model_validate(dumped).id == stub.id
+    # A later step loads the stub and reads the payload as the Drive type.
+    loaded = SlimDocumentStub.model_validate_json(stub.model_dump_json())
+    assert loaded.listing_payload is not None
+    payload = loaded.listing_payload.as_type(DriveListingPayload)
+    assert payload.retriever_email == dumped["listing_payload"]["retriever_email"]
 
 
 def test_listing_applies_the_size_threshold(mock_drive: MockDrive) -> None:
