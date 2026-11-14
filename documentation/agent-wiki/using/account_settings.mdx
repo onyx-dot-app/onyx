@@ -1,0 +1,29 @@
+---
+title: "Account Settings"
+description: "Your profile, appearance, notifications, and connectors"
+icon: "gear"
+---
+
+Personal preferences, scoped to you.
+Organization-wide configuration is in the [admin console](/agent-wiki/admin/overview) instead.
+
+Open **Settings** from the sidebar.
+
+| Section | What's there |
+| --- | --- |
+| **Profile** | Your full name and work role |
+| **Appearance** | Light or dark theme |
+| **Wiki** | Your timezone and default landing view |
+| **Notifications** | Comment emails and auto-update warning emails |
+| **Connectors** | Connect Slack, and manage email recipients |
+| **Account** | Your email address |
+
+Two of these matter more than the rest:
+
+**Timezone** is what [scheduled triggers](/agent-wiki/automate/triggers) run against,
+and what timestamps in the Activity Center are displayed in. Set it before building schedules,
+or a daily trigger will fire at an hour you didn't intend.
+
+**Connectors** is where you connect your own Slack account, once an admin has saved the Slack app credentials.
+The connection is per-user: your triggers post as you, to channels you can post to.
+**Mute** pauses Slack delivery without disconnecting, and fires are still recorded.

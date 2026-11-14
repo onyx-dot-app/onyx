@@ -1,0 +1,113 @@
+---
+title: "S3 IAM Role"
+description: "Authorize the S3 connector using an AWS IAM Role with assume role policy."
+---
+
+### When to use this method
+
+Onyx assumes the role from the credentials of its own host,
+such as the instance role of a self-hosted deployment on EC2. This method is for self-hosted Onyx.
+
+- When you need to segregate permissions, granting specific S3 access without modifying your EC2
+  instance's main role
+- When you require temporary, frequently rotated credentials for S3 access, without managing
+  long-lived access keys
+- When working in multi-account AWS environments, enabling cross-account S3 access through role
+  assumption
+
+### Setting up the IAM Role
+
+<Steps>
+  <Step title="Create the S3 Access Role">
+    - In AWS Console, go to **IAM › Roles** and click **Create role**
+    - For **Trusted entity type**, select **Custom trust policy**
+    - In the Custom trust policy JSON editor, configure who can assume this role.
+    You can choose from:
+    - **IAM Role**: `"AWS": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YourExistingEC2Role"`
+    - **AWS Service**: `"Service": "ec2.amazonaws.com"` (for EC2 instances)
+
+    Example for EC2 role (replace `YOUR_AWS_ACCOUNT_ID` and `YourExistingEC2Role`):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Principal": {
+           "AWS": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YourExistingEC2Role"
+         },
+         "Action": "sts:AssumeRole"
+       }
+     ]
+   }
+   ```
+
+    - Click **Next**
+    - Attach **AmazonS3ReadOnlyAccess** policy or create a custom policy for specific buckets:
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": [
+           "s3:GetObject",
+           "s3:ListBucket"
+         ],
+         "Resource": [
+           "arn:aws:s3:::your-source-bucket-name",
+           "arn:aws:s3:::your-source-bucket-name/*"
+         ]
+       }
+     ]
+   }
+   ```
+
+    - Name it (e.g., `OnyxS3AccessRole`) and click **Create role**
+    - Copy the **Role ARN** from the role summary page (e.g., `arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_CREATED_ROLE_NAME`)
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/s3/role-arn.webp" alt="Diagram of page where role arn can be copied"/>
+  </Step>
+
+  <Step title="Grant AssumeRole to EC2 instance role">
+    - Go back to **IAM > Roles** and find your EC2 instance's existing role
+    - Click on the role and go to the **Permissions** tab
+    - Click **Add permissions > Create inline policy**
+    - Switch to JSON and add this policy (replace with your actual account ID and role name):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [
+       {
+         "Effect": "Allow",
+         "Action": "sts:AssumeRole",
+         "Resource": "arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_CREATED_ROLE_NAME"
+       }
+     ]
+   }
+   ```
+
+    - Name the policy (e.g., `AllowAssumeOnyxS3Role`) and click **Create policy**
+
+    <img className="rounded-image" src="/assets/admins/connectors/blob/s3/iam-role.webp" alt="Diagram of IAM role assignment"/>
+  </Step>
+</Steps>
+
+### Credential Entry in Onyx
+
+When you create the authentication account for the S3 connector in Onyx:
+
+<Steps>
+  <Step title="Enter the Role ARN">
+    Select the **IAM Role** tab and enter a **Display Name**. In **AWS Role ARN**,
+    enter the Role ARN you copied earlier, such as `arn:aws:iam::YOUR_AWS_ACCOUNT_ID:role/YOUR_CREATED_ROLE_NAME`.
+    Select **Create**.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/admins/connectors/blob/s3/onyx-iam-role.webp" alt="Screenshot of Onyx S3 IAM role configuration with tabs"/>
+
+Then follow the [indexing steps in the overview](./overview#indexing) to configure your S3 connector.
