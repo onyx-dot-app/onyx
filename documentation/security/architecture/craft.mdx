@@ -127,7 +127,8 @@ The host agent writes its audit lines to its standard error. Ship the pod logs t
   files first. Onyx also saves at the end of a turn and when a node drains.
 - When you delete a Craft session or a user, Onyx deletes the session saves from the file store. See
   [Delete user data](/deployment/kubernetes/craft-firecracker-operations#delete-user-data).
-- The chat retention setting does not delete Craft session saves.
+- {/* depends: #17841 */} On Firecracker, chat retention also deletes a Craft session save when its session had no
+  activity for the retention window (`maximum_chat_retention_days`).
 - Node disk and file store encryption come from your platform. On bare metal, and with the bundled object store,
   set up encryption yourself.
 - The hop from the host agent to the sandbox proxy is plain TCP inside the cluster. Each token on it is signed,
