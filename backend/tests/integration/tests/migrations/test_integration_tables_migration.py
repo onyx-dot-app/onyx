@@ -435,7 +435,9 @@ def _seed(conn: Connection) -> Seeded:
     conn.execute(
         text(
             "INSERT INTO approval_request (id, chat_session_id, chat_message_id, "
-            "gated_app_id, action_id) VALUES (:id, :s, :m, :g, 'create_issue')"
+            "gated_app_id, action_id, tool_call_id, tool_name, display_name) "
+            "VALUES (:id, :s, :m, :g, 'create_issue', 'call_1', 'create_issue', "
+            "'Create issue')"
         ),
         {
             "id": uuid4(),
