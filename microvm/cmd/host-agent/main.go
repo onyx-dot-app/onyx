@@ -631,7 +631,7 @@ func newScaleDownGuard(f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.
 	if err != nil {
 		return nil, fmt.Errorf("--scale-down-guard: %w", err)
 	}
-	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.VMSlotsUsed, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
+	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.ScaleDownHolds, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
 	// A new VM is guarded at once, not at the next tick.
 	m.OnAdmit(g.Kick)
 	return g, nil

@@ -124,6 +124,39 @@ func TestScaleDownGuardBlocksWhileVMsRun(t *testing.T) {
 	}
 }
 
+// readHook runs fn at each Node read, for a VM that starts during the read.
+type readHook struct {
+	*fakeNode
+	fn func()
+}
+
+func (r readHook) Node(ctx context.Context) (Node, error) {
+	r.fn()
+	return r.fakeNode.Node(ctx)
+}
+
+func TestScaleDownGuardKeepsAnnotationForVMStartedDuringRead(t *testing.T) {
+	ctx := context.Background()
+	f := newGuard(t, map[string]string{ScaleDownDisabledKey: "true", GuardOwnerKey: "true"})
+	f.g.Node = readHook{f.node, func() { f.vms = 1 }}
+	f.g.Once(ctx)
+	f.clock = f.clock.Add(10 * time.Minute)
+	f.vms = 0
+	f.g.Once(ctx) // after the grace; the read admits a VM
+	if !f.blocked() || f.node.patches != 0 {
+		t.Fatalf("removed for a new VM: %v after %d patches", f.node.ann, f.node.patches)
+	}
+	// The idle time starts again.
+	f.g.Node = f.node
+	f.vms = 0
+	f.g.Once(ctx)
+	f.clock = f.clock.Add(9 * time.Minute)
+	f.g.Once(ctx)
+	if !f.blocked() {
+		t.Fatal("removed inside the new grace")
+	}
+}
+
 func TestScaleDownGuardAfterRestart(t *testing.T) {
 	ctx := context.Background()
 	ours := map[string]string{ScaleDownDisabledKey: "true", GuardOwnerKey: "true"}

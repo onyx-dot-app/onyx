@@ -622,12 +622,29 @@ func (m *Manager) vmSlotsUsedLocked() int {
 	return n
 }
 
-// VMSlotsUsed counts the VMs that may run on the node: starting and running
-// VMs, template build VMs and processes in doubt.
-func (m *Manager) VMSlotsUsed() int {
+// ScaleDownHolds counts what keeps the node from scale-down: the VM slots in
+// use (starting and running VMs, template build VMs and processes in
+// doubt), plus one while no process scan has worked. With processes in
+// doubt or no scan that worked, it scans the processes first, so a doubt
+// whose process exited stops holding the node.
+func (m *Manager) ScaleDownHolds() int {
+	m.mu.Lock()
+	need := len(m.doubt) > 0 || m.needScan
+	m.mu.Unlock()
+	if need && m.adopter != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		if err := m.rescan(ctx); err != nil {
+			m.log.Error("process scan for the scale-down guard failed", "err", err)
+		}
+		cancel()
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.vmSlotsUsedLocked()
+	n := m.vmSlotsUsedLocked()
+	if m.needScan {
+		n++
+	}
+	return n
 }
 
 // rescanAtCap scans the processes again when processes in doubt hold slots
