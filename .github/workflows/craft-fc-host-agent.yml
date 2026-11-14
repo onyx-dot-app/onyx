@@ -89,7 +89,7 @@ jobs:
           # The same tag that craft-fc-artifacts.yml derives (no revision suffix).
           kernel_tag="$(sed -n 's/^ARG KERNEL_TAG=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
           fc_version="$(sed -n 's/^ARG FC_VERSION=//p' "${CRAFT_FC_DIR}/Dockerfile.artifacts")"
-          kernel="${kernel_tag#microvm-kernel-}"
+          kernel="$(sed -E 's/^(microvm-)?kernel[0-9.]*-//' <<<"${kernel_tag}")"
           derived="${kernel%.amzn2023}-fc${fc_version#v}"
           if [ "${tag%-r[0-9]*}" != "${derived}" ]; then
             echo "::error::ARTIFACTS_TAG ${tag} does not match Dockerfile.artifacts (${derived})."
