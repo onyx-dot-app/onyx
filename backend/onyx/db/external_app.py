@@ -1,10 +1,8 @@
-import re
 from collections.abc import Iterable
-from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
@@ -18,6 +16,11 @@ from onyx.db.enums import (
     GatedAppKind,
     SkillInstallationPolicy,
     SkillSharePermission,
+)
+from onyx.db.external_app_readiness import (
+    SkillExternalAppDependencyState,
+    app_dependency_states,
+    is_user_authenticated_for_app,
 )
 from onyx.db.models import (
     ExternalApp,
@@ -44,36 +47,6 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.sensitive import SensitiveValue
 
 logger = setup_logger()
-
-_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
-
-
-@dataclass(frozen=True)
-class SkillExternalAppDependencyState:
-    external_app_id: int
-    name: str
-    enabled: bool
-    ready: bool
-
-
-def placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
-    placeholders: set[str] = set()
-    for value in auth_template.values():
-        if isinstance(value, str):
-            placeholders.update(_PLACEHOLDER_RE.findall(value))
-    return placeholders
-
-
-def required_user_credential_keys(
-    auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any],
-) -> list[str]:
-    """Sorted credential parameter names the user must supply: `{placeholder}`
-    references in `auth_template` values not pre-filled by
-    `organization_credentials`."""
-    return sorted(
-        placeholders_in_template(auth_template) - organization_credentials.keys()
-    )
 
 
 def validate_auth_template(
@@ -127,24 +100,6 @@ def resolve_masked_credentials(
         else:
             resolved[key] = value
     return resolved
-
-
-def is_user_authenticated_for_app(
-    app: ExternalApp,
-    user_cred: ExternalAppUserCredential | None,
-) -> bool:
-    """True iff the user has supplied every credential parameter the app's
-    ``auth_template`` requires that the org hasn't pre-filled. Apps with no
-    user-required keys need no credential row."""
-    required = required_user_credential_keys(
-        app.auth_template, app.organization_credentials.get_value(apply_mask=False)
-    )
-    if not required:
-        return True
-    if user_cred is None:
-        return False
-    stored = user_cred.user_credentials.get_value(apply_mask=False)
-    return all(k in stored for k in required)
 
 
 def get_external_app_by_id(
@@ -216,36 +171,11 @@ def get_skill_external_app_dependencies(
     skill_ids: Iterable[UUID] | None = None,
 ) -> dict[UUID, SkillExternalAppDependencyState]:
     """Return dependency state for all or selected associated skills."""
-    stmt = (
-        select(ExternalApp__Skill.skill_id, ExternalApp, ExternalAppUserCredential)
-        .join(
-            ExternalApp,
-            ExternalApp.id == ExternalApp__Skill.external_app_id,
-        )
-        .join(
-            ExternalAppUserCredential,
-            and_(
-                ExternalAppUserCredential.external_app_id == ExternalApp.id,
-                ExternalAppUserCredential.user_id == user.id,
-            ),
-            isouter=True,
-        )
-    )
-    if skill_ids is not None:
-        requested_ids = set(skill_ids)
-        if not requested_ids:
-            return {}
-        stmt = stmt.where(ExternalApp__Skill.skill_id.in_(requested_ids))
-
-    rows = db_session.execute(stmt).all()
     return {
-        skill_id: SkillExternalAppDependencyState(
-            external_app_id=app.id,
-            name=app.name,
-            enabled=app.enabled,
-            ready=app.enabled and is_user_authenticated_for_app(app, credential),
-        )
-        for skill_id, app, credential in rows
+        skill_id: state
+        for (_, skill_id), state in app_dependency_states(
+            [user.id], db_session, skill_ids
+        ).items()
     }
 
 

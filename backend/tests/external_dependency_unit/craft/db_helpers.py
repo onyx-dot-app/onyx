@@ -16,6 +16,7 @@ Conventions:
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -64,6 +65,8 @@ from onyx.db.models import (
 from onyx.db.permissions import recompute_user_permissions__no_commit
 from onyx.db.plugin import (
     create_skill_plugin__no_commit,
+    get_or_create_organization_library__no_commit,
+    get_or_create_user_uploads__no_commit,
     legacy_skill_version_content,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
@@ -234,6 +237,17 @@ def set_current_version_validity(
             .scalar_subquery()
         )
         .values(is_valid=is_valid)
+    )
+    db_session.flush()
+
+
+def set_plugin_created_at(
+    db_session: Session, plugin_id: UUID, created_at: datetime
+) -> None:
+    """Set a plugin's age. Rows made in one test transaction share one
+    timestamp, and the name order prefers the older plugin."""
+    db_session.execute(
+        update(Plugin).where(Plugin.id == plugin_id).values(created_at=created_at)
     )
     db_session.flush()
 
@@ -436,6 +450,64 @@ def share_plugin_with_group(
         )
     )
     db_session.flush()
+
+
+def make_skillless_plugin(
+    db_session: Session,
+    *,
+    author_user_id: UUID | None = None,
+    name: str | None = None,
+    published: bool = False,
+    installation_policy: PluginInstallationPolicy | None = None,
+    shared_user_ids: Iterable[UUID] = (),
+    shared_group_ids: Iterable[int] = (),
+) -> Plugin:
+    """A plugin with no skills, as an integration makes it: no plugin_skill
+    rows, a current version with no bundle, size or file count, and no legacy
+    skill row. Private (in the author's "My uploads") unless ``published``.
+    The shares are VIEWER rows. A private plugin with NOT_AVAILABLE and shares
+    is the row set the U1 migration writes for a private MCP server."""
+    if author_user_id is None and not published:
+        author_user_id = make_user(db_session, standard_account=True).id
+    marketplace_id = (
+        get_or_create_organization_library__no_commit(db_session)
+        if published or author_user_id is None
+        else get_or_create_user_uploads__no_commit(author_user_id, db_session)
+    )
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=name or f"integration-{plugin_id.hex[:8]}",
+        description="",
+        marketplace_id=marketplace_id,
+        author_user_id=author_user_id,
+        installation_policy=installation_policy,
+        current_version_id=version_id,
+        published_version_id=version_id if published else None,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    db_session.add(
+        PluginVersion(
+            id=version_id,
+            plugin_id=plugin_id,
+            version_number=1,
+            bundle_file_id=None,
+            unpacked_size_bytes=None,
+            file_count=None,
+        )
+    )
+    db_session.flush()
+    for user_id in shared_user_ids:
+        share_plugin_with_user(
+            db_session, plugin_id, user_id, SkillSharePermission.VIEWER
+        )
+    for group_id in shared_group_ids:
+        share_plugin_with_group(
+            db_session, plugin_id, group_id, SkillSharePermission.VIEWER
+        )
+    return plugin
 
 
 def make_cc_pair(

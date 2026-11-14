@@ -12,8 +12,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
 from onyx.db.skill import RuntimeSkill, RuntimeSkillVersion
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills import push
 
@@ -70,16 +68,6 @@ def test_skill_runtime_hash_covers_files_and_connectable_apps() -> None:
     assert push.compute_skill_runtime_hash(
         files, "apps"
     ) != push.compute_skill_runtime_hash(files, "different apps")
-
-
-def test_assemble_rejects_duplicate_names() -> None:
-    user = cast(User, SimpleNamespace())
-    skills = [_skill(is_valid=True), _skill(is_valid=True)]
-
-    with pytest.raises(OnyxError) as exc_info:
-        push._assemble_fileset(skills, user, MagicMock(spec=Session))
-
-    assert exc_info.value.error_code == OnyxErrorCode.INTERNAL_ERROR
 
 
 def test_assemble_classifies_and_hydrates_valid_unclassified_skill(
@@ -273,7 +261,9 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     user = cast(User, SimpleNamespace())
     db_session = MagicMock(spec=Session)
     list_runtime_skills = MagicMock(return_value=[valid_skill, invalid_skill])
-    assemble_fileset = MagicMock(return_value={"canonical-name/SKILL.md": b"content"})
+    assemble_fileset = MagicMock(
+        return_value=({"canonical-name/SKILL.md": b"content"}, set()),
+    )
     monkeypatch.setattr(
         push,
         "list_runtime_skills_for_user",
@@ -281,7 +271,7 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     )
     monkeypatch.setattr(
         push,
-        "_assemble_fileset",
+        "_assemble",
         assemble_fileset,
     )
     monkeypatch.setattr(push, "get_connectable_apps_for_user", lambda *_args: [])
@@ -292,8 +282,7 @@ def test_user_payload_returns_hydrated_files_and_connectable_apps(
     assert apps_section == "apps"
     assert files == {"canonical-name/SKILL.md": b"content"}
     list_runtime_skills.assert_called_once_with(
-        user=user,
-        db_session=db_session,
+        user=user, db_session=db_session, left_out=set()
     )
     assemble_fileset.assert_called_once_with(
         [valid_skill, invalid_skill],

@@ -31,12 +31,14 @@ from onyx.db.external_app import (
     get_external_apps,
     get_skills_for_external_app,
     get_user_credentials_by_app_id,
-    placeholders_in_template,
     replace_custom_skill_associations__no_commit,
-    required_user_credential_keys,
     update_external_app,
     upsert_external_app_user_credential,
     validate_auth_template,
+)
+from onyx.db.external_app_readiness import (
+    placeholders_in_template,
+    required_user_credential_keys,
 )
 from onyx.db.models import ExternalApp, ExternalAppUserCredential, User
 from onyx.db.plugin import get_plugin_version_validity
