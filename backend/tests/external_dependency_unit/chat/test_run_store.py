@@ -3182,6 +3182,7 @@ def test_spawn_takes_the_chat_lock_before_its_parent_response(
                 delivery=MessageDelivery.SEND,
                 target_response_id=branch[1],
                 turn_preparing=False,
+                mentions=[],
             )
             assert pending.target_response_id == branch[1]
             sending.commit()

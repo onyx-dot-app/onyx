@@ -137,13 +137,10 @@ def _retained_state(
     while (
         size > _MAX_CONTEXT_BYTES or len(state.messages) > _MAX_CONTEXT_MESSAGES
     ) and len(state.messages) > required_messages:
-        # Keep each question, its attachments, and all its responses together.
+        # Keep each question, its context messages, and all its responses together.
         remove_count = 0
         for index, message in enumerate(state.messages):
-            if isinstance(message, UserMessage) and not (
-                isinstance(message.metadata, PromptMetadata)
-                and message.metadata.file_id is not None
-            ):
+            if isinstance(message, UserMessage) and not _is_question_context(message):
                 next_turn = input_group_start(state.messages, index)
                 if next_turn > 0:
                     remove_count = next_turn
@@ -249,17 +246,23 @@ def _update_incognito_state(
     return False
 
 
+def _is_question_context(message: Message) -> bool:
+    """An attachment or the SKILL.md of a mentioned skill: input that precedes
+    its question."""
+    return (
+        isinstance(message, UserMessage)
+        and isinstance(message.metadata, PromptMetadata)
+        and (
+            message.metadata.file_id is not None
+            or message.metadata.skill_name is not None
+        )
+    )
+
+
 def input_group_start(messages: Sequence[Message], question_index: int) -> int:
-    """Find the attachment messages immediately before a user question."""
+    """Find the attachment and skill messages immediately before a user question."""
     start = question_index
-    while start > 0:
-        previous = messages[start - 1]
-        if not (
-            isinstance(previous, UserMessage)
-            and isinstance(previous.metadata, PromptMetadata)
-            and previous.metadata.file_id is not None
-        ):
-            break
+    while start > 0 and _is_question_context(messages[start - 1]):
         start -= 1
     return start
 

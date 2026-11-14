@@ -22,6 +22,7 @@ from onyx.agents.models import (
     RunFailureKind,
     RunStatus,
 )
+from onyx.chat.mention_models import Mention
 from onyx.chat.models import (
     AgentInboxWork,
     AgentResultState,
@@ -231,6 +232,7 @@ def _pending_human_message(row: ChatInput) -> PendingChatMessage:
         target_response_id=row.target_response_id,
         deep_research=row.deep_research,
         llm_override=row.llm_override,
+        mentions=row.mentions,
     )
 
 
@@ -258,6 +260,7 @@ def submit_human_message__no_commit(
     turn_preparing: bool,
     deep_research: bool = False,
     llm_override: LLMOverride | None = None,
+    mentions: list[Mention],
 ) -> PendingChatMessage:
     """Store text after authorization. Only `send` binds to a running response.
 
@@ -321,6 +324,7 @@ def submit_human_message__no_commit(
         content=_pending_content(message),
         deep_research=deep_research,
         llm_override=llm_override,
+        mentions=mentions,
     )
     session.add(row)
     session.flush()

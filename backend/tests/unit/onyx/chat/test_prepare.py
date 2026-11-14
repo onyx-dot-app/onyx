@@ -267,6 +267,7 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.get_default_base_system_prompt",
         lambda *_args: "System",
     )
+    monkeypatch.setattr("onyx.chat.process_message.list_chat_skills", lambda *_args: [])
     monkeypatch.setattr(
         "onyx.chat.process_message.calculate_reserved_tokens", lambda **_kwargs: 100
     )
@@ -296,6 +297,7 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.capture_chat_history",
         lambda _messages, _tools, _tokens, checkpoint: [
             ChatHistoryMessage(
+                mentions=[],
                 id=2,
                 message_type=MessageType.USER,
                 message="Accepted",
@@ -606,6 +608,7 @@ def test_a_queued_turn_uses_the_saved_tools_and_search_filters(
             queued_turn=QueuedChatTurn(
                 parent_response_id=1,
                 message=PendingChatMessage(
+                    mentions=[],
                     id="queued",
                     message="Queued",
                     delivery=MessageDelivery.QUEUE,

@@ -21,6 +21,7 @@ from onyx.server.query_and_chat.models import (
 class TestMultiModelMessageResponseIDInfo:
     def test_round_trip(self) -> None:
         info = MultiModelMessageResponseIDInfo(
+            mentions=[],
             user_message_id=42,
             responses=[
                 ModelResponseSlot(message_id=43, model_name="gpt-4"),
@@ -40,6 +41,7 @@ class TestMultiModelMessageResponseIDInfo:
 
     def test_null_user_message_id(self) -> None:
         info = MultiModelMessageResponseIDInfo(
+            mentions=[],
             user_message_id=None,
             responses=[
                 ModelResponseSlot(message_id=1, model_name="a"),
@@ -85,6 +87,7 @@ class TestChatMessageDetailMultiModel:
         from onyx.configs.constants import MessageType
 
         detail = ChatMessageDetail(
+            mentions=[],
             message_id=1,
             message="hello",
             message_type=MessageType.ASSISTANT,
@@ -98,6 +101,7 @@ class TestChatMessageDetailMultiModel:
         from onyx.configs.constants import MessageType
 
         detail = ChatMessageDetail(
+            mentions=[],
             message_id=1,
             message="hello",
             message_type=MessageType.USER,
@@ -113,6 +117,7 @@ class TestChatMessageDetailMultiModel:
         from onyx.configs.constants import MessageType
 
         detail = ChatMessageDetail(
+            mentions=[],
             message_id=1,
             message="hello",
             message_type=MessageType.ASSISTANT,

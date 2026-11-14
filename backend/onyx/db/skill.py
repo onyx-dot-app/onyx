@@ -121,7 +121,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.models import PluginFileEntry
+from onyx.skills.models import ChatSkill, PluginFileEntry
 
 
 class SkillManagementPolicy(str, Enum):
@@ -490,6 +490,29 @@ def list_skills(
     return list(db_session.scalars(stmt))
 
 
+def _where_user_runs_skill[RowT: tuple[Any, ...]](
+    stmt: Select[RowT], user: User, run_version: type[PluginVersion]
+) -> Select[RowT]:
+    """Skills the user can see and has on. A custom skill joins the version
+    the user runs as ``run_version``, which must exist and not be invalid; a
+    built-in skill has no version."""
+    run_plugin: type[Plugin] = aliased(Plugin)
+    return (
+        stmt.outerjoin(run_plugin, run_plugin.id == Skill.id)
+        .outerjoin(
+            run_version, run_version.id == version_user_runs(run_plugin, user.id)
+        )
+        .where(
+            skill_visible_to_user(user),
+            _is_enabled_for_user(user),
+            or_(
+                Skill.built_in_skill_id.isnot(None),
+                and_(run_version.id.isnot(None), run_version.is_valid.is_not(False)),
+            ),
+        )
+    )
+
+
 def list_runtime_skills_for_user(
     *,
     db_session: Session,
@@ -508,10 +531,9 @@ def list_runtime_skills_for_user(
         for skill_id, dependency in external_app_dependencies.items()
         if dependency.ready
     ]
-    run_plugin: type[Plugin] = aliased(Plugin)
     run_version: type[PluginVersion] = aliased(PluginVersion)
     name = _runtime_name(user)
-    stmt = (
+    stmt = _where_user_runs_skill(
         select(
             Skill,
             name,
@@ -524,23 +546,15 @@ def list_runtime_skills_for_user(
             selectinload(Skill.user_shares).selectinload(Skill__User.user),
             selectinload(Skill.group_shares).selectinload(Skill__UserGroup.user_group),
         )
-        .outerjoin(run_plugin, run_plugin.id == Skill.id)
-        .outerjoin(
-            run_version, run_version.id == version_user_runs(run_plugin, user.id)
-        )
         .order_by(name, Skill.id)
         .where(
-            skill_visible_to_user(user),
-            _is_enabled_for_user(user),
             or_(
                 ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
                 Skill.id.in_(ready_external_app_skill_ids),
             ),
-            or_(
-                Skill.built_in_skill_id.isnot(None),
-                and_(run_version.id.isnot(None), run_version.is_valid.is_not(False)),
-            ),
-        )
+        ),
+        user,
+        run_version,
     )
     rows = db_session.execute(_exclude_unavailable_built_in_skills(stmt, db_session))
     return [
@@ -556,6 +570,42 @@ def list_runtime_skills_for_user(
             ),
         )
         for skill, skill_name, version_id, bundle_file_id, is_valid in rows
+    ]
+
+
+def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
+    """The custom skills the user runs, by name, with the name, description
+    and id of the version the user runs, in one query. Built-in skills and
+    skills of an external app need the Craft sandbox, so chat leaves them out.
+    Anonymous users have none."""
+    if user.is_anonymous:
+        return []
+    run_version: type[PluginVersion] = aliased(PluginVersion)
+    name = func.coalesce(
+        frontmatter_in_version("name", run_version.id.expression), Skill.name
+    )
+    rows = db_session.execute(
+        _where_user_runs_skill(
+            select(
+                name,
+                func.coalesce(
+                    frontmatter_in_version("description", run_version.id.expression),
+                    Skill.description,
+                ),
+                run_version.id,
+            )
+            .where(
+                Skill.built_in_skill_id.is_(None),
+                ~exists().where(ExternalApp__Skill.skill_id == Skill.id),
+            )
+            .order_by(name, Skill.id),
+            user,
+            run_version,
+        )
+    )
+    return [
+        ChatSkill(name=skill_name, description=description, version_id=version_id)
+        for skill_name, description, version_id in rows
     ]
 
 

@@ -73,6 +73,10 @@ from onyx.tools.tool_constructor import (
     SearchToolConfig,
     construct_tools,
 )
+from onyx.tools.tool_implementations.skills.skill_tools import (
+    SkillsListTool,
+    SkillsReadTool,
+)
 from onyx.tracing.framework.create import ChatTraceMetadata, trace
 from onyx.utils.fleet_query_telemetry import CURRENT_QUERY_OBSERVATION, QueryObservation
 from onyx.utils.logger import setup_logger
@@ -155,6 +159,7 @@ def start_chat_turn(
                     )
                     for response in setup.responses
                 ],
+                setup.mentions,
             )
         )
         if query_observation is not None:
@@ -869,7 +874,20 @@ def create_chat_agent(
             setup.previous_run_id,
             setup=setup,
             llm=llm,
-            tools=tools,
+            # Every user with a chat skill gets the skill tools, whatever the
+            # agent's tool selection. Restored and child agents receive them
+            # with the other configured tools.
+            tools=[
+                *tools,
+                *(
+                    [
+                        SkillsListTool(setup.chat_skills),
+                        SkillsReadTool(setup.chat_skills, user.id),
+                    ]
+                    if setup.chat_skills
+                    else []
+                ),
+            ],
             inject_memories=user.use_memories,
             with_subagents=with_subagents,
             additional_context=setup.additional_context,

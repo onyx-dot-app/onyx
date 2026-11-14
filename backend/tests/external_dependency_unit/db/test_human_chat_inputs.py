@@ -59,6 +59,7 @@ def test_follow_up_question_keeps_history_and_pending_messages(
         delivery=MessageDelivery.QUEUE,
         target_response_id=response.id,
         turn_preparing=False,
+        mentions=[],
     )
     results = create_new_chat_message(
         conversation.id,

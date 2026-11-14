@@ -42,6 +42,11 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.mention_models import (
+    RecordedMention,
+    RecordedSkillMention,
+    SkillMention,
+)
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
@@ -86,6 +91,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import HookPoint, Permission, record_mode_persists_content
 from onyx.db.memory import get_memories
 from onyx.db.models import ChatSession, User
+from onyx.db.skill import list_chat_skills
 from onyx.db.tools import capture_persona_tool_configuration, get_tools
 from onyx.db.user_file import capture_user_file_metadata, prepare_chat_file_inputs
 from onyx.db.users import fetch_user_by_id
@@ -126,6 +132,8 @@ from onyx.server.query_and_chat.token_limit import (
     check_token_rate_limits,
 )
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
+from onyx.skills.chat import render_skills_catalog
+from onyx.skills.content import read_versions_instructions
 from onyx.tools.constants import (
     CODING_AGENT_TOOL_ID,
     FILE_READER_TOOL_ID,
@@ -327,6 +335,20 @@ def prepare_chat_turn(
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
             )
+            # One read serves the catalog, the skill tools and the skills the
+            # user tagged in an accepted question.
+            chat_skills = list_chat_skills(db_session, user)
+            skills_by_name = {skill.name: skill for skill in chat_skills}
+            # A mention the user cannot use is ignored, not rejected.
+            mentions: list[RecordedMention] = []
+            for mention in dict.fromkeys(new_msg_req.mentions):
+                match mention:
+                    case SkillMention(name=name) if name in skills_by_name:
+                        mentions.append(
+                            RecordedSkillMention(
+                                name=name, version_id=skills_by_name[name].version_id
+                            )
+                        )
             accepted_text = None
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
@@ -344,6 +366,7 @@ def prepare_chat_turn(
                         message_type=MessageType.AGENT_RESULTS
                         if results_turn
                         else MessageType.USER,
+                        mentions=mentions,
                         db_session=db_session,
                         commit=False,
                     )
@@ -471,6 +494,11 @@ def prepare_chat_turn(
                         if keeps_content
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
+                    # A mention identifies a record, such as a skill's name and
+                    # version, not conversation content, so a content-free
+                    # question keeps its mentions and its skill messages stay on
+                    # the branch.
+                    mentions=mentions,
                     db_session=db_session,
                     commit=False,
                 )
@@ -506,6 +534,7 @@ def prepare_chat_turn(
                                     response_ids, selected_models, strict=True
                                 )
                             ],
+                            mentions,
                         )
                     )
             persona = chat_session.persona
@@ -552,7 +581,17 @@ def prepare_chat_turn(
                         if persona.replace_base_system_prompt
                         else ""
                     )
-                    + (custom_prompt or ""),
+                    + (custom_prompt or "")
+                    + (
+                        render_skills_catalog(
+                            chat_skills,
+                            min(
+                                llm.config.max_input_tokens
+                                for llm, _ in selected_models
+                            ),
+                        )
+                        or ""
+                    ),
                     memory.user_info.placeholder_values,
                 ),
                 token_counter=token_counter,
@@ -625,6 +664,16 @@ def prepare_chat_turn(
             file_inputs = prepare_chat_file_inputs(
                 list(descriptors.values()), db_session
             )
+            skill_instructions = read_versions_instructions(
+                {
+                    mention.version_id
+                    for message in captured_history
+                    for mention in message.mentions
+                    if isinstance(mention, RecordedSkillMention)
+                },
+                user.id,
+                db_session,
+            )
             reasoning_effort = (
                 chat_session.reasoning_effort_override or ReasoningEffort.AUTO
             )
@@ -673,6 +722,7 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
+            skill_instructions=skill_instructions,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -723,6 +773,7 @@ def prepare_chat_turn(
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
+            mentions=captured_history[-1].mentions,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
                 if user.is_anonymous
@@ -745,6 +796,7 @@ def prepare_chat_turn(
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
+            chat_skills=chat_skills,
             skip_clarification=skip_clarification,
             cache=get_cache_backend(),
             admission=admission,
@@ -875,6 +927,9 @@ def dispatch_pending_chat_messages(
                         llm_override=queued_turn.message.llm_override
                         if queued_turn.message is not None
                         else None,
+                        mentions=queued_turn.message.mentions
+                        if queued_turn.message is not None
+                        else [],
                         # Turns the server starts deliver their follow-ups through
                         # the chat, so they offer agent tools. The pending route
                         # does not check the client's `accepts_follow_ups`.
