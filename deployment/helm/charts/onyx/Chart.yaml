@@ -5,7 +5,7 @@ home: https://www.onyx.app/
 sources:
   - "https://github.com/onyx-dot-app/onyx"
 type: application
-version: 0.9.46
+version: 0.9.47
 appVersion: latest
 annotations:
   category: Productivity
@@ -20,12 +20,11 @@ annotations:
     - name: background
       image: docker.io/onyxdotapp/onyx-backend:latest
   artifacthub.io/changes: |
-    - kind: added
-      description: New Craft Firecracker alert CraftFcNodeReportsStale fires
-        when the api_server accepts no node state report from a host agent
-        for more than craft.hostAgent.alerts.nodeReportStaleSeconds (default
-        300 s). The host agent dashboard colors the failed and canceled
-        Create results.
+    - kind: security
+      description: With chart-made Firecracker mTLS certificates, the host
+        agents accept only the client certificate (craft.hostAgent.clientAllowedSans
+        defaults to its name). Before, an agent certificate from the same CA
+        could call the other agents.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
