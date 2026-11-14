@@ -4968,8 +4968,8 @@
               }
             },
             "everything": {
-              "label": "Indexes every ticket the account can read",
-              "description": "Onyx indexes all tickets the selected account can read. To index fewer, choose another tab."
+              "label": "Indexes every service desk ticket the account can read",
+              "description": "Onyx indexes the service desk tickets the selected account can read. To index tickets from other project types, choose another tab."
             },
             "project_key": {
               "label": "Project Key",

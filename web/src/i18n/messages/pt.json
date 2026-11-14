@@ -4968,8 +4968,8 @@
               }
             },
             "everything": {
-              "label": "Indexa todos os tickets que a conta pode ler",
-              "description": "O Onyx indexa todos os tickets que a conta selecionada pode ler. Para indexar menos conteúdo, escolha outra aba."
+              "label": "Indexa todos os chamados de service desk que a conta pode ler",
+              "description": "O Onyx indexa os chamados de service desk que a conta selecionada pode ler. Para indexar chamados de outros tipos de projeto, escolha outra aba."
             },
             "project_key": {
               "label": "Chave do projeto",

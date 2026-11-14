@@ -4968,8 +4968,8 @@
               }
             },
             "everything": {
-              "label": "Indiziert jedes Ticket, das das Konto lesen kann",
-              "description": "Onyx indiziert alle Tickets, die das ausgewählte Konto lesen kann. Um die Auswahl einzugrenzen, wählen Sie einen anderen Tab."
+              "label": "Indiziert jedes Service-Desk-Ticket, das das Konto lesen kann",
+              "description": "Onyx indiziert die Service-Desk-Tickets, die das ausgewählte Konto lesen kann. Um Tickets aus anderen Projekttypen zu indizieren, wählen Sie einen anderen Tab."
             },
             "project_key": {
               "label": "Projektschlüssel",
