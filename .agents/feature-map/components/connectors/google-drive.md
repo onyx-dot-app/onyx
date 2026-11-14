@@ -92,9 +92,10 @@ checkpoint covers exactly what the call yielded. The entry points:
   before it passes `INLINE_CALL_BUDGET_FILES`.
 - `retrieve_slim_docs_from_checkpoint`: full concurrency, stubs only.
 - Pruning and permission sync loop the calls in their task. Permission sync
-  stores the state through `on_checkpoint`. Pruning lists the time since the
-  window end once more at the end, because a file edited during the listing
-  moves past the end.
+  stores the state through `on_checkpoint`. Pruning ends with a pass that has
+  no upper bound (`open_window_end`): every file modified at the window end or
+  later. A file edited during the listing moves past the end, and pruning
+  would read it as deleted.
 
 A service account checkpoint of the serial crawl (`phase_progress` or a stage)
 is dropped: the attempt lists again from its window start.

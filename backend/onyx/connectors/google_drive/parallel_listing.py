@@ -310,6 +310,8 @@ class _SplitRefusal(Enum):
     # The page starts at a time that more files share than the shard keeps
     # ids for. A later page that starts after that time can split.
     FRONTIER_OVERFLOW = "frontier_overflow"
+    # The shard has no upper bound to split at.
+    OPEN_END = "open_end"
 
 
 class ParallelDriveLister:
@@ -556,6 +558,7 @@ class ParallelDriveLister:
             exact=exact,
             skip_ids=skip_ids or [],
             owner_filter=owner_filter,
+            open_end=state.open_end and t1 >= state.window_t1,
         )
         return shard_id
 
@@ -678,6 +681,8 @@ class ParallelDriveLister:
                 owner = shard.owner_filter.replace("\\", "\\\\").replace("'", "\\'")
                 query += f" and '{owner}' in owners"
         field = GoogleFields.MODIFIED_TIME.value
+        if shard.open_end:
+            return f"{query} and {field} >= '{_iso(t0)}'"
         return f"{query} and {field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
 
     def _retrieved(
@@ -738,6 +743,8 @@ class ParallelDriveLister:
     ) -> list[int] | _SplitRefusal:
         """Splits the shard when its range should hold many pages. Returns the
         new shard ids, or why the shard keeps its page."""
+        if shard.open_end:
+            return _SplitRefusal.OPEN_END
         page_times = [ms for file in files if (ms := _modified_ms(file)) is not None]
         if len(page_times) < 2:
             return _SplitRefusal.DENSITY
@@ -901,7 +908,7 @@ def extend_window(state: DriveListingState, t1: int) -> None:
     """Moves the end of the window to ``t1`` when a resumed listing gets a
     later end. Each partition that began gets a shard for the added range.
     Pending partitions use the new end when they start."""
-    if t1 <= state.window_t1:
+    if state.open_end or t1 <= state.window_t1:
         return
     for partition, principal, exact in state.started_partitions:
         shard_id = state.next_shard_id
@@ -915,3 +922,24 @@ def extend_window(state: DriveListingState, t1: int) -> None:
             exact=exact,
         )
     state.window_t1 = t1
+
+
+def open_window_end(state: DriveListingState) -> None:
+    """Removes the end of the window. Each partition that began gets a shard
+    for the files modified at the old end or later, with no upper bound. A
+    file edited during this pass then cannot move out of its range."""
+    if state.open_end:
+        return
+    for partition, principal, exact in state.started_partitions:
+        shard_id = state.next_shard_id
+        state.next_shard_id += 1
+        state.shards[shard_id] = ListingShard(
+            id=shard_id,
+            partition=partition,
+            principal=principal,
+            t0=state.window_t1,
+            t1=state.window_t1,
+            exact=exact,
+            open_end=True,
+        )
+    state.open_end = True
