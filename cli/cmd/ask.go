@@ -49,9 +49,12 @@ automatically truncated to --max-output bytes and the full response is saved
 to a temp file. Set --max-output 0 to disable truncation.
 
 Some tool calls need your approval before they run. On a terminal, ask
-prompts for each one; answer d to show all arguments in full. Without a terminal, or with --json, it never waits:
---approve sets the answer. The default, fail, rejects the tool call and exits
-with code 10.`,
+prompts for each one; answer d to show all arguments in full. Without a
+terminal, or with --json, it never waits: --approve sets the answer. After
+the decisions, ask follows the response to its answer. The default, fail,
+rejects the tool call, lets the response finish without it, and exits with
+code 10. An interrupt at a prompt exits with code 11 and leaves the request
+waiting for another client.`,
 		Args: cobra.MaximumNArgs(1),
 		Example: `  onyx-cli ask "What connectors are available?"
   onyx-cli ask --agent-id 3 "Summarize our Q4 revenue"
@@ -139,14 +142,27 @@ with code 10.`,
 			}
 
 			var sessionID string
+			// The stream that ch reads.
+			var streamID int
 			var lastErr error
 			gotStop := false
-			// approvalErr ends the run after --approve=fail rejected a tool call
-			// or a decision failed. The stream is cancelled and drained first, so
-			// its owner stops the turn before the process exits.
+			// The stream stopped while the response waits for decisions.
+			awaiting := false
+			// Bytes of answer text shown. A continuation replays the response
+			// from its start, so it skips the text already shown.
+			shownText, skipText := 0, 0
+			// approvalErr ends the run after a decision failed. The owner of a
+			// running stream stops its response; a waiting response keeps waiting.
 			var approvalErr error
+			// approvalRequired is the exit after --approve=fail rejected a tool
+			// call. The response continues without it first.
+			var approvalRequired error
+			// A prompt was interrupted before its decision.
+			undecided := false
 			// The titles of the requests shown here, by approval id.
 			asked := map[string]string{}
+			// Requests whose outcome was shown.
+			reported := map[string]bool{}
 			// Events that arrived while a prompt waited, handled after it.
 			var deferred []models.StreamEvent
 			// Requests that the server ended while a prompt waited.
@@ -202,9 +218,6 @@ with code 10.`,
 					for _, arg := range approval.Arguments(req.Arguments) {
 						fmt.Fprintf(ios.ErrOut, "  %s\n", arg)
 					}
-					if deadline := approval.Deadline(req.ExpiresAt); deadline != "" {
-						fmt.Fprintf(ios.ErrOut, "  %s\n", deadline)
-					}
 				}
 				asked[req.ApprovalID] = title
 				decision := approveDecision
@@ -215,6 +228,7 @@ with code 10.`,
 					}
 					const promptText = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject: "
 					fmt.Fprint(ios.ErrOut, promptText)
+					events := ch
 				prompt:
 					for {
 						if !reading {
@@ -223,18 +237,21 @@ with code 10.`,
 						}
 						select {
 						case <-ctx.Done():
-							// Interrupted: stream cancellation stops the turn.
+							// A running stream's owner stops its response; a
+							// waiting response keeps the request for another client.
+							undecided = true
 							return
-						case event, ok := <-ch:
+						case event, ok := <-events:
 							if !ok {
-								fmt.Fprintln(ios.ErrOut)
-								return
+								// The stream stopped for the decisions; the prompt still waits.
+								events = nil
+								continue
 							}
 							deferred = append(deferred, event)
 							if resolved, isResolved := event.(models.ToolApprovalResolvedEvent); isResolved {
 								ended[resolved.ApprovalID] = true
 							}
-							// The server ended the request, e.g. at its deadline.
+							// The server ended the request, e.g. when its program ended.
 							if ended[req.ApprovalID] {
 								fmt.Fprintln(ios.ErrOut)
 								return
@@ -266,10 +283,8 @@ with code 10.`,
 					}
 				}
 				if promptReader == nil && askApprove == "fail" {
-					approvalErr = exitcodes.Newf(exitcodes.ApprovalRequired,
-						"tool call %q needs approval; rerun on a terminal, or with --approve=once, --approve=session, or --approve=reject", title)
-					// The rejected turn would continue without the tool; stop it.
-					defer cancelStream()
+					approvalRequired = exitcodes.Newf(exitcodes.ApprovalRequired,
+						"tool call %q needed approval, so ask rejected it; rerun on a terminal, or with --approve=once, --approve=session, or --approve=reject", title)
 				}
 				_, err := client.DecideApproval(ctx, req.ApprovalID, decision)
 				switch {
@@ -286,96 +301,158 @@ with code 10.`,
 				}
 			}
 
+		follow:
 			for {
-				var event models.StreamEvent
-				if len(deferred) > 0 {
-					event, deferred = deferred[0], deferred[1:]
-				} else if next, ok := <-ch; ok {
-					event = next
-				} else {
+				for {
+					var event models.StreamEvent
+					if len(deferred) > 0 {
+						event, deferred = deferred[0], deferred[1:]
+					} else if next, ok := <-ch; ok {
+						event = next
+					} else {
+						break
+					}
+					if approvalErr != nil {
+						// Drain so the stream owner can stop the turn before exit.
+						if stop, ok := event.(models.StopEvent); ok {
+							awaiting = stop.AwaitingApproval()
+						}
+						continue
+					}
+					switch e := event.(type) {
+					case models.SessionCreatedEvent:
+						sessionID = e.ChatSessionID
+					case models.MessageIDEvent:
+						streamID = e.ReservedAgentMessageID
+					case models.StreamCursorEvent:
+						streamID = e.StreamID
+						continue
+					case models.StreamUnavailableEvent:
+						continue
+					case models.StopEvent:
+						// Keep draining: the server saves the turn after it sends stop,
+						// and the rename below reads the saved history.
+						gotStop = true
+						awaiting = e.AwaitingApproval()
+					case models.MessageDeltaEvent:
+						skipped := min(skipText, len(e.Content))
+						skipText -= skipped
+						if skipped == len(e.Content) {
+							continue
+						}
+						e.Content = e.Content[skipped:]
+						shownText += len(e.Content)
+						event = e
+					case models.ToolApprovalRequestEvent:
+						if _, seen := asked[e.ApprovalID]; seen {
+							continue
+						}
+					case models.ToolApprovalResolvedEvent:
+						if reported[e.ApprovalID] {
+							continue
+						}
+						reported[e.ApprovalID] = true
+					}
+
+					if askJSON {
+						wrapped := struct {
+							Type  string             `json:"type"`
+							Event models.StreamEvent `json:"event"`
+						}{
+							Type:  event.EventType(),
+							Event: event,
+						}
+						data, err := json.Marshal(wrapped)
+						if err != nil {
+							return fmt.Errorf("error marshaling event: %w", err)
+						}
+						fmt.Fprintln(ios.Out, string(data))
+						if req, ok := event.(models.ToolApprovalRequestEvent); ok {
+							answerApproval(req)
+						}
+						if errEvt, ok := event.(models.ErrorEvent); ok {
+							if errEvt.StatusCode != 0 {
+								lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", sanitize.Terminal(errEvt.Error))
+							} else {
+								lastErr = exitcodes.New(exitcodes.General, sanitize.Terminal(errEvt.Error))
+							}
+						}
+						continue
+					}
+
+					switch e := event.(type) {
+					case models.MessageDeltaEvent:
+						ow.Write(sanitize.Terminal(e.Content))
+					case models.SearchStartEvent:
+						if isTTY && !askQuiet {
+							if e.IsInternetSearch {
+								fmt.Fprintf(ios.ErrOut, "\033[2mSearching the web...\033[0m\n")
+							} else {
+								fmt.Fprintf(ios.ErrOut, "\033[2mSearching documents...\033[0m\n")
+							}
+						}
+					case models.SearchQueriesEvent:
+						if isTTY && !askQuiet {
+							for _, q := range e.Queries {
+								fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", sanitize.Terminal(q))
+							}
+						}
+					case models.SearchDocumentsEvent:
+						if isTTY && !askQuiet && len(e.Documents) > 0 {
+							fmt.Fprintf(ios.ErrOut, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
+						}
+					case models.ReasoningStartEvent:
+						if isTTY && !askQuiet {
+							fmt.Fprintf(ios.ErrOut, "\033[2mThinking...\033[0m\n")
+						}
+					case models.ToolStartEvent:
+						if isTTY && !askQuiet && e.ToolName != "" {
+							fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
+						}
+					case models.ToolApprovalRequestEvent:
+						answerApproval(e)
+					case models.ToolApprovalResolvedEvent:
+						if title, ok := asked[e.ApprovalID]; ok {
+							fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.OutcomeLabel(e.Outcome), title)
+						}
+					case models.ErrorEvent:
+						ow.Finish()
+						if e.StatusCode != 0 {
+							return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
+						}
+						return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
+					}
+				}
+				if !awaiting || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
 					break
 				}
-				if approvalErr != nil {
-					// Drain so the stream owner can stop the turn before exit.
-					continue
+				// Every request got its decision, so the response continues on a
+				// new stream. Follow it from its start once the status names it.
+				stopped := streamID
+				for {
+					status, err := client.ChatSessionStatus(ctx, sessionID)
+					if ctx.Err() != nil {
+						break follow
+					}
+					if err != nil && !api.IsRetryableReadinessError(err) {
+						return fmt.Errorf("cannot follow the response after the approval decisions: %w", err)
+					}
+					if err == nil && !status.IsProcessing {
+						return exitcodes.New(exitcodes.General, "the response did not continue after the approval decisions; open the chat to see it")
+					}
+					if err == nil && status.StreamID != nil && *status.StreamID != stopped {
+						streamID = *status.StreamID
+						break
+					}
+					select {
+					case <-ctx.Done():
+						break follow
+					case <-time.After(time.Second):
+					}
 				}
-				switch e := event.(type) {
-				case models.SessionCreatedEvent:
-					sessionID = e.ChatSessionID
-				case models.StopEvent:
-					// Keep draining: the server saves the turn after it sends stop,
-					// and the rename below reads the saved history.
-					gotStop = true
-				}
-
-				if askJSON {
-					wrapped := struct {
-						Type  string             `json:"type"`
-						Event models.StreamEvent `json:"event"`
-					}{
-						Type:  event.EventType(),
-						Event: event,
-					}
-					data, err := json.Marshal(wrapped)
-					if err != nil {
-						return fmt.Errorf("error marshaling event: %w", err)
-					}
-					fmt.Fprintln(ios.Out, string(data))
-					if req, ok := event.(models.ToolApprovalRequestEvent); ok {
-						answerApproval(req)
-					}
-					if errEvt, ok := event.(models.ErrorEvent); ok {
-						if errEvt.StatusCode != 0 {
-							lastErr = exitcodes.Newf(exitcodes.ForHTTPStatus(errEvt.StatusCode), "%s", sanitize.Terminal(errEvt.Error))
-						} else {
-							lastErr = exitcodes.New(exitcodes.General, sanitize.Terminal(errEvt.Error))
-						}
-					}
-					continue
-				}
-
-				switch e := event.(type) {
-				case models.MessageDeltaEvent:
-					ow.Write(sanitize.Terminal(e.Content))
-				case models.SearchStartEvent:
-					if isTTY && !askQuiet {
-						if e.IsInternetSearch {
-							fmt.Fprintf(ios.ErrOut, "\033[2mSearching the web...\033[0m\n")
-						} else {
-							fmt.Fprintf(ios.ErrOut, "\033[2mSearching documents...\033[0m\n")
-						}
-					}
-				case models.SearchQueriesEvent:
-					if isTTY && !askQuiet {
-						for _, q := range e.Queries {
-							fmt.Fprintf(ios.ErrOut, "\033[2m  → %s\033[0m\n", sanitize.Terminal(q))
-						}
-					}
-				case models.SearchDocumentsEvent:
-					if isTTY && !askQuiet && len(e.Documents) > 0 {
-						fmt.Fprintf(ios.ErrOut, "\033[2mFound %d documents\033[0m\n", len(e.Documents))
-					}
-				case models.ReasoningStartEvent:
-					if isTTY && !askQuiet {
-						fmt.Fprintf(ios.ErrOut, "\033[2mThinking...\033[0m\n")
-					}
-				case models.ToolStartEvent:
-					if isTTY && !askQuiet && e.ToolName != "" {
-						fmt.Fprintf(ios.ErrOut, "\033[2mUsing %s...\033[0m\n", sanitize.Terminal(e.ToolName))
-					}
-				case models.ToolApprovalRequestEvent:
-					answerApproval(e)
-				case models.ToolApprovalResolvedEvent:
-					if title, ok := asked[e.ApprovalID]; ok {
-						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.OutcomeLabel(e.Outcome), title)
-					}
-				case models.ErrorEvent:
-					ow.Finish()
-					if e.StatusCode != 0 {
-						return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
-					}
-					return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
-				}
+				ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, 0)
+				skipText = shownText
+				gotStop, awaiting = false, false
 			}
 
 			if !askJSON {
@@ -386,6 +463,10 @@ with code 10.`,
 				return approvalErr
 			}
 			if ctx.Err() != nil {
+				if awaiting && undecided {
+					return exitcodes.New(exitcodes.ApprovalPending,
+						"interrupted while a tool call waits for approval; it still waits, and another Onyx client can decide it")
+				}
 				return nil
 			}
 
@@ -403,7 +484,7 @@ with code 10.`,
 				}
 			}
 			nameChatSession(ctx, ios, client, sessionID)
-			return nil
+			return approvalRequired
 		},
 	}
 

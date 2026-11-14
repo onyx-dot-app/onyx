@@ -3,7 +3,6 @@ package parser
 import (
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
@@ -367,7 +366,6 @@ func TestToolApprovalRequest(t *testing.T) {
 		"tool_name":    "mcp__3__linear__create_issue",
 		"display_name": "Create issue",
 		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2, "id": json.Number("9007199254740993")},
-		"expires_at":   "2026-11-13T10:00:00.123456+00:00",
 	}, 1, 0)
 	event := ParseStreamLine(line)
 	e, ok := event.(models.ToolApprovalRequestEvent)
@@ -380,9 +378,6 @@ func TestToolApprovalRequest(t *testing.T) {
 	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != json.Number("2") || e.Arguments["id"] != json.Number("9007199254740993") {
 		t.Errorf("arguments = %v", e.Arguments)
 	}
-	if e.ExpiresAt == nil || !e.ExpiresAt.Equal(time.Date(2026, 11, 13, 10, 0, 0, 123456000, time.UTC)) {
-		t.Errorf("expires_at = %v", e.ExpiresAt)
-	}
 	if e.EventType() != models.EventToolApprovalRequest {
 		t.Errorf("event type = %s", e.EventType())
 	}
@@ -393,26 +388,25 @@ func TestToolApprovalRequestToleratesBadFields(t *testing.T) {
 		"type":        "tool_approval_request",
 		"approval_id": "a1",
 		"arguments":   "not an object",
-		"expires_at":  "soon",
 	}, 1, 0)
 	e, ok := ParseStreamLine(line).(models.ToolApprovalRequestEvent)
 	if !ok {
 		t.Fatal("expected ToolApprovalRequestEvent")
 	}
-	if e.Arguments != nil || e.ExpiresAt != nil {
+	if e.Arguments != nil {
 		t.Errorf("bad fields must parse as absent, got %+v", e)
 	}
 }
 
 func TestToolApprovalResolved(t *testing.T) {
 	line := makePacket(map[string]interface{}{
-		"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "expired",
+		"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "cancelled",
 	}, 1, 0)
 	e, ok := ParseStreamLine(line).(models.ToolApprovalResolvedEvent)
 	if !ok {
 		t.Fatal("expected ToolApprovalResolvedEvent")
 	}
-	if e.ApprovalID != "a1" || e.Outcome != models.ApprovalOutcomeExpired {
+	if e.ApprovalID != "a1" || e.Outcome != models.ApprovalOutcomeCancelled {
 		t.Errorf("got %+v", e)
 	}
 }

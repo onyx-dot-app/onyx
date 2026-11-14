@@ -297,6 +297,10 @@ its background task end ([[#pure-asgi-middleware]]).
    can continue from the last cursor without a repeated packet. It reports a
    404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
    the response again, and a clean end before the first cursor is retried.
+   After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
+   and `cli/internal/tui/app.go` keep the approval cards and stop reading.
+   After the last decision they poll the status and follow the new stream
+   from cursor 0; `ask` skips the replayed text that it already printed.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool

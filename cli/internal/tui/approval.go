@@ -46,8 +46,8 @@ type approvalDecidedMsg struct {
 }
 
 // renderApprovalCard renders a request. Only the active card, the oldest
-// undecided one, takes input.
-func renderApprovalCard(card approvalCard, active bool, width int) string {
+// undecided one, takes input. A suspended response cannot be stopped.
+func renderApprovalCard(card approvalCard, active, suspended bool, width int) string {
 	if card.decided != "" {
 		return approvalRecord(card.request, card.decided)
 	}
@@ -64,9 +64,6 @@ func renderApprovalCard(card approvalCard, active bool, width int) string {
 		for _, arg := range approval.Arguments(card.request.Arguments) {
 			lines = append(lines, "    "+arg)
 		}
-	}
-	if deadline := approval.Deadline(card.request.ExpiresAt); deadline != "" {
-		lines = append(lines, dimInfoStyle.Render("    "+deadline))
 	}
 	switch {
 	case !active:
@@ -91,7 +88,11 @@ func renderApprovalCard(card approvalCard, active bool, width int) string {
 		if card.expanded {
 			details = "d show less"
 		}
-		lines = append(lines, dimInfoStyle.Render("    ↑↓ select • enter confirm • y/a/n • "+details+" • esc stop the response"))
+		hint := "    ↑↓ select • enter confirm • y/a/n • " + details
+		if !suspended {
+			hint += " • esc stop the response"
+		}
+		lines = append(lines, dimInfoStyle.Render(hint))
 	}
 	for i := range lines {
 		lines[i] = ansi.Truncate(lines[i], max(width-1, 20), "…")
@@ -127,7 +128,7 @@ func (m Model) activeApproval() int {
 func (m Model) renderApprovals() {
 	active := m.activeApproval()
 	for i, card := range m.approvals {
-		m.viewport.setApproval(card.request.ApprovalID, renderApprovalCard(card, i == active, m.viewport.width))
+		m.viewport.setApproval(card.request.ApprovalID, renderApprovalCard(card, i == active, m.suspended(), m.viewport.width))
 	}
 }
 
@@ -167,6 +168,10 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 		m.viewport.addError("Could not send the approval decision: " + msg.err.Error())
 	}
 	m.renderApprovals()
+	if m.suspended() && m.activeApproval() < 0 && m.chatSessionID != nil {
+		// The response continues on a new stream; the readiness check follows it.
+		return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
+	}
 	return m, nil
 }
 

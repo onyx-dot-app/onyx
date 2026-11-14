@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
@@ -83,15 +82,6 @@ func argumentText(value any) string {
 	return string(encoded)
 }
 
-// Deadline shows when the server ends the request, or "" when the server
-// sent no deadline. Only the server decides that the request expired.
-func Deadline(expiresAt *time.Time) string {
-	if expiresAt == nil {
-		return ""
-	}
-	return "Approve by " + expiresAt.Local().Format("15:04")
-}
-
 // OutcomeLabel names how a request ended.
 func OutcomeLabel(outcome string) string {
 	switch outcome {
@@ -101,8 +91,6 @@ func OutcomeLabel(outcome string) string {
 		return "Approved for this session"
 	case models.ApprovalOutcomeRejected:
 		return "Not approved"
-	case models.ApprovalOutcomeExpired:
-		return "Timed out"
 	case models.ApprovalOutcomeDisabled:
 		return "Disabled"
 	default:

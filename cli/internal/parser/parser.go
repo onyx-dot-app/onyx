@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"golang.org/x/text/cases"
@@ -225,9 +224,6 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 			DisplayName: jsonString(obj["display_name"]),
 		}
 		event.Arguments, _ = obj["arguments"].(map[string]any)
-		if expiresAt, err := time.Parse(time.RFC3339, jsonString(obj["expires_at"])); err == nil {
-			event.ExpiresAt = &expiresAt
-		}
 		return event
 
 	case "tool_approval_resolved":

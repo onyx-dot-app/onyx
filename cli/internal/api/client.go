@@ -26,8 +26,8 @@ import (
 // Each call site picks an http.Client with a timeout matched to its expected
 // work: 3min for quick JSON endpoints, 5min for /search (which runs LLM query
 // expansion + relevance selection) and uploads, and 6min for image generation.
-// Chat streams have no total timeout: a turn can wait minutes for a tool
-// approval, so streamIdleTimeout bounds each wait for data instead.
+// Chat streams have no total timeout: a turn can run for many minutes, so
+// streamIdleTimeout bounds each wait for data instead.
 type Client struct {
 	baseURL           string
 	apiKey            string
@@ -65,7 +65,7 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 			Transport: transport,
 		},
 		streamHTTPClient: &http.Client{Transport: transport},
-		// The server sends a heartbeat every 15 seconds while a turn is idle.
+		// The server sends a heartbeat every 15 seconds while a turn has no output.
 		streamIdleTimeout: 2 * time.Minute,
 		// Must exceed the server's 5-minute image-generation stream ceiling,
 		// or the client gives up before the server's timeout envelope arrives.

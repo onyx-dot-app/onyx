@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -20,7 +21,10 @@ import (
 
 // approvalRun is what the fake server saw during one ask run.
 type approvalRun struct {
+	// decisions receives "id:decision" for each decision.
 	decisions chan string
+	// stops receives the stream_id of each Stop.
+	stops chan string
 }
 
 // approvalServerOptions changes how the fake server answers.
@@ -29,57 +33,53 @@ type approvalServerOptions struct {
 	decisionStatus int
 	// The tool is disabled by a policy, so an approval rejects it.
 	disabled bool
-	// The server ends the request without a decision, as at its deadline.
-	expire bool
+	// The approval ids of the response's requests; "a1" when empty.
+	requests []string
 }
 
-// newApprovalServer streams one tool approval request, waits for the decision,
-// then finishes the answer.
+// newApprovalServer streams some text and the response's tool approval
+// requests, then stops for the decisions. Once every request is decided, the
+// response continues on stream 3, which replays the response from its start
+// and finishes the answer.
 func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	t.Helper()
 	if opts.decisionStatus == 0 {
 		opts.decisionStatus = http.StatusOK
 	}
-	run := &approvalRun{decisions: make(chan string, 1)}
-	decided := make(chan string, 1)
-	if opts.expire {
-		decided <- "expired"
+	if len(opts.requests) == 0 {
+		opts.requests = []string{"a1"}
 	}
+	run := &approvalRun{decisions: make(chan string, 8), stops: make(chan string, 8)}
+	requests := make([]map[string]any, len(opts.requests))
+	for i, id := range opts.requests {
+		requests[i] = requestEvent(id)
+	}
+	requests[0]["display_name"] = "Create issue"
+	requests[0]["arguments"] = map[string]any{"title": "Bug\x1b]52;c;ZWNobyBoaQ==\x07 report"}
+	var mu sync.Mutex
+	// The outcome of each decided request, by approval id.
+	outcomes := map[string]string{}
+	continuing := false
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
 		fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
-		fmt.Fprintln(w, streamLine("tool_approval_request", map[string]any{
-			"approval_id":  "a1",
-			"tool_call_id": "call-1",
-			"tool_name":    "mcp__3__linear__create_issue",
-			"display_name": "Create issue",
-			"arguments":    map[string]any{"title": "Bug\x1b]52;c;ZWNobyBoaQ==\x07 report"},
-			"expires_at":   "2099-01-01T00:00:00Z",
-		}))
-		w.(http.Flusher).Flush()
-		select {
-		case outcome := <-decided:
-			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": outcome}))
-			fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "done"}))
-			fmt.Fprintln(w, streamLine("stop", nil))
-		case <-r.Context().Done():
+		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Filing. "}))
+		for _, request := range requests {
+			fmt.Fprintln(w, streamLine("tool_approval_request", request))
 		}
+		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
 	})
-	mux.HandleFunc("/api/chat/approvals/a1/decision", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /api/chat/approvals/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Decision string `json:"decision"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		run.decisions <- body.Decision
-		if opts.decisionStatus != http.StatusOK {
-			w.WriteHeader(opts.decisionStatus)
-			fmt.Fprint(w, `{"error_code":"CONFLICT","detail":"This request was already decided or is no longer waiting"}`)
-			decided <- "approved"
-			return
-		}
+		id := r.PathValue("id")
+		run.decisions <- id + ":" + body.Decision
 		outcome, decision, decidedVia := "approved", "APPROVED", "USER"
 		switch {
+		case opts.decisionStatus != http.StatusOK:
 		case body.Decision == "reject":
 			outcome, decision = "rejected", "REJECTED"
 		case opts.disabled:
@@ -87,12 +87,49 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		case body.Decision == "approve_session":
 			outcome, decidedVia = "approved_for_chat", "SESSION_GRANT"
 		}
-		decided <- outcome
-		fmt.Fprintf(w, `{"approval_id":"a1","decision":%q,"decided_via":%q}`, decision, decidedVia)
+		mu.Lock()
+		outcomes[id] = outcome
+		continuing = len(outcomes) == len(requests)
+		mu.Unlock()
+		if opts.decisionStatus != http.StatusOK {
+			w.WriteHeader(opts.decisionStatus)
+			fmt.Fprint(w, `{"error_code":"CONFLICT","detail":"This request was already decided or is no longer waiting"}`)
+			return
+		}
+		fmt.Fprintf(w, `{"approval_id":%q,"decision":%q,"decided_via":%q}`, id, decision, decidedVia)
 	})
-	mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {})
 	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if continuing {
+			fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":3}}`)
+			return
+		}
 		fmt.Fprint(w, `{"is_processing":false}`)
+	})
+	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/resume-stream", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !continuing || r.URL.Query().Get("stream_id") != "3" || r.URL.Query().Get("cursor") != "0" {
+			http.NotFound(w, r)
+			return
+		}
+		fmt.Fprintln(w, `{"stream_id":3,"next_cursor":0,"replay_complete":false}`)
+		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Filing. "}))
+		for _, request := range requests {
+			fmt.Fprintln(w, streamLine("tool_approval_request", request))
+		}
+		for _, request := range requests {
+			id := request["approval_id"]
+			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
+		}
+		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "done"}))
+		fmt.Fprintln(w, streamLine("stop", nil))
+		fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 4+2*len(requests))
+		continuing = false
+	})
+	mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
+		run.stops <- r.URL.Query().Get("stream_id")
 	})
 	mux.HandleFunc("/api/chat/rename-chat-session", func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprint(w, `{"new_name":"Title"}`)
@@ -127,9 +164,29 @@ func pipedIOS() (*iostreams.IOStreams, *bytes.Buffer, *bytes.Buffer) {
 	return &iostreams.IOStreams{In: &bytes.Buffer{}, Out: out, ErrOut: errOut, IsStdinTTY: true}, out, errOut
 }
 
-func TestAsk_NonInteractiveRejectsAndExitsWithApprovalRequired(t *testing.T) {
-	run := newApprovalServer(t, approvalServerOptions{})
-	ios, _, errOut := pipedIOS()
+// noDecision fails when the server got a decision.
+func noDecision(t *testing.T, run *approvalRun) {
+	t.Helper()
+	select {
+	case got := <-run.decisions:
+		t.Errorf("sent decision %q", got)
+	default:
+	}
+}
+
+// noStop fails when the server got a Stop.
+func noStop(t *testing.T, run *approvalRun) {
+	t.Helper()
+	select {
+	case got := <-run.stops:
+		t.Errorf("sent Stop for stream %q", got)
+	default:
+	}
+}
+
+func TestAsk_NonInteractiveRejectsFinishesAndExitsWithApprovalRequired(t *testing.T) {
+	run := newApprovalServer(t, approvalServerOptions{requests: []string{"a1", "a2"}})
+	ios, out, errOut := pipedIOS()
 	err := runApprovalAsk(t, ios)
 	if code := exitCode(err); code != exitcodes.ApprovalRequired {
 		t.Fatalf("exit code = %d (%v), want %d", code, err, exitcodes.ApprovalRequired)
@@ -137,8 +194,16 @@ func TestAsk_NonInteractiveRejectsAndExitsWithApprovalRequired(t *testing.T) {
 	if !strings.Contains(err.Error(), "--approve=") {
 		t.Errorf("error does not explain how to proceed: %v", err)
 	}
-	if got := <-run.decisions; got != "reject" {
-		t.Errorf("decision = %q, want reject so the server stops waiting", got)
+	// A waiting response cannot be stopped: each request gets a rejection,
+	// and the response finishes without the tools.
+	for _, want := range []string{"a1:reject", "a2:reject"} {
+		if got := <-run.decisions; got != want {
+			t.Errorf("decision = %q, want %q", got, want)
+		}
+	}
+	noStop(t, run)
+	if out.String() != "Filing. done\n" {
+		t.Errorf("stdout = %q, want the finished answer", out.String())
 	}
 	stderr := errOut.String()
 	if !strings.Contains(stderr, "Approval requested: Create issue") || !strings.Contains(stderr, "title: Bug report") {
@@ -157,9 +222,10 @@ func TestAsk_JSONEmitsRequestAndNeverPrompts(t *testing.T) {
 	if code := exitCode(err); code != exitcodes.ApprovalRequired {
 		t.Fatalf("exit code = %d (%v), want %d", code, err, exitcodes.ApprovalRequired)
 	}
-	if got := <-run.decisions; got != "reject" {
+	if got := <-run.decisions; got != "a1:reject" {
 		t.Errorf("decision = %q", got)
 	}
+	noStop(t, run)
 	var first struct {
 		Type  string `json:"type"`
 		Event struct {
@@ -179,13 +245,13 @@ func TestAsk_JSONEmitsRequestAndNeverPrompts(t *testing.T) {
 	}
 }
 
-func TestAsk_ApproveFlagAnswersAndContinues(t *testing.T) {
+func TestAsk_ApproveFlagAnswersAndFollowsTheContinuation(t *testing.T) {
 	tests := []struct {
 		flag, decision, record string
 	}{
-		{"reject", "reject", "Not approved: Create issue"},
-		{"once", "approve_once", "Approved: Create issue"},
-		{"session", "approve_session", "Approved for this session: Create issue"},
+		{"reject", "a1:reject", "Not approved: Create issue"},
+		{"once", "a1:approve_once", "Approved: Create issue"},
+		{"session", "a1:approve_session", "Approved for this session: Create issue"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.flag, func(t *testing.T) {
@@ -197,18 +263,49 @@ func TestAsk_ApproveFlagAnswersAndContinues(t *testing.T) {
 			if got := <-run.decisions; got != tt.decision {
 				t.Errorf("decision = %q, want %q", got, tt.decision)
 			}
-			if !strings.Contains(out.String(), "done") {
-				t.Errorf("answer did not continue after the decision: %q", out.String())
+			// The continuation replays "Filing. ", which shows once.
+			if out.String() != "Filing. done\n" {
+				t.Errorf("stdout = %q, want the answer once", out.String())
 			}
-			if !strings.Contains(errOut.String(), tt.record) {
-				t.Errorf("stderr lacks %q: %q", tt.record, errOut.String())
+			stderr := errOut.String()
+			if strings.Count(stderr, "Approval requested:") != 1 || strings.Count(stderr, tt.record) != 1 {
+				t.Errorf("stderr shows the request or its outcome other than once: %q", stderr)
 			}
 		})
 	}
 }
 
+func TestAsk_JSONFollowsTheContinuationWithoutRepeatingEvents(t *testing.T) {
+	newApprovalServer(t, approvalServerOptions{})
+	ios, out, _ := pipedIOS()
+	if err := runApprovalAsk(t, ios, "--json", "--approve=once"); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var types, text []string
+	for _, line := range strings.Split(strings.TrimSpace(out.String()), "\n") {
+		var event struct {
+			Type  string `json:"type"`
+			Event struct {
+				Content string `json:"content"`
+			} `json:"event"`
+		}
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatal(err)
+		}
+		types = append(types, event.Type)
+		text = append(text, event.Event.Content)
+	}
+	want := []string{"session_created", "message_id_info", "message_delta", "tool_approval_request", "stop", "tool_approval_resolved", "message_delta", "stop"}
+	if strings.Join(types, " ") != strings.Join(want, " ") {
+		t.Errorf("event types = %v, want %v", types, want)
+	}
+	if got := strings.Join(text, ""); got != "Filing. done" {
+		t.Errorf("text = %q", got)
+	}
+}
+
 func TestAsk_InteractivePrompt(t *testing.T) {
-	for answer, want := range map[string]string{"y\n": "approve_once", "a\n": "approve_session", "\n": "reject", "": "reject"} {
+	for answer, want := range map[string]string{"y\n": "a1:approve_once", "a\n": "a1:approve_session", "\n": "a1:reject", "": "a1:reject"} {
 		t.Run(want+"/"+strings.TrimSpace(answer), func(t *testing.T) {
 			run := newApprovalServer(t, approvalServerOptions{})
 			ios, out, errOut := pipedIOS()
@@ -220,13 +317,42 @@ func TestAsk_InteractivePrompt(t *testing.T) {
 			if got := <-run.decisions; got != want {
 				t.Errorf("decision = %q, want %q", got, want)
 			}
-			if !strings.Contains(errOut.String(), "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject") {
+			if !strings.Contains(errOut.String(), askPrompt) {
 				t.Errorf("no prompt on stderr: %q", errOut.String())
 			}
-			if !strings.Contains(out.String(), "done") {
+			if out.String() != "Filing. done\n" {
 				t.Errorf("answer did not continue: %q", out.String())
 			}
 		})
+	}
+}
+
+func TestAsk_PromptsForEachRequestAfterTheStreamStops(t *testing.T) {
+	run := newApprovalServer(t, approvalServerOptions{requests: []string{"a1", "a2"}})
+	ios, typed, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	// The stream has stopped for the decisions; the prompt still waits.
+	time.Sleep(100 * time.Millisecond)
+	go func() { _, _ = io.WriteString(typed, "y\n") }()
+	waitForPrompts(t, errOut, 2)
+	go func() { _, _ = io.WriteString(typed, "n\n") }()
+
+	if err := <-done; err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	for _, want := range []string{"a1:approve_once", "a2:reject"} {
+		if got := <-run.decisions; got != want {
+			t.Fatalf("decision = %q, want %q", got, want)
+		}
+	}
+	if got := ios.Out.(*syncBuffer).String(); got != "Filing. done\n" {
+		t.Errorf("stdout = %q", got)
+	}
+	if !strings.Contains(errOut.String(), "Not approved: Tool a2") {
+		t.Errorf("a2's outcome is not reported: %q", errOut.String())
 	}
 }
 
@@ -247,7 +373,7 @@ func TestAsk_ApprovingADisabledToolRecordsItDisabled(t *testing.T) {
 	if err := runApprovalAsk(t, ios, "--approve=once"); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if got := <-run.decisions; got != "approve_once" {
+	if got := <-run.decisions; got != "a1:approve_once" {
 		t.Errorf("decision = %q", got)
 	}
 	if !strings.Contains(errOut.String(), "Disabled: Create issue") || !strings.Contains(out.String(), "done") {
@@ -255,19 +381,47 @@ func TestAsk_ApprovingADisabledToolRecordsItDisabled(t *testing.T) {
 	}
 }
 
+func TestAsk_InterruptedPromptLeavesTheRequestWaiting(t *testing.T) {
+	run := newApprovalServer(t, approvalServerOptions{})
+	ios, _, errOut := interactiveIOS(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		cmd := newAskCmd(ios)
+		cmd.SetArgs([]string{"file a ticket"})
+		done <- cmd.ExecuteContext(ctx)
+	}()
+
+	waitForPrompts(t, errOut, 1)
+	// Let the stream stop for the decision before the interrupt.
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	err := <-done
+	if code := exitCode(err); code != exitcodes.ApprovalPending {
+		t.Fatalf("exit code = %d (%v), want %d", code, err, exitcodes.ApprovalPending)
+	}
+	if !strings.Contains(err.Error(), "still waits") {
+		t.Errorf("error does not say the request waits: %v", err)
+	}
+	noStop(t, run)
+	noDecision(t, run)
+}
+
 func TestAsk_PromptEndsWhenTheServerEndsTheRequest(t *testing.T) {
-	run := newApprovalServer(t, approvalServerOptions{expire: true})
-	ios, out, errOut := pipedIOS()
-	// Nobody answers the prompt.
-	answer, unanswered := io.Pipe()
-	t.Cleanup(func() { _ = unanswered.Close() })
-	ios.In = answer
-	ios.IsStderrTTY = true
+	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
+		send("tool_approval_request", requestEvent("a1"))
+		// The program that asked ends while its stream keeps running.
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "cancelled"})
+		send("message_delta", map[string]any{"content": "done"})
+		send("stop", nil)
+	})
+	ios, _, errOut := interactiveIOS(t)
 	if err := runApprovalAsk(t, ios); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
-	if !strings.Contains(errOut.String(), "Timed out: Create issue") || !strings.Contains(out.String(), "done") {
-		t.Errorf("stdout=%q stderr=%q", out.String(), errOut.String())
+	if !strings.Contains(errOut.String(), "No longer waiting: Tool a1") || !strings.Contains(ios.Out.(*syncBuffer).String(), "done") {
+		t.Errorf("stdout=%q stderr=%q", ios.Out.(*syncBuffer).String(), errOut.String())
 	}
 	select {
 	case got := <-run.decisions:
@@ -379,8 +533,8 @@ func TestAsk_LateAnswerDoesNotDecideTheNextRequest(t *testing.T) {
 	run := newParallelApprovalServer(t, func(send func(string, map[string]any), decisions <-chan string) {
 		send("tool_approval_request", requestEvent("a1"))
 		<-aShown
-		// a1 times out while the user types its answer.
-		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "expired"})
+		// a1 ends while the user types its answer.
+		send("tool_approval_resolved", map[string]any{"approval_id": "a1", "outcome": "cancelled"})
 		send("tool_approval_request", requestEvent("a2"))
 		<-decisions
 		send("tool_approval_resolved", map[string]any{"approval_id": "a2", "outcome": "rejected"})
@@ -525,39 +679,49 @@ func TestAsk_NoPromptForARequestResolvedWhileAnotherWaited(t *testing.T) {
 
 func TestAsk_DecisionFailureStopsTheResponseBeforeExit(t *testing.T) {
 	for _, args := range [][]string{{"--approve=once"}, {"--approve=once", "--json"}} {
-		t.Run(strings.Join(args, " "), func(t *testing.T) {
-			stopped := make(chan string, 1)
-			mux := http.NewServeMux()
-			mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
-				fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
-				fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
-				fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
-				w.(http.Flusher).Flush()
-				<-r.Context().Done()
-			})
-			mux.HandleFunc("/api/chat/approvals/a1/decision", func(w http.ResponseWriter, r *http.Request) {
-				http.Error(w, `{"detail":"boom"}`, http.StatusInternalServerError)
-			})
-			mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
-				stopped <- r.URL.Query().Get("stream_id")
-			})
-			srv := httptest.NewServer(mux)
-			t.Cleanup(srv.Close)
-			testutil.IsolateConfig(t, srv.URL)
-			t.Setenv("CI", "")
-			ios, _, _ := pipedIOS()
+		// A running stream's owner stops it; a waiting response cannot be
+		// stopped and keeps its request.
+		for _, waiting := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/waiting=%t", strings.Join(args, " "), waiting), func(t *testing.T) {
+				stopped := make(chan string, 1)
+				mux := http.NewServeMux()
+				mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
+					fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
+					fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
+					fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
+					if waiting {
+						fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+						return
+					}
+					w.(http.Flusher).Flush()
+					<-r.Context().Done()
+				})
+				mux.HandleFunc("/api/chat/approvals/a1/decision", func(w http.ResponseWriter, r *http.Request) {
+					http.Error(w, `{"detail":"boom"}`, http.StatusInternalServerError)
+				})
+				mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
+					stopped <- r.URL.Query().Get("stream_id")
+				})
+				srv := httptest.NewServer(mux)
+				t.Cleanup(srv.Close)
+				testutil.IsolateConfig(t, srv.URL)
+				t.Setenv("CI", "")
+				ios, _, _ := pipedIOS()
 
-			if err := runApprovalAsk(t, ios, args...); exitCode(err) == exitcodes.Success {
-				t.Fatal("a failed decision must fail the run")
-			}
-			select {
-			case id := <-stopped:
-				if id != "2" {
-					t.Fatalf("Stop stream_id = %q, want 2", id)
+				if err := runApprovalAsk(t, ios, args...); exitCode(err) == exitcodes.Success {
+					t.Fatal("a failed decision must fail the run")
 				}
-			default:
-				t.Fatal("ask returned before the response was stopped")
-			}
-		})
+				select {
+				case id := <-stopped:
+					if waiting || id != "2" {
+						t.Fatalf("Stop stream_id = %q; want 2 only for a running stream", id)
+					}
+				default:
+					if !waiting {
+						t.Fatal("ask returned before the running response was stopped")
+					}
+				}
+			})
+		}
 	}
 }

@@ -2,11 +2,11 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -47,13 +47,11 @@ func streamingModel(client api.ClientAPI) (Model, chan models.StreamEvent) {
 }
 
 func approvalRequest(id string) models.ToolApprovalRequestEvent {
-	expires := time.Now().Add(10 * time.Minute)
 	return models.ToolApprovalRequestEvent{
 		ApprovalID:  id,
 		ToolName:    "mcp__3__linear__create_issue",
 		DisplayName: "Create issue",
 		Arguments:   map[string]any{"title": "Bug"},
-		ExpiresAt:   &expires,
 	}
 }
 
@@ -107,7 +105,7 @@ func TestApprovalShortcutsDecide(t *testing.T) {
 			m, ch := streamingModel(client)
 			m = receive(t, m, ch, approvalRequest("a1"))
 			card := approvalEntry(t, m, "a1")
-			for _, want := range []string{"Approval requested: Create issue", "title: Bug", "Approve by", "> Approve once (y)", "Reject (n)"} {
+			for _, want := range []string{"Approval requested: Create issue", "title: Bug", "> Approve once (y)", "Reject (n)"} {
 				if !strings.Contains(card, want) {
 					t.Fatalf("card lacks %q:\n%s", want, card)
 				}
@@ -219,7 +217,6 @@ func TestApprovalResolvedOutcomes(t *testing.T) {
 		"approved":          "Approved",
 		"approved_for_chat": "Approved for this session",
 		"rejected":          "Not approved",
-		"expired":           "Timed out",
 		"disabled":          "Disabled",
 		"cancelled":         "No longer waiting",
 		"deferred":          "No longer waiting",
@@ -331,8 +328,12 @@ type resumingClient struct {
 	sent chan models.StreamEvent
 	// saved answers GetChatSession.
 	saved *models.ChatSessionDetailResponse
+	// status answers ChatSessionStatus when set.
+	status *models.ChatSessionStatus
 	// statusErr fails ChatSessionStatus.
 	statusErr error
+	// stops receives the stream ID of each Stop.
+	stops chan int
 }
 
 func (c *resumingClient) SendMessageStream(context.Context, string, *string, int, *int, []models.FileDescriptorPayload, *models.LLMOverride) <-chan models.StreamEvent {
@@ -344,15 +345,59 @@ func (c *resumingClient) ResumeChatStream(_ context.Context, sessionID string, _
 	return c.running
 }
 
-func TestApprovalPendingErrorReattachesAndKeepsDraft(t *testing.T) {
-	client := &resumingClient{running: make(chan models.StreamEvent)}
+func (c *resumingClient) StopChatSession(_ context.Context, _ string, streamID int) {
+	c.stops <- streamID
+}
+
+const waitingSessionID = "11111111-2222-3333-4444-555555555555"
+
+// waitingSession is a saved session whose response 2 waits for a1.
+func waitingSession(t *testing.T) *models.ChatSessionDetailResponse {
+	t.Helper()
+	packet := func(obj map[string]any) json.RawMessage {
+		line, err := json.Marshal(map[string]any{"placement": map[string]any{"turn_index": 0}, "obj": obj})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return line
+	}
+	return &models.ChatSessionDetailResponse{
+		ChatSessionID: waitingSessionID,
+		Messages: []models.ChatMessageDetail{
+			{MessageID: 1, MessageType: "user", Message: "file a ticket"},
+			{MessageID: 2, MessageType: "assistant", Message: "Filing the ticket."},
+		},
+		Packets: [][]json.RawMessage{{
+			packet(map[string]any{"type": "message_delta", "content": "Filing the ticket."}),
+			packet(map[string]any{"type": "tool_approval_request", "approval_id": "a1", "tool_name": "mcp__3__linear__create_issue", "display_name": "Create issue", "arguments": map[string]any{"title": "Bug"}}),
+			packet(map[string]any{"type": "stop", "stop_reason": "awaiting_approval"}),
+		}},
+	}
+}
+
+// run runs cmd and feeds its message back to the model.
+func run(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("no command")
+	}
+	updated, next := m.Update(cmd())
+	return updated.(Model), next
+}
+
+func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
+	client := &resumingClient{sent: make(chan models.StreamEvent), saved: waitingSession(t)}
 	m, ch := streamingModel(client)
-	session := "session-1"
+	session := waitingSessionID
 	m.chatSessionID = &session
-	m.submittedMessage = "follow-up"
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
+	m, _ = m.finishStream(nil)
 
-	m = receive(t, m, ch, models.ErrorEvent{Error: "HTTP 409: Approve or reject", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending})
-
+	m, _ = m.sendMessage("follow-up")
+	updated, cmd := m.handleStreamEvent(StreamEventMsg{Channel: client.sent, Event: models.ErrorEvent{Error: "HTTP 409: Approve or reject", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending}})
+	m = updated.(Model)
 	var warning string
 	for _, e := range m.viewport.entries {
 		if e.kind == entryError {
@@ -362,49 +407,20 @@ func TestApprovalPendingErrorReattachesAndKeepsDraft(t *testing.T) {
 	if !strings.Contains(warning, "waits for approval") || strings.Contains(warning, "409") {
 		t.Fatalf("message = %q", warning)
 	}
-	if m.input.textInput.Value() != "follow-up" {
-		t.Fatal("lost the draft")
-	}
-	if len(client.resumed) != 1 || client.resumed[0] != session || m.streamCh != client.running || !m.isStreaming {
-		t.Fatalf("did not follow the running response: resumed=%v", client.resumed)
-	}
-	// The waiting request arrives on the resumed stream.
-	m = receive(t, m, client.running, approvalRequest("a1"))
-	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
-		t.Fatal("the waiting request cannot be decided")
-	}
-}
 
-func TestApprovalPendingReplayReplacesTheShownResponse(t *testing.T) {
-	client := &resumingClient{running: make(chan models.StreamEvent), sent: make(chan models.StreamEvent)}
-	m, ch := streamingModel(client)
-	session := "session-1"
-	m.chatSessionID = &session
-	m.viewport.startAgent()
-	// The response waits for approval when its stream drops.
-	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 7})
-	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
-	m = receive(t, m, ch, approvalRequest("a1"))
-	m, _ = m.finishStream(nil)
-
-	m, _ = m.sendMessage("follow-up")
-	m = receive(t, m, client.sent, models.ErrorEvent{Error: "HTTP 409", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending})
-	for _, e := range m.viewport.entries {
-		if e.kind == entryUser {
-			t.Fatalf("the unsent message shows: %q", e.content)
-		}
+	// The waiting response has no stream; the saved session shows its request.
+	m, _ = run(t, m, cmd)
+	if len(client.resumed) != 0 {
+		t.Fatalf("followed a stream: resumed=%v", client.resumed)
 	}
 	if m.input.textInput.Value() != "follow-up" {
 		t.Fatal("lost the draft")
 	}
-
-	// The running response replays from its start.
-	m = receive(t, m, client.running, models.MessageIDEvent{ReservedAgentMessageID: 7})
-	m = receive(t, m, client.running, models.MessageDeltaEvent{Content: "Filing the ticket."})
-	m = receive(t, m, client.running, approvalRequest("a1"))
-	m, _ = m.finishStream(nil)
 	shown, cards := 0, 0
 	for _, e := range m.viewport.entries {
+		if e.kind == entryUser && e.content == "follow-up" {
+			t.Fatalf("the unsent message shows: %q", e.content)
+		}
 		shown += strings.Count(e.content, "Filing the ticket.")
 		if e.kind == entryApproval {
 			cards++
@@ -413,8 +429,90 @@ func TestApprovalPendingReplayReplacesTheShownResponse(t *testing.T) {
 	if shown != 1 || cards != 1 {
 		t.Fatalf("the response shows %d times and its request %d times", shown, cards)
 	}
-	if last := m.viewport.entries[len(m.viewport.entries)-1]; last.responseID != 7 {
-		t.Fatalf("the replayed response is not last: %q", last.content)
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+		t.Fatal("the waiting request cannot be decided")
+	}
+}
+
+func TestStopForDecisionsKeepsCardsAndTheLastDecisionFollowsTheContinuation(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent)}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, approvalRequest("a1"))
+	m = receive(t, m, ch, approvalRequest("a2"))
+	reason := models.StopReasonAwaitingApproval
+	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
+	updated, cmd := m.Update(StreamDoneMsg{Channel: ch})
+	m = updated.(Model)
+	if cmd != nil {
+		t.Fatal("the client keeps reading after the stream stopped for decisions")
+	}
+	if !m.isStreaming || m.activeApproval() != 0 {
+		t.Fatal("the cards are not actionable")
+	}
+
+	// The first decision leaves a2 waiting, so nothing follows yet.
+	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, next := run(t, m, cmd)
+	if next != nil || m.activeApproval() != 1 {
+		t.Fatal("followed the response before every request was decided")
+	}
+
+	// The last decision checks the status, which names the continuation.
+	client.status = &models.ChatSessionStatus{IsProcessing: true, StreamID: new(3)}
+	client.saved = &models.ChatSessionDetailResponse{
+		ChatSessionID: session,
+		Messages: []models.ChatMessageDetail{
+			{MessageID: 1, MessageType: "user", Message: "file a ticket"},
+			{MessageID: 2, MessageType: "assistant"},
+		},
+	}
+	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
+	m, ready := run(t, m, cmd)
+	m, reload := run(t, m, ready)
+	m, _ = run(t, m, reload)
+	if len(client.resumed) != 1 || m.streamCh != client.running {
+		t.Fatalf("did not follow the continuation: resumed=%v", client.resumed)
+	}
+	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a1", Outcome: "approved"})
+	m = receive(t, m, client.running, models.MessageDeltaEvent{Content: "Filed ENG-1."})
+	if view := stripANSI(m.viewport.view(20)); !strings.Contains(view, "Filed ENG-1.") {
+		t.Fatalf("the continuation does not show:\n%s", view)
+	}
+}
+
+func TestResumingAWaitingSessionShowsItsRequestThatStopCannotEnd(t *testing.T) {
+	client := &resumingClient{stops: make(chan int, 1)}
+	m := NewModel(config.DefaultConfig(), client)
+	m, _ = run(t, m, func() tea.Msg { return SessionResumedMsg{Detail: waitingSession(t)} })
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+		t.Fatal("the waiting request cannot be decided")
+	}
+	if len(client.resumed) != 0 {
+		t.Fatalf("followed a stream: resumed=%v", client.resumed)
+	}
+
+	card := approvalEntry(t, m, "a1")
+	if strings.Contains(card, "esc stop the response") {
+		t.Fatalf("the card offers Stop for a waiting response:\n%s", card)
+	}
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: 'c', Mod: tea.ModCtrl}} {
+		updated, cmd := m.handleKey(key)
+		m = updated.(Model)
+		if cmd != nil || m.stopRequested {
+			t.Fatalf("%s acted on a waiting response", key.String())
+		}
+	}
+	select {
+	case got := <-client.stops:
+		t.Fatalf("sent Stop for stream %d", got)
+	default:
+	}
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+		t.Fatal("the waiting request cannot be decided after Esc")
 	}
 }
 
@@ -454,6 +552,9 @@ func (c *resumingClient) GetChatSession(_ context.Context, sessionID string) (*m
 }
 
 func (c *resumingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
+	if c.status != nil {
+		return *c.status, nil
+	}
 	// Like the API client, a failed query reports a running session.
 	return models.ChatSessionStatus{IsProcessing: c.statusErr != nil}, c.statusErr
 }

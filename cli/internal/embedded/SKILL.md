@@ -135,9 +135,11 @@ onyx-cli ask --json "List all active API integrations"
 
 Some tool calls need the user's approval before they run. Without a terminal, `ask` never waits for input. It uses `--approve`:
 
-- `fail` (default): rejects the tool call and exits with code 10. Without `--json`, it prints the request to stderr. With `--json`, the request is the `tool_approval_request` event on stdout.
+- `fail` (default): rejects the tool call, prints the rest of the answer without it, and exits with code 10. Without `--json`, it prints the request to stderr. With `--json`, the request is the `tool_approval_request` event on stdout.
 - `reject`: rejects the tool call and continues the answer without it.
 - `once` or `session`: approves every tool call in the response that needs approval.
+
+After the answers, `ask` follows the response as it continues and prints the rest of the answer in the same run.
 
 On exit code 10, show the user the tool name and arguments. Without `--json`, read them from stderr, which shows at most 10 arguments and shortens long values; say so when it does. With `--json`, read them from the `tool_approval_request` event on stdout, which has every argument in full. On a terminal, the user can answer `d` to see every argument in full. A new run gives a new response, which can request different tool calls. Consent to the tool call that the user saw is not consent to `--approve=once` or `--approve=session`, because these approve every tool call in the new run without showing it. Use them only if the user agrees to approve all tool calls in the run. Otherwise, ask the user to run the command on a terminal, where `ask` shows each request and waits for an answer.
 
@@ -189,6 +191,7 @@ Checks config exists, PAT is present, server is reachable, and credentials are v
 | 8    | ServerError    | Server returned 5xx              |
 | 9    | NotAvailable   | Feature/endpoint does not exist  |
 | 10   | ApprovalRequired | A tool call needed approval; `--approve=fail` rejected it |
+| 11   | ApprovalPending  | `ask` was interrupted at an approval prompt; the request still waits for a decision |
 
 ## Statelessness
 

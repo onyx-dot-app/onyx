@@ -1,6 +1,8 @@
 // Package models defines API request/response types for the Onyx CLI.
 package models
 
+import "encoding/json"
+
 // AgentSummary represents an agent from the API.
 type AgentSummary struct {
 	ID               int    `json:"id"`
@@ -44,6 +46,8 @@ type ChatSessionDetailResponse struct {
 	AgentID       *int                `json:"persona_id"`
 	AgentName     *string             `json:"persona_name"`
 	Messages      []ChatMessageDetail `json:"messages"`
+	// One replay packet list for each assistant message, in message order.
+	Packets [][]json.RawMessage `json:"packets"`
 }
 
 // ChatSessionStatus reports whether the server still runs a response of a

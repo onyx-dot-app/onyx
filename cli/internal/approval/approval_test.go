@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
@@ -85,15 +84,5 @@ func TestTitleFallsBack(t *testing.T) {
 	}
 	if got := Title(models.ToolApprovalRequestEvent{DisplayName: "\x1b[2J"}); got != "Tool call" {
 		t.Errorf("Title = %q", got)
-	}
-}
-
-func TestDeadlineShowsOnlyTheServerTime(t *testing.T) {
-	past := time.Date(2000, 1, 1, 15, 45, 0, 0, time.Local)
-	if got := Deadline(&past); got != "Approve by 15:45" {
-		t.Errorf("Deadline = %q", got)
-	}
-	if got := Deadline(nil); got != "" {
-		t.Errorf("Deadline = %q", got)
 	}
 }

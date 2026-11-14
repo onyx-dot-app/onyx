@@ -1,7 +1,5 @@
 package models
 
-import "time"
-
 // StreamEvent is the interface for all parsed stream events.
 type StreamEvent interface {
 	EventType() string
@@ -50,6 +48,10 @@ type MessageIDEvent struct {
 
 func (e MessageIDEvent) EventType() string { return EventMessageIDInfo }
 
+// StopReasonAwaitingApproval ends the stream of a response that waits for
+// tool approval decisions. The response continues on a new stream after them.
+const StopReasonAwaitingApproval = "awaiting_approval"
+
 // StopEvent signals the end of a stream.
 type StopEvent struct {
 	Placement  *Placement `json:"placement,omitempty"`
@@ -57,6 +59,12 @@ type StopEvent struct {
 }
 
 func (e StopEvent) EventType() string { return EventStop }
+
+// AwaitingApproval reports a stream that stopped while its response waits for
+// approval decisions.
+func (e StopEvent) AwaitingApproval() bool {
+	return e.StopReason != nil && *e.StopReason == StopReasonAwaitingApproval
+}
 
 // ErrorEvent signals an error.
 type ErrorEvent struct {
@@ -189,7 +197,7 @@ type IntermediateReportDeltaEvent struct {
 func (e IntermediateReportDeltaEvent) EventType() string { return EventIntermediateReportDt }
 
 // ToolApprovalRequestEvent asks the user to approve one tool call. The tool
-// call waits until the user decides or the request expires. Arguments come
+// call waits until the user decides or stops the response. Arguments come
 // from the model and are untrusted.
 type ToolApprovalRequestEvent struct {
 	Placement   *Placement     `json:"placement,omitempty"`
@@ -198,7 +206,6 @@ type ToolApprovalRequestEvent struct {
 	ToolName    string         `json:"tool_name"`
 	DisplayName string         `json:"display_name"`
 	Arguments   map[string]any `json:"arguments"`
-	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
 }
 
 func (e ToolApprovalRequestEvent) EventType() string { return EventToolApprovalRequest }
@@ -210,7 +217,6 @@ const (
 	// the tool approved the request.
 	ApprovalOutcomeApprovedForChat = "approved_for_chat"
 	ApprovalOutcomeRejected        = "rejected"
-	ApprovalOutcomeExpired         = "expired"
 	ApprovalOutcomeDisabled        = "disabled"
 	ApprovalOutcomeCancelled       = "cancelled"
 )

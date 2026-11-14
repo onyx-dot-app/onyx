@@ -36,7 +36,7 @@ func collectEvents(t *testing.T, events <-chan models.StreamEvent) []models.Stre
 
 func TestStreamOutlivesIdleTimeoutWhileDataArrives(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Heartbeats keep a long wait, such as a pending approval, alive.
+		// Heartbeats keep a long turn without output alive.
 		for range 40 {
 			fmt.Fprintln(w, `{"placement":{"turn_index":0},"obj":{"type":"chat_heartbeat"}}`)
 			w.(http.Flusher).Flush()
