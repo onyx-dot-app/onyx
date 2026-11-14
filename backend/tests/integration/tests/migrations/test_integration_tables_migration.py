@@ -34,7 +34,7 @@ from onyx.db.plugin import (
 from onyx.db.users import delete_user_from_db__no_commit
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "ff11c4042c42"
+PREVIOUS_REVISION = "7c00f53ab75f"
 REVISION = "730bce2814a0"
 ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 
@@ -419,6 +419,31 @@ def _seed(conn: Connection) -> Seeded:
         ),
         {"id": uuid4(), "s": session_id, "g": gated["app_slack"]},
     )
+    chat_session_id = _insert(
+        conn,
+        "INSERT INTO chat_session (id, user_id, deleted, shared_status, "
+        "onyxbot_flow) VALUES (:id, :u, false, 'PRIVATE', false) RETURNING id",
+        id=uuid4(),
+        u=users["owner"],
+    )
+    chat_message_id = _insert(
+        conn,
+        "INSERT INTO chat_message (chat_session_id, message, message_type, "
+        "token_count) VALUES (:s, 'q', 'ASSISTANT', 1) RETURNING id",
+        s=chat_session_id,
+    )
+    conn.execute(
+        text(
+            "INSERT INTO approval_request (id, chat_session_id, chat_message_id, "
+            "gated_app_id, action_id) VALUES (:id, :s, :m, :g, 'create_issue')"
+        ),
+        {
+            "id": uuid4(),
+            "s": chat_session_id,
+            "m": chat_message_id,
+            "g": gated["mcp_public"],
+        },
+    )
     conn.execute(
         text(
             "INSERT INTO action_receipt (id, session_id, action_type, effect, "
@@ -483,6 +508,9 @@ def _cleanup(conn: Connection, seeded: Seeded) -> None:
     )
     conn.execute(
         text("DELETE FROM build_session WHERE user_id = :u"), {"u": seeded.owner}
+    )
+    conn.execute(
+        text("DELETE FROM chat_session WHERE user_id = :u"), {"u": seeded.owner}
     )
     conn.execute(
         text("DELETE FROM discord_guild_config WHERE default_persona_id = :p"),
@@ -876,6 +904,16 @@ def test_copies_each_integration(engine: Engine, seeded: Seeded) -> None:
                 ).scalar_one()
                 == slack.id
             )
+        assert (
+            conn.execute(
+                text(
+                    "SELECT integration_id FROM approval_request "
+                    "WHERE gated_app_id = :g"
+                ),
+                {"g": seeded.gated["mcp_public"]},
+            ).scalar_one()
+            == public.id
+        )
 
 
 def test_downgrade_then_upgrade_gives_the_same_rows(

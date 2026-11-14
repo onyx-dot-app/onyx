@@ -6,7 +6,7 @@ a rollback finds them as they were. It moves no secret: the credential import
 (U3) does that in app code.
 
 Revision ID: 730bce2814a0
-Revises: ff11c4042c42
+Revises: 7c00f53ab75f
 Create Date: 2026-11-13 14:42:45.411165
 
 """
@@ -17,12 +17,14 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "730bce2814a0"
-down_revision = "ff11c4042c42"
+down_revision = "7c00f53ab75f"
 branch_labels = None
 depends_on = None
 
 
 ORGANIZATION_LIBRARY_ID = "00000000-0000-4000-8000-00000000011b"
+# Records of a gated action. Each gets the integration of its gated_app_id.
+RECORD_TABLES = ("action_receipt", "action_approval", "approval_request")
 # Created-at of a row whose source has no timestamp (tool rows have none).
 FALLBACK_CREATED_AT = "2026-11-13 00:00:00+00"
 
@@ -229,7 +231,7 @@ def _create_tables() -> None:
         ["plugin_id"],
     )
 
-    for table in ("action_receipt", "action_approval"):
+    for table in RECORD_TABLES:
         op.add_column(table, sa.Column("integration_id", sa.Integer(), nullable=True))
         # NOT VALID: no scan of the old rows under a lock. The constraint still
         # checks each new or changed row, so the backfill below is checked too.
@@ -822,7 +824,7 @@ _INSERT_TASK_PLUGINS = f"""
 
 _SET_RECORD_INTEGRATIONS = [
     f"UPDATE {table} SET integration_id = gated_app_id WHERE gated_app_id IS NOT NULL"
-    for table in ("action_receipt", "action_approval")
+    for table in RECORD_TABLES
 ]
 
 
@@ -852,23 +854,14 @@ def _copy_integrations() -> None:
         op.execute(statement)
 
 
-def _run_deferred_checks() -> None:
-    # Plugin writes queue deferred FK checks until commit, and every revision
-    # runs in one transaction, where ALTER TABLE refuses a table with queued
-    # checks. ALL, because 414dfccc5e24 drops these constraints.
-    op.execute("SET CONSTRAINTS ALL IMMEDIATE")
-    op.execute("SET CONSTRAINTS ALL DEFERRED")
-
-
 def upgrade() -> None:
     _create_tables()
     _copy_integrations()
-    _run_deferred_checks()
 
 
 def downgrade() -> None:
     op.drop_column("assistant__user_specific_config", "disabled_plugin_ids")
-    for table in ("action_approval", "action_receipt"):
+    for table in reversed(RECORD_TABLES):
         op.drop_column(table, "integration_id")
     for table in (
         "scheduled_task__plugin",
@@ -880,4 +873,3 @@ def downgrade() -> None:
     # Each home plugin goes with its integration.
     op.execute("DELETE FROM plugin WHERE id IN (SELECT plugin_id FROM integration)")
     op.drop_table("integration")
-    _run_deferred_checks()

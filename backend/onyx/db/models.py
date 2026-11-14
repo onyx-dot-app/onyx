@@ -3650,6 +3650,15 @@ class ApprovalRequest(Base):
     gated_app_id: Mapped[int] = mapped_column(
         ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=False
     )
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_approval_request_integration_id",
+        ),
+        nullable=True,
+    )
     # The action that the request asks to run, such as an MCP tool name. It
     # keys the action policy and session grants.
     action_id: Mapped[str] = mapped_column(String, nullable=False)
