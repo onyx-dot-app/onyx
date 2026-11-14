@@ -13,6 +13,7 @@ raise: a failure is logged. The heavy client stack loads only when enabled.
   purged as on session delete.
 """
 
+import random
 from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
@@ -72,10 +73,10 @@ def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
             logger.exception("sandbox_fc_sandbox_purge_failed sandbox=%s", sandbox_id)
 
 
-def purge_expired_harness_sessions(retention_days: float) -> None:
-    """Purge each saved session whose chat session is gone or whose build
-    session had no activity in `retention_days`. Run after the retention
-    deletes commit."""
+def purge_expired_harness_sessions(retention_days: float, limit: int) -> None:
+    """Purge at most `limit` saved sessions whose chat session is gone or
+    whose build session had no activity in `retention_days`. The next run
+    takes the rest. Run after the retention deletes commit."""
     if not HARNESS_PURGE_ENABLED:
         return
     cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
@@ -104,7 +105,9 @@ def purge_expired_harness_sessions(retention_days: float) -> None:
     except Exception:
         logger.exception("sandbox_fc_retention_purge_failed")
         return
-    for sandbox_id, session_id in expired:
+    # Random order: saves whose purge keeps failing cannot block the rest.
+    random.shuffle(expired)
+    for sandbox_id, session_id in expired[:limit]:
         purge_harness_session(sandbox_id, session_id)
 
 

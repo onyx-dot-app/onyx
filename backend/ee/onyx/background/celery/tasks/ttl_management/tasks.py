@@ -17,7 +17,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.sandbox.firecracker.purge import (
-    purge_expired_harness_sessions,
+    HARNESS_PURGE_ENABLED,
 )
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
@@ -52,6 +52,23 @@ def _release_chain_if_owned(redis_client: TenantRedisClient, chain_token: str) -
         [OnyxRedisLocks.CHAT_TTL_CHAIN_ACTIVE],
         [chain_token],
     )
+
+
+def _send_harness_retention_purge(
+    task: Task, retention_limit_days: float, tenant_id: str
+) -> None:
+    """Once per chain, after its deletes commit. The sandbox queue runs on a
+    worker that can call the Firecracker host agents."""
+    try:
+        task.app.send_task(
+            OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
+            kwargs={"retention_days": retention_limit_days, "tenant_id": tenant_id},
+            queue=OnyxCeleryQueues.SANDBOX,
+            priority=OnyxCeleryPriority.LOW,
+            expires=CELERY_CHAT_TTL_DELETE_TASK_EXPIRES,
+        )
+    except Exception:
+        logger.exception("Failed to enqueue the Firecracker retention purge")
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -150,8 +167,8 @@ def perform_ttl_management_task(
             _release_chain_if_owned(redis_client, chain_token)
             raise
     else:
-        # Once per chain, after its deletes commit. Never raises.
-        purge_expired_harness_sessions(retention_limit_days)
+        if HARNESS_PURGE_ENABLED:
+            _send_harness_retention_purge(self, retention_limit_days, tenant_id)
         _release_chain_if_owned(redis_client, chain_token)
 
 

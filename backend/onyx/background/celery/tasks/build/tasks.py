@@ -28,6 +28,9 @@ from onyx.server.features.build.db.sandbox import (
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_expired_harness_sessions,
+)
 from onyx.server.features.build.session.resource_cleanup import (
     delete_unknown_tenant_resources,
     fail_stale_provisioning_sandboxes,
@@ -46,6 +49,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 SNAPSHOT_INTERVAL_DIVISOR = 4
 RUNNING_SANDBOX_BATCH_SIZE = 100
 RUNNING_SANDBOX_CURSOR_KEY = "sandbox_cleanup_running_cursor"
+# Saves purged per retention run; the hourly chain end takes the rest.
+HARNESS_RETENTION_PURGE_BATCH_SIZE = 100
 
 
 def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
@@ -73,6 +78,23 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     _sweep_tenant_sandboxes(
         tenant_id, time.monotonic() + TIMEOUT_SECONDS, reconcile_resources=False
     )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def purge_expired_harness_sessions_task(
+    self: Task,  # noqa: ARG001
+    retention_days: float,
+    *,
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """Firecracker session saves that chat retention no longer keeps. Sent
+    by the EE chat retention chain."""
+    purge_expired_harness_sessions(retention_days, HARNESS_RETENTION_PURGE_BATCH_SIZE)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]

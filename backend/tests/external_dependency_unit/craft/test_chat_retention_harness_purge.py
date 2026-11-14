@@ -11,7 +11,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.background.celery.tasks.ttl_management import tasks as ttl_tasks
+from onyx.background.celery.tasks.build import tasks as build_tasks
 from onyx.cache.factory import get_cache_backend
+from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.chat import create_chat_session
 from onyx.db.enums import BuildSessionStatus, SandboxStatus
 from onyx.db.models import BuildSession, ChatSession, User
@@ -48,18 +50,46 @@ def _delete_user(db_session: Session, user_id: UUID) -> None:
         delete_user_from_db(user, db_session)
 
 
-def test_retention_purges_the_saves_it_no_longer_keeps(
-    db_session: Session,
-    tenant_context: None,  # noqa: ARG001
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def _record_purges(monkeypatch: pytest.MonkeyPatch) -> list[tuple[UUID, UUID]]:
     purged: list[tuple[UUID, UUID]] = []
-    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", True)
     monkeypatch.setattr(
         purge_module,
         "purge_harness_session",
         lambda sandbox_id, session_id: purged.append((sandbox_id, session_id)),
     )
+    return purged
+
+
+def _run_chain_end(tenant_id: str, chat_session_ids: list[UUID]) -> MagicMock:
+    """Runs one retention batch that ends its chain. Returns `send_task`."""
+    lease = MagicMock()
+    lease.eval.return_value = 1
+    task = ttl_tasks.perform_ttl_management_task
+    with (
+        patch(f"{_TASKS}.get_redis_client", return_value=lease),
+        patch(
+            f"{_TASKS}.load_settings",
+            return_value=Settings(maximum_chat_retention_days=_RETENTION_DAYS),
+        ),
+        patch(
+            f"{_TASKS}.get_chat_sessions_older_than",
+            return_value=[(None, s) for s in chat_session_ids],
+        ),
+        patch.object(task.app, "send_task") as send_task,
+    ):
+        run_batch = task.run
+        run_batch(_RETENTION_DAYS, "token", tenant_id=tenant_id)  # ty: ignore[invalid-argument-type]
+    return send_task
+
+
+def test_retention_purges_the_saves_it_no_longer_keeps(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    purged = _record_purges(monkeypatch)
+    monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", True)
+    monkeypatch.setattr(ttl_tasks, "HARNESS_PURGE_ENABLED", True)
     tenant_id = get_current_tenant_id()
     tenant_cache = get_cache_backend(tenant_id=tenant_id)
     user = make_user(db_session, standard_account=True)
@@ -75,27 +105,27 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         for session_id in (old_build, fresh_build, expired_chat, kept_chat, orphan):
             add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(session_id))
 
-        lease = MagicMock()
-        lease.eval.return_value = 1
-        with (
-            patch(f"{_TASKS}.get_redis_client", return_value=lease),
-            patch(
-                f"{_TASKS}.load_settings",
-                return_value=Settings(maximum_chat_retention_days=_RETENTION_DAYS),
-            ),
-            patch(
-                f"{_TASKS}.get_chat_sessions_older_than",
-                return_value=[(user.id, expired_chat)],
-            ),
-        ):
-            run_batch = ttl_tasks.perform_ttl_management_task.run
-            run_batch(_RETENTION_DAYS, "token", tenant_id=tenant_id)  # ty: ignore[invalid-argument-type]
+        send_task = _run_chain_end(tenant_id, [expired_chat])
 
         db_session.expire_all()
         assert db_session.get(ChatSession, expired_chat) is None
+        # The sweep runs on the sandbox queue, after the deletes commit.
+        send_task.assert_called_once()
+        assert send_task.call_args.args == (
+            OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
+        )
+        assert send_task.call_args.kwargs["queue"] == OnyxCeleryQueues.SANDBOX
+        assert send_task.call_args.kwargs["expires"] is not None
+        sweep = build_tasks.purge_expired_harness_sessions_task.run
+        sweep(**send_task.call_args.kwargs["kwargs"])
+
         assert sorted(purged) == sorted(
             [(sandbox_id, old_build), (sandbox_id, expired_chat), (sandbox_id, orphan)]
         )
+
+        purged.clear()
+        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=2)
+        assert len(purged) == 2
     finally:
         db_session.rollback()
         if sandbox_id is not None:
@@ -108,14 +138,11 @@ def test_retention_purges_nothing_when_firecracker_is_off(
     tenant_context: None,  # noqa: ARG001
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    purged: list[tuple[UUID, UUID]] = []
+    purged = _record_purges(monkeypatch)
     monkeypatch.setattr(purge_module, "HARNESS_PURGE_ENABLED", False)
-    monkeypatch.setattr(
-        purge_module,
-        "purge_harness_session",
-        lambda sandbox_id, session_id: purged.append((sandbox_id, session_id)),
-    )
-    tenant_cache = get_cache_backend(tenant_id=get_current_tenant_id())
+    monkeypatch.setattr(ttl_tasks, "HARNESS_PURGE_ENABLED", False)
+    tenant_id = get_current_tenant_id()
+    tenant_cache = get_cache_backend(tenant_id=tenant_id)
     user = make_user(db_session, standard_account=True)
     user_id = user.id
     sandbox_id: UUID | None = None
@@ -123,8 +150,10 @@ def test_retention_purges_nothing_when_firecracker_is_off(
         sandbox_id = make_sandbox(db_session, user, status=SandboxStatus.SLEEPING).id
         add_id(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id, str(uuid4()))
 
-        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS)
+        send_task = _run_chain_end(tenant_id, [])
+        purge_module.purge_expired_harness_sessions(_RETENTION_DAYS, limit=100)
 
+        send_task.assert_not_called()
         assert purged == []
     finally:
         db_session.rollback()
