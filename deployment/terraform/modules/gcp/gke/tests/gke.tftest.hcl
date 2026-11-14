@@ -530,6 +530,26 @@ run "the_pod_sandbox_pool_can_be_sized" {
   }
 }
 
+run "a_caller_pool_named_sandboxpod_still_starts_empty" {
+  command = plan
+
+  variables {
+    enable_sandbox_node_pool = true
+    craft_sandbox_runtime    = "firecracker"
+    node_pools = {
+      main = {}
+      sandboxpod = {
+        taints = [{ key = "workload", value = "sandbox", effect = "NO_SCHEDULE" }]
+      }
+    }
+  }
+
+  assert {
+    condition     = google_container_node_pool.this["sandboxpod"].initial_node_count == 0
+    error_message = "Only the module's own pod sandbox pool starts with a node; a caller's tainted pool starts empty."
+  }
+}
+
 run "pod_sandbox_pool_needs_firecracker" {
   command = plan
 

@@ -6,8 +6,9 @@ locals {
     { "onyx.app/workload" = "sandbox" },
     local.sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
   )
-  # Pools whose first workloads are DaemonSets; see initial_node_count.
-  daemonset_first_pools = local.sandbox_firecracker ? ["sandbox", "sandboxpod"] : []
+  # The Craft pools this module makes whose first workloads are DaemonSets;
+  # see initial_node_count. A caller's own pool of the same name is not one.
+  daemonset_first_pools = local.sandbox_firecracker ? concat(["sandbox"], var.enable_craft_pod_sandbox_node_pool ? ["sandboxpod"] : []) : []
   # Kubelet does not count microVM memory, so a Firecracker pool also carries
   # the onyx.app/kvm taint. Only the host agent and preflight tolerate it.
   sandbox_node_taints = concat(
