@@ -8,6 +8,7 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
+from onyx.agents.events import InputEndedEvent
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
@@ -33,22 +34,35 @@ Outcome = PendingToolInput | ToolResult | None
 
 
 class Approvals(ToolApprovals):
-    """Answers each requiring call with the outcome set for its name."""
+    """Answers each requiring call with the outcome set for its name, and ends
+    a withdrawn request with the answer set for it."""
 
-    def __init__(self, outcomes: dict[str, Outcome]) -> None:
+    def __init__(
+        self,
+        outcomes: dict[str, Outcome],
+        ended: dict[str, HumanToolAnswer] | None = None,
+    ) -> None:
         self.outcomes = outcomes
+        self.ended = ended or {}
         self.requested: list[str] = []
         self.withdrawn: list[str] = []
         self._lock = threading.Lock()
 
-    def request_approval(self, run: Run, call: ToolCall) -> Outcome:  # noqa: ARG002
+    def request_approval(
+        self,
+        run: Run,  # noqa: ARG002
+        tool_call: ToolCall,
+        nested_call: ToolCall | None,
+    ) -> Outcome:
+        call = nested_call or tool_call
         with self._lock:
             self.requested.append(call.id)
         return self.outcomes[call.name]
 
-    def withdraw_approval(self, request_id: str) -> None:
+    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
         with self._lock:
             self.withdrawn.append(request_id)
+        return self.ended.get(request_id)
 
 
 def _request(request_id: str) -> PendingToolInput:
@@ -207,9 +221,11 @@ def test_calls_that_require_approval_are_not_merged() -> None:
     executed: list[dict[str, JsonValue]] = []
 
     class PerCallApprovals(Approvals):
-        def request_approval(self, run: Run, call: ToolCall) -> Outcome:
-            super().request_approval(run, call)
-            return _request(f"{call.id}-request")
+        def request_approval(
+            self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
+        ) -> Outcome:
+            super().request_approval(run, tool_call, nested_call)
+            return _request(f"{tool_call.id}-request")
 
     def execute(invocation: ToolInvocation) -> ToolResult:
         executed.append(invocation.arguments)
@@ -248,3 +264,52 @@ def test_calls_that_require_approval_are_not_merged() -> None:
     finally:
         run.cancel()
         assert run.wait_for_idle(5)
+
+
+@pytest.mark.parametrize(
+    "ended, result",
+    [
+        (None, None),
+        (
+            HumanToolAnswer(
+                request_id="send-request",
+                decision=InputDecision.DENY,
+                result=ToolResult(content="rejected on Stop", is_error=True),
+            ),
+            "rejected on Stop",
+        ),
+    ],
+    ids=["unanswered", "denied"],
+)
+def test_a_cancelled_run_ends_its_requests_with_the_gates_answers(
+    ended: HumanToolAnswer | None, result: str | None
+) -> None:
+    """A request that ends with its run takes the answer the gate saved; a
+    denied call keeps the denial as its result, so later runs see it."""
+    approvals = Approvals(
+        {"send": _request("send-request")},
+        {"send-request": ended} if ended is not None else {},
+    )
+    run = _run(
+        [ToolCall(id="send-1", name="send", arguments={})],
+        [_recording_tool("send", [], approval_required=True)],
+        approvals,
+    )
+    ends: list[HumanToolAnswer | None] = []
+    run.subscribe(
+        lambda event: (
+            ends.append(event.answer) if isinstance(event, InputEndedEvent) else None
+        )
+    )
+    deadline = time.monotonic() + 5
+    while not run.pending_inputs:
+        assert time.monotonic() < deadline
+        time.sleep(0.01)
+
+    run.cancel()
+
+    assert run.wait_for_idle(5)
+    assert approvals.withdrawn == ["send-request"]
+    assert ends == [ended]
+    saved = run.snapshot().steps[0].tools["send-1"].result
+    assert (saved.text if saved is not None else None) == result

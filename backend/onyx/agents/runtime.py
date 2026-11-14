@@ -76,7 +76,7 @@ from onyx.agents.models import (
     cancellation_failure,
     messages_from_steps,
 )
-from onyx.agents.tool_execution import ToolBatch
+from onyx.agents.tool_execution import DENIED_CALL_MESSAGE, ToolBatch
 from onyx.agents.tools import (
     AgentTool,
     ChildRunWait,
@@ -123,7 +123,11 @@ from onyx.utils.threadpool_concurrency import start_thread_with_context
 from onyx.utils.timing import PausableClock
 
 if TYPE_CHECKING:
-    from onyx.agents.agent_coordination import AgentCoordinator, RunCoordination
+    from onyx.agents.agent_coordination import (
+        AgentCoordinator,
+        RunCoordination,
+        ToolApprovals,
+    )
 
 logger = setup_logger()
 _FEATURE_STATE = TypeAdapter(dict[str, JsonValue])
@@ -628,6 +632,12 @@ class Run:
             ]
 
     @property
+    def approvals(self) -> "ToolApprovals | None":
+        """The application's gate for calls that wait for the user's approval."""
+        coordination = self.coordination
+        return coordination.coordinator.approvals if coordination is not None else None
+
+    @property
     def has_event_listeners(self) -> bool:
         """Whether a listener receives this run's events, directly or through a
         foreground ancestor."""
@@ -936,6 +946,12 @@ class Run:
                     raise
             return answer
         finally:
+            if answer is None:
+                with self.execution_lock:
+                    open_request = request.request_id in self._nested_inputs
+                if open_request:
+                    # The run may continue, so its end does not end the request.
+                    answer = self._withdraw_approval(request)
             with self.execution_lock:
                 # The run's end already ended a request that it found open.
                 if self._nested_inputs.pop(request.request_id, None) is not None:
@@ -950,6 +966,15 @@ class Run:
                             answer=answer,
                         )
                     )
+
+    def _withdraw_approval(self, request: PendingToolInput) -> HumanToolAnswer | None:
+        """End a request of the approval gate whose call stopped waiting without
+        an answer; returns the answer of a decision saved first, or None. Call
+        without the execution lock: the gate saves how the request ended."""
+        approvals = self.approvals
+        if not request.approval or approvals is None:
+            return None
+        return approvals.withdraw_approval(request.request_id)
 
     def _input_ended(
         self,
@@ -973,10 +998,13 @@ class Run:
             answer=answer,
         )
 
-    def _withdraw_pending_inputs(self) -> None:
-        """Report the requests that end unanswered with the run: those of direct
-        calls, and those of calls that tools make for the model, whose waiting
-        threads can wake after the run has ended. Call under the execution lock."""
+    def _withdraw_pending_inputs(self, answers: Mapping[str, HumanToolAnswer]) -> None:
+        """Report the requests that end with the run: those of direct calls, and
+        those of calls that tools make for the model, whose waiting threads can
+        wake after the run has ended. `answers` holds the answers that approval
+        requests ended with (`ToolApprovals.withdraw_approval`); a direct call
+        that one denies keeps its result, so later runs see it. Call under the
+        execution lock."""
         if self.event_delivery:
             for required, _waiter in self._nested_inputs.values():
                 self.event_delivery.publish(
@@ -986,7 +1014,7 @@ class Run:
                         tool_call=required.tool_call,
                         nested_call=required.nested_call,
                         request=required.request,
-                        answer=None,
+                        answer=answers.get(required.request.request_id),
                     )
                 )
         self._nested_inputs.clear()
@@ -995,12 +1023,29 @@ class Run:
         progress = self._state.progress
         if progress is None or not progress.pending_tool_calls:
             return
-        message = self._state.steps[progress.step_index].message
+        step = self._state.steps[progress.step_index]
+        message = step.message
         for call in message.tool_calls:
             pending = progress.pending_tool_calls.get(call.id)
-            if isinstance(pending, PendingToolInput) and self.event_delivery:
-                if message.id is None:
-                    raise RuntimeError("Recorded generation has no message ID")
+            if not isinstance(pending, PendingToolInput):
+                continue
+            if message.id is None:
+                raise RuntimeError("Recorded generation has no message ID")
+            answer = answers.get(pending.request_id)
+            if answer is not None and answer.decision == InputDecision.DENY:
+                result = answer.result or ToolResult(
+                    content=DENIED_CALL_MESSAGE, is_error=True
+                )
+                execution = step.tools.setdefault(
+                    call.id, ToolExecutionRecord(status=ExecutionStatus.ERROR)
+                )
+                execution.result = _tool_result_message(result, call, message.id)
+                execution.status = (
+                    ExecutionStatus.ERROR
+                    if result.is_error
+                    else ExecutionStatus.COMPLETE
+                )
+            if self.event_delivery:
                 self.event_delivery.publish(
                     self._input_ended(
                         message_id=message.id,
@@ -1008,7 +1053,7 @@ class Run:
                         tool_call=call,
                         nested_call=None,
                         request=pending,
-                        answer=None,
+                        answer=answer,
                     )
                 )
 
@@ -1454,6 +1499,11 @@ class Run:
                         )
             with self.execution_lock:
                 self._state.child_runs = children
+        ended_answers = {
+            request.request_id: answer
+            for request in self.pending_inputs
+            if (answer := self._withdraw_approval(request)) is not None
+        }
         with self.execution_lock:
             for index, step in enumerate(self._state.steps):
                 if step.generation_status == ExecutionStatus.RUNNING:
@@ -1479,7 +1529,7 @@ class Run:
                         execution.status = ExecutionStatus(outcome.value)
             # After partial messages end, so live events keep the saved order.
             self._apply_amendments(amendments)
-            self._withdraw_pending_inputs()
+            self._withdraw_pending_inputs(ended_answers)
             if outcome == RunStatus.CANCELLED and self._state.failure is None:
                 # Deadlines and user stops are reported; a plain request is not.
                 self._state.failure = cancellation_failure(

@@ -42,19 +42,32 @@ REQUEST = PendingToolInput(
 )
 # The runtime marks the requests that the approvals owner opens.
 OPENED = REQUEST.model_copy(update={"approval": True})
+REJECTED = HumanToolAnswer(
+    request_id="approval",
+    decision=InputDecision.DENY,
+    result=ToolResult(content="rejected", is_error=True),
+)
 
 
 class Approvals(ToolApprovals):
-    """Asks for the approval of every `send` call, and records withdrawals."""
+    """Asks for the approval of every `send` call, records withdrawals, and
+    ends a withdrawn request with `ended`."""
 
     def __init__(self) -> None:
         self.withdrawn: list[str] = []
+        self.ended: HumanToolAnswer | None = None
 
-    def request_approval(self, run: Run, call: ToolCall) -> PendingToolInput:  # noqa: ARG002
+    def request_approval(
+        self,
+        run: Run,  # noqa: ARG002
+        tool_call: ToolCall,  # noqa: ARG002
+        nested_call: ToolCall | None,  # noqa: ARG002
+    ) -> PendingToolInput:
         return REQUEST
 
-    def withdraw_approval(self, request_id: str) -> None:
+    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
         self.withdrawn.append(request_id)
+        return self.ended
 
 
 class ProgramRun:
@@ -178,11 +191,13 @@ def test_submit_answers_the_waiting_nested_call(
         assert program.run.wait_for_idle(5)
 
 
+@pytest.mark.parametrize("ended", [None, REJECTED], ids=["unanswered", "rejected"])
 def test_cancelling_the_run_ends_the_nested_request_before_the_run_ends(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, ended: HumanToolAnswer | None
 ) -> None:
     """The waiting call can wake after its run has ended; the run still reports
-    the end of its request, once, before its own end."""
+    the end of its request, once, before its own end, with the answer of a
+    decision saved before the run ended."""
     run_ended = threading.Event()
 
     class LateWakingFuture(Future[HumanToolAnswer]):
@@ -195,6 +210,7 @@ def test_cancelling_the_run_ends_the_nested_request_before_the_run_ends(
 
     monkeypatch.setattr(runtime, "Future", LateWakingFuture)
     program = ProgramRun()
+    program.approvals.ended = ended
     program.run.subscribe(
         lambda event: run_ended.set() if isinstance(event, AgentEndEvent) else None
     )
@@ -204,12 +220,12 @@ def test_cancelling_the_run_ends_the_nested_request_before_the_run_ends(
     with pytest.raises(AgentCancelled):
         program.run.result(timeout=5)
     assert program.run.wait_for_idle(5)
-    ended = [
+    ends = [
         (type(e), e.answer if isinstance(e, InputEndedEvent) else None)
         for e in program.events
         if isinstance(e, (InputEndedEvent, AgentEndEvent))
     ]
-    assert ended == [(InputEndedEvent, None), (AgentEndEvent, None)]
+    assert ends == [(InputEndedEvent, ended), (AgentEndEvent, None)]
 
 
 def test_cancelling_the_calls_scope_stops_only_its_wait() -> None:
@@ -292,11 +308,13 @@ def test_a_direct_request_cannot_reuse_an_open_nested_request_id() -> None:
     nested_open = threading.Event()
 
     class SharedIdApprovals(Approvals):
-        def request_approval(self, run: Run, call: ToolCall) -> PendingToolInput:
-            if call.id == "direct":
+        def request_approval(
+            self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
+        ) -> PendingToolInput:
+            if nested_call is None and tool_call.id == "direct":
                 # The direct call asks once the program's call waits.
                 assert nested_open.wait(5)
-            return super().request_approval(run, call)
+            return super().request_approval(run, tool_call, nested_call)
 
     def program(invocation: ToolInvocation) -> ToolResult:
         gate = invocation.nested_calls

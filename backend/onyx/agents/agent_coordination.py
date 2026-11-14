@@ -37,6 +37,7 @@ from onyx.agents.runtime import (
 from onyx.agents.tools import (
     AgentControl,
     AgentLifetime,
+    HumanToolAnswer,
     PendingToolInput,
     SpawnResult,
 )
@@ -113,15 +114,19 @@ class ToolApprovals(Protocol):
     """
 
     def request_approval(
-        self, run: Run, call: ToolCall
+        self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         """A request to wait for, a result for a call that cannot wait, or None
-        when a standing grant approves the call."""
+        when a standing grant approves the call. The call is `nested_call`
+        when `tool_call`, a call of the run's step, makes it for the model, and
+        `tool_call` otherwise."""
         ...
 
-    def withdraw_approval(self, request_id: str) -> None:
-        """A call that a tool makes for the model stopped waiting for this
-        request without an answer, for example because its program ended."""
+    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
+        """A call stopped waiting for this request without an answer, because
+        its run or its program ended. Ends the request; returns the answer of a
+        decision saved before it ended, such as the user's rejection when the
+        user stopped the run, or None."""
         ...
 
 
