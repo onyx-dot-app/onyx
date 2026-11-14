@@ -50,7 +50,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -202,13 +202,13 @@ class DrupalWikiConnector(
         if not file_name:
             return False
 
-        # Get file extension
-        file_extension = get_file_ext(file_name)
-
-        if file_extension in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+        # allow_images is applied after the download, without an error.
+        if is_indexable_file_type(file_name, None, allow_images=True):
             return True
 
-        logger.warning("Unsupported file type: %s for %s", file_extension, file_name)
+        logger.warning(
+            "Unsupported file type: %s for %s", get_file_ext(file_name), file_name
+        )
         return False
 
     def _get_media_type_from_filename(self, filename: str) -> str:
