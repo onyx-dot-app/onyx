@@ -288,11 +288,13 @@ async function runChatStream(
       // A Stop the server confirms during the wait ends following.
       (next) => !signal.aborted && (lost || next !== streamId),
     );
-    if (wait.kind === "stream") {
+    // A lost send also reloads the saved session when the server is already idle, so the
+    // answer and its approval outcomes replace the partial output.
+    if (wait.kind === "stream" || (wait.kind === "idle" && lost)) {
       store.getState().setAbortController(sessionId, null);
       void recoverChatSession(
         sessionId,
-        wait.streamId,
+        wait.kind === "stream" ? wait.streamId : null,
         server.serverUrl,
         server.queryClient,
         new AbortController(),

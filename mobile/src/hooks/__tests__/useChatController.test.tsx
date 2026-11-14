@@ -119,6 +119,12 @@ function deltaPacket(content: string): StreamEvent {
     obj: { type: PacketType.MESSAGE_DELTA, content },
   } as StreamEvent;
 }
+function stopPacket(): StreamEvent {
+  return {
+    placement: { turn_index: 0 },
+    obj: { type: PacketType.STOP },
+  } as StreamEvent;
+}
 function endPacket(): StreamEvent {
   return {
     placement: { turn_index: 0 },
@@ -138,6 +144,40 @@ function cursor(streamId: number, nextCursor: number): StreamEvent {
 }
 function streamError(error: string, errorCode?: string): StreamEvent {
   return { error, error_code: errorCode ?? null } as unknown as StreamEvent;
+}
+
+// The saved session of one question (10) and its answer (11).
+function savedTurn(packets: unknown[], answer = "") {
+  return {
+    chat_session_id: "s1",
+    description: "",
+    persona_id: 0,
+    messages: [
+      {
+        message_id: 10,
+        message_type: "user",
+        parent_message: null,
+        latest_child_message: 11,
+        message: "Question",
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+      {
+        message_id: 11,
+        message_type: "assistant",
+        parent_message: 10,
+        latest_child_message: null,
+        message: answer,
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+    ],
+    packets: [packets],
+    time_created: "",
+    current_stream: null,
+  };
 }
 
 async function* scripted(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
@@ -179,6 +219,7 @@ describe("useChatController", () => {
 
   it("blocks a send while a tool approval waits and keeps the draft", async () => {
     useChatSessionStore.getState().ensureSession("s1");
+    getSessionMock.mockResolvedValue(savedTurn([approvalRequest]));
     streamMock.mockReturnValueOnce(
       scripted([
         idInfo,
@@ -267,6 +308,52 @@ describe("useChatController", () => {
     await act(async () => endReplay());
   });
 
+  it("reloads the saved answer when a lost send finds the server already idle", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield idInfo;
+        yield startPacket("Part");
+        yield approvalRequest;
+        throw new TypeError("Network request failed");
+      })(),
+    );
+    getSessionMock.mockResolvedValue(
+      savedTurn(
+        [
+          startPacket("Part of the answer"),
+          approvalRequest,
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.TOOL_APPROVAL_RESOLVED,
+              approval_id: "a1",
+              outcome: "rejected",
+            },
+          },
+          stopPacket(),
+        ],
+        "Part of the answer",
+      ),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(getSessionMock).toHaveBeenCalledWith("s1");
+    expect(resumeMock).not.toHaveBeenCalled();
+    expect(accumulated(result.current.messages[1]!.packets)).toBe(
+      "Part of the answer",
+    );
+    expect(
+      findPendingToolApprovalIds(
+        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
+      ),
+    ).toEqual([]);
+  });
+
   it("does not let a failed response's request block the next send", async () => {
     let now = Date.now();
     const clock = jest.spyOn(Date, "now").mockImplementation(() => (now += 10));
@@ -279,6 +366,7 @@ describe("useChatController", () => {
         scripted([
           { user_message_id: 12, reserved_assistant_message_id: 13 },
           endPacket(),
+          stopPacket(),
         ] as StreamEvent[]),
       );
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
@@ -461,6 +549,7 @@ describe("useChatController", () => {
       })(),
     );
     stopSessionMock.mockResolvedValue();
+    getSessionMock.mockResolvedValue(savedTurn([]));
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
       await result.current.submit("Question");
@@ -490,6 +579,7 @@ describe("useChatController", () => {
         deltaPacket(" world"),
         idInfo,
         endPacket(),
+        stopPacket(),
       ]),
     );
 
@@ -712,7 +802,9 @@ describe("useChatController", () => {
         .mockImplementation(() => (now += 10));
       useChatSessionStore.getState().ensureSession("s1");
       streamMock
-        .mockReturnValueOnce(scripted([idInfo, startPacket("Hi"), endPacket()]))
+        .mockReturnValueOnce(
+          scripted([idInfo, startPacket("Hi"), endPacket(), stopPacket()]),
+        )
         .mockReturnValueOnce(
           kind === "error packet"
             ? scripted([streamError("Rejected.")])
@@ -724,6 +816,7 @@ describe("useChatController", () => {
           scripted([
             { user_message_id: 12, reserved_assistant_message_id: 13 },
             endPacket(),
+            stopPacket(),
           ] as StreamEvent[]),
         );
       const onAccepted = jest.fn();
@@ -782,6 +875,7 @@ describe("useChatController", () => {
           { user_message_id: 12, reserved_assistant_message_id: 13 },
           startPacket("Done"),
           endPacket(),
+          stopPacket(),
         ] as StreamEvent[]),
       );
 
@@ -1244,7 +1338,9 @@ describe("useChatController", () => {
             resolveStatus = resolve;
           }),
       );
-    streamMock.mockReturnValue(scripted([idInfo, startPacket("saved later")]));
+    streamMock.mockReturnValue(
+      scripted([idInfo, startPacket("saved later"), stopPacket()]),
+    );
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
       await result.current.submit("hi");

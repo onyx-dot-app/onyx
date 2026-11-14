@@ -72,8 +72,8 @@ export async function recoverChatSession(
   let replay: Packet[] = [];
   try {
     while (true) {
-      // "lost": the connection ended before the run's stop. "noBuffer": the server has nothing
-      // to replay for this stream, so only a new stream is followed.
+      // "lost": delivery ended before the run's stop, so a paced reattach follows. "noBuffer":
+      // resume-stream answered 404, so only a new stream is followed.
       let end: "finished" | "lost" | "noBuffer" = "noBuffer";
       if (streamId !== null && stillCurrent()) {
         let target = getMessageByMessageId(
@@ -94,6 +94,7 @@ export async function recoverChatSession(
             }
           } catch (error) {
             console.warn("Could not load the running response", error);
+            end = "lost";
           }
         }
         // An error already ended local delivery; reopening still needs to confirm server readiness.
@@ -119,10 +120,8 @@ export async function recoverChatSession(
           // The finished replay replaces the node's packets instead of extending them.
           let replacing = false;
           let flushTimer: ReturnType<typeof setTimeout> | null = null;
-          let sawCursor = false;
           let stopped = false;
           let errored = false;
-          let threw = false;
           let missing = false;
 
           const flush = () => {
@@ -156,7 +155,6 @@ export async function recoverChatSession(
               // re-check focus/abort on every event (heartbeats included) so navigate-away unwinds during quiet phases
               if (!stillCurrent()) break;
               if (isStreamCursor(event)) {
-                sawCursor = true;
                 cursor = event.next_cursor;
                 stopped ||= batchStops;
                 batchStops = false;
@@ -209,7 +207,6 @@ export async function recoverChatSession(
               if (error instanceof StreamHttpError && error.status === 404) {
                 missing = true;
               } else {
-                threw = true;
                 console.warn("resume-stream failed", error);
               }
             }
@@ -217,8 +214,9 @@ export async function recoverChatSession(
             if (flushTimer) clearTimeout(flushTimer);
             flush();
           }
-          if (errored || stopped) end = "finished";
-          else if (threw || (sawCursor && !missing)) end = "lost";
+          // Only a 404 means no buffer. A clean end before the stop, a network error, a 5xx or a
+          // 429 reattach; the status poll reports an auth failure.
+          end = errored || stopped ? "finished" : missing ? "noBuffer" : "lost";
         }
       }
       if (!stillOurs()) return;

@@ -130,10 +130,13 @@ saved session when the response is not in the local tree, then follows the
 stream through resume-stream with `stream_id`. It commits packets only at
 cursor objects. A replay from cursor 0 replaces the shown packets only at
 `replay_complete`, so a replay that fails partway keeps a waiting approval
-card on screen. A lost connection reattaches from the last cursor while the
-poll reports the same stream, paced by `SESSION_POLL_INTERVAL_MS`. A stream
-that answers 404, or ends without a cursor, is not retried; recovery waits
-for a new stream id or for idle.
+card on screen. Delivery that ends before the run's stop (a clean end, a
+network error, a 5xx or a 429), or a failed load of the unseen response,
+reattaches from the last cursor while the poll reports the same stream,
+paced by `SESSION_POLL_INTERVAL_MS`. Only a 404 marks a stream as having no
+buffer; recovery then waits for a new stream id or for idle. A lost send
+whose first poll is already idle still reloads the saved session before it
+returns to `input`.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

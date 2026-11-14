@@ -1097,6 +1097,138 @@ describe("useChatSessionController", () => {
     expect(assistantText("s1", 4)).toBe("next");
   });
 
+  it("retries loading an unseen response while its stream runs", async () => {
+    seedLiveSession(null);
+    useChatSessionStore.getState().updateChatState("s1", "settling");
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: true,
+      current_stream: { stream_id: 4 },
+    });
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    const nextTurn: BackendMessage[] = [
+      ...backendMessages("first"),
+      {
+        message_id: 3,
+        message_type: "user",
+        parent_message: 2,
+        latest_child_message: 4,
+        message: "asked elsewhere",
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+      {
+        message_id: 4,
+        message_type: "assistant",
+        parent_message: 3,
+        latest_child_message: null,
+        message: "",
+        files: [],
+        time_sent: "",
+        error: null,
+      },
+    ];
+    nextTurn[1] = { ...nextTurn[1]!, latest_child_message: 3 };
+    getSessionMock
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        chat_session_id: "s1",
+        description: "",
+        persona_id: 0,
+        messages: nextTurn,
+        packets: [[historyPacket("first")], []],
+        time_created: "",
+        current_stream: null,
+      });
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield startPacket("live");
+        yield { stream_id: 4, next_cursor: 1, replay_complete: true };
+        await new Promise(() => {});
+      })(),
+    );
+
+    const { unmount } = renderHook(() => useChatSessionController("s1"), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(assistantText("s1", 4)).toBe("live"), {
+      timeout: 3000,
+    });
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
+    expect(resumeMock).toHaveBeenCalledWith("s1", 4, 0, expect.anything());
+    unmount();
+    warn.mockRestore();
+  });
+
+  it.each([
+    ["a clean end before the first cursor", () => scripted([])],
+    [
+      "a 503",
+      () =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          throw new StreamHttpError("unavailable", 503);
+        })(),
+    ],
+    [
+      "a 429",
+      () =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          throw new StreamHttpError("slow down", 429);
+        })(),
+    ],
+  ])("reattaches to the same stream after %s", async (_case, firstAttempt) => {
+    seedLiveSession(2);
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: true,
+      current_stream: { stream_id: 2 },
+    });
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    resumeMock.mockReturnValueOnce(firstAttempt()).mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        yield startPacket("back");
+        yield cursor(1);
+        await new Promise(() => {});
+      })(),
+    );
+
+    const { unmount } = renderHook(() => useChatSessionController("s1"), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(assistantText("s1", 2)).toBe("back"), {
+      timeout: 3000,
+    });
+    expect(resumeMock.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [2, 0],
+      [2, 0],
+    ]);
+    unmount();
+    warn.mockRestore();
+  });
+
+  it("reports an auth failure through the status poll after a 401 resume", async () => {
+    seedLiveSession(2);
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    resumeMock.mockReturnValueOnce(
+      (async function* (): AsyncGenerator<StreamEvent> {
+        throw new StreamHttpError("expired", 401);
+      })(),
+    );
+    jest
+      .mocked(getChatSessionStatus)
+      .mockRejectedValue(new ApiError({ status: 401, detail: "Signed out" }));
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Signed out"));
+    expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+      "unconfirmed",
+    );
+    expect(resumeMock).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
   it("does not render heartbeat packets during resume", async () => {
     seedLiveSession(2);
     let releaseTail: () => void = () => {};
