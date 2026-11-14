@@ -187,6 +187,8 @@ type Manager struct {
 	// releases run when a VM stops or exits, after the egress detach and
 	// before the VM's vsock socket and jailer UID are freed.
 	releases []func(VM)
+	// admits run when a Create or a template build takes a VM slot.
+	admits []func()
 	// adopter rescans the processes for the doubt rules (doubt.go).
 	adopter Adopter
 	scanMu  sync.Mutex
@@ -235,6 +237,17 @@ func (m *Manager) UseEgress(e Egress) { m.egress = e }
 // OnRelease adds f to the functions that run for a VM that stops, exits or
 // fails to start. Call it before Recover and before the API serves.
 func (m *Manager) OnRelease(f func(VM)) { m.releases = append(m.releases, f) }
+
+// OnAdmit adds f to the functions that run when a Create admits a new VM
+// or a template build takes a slot. f must not block or call the Manager.
+// Call it before Recover and before the API serves.
+func (m *Manager) OnAdmit(f func()) { m.admits = append(m.admits, f) }
+
+func (m *Manager) admitted() {
+	for _, f := range m.admits {
+		f()
+	}
+}
 
 // release removes everything that names the VM: first its relay identity
 // and relay connections, then the OnRelease users (the daemon pass-through).
@@ -445,6 +458,7 @@ func (m *Manager) Create(ctx context.Context, req CreateRequest) (VM, bool, erro
 		starting.Prev = t.record()
 	}
 	m.mu.Unlock()
+	m.admitted()
 
 	// The start must finish or clean up even if the caller goes away.
 	startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), m.cfg.StartTimeout)
@@ -956,6 +970,7 @@ func (m *Manager) BuildSlot(id string, memMiB uint32) (uint32, func(left bool), 
 		return 0, nil, apierr.New(pb.ErrorReason_CAPACITY_VM_SLOTS, "no free jailer UID for the template build")
 	}
 	m.building[id] = memMiB
+	m.admitted()
 	done := func(left bool) {
 		m.mu.Lock()
 		defer m.mu.Unlock()

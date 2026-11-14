@@ -631,7 +631,10 @@ func newScaleDownGuard(f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.
 	if err != nil {
 		return nil, fmt.Errorf("--scale-down-guard: %w", err)
 	}
-	return &nodewatch.ScaleDownGuard{Node: c, VMs: m.VMSlotsUsed, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}, nil
+	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.VMSlotsUsed, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
+	// A new VM is guarded at once, not at the next tick.
+	m.OnAdmit(g.Kick)
+	return g, nil
 }
 
 // pushers are the key registration and node state report loops. They

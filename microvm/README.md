@@ -633,15 +633,17 @@ manual flag (`SetDrain`) before a planned drain to close this gap.
 **Cluster autoscaler.** VMs are not pods, so the cluster autoscaler (GKE, AKS, the EKS
 cluster-autoscaler) sees a KVM node with VMs as empty and can remove it. With `--scale-down-guard`,
 the agent sets the Node annotation `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` while
-the node runs VMs (starting, running, template builds and processes in doubt; checked every 10 s,
-from the first check after recovery). It removes the annotation when the node has had no VMs for
-`--scale-down-guard-grace` (default 10 m). It patches only its own Node (RBAC: `get` and `patch` on
-nodes) and marks its value with `onyx.app/craft-fc-scale-down-guard=true`; it never changes or removes
-an annotation that it did not set. A failed patch is logged once per failure streak and tried again;
-it never blocks VM work. The default `--drain-taints` also has `ToBeDeletedByClusterAutoscaler`, the
-taint the autoscaler sets (without a cordon) before it removes a node. This is a second guard only:
-the autoscaler removes a node with only DaemonSet pods seconds after the taint. Karpenter does not
-read this annotation.
+the node runs VMs (starting, running, template builds and processes in doubt). It checks when a Create
+or a template build takes a slot, and every 10 s from the first check after recovery; while VMs run,
+each check reads the Node and sets the annotation again if someone removed it. It removes the
+annotation when the node has had no VMs for `--scale-down-guard-grace` (default 10 m; after an agent
+restart the grace starts again). It patches only its own Node (RBAC: `get` and `patch` on nodes) and
+marks its value with `onyx.app/craft-fc-scale-down-guard=true`. It leaves a `true` value without this
+mark, and never removes it; it replaces any other value without the mark while VMs run. A failed
+patch is logged once per failure streak and tried again; it never blocks VM work. The default
+`--drain-taints` also has `ToBeDeletedByClusterAutoscaler`, the taint the autoscaler sets (without a
+cordon) before it removes a node. This is a second guard only: the autoscaler removes a node with only
+DaemonSet pods seconds after the taint. Karpenter does not read this annotation.
 
 ### Managed drive
 

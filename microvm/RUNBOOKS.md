@@ -324,6 +324,9 @@ node has had no VMs for `--scale-down-guard-grace` (chart `craft.hostAgent.scale
    if it is not needed: `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled-`.
 4. To remove a node that runs VMs, use "Drain a node". The annotation goes after the grace, then
    the autoscaler can remove the node.
+5. If you turn the guard off (`craft.hostAgent.scaleDownGuard.enabled=false`) or remove the agent
+   while a node has the annotation, the annotation and its mark stay. Remove both by hand:
+   `kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled- onyx.app/craft-fc-scale-down-guard-`.
 
 ### Rebuild a template
 

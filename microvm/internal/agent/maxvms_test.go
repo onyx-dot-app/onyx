@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +16,8 @@ import (
 func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	f := newFixture(t, 10)
 	f.m.cfg.MaxVMs = 2
+	var admits atomic.Int32
+	f.m.OnAdmit(func() { admits.Add(1) })
 	ctx := context.Background()
 
 	f.l.gate = make(chan struct{})
@@ -45,6 +48,9 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.VMSlotsUsed() != 2 {
 		t.Fatalf("NodeInfo with a build %+v %v", info, err)
 	}
+	if n := admits.Load(); n != 2 {
+		t.Fatalf("%d admits for a Create and a build", n)
+	}
 
 	close(f.l.gate)
 	if err := <-started; err != nil {
@@ -62,6 +68,10 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	wantReason(t, err, pb.ErrorReason_CAPACITY_VM_SLOTS)
 	if info, err := f.m.NodeInfo(); err != nil || info.MaxVMs != 2 || info.VMCount != 2 || info.VMSlotsUsed != 2 {
 		t.Fatalf("NodeInfo %+v %v", info, err)
+	}
+	// Refusals and the repeat Create admit nothing.
+	if n := admits.Load(); n != 3 {
+		t.Fatalf("%d admits", n)
 	}
 
 	if _, err := f.m.Stop(ctx, sb2, 1, vm2.Generation); err != nil {

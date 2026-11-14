@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -83,8 +85,14 @@ func TestScaleDownGuardBlocksWhileVMsRun(t *testing.T) {
 		t.Fatalf("VM runs: %v after %d patches", f.node.ann, f.node.patches)
 	}
 	f.g.Once(ctx)
-	if f.node.patches != 1 || f.node.reads != 1 {
+	if f.node.patches != 1 || f.node.reads != 2 {
 		t.Fatalf("no change, but %d reads %d patches", f.node.reads, f.node.patches)
+	}
+	// Someone removes the annotation while VMs run: the next check sets it again.
+	f.node.ann = nil
+	f.g.Once(ctx)
+	if !f.blocked() || f.node.patches != 2 {
+		t.Fatalf("not set again: %v after %d patches", f.node.ann, f.node.patches)
 	}
 
 	f.vms = 0
@@ -101,17 +109,18 @@ func TestScaleDownGuardBlocksWhileVMsRun(t *testing.T) {
 	f.g.Once(ctx)
 	f.clock = f.clock.Add(9 * time.Minute)
 	f.g.Once(ctx)
-	if !f.blocked() || f.node.patches != 1 {
+	if !f.blocked() || f.node.patches != 2 {
 		t.Fatalf("idle time not reset: %v after %d patches", f.node.ann, f.node.patches)
 	}
 	f.clock = f.clock.Add(time.Minute)
 	f.g.Once(ctx)
-	if len(f.node.ann) != 0 || f.node.patches != 2 {
+	if len(f.node.ann) != 0 || f.node.patches != 3 {
 		t.Fatalf("after the grace: %v after %d patches", f.node.ann, f.node.patches)
 	}
+	reads := f.node.reads
 	f.g.Once(ctx)
-	if f.node.patches != 2 {
-		t.Fatalf("removed twice: %d patches", f.node.patches)
+	if f.node.patches != 3 || f.node.reads != reads {
+		t.Fatalf("idle node read again: %d reads %d patches", f.node.reads-reads, f.node.patches)
 	}
 }
 
@@ -176,6 +185,53 @@ func TestScaleDownGuardRetriesFailedPatch(t *testing.T) {
 	f.g.Once(ctx)
 	if !f.blocked() {
 		t.Fatalf("no retry: %v", f.node.ann)
+	}
+}
+
+// syncNode is a fakeNode for Run, which reads it from another goroutine.
+type syncNode struct {
+	mu sync.Mutex
+	fakeNode
+}
+
+func (n *syncNode) Node(ctx context.Context) (Node, error) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.fakeNode.Node(ctx)
+}
+
+func (n *syncNode) SetAnnotations(ctx context.Context, set map[string]*string) error {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.fakeNode.SetAnnotations(ctx, set)
+}
+
+func (n *syncNode) patched() int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return n.patches
+}
+
+func TestScaleDownGuardKickChecksAtOnce(t *testing.T) {
+	node := &syncNode{}
+	var vms atomic.Int32
+	g := &ScaleDownGuard{
+		Node: node, VMs: func() int { return int(vms.Load()) }, Grace: time.Hour, Interval: time.Hour,
+		Timeout: time.Second, Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+	g.Kick() // before Run: never blocks
+	g.Kick()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go g.Run(ctx)
+	vms.Store(1)
+	g.Kick()
+	deadline := time.Now().Add(5 * time.Second)
+	for node.patched() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("Kick did not run a check")
+		}
+		time.Sleep(time.Millisecond)
 	}
 }
 
