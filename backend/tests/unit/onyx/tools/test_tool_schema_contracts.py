@@ -121,6 +121,7 @@ def _nullable(schema: dict[str, JsonValue], description: str) -> JsonValue:
 
 _STRING: dict[str, JsonValue] = {"type": "string"}
 _INTEGER: dict[str, JsonValue] = {"type": "integer"}
+_STRINGS: dict[str, JsonValue] = {"type": "array", "items": _STRING}
 
 
 @pytest.mark.parametrize(
@@ -155,6 +156,40 @@ _INTEGER: dict[str, JsonValue] = {"type": "integer"}
                     "Should be a concise, standalone statement that captures the "
                     "key information. For example: 'User prefers dark mode' or "
                     "'User's favorite frontend framework is React'.",
+                }
+            ),
+        ),
+        (
+            OpenURLTool,
+            _strict_parameters(
+                urls={
+                    **_STRINGS,
+                    "description": "List of URLs to open and read, can be a single "
+                    "URL or multiple URLs. This will return the text content of the "
+                    "page(s).",
+                }
+            ),
+        ),
+        (
+            SearchTool,
+            _strict_parameters(
+                queries={
+                    **_STRINGS,
+                    "description": "List of up to 3 search queries to execute, "
+                    "typically a single query. Later queries are ignored. Query "
+                    "expansion and filter extraction steps will be run automatically "
+                    "downstream, do not include time or source type scoping details "
+                    "in your query.",
+                }
+            ),
+        ),
+        (
+            WebSearchTool,
+            _strict_parameters(
+                queries={
+                    **_STRINGS,
+                    "description": "One or more queries to look up on the web. Must "
+                    "contain only printable characters",
                 }
             ),
         ),
