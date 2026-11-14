@@ -65,9 +65,10 @@
   (`lib/chat/toolApprovals.ts:readToolApprovals`); a stop that the client adds
   has no reason and never does. After the last decision,
   `lib/chat/settleChatSession.ts:followApprovalContinuation` follows the new
-  stream that continues the answer, from cursor 0 into the same rows. Stop
-  stays available on the idle chat while a card waits; the server rejects the
-  requests, and the record reads "Not approved". A reload replays the request
+  stream that continues the answer, from cursor 0 into the same rows. A
+  suspended turn has no Stop: the user decides each card. Stop shows only
+  while the turn is live; the server then rejects every open request, and the
+  record reads "Not approved". A reload replays the request
   and the stop the same way. The saved answer replays the records, so they
   stay after the answer settles and after a reload.
   While the card waits, the timeline header reads "Waiting for your approval",

@@ -541,23 +541,6 @@ test.each(["input", "streaming"] as const)(
   }
 );
 
-test("an idle chat whose turn waits for approval offers Stop", async () => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
-  awaitToolApproval();
-  const user = setupUser();
-  const inputProps = { ...props("input"), initialMessage: "" };
-  const { container } = render(<ChatInput {...inputProps} />);
-  const send = container.querySelector<HTMLButtonElement>(
-    "#onyx-chat-input-send-button"
-  );
-  if (!send) throw new Error("Send button is missing");
-
-  await user.click(send);
-
-  expect(inputProps.stopGenerating).toHaveBeenCalled();
-  expect(inputProps.onSubmit).not.toHaveBeenCalled();
-});
-
 test("a server refusal for a waiting approval returns the text to the composer", async () => {
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const warning = jest.spyOn(toast, "warning");

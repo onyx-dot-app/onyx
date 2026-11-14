@@ -1,6 +1,5 @@
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
-import { findPendingToolApprovalId } from "@/lib/chat/toolApprovals";
 
 export const STOP_BEFORE_DISPATCH = Symbol("stop-before-dispatch");
 
@@ -11,11 +10,9 @@ export async function stopChatSession(
 ): Promise<void> {
   const store = useChatSessionStore.getState();
   const session = store.sessions.get(sessionId);
-  // A turn that waits for approval has no stream, and the server can stop it.
   if (
     !session ||
-    (session.chatState === "input" &&
-      findPendingToolApprovalId(session.messageTree) === null) ||
+    session.chatState === "input" ||
     session.chatState === "cancelling"
   )
     return;
