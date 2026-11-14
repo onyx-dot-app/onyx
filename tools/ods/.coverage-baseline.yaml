@@ -5,13 +5,13 @@
 # tests with `ods coverage <suite> --update`.
 #
 # Generated file: do not edit by hand.
-total: 90.1
+total: 90.2
 packages:
   .: 0
   cmd: 88.7
   internal/alembic: 98.7
   internal/audit: 98
-  internal/auditcmd: 97.8
+  internal/auditcmd: 97.6
   internal/basedigest: 97.5
   internal/childproc: 100
   internal/composegen: 99.3
