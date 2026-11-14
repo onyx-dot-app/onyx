@@ -422,6 +422,13 @@ func (m Model) handleFileDrop(path string) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) cancelStream() (Model, tea.Cmd) {
+	// The server's Stop rejects the requests that wait, and the cut stream
+	// does not deliver their outcomes.
+	for i := range m.approvals {
+		if m.approvals[i].decided == "" {
+			m.approvals[i].decided = approval.OutcomeLabel(models.ApprovalOutcomeRejected)
+		}
+	}
 	if m.settling && m.streamID != nil && m.chatSessionID != nil {
 		sessionID, streamID := *m.chatSessionID, *m.streamID
 		go func() {

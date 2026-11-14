@@ -131,7 +131,8 @@ The chat shows a card with the tool name, its arguments, and the time by which t
 
 The shortcuts work when the input is empty. While a request waits, you can type a draft, but you cannot send it.
 After the decision, the card changes to a one-line record: **Approved**, **Approved for this session**,
-**Not approved**, **Timed out**, **Disabled**, or **No longer waiting**.
+**Not approved**, **Timed out**, **Disabled**, or **No longer waiting**. If you stop the response while a request waits,
+Onyx rejects the call, and the record shows **Not approved**.
 
 If you open a session with `/resume` while a request in it waits, the chat shows the response again with its card,
 so you can decide in the CLI. If you send a message while a request waits,
