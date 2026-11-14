@@ -89,7 +89,7 @@ send → ApiService                                   services/api-service.ts
   └─ stream ended before its response, or 409 APPROVAL_PENDING → resumeStream
 restore / resumeStream / decision with no stream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (cursor lines track stream_id
-  │    and next_cursor; 4xx or no cursor: that stream is never requested again)
+  │    and next_cursor; only a 404 stops requests for that stream)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
   └─ idle with a response unfinished or an acknowledged answer not shown →

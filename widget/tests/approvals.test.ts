@@ -326,15 +326,36 @@ describe("approval decisions", () => {
     ]);
   });
 
-  it.each([401, 403, 404])(
-    "ends a resume without packets when the stream cannot be replayed (%s)",
+  it("ends a resume with noBuffer only on a 404, and ended on a body end", async () => {
+    const statuses = [404, 200];
+    globalThis.fetch = mock(
+      async () => new Response("", { status: statuses.shift() })
+    ) as typeof fetch;
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    const signal = new AbortController().signal;
+    expect(await api.resumeStream("s", signal).next()).toEqual({
+      done: true,
+      value: "noBuffer",
+    });
+    expect(await api.resumeStream("s", signal).next()).toEqual({
+      done: true,
+      value: "ended",
+    });
+  });
+
+  it.each([401, 403, 429])(
+    "throws a resume failure the widget can retry (%s)",
     async (status) => {
       globalThis.fetch = mock(
-        async () => new Response("none", { status })
+        async () => new Response("denied", { status })
       ) as typeof fetch;
       const api = new ApiService("https://onyx.test/api", async () => "key");
-      const stream = api.resumeStream("s", new AbortController().signal);
-      expect((await stream.next()).done).toBe(true);
+      const error = await api
+        .resumeStream("s", new AbortController().signal)
+        .next()
+        .catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(ApiError);
+      expect((error as ApiError).status).toBe(status);
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     }
   );

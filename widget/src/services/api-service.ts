@@ -35,6 +35,9 @@ export function pause(ms: number, signal: AbortSignal): Promise<void> {
 
 class SessionUnavailableError extends Error {}
 
+/** How a resume attempt ended without throwing. */
+export type ResumeEnd = "noBuffer" | "ended";
+
 /** A rejected request, with the backend's `error_code` when it sent one. */
 export class ApiError extends Error {
   constructor(
@@ -229,13 +232,15 @@ export class ApiService {
   /**
    * Replay the session's running response from `from.cursor` of stream
    * `from.streamId`, or from the start of the current stream, then follow it.
-   * Ends without packets when that stream cannot be replayed (a 4xx).
+   * Returns "noBuffer" without packets when the server has nothing to serve
+   * at that cursor (404), else "ended" when the body ends. Other failures
+   * throw.
    */
   async *resumeStream(
     chatSessionId: string,
     signal: AbortSignal,
     from: { streamId: number; cursor: number } | null = null
-  ): AsyncGenerator<Packet | StreamCursor, void, unknown> {
+  ): AsyncGenerator<Packet | StreamCursor, ResumeEnd, unknown> {
     const query = from
       ? `stream_id=${from.streamId}&cursor=${from.cursor}`
       : "cursor=0";
@@ -243,10 +248,10 @@ export class ApiService {
       `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?${query}`,
       async () => ({ headers: await this.getHeaders(), signal })
     );
-    // Below 500 the stream is not replayable; the caller retries a 5xx.
-    if (response.status < 500 && !response.ok) return;
+    if (response.status === 404) return "noBuffer";
     if (!response.ok) throw await apiErrorFrom(response);
     yield* this.parseSSEStream(response);
+    return "ended";
   }
 
   /** The session's saved messages, with a replay packet list for each response. */

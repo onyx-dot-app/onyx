@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
-import { ApiService } from "../src/services/api-service";
+import {
+  ApiError,
+  ApiService,
+  type ResumeEnd,
+} from "../src/services/api-service";
 import type { Packet, StreamCursor } from "../src/types/api-types";
 import { OnyxChatWidget } from "../src/widget";
 
@@ -468,6 +472,56 @@ describe("widget readiness", () => {
       expect(widget["messages"][0]).toMatchObject({ content: "123" });
     });
 
+    it("keeps following a stream after a 401, a 429 or a clean end before its first cursor", async () => {
+      const { widget, api } = followingWidget();
+      logPauses([]);
+      const attempts: unknown[] = [];
+      api.resumeStream = mock(async function* (
+        _session: string,
+        _signal: AbortSignal,
+        from: { streamId: number; cursor: number } | null = null
+      ): AsyncGenerator<Packet | StreamCursor, ResumeEnd> {
+        attempts.push(from);
+        switch (attempts.length) {
+          case 1:
+            yield {
+              obj: { user_message_id: 1, reserved_assistant_message_id: 2 },
+            };
+            yield { obj: { type: "message_start" } };
+            yield { stream_id: 5, next_cursor: 2, replay_complete: true };
+            throw new TypeError("network error");
+          case 2:
+            throw new ApiError("Unauthorized", 401);
+          case 3:
+            throw new ApiError("Too many requests", 429);
+          case 4:
+            return "ended";
+          default:
+            yield { obj: { type: "message_delta", content: "Done" } };
+            yield { obj: { type: "stop" } };
+            return "ended";
+        }
+      });
+      api.waitForSessionIdle = mock(
+        async (
+          _session: string,
+          _signal: AbortSignal,
+          _onUnconfirmed: () => void,
+          attachable: (streamId: number) => boolean = () => false
+        ) => (attachable(5) ? 5 : null)
+      );
+
+      await widget["resumeStream"]("session");
+
+      const from = { streamId: 5, cursor: 2 };
+      expect(attempts).toEqual([null, from, from, from, from]);
+      expect(widget["messages"][0]).toMatchObject({
+        id: 2,
+        content: "Done",
+        isStreaming: false,
+      });
+    });
+
     const approval = (id: string) => ({
       type: "tool_approval_request" as const,
       approval_id: id,
@@ -550,7 +604,7 @@ describe("widget readiness", () => {
           throw new TypeError("network error");
         }
         // Stream 5 is gone (404).
-        if (from.streamId === 5) return;
+        if (from.streamId === 5) return "noBuffer" as const;
         yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
         yield { obj: approval("a") };
         yield {

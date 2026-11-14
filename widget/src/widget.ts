@@ -27,6 +27,7 @@ import {
   ApiError,
   ApiService,
   READINESS_POLL_INTERVAL_MS,
+  ResumeEnd,
   pause,
 } from "./services/api-service";
 import {
@@ -56,8 +57,6 @@ interface StreamFollow {
   cursor: number;
   // The message as of `cursor`; packets after it arrive again on a reattach
   messageAtCursor: ChatMessage | null;
-  // The current attempt delivered a cursor, so the stream has a buffer
-  cursorSeen: boolean;
   // The response's stop or error arrived
   ended: boolean;
 }
@@ -69,7 +68,6 @@ function newFollow(streamId: number | null): StreamFollow {
     streamId,
     cursor: 0,
     messageAtCursor: null,
-    cursorSeen: false,
     ended: false,
   };
 }
@@ -711,15 +709,17 @@ export class OnyxChatWidget extends LitElement {
       let streamWithoutBuffer: number | null = null;
       while (true) {
         const { streamId, cursor } = follow;
-        follow.cursorSeen = false;
-        let dropped = false;
+        const packets = this.apiService.resumeStream(
+          sessionId,
+          controller.signal,
+          streamId === null ? null : { streamId, cursor }
+        );
+        let end: ResumeEnd | null = null;
         try {
           await this.followStream(
-            this.apiService.resumeStream(
-              sessionId,
-              controller.signal,
-              streamId === null ? null : { streamId, cursor }
-            ),
+            (async function* () {
+              end = yield* packets;
+            })(),
             sessionId,
             identity,
             stillOurs,
@@ -734,7 +734,6 @@ export class OnyxChatWidget extends LitElement {
           )
             throw err;
           console.warn("The response stream ended early:", err);
-          dropped = true;
         }
         if (!stillOurs()) return;
         if (follow.ended) {
@@ -746,12 +745,10 @@ export class OnyxChatWidget extends LitElement {
           );
           break;
         }
-        // A 4xx, or a stream that ended without a cursor: its buffer is gone.
-        // Before the first cursor the stream id is unknown, so the first
-        // stream the status reports gets one attempt.
-        if (!dropped && !follow.cursorSeen) {
-          streamWithoutBuffer = follow.streamId;
-        }
+        // Only a 404 means the buffer is gone; other ends are retried. Before
+        // the first cursor the stream id is unknown, so the first stream the
+        // status reports gets one attempt.
+        if (end === "noBuffer") streamWithoutBuffer = follow.streamId;
         await pause(READINESS_POLL_INTERVAL_MS, controller.signal);
         const next = await this.apiService.waitForSessionIdle(
           sessionId,
@@ -853,7 +850,6 @@ export class OnyxChatWidget extends LitElement {
         follow.streamId = packet.stream_id;
         follow.cursor = packet.next_cursor;
         follow.messageAtCursor = follow.message;
-        follow.cursorSeen = true;
         continue;
       }
       if (
