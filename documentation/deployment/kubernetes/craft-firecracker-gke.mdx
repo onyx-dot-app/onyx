@@ -21,6 +21,16 @@ configure Helm as the overview page shows.
 The COS root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
 so you do not need a data disk. Keep a boot disk of 200 GB or more for the loop store.
 
+In the preflight results on COS nodes, a `WARN kernel` line for a 6.12 kernel is expected, for example `WARN kernel:
+6.12.x is not a Firecracker-tested host kernel`. So is the `WARN filesystem` line for the ext4 root disk.
+
+<Note>
+  If your network inspects TLS, `kubectl` can fail to reach the public endpoint of the cluster.
+  Use the DNS endpoint of the cluster instead:
+  `gcloud container clusters update <cluster> --location=<region> --enable-dns-access`,
+  then `gcloud container clusters get-credentials <cluster> --location=<region> --dns-endpoint`.
+</Note>
+
 ## Option 1: Onyx Terraform modules
 
 The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/deployment/cloud/gcp) for the full module.
@@ -59,8 +69,8 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
     and no KVM label or taint. The chart default `sandboxPod` values select this pool,
     so you need no chart change for it.
 
-    A tainted pool starts with 0 nodes.
-    The cluster autoscaler adds a node when the first pod sandbox or the image prepuller needs one.
+    A tainted pool starts with 0 nodes. The cluster autoscaler adds a node when the first pod sandbox needs one.
+    The image prepuller is a DaemonSet, and DaemonSet pods do not make the autoscaler add a node.
     The `gcp/onyx` module uses the default size for this pool.
   </Step>
 
@@ -77,6 +87,23 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
     as [Add Firecracker to an existing
     installation](/deployment/kubernetes/craft-firecracker#add-firecracker-to-an-existing-installation) shows.
     Plan the apply for a quiet time.
+  </Step>
+
+  <Step title="Add the first Firecracker node">
+    {/* depends: GKE pool PR (initial node count of the Firecracker pool) */} The Firecracker pool is tainted,
+    so it starts with 0 nodes. The host agent, the preflight check, and the image prepuller are DaemonSets,
+    and DaemonSet pods do not make the cluster autoscaler add a node.
+    Resize the managed instance group of the pool to 1 node in each zone:
+
+    ```bash
+    gcloud container node-pools list --cluster=<cluster> --location=<region>   # the pool name starts with sandbox-
+    gcloud container node-pools describe <sandbox pool> --cluster=<cluster> --location=<region> \
+      --format='value(instanceGroupUrls)'
+    gcloud compute instance-groups managed resize <instance group> --size=1 --zone=<zone>
+    ```
+
+    Run the `resize` command for each instance group that the `describe` command shows.
+    The `instanceGroupUrls` value ends with the zone and the group name.
   </Step>
 
   <Step title="Configure Helm">

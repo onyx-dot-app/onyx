@@ -53,7 +53,8 @@ The node label is required unless you replace `sandboxPod.nodeSelector` with a s
 ## Create the sandbox push Secret
 
 Craft uses an Ed25519 key to authenticate file and history pushes into sandbox pods.
-Generate a key and store it in the Onyx namespace:
+Generate a key and store it in the Onyx namespace.
+The command needs Python 3 with the `cryptography` package on your machine (`pip install cryptography`):
 
 ```bash
 SANDBOX_PUSH_PRIVATE_KEY="$(python3 -c 'import base64; from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey; from cryptography.hazmat.primitives.serialization import Encoding, NoEncryption, PrivateFormat; key = Ed25519PrivateKey.generate(); print(base64.b64encode(key.private_bytes(Encoding.Raw, PrivateFormat.Raw, NoEncryption())).decode())')"

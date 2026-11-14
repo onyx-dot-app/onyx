@@ -15,7 +15,7 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
 
 | Item | Requirement |
 | --- | --- |
-| Prometheus Operator | The `ServiceMonitor` and `PrometheusRule` CRDs. |
+| Prometheus Operator | The `ServiceMonitor` and `PrometheusRule` CRDs. To install kube-prometheus-stack, see the step "Let Grafana find the dashboard" in [Turn on monitoring](#turn-on-monitoring). |
 | kube-state-metrics | For the `CraftFcHostAgentPodsMissing` alert and the "Agent pods unavailable" panel. kube-prometheus-stack installs it. |
 | Grafana | The dashboard sidecar, with the label `grafana_dashboard: "1"`. The sidecar must watch the Onyx release namespace. |
 | Metrics token | `auth.metricsAuth` with a token. Without a token, every scrape gets `401`. |
@@ -87,7 +87,7 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
     If Grafana reads dashboards only from its own namespace, set the sidecar to search all namespaces.
     For kube-prometheus-stack:
 
-    ```yaml
+    ```yaml kps-values.yaml
     grafana:
       sidecar:
         dashboards:
@@ -95,6 +95,16 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
           folderAnnotation: grafana_folder
           provider:
             foldersFromFilesStructure: true
+    ```
+
+    Install or upgrade kube-prometheus-stack with these values.
+    This example installs it in the `monitoring` namespace with the release name `kube-prometheus-stack`,
+    the names that the Helm values above use:
+
+    ```bash
+    helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+    helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+      -n monitoring --create-namespace -f kps-values.yaml
     ```
   </Step>
 

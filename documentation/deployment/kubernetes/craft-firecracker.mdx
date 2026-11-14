@@ -324,8 +324,9 @@ the host agent accepts every client certificate that its CA signed.
     ```
 
     Each KVM node must print `RESULT: PASS`. A `WARN filesystem` line on an ext4 node is expected:
-    the host agent makes its XFS loop store there. Turn the preflight off after the check:
-    set `craft.firecrackerPreflight.enabled: false` and upgrade.
+    the host agent makes its XFS loop store there.
+    A `WARN kernel` line is expected on a host kernel that Onyx does not test, for example 6.12 on GKE COS nodes.
+    Turn the preflight off after the check: set `craft.firecrackerPreflight.enabled: false` and upgrade.
   </Step>
 
   <Step title="Check the host agent">
