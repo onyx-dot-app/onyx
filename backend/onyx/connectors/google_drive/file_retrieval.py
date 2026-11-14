@@ -311,17 +311,34 @@ def resolve_file_or_shortcut(
     if not _is_drive_shortcut(file):
         return file
 
+    target = resolve_shortcut(ops, user_email, file, field_type)
+    if target is None or target.get("mimeType") == DRIVE_FOLDER_TYPE:
+        return None
+    return target
+
+
+def resolve_shortcut(
+    ops: GoogleDriveSourceOperations,
+    user_email: str,
+    shortcut: GoogleDriveFileType,
+    field_type: DriveFileFieldType,
+) -> GoogleDriveFileType | None:
+    """The target of a shortcut, a file or a folder, read with the fields of
+    ``field_type``. None when the user cannot read it. A file target gets
+    the shortcut's modifiedTime and a mark that a shortcut reached it."""
     target = _resolve_shortcut_target(
         ops=ops,
         user_email=user_email,
-        shortcut=file,
+        shortcut=shortcut,
         target_fields=_get_single_file_fields(field_type),
     )
     if target is None or target.get("mimeType") == DRIVE_FOLDER_TYPE:
-        return None
+        return target
 
     logger.debug(
-        "Resolved Drive shortcut %s to target %s", file.get("id"), target.get("id")
+        "Resolved Drive shortcut %s to target %s",
+        shortcut.get("id"),
+        target.get("id"),
     )
     # Use the shortcut's own modifiedTime: listings are filtered and ordered by
     # it, so this preserves the invariant that a retrieved item's modifiedTime
@@ -330,12 +347,12 @@ def resolve_file_or_shortcut(
     # The target's own time stays under a separate key: it says if the
     # listing of the target's own partition returns the target.
     target[TARGET_MODIFIED_TIME_KEY] = target.get(GoogleFields.MODIFIED_TIME.value)
-    listing_modified_time = file.get(GoogleFields.MODIFIED_TIME.value)
+    listing_modified_time = shortcut.get(GoogleFields.MODIFIED_TIME.value)
     if listing_modified_time is not None:
         target[GoogleFields.MODIFIED_TIME.value] = listing_modified_time
     # The target now looks like any listed file; record where it came from so
     # partitioned retrieval does not count it as part of the listing's scope.
-    target[RESOLVED_FROM_SHORTCUT_KEY] = file.get("id")
+    target[RESOLVED_FROM_SHORTCUT_KEY] = shortcut.get("id")
     return target
 
 

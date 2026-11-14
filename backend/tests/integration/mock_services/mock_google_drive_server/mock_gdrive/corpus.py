@@ -223,18 +223,22 @@ class Corpus:
         ]
 
     def subtree_content_ids(self, folder_id: str) -> list[str]:
-        """The content files under a folder, at any depth."""
+        """The content files under a folder, at any depth, once each. A
+        shortcut counts as its target, as a folder target follows it."""
         found: list[str] = []
         pending = [folder_id]
         seen = {folder_id}
         while pending:
             for child_id in self.children.get(pending.pop(), []):
                 child = self.files[child_id]
-                if child.is_content:
-                    found.append(child_id)
-                elif child.is_folder and child_id not in seen:
-                    seen.add(child_id)
-                    pending.append(child_id)
+                if child.shortcut_target_id is not None:
+                    child = self.files[child.shortcut_target_id]
+                if child.is_content and child.id not in seen:
+                    seen.add(child.id)
+                    found.append(child.id)
+                elif child.is_folder and child.id not in seen:
+                    seen.add(child.id)
+                    pending.append(child.id)
         return found
 
     def touch(self, count: int, rng: random.Random) -> list[str]:
@@ -568,6 +572,41 @@ class Corpus:
             self._add_tree_file(
                 rng, tree.files_per_folder + n, level[0], drive_id, owner
             )
+        if tree.cycle_shortcut:
+            self._add_folder_shortcut(rng, level[0], tree_root, drive_id, owner)
+        if tree.shortcut_to_tree is not None:
+            self._add_folder_shortcut(
+                rng,
+                tree_root,
+                self.folder_tree_root_ids[tree.shortcut_to_tree],
+                drive_id,
+                owner,
+            )
+
+    def _add_folder_shortcut(
+        self,
+        rng: random.Random,
+        parent: str,
+        target_id: str,
+        drive_id: str | None,
+        owner: str | None,
+    ) -> None:
+        created, modified = self._times(rng)
+        self._add(
+            MockFile(
+                id=self._next_file_id(),
+                name=f"Shortcut to {self.files[target_id].name}",
+                mime_type=SHORTCUT_MIME,
+                parents=[parent],
+                drive_id=drive_id,
+                owner=owner,
+                created_time=created,
+                modified_time=modified,
+                permissions=self._owner_permissions(owner),
+                content_bytes=0,
+                shortcut_target_id=target_id,
+            )
+        )
 
     def _add_tree_file(
         self,

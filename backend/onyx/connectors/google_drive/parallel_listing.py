@@ -13,6 +13,15 @@ the range look sparse does not stop a later split. No step depends on the
 order of the pages: the ranges are query filters, so shards do not overlap and
 do not miss a file. The order only makes the density estimate good.
 
+**Folder subtrees.** A requested folder has no partition of its own in
+Drive, so its partition lists one folder at a time with ``'<id>' in parents``.
+One SUBTREE shard lists a folder's files in the shard's time range and all of
+its subfolders in one call. Each subfolder becomes a new SUBTREE shard of the
+same partition. A folder with more than one page drops that page and becomes
+a FILES shard, which splits by time like any other, and a FOLDERS shard for
+its subfolders. So a small folder costs one call, and a large one does not
+list serially.
+
 **Checkpoint.** ``DriveListingState`` holds the open shards. One lock guards
 each page step: it emits the page's files, adds the dedup claims, and moves,
 splits or closes the shard. A call drains the pool before it ends, so the state
@@ -29,7 +38,12 @@ from concurrent.futures import wait as wait_for_futures
 from datetime import datetime, timezone
 from enum import Enum
 
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
+from pydantic import BaseModel
+
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_SHORTCUT_TYPE,
+)
 from onyx.connectors.google_drive.file_retrieval import (
     RESOLVED_FROM_SHORTCUT_KEY,
     TARGET_MODIFIED_TIME_KEY,
@@ -37,6 +51,7 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_fields_for_file_type,
     owner_email,
     resolve_file_or_shortcut,
+    resolve_shortcut,
 )
 from onyx.connectors.google_drive.models import (
     DriveListingState,
@@ -111,6 +126,15 @@ _OUTPUT_POLL_SECONDS = 0.1
 
 _FILES_QUERY = f"mimeType != '{DRIVE_FOLDER_TYPE}' and trashed = false"
 _FOLDERS_QUERY = f"mimeType = '{DRIVE_FOLDER_TYPE}' and trashed = false"
+_FOLDER_OR_SHORTCUT = (
+    f"mimeType = '{DRIVE_FOLDER_TYPE}' or mimeType = '{DRIVE_SHORTCUT_TYPE}'"
+)
+# Partitions that wait until every exact partition has begun, so that most
+# files they see are dropped as covered, not claimed in the dedup set.
+_WAITING_PARTITION_KINDS = {
+    ListingPartitionKind.SHARED_WITH_USER,
+    ListingPartitionKind.FOLDER_SUBTREE,
+}
 _NEWEST_FIELDS = f"nextPageToken, files({GoogleFields.MODIFIED_TIME.value})"
 
 _GOOGLE_APPS_PREFIX = "application/vnd.google-apps."
@@ -178,6 +202,11 @@ def _iso(ms: int) -> str:
     return stamp.replace(microsecond=ms % 1000 * 1000).isoformat(
         timespec="milliseconds"
     )
+
+
+def _quoted(value: str) -> str:
+    """A value for a quoted string in a Drive query."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
 
 def _modified_ms(file: GoogleDriveFileType) -> int | None:
@@ -305,6 +334,17 @@ def _move_frontier(shard: ListingShard, files: list[GoogleDriveFileType]) -> Non
         shard.frontier_ids = []
 
 
+class FolderTargetPlan(BaseModel):
+    """Who lists a requested folder."""
+
+    # The users to list the folder as. Empty when no user can see it. More
+    # than one when no user is sure to see the whole subtree.
+    principals: list[str] = []
+    # True when the folder is in a shared drive that a complete listing
+    # covers. Then the folder needs no listing of its own.
+    covered: bool = False
+
+
 class _SplitRefusal(Enum):
     """Why a shard keeps its page instead of splitting."""
 
@@ -353,6 +393,9 @@ class ParallelDriveLister:
         ],
         # Whether to emit a file, and the dedup claim. Called under the lock.
         admit_file: Callable[[GoogleDriveFileType, bool], bool],
+        # Picks who lists a requested folder. The collection holds the shared
+        # drives that a complete listing covers.
+        plan_folder_target: Callable[[str, Collection[str]], FolderTargetPlan],
         # The caller converts each file before it reads the next. One page is
         # in flight, and the call stops before a page could pass
         # INLINE_CALL_BUDGET_FILES, so the files that wait for conversion
@@ -376,6 +419,7 @@ class ParallelDriveLister:
         self._impersonation_failed = impersonation_failed
         self._listing_denied = listing_denied
         self._admit_file = admit_file
+        self._plan_folder_target = plan_folder_target
         self._inline = inline
         self._shared_with_all_drives = shared_with_all_drives
         self._budget_files = INLINE_CALL_BUDGET_FILES if inline else CALL_BUDGET_FILES
@@ -455,21 +499,18 @@ class ParallelDriveLister:
 
     def _plan_tasks(self) -> list[AdaptiveTask]:
         """Tasks for the pending partitions that can start. A shared-with-user
-        partition waits until every exact partition has begun: most owners are
-        then listed, and their files are dropped, not put in the dedup set.
-        The caller holds the lock."""
+        or folder subtree partition waits until every exact partition has
+        begun: most owners and drives are then listed, and their files are
+        dropped, not put in the dedup set. The caller holds the lock."""
         exact_pending = any(
-            partition.kind is not ListingPartitionKind.SHARED_WITH_USER
+            partition.kind not in _WAITING_PARTITION_KINDS
             for partition in self._state.pending_partitions
         )
         tasks: list[AdaptiveTask] = []
         for partition in self._state.pending_partitions:
             if partition in self._planning:
                 continue
-            if (
-                partition.kind is ListingPartitionKind.SHARED_WITH_USER
-                and exact_pending
-            ):
+            if partition.kind in _WAITING_PARTITION_KINDS and exact_pending:
                 continue
             self._planning.add(partition)
             tasks.append(self._plan_task(partition))
@@ -477,14 +518,19 @@ class ParallelDriveLister:
 
     def _plan_task(self, partition: ListingPartition) -> AdaptiveTask:
         def run() -> list[AdaptiveTask]:
-            if partition.kind is ListingPartitionKind.SHARED_DRIVE:
-                shard_id = self._plan_shared_drive(partition)
+            shard_ids: list[int] = []
+            if partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+                shard_ids = self._plan_folder_subtree(partition)
             else:
-                shard_id = self._plan_user_partition(partition)
+                if partition.kind is ListingPartitionKind.SHARED_DRIVE:
+                    shard_id = self._plan_shared_drive(partition)
+                else:
+                    shard_id = self._plan_user_partition(partition)
+                if shard_id is not None:
+                    shard_ids.append(shard_id)
             with self._lock:
                 tasks = self._plan_tasks()
-            if shard_id is not None:
-                tasks.append(self._page_task(shard_id))
+            tasks.extend(self._page_task(shard_id) for shard_id in shard_ids)
             return tasks
 
         return run
@@ -532,6 +578,79 @@ class ParallelDriveLister:
                 self._state.listed_owners.add(email.lower())
             return self._start_partition(partition, email, exact=not shared_with)
 
+    def _plan_folder_subtree(self, partition: ListingPartition) -> list[int]:
+        """Starts the walk of a requested folder as each of its users. A
+        folder that no usable user can see is unreachable, so pruning refuses
+        to run."""
+        folder_id = partition.key
+        with self._lock:
+            covered = set(self._state.listed_drive_ids)
+        plan = self._plan_folder_target(folder_id, covered)
+        usable: list[str] = []
+        failures: list[RetrievedDriveFile] = []
+        if not plan.covered:
+            for email in plan.principals:
+                with self._lock:
+                    checked = email.lower() in self._state.listed_owners
+                ok = True
+                if not checked:
+                    ok, user_failures = self._check_impersonation(email)
+                    failures.extend(user_failures)
+                if ok:
+                    usable.append(email)
+        with self._lock:
+            self._emit(failures)
+            self._finish_planning(partition)
+            if plan.covered:
+                logger.info(
+                    "Requested folder %s is in a shared drive that is listed in full",
+                    folder_id,
+                )
+                return []
+            if not usable:
+                logger.warning(
+                    "Requested folder %s is not visible to any usable user; "
+                    "pruning is blocked until it is.",
+                    folder_id,
+                )
+                self._checkpoint.unreachable_target_ids.add(folder_id)
+                return []
+            shard_ids: list[int] = []
+            for email in usable:
+                logger.info("Listing requested folder %s as %s", folder_id, email)
+                self._state.started_partitions.append((partition, email, False))
+                shard_ids.append(
+                    self._add_walk_root(
+                        partition,
+                        email,
+                        self._state.window_t0,
+                        self._state.window_t1,
+                    )
+                )
+            return shard_ids
+
+    def _add_walk_root(
+        self,
+        partition: ListingPartition,
+        principal: str,
+        t0: int,
+        t1: int,
+        owner_filter: str | None = None,
+    ) -> int:
+        """The SUBTREE shard of a requested folder itself. The caller holds
+        the lock."""
+        return self._add_shard(
+            partition,
+            principal,
+            False,
+            t0,
+            t1,
+            newest_ms=None,
+            owner_filter=owner_filter,
+            kind=ListingShardKind.SUBTREE,
+            folder_id=partition.key,
+        )
+
     def _finish_planning(self, partition: ListingPartition) -> None:
         """The caller holds the lock."""
         self._state.pending_partitions.remove(partition)
@@ -574,6 +693,8 @@ class ParallelDriveLister:
         skip_ids: list[str] | None = None,
         owner_filter: str | None = None,
         kind: ListingShardKind = ListingShardKind.FILES,
+        folder_id: str | None = None,
+        shortcut_path: list[str] | None = None,
     ) -> int:
         """The caller holds the lock."""
         state = self._state
@@ -591,6 +712,8 @@ class ParallelDriveLister:
             skip_ids=skip_ids or [],
             owner_filter=owner_filter,
             open_end=state.open_end and t1 >= state.window_t1,
+            folder_id=folder_id,
+            shortcut_path=shortcut_path or [],
         )
         return shard_id
 
@@ -618,6 +741,8 @@ class ParallelDriveLister:
         return run
 
     def _list_one_page(self, shard: ListingShard) -> list[AdaptiveTask]:
+        if _is_walk_shard(shard):
+            return self._list_walk_page(shard)
         files, next_token = self._fetch_page(shard)
 
         if next_token is not None:
@@ -636,7 +761,7 @@ class ParallelDriveLister:
         if shard.kind is ListingShardKind.FILES:
             resolved = []
             for file in files:
-                target = self._resolve_shortcut(shard.principal, file)
+                target = self._resolve_file(shard.principal, file)
                 if target is not None:
                     resolved.append(target)
 
@@ -659,23 +784,156 @@ class ParallelDriveLister:
             _move_frontier(live, files)
         return [self._page_task(shard.id)]
 
-    def _resolve_shortcut(
+    def _list_walk_page(self, shard: ListingShard) -> list[AdaptiveTask]:
+        """One page of a folder walk: a SUBTREE shard, or the FOLDERS shard
+        of one folder. Emits the files and the subfolders, and adds a SUBTREE
+        shard for each subfolder."""
+        items, next_token = self._fetch_page(shard)
+        if shard.kind is ListingShardKind.SUBTREE and next_token is not None:
+            return self._divide_folder(shard)
+
+        # Each subfolder, with the shortcut path of its walk.
+        folders: list[tuple[GoogleDriveFileType, list[str]]] = []
+        files: list[GoogleDriveFileType] = []
+        for item in items:
+            mime_type = item.get("mimeType")
+            if mime_type == DRIVE_FOLDER_TYPE:
+                folders.append((item, shard.shortcut_path))
+            elif mime_type == DRIVE_SHORTCUT_TYPE:
+                target = self._resolve_walk_shortcut(shard, item)
+                if target is None:
+                    continue
+                if target.get("mimeType") != DRIVE_FOLDER_TYPE:
+                    files.append(target)
+                    continue
+                target_id = target.get("id")
+                # A shortcut back up the walk would loop.
+                if target_id == shard.partition.key or target_id in (
+                    shard.shortcut_path
+                ):
+                    continue
+                folders.append((target, [*shard.shortcut_path, str(target_id)]))
+            elif shard.kind is ListingShardKind.SUBTREE:
+                files.append(item)
+        if shard.owner_filter is not None:
+            files = [file for file in files if owner_email(file) == shard.owner_filter]
+
+        with self._lock:
+            live = self._state.shards.get(shard.id)
+            if live is None:
+                # The partition failed while this page was in flight.
+                return []
+            # Folders are not documents: no dedup claim. The connector skips
+            # a folder that it already yielded.
+            emitted = [self._retrieved(shard, folder) for folder, _ in folders]
+            emitted.extend(
+                self._retrieved(shard, file)
+                for file in files
+                if self._admit(shard, file)
+            )
+            self._emit(emitted)
+            children = [
+                self._add_shard(
+                    shard.partition,
+                    shard.principal,
+                    False,
+                    shard.t0,
+                    shard.t1,
+                    newest_ms=None,
+                    owner_filter=shard.owner_filter,
+                    kind=ListingShardKind.SUBTREE,
+                    folder_id=folder["id"],
+                    shortcut_path=path,
+                )
+                for folder, path in folders
+                if isinstance(folder.get("id"), str)
+            ]
+            if next_token is None:
+                del self._state.shards[shard.id]
+            else:
+                live.page_token = next_token
+        tasks = [self._page_task(child_id) for child_id in children]
+        if next_token is not None:
+            tasks.append(self._page_task(shard.id))
+        return tasks
+
+    def _divide_folder(self, shard: ListingShard) -> list[AdaptiveTask]:
+        """A folder with more than one page: drops the page, and lists the
+        folder's files as a FILES shard, which can split by time, and its
+        subfolders as a FOLDERS shard."""
+        with self._lock:
+            if shard.id not in self._state.shards:
+                return []
+            del self._state.shards[shard.id]
+            children = [
+                self._add_shard(
+                    shard.partition,
+                    shard.principal,
+                    False,
+                    shard.t0,
+                    shard.t1,
+                    newest_ms=None,
+                    owner_filter=shard.owner_filter,
+                    kind=kind,
+                    folder_id=shard.folder_id,
+                    shortcut_path=shard.shortcut_path,
+                )
+                for kind in (ListingShardKind.FILES, ListingShardKind.FOLDERS)
+            ]
+        logger.debug("Folder %s has more than one page", shard.folder_id)
+        return [self._page_task(child_id) for child_id in children]
+
+    def _resolve_walk_shortcut(
+        self, shard: ListingShard, shortcut: GoogleDriveFileType
+    ) -> GoogleDriveFileType | None:
+        """The target of a shortcut in a walked folder: a folder to walk, or
+        a file in the shard's range. The FILES shard of a divided folder
+        lists its file shortcuts, so its FOLDERS shard takes only folders."""
+        wants_file = shard.kind is ListingShardKind.SUBTREE and _in_range(
+            shard, shortcut
+        )
+        details = shortcut.get("shortcutDetails") or {}
+        target_mime_type = details.get("targetMimeType")
+        if not wants_file and target_mime_type not in (None, DRIVE_FOLDER_TYPE):
+            # Skips a files.get that cannot give a target to keep.
+            return None
+        target = self._resolve_shortcut(
+            lambda: resolve_shortcut(
+                self._ops, shard.principal, shortcut, self._field_type
+            )
+        )
+        if target is None:
+            return None
+        if target.get("mimeType") != DRIVE_FOLDER_TYPE and not wants_file:
+            return None
+        return target
+
+    def _resolve_file(
         self, user_email: str, file: GoogleDriveFileType
     ) -> GoogleDriveFileType | None:
-        """The file, or the target of a shortcut. files.get has no retry of
-        its own, and one failed read must not fail the whole call."""
+        """The file, or the target of a shortcut to a file."""
+        return self._resolve_shortcut(
+            lambda: resolve_file_or_shortcut(
+                self._ops, user_email, file, self._field_type
+            )
+        )
 
-        def resolve() -> GoogleDriveFileType | None:
+    @staticmethod
+    def _resolve_shortcut(
+        resolve: Callable[[], GoogleDriveFileType | None],
+    ) -> GoogleDriveFileType | None:
+        """files.get has no retry of its own, and one failed read must not
+        fail the whole call."""
+
+        def resolve_with_pushback() -> GoogleDriveFileType | None:
             try:
-                return resolve_file_or_shortcut(
-                    self._ops, user_email, file, self._field_type
-                )
+                return resolve()
             except GoogleDriveHttpError as error:
                 if error.transient:
                     record_pushback()
                 raise
 
-        return retry_transient(resolve)()
+        return retry_transient(resolve_with_pushback)()
 
     def _fetch_page(
         self, shard: ListingShard
@@ -702,6 +960,9 @@ class ParallelDriveLister:
     def _variant(self, shard: ListingShard) -> DriveCorpus:
         if shard.partition.kind is ListingPartitionKind.SHARED_DRIVE:
             return DriveCorpus.DRIVE
+        if shard.partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+            # A requested folder can be in a My Drive or a shared drive.
+            return DriveCorpus.ALL_DRIVES
         if (
             shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER
             and self._shared_with_all_drives
@@ -717,6 +978,8 @@ class ParallelDriveLister:
 
     @staticmethod
     def _query(shard: ListingShard, t0: int, t1: int) -> str:
+        if shard.folder_id is not None:
+            return _walk_query(shard, t0, t1)
         folders = shard.kind is ListingShardKind.FOLDERS
         query = _FOLDERS_QUERY if folders else _FILES_QUERY
         if shard.partition.kind is ListingPartitionKind.MY_DRIVE:
@@ -725,18 +988,21 @@ class ParallelDriveLister:
             # The user's My Drive partition lists the user's own files.
             query += " and not 'me' in owners"
             if shard.owner_filter is not None:
-                owner = shard.owner_filter.replace("\\", "\\\\").replace("'", "\\'")
-                query += f" and '{owner}' in owners"
+                query += f" and '{_quoted(shard.owner_filter)}' in owners"
         if folders:
             return query
-        field = GoogleFields.MODIFIED_TIME.value
-        if shard.open_end:
-            return f"{query} and {field} >= '{_iso(t0)}'"
-        return f"{query} and {field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
+        return f"{query} and {_time_range(shard, t0, t1)}"
 
     def _retrieved(
         self, shard: ListingShard, file: GoogleDriveFileType
     ) -> RetrievedDriveFile:
+        if shard.partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+            return RetrievedDriveFile(
+                completion_stage=DriveRetrievalStage.FOLDER_FILES,
+                drive_file=file,
+                user_email=shard.principal,
+                parent_id=shard.folder_id,
+            )
         if shard.partition.kind is ListingPartitionKind.SHARED_DRIVE:
             return RetrievedDriveFile(
                 completion_stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
@@ -771,7 +1037,7 @@ class ParallelDriveLister:
         # listing's range, so no other listing covers it.
         listable = not via_shortcut or self._in_window(file)
 
-        if kind is ListingPartitionKind.SHARED_WITH_USER:
+        if kind in _WAITING_PARTITION_KINDS:
             covered = (
                 file_drive_id in state.listed_drive_ids or owner in state.listed_owners
             )
@@ -821,7 +1087,7 @@ class ParallelDriveLister:
     ) -> list[int] | _SplitRefusal:
         """Splits the shard when its range should hold many pages. Returns the
         new shard ids, or why the shard keeps its page."""
-        if shard.kind is ListingShardKind.FOLDERS:
+        if shard.kind is not ListingShardKind.FILES:
             return _SplitRefusal.FOLDERS
         if shard.open_end:
             return _SplitRefusal.OPEN_END
@@ -856,7 +1122,7 @@ class ParallelDriveLister:
         if shard.t1 - shard.t0 < 2 * MIN_SHARD_MS:
             return _SplitRefusal.DENSITY
         with self._lock:
-            if len(self._state.shards) >= MAX_OPEN_SHARDS:
+            if _split_shard_count(self._state) >= MAX_OPEN_SHARDS:
                 return _SplitRefusal.SHARD_CAP
         newest_ms = shard.newest_ms
         newest_density: float | None = None
@@ -879,7 +1145,7 @@ class ParallelDriveLister:
             state = self._state
             if shard.id not in state.shards:
                 return []
-            if len(state.shards) + len(ranges) - 1 > MAX_OPEN_SHARDS:
+            if _split_shard_count(state) + len(ranges) - 1 > MAX_OPEN_SHARDS:
                 return _SplitRefusal.SHARD_CAP
             del state.shards[shard.id]
             children = [
@@ -893,6 +1159,8 @@ class ParallelDriveLister:
                     # Only the first sub-range starts at the shard's start.
                     skip_ids if index == 0 else None,
                     shard.owner_filter,
+                    folder_id=shard.folder_id,
+                    shortcut_path=shard.shortcut_path,
                 )
                 for index, (t0, t1) in enumerate(ranges)
             ]
@@ -946,8 +1214,18 @@ class ParallelDriveLister:
         callbacks raise and fail the call. Closes every shard of the partition
         and reports ``failures``. With ``list_again``, a shared drive goes back
         to pending, to list again from its start as another member. Otherwise
-        the drive is incomplete."""
+        the drive is incomplete. A folder subtree closes only the walk of that
+        user. With ``list_again``, it goes back to pending when no other user
+        walks it. Otherwise, with no other walk, the folder is unreachable."""
         partition = shard.partition
+        # A folder subtree can have one walk per user.
+        per_user = partition.kind is ListingPartitionKind.FOLDER_SUBTREE
+
+        def failed(open_partition: ListingPartition, principal: str) -> bool:
+            return open_partition == partition and (
+                not per_user or principal == shard.principal
+            )
+
         with self._lock:
             state = self._state
             if shard.id not in state.shards:
@@ -956,16 +1234,26 @@ class ParallelDriveLister:
             for shard_id in [
                 shard_id
                 for shard_id, open_shard in state.shards.items()
-                if open_shard.partition == partition
+                if failed(open_shard.partition, open_shard.principal)
             ]:
                 del state.shards[shard_id]
             state.started_partitions = [
                 started
                 for started in state.started_partitions
-                if started[0] != partition
+                if not failed(started[0], started[1])
             ]
             self._emit(failures)
-            if partition.kind is ListingPartitionKind.SHARED_DRIVE:
+            if per_user:
+                if not any(
+                    started[0] == partition for started in state.started_partitions
+                ):
+                    if list_again:
+                        # The files it emitted are claimed, so the new walk
+                        # drops them.
+                        state.pending_partitions.insert(0, partition)
+                    else:
+                        self._checkpoint.unreachable_target_ids.add(partition.key)
+            elif partition.kind is ListingPartitionKind.SHARED_DRIVE:
                 drive_id = partition.key
                 state.listed_drive_ids.discard(drive_id)
                 self._checkpoint.organizer_email_by_drive_id.pop(drive_id, None)
@@ -980,8 +1268,8 @@ class ParallelDriveLister:
                 # listing that starts later keeps them.
                 owner = partition.key.lower()
                 state.listed_owners.discard(owner)
-                # A shared-with listing that began dropped this owner's files.
-                # It lists them again, and only them.
+                # A shared-with listing or a folder walk that began dropped
+                # this owner's files. It lists them again, and only them.
                 relist = [
                     self._add_shard(
                         started_partition,
@@ -996,6 +1284,17 @@ class ParallelDriveLister:
                     if started_partition.kind is ListingPartitionKind.SHARED_WITH_USER
                     and started_partition.key.lower() != owner
                 ]
+                relist.extend(
+                    self._add_walk_root(
+                        started_partition,
+                        principal,
+                        state.window_t0,
+                        state.window_t1,
+                        owner_filter=owner,
+                    )
+                    for started_partition, principal, _ in state.started_partitions
+                    if started_partition.kind is ListingPartitionKind.FOLDER_SUBTREE
+                )
                 return [
                     self._page_task(shard_id) for shard_id in relist
                 ] + self._plan_tasks()
@@ -1018,6 +1317,8 @@ def extend_window(state: DriveListingState, t1: int) -> None:
             t0=state.window_t1,
             t1=t1,
             exact=exact,
+            kind=_added_range_kind(partition),
+            folder_id=_added_range_folder(partition),
         )
     state.window_t1 = t1
 
@@ -1039,5 +1340,64 @@ def open_window_end(state: DriveListingState) -> None:
             t1=state.window_t1,
             exact=exact,
             open_end=True,
+            kind=_added_range_kind(partition),
+            folder_id=_added_range_folder(partition),
         )
     state.open_end = True
+
+
+def _added_range_kind(partition: ListingPartition) -> ListingShardKind:
+    """A folder subtree lists an added range with a new walk from the
+    requested folder."""
+    if partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+        return ListingShardKind.SUBTREE
+    return ListingShardKind.FILES
+
+
+def _added_range_folder(partition: ListingPartition) -> str | None:
+    if partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+        return partition.key
+    return None
+
+
+def _is_walk_shard(shard: ListingShard) -> bool:
+    """A shard that walks a folder subtree: it adds a shard for each
+    subfolder."""
+    return shard.folder_id is not None and shard.kind is not ListingShardKind.FILES
+
+
+def _split_shard_count(state: DriveListingState) -> int:
+    """The open shards that count against MAX_OPEN_SHARDS. A walk shard
+    does not count: it lists one folder, so a wide folder tree has many of
+    them, and they must not stop a large folder from splitting."""
+    return sum(1 for shard in state.shards.values() if not _is_walk_shard(shard))
+
+
+def _time_range(shard: ListingShard, t0: int, t1: int) -> str:
+    field = GoogleFields.MODIFIED_TIME.value
+    if shard.open_end:
+        return f"{field} >= '{_iso(t0)}'"
+    return f"{field} >= '{_iso(t0)}' and {field} < '{_iso(t1)}'"
+
+
+def _walk_query(shard: ListingShard, t0: int, t1: int) -> str:
+    """The query of a folder subtree's shard. Subfolders and shortcuts have no
+    time range: the walk must reach every folder, and a shortcut's time is
+    checked when it points to a file."""
+    query = f"'{shard.folder_id}' in parents and trashed = false"
+    if shard.kind is ListingShardKind.FOLDERS:
+        return f"{query} and ({_FOLDER_OR_SHORTCUT})"
+    time_range = _time_range(shard, t0, t1)
+    if shard.kind is ListingShardKind.SUBTREE:
+        return f"{query} and ({_FOLDER_OR_SHORTCUT} or ({time_range}))"
+    query = f"{query} and mimeType != '{DRIVE_FOLDER_TYPE}' and {time_range}"
+    if shard.owner_filter is not None:
+        query += f" and '{_quoted(shard.owner_filter)}' in owners"
+    return query
+
+
+def _in_range(shard: ListingShard, file: GoogleDriveFileType) -> bool:
+    modified = _modified_ms(file)
+    if modified is None or modified < shard.t0:
+        return False
+    return shard.open_end or modified < shard.t1

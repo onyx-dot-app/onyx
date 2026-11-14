@@ -271,21 +271,30 @@ class ListingPartitionKind(str, Enum):
     MY_DRIVE = "my_drive"
     # All files a user sees. Files that another partition covers are dropped.
     SHARED_WITH_USER = "shared_with_user"
+    # A requested folder and every folder under it, listed one folder at a
+    # time. Files that another partition covers are dropped.
+    FOLDER_SUBTREE = "folder_subtree"
 
 
 class ListingPartition(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: ListingPartitionKind
-    # A drive id for a shared drive, a user email for the other kinds.
+    # A drive id for a shared drive, a folder id for a folder subtree, a user
+    # email for the other kinds.
     key: str
 
 
 class ListingShardKind(str, Enum):
     # Files other than folders, in the shard's modifiedTime range.
     FILES = "files"
-    # All folders of the partition. It has no time range and does not split.
+    # All folders of the partition, or with folder_id the subfolders of one
+    # folder. It has no time range and does not split.
     FOLDERS = "folders"
+    # The files in the shard's range and the subfolders of one folder of a
+    # folder subtree. A folder with more than one page becomes a FILES and a
+    # FOLDERS shard of that folder.
+    SUBTREE = "subtree"
 
 
 class ListingShard(BaseModel):
@@ -330,6 +339,13 @@ class ListingShard(BaseModel):
     # True when the shard has no upper bound: it lists every file modified at
     # t0 or later, and t1 is not used. Such a shard does not split.
     open_end: bool = False
+    # The folder whose children the shard lists. Set on each shard of a
+    # folder subtree.
+    folder_id: str | None = None
+    # The folders that this walk reached through a shortcut, from the root
+    # down. A shortcut to one of them, or to the root, is not followed again,
+    # so a shortcut cycle ends.
+    shortcut_path: list[str] = []
 
 
 class DriveListingState(BaseModel):
@@ -421,11 +437,11 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # cached user emails
     user_emails: list[str] | None = None
 
-    # --- Phased retrieval state, used by the serial service account listing
-    # (requested folders). Sized by drives and users, never by documents.
+    # --- Service account state. Sized by drives and users, never by
+    # documents.
 
-    # None until the first phased run; a checkpoint written by the per-user
-    # stage loop also has None here and restarts at INVENTORY.
+    # State of the serial phased listing. The shard engine drops a checkpoint
+    # that has it.
     phase_progress: PhaseProgress | None = None
 
     # Drive id -> the email that listed it. Once the shared drive phase is
@@ -442,6 +458,7 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
 
     # Requested targets at least one principal crawled. At the end of the
     # requested-target phase, every planned target missing here is unreachable.
+    # Only the serial phased listing uses it.
     crawled_target_ids: set[str] = set()
 
     # Requested drives and folders that no impersonable user could reach.
@@ -449,9 +466,9 @@ class GoogleDriveCheckpoint(ConnectorCheckpoint):
     # listing would delete every document indexed from them.
     unreachable_target_ids: set[str] = set()
 
-    # State of the shard engine, which lists a service account with no
-    # requested folders. None for the serial listing (OAuth and requested
-    # folders). A service account checkpoint of the serial listing is dropped.
+    # State of the shard engine, which lists every service account. None for
+    # the serial listing (OAuth). A service account checkpoint of the serial
+    # listing is dropped.
     listing: DriveListingState | None = None
 
     # Hierarchy node raw IDs that have already been yielded.

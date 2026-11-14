@@ -75,6 +75,7 @@ from onyx.connectors.google_drive.models import (
     target_partition_key,
 )
 from onyx.connectors.google_drive.parallel_listing import (
+    FolderTargetPlan,
     ParallelDriveLister,
     drive_document_type,
     extend_window,
@@ -2062,10 +2063,10 @@ class GoogleDriveConnector(
         include_permissions: bool = False,
         inline: bool = False,
     ) -> Generator[RetrievedDriveFile, None, None]:
-        """One call of the listing. With no requested folders, the listing
-        is ``ParallelDriveLister``, for a service account and for OAuth.
-        Requested folders use the serial listing. ``field_type`` is for the
-        serial listing. The shard engine asks for permissions only when
+        """One call of the listing. The listing is ``ParallelDriveLister``,
+        except for OAuth with requested folders, which uses the serial
+        listing. ``field_type`` is for the serial listing. The shard engine
+        asks for permissions only when
         ``include_permissions`` or the link-only filter needs them. With
         ``inline``, the caller converts each file in this call (see
         ``ParallelDriveLister``)."""
@@ -3003,17 +3004,19 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None,
     ) -> bool:
         """Sets up ``checkpoint.listing`` for this call. Returns False when
-        the connector must use the serial listing: requested folders, because
-        a folder crawl has no time-range shards yet. With no ``end``, a new
-        listing ends now and a started one keeps its end.
+        the connector must use the serial listing: OAuth with requested
+        folders. With no ``end``, a new listing ends now and a started one
+        keeps its end.
 
         The first call plans the partitions: shared drives, then My Drives,
-        then the files shared with each user. An OAuth credential lists as
-        its one user."""
-        if self._requested_folder_ids:
+        then the files shared with each user, then the requested folders
+        (including requested drive ids that are folders). An OAuth credential
+        lists as its one user."""
+        oauth = not self._is_service_account
+        if oauth and self._requested_folder_ids:
             return False
         state = checkpoint.listing
-        if state is None and checkpoint.folder_ids_to_retrieve:
+        if oauth and state is None and checkpoint.folder_ids_to_retrieve:
             # The serial listing lists a requested drive id that is a folder.
             return False
         if state is None and (
@@ -3042,7 +3045,7 @@ class GoogleDriveConnector(
             return True
 
         self._run_inventory(checkpoint)
-        if checkpoint.folder_ids_to_retrieve:
+        if oauth and checkpoint.folder_ids_to_retrieve:
             # A requested drive id that is a folder.
             return False
         partitions = [
@@ -3068,6 +3071,10 @@ class GoogleDriveConnector(
         partitions.extend(
             ListingPartition(kind=ListingPartitionKind.SHARED_WITH_USER, key=email)
             for email in shared_with_emails
+        )
+        partitions.extend(
+            ListingPartition(kind=ListingPartitionKind.FOLDER_SUBTREE, key=folder_id)
+            for folder_id in checkpoint.folder_ids_to_retrieve or []
         )
         checkpoint.listing = DriveListingState(
             window_t0=t0, window_t1=t1, pending_partitions=partitions
@@ -3129,23 +3136,43 @@ class GoogleDriveConnector(
                 email,
                 error,
             )
-            shared_drive = partition.kind is ListingPartitionKind.SHARED_DRIVE
+            stage, parent_id = {
+                ListingPartitionKind.SHARED_DRIVE: (
+                    DriveRetrievalStage.SHARED_DRIVE_FILES,
+                    partition.key,
+                ),
+                ListingPartitionKind.FOLDER_SUBTREE: (
+                    DriveRetrievalStage.FOLDER_FILES,
+                    partition.key,
+                ),
+            }.get(partition.kind, (DriveRetrievalStage.MY_DRIVE_FILES, None))
             return [
                 RetrievedDriveFile(
-                    completion_stage=(
-                        DriveRetrievalStage.SHARED_DRIVE_FILES
-                        if shared_drive
-                        else DriveRetrievalStage.MY_DRIVE_FILES
-                    ),
+                    completion_stage=stage,
                     drive_file={},
                     user_email=email,
-                    parent_id=partition.key if shared_drive else None,
+                    parent_id=parent_id,
                     error=error,
                 )
             ]
 
         def admit_file(drive_file: GoogleDriveFileType, exact: bool) -> bool:
             return self._admit_file(checkpoint, drive_file, exact)
+
+        def plan_folder_target(
+            folder_id: str, covered_drive_ids: Collection[str]
+        ) -> FolderTargetPlan:
+            found = self._find_target_viewer(folder_id, checkpoint)
+            if found is None:
+                return FolderTargetPlan()
+            viewer, metadata = found
+            if metadata.get("driveId") in covered_drive_ids:
+                return FolderTargetPlan(covered=True)
+            return FolderTargetPlan(
+                principals=self._target_principals(
+                    folder_id, viewer, metadata, checkpoint
+                )
+            )
 
         lister = ParallelDriveLister(
             ops=self.ops,
@@ -3163,6 +3190,7 @@ class GoogleDriveConnector(
             impersonation_failed=impersonation_failed,
             listing_denied=listing_denied,
             admit_file=admit_file,
+            plan_folder_target=plan_folder_target,
             inline=inline,
             # As the serial OAuth listing's allDrives corpus.
             shared_with_all_drives=(

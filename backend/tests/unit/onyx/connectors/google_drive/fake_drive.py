@@ -3,8 +3,9 @@
 It replaces the listing functions and the gateway operations the connector
 calls (not the raw Google client), so tests control who sees what and how
 listings paginate. For the shard engine it reads only the parts of the query
-that engine writes: the folder-only term, the owner terms and the
-modifiedTime range. The tenant lists no folders. Page tokens
+that engine writes: the parent term, the folder-only term, the owner terms
+and the modifiedTime range. The tenant lists no folders, so a requested
+folder has no subfolders. Page tokens
 are scoped to the listing that issued them; reusing one for a different
 principal or partition fails the test.
 """
@@ -43,6 +44,7 @@ DOMAIN = "co.com"
 PAGE_SIZE = 2
 
 _OWNER_TERM = re.compile(r"'([^']+)' in owners")
+_PARENT_TERM = re.compile(r"'([^']+)' in parents")
 _TIME_TERM = re.compile(r"modifiedTime (>=|<) '([^']+)'")
 _FOLDERS_TERM = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
 
@@ -239,8 +241,19 @@ class FakeTenant:
         if user_email in self.broken_users:
             raise GoogleDriveRefreshError("token_refresh_failed")
         query = query or ""
-        if _FOLDERS_TERM in query:
+        parent = _PARENT_TERM.search(query)
+        if parent is not None:
+            # A walk of a requested folder. Only a query with a time range
+            # asks for files.
+            folder = self.folders.get(parent.group(1))
             files: list[dict[str, Any]] = []
+            if folder is not None and "modifiedTime" in query:
+                files = [
+                    drive_file(file_id, owner=folder.owner)
+                    for file_id in folder.visible_files.get(user_email, [])
+                ]
+        elif _FOLDERS_TERM in query:
+            files = []
         elif variant is DriveCorpus.DRIVE and drive_id is not None:
             files = self._drive_listing(user_email, drive_id)
         elif "not 'me' in owners" in query:

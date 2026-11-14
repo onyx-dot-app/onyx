@@ -194,6 +194,9 @@ def _lister(admitted: list[str]) -> parallel_listing.ParallelDriveLister:
         impersonation_failed=lambda _email, _error: [],
         listing_denied=lambda _partition, _email, _error: [],
         admit_file=admit_file,
+        plan_folder_target=lambda _folder, _covered: (
+            parallel_listing.FolderTargetPlan()
+        ),
     )
 
 
