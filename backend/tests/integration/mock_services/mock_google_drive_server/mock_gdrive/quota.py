@@ -17,13 +17,18 @@ class SlidingWindow:
         self._events: deque[tuple[float, int]] = deque()
         self._total = 0
 
-    def total(self, now: float) -> int:
+    def _prune(self, now: float) -> None:
         cutoff = now - self.window_seconds
         while self._events and self._events[0][0] <= cutoff:
             self._total -= self._events.popleft()[1]
+
+    def total(self, now: float) -> int:
+        self._prune(now)
         return self._total
 
     def add(self, now: float, amount: int) -> None:
+        # Also prunes here: with no limits, nothing calls total().
+        self._prune(now)
         self._events.append((now, amount))
         self._total += amount
 

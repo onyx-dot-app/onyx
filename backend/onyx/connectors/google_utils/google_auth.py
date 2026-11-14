@@ -95,14 +95,17 @@ def get_google_oauth_creds(
         info=creds_json,
         scopes=GOOGLE_SCOPES[source],
     )
+    if GOOGLE_API_TOKEN_URI != GOOGLE_TOKEN_URI:
+        # from_authorized_user_info always sets Google's token endpoint. Set
+        # the override also on valid credentials, because the client
+        # refreshes them later in a long run. The copy drops the expiry.
+        expiry = creds.expiry
+        creds = creds.with_token_uri(GOOGLE_API_TOKEN_URI)
+        creds.expiry = expiry
     if creds.valid:
         return creds
 
     if creds.expired and creds.refresh_token:
-        if GOOGLE_API_TOKEN_URI != GOOGLE_TOKEN_URI:
-            # from_authorized_user_info always sets Google's token endpoint.
-            # The copy drops the expiry, so make it only before a refresh.
-            creds = creds.with_token_uri(GOOGLE_API_TOKEN_URI)
         try:
             with _token_request():
                 creds.refresh(Request())

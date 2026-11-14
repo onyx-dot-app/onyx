@@ -1395,8 +1395,11 @@ def _load_google_api_endpoint_override() -> str | None:
     raw = os.environ.get("GOOGLE_API_ENDPOINT_OVERRIDE", "").strip()
     if not raw:
         return None
-    parsed = urllib.parse.urlparse(raw)
-    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+    try:
+        parsed = urllib.parse.urlparse(raw)
+    except ValueError:
+        parsed = None
+    if parsed is None or parsed.scheme not in ("http", "https") or not parsed.netloc:
         logger.error(
             "Ignoring GOOGLE_API_ENDPOINT_OVERRIDE=%r: it is not an http(s) URL.", raw
         )

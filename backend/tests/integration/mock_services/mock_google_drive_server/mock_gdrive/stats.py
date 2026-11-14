@@ -24,11 +24,14 @@ class MinuteStats(BaseModel):
 
 class Stats:
     def __init__(self) -> None:
+        self.inflight = 0
         self.reset()
 
     def reset(self) -> None:
+        """Clears the numbers. Requests in flight stay counted, so their
+        finish does not make the count negative. Their time counts from now."""
         self.reset_at = time.monotonic()
-        self.first_at: float | None = None
+        self.first_at: float | None = self.reset_at if self.inflight else None
         self.last_at: float | None = None
         self.ops: dict[str, OpStats] = {}
         self.statuses: dict[int, int] = {}
@@ -37,8 +40,7 @@ class Stats:
         self.content_file_ids: set[str] = set()
         self.content_fetches = 0
         self.docs_api_file_ids: set[str] = set()
-        self.inflight = 0
-        self.max_inflight = 0
+        self.max_inflight = self.inflight
         self._inflight_area = 0.0
         self._inflight_changed_at = self.reset_at
 
@@ -102,9 +104,9 @@ class Stats:
 
     def snapshot(self, quota_usage: dict[str, object]) -> dict[str, Any]:
         now = time.monotonic()
-        active = (
-            (self.last_at or now) - self.first_at if self.first_at is not None else 0.0
-        )
+        # While requests are in flight, the active time runs to now.
+        active_end = now if self.inflight > 0 else (self.last_at or now)
+        active = active_end - self.first_at if self.first_at is not None else 0.0
         area = self._inflight_area + self.inflight * (now - self._inflight_changed_at)
         minutes = active / 60 if active > 0 else 0.0
         requests = sum(s.count for s in self.ops.values())

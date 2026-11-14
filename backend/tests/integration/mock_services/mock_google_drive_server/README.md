@@ -72,8 +72,11 @@ Or build the image:
 
 ```bash
 docker build -t mock-google-drive backend/tests/integration/mock_services/mock_google_drive_server
-docker run -p 9650:9650 mock-google-drive
+docker run -p 127.0.0.1:9650:9650 mock-google-drive
 ```
+
+The `/_mock` routes have no authentication, so publish the port on the loopback address only.
+When Onyx workers run in containers, publish it on an address that only they can reach.
 
 Set the startup settings with `MOCK_GDRIVE_CONFIG` (a JSON object) or `MOCK_GDRIVE_CONFIG_FILE`
 (a JSON file). See `mock_gdrive/settings.py` for every setting.
@@ -165,7 +168,8 @@ Read the report like this:
 - **Concurrency** is the average and the most requests in flight. By Little's law, docs per
   second is about the requests in flight divided by the time per document.
 - **Missing (without a failure)** counts files that the run dropped without a `ConnectorFailure`.
-  A later run does not retry these files.
+  A later run does not retry these files. The benchmark measures it only for a crawl of every
+  scope that runs to its end, with no `--no-…` scope flag and no `--max-docs` stop.
 - **CPU** is the benchmark process's CPU seconds, whose threads share one GIL, and the PDF
   subprocesses'. When the process's CPU seconds come close to the elapsed seconds, parsing in
   the process limits the run, and more workers do not help.
@@ -174,7 +178,8 @@ Read the report like this:
 
 1. Add `GOOGLE_API_ENDPOINT_OVERRIDE=http://localhost:9650/` to the environment of the API server
    and every Celery worker, for example in `.vscode/.env`. Then restart them. The setting is for
-   testing only. When it is set, every Google connector sends its calls to the mock.
+   testing only. When it is set, every Google connector sends its calls to the mock. This
+   includes Gmail connectors, and the mock has no Gmail routes, so their calls fail.
 2. Save the service account key:
    `curl -s localhost:9650/_mock/service-account-key > mock-service-account.json`
 3. In the Admin panel, add a Google Drive connector. Upload `mock-service-account.json` as a

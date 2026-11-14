@@ -231,7 +231,15 @@ def run_benchmark(
     stats = client.get("/_mock/stats").json()
     config = client.get("/_mock/config").json()
 
-    missing = expected - set(retrieved)
+    # The corpus summary lists every file. Only a crawl of every scope that
+    # ran to its end must retrieve them all.
+    coverage_measured = (
+        include_shared_drives
+        and include_my_drives
+        and include_files_shared_with_me
+        and not done
+    )
+    missing = expected - set(retrieved) if coverage_measured else set()
     # Missing with no failure: a later run would not retry them either.
     silently_missing = missing - failed_ids
     return {
@@ -241,6 +249,7 @@ def run_benchmark(
         "failures": len(failures),
         "failure_samples": failures[:10],
         "expected_documents": len(expected),
+        "coverage_measured": coverage_measured,
         "missing_documents": len(missing),
         "missing_samples": sorted(missing)[:10],
         "silently_missing_documents": len(silently_missing),
@@ -283,11 +292,14 @@ def _print_report(report: dict[str, Any]) -> None:
     print(
         f"Documents:        {report['documents']} of {report['expected_documents']} expected"
     )
-    print(
-        f"Missing:          {report['missing_documents']} "
-        f"({report['silently_missing_documents']} without a failure)  "
-        f"Duplicates: {report['duplicate_documents']}"
-    )
+    if report["coverage_measured"]:
+        missing = (
+            f"{report['missing_documents']} "
+            f"({report['silently_missing_documents']} without a failure)"
+        )
+    else:
+        missing = "not measured (partial crawl)"
+    print(f"Missing:          {missing}  Duplicates: {report['duplicate_documents']}")
     print(f"Failures:         {report['failures']}")
     print(f"Elapsed:          {report['elapsed_seconds']} s")
     print(

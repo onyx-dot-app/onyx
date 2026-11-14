@@ -30,7 +30,13 @@ from .auth import (
 )
 from .corpus import Corpus, MockFile, MockPermission, MockUser
 from .fields import FieldsError, apply_mask, parse_fields
-from .query import QueryError, matches, parse_query, required_parent
+from .query import (
+    QueryError,
+    matches,
+    parse_query,
+    required_parent,
+    resolve_parent,
+)
 from .quota import Bucket, QuotaTracker, RateLimitDecision, UnitCost
 from .responses import (
     MockResponse,
@@ -487,6 +493,7 @@ class MockGoogleApi:
         parent = required_parent(node)
         candidates: Iterable[str]
         if parent is not None:
+            parent = resolve_parent(parent, me, corpus)
             candidates = (f for f in corpus.children.get(parent, []) if visible(f))
         else:
             candidates = self._corpus_ids(me, corpora, drive_id, include_all_drives)

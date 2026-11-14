@@ -72,17 +72,22 @@ def test_batch_get_files_by_web_view_link(mock_drive_client: httpx.Client) -> No
         }
     )
     # Long keys: the client folds a long Content-ID header over two lines.
-    links = [
-        f"https://drive.google.com/file/d/{file_id}/view?usp=drivesdk"
+    file_id_by_link = {
+        f"https://drive.google.com/file/d/{file_id}/view?usp=drivesdk": file_id
         for file_id in readable
-    ]
+    }
     result = get_files_by_web_view_links_batch(
-        connector.ops, admin, links, DriveFileFieldType.WITH_PERMISSIONS
+        connector.ops,
+        admin,
+        list(file_id_by_link),
+        DriveFileFieldType.WITH_PERMISSIONS,
     )
 
     assert result.errors == {}
-    assert sorted(result.files) == sorted(links)
-    assert {file["id"] for file in result.files.values()} == set(readable)
+    # Each answer belongs to the link that asked for it.
+    assert {link: file["id"] for link, file in result.files.items()} == (
+        file_id_by_link
+    )
 
 
 def test_service_account_key_is_accepted(mock_drive_client: httpx.Client) -> None:

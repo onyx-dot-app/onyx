@@ -109,8 +109,19 @@ def handle_token_request(
             return oauth_error(
                 400, "invalid_grant", "Token has been expired or revoked."
             )
+        raw_granted = payload.get("s") if payload else None
+        granted = (
+            [str(scope) for scope in raw_granted]
+            if isinstance(raw_granted, list)
+            else list(_DEFAULT_OAUTH_SCOPES)
+        )
         requested = form.get("scope", "").split()
-        return _issue(email, requested or list(_DEFAULT_OAUTH_SCOPES))
+        # A refresh cannot add scopes that the grant did not include.
+        if not set(requested) <= set(granted):
+            return oauth_error(
+                400, "invalid_scope", "Some requested scopes were not granted."
+            )
+        return _issue(email, requested or granted)
     return oauth_error(
         400, "unsupported_grant_type", f"Invalid grant_type: {grant_type}"
     )
@@ -148,7 +159,10 @@ def authenticate(headers: dict[str, str], corpus: Corpus) -> Principal | None:
     if not token.startswith(_ACCESS_PREFIX):
         return None
     payload = _b64decode(token.removeprefix(_ACCESS_PREFIX))
-    if payload is None or int(payload.get("x", 0)) < time.time():
+    if payload is None:
+        return None
+    expiry = payload.get("x")
+    if not isinstance(expiry, int) or isinstance(expiry, bool) or expiry < time.time():
         return None
     email = payload.get("e")
     scopes = payload.get("s")
@@ -206,7 +220,8 @@ def oauth_credentials(email: str, token_uri: str) -> dict[str, Any]:
     return {
         "client_id": "mock-client-id.apps.googleusercontent.com",
         "client_secret": "mock-client-secret",
-        "refresh_token": _REFRESH_PREFIX + _b64encode({"e": email}),
+        "refresh_token": _REFRESH_PREFIX
+        + _b64encode({"e": email, "s": list(_DEFAULT_OAUTH_SCOPES)}),
         "token": None,
         "expiry": "2000-01-01T00:00:00Z",
         "token_uri": token_uri,

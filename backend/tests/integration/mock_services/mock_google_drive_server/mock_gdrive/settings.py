@@ -7,11 +7,12 @@ generates a new corpus.
 """
 
 import json
+import math
 import os
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 DOC_MIME = "application/vnd.google-apps.document"
 SHEET_MIME = "application/vnd.google-apps.spreadsheet"
@@ -32,7 +33,12 @@ CONTENT_MIMES = GOOGLE_NATIVE_MIMES | UPLOADED_MIMES
 SCOPE_PREFIX = "https://www.googleapis.com/auth/"
 
 
-class ExternalShareSettings(BaseModel):
+class _Settings(BaseModel):
+    # A misspelled key fails the request instead of keeping the default.
+    model_config = ConfigDict(extra="forbid")
+
+
+class ExternalShareSettings(_Settings):
     """Files owned by accounts outside the domain. Each recipient gets the same
     set, as when a set of external files is shared with several domain users.
     The token endpoint refuses to impersonate the owners."""
@@ -45,7 +51,7 @@ class ExternalShareSettings(BaseModel):
     recipients: int = Field(default=3, ge=1)
 
 
-class BulkUploadSettings(BaseModel):
+class BulkUploadSettings(_Settings):
     """Bursts of files that share one whole-second modifiedTime, as a bulk
     upload gives."""
 
@@ -63,7 +69,7 @@ class BulkUploadSettings(BaseModel):
     index: int = Field(default=0, ge=0)
 
 
-class FolderTreeSettings(BaseModel):
+class FolderTreeSettings(_Settings):
     """A folder tree for folder targets (shared_folder_urls). The corpus
     summary lists its root folder in `folder_tree_root_ids`."""
 
@@ -79,7 +85,7 @@ class FolderTreeSettings(BaseModel):
     deepest_folder_files: int = Field(default=0, ge=0)
 
 
-class CorpusSettings(BaseModel):
+class CorpusSettings(_Settings):
     """The shape of the generated Workspace. The same settings always give the
     same corpus."""
 
@@ -124,6 +130,11 @@ class CorpusSettings(BaseModel):
         unknown = set(self.mime_weights) - CONTENT_MIMES
         if unknown:
             raise ValueError(f"Unsupported mime types in mime_weights: {unknown}")
+        if any(
+            weight < 0 or not math.isfinite(weight)
+            for weight in self.mime_weights.values()
+        ):
+            raise ValueError("Each mime weight must be finite and not negative")
         if sum(self.mime_weights.values()) <= 0:
             raise ValueError("mime_weights must have a positive weight")
         return self
@@ -153,7 +164,7 @@ class CorpusSettings(BaseModel):
         return self
 
 
-class QuotaSettings(BaseModel):
+class QuotaSettings(_Settings):
     """Google's per-minute quotas. "units" is the quota model of GCP projects
     created on or after 2026-05-01; "requests" is the older one."""
 
@@ -178,7 +189,7 @@ class QuotaSettings(BaseModel):
     retry_after_seconds: int | None = None
 
 
-class LatencySettings(BaseModel):
+class LatencySettings(_Settings):
     """Time each call takes. A call waits its base time, scaled by a random
     factor in [1 - jitter, 1 + jitter], plus its body size over the bandwidth."""
 
@@ -193,7 +204,7 @@ class LatencySettings(BaseModel):
     bandwidth_bytes_per_second: float = Field(default=10_000_000, gt=0)
 
 
-class FaultSettings(BaseModel):
+class FaultSettings(_Settings):
     # Share of API calls that fail with a 500 or 503.
     server_error_rate: float = Field(default=0.0, ge=0, le=1)
     # Scopes the service account may use with domain-wide delegation. None
@@ -203,7 +214,7 @@ class FaultSettings(BaseModel):
     service_account_email: str = "mock-indexer@onyx-mock-drive.iam.gserviceaccount.com"
 
 
-class MockSettings(BaseModel):
+class MockSettings(_Settings):
     corpus: CorpusSettings = Field(default_factory=CorpusSettings)
     quota: QuotaSettings = Field(default_factory=QuotaSettings)
     latency: LatencySettings = Field(default_factory=LatencySettings)

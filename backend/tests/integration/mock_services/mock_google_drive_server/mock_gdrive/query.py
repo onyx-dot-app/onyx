@@ -60,6 +60,7 @@ _TOKEN = re.compile(
 _TIME_FIELDS = {"modifiedTime", "createdTime"}
 _BOOL_FIELDS = {"trashed", "starred", "sharedWithMe"}
 _IN_FIELDS = {"parents", "owners", "writers", "readers"}
+_ALL_ROLES = {"owner", "organizer", "fileOrganizer", "writer", "commenter", "reader"}
 
 
 def _tokenize(query: str) -> list[tuple[str, str]]:
@@ -198,6 +199,15 @@ def parse_query(query: str) -> QueryNode | None:
     return _Parser(_tokenize(query)).parse()
 
 
+def resolve_parent(value: str, me: str, corpus: Corpus) -> str:
+    """The folder id of a parent in a query. ``root`` is the caller's My Drive
+    root."""
+    if value != "root":
+        return value
+    root = corpus.root_of(me)
+    return root.id if root is not None else value
+
+
 def required_parent(node: QueryNode | None) -> str | None:
     """A parent every match must have, so a listing can start from its
     children instead of every file."""
@@ -243,7 +253,7 @@ def matches(node: QueryNode | None, file: MockFile, me: str, corpus: Corpus) -> 
     if isinstance(node, InNode):
         value = me if node.value == "me" else node.value
         if node.field == "parents":
-            return value in file.parents
+            return resolve_parent(value, me, corpus) in file.parents
         if node.field == "owners":
             return file.owner == value
         roles = {"owner", "organizer", "fileOrganizer", "writer"}
@@ -259,7 +269,9 @@ def matches(node: QueryNode | None, file: MockFile, me: str, corpus: Corpus) -> 
     if node.field == "trashed" or node.field == "starred":
         return _compare(False, node.op, node.value)
     if node.field == "sharedWithMe":
-        return _compare(file.owner not in (None, me), node.op, node.value)
+        # A file of a shared drive has no owner, and can be shared directly.
+        shared = file.owner != me and corpus.has_direct_role(me, file, _ALL_ROLES)
+        return _compare(shared, node.op, node.value)
     if node.time_value is None:
         return False
     actual = file.modified_time if node.field == "modifiedTime" else file.created_time

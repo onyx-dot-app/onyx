@@ -112,7 +112,10 @@ async def patch_config(request: Request, patch: dict[str, Any]) -> Response:
             deep_merge(api.settings.model_dump(), patch)
         )
     except ValidationError as e:
-        return JSONResponse({"detail": e.errors(include_url=False)}, status_code=400)
+        return JSONResponse(
+            {"detail": e.errors(include_url=False, include_context=False)},
+            status_code=400,
+        )
     api.update_settings(settings)
     return JSONResponse(settings.model_dump())
 
@@ -126,7 +129,10 @@ async def regenerate_corpus(request: Request, patch: dict[str, Any]) -> Response
     try:
         settings = MockSettings.model_validate(merged)
     except ValidationError as e:
-        return JSONResponse({"detail": e.errors(include_url=False)}, status_code=400)
+        return JSONResponse(
+            {"detail": e.errors(include_url=False, include_context=False)},
+            status_code=400,
+        )
     api.regenerate(settings)
     return JSONResponse(api.corpus.summary())
 
