@@ -92,6 +92,12 @@ class FolderTreeSettings(_Settings):
     files_per_folder: int = Field(default=3, ge=0)
     # Extra files in the first folder of the last level.
     deepest_folder_files: int = Field(default=0, ge=0)
+    # A shortcut in the first folder of the last level to the tree's root
+    # folder: a cycle that a folder walk must stop at.
+    cycle_shortcut: bool = False
+    # A shortcut in the tree's root folder to the root folder of an earlier
+    # tree, by its index in folder_trees. A folder walk follows it.
+    shortcut_to_tree: int | None = Field(default=None, ge=0)
 
 
 class CorpusSettings(_Settings):
@@ -170,6 +176,9 @@ class CorpusSettings(_Settings):
                 raise ValueError(
                     f"No {target.container} with index {target.index} in the corpus"
                 )
+        for position, tree in enumerate(self.folder_trees):
+            if tree.shortcut_to_tree is not None and tree.shortcut_to_tree >= position:
+                raise ValueError("shortcut_to_tree must name an earlier folder tree")
         return self
 
 
