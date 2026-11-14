@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,17 +23,20 @@ import (
 
 // Client is the Onyx API client.
 //
-// Three http.Clients are kept so each call site can pick a timeout matched to
-// its expected work: 3min for quick JSON endpoints, 5min for /search (which
-// runs LLM query expansion + relevance selection), and 5min for streaming
-// chat responses and uploads.
+// Each call site picks an http.Client with a timeout matched to its expected
+// work: 3min for quick JSON endpoints, 5min for /search (which runs LLM query
+// expansion + relevance selection) and uploads, and 6min for image generation.
+// Chat streams have no total timeout: a turn can wait minutes for a tool
+// approval, so streamIdleTimeout bounds each wait for data instead.
 type Client struct {
-	baseURL             string
-	apiKey              string
-	httpClient          *http.Client
-	searchHTTPClient    *http.Client
-	streamingHTTPClient *http.Client
-	imageHTTPClient     *http.Client
+	baseURL           string
+	apiKey            string
+	httpClient        *http.Client
+	searchHTTPClient  *http.Client
+	uploadHTTPClient  *http.Client
+	streamHTTPClient  *http.Client
+	imageHTTPClient   *http.Client
+	streamIdleTimeout time.Duration
 }
 
 // NewClient creates a new API client from config.
@@ -56,10 +60,13 @@ func NewClient(cfg config.OnyxCliConfig) *Client {
 			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
-		streamingHTTPClient: &http.Client{
+		uploadHTTPClient: &http.Client{
 			Timeout:   5 * time.Minute,
 			Transport: transport,
 		},
+		streamHTTPClient: &http.Client{Transport: transport},
+		// The server sends a heartbeat every 15 seconds while a turn is idle.
+		streamIdleTimeout: 2 * time.Minute,
 		// Must exceed the server's 5-minute image-generation stream ceiling,
 		// or the client gives up before the server's timeout envelope arrives.
 		imageHTTPClient: &http.Client{
@@ -93,7 +100,19 @@ func checkResponse(resp *http.Response) error {
 			Detail:     "server returned HTML instead of JSON — check that your server URL is correct",
 		}
 	}
-	return &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+	apiErr := &OnyxAPIError{StatusCode: resp.StatusCode, Detail: string(body)}
+	// Onyx errors carry {"error_code", "detail"}; other errors keep the raw body.
+	var structured struct {
+		ErrorCode string `json:"error_code"`
+		Detail    any    `json:"detail"`
+	}
+	if json.Unmarshal(body, &structured) == nil && structured.ErrorCode != "" {
+		apiErr.ErrorCode = structured.ErrorCode
+		if detail, ok := structured.Detail.(string); ok && detail != "" {
+			apiErr.Detail = detail
+		}
+	}
+	return apiErr
 }
 
 func isHTMLResponse(contentType string, body []byte) bool {
@@ -353,7 +372,7 @@ func (c *Client) UploadFile(ctx context.Context, filePath string) (*models.FileD
 	}
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 
-	resp, err := c.streamingHTTPClient.Do(req)
+	resp, err := c.uploadHTTPClient.Do(req)
 	if err != nil {
 		return nil, wrapTimeoutError(err)
 	}
@@ -402,6 +421,16 @@ func (c *Client) StopChatSession(ctx context.Context, sessionID string, streamID
 		return
 	}
 	_ = resp.Body.Close()
+}
+
+// DecideApproval answers a tool approval request and returns the decision the
+// server saved. An error for which IsApprovalNoLongerWaiting is true means the
+// request no longer waits.
+func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error) {
+	body := map[string]models.ApprovalDecision{"decision": decision}
+	var result models.ApprovalDecisionResult
+	err := c.doJSON(ctx, "POST", "/chat/approvals/"+url.PathEscape(approvalID)+"/decision", body, &result)
+	return result, err
 }
 
 // IsChatSessionProcessing confirms whether the server still owns the session.
@@ -455,7 +484,9 @@ type ClientAPI interface {
 	GetBackendVersion(ctx context.Context) (string, error)
 	StopChatSession(ctx context.Context, sessionID string, streamID int)
 	IsChatSessionProcessing(ctx context.Context, sessionID string) (bool, error)
+	DecideApproval(ctx context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error)
 	SendMessageStream(ctx context.Context, message string, chatSessionID *string, agentID int, parentMessageID *int, fileDescriptors []models.FileDescriptorPayload, llmOverride *models.LLMOverride) <-chan models.StreamEvent
+	ResumeChatStream(ctx context.Context, sessionID string) <-chan models.StreamEvent
 	Search(ctx context.Context, req models.SearchRequest) (*models.SearchResponse, error)
 	GenerateImage(ctx context.Context, req models.ImageGenerationRequest) (*models.ImageGenerationResponse, error)
 }

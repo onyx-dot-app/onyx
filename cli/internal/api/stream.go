@@ -5,12 +5,17 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
+
+var errStreamIdle = errors.New("chat stream idle timeout")
 
 // SendMessageStream starts streaming a chat message response.
 // It reads NDJSON lines, parses them, and sends events on the returned channel.
@@ -23,6 +28,56 @@ func (c *Client) SendMessageStream(
 	parentMessageID *int,
 	fileDescriptors []models.FileDescriptorPayload,
 	llmOverride *models.LLMOverride,
+) <-chan models.StreamEvent {
+	payload := models.SendMessagePayload{
+		Message:          message,
+		LLMOverride:      llmOverride,
+		ParentMessageID:  parentMessageID,
+		FileDescriptors:  fileDescriptors,
+		Origin:           "api",
+		IncludeCitations: true,
+		Stream:           true,
+	}
+	if payload.FileDescriptors == nil {
+		payload.FileDescriptors = []models.FileDescriptorPayload{}
+	}
+	sessionID := ""
+	if chatSessionID != nil {
+		sessionID = *chatSessionID
+		payload.ChatSessionID = chatSessionID
+	} else {
+		payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
+	}
+	body, err := json.Marshal(payload)
+	return c.stream(ctx, sessionID, false, func(requestCtx context.Context) (*http.Request, error) {
+		if err != nil {
+			return nil, fmt.Errorf("marshal: %w", err)
+		}
+		req, err := c.newRequest(requestCtx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
+		if err == nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		return req, err
+	})
+}
+
+// ResumeChatStream replays the session's running response from its start and
+// then follows it, like SendMessageStream. The channel closes without events
+// when the session runs nothing.
+func (c *Client) ResumeChatStream(ctx context.Context, sessionID string) <-chan models.StreamEvent {
+	return c.stream(ctx, sessionID, true, func(requestCtx context.Context) (*http.Request, error) {
+		return c.newRequest(requestCtx, "GET", "/chat/chat-session/"+url.PathEscape(sessionID)+"/resume-stream?cursor=0", nil)
+	})
+}
+
+// stream delivers the events of one streaming response. Cancelling ctx stops
+// the response once the server reports its IDs. notFoundIsEmpty ends a 404
+// response without events.
+func (c *Client) stream(
+	ctx context.Context,
+	sessionID string,
+	notFoundIsEmpty bool,
+	newRequest func(context.Context) (*http.Request, error),
 ) <-chan models.StreamEvent {
 	ch := make(chan models.StreamEvent, 64)
 
@@ -73,47 +128,36 @@ func (c *Client) SendMessageStream(
 			}
 			cancel()
 		}()
-		sessionID := ""
-		if chatSessionID != nil {
-			sessionID = *chatSessionID
+
+		// A dead connection fails after streamIdleTimeout without data, however
+		// long the turn itself runs.
+		requestCtx, cancelRequest := context.WithCancelCause(streamCtx)
+		defer cancelRequest(nil)
+		idle := time.AfterFunc(c.streamIdleTimeout, func() { cancelRequest(errStreamIdle) })
+		defer idle.Stop()
+		idleError := models.ErrorEvent{
+			Error:       fmt.Sprintf("no data from the server for %s", c.streamIdleTimeout),
+			IsRetryable: true,
+			StatusCode:  http.StatusRequestTimeout,
 		}
 
-		payload := models.SendMessagePayload{
-			Message:          message,
-			LLMOverride:      llmOverride,
-			ParentMessageID:  parentMessageID,
-			FileDescriptors:  fileDescriptors,
-			Origin:           "api",
-			IncludeCitations: true,
-			Stream:           true,
-		}
-		if payload.FileDescriptors == nil {
-			payload.FileDescriptors = []models.FileDescriptorPayload{}
-		}
-
-		if chatSessionID != nil {
-			payload.ChatSessionID = chatSessionID
-		} else {
-			payload.ChatSessionInfo = &models.ChatSessionCreationInfo{AgentID: agentID}
-		}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			ch <- models.ErrorEvent{Error: fmt.Sprintf("marshal error: %v", err), IsRetryable: false}
-			return
-		}
-
-		req, err := c.newRequest(streamCtx, "POST", "/chat/send-chat-message", bytes.NewReader(body))
+		req, err := newRequest(requestCtx)
 		if err != nil {
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("request error: %v", err), IsRetryable: false}
 			return
 		}
-		req.Header.Set("Content-Type", "application/json")
 
-		resp, err := c.streamingHTTPClient.Do(req)
+		// The idle timer keeps running until the scanner loop, so it also bounds
+		// the read of an error body.
+		resp, err := c.streamHTTPClient.Do(req)
 		if err != nil {
+			idle.Stop()
 			if ctx.Err() != nil {
 				return // cancelled
+			}
+			if errors.Is(context.Cause(requestCtx), errStreamIdle) {
+				ch <- idleError
+				return
 			}
 			wrapped := wrapTimeoutError(err)
 			if apiErr, ok := wrapped.(*OnyxAPIError); ok {
@@ -129,6 +173,9 @@ func (c *Client) SendMessageStream(
 		}
 		defer func() { _ = resp.Body.Close() }()
 
+		if notFoundIsEmpty && resp.StatusCode == http.StatusNotFound {
+			return
+		}
 		if err := checkResponse(resp); err != nil {
 			apiErr, ok := err.(*OnyxAPIError)
 			if ok {
@@ -136,6 +183,7 @@ func (c *Client) SendMessageStream(
 					Error:       fmt.Sprintf("HTTP %d: %s", apiErr.StatusCode, apiErr.Detail),
 					IsRetryable: apiErr.StatusCode >= 500,
 					StatusCode:  apiErr.StatusCode,
+					ErrorCode:   apiErr.ErrorCode,
 				}
 			} else {
 				ch <- models.ErrorEvent{
@@ -149,7 +197,14 @@ func (c *Client) SendMessageStream(
 
 		scanner := bufio.NewScanner(resp.Body)
 		scanner.Buffer(make([]byte, 0, 1024*1024), 1024*1024)
-		for scanner.Scan() {
+		for {
+			// Only time spent waiting on the server counts toward the idle limit.
+			idle.Reset(c.streamIdleTimeout)
+			scanned := scanner.Scan()
+			idle.Stop()
+			if !scanned {
+				break
+			}
 			event := parser.ParseStreamLine(scanner.Text())
 			switch e := event.(type) {
 			case models.SessionCreatedEvent:
@@ -185,6 +240,10 @@ func (c *Client) SendMessageStream(
 			}
 		}
 		if err := scanner.Err(); err != nil && ctx.Err() == nil {
+			if errors.Is(context.Cause(requestCtx), errStreamIdle) {
+				ch <- idleError
+				return
+			}
 			ch <- models.ErrorEvent{Error: fmt.Sprintf("stream read error: %v", err), IsRetryable: true}
 		}
 	}()
