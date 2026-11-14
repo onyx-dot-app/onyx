@@ -147,7 +147,9 @@ export default function NewTeamModal() {
   };
 
   // Only render if showNewTeamModal is true
-  if (!showNewTeamModal || isLoading || isPlayground) return null;
+  if (!showNewTeamModal || isLoading || settingsLoading || isPlayground) {
+    return null;
+  }
 
   const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
   const headerTitle = hasRequestedInvite
