@@ -11790,9 +11790,17 @@
         "loginBadCredentials": "이 계정으로는 로그인할 수 없습니다. 비활성화되었을 수 있습니다. 워크스페이스 관리자에게 문의하세요.",
         "loginRequired": "먼저 ID 공급자로 로그인해야 합니다.",
         "oauthUserAlreadyExists": "이 이메일로 다른 로그인 방식의 계정이 이미 있습니다. 처음 사용한 방식으로 로그인하거나, 관리자에게 이 공급자의 연결을 요청하세요.",
+        "playgroundActiveTenant": "회사의 팀이 이미 Onyx를 사용해 보고 있습니다. 팀에 참여하시겠습니까, 새 팀을 시작하시겠습니까?",
+        "playgroundAskAdmin": "관리자에게 초대를 요청하세요.",
+        "playgroundCheckFailed": "가입을 확인할 수 없습니다. 나중에 다시 시도하세요.",
+        "playgroundEmailUsed": "플레이그라운드 액세스를 이미 사용했습니다.",
+        "playgroundLimitReached": "귀사는 플레이그라운드 액세스를 이미 사용했습니다.",
         "serverError": "ID 공급자에서 오류가 발생했습니다. 다시 시도하세요.",
         "staleSignIn": "이 로그인 링크가 만료되었거나 더 이상 유효하지 않습니다. 다시 로그인하세요.",
         "temporarilyUnavailable": "ID 공급자를 일시적으로 사용할 수 없습니다. 나중에 다시 시도하세요."
+      },
+      "contactSalesButton": {
+        "label": "영업팀에 문의"
       },
       "credentialsIssue": {
         "description": "잘못되었거나 만료된 로그인 자격 증명"
@@ -11800,6 +11808,12 @@
       "heading": {
         "description": "로그인 시도 중 문제가 발생했습니다.",
         "title": "인증 오류"
+      },
+      "joinTeamButton": {
+        "label": "팀에 참여"
+      },
+      "playgroundHeading": {
+        "title": "Onyx 플레이그라운드"
       },
       "possibleIssues": {
         "title": "가능한 원인:"
@@ -11809,6 +11823,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "문제가 계속되면 시스템 관리자에게 도움을 요청하세요."
+      },
+      "startNewTeamButton": {
+        "label": "새 팀 시작"
       },
       "systemDisruptionIssue": {
         "description": "일시적인 인증 시스템 장애"

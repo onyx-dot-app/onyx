@@ -9,6 +9,7 @@ import { Button, Text } from "@opal/components";
 import { InputErrorText, toast } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import { useUser } from "@/providers/UserProvider";
+import { useSettings } from "@/lib/settings/hooks";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
   SvgArrowRight,
@@ -38,12 +39,17 @@ export default function NewTeamModal() {
   const appDomain = user?.email.split("@")[1] ?? "";
   const navigation = useNavigation();
   const searchParams = useSearchParams();
+  // The playground asks "join or start a new team" before the tenant exists
+  // (/auth/error), and its "join" must not request an invite. No modal there.
+  const isPlayground = useSettings().is_playground === true;
 
   useEffect(() => {
     const hasNewTeamParam = searchParams?.has("new_team");
     if (hasNewTeamParam) {
-      setShowNewTeamModal(true);
-      fetchTenantInfo();
+      if (!isPlayground) {
+        setShowNewTeamModal(true);
+        fetchTenantInfo();
+      }
 
       // Remove the new_team parameter from the URL without page reload
       const newParams = new URLSearchParams(searchParams?.toString() || "");
@@ -55,7 +61,7 @@ export default function NewTeamModal() {
       // app.
       navigation.go(newUrl as Route, { replace: true, shallow: true });
     }
-  }, [searchParams, setShowNewTeamModal, navigation]);
+  }, [searchParams, setShowNewTeamModal, navigation, isPlayground]);
 
   const fetchTenantInfo = async () => {
     setIsLoading(true);
@@ -133,7 +139,7 @@ export default function NewTeamModal() {
   };
 
   // Only render if showNewTeamModal is true
-  if (!showNewTeamModal || isLoading) return null;
+  if (!showNewTeamModal || isLoading || isPlayground) return null;
 
   const headerIcon = hasRequestedInvite ? SvgCheckCircle : SvgOrganization;
   const headerTitle = hasRequestedInvite

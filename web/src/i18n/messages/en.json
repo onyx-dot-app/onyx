@@ -11790,9 +11790,17 @@
         "loginBadCredentials": "This account can't sign in. It may be deactivated. Contact your workspace admin.",
         "loginRequired": "You need to log in with your identity provider first.",
         "oauthUserAlreadyExists": "An account with this email already exists under a different sign-in method. Sign in the way you first did, or ask your admin to link this provider.",
+        "playgroundActiveTenant": "A team from your company is already trying Onyx. Join your team, or start a new team?",
+        "playgroundAskAdmin": "Ask your admin to invite you.",
+        "playgroundCheckFailed": "We could not check your sign-up. Try again later.",
+        "playgroundEmailUsed": "You have used your playground access.",
+        "playgroundLimitReached": "Your company has used its playground access.",
         "serverError": "Your identity provider encountered an error. Please try again.",
         "staleSignIn": "This sign-in link has expired or is no longer valid. Please sign in again.",
         "temporarilyUnavailable": "Your identity provider is temporarily unavailable. Please try again later."
+      },
+      "contactSalesButton": {
+        "label": "Contact sales"
       },
       "credentialsIssue": {
         "description": "Incorrect or expired login credentials"
@@ -11800,6 +11808,12 @@
       "heading": {
         "description": "There was a problem with your login attempt.",
         "title": "Authentication Error"
+      },
+      "joinTeamButton": {
+        "label": "Join your team"
+      },
+      "playgroundHeading": {
+        "title": "Onyx Playground"
       },
       "possibleIssues": {
         "title": "Possible Issues:"
@@ -11809,6 +11823,9 @@
       },
       "selfHostedSupportPrompt": {
         "text": "If you continue to experience problems, please reach out to your system administrator for assistance."
+      },
+      "startNewTeamButton": {
+        "label": "Start a new team"
       },
       "systemDisruptionIssue": {
         "description": "Temporary authentication system disruption"
