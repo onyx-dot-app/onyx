@@ -12,7 +12,7 @@ import type { ApprovalDecisionResponse } from "@/api/chat/approvals";
 import {
   ApprovalStatus,
   decidedStatus,
-  findPendingToolApprovalId,
+  findPendingToolApprovalIds,
   orderApprovalsByTurn,
   readToolApprovals,
   toolApprovalStatus,
@@ -135,7 +135,7 @@ describe("tool approval store", () => {
       node(1, "user", [], null),
       node(2, "assistant", [request("a")], 1),
     ]);
-    expect(findPendingToolApprovalId(older)).toBe("a");
+    expect(findPendingToolApprovalIds(older)).toEqual(["a"]);
 
     const newer = treeOf([
       node(1, "user", [], null),
@@ -143,7 +143,7 @@ describe("tool approval store", () => {
       node(3, "user", [], 2),
       node(4, "assistant", [request("b"), resolved("b", "rejected")], 3),
     ]);
-    expect(findPendingToolApprovalId(newer)).toBeNull();
+    expect(findPendingToolApprovalIds(newer)).toEqual([]);
   });
 
   it("does not report a request this device already decided", () => {
@@ -152,7 +152,7 @@ describe("tool approval store", () => {
       node(2, "assistant", [request("a")], 1),
     ]);
     useToolApprovalUi.setState({ localStatuses: new Map([["a", "rejected"]]) });
-    expect(findPendingToolApprovalId(tree)).toBeNull();
+    expect(findPendingToolApprovalIds(tree)).toEqual([]);
   });
 });
 

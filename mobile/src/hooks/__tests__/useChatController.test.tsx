@@ -22,7 +22,7 @@ import {
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
 import {
-  findPendingToolApprovalId,
+  findPendingToolApprovalIds,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
 import { useChatController } from "@/hooks/useChatController";
@@ -235,10 +235,10 @@ describe("useChatController", () => {
     // The card stays reachable: the response is still a live answer, not an error.
     await waitFor(() =>
       expect(
-        findPendingToolApprovalId(
+        findPendingToolApprovalIds(
           useChatSessionStore.getState().sessions.get("s1")?.messageTree,
         ),
-      ).toBe("a1"),
+      ).toEqual(["a1"]),
     );
     expect(result.current.messages.map((m) => m.type)).toEqual([
       "user",
@@ -382,6 +382,51 @@ describe("useChatController", () => {
     expect(stopPacket.obj.type).toBe(PacketType.STOP);
     expect((stopPacket.obj as { stop_reason?: string }).stop_reason).toBe(
       StopReason.USER_CANCELLED,
+    );
+  });
+
+  it("records the requests that wait as rejected when the user stops", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    stopSessionMock.mockResolvedValue();
+    streamMock.mockImplementation((_body, signal) =>
+      (async function* () {
+        yield idInfo;
+        yield {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_REQUEST,
+            approval_id: "a1",
+            tool_call_id: "c1",
+            tool_name: "lookup",
+            display_name: "Lookup",
+            arguments: {},
+            expires_at: "2099-01-01T00:00:00Z",
+          },
+        } as StreamEvent;
+        await new Promise<void>((resolve) => {
+          if (signal.aborted) resolve();
+          else signal.addEventListener("abort", () => resolve());
+        });
+      })(),
+    );
+
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("hi");
+    });
+    await waitFor(() =>
+      expect(result.current.messages[1]?.packets.length).toBeGreaterThan(0),
+    );
+    await act(async () => {
+      result.current.stop();
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    // The server rejects them on Stop; the cut stream does not report it.
+    await waitFor(() =>
+      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
+        "rejected",
+      ),
     );
   });
 

@@ -143,29 +143,29 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set) => ({
   nudge: () => set((state) => ({ nudgeSeq: state.nudgeSeq + 1 })),
 }));
 
-// The first request of the latest turn that still waits for this user. A failed response's run
+// The requests of the latest turn that still wait for this user, in order. A failed response's run
 // has ended, so its requests wait for nothing; the server's send check expires them.
-export function findPendingToolApprovalId(
+export function findPendingToolApprovalIds(
   tree: MessageTreeState | undefined,
-): string | null {
-  if (!tree) return null;
+): string[] {
+  if (!tree) return [];
   const chain = getLatestMessageChain(tree);
   const lastUser = chain.findLastIndex((message) => message.type === "user");
   const { localStatuses } = useToolApprovalUi.getState();
-  for (const response of chain.slice(lastUser + 1)) {
-    if (response.type === "error") continue;
+  return chain.slice(lastUser + 1).flatMap((response) => {
+    if (response.type === "error") return [];
     const { entries, stopped } = readToolApprovals(response.packets);
-    const pending = entries.find(
-      (entry) =>
-        toolApprovalStatus(
-          entry,
-          localStatuses.get(entry.request.approval_id),
-          stopped,
-        ) === "pending",
-    );
-    if (pending) return pending.request.approval_id;
-  }
-  return null;
+    return entries
+      .filter(
+        (entry) =>
+          toolApprovalStatus(
+            entry,
+            localStatuses.get(entry.request.approval_id),
+            stopped,
+          ) === "pending",
+      )
+      .map((entry) => entry.request.approval_id);
+  });
 }
 
 // A card follows the display groups of its own turn and of every earlier turn.

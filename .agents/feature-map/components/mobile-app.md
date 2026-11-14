@@ -107,7 +107,10 @@ them as liveness ticks. Stop calls `stop-chat-session` with the response id
 from the message-id packet and aborts the local `AbortController`, because a
 client abort alone leaves the backend generating. Before that packet arrives,
 `mobile/src/hooks/useChatController.ts:stop` waits for it (`STOP_ACK_TIMEOUT_MS`), then
-aborts locally and never sends an unscoped Stop.
+aborts locally and never sends an unscoped Stop. The server's Stop rejects the
+tool approval requests that wait, and the cut stream does not deliver their
+resolutions, so a confirmed Stop records them as rejected on the device
+(`stopAcknowledgedStream`, `chat/toolApprovals.ts:findPendingToolApprovalIds`).
 
 **Readiness.** When delivery ends, the session goes to `settling` and
 `chat/sessionReadiness.ts:waitForSessionIdle` polls
