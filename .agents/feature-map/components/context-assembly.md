@@ -40,8 +40,8 @@
   the image. With `ENABLE_AZURE_IMAGE_CAP=true`, an Azure model gets at most 50
   images per request: the most recent ones, and a notice of how many were
   dropped. No other provider has a cap.
-- **Incognito.** A usage-only session retains questions, text-file messages, image references,
-  and full tool results in temporary history
+- **Incognito.** A usage-only session retains questions, their picked skills, text-file messages,
+  image references, and full tool results in temporary history
   ([[#usage-only-history-shape]]). Request-only context reaches the current turn
   through its trailing reminder. If the stored conversation expires, a new
   message continues without the earlier messages and with no error
@@ -92,7 +92,7 @@ compaction candidate. The list on each model call:
 [project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
 [chronological history]     questions, attachments, assistant messages, full tool results stable
-  [mentioned skills]        USER message: request-only SKILL.md right after the message that picked it
+  [mentioned skills]        USER message: recorded <skill> SKILL.md right after the message that picked it
 [request-only context]      USER reminder, supplied only for the current request
 [oversized-files notice]    USER, names the retrieval tools offered this step
 [forgotten-files notice]    USER, files that are not in the working history
@@ -134,23 +134,27 @@ Compaction controls history growth; starting a new user turn does not rewrite
 previous evidence. A code mode result keeps what a later turn needs in its own
 content ([[chat-persistence#code-mode-replay-content]]).
 The skills catalog is per user, so it is a separate message and not part of
-the shared system prompt. `ChatAgent` renders it from the saved skill list for
-its own model's window; a change to the user's skills changes the prefix from
-the catalog on. Mentioned skills are request-only. History keeps only the
-record of each pick: a question records its mentions when it is accepted
-(`ChatMessage.mentions`, `PromptMetadata.mentions`), and a message sent into a
-running response records them when the run accepts it
-(`ChatInputMetadata.mentions`). A skill mention keeps the version the user ran
-([[skills]]). On each model call, `chat/prompt_utils.py:prepare_prompt` adds
-the SKILL.md of each recorded mention as a USER message right after the
-message that picked it (id `<message id>:skill:<version id>`). The text comes
-from the pinned version, so the prompt stays the same across turns even after
-the skill changes. It is read only while the user can still see the skill;
-otherwise the message is a short "no longer available" note. Compaction and
-truncation never see the skill text: they act on history, and a cutoff that
-keeps a message keeps its skills. `agents/compaction.py:messages_after_compaction`
-keeps the question as the user's task. Message text never mentions a skill;
-an agent message mentions none.
+the shared system prompt. Each agent builds it from its `skills_list` tool's
+skill list for its own model's window
+(`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`);
+a change to the user's skills changes the prefix from the catalog on.
+Mentioned skills are recorded history. When a message is accepted, its picks
+are stored with their cut SKILL.md text ([[skills]]): a question's in
+`ChatMessage.mentions`, and a message sent into a running response in its
+accepted input. History puts one user-role `<skill>` message for each pick
+right after the message that picked it (id `<message id>:skill:<version id>`),
+built from the stored text: `chat/chat_utils.py:convert_chat_history` for a
+question and `chat/models.py:accepted_input_messages` for an accepted send.
+Old turns never read the skill again, so their prompt stays the same after
+the skill changes, is deleted or is hidden from the user. A skill message is
+marked as input context (`CompactionMetadata.is_input_context`, predicate
+`agents/compaction.py:is_input_context`): it belongs to the message before
+it and is never a user turn. Compaction never takes it as the user's task
+(`agents/compaction.py:messages_after_compaction`), the summarizer sees it,
+and compacted history drops it with the summarized prefix. No cut falls just
+before one (`agents/compaction.py:history_boundaries`), so a kept message
+keeps its skills. Message text never mentions a skill; an agent message
+mentions none.
 `backend/onyx/chat/README.md` has worked examples of the fixed
 preamble and growing history.
 
@@ -305,11 +309,13 @@ counts what is sent, not the stored token counts.
     whether `calculate_reserved_tokens` counts it, whether it belongs to recorded
     history or request-only prompt assembly, what each incognito mode stores
     ([[chat-persistence#incognito-decision-per-field]]), and whether a resumed
-    turn needs it. Mentioned skills, for example, are request-only: recorded
-    history keeps only the mentions, prompt assembly puts each SKILL.md after
-    its message, and compaction never sees it; a usage-only session keeps the
-    mentions, not the skill text, in temporary history; a resumed turn
-    rebuilds the catalog from the saved skill list. Add request-only context through
+    turn needs it. Mentioned skills, for example, are recorded history: the
+    accepted message stores each SKILL.md, history puts it after its message
+    as input context, and compaction summarizes it but never takes it as the
+    task; `prepare_chat_turn` adds the current question's skill text to the
+    reservation; a usage-only session keeps the skill messages in temporary history
+    while its content-free rows keep the picks without text; a resumed turn
+    rebuilds the catalog from its restored skill tools. Add request-only context through
     `prepare_prompt`, outside recorded history. Compaction cutoffs identify
     recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatAgent` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
@@ -319,9 +325,10 @@ counts what is sent, not the stored token counts.
 12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
     `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
     the selected branch of temporary history with the accepted question and its
-    preceding text-file messages ([[chat-persistence]]). The question keeps its
-    mentions; the skill text is not in temporary history. Regeneration reuses the
-    saved question and attachments. Only new attachments need text extraction;
+    preceding text-file messages ([[chat-persistence]]). The question's skill
+    messages follow it in temporary history, and trimming and branch selection
+    keep them with it. Regeneration reuses the saved question, its skill
+    messages and attachments. Only new attachments need text extraction;
     earlier text comes from temporary history. Image references
     restore lazy file descriptors; temporary history stores no image bytes.
     Temporary file metadata preserves names and sizes for retrieval notices. The current

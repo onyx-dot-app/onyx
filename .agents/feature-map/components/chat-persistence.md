@@ -182,7 +182,7 @@ one place at any moment. The delivery and the reader decide its path:
 
 | Message | Path |
 | --- | --- |
-| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the skills it picked at the versions that acceptance resolved |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the skills it picked at the versions that acceptance resolved, with their text |
 | `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
 
 Agent messages follow the same two paths. Child results go into the
@@ -200,8 +200,8 @@ Human input needs no invoking tool call or source response. Main Chat accepts
 text without attachments or request headers. A queued or interrupting message
 keeps its Deep Research choice (`chat_input.deep_research`), the model the
 picker showed (`chat_input.llm_override`) and what the user tagged with `@`
-(`chat_input.mentions`); its turn resolves the mentions when it accepts the
-message ([[skills]]). The human queue belongs to the
+(`chat_input.mentions`); its turn accepts the picks, with their text, when
+it accepts the message ([[skills]]). The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
@@ -333,9 +333,10 @@ mode store work in later turns.
 The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
 answers before appending its text-file messages and then its question. The
-temporary question keeps its mentions, not the skill text; prompt assembly
-reads each SKILL.md with the user's current access, so a revoked skill becomes
-the "no longer available" note on later turns and regenerations. A small response
+temporary question keeps its skill messages, with their SKILL.md text, right
+after it, while the content-free database row keeps each pick without text.
+Later turns and regenerations reuse that text and never read the skill again.
+A small response
 index keeps run IDs, output IDs and each response’s checkpoint.
 Continuation and regeneration use the selected parent’s
 checkpoint, never the last sibling saved. A failed save or eviction can leave a
@@ -427,9 +428,10 @@ Community downgrade clears it ([[billing]]).
    clears citations and skips sources and tool calls when `persist_content` is
    false, and `save_response_content` keeps only `response_status`. Error text
    becomes a generic message. A question keeps its `mentions` record (for a
-   skill, its name and version id) in a content-free session: a mention
-   identifies a record, not conversation content, and later turns need them
-   to add the question's skills (`chat/process_message.py:prepare_chat_turn`).
+   skill, its name and version id) in a content-free session, because a
+   mention identifies a record, not conversation content. The skill text is
+   content: a content-free row stores each pick without it, and temporary
+   history keeps the text.
    Token counts and `request_params` are kept on purpose for usage metering. `db/chat.py:update_chat_session` drops a title
    with no error. Every runtime writer (`_ResponseWriter`, child reservation,
    `db/chat_checkpoint.py:publish_checkpoint__no_commit`) refuses a

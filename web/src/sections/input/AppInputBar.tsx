@@ -264,6 +264,7 @@ const AppInputBar = React.memo(
       entries: mentionEntries,
       filter: filterMentionEntries,
       onSelect: insertMention,
+      onEmptyTrigger: chatSkills.revalidate,
     });
     useEffect(() => {
       if (mentionPicker.open) void chatSkills.revalidate();

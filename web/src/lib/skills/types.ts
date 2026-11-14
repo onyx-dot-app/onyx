@@ -82,6 +82,8 @@ export type CustomSkill = Skill & {
 export interface ChatSkill {
   name: string;
   description: string;
+  /** `metadata.short-description` in the SKILL.md frontmatter. */
+  short_description: string | null;
   version_id: string;
 }
 

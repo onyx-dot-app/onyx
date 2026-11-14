@@ -26,6 +26,7 @@ import {
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
+import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
 import {
@@ -425,6 +426,7 @@ describe("`@` skill mentions", () => {
             {
               name: "code-review",
               description: "Review code",
+              short_description: null,
               version_id: "v1",
             },
           ])
@@ -451,6 +453,70 @@ describe("`@` skill mentions", () => {
       await user.keyboard("d");
       expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
       expect(skillFetches()).toBe(2);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("a row shows the skill's short description when it has one", async () => {
+    mockChatSkills = null;
+    const skills: ChatSkill[] = [
+      {
+        name: "code-review",
+        description: "Review code for bugs, style and missing tests",
+        short_description: "Review code",
+        version_id: "v1",
+      },
+      {
+        name: "commit-message",
+        description: "Write a commit message",
+        short_description: null,
+        version_id: "v2",
+      },
+    ];
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify(skills)));
+    try {
+      render(<Composer plugins={[]} />);
+      const user = setupUser();
+      await user.type(screen.getByRole("textbox"), "use @co");
+
+      const shortRow = await screen.findByTestId(
+        "skill-picker-row-code-review"
+      );
+      expect(shortRow).toHaveTextContent("Review code");
+      expect(shortRow).not.toHaveTextContent("missing tests");
+      expect(
+        screen.getByTestId("skill-picker-row-commit-message")
+      ).toHaveTextContent("Write a commit message");
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  test("with no chat skills, each typed `@` fetches them again once", async () => {
+    mockChatSkills = null;
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () => new Response(JSON.stringify([])));
+    try {
+      const skillFetches = () =>
+        fetchSpy.mock.calls.filter(([url]) => url === "/api/skills/chat")
+          .length;
+      render(<Composer plugins={[]} />);
+      await waitFor(() => expect(skillFetches()).toBe(1));
+
+      const user = setupUser();
+      const input = screen.getByRole("textbox");
+      await user.type(input, "use @co");
+      await waitFor(() => expect(skillFetches()).toBe(2));
+      await user.type(input, "de @");
+      await waitFor(() => expect(skillFetches()).toBe(3));
+      await user.type(input, "co");
+      await act(async () => {});
+      expect(skillFetches()).toBe(3);
+      expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
     } finally {
       fetchSpy.mockRestore();
     }

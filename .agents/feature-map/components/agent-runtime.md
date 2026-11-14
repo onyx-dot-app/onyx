@@ -45,7 +45,10 @@ document does not repeat it.
   `chat/run_store.py:agent_result_message`. `RunOwnership.accept_inputs` marks them read. Results reach only the
   spawner; any agent in the visible tree can message another, and messages to the root never
   start a root run. Chat can remap citations through `PreparedStep.input_messages`.
-  Accepted inputs retain their identity and source in saved history.
+  Each input message between steps must carry `InputMessageMetadata` or be input
+  context (`agents/compaction.py:is_input_context`), such as the `<skill>`
+  message after a send that picked a skill (`chat/models.py:accepted_input_messages`);
+  the runtime rejects other messages. Accepted inputs retain their identity and source in saved history.
   `MessageStartEvent.input_messages` contains the inputs durably accepted by
   that step; it excludes instructions still queued or withdrawn before acceptance.
   `send_message` stores the instruction through `RunOwnership.submit_message`; it targets the next step or starts
@@ -228,7 +231,10 @@ and ignore thread-pool `submit` calls; expect no runtime matches.
    [[observability#root-trace-required]]).
 5. `run-input-protected` **Pass the whole current input in one `start` call.**
    The question and its attachment text go in
-   `start(messages=...)`, with the question last.
+   `start(messages=...)`, with the question after its attachments. The
+   `<skill>` messages of the question's picked skills follow it: they are
+   recorded input context (`CompactionMetadata.is_input_context`), not a
+   user turn, so compaction never takes one as the task.
    Chat supplies request-only context through prompt assembly, outside compacted history.
    Compaction and truncation keep the input group until the
    model's first step in the run answers it, and input that cannot fit fails the

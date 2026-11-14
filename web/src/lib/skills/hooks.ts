@@ -15,6 +15,7 @@ import {
   type CaretText,
 } from "@/lib/contentEditable";
 import {
+  detectPickerTrigger,
   flattenSections,
   type PickerEntry,
   type PickerSections,
@@ -50,7 +51,7 @@ export interface ChatSkillEntries {
   /** The skills as `@` picker sections, sorted by name. */
   entries: PickerSections;
   /** Fetches the skills again. A window focus does not, so the `@` menu
-   * calls this when it opens. */
+   * calls this when it opens, and when `@` is typed while the list is empty. */
   revalidate: () => Promise<ChatSkill[] | undefined>;
 }
 
@@ -69,7 +70,7 @@ export function useChatSkills(): ChatSkillEntries {
           kind: "skill",
           slug: skill.name,
           name: skill.name,
-          description: skill.description,
+          description: skill.short_description ?? skill.description,
         })
       ),
       apps: [],
@@ -93,6 +94,9 @@ interface UseEntryPickerOptions {
    * trigger and its whole word, split at the caret) with the entry, e.g. as a
    * chip. The caret is still where the last input left it. */
   onSelect: (entry: PickerEntry, token: CaretText) => void;
+  /** Called once for each trigger typed while `entries` is empty, which
+   * cannot open the picker; for example, to fetch the entries again. */
+  onEmptyTrigger?: () => void;
 }
 
 export interface UseEntryPickerResult {
@@ -138,6 +142,7 @@ export function useEntryPicker({
   entries,
   filter,
   onSelect,
+  onEmptyTrigger,
 }: UseEntryPickerOptions): UseEntryPickerResult {
   const [session, setSession] = useState<PickerSession>(INITIAL_PICKER_SESSION);
   // The latest session, which handlers read before React renders it.
@@ -149,6 +154,8 @@ export function useEntryPicker({
     offset: number;
   } | null>(null);
   const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
+  // The trigger index that `onEmptyTrigger` was last called for.
+  const emptyTriggerRef = useRef<number | null>(null);
   const hasEntries = useMemo(
     () => flattenSections(entries).length > 0,
     [entries]
@@ -166,7 +173,6 @@ export function useEntryPicker({
 
   const onInput = useCallback(
     (event: SyntheticEvent<HTMLElement>) => {
-      if (!hasEntries) return;
       const input = event.currentTarget;
       let text: CaretText | null;
       if (input instanceof HTMLTextAreaElement) {
@@ -182,9 +188,19 @@ export function useEntryPicker({
         if (
           sessionRef.current.triggerIndex === null &&
           !caretTokenMayContain(input, trigger)
-        )
+        ) {
+          emptyTriggerRef.current = null;
           return;
+        }
         text = getTextAroundCursor(input);
+      }
+      if (!hasEntries) {
+        const index =
+          (text && detectPickerTrigger(text, trigger)?.triggerIndex) ?? null;
+        if (index !== null && index !== emptyTriggerRef.current)
+          onEmptyTrigger?.();
+        emptyTriggerRef.current = index;
+        return;
       }
       const next = reduceOnInput(sessionRef.current, text, trigger, (query) =>
         filter(entries, query)
@@ -200,7 +216,7 @@ export function useEntryPicker({
       }
       commit(next);
     },
-    [hasEntries, trigger, filter, entries, commit]
+    [hasEntries, trigger, filter, entries, commit, onEmptyTrigger]
   );
 
   // Entries can change while open, for example on revalidation.
