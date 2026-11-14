@@ -41,7 +41,8 @@ type Client struct {
 	// Timeout bounds one whole request (body included), or one whole ranged
 	// download (all parts). 0 means 10 min.
 	Timeout time.Duration
-	// AllowHTTP allows plain http URLs (a test MinIO). Default https only.
+	// AllowHTTP allows plain http URLs and redirects to any host (an object
+	// store inside the cluster, or a test store). Default https only.
 	AllowHTTP bool
 	// Parallel is the number of range GETs that Get runs at once for an
 	// object larger than PartBytes. 0 or 1 means one plain GET. One S3
@@ -53,7 +54,8 @@ type Client struct {
 }
 
 // client returns a copy of the HTTP client that also checks the scheme of
-// every redirect, so an https request is never sent on over http.
+// every redirect. Without AllowHTTP, an https request is never sent on over
+// http.
 func (c *Client) client() *http.Client {
 	base := c.HTTP
 	if base == nil {
