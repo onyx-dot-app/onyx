@@ -2010,8 +2010,9 @@ craft:
   # the kube-dns podSelector in the sandbox-egress NetworkPolicy can't match it; without an allow
   # here its DNS query hits the default-deny and bricks sandbox init. Set this to the actual
   # listener IP(s), e.g. ["169.254.20.10/32"]. Empty (default) = standard CoreDNS, resolved via
-  # the podSelector alone (no NodeLocal DNS). GKE Dataplane V2 runs node-local-dns as pods;
-  # the podSelector matches them, so leave this empty there.
+  # the podSelector alone (no NodeLocal DNS). GKE Dataplane V2 with kube-dns runs node-local-dns
+  # as pods, which the podSelector matches, so leave this empty there. With Cloud DNS, GKE's
+  # NodeLocal DNSCache listens on the host network (169.254.20.10), so set it.
   dnsExtraCIDRs: []
   # CIDR(s) of the egress proxy when it is NOT a chart-labeled pod. The sandbox-egress NetworkPolicy
   # selects the proxy by pod label (app.kubernetes.io/component: sandbox-proxy), but
