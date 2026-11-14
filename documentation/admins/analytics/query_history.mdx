@@ -1,0 +1,35 @@
+---
+title: "Query History"
+description: "View and export query history in Onyx"
+icon: "clock-rotate-left"
+---
+
+<Note>
+  Query History is available on **Business**, **Enterprise**, and **Cloud** plans.
+  See [Plans & Billing](/admins/billing/overview).
+</Note>
+
+Open **Admin Panel > Query History** to see a log of chat sessions in your workspace.
+This includes messages sent through the Slack Integration and through API keys.
+
+<img className="rounded-image" src="/assets/admins/analytics/query_history.webp" alt="Query History"/>
+
+## Filter and Inspect Sessions
+
+Filter the list by date range and by **Feedback Type**.
+
+Select a session to open **Chat Session Details**. The details show each message, the feedback the user gave,
+and the **Reference Documents** that Onyx used for the answer.
+
+## Control Visibility
+
+Admins choose how much of the query history is visible in **Admin Panel > Chat Preferences > Query History Visibility**:
+
+- **Show with User Info**: all queries are visible and linked to users.
+- **Anonymized**: queries are visible with user identity removed.
+- **Hidden**: query history reporting is off and the page is hidden from the Admin Panel.
+
+## Exporting Query History
+
+Click **Kickoff Export** to export the query history for a date range to a CSV file. Large exports can take time.
+Click **View Exports** to see previous exports and download the file.
