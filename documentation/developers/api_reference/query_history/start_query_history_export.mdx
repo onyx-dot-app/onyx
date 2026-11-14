@@ -1,0 +1,18 @@
+---
+title: "Start Query History Export"
+openapi: "POST /admin/query-history/start-export"
+---
+
+import BusinessEditionInfo from "/snippets/business-edition-info.mdx";
+
+<BusinessEditionInfo />
+
+<Info>
+  **Required permission:** View Query History (`read:query_history`), or Admin (`admin`).
+</Info>
+
+<Note>
+  The export runs in the background.
+  Poll [Get Query History Export Status](/developers/api_reference/query_history/get_query_history_export_status)
+  and then call [Download Query History CSV](/developers/api_reference/query_history/download_query_history_csv).
+</Note>

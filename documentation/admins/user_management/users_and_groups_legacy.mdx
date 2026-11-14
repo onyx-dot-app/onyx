@@ -1,0 +1,52 @@
+---
+title: "Users and Groups before v4.7"
+description: "Manage users, roles, groups, and invitations in Onyx versions before v4.7"
+icon: "users"
+---
+
+<Info>
+  This page applies to Onyx versions before **v4.7**. For Onyx v4.7 and later,
+  see [Users and Groups](/admins/user_management/users_and_groups).
+</Info>
+
+## Overview
+
+### Users
+
+As users join your workspace, they will appear in the Users page.
+You can promote users to Admins and Curators through the Role dropdown.
+
+<Tip>
+  Unable to delete a User? They may have a Document Set or Agent still associated with their profile.
+</Tip>
+
+<img className="rounded-image" src="/assets/admins/user_management/legacy/user_management.webp" alt="Users management page"/>
+
+### Inviting Users
+
+You may use the **Invite Users** button to send an email invitation to join your workspace.
+
+<Warning>
+  Inviting Users will disallow new users from automatically joining your workspace!
+  You will need to invite all users or none.
+</Warning>
+
+<img className="rounded-image" src="/assets/admins/user_management/legacy/invite_users_warning.webp" alt="Invite users warning"/>
+
+## Groups
+
+You can organize your Users into Groups to manage their access controls at the same time.
+
+Specifically, you can attach private Connectors, Document Sets, and Agents to a Group,
+granting all users in the Group access to these resources.
+
+Additionally, you can impose token rate limits on a Group to monitor and control AI model usage.
+
+<img className="rounded-image" src="/assets/admins/user_management/legacy/group_overview.webp" alt="Group overview page"/>
+
+<img className="rounded-image" src="/assets/admins/user_management/legacy/group_management.webp" alt="Group management page"/>
+
+<Tip>
+  Want to automate user and group provisioning? Set up [SCIM](/deployment/authentication/scim)
+  to sync directly from your identity provider.
+</Tip>

@@ -1,0 +1,35 @@
+---
+title: "Notifications"
+description: "Slack app and outbound email"
+icon: "bell"
+---
+
+Two delivery channels an admin configures once,
+after which users can point their own [triggers](/agent-wiki/automate/triggers) at them.
+
+## Slack app
+
+Under **Admin → Slack App**,
+save the OAuth credentials for the Agent Wiki Slack app — found under **Basic Information → App Credentials** on
+`api.slack.com`.
+
+The **Connect Slack** flow stays hidden from users until both credentials are saved. Once they are,
+each person connects their own Slack account from **Settings → Connectors**,
+and can then send trigger fires to any channel they can post to, or as a DM.
+
+Individual users can **Mute** their connection to pause Slack delivery without disconnecting — fires are still recorded
+in the Activity Center.
+
+## Outbound email
+
+Under **Admin → Outbound Email**, configure the SMTP account every email the wiki sends goes through:
+trigger notifications, verification links, and notification emails.
+
+Sending stays **off** until a host and a from-address are saved. Until then,
+email verification links won't arrive either — worth knowing if you're standing up an instance with email-based sign-up
+and wondering why nobody can confirm their address.
+
+## Related
+
+Both channels appear as destinations when creating a trigger, alongside the Activity Center, webhooks, and Onyx Craft.
+See [Triggers](/agent-wiki/automate/triggers).

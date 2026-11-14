@@ -1,0 +1,49 @@
+---
+title: "Nebius TokenFactory"
+description: "Configure Nebius TokenFactory as a language model provider for Onyx"
+icon: "server"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served through [Nebius TokenFactory](https://tokenfactory.nebius.com/).
+
+<Note>
+  Nebius TokenFactory serves open-weight models through an OpenAI-compatible API.
+  Onyx lists the chat models available to your key, with each model's context window.
+</Note>
+
+<Steps>
+  <Step title="Set Up Your Nebius TokenFactory Access">
+    In the Nebius TokenFactory console, create an **API Key**.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Nebius TokenFactory">
+    Under **Gateways & Routers**, click **Connect** on the **Nebius TokenFactory** card.
+
+    Keep the default **API Base URL** (`https://api.tokenfactory.nebius.com/v1`), including the API version,
+    unless Nebius gives you a different endpoint.
+
+    Paste your Nebius TokenFactory **API Key**.
+
+    <img className="rounded-image" src="/assets/admins/ai_models/nebius_tokenfactory_connect.webp" alt="Set up Nebius TokenFactory dialog with API Base URL, API Key, Display Name, and Models"/>
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**. Onyx lists the models that Nebius TokenFactory exposes.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the provider with one of the selected models before it saves it.
+  </Step>
+</Steps>
+
+See the [Nebius TokenFactory documentation](https://docs.tokenfactory.nebius.com/)
+for account setup and billing details.
