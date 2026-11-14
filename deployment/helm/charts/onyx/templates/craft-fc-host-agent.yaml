@@ -15,11 +15,12 @@ Agent flags and node requirements: microvm/README.md.
   relative path and the agent cannot re-adopt VMs after a restart.
 - The data dir is a hostPath at the same path in the container: the agent
   passes these paths to the jailer, which runs in the host mount namespace.
-- mTLS: craft.hostAgent.tls.existingSecret (in the agent namespace) has the
-  server certificate (tls.crt, tls.key) and the api_server client CA (ca.crt).
-  craft.hostAgent.client.existingSecret (in the release namespace) has the
-  client certificate and the agent CA for the pods that call the agents
-  (onyx.craftFcAgentClient.*). The chart does not make certificates.
+- mTLS: the agent Secret (agent namespace) has the server certificate
+  (tls.crt, tls.key) and the client CA (ca.crt). The client Secret (release
+  namespace) has the client certificate and the agent CA for the pods that
+  call the agents (onyx.craftFcAgentClient.*). With no existingSecret, the
+  chart makes one CA and both certificates, and reuses them on upgrade
+  (lookup) while the DNS names stay the same.
 - The agent registers $(POD_IP):listenPort with its signing key, so the
   api_server finds the agent of each node.
 - SANDBOX_NODE_REGISTRATION_SECRET: the api_server reads it from
@@ -31,10 +32,12 @@ Agent flags and node requirements: microvm/README.md.
 - Drain (craft.hostAgent.drainWatch): the agent reads its own Node with a
   ServiceAccount that may only "get" nodes, and refuses new VMs while the
   Node has a drain taint. Off: no ServiceAccount token in the pod.
-- Root drive (craft.hostAgent.rootfs): with an image tag, an init
-  container copies the drive of onyxdotapp/craft-fc-artifacts:rootfs-<version>
-  into <dataDir>/rootfs (skipped when it is current), and the agent builds
-  its template from it (--rootfs-dir). The drive has no egress CA.
+- Root drive (craft.hostAgent.rootfs): an init container copies the drive
+  of onyxdotapp/craft-fc-artifacts:rootfs-<version> into <dataDir>/rootfs
+  (skipped when it is current), and the agent builds its template from it
+  (--rootfs-dir). <version> is the source image tag, which configmap.yaml
+  also sets as SANDBOX_FC_TEMPLATE (onyx.craftFcRootfsVersion). The drive has
+  no egress CA.
 - Egress CA (craft.hostAgent.egressCA): the agent reads the sandbox-proxy CA
   ConfigMap (configMap.SANDBOX_PROXY_CA_CONFIGMAP in SANDBOX_NAMESPACE) at
   each Create and sends it to the guest daemon, which installs it at Init.
@@ -60,14 +63,12 @@ Agent flags and node requirements: microvm/README.md.
 {{- fail "craft.hostAgent.namespace must differ from the release namespace and configMap.SANDBOX_NAMESPACE" }}
 {{- end }}
 {{- $image := $agent.image | default dict }}
-{{- if not $image.tag }}
-{{- fail "craft.hostAgent.image.tag is required with craft.sandboxRuntime=firecracker" }}
+{{- $imageTag := $image.tag }}
+{{- if not $imageTag }}
+{{- $imageTag = include "onyx.craftFcPinnedTag" (list (include "onyx.craftFcReleaseTag" .) "host agent image" "craft.hostAgent.image.tag") }}
 {{- end }}
 {{- $tls := $agent.tls | default dict }}
-{{- if not $tls.existingSecret }}
-{{- fail "craft.hostAgent.tls.existingSecret is required with craft.sandboxRuntime=firecracker" }}
-{{- end }}
-{{- $_ := include "onyx.craftFcAgentClient.secretName" . }}
+{{- $clientSecret := include "onyx.craftFcAgentClient.secretName" . }}
 {{- $reg := (.Values.auth | default dict).sandboxNodeRegistration | default dict }}
 {{- if ne (toString $reg.enabled) "true" }}
 {{- fail "auth.sandboxNodeRegistration.enabled must be true with craft.sandboxRuntime=firecracker" }}
@@ -79,6 +80,13 @@ Agent flags and node requirements: microvm/README.md.
 {{- if and (not $regSecret) (or $reg.existingSecret (not $regValue)) }}
 {{- fail "craft.hostAgent.registrationExistingSecret is required when auth.sandboxNodeRegistration uses existingSecret or has no value" }}
 {{- end }}
+{{- $loopStoreGiB := toString (($agent.loopStore | default dict).sizeGiB | default "") }}
+{{- if and $loopStoreGiB (not (regexMatch "^[0-9]+$" $loopStoreGiB)) }}
+{{- fail (printf "craft.hostAgent.loopStore.sizeGiB must be a whole number of GiB, not %q" $loopStoreGiB) }}
+{{- end }}
+{{- /* The bundled object store (objectStore or MinIO) is plain HTTP inside the
+cluster, and configmap.yaml then forces S3_ENDPOINT_URL to it. */}}
+{{- $bundledStore := and (or (eq (include "onyx.objectStore.enabled" .) "true") .Values.minio.enabled) (eq (lower (toString (.Values.configMap.FILE_STORE_BACKEND | default "s3"))) "s3") }}
 {{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") }}
 {{- $dataDir := $agent.dataDir | default "/var/lib/craft-fc" }}
 {{- $port := $agent.listenPort | default 7443 }}
@@ -91,6 +99,13 @@ Agent flags and node requirements: microvm/README.md.
 {{- $watchDrain := ne (toString $drain.enabled) "false" }}
 {{- $rootfs := $agent.rootfs | default dict }}
 {{- $rootfsImage := $rootfs.image | default dict }}
+{{- $rootfsTag := $rootfsImage.tag }}
+{{- if and $rootfsTag (not (index .Values.configMap "SANDBOX_FC_TEMPLATE")) }}
+{{- fail "craft.hostAgent.rootfs.image.tag needs configMap.SANDBOX_FC_TEMPLATE (the source image tag of that drive); or leave the tag empty and set craft.hostAgent.rootfs.version" }}
+{{- end }}
+{{- if not $rootfsTag }}
+{{- $rootfsTag = printf "rootfs-%s" (include "onyx.craftFcRootfsVersion" .) }}
+{{- end }}
 {{- $rootfsDir := printf "%s/rootfs" $dataDir }}
 {{- $egressCA := $agent.egressCA | default dict }}
 {{- $readCA := ne (toString $egressCA.enabled) "false" }}
@@ -108,6 +123,69 @@ Agent flags and node requirements: microvm/README.md.
 {{- $metricsValue := dig "values" $metricsKey "" $metricsAuth }}
 {{- if and $metricsToken (not $metrics.authExistingSecret) (or $metricsAuth.existingSecret (not $metricsValue)) }}
 {{- fail "craft.hostAgent.metrics.authExistingSecret is required when auth.metricsAuth uses existingSecret or has no value" }}
+{{- end }}
+{{- $tlsSecret := $tls.existingSecret | default (printf "%s-tls" $name) }}
+{{- if not $tls.existingSecret }}
+{{- /* One CA signs both sides (onyx.craftFcAgentCerts.stored). A new set
+is valid 10 years and renews on the first upgrade in its last 30 days. */}}
+{{- $sans := include "onyx.craftFcAgentCerts.names" . | fromYamlArray }}
+{{- $sansKey := join "," $sans }}
+{{- $stored := include "onyx.craftFcAgentCerts.stored" . | fromYaml }}
+{{- $serverData := $stored.server }}
+{{- $clientData := $stored.client }}
+{{- $renewAfter := $stored.renewAfter }}
+{{- $certRevision := $stored.revision }}
+{{- if not $stored }}
+{{- $ips := list }}
+{{- $dns := list }}
+{{- range $sans }}
+{{- if regexMatch "^[0-9.]+$|:" . }}
+{{- $ips = append $ips . }}
+{{- else }}
+{{- $dns = append $dns . }}
+{{- end }}
+{{- end }}
+{{- $clientName := printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-client")) .Release.Namespace }}
+{{- $ca := genCA (printf "%s-craft-fc-ca" (include "onyx.fullname" .)) 3650 }}
+{{- $server := genSignedCert (first $sans) $ips $dns 3650 $ca }}
+{{- $client := genSignedCert $clientName nil (list $clientName) 3650 $ca }}
+{{- $serverData = dict "ca.crt" ($ca.Cert | b64enc) "tls.crt" ($server.Cert | b64enc) "tls.key" ($server.Key | b64enc) }}
+{{- $clientData = dict "ca.crt" ($ca.Cert | b64enc) "tls.crt" ($client.Cert | b64enc) "tls.key" ($client.Key | b64enc) }}
+{{- $renewAfter = toString (add (now | unixEpoch | int64) (mul 3620 86400)) }}
+{{- $certRevision = toString .Release.Revision }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $tlsSecret }}
+  namespace: {{ $ns }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+  annotations:
+    onyx.app/craft-fc-agent-sans: {{ $sansKey | quote }}
+    onyx.app/craft-fc-cert-renew-after: {{ $renewAfter | quote }}
+    onyx.app/craft-fc-cert-revision: {{ $certRevision | quote }}
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ index $serverData "ca.crt" }}
+  tls.crt: {{ index $serverData "tls.crt" }}
+  tls.key: {{ index $serverData "tls.key" }}
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $clientSecret }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "onyx.labels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+type: kubernetes.io/tls
+data:
+  ca.crt: {{ index $clientData "ca.crt" }}
+  tls.crt: {{ index $clientData "tls.crt" }}
+  tls.key: {{ index $clientData "tls.key" }}
+---
 {{- end }}
 {{- if ne (toString $agent.createNamespace) "false" }}
 apiVersion: v1
@@ -273,11 +351,10 @@ spec:
       {{- end }}
       enableServiceLinks: false
       terminationGracePeriodSeconds: {{ $agent.terminationGracePeriodSeconds | default 30 }}
-      {{- if $rootfsImage.tag }}
       initContainers:
         # Copies the root drive into --rootfs-dir; does nothing when it is current.
         - name: rootfs
-          image: "{{ $rootfsImage.repository | default "onyxdotapp/craft-fc-artifacts" }}:{{ $rootfsImage.tag }}"
+          image: "{{ $rootfsImage.repository | default "onyxdotapp/craft-fc-artifacts" }}:{{ $rootfsTag }}"
           imagePullPolicy: {{ $rootfsImage.pullPolicy | default "IfNotPresent" }}
           args:
             - {{ $rootfsDir | quote }}
@@ -294,10 +371,9 @@ spec:
           volumeMounts:
             - name: data
               mountPath: {{ $dataDir }}
-      {{- end }}
       containers:
         - name: host-agent
-          image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $image.tag }}"
+          image: "{{ $image.repository | default "onyxdotapp/craft-fc-host-agent" }}:{{ $imageTag }}"
           imagePullPolicy: {{ $image.pullPolicy | default "IfNotPresent" }}
           command:
             - nsenter
@@ -332,8 +408,9 @@ spec:
             - --drain-taints={{ $drain.taints | default "node.kubernetes.io/unschedulable" }}
             - --drain-poll-interval={{ $drain.pollInterval | default "10s" }}
             {{- end }}
-            {{- if $rootfsImage.tag }}
             - --rootfs-dir={{ $rootfsDir }}
+            {{- if $bundledStore }}
+            - --transfer-allow-http
             {{- end }}
             {{- if $readCA }}
             - --egress-ca-configmap={{ $caNs }}/{{ $caConfigMap }}:{{ $caKey }}
@@ -358,6 +435,10 @@ spec:
               valueFrom:
                 fieldRef:
                   fieldPath: status.podIP
+            {{- if $loopStoreGiB }}
+            - name: CRAFT_FC_LOOP_STORE_GIB
+              value: {{ $loopStoreGiB | quote }}
+            {{- end }}
             - name: SANDBOX_NODE_REGISTRATION_SECRET
               valueFrom:
                 secretKeyRef:
@@ -411,7 +492,7 @@ spec:
             type: CharDevice
         - name: tls
           secret:
-            secretName: {{ $tls.existingSecret }}
+            secretName: {{ $tlsSecret }}
             defaultMode: 0400
         {{- if $metricsToken }}
         - name: metrics-auth

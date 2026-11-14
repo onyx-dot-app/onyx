@@ -22,6 +22,9 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with include "onyx.craftFcAgentClient.podAnnotations" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
       {{- with .Values.celery_worker_heavy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

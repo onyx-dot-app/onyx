@@ -379,17 +379,92 @@ locked
 {{- end }}
 
 {{/*
+Onyx release tag for the Craft Firecracker images: global.version (else
+appVersion) without the "-dev" suffix of the debug image twins.
+*/}}
+{{- define "onyx.craftFcReleaseTag" -}}
+{{- trimSuffix "-dev" (toString (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- end }}
+
+{{/*
+Source image tag of the root drive: craft.hostAgent.rootfs.version, else the
+release tag. The rootfs image is rootfs-<version> and SANDBOX_FC_TEMPLATE is
+<version>. Fails on a floating tag: no root drive is published for it.
+*/}}
+{{- define "onyx.craftFcRootfsVersion" -}}
+{{- $v := (dig "hostAgent" "rootfs" "version" "" (.Values.craft | default dict)) | default (include "onyx.craftFcReleaseTag" .) -}}
+{{- include "onyx.craftFcPinnedTag" (list $v "root drive version" "craft.hostAgent.rootfs.version") -}}
+{{- end }}
+
+{{/* Returns the tag, or fails when it is empty or floating. Input: (list tag what value). */}}
+{{- define "onyx.craftFcPinnedTag" -}}
+{{- $v := index . 0 -}}
+{{- if or (not $v) (has $v (list "latest" "edge" "beta")) -}}
+{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to an Onyx release tag (for example v5.2.0) or set %s" (index . 1) $v (index . 2)) -}}
+{{- end -}}
+{{- $v -}}
+{{- end }}
+
+{{/*
 mTLS client of the Craft Firecracker host agents, for the pods that call them:
 api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
 unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+With no existingSecret, craft-fc-host-agent.yaml makes the certificates.
 */}}
 {{- define "onyx.craftFcAgentClient.secretName" -}}
 {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
-{{- $name := dig "hostAgent" "client" "existingSecret" "" (.Values.craft | default dict) -}}
-{{- if not $name -}}
-{{- fail "craft.hostAgent.client.existingSecret is required with craft.sandboxRuntime=firecracker" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- $name := dig "client" "existingSecret" "" $agent -}}
+{{- if ne (empty $name) (empty (dig "tls" "existingSecret" "" $agent)) -}}
+{{- fail "set both craft.hostAgent.tls.existingSecret and craft.hostAgent.client.existingSecret, or neither (the chart then makes the certificates)" -}}
+{{- end -}}
+{{- $name | default (printf "%s-client-tls" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end -}}
+{{- end }}
+
+{{/* Name the clients verify in the agent certificate. Default with chart-made certificates: the agent Service DNS name. */}}
+{{- define "onyx.craftFcAgentClient.tlsServerName" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- $name := dig "client" "tlsServerName" "" $agent -}}
+{{- if and (not $name) (not (dig "tls" "existingSecret" "" $agent)) -}}
+{{- $name = printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-host-agent")) (include "onyx.craftHostAgentNamespace" .) -}}
 {{- end -}}
 {{- $name -}}
+{{- end }}
+
+{{/*
+Chart-made agent mTLS set (no existingSecret). "onyx.craftFcAgentCerts.stored"
+returns the stored set as YAML when it can be reused: both Secrets exist with
+the same CA, the agent DNS names are the same, and renewal is not due. Else
+it returns "" and the agent template makes a new set. The decision depends
+only on the cluster state, so the client pods use it too.
+*/}}
+{{- define "onyx.craftFcAgentCerts.names" -}}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") -}}
+{{- $ns := include "onyx.craftHostAgentNamespace" . -}}
+{{- toYaml (uniq (list (include "onyx.craftFcAgentClient.tlsServerName" .) (printf "%s.%s.svc" $name $ns) (printf "%s.%s.svc.%s" $name $ns (include "onyx.clusterDomain" .)))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentCerts.stored" -}}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") -}}
+{{- $old := lookup "v1" "Secret" (include "onyx.craftHostAgentNamespace" .) (printf "%s-tls" $name) | default dict -}}
+{{- $oldClient := lookup "v1" "Secret" .Release.Namespace (include "onyx.craftFcAgentClient.secretName" .) | default dict -}}
+{{- $server := $old.data | default dict -}}
+{{- $client := $oldClient.data | default dict -}}
+{{- $annotations := dig "metadata" "annotations" dict $old -}}
+{{- $renewAfter := index $annotations "onyx.app/craft-fc-cert-renew-after" | default "0" | int64 -}}
+{{- $sans := join "," (include "onyx.craftFcAgentCerts.names" . | fromYamlArray) -}}
+{{- if and (index $server "ca.crt") (index $server "tls.crt") (index $server "tls.key") (index $client "tls.crt") (index $client "tls.key") (eq (index $server "ca.crt") (index $client "ca.crt" | default "")) (eq (index $annotations "onyx.app/craft-fc-agent-sans" | default "") $sans) (lt (now | unixEpoch | int64) $renewAfter) -}}
+{{- toYaml (dict "server" $server "client" $client "renewAfter" (toString $renewAfter) "revision" (index $annotations "onyx.app/craft-fc-cert-revision" | default "0")) -}}
+{{- end -}}
+{{- end }}
+
+{{/* Pod annotation that restarts the agent clients when the chart makes a new mTLS set: they load the certificate once. */}}
+{{- define "onyx.craftFcAgentClient.podAnnotations" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- if and (include "onyx.craftFcAgentClient.secretName" .) (not (dig "tls" "existingSecret" "" $agent)) -}}
+{{- $stored := include "onyx.craftFcAgentCerts.stored" . | fromYaml -}}
+onyx.app/craft-fc-cert-revision: {{ (get $stored "revision" | default .Release.Revision) | toString | quote }}
 {{- end -}}
 {{- end }}
 
@@ -401,7 +476,7 @@ unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs
   value: /etc/onyx/craft-fc-agent-client/tls.key
 - name: SANDBOX_FC_AGENT_CA_PATH
   value: /etc/onyx/craft-fc-agent-client/ca.crt
-{{- with dig "hostAgent" "client" "tlsServerName" "" (.Values.craft | default dict) }}
+{{- with include "onyx.craftFcAgentClient.tlsServerName" . }}
 - name: SANDBOX_FC_AGENT_TLS_SERVER_NAME
   value: {{ . | quote }}
 {{- end }}
@@ -457,11 +532,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 
 {{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
 {{- define "onyx.sandboxApiUrl" -}}
-{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s:%v" (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "api-service")))) (.Values.api.service.servicePort | default 8080)) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}
-{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "sandbox-proxy")))) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyPort" -}}
@@ -856,10 +931,40 @@ so the templates must not depend on values.yaml for these keys.
 {{- toYaml $merged -}}
 {{- end }}
 
+{{- define "onyx.clusterDomain" -}}
+{{- .Values.global.clusterDomain | default "cluster.local" -}}
+{{- end }}
+
+{{/* <service>.<release namespace>.svc.<cluster domain> */}}
+{{- define "onyx.serviceFqdn" -}}
+{{- $ctx := index . 0 -}}
+{{- printf "%s.%s.svc.%s" (index . 1) $ctx.Release.Namespace (include "onyx.clusterDomain" $ctx) -}}
+{{- end }}
+
+{{/*
+Host of a bundled store Service in S3_ENDPOINT_URL. Firecracker host agents
+upload to the presigned URL host from their own namespace, so with Firecracker
+it is the FQDN; otherwise the short name.
+*/}}
+{{- define "onyx.bundledStoreHost" -}}
+{{- $ctx := index . 0 -}}
+{{- if eq (include "onyx.craftSandboxRuntime" $ctx) "firecracker" -}}
+{{- include "onyx.serviceFqdn" (list $ctx (index . 1)) -}}
+{{- else -}}
+{{- index . 1 -}}
+{{- end -}}
+{{- end }}
+
 {{/* The bundled object store's Service name and S3 endpoint. */}}
 {{- define "onyx.objectStore.endpoint" -}}
 {{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
 {{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
+{{- end }}
+
+{{/* S3_ENDPOINT_URL of the bundled object store. */}}
+{{- define "onyx.objectStore.s3Endpoint" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- printf "http://%s:%v" (include "onyx.bundledStoreHost" (list . (include "onyx.resourceName" (list . "object-store")))) $objectStore.service.port -}}
 {{- end }}
 
 {{/*
