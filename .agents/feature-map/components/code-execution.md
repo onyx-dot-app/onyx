@@ -174,7 +174,15 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         observation is running
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
-                                        reason="suspended"; later calls can start cells
+                                        reason="suspended"; later calls can start cells. A
+                                        cell whose observation waits for input stays parked
+  ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
+                                        SavedCodeCell in ChatFeatureState.code_cells; its
+                                        dump goes to the file store at handoff
+                                        (chat/restoration.py:persist_checkpoint_files)
+  CodeModeTool / WaitCodeTool.resume_with_input -> CodeCells.resume
+                                        continue the observation that waited, with the
+                                        answers, in any process (sandbox.resume_program)
   chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
                                         a closing record follows the card section end
 ```
@@ -428,10 +436,28 @@ health calls are not retried.
     tool as a function of `execute_code` programs.
     Nested calls get the run's `before_tool_call` hook and approval gate as
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
-    `tools/tool_implementations/code_mode/cells.py:_decided_result`): a
+    `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does, and a request decision fails the call and
-    withdraws the request, since a program cannot wait for input. A hook that
+    program as a tool error does. A request decision shows the request at once,
+    also for a cell that runs in the background, and the call waits without a
+    thread (the handler returns
+    `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program
+    waits only for such calls and no other call or sleep of it runs
+    (`tools/tool_implementations/code_mode/sandbox.py:_Run.parkable`), it parks: the sandbox dumps it, returns its
+    worker, and the cell gives back its running-cell slot (`CodeCell._park`).
+    An observation that sees the park ends with `NestedInputWait`, which the
+    run saves; its stdout and calls so far stay in the cell's window. A dump
+    that the memory share forbids, or one over `MAX_PARKED_PROGRAM_BYTES`
+    (64 MB), is refused: each waiting call ends its request and fails with
+    `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. When the run
+    suspends, a parked cell whose observation waits is saved; other cells close.
+    After the answers, the observation's continuation takes a running-cell slot,
+    waiting for one, loads the dump on a new worker and deletes the stored dump.
+    An approved call runs then (`NestedCallGate.decide_approved`), unless its
+    tool is gone or its parameters changed (`UNAVAILABLE_CALL_MESSAGE`); a
+    rejected call raises the rejection in the program. The program's lifetime
+    counts the time it ran before it parked, not the wait. A run that ends
+    while a cell is parked closes it and deletes its dump. A hook that
     raises fails the run, as for a direct call: `NestedCallGate.decide` raises
     `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
     cannot catch; the cell stops its program, and the observation that reports

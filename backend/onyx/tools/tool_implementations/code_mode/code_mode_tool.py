@@ -3,7 +3,12 @@ other tools, run as cells of the response (code_mode/cells.py)."""
 
 from pydantic import BaseModel, Field
 
-from onyx.agents.tools import ToolExecutionMode, ToolInvocation
+from onyx.agents.tools import (
+    NestedInputAnswer,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolOutcome,
+)
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import (
@@ -125,6 +130,17 @@ class CodeModeTool(Tool):
             for tool in self._inner_tools
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
+        cells.programs = self.program
+        self.resume_with_input = self._resume_with_input
+
+    def program(self, code: str, limits: SandboxLimits) -> Program:
+        """A program that calls this tool's functions."""
+        return Program(
+            code=code,
+            stubs=self._stubs,
+            limits=limits,
+            sequential_calls=self._sequential_calls,
+        )
 
     @property
     def inner_tools(self) -> list[Tool]:
@@ -168,7 +184,7 @@ class CodeModeTool(Tool):
             CodeModeArguments,
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
         if not arguments.code.strip():
             raise ToolCallException(
@@ -176,16 +192,25 @@ class CodeModeTool(Tool):
                 llm_facing_message="The `code` argument is empty. Provide a Python program.",
             )
         return self._cells.start(
-            Program(
-                code=arguments.code,
-                stubs=self._stubs,
-                limits=self._limits,
-                sequential_calls=self._sequential_calls,
-            ),
+            self.program(arguments.code, self._limits),
             invocation,
             context,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(CodeModeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
         )
 
 
@@ -197,6 +222,7 @@ class WaitCodeTool(Tool):
 
     def __init__(self, cells: CodeCells) -> None:
         self._cells = cells
+        self.resume_with_input = self._resume_with_input
 
     @property
     def id(self) -> None:
@@ -227,7 +253,7 @@ class WaitCodeTool(Tool):
             self.name, WAIT_CODE_DESCRIPTION, WaitCodeArguments
         )
 
-    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolOutcome:
         arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
         return self._cells.wait(
             arguments.cell_id,
@@ -236,6 +262,20 @@ class WaitCodeTool(Tool):
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
             terminate=arguments.terminate,
+        )
+
+    def _resume_with_input(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+    ) -> ToolOutcome:
+        arguments = parse_tool_arguments(WaitCodeArguments, invocation.arguments)
+        return self._cells.resume(
+            invocation,
+            context,
+            answers,
+            yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
         )
 
 

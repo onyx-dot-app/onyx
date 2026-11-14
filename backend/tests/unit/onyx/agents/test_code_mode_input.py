@@ -1,0 +1,337 @@
+"""Code mode programs whose calls wait for the user's input: the program parks,
+the run saves it, and any process continues it after the answer."""
+
+import json
+import threading
+from collections.abc import Callable, Mapping
+
+import pytest
+from pydantic import BaseModel, JsonValue
+
+from onyx.agents.events import AgentEvent, InputEndedEvent, InputRequiredEvent
+from onyx.agents.models import (
+    AgentState,
+    ExecutionCheckpoint,
+    RunState,
+    RunStatus,
+    ToolCallContext,
+)
+from onyx.agents.runtime import Agent, RestorableFeature, Run
+from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
+from onyx.agents.tools import (
+    HumanToolAnswer,
+    InputDecision,
+    InputMode,
+    NestedInputWait,
+    PendingToolInput,
+    ToolInvocation,
+    ToolOutcome,
+)
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    TextContent,
+    ToolCall,
+    ToolResult,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.tools.interface import Tool
+from onyx.tools.models import ToolContext
+from onyx.tools.tool_implementations.code_mode import sandbox
+from onyx.tools.tool_implementations.code_mode.cells import (
+    PARK_REFUSED_MESSAGE,
+    CodeCells,
+)
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+    CodeModeTool,
+    WaitCodeTool,
+)
+from onyx.tools.tool_implementations.code_mode.models import SavedCodeCell
+from onyx.tracing.flows import LLMFlow
+from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeTool
+
+# The default memory limit: a dump fits within its share of it.
+PARKING_LIMITS = LIMITS.model_copy(update={"max_memory_bytes": 128 * 1024 * 1024})
+PROGRAM = 'print("before")\nr = await send(value="x")\nprint("sent", r)'
+REQUEST_ID = "send-approval"
+
+
+class SavedCells(BaseModel):
+    cells: list[SavedCodeCell]
+
+
+class CellsFeature(RestorableFeature):
+    """Saves and restores the cells of one agent, as chat's feature does."""
+
+    def __init__(self, cells: CodeCells) -> None:
+        self.cells = cells
+
+    def capture_state(self) -> SavedCells:
+        return SavedCells(cells=self.cells.saved())
+
+    def restore_state(self, state: Mapping[str, JsonValue]) -> None:
+        self.cells.restore(SavedCells.model_validate(state).cells)
+
+
+def _ask_for_send(context: ToolCallContext) -> PendingToolInput | None:
+    if context.call.name != "send":
+        return None
+    return PendingToolInput(
+        request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
+    )
+
+
+def _reply(
+    steps: tuple[ToolCall, ...], shown: threading.Event
+) -> Callable[[GenerationRequest, CancellationSignal], AssistantMessage]:
+    """Makes `steps` one call per step, then answers with the last result.
+    Steps after the first wait until a request shows."""
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+        if len(results) < len(steps):
+            assert not results or shown.wait(10)
+            return AssistantMessage(content=[steps[len(results)]])
+        return AssistantMessage(content=[TextContent(text=results[-1].text)])
+
+    return reply
+
+
+class Agents:
+    """Builds the agent of one process; each gets fresh cells and tools."""
+
+    def __init__(
+        self, *steps: ToolCall, parameters: dict[str, JsonValue] | None = None
+    ) -> None:
+        self.steps = steps
+        self.sent: list[JsonValue] = []
+        self.parameters = parameters
+        self.gate: threading.Event | None = None
+        # Set once a request shows; later model steps wait for it.
+        self.shown = threading.Event()
+
+    def send(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        self.sent.append(invocation.arguments["value"])
+        return ToolResult(content=json.dumps({"sent": invocation.arguments["value"]}))
+
+    def wait(self, invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        assert self.gate is not None and self.gate.wait(10)
+        return ToolResult(content=json.dumps({"waited": invocation.arguments["value"]}))
+
+    def agent(self, state: AgentState | None = None) -> Agent:
+        cells = CodeCells()
+        tools: list[Tool] = [
+            FakeTool("send", self.send, parameters=self.parameters),
+            FakeTool("wait", self.wait),
+        ]
+        execute = CodeModeTool(tools, cells=cells, limits=PARKING_LIMITS)
+        return Agent(
+            FakeModelClient(_reply(self.steps, self.shown)),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=state,
+            tools=[execute.bind(ToolContext), WaitCodeTool(cells).bind(ToolContext)],
+            before_tool_call=_ask_for_send,
+            on_suspend=cells.suspend,
+            on_finish=cells.finish,
+            restoration=CellsFeature(cells),
+        )
+
+
+def _execute(call_id: str, code: str, yield_ms: int = 10_000) -> ToolCall:
+    return ToolCall(
+        id=call_id,
+        name=CodeModeTool.NAME,
+        arguments={"code": code, "yield_time_ms": yield_ms},
+    )
+
+
+def _suspended(run: Run) -> RunState:
+    state = run.wait_until_settled(timeout=20)
+    assert state.status == RunStatus.SUSPENDED, state.failure
+    assert run.wait_for_idle(10)
+    return state
+
+
+def _transferred(run: Run) -> ExecutionCheckpoint:
+    """The suspended run as another process loads it."""
+    return ExecutionCheckpoint.model_validate(run.capture().model_dump(mode="json"))
+
+
+def _answer(decision: InputDecision) -> HumanToolAnswer:
+    return HumanToolAnswer(
+        request_id=REQUEST_ID,
+        decision=decision,
+        result=ToolResult(content="rejected", is_error=True)
+        if decision == InputDecision.DENY
+        else None,
+    )
+
+
+@pytest.mark.parametrize("approved", [True, False], ids=["approved", "rejected"])
+def test_a_program_parks_and_another_agent_continues_it(approved: bool) -> None:
+    agents = Agents(_execute("program", PROGRAM))
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=3, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    saved = _suspended(run)
+
+    assert saved.progress is not None
+    pending = saved.progress.pending_tool_calls["program"]
+    assert isinstance(pending, NestedInputWait)
+    [shown] = [event for event in events if isinstance(event, InputRequiredEvent)]
+    assert (shown.tool_call.id, shown.nested_call) == (
+        "program",
+        ToolCall(id="program:0", name="send", arguments={"value": "x"}),
+    )
+    assert agents.sent == []
+
+    checkpoint = _transferred(run)
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state,
+        answers=[_answer(InputDecision.APPROVE if approved else InputDecision.DENY)],
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert "before" in output
+    if approved:
+        assert agents.sent == ["x"]
+        assert "sent {'sent': 'x'}" in output
+    else:
+        assert agents.sent == []
+        assert "rejected" in output
+
+
+def test_parking_waits_for_a_running_call_of_the_program() -> None:
+    agents = Agents(
+        _execute(
+            "program",
+            'a, b = await asyncio.gather(wait(value="a"), send(value="b"))\nprint(a, b)',
+        )
+    )
+    agents.gate = threading.Event()
+    shown = threading.Event()
+    run = agents.agent().start(
+        max_steps=3,
+        messages=[UserMessage(content="Send")],
+        on_event=lambda event: (
+            shown.set() if isinstance(event, InputRequiredEvent) else None
+        ),
+    )
+    try:
+        # The card shows at once, while the other call runs.
+        assert shown.wait(10)
+        assert run.status == RunStatus.RUNNING
+        agents.gate.set()
+        _suspended(run)
+
+        run.submit(_answer(InputDecision.APPROVE))
+        output = run.result(timeout=20).output.text
+        assert "{'waited': 'a'} {'sent': 'b'}" in output
+    finally:
+        agents.gate.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
+def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
+    agents = Agents(
+        _execute("program", f"yield_control()\n{PROGRAM}", yield_ms=1_000),
+        ToolCall(id="wait", name=WaitCodeTool.NAME, arguments={"cell_id": 1}),
+    )
+    events: list[AgentEvent] = []
+
+    def on_event(event: AgentEvent) -> None:
+        events.append(event)
+        if isinstance(event, InputRequiredEvent):
+            agents.shown.set()
+
+    run = agents.agent().start(
+        max_steps=4, messages=[UserMessage(content="Send")], on_event=on_event
+    )
+    saved = _suspended(run)
+
+    assert saved.progress is not None
+    assert isinstance(saved.progress.pending_tool_calls["wait"], NestedInputWait)
+    shown = [event for event in events if isinstance(event, InputRequiredEvent)]
+    # Shown once, at the cell's execute_code call, before wait_code saved it.
+    assert [event.tool_call.id for event in shown] == ["program"]
+
+    run.submit(_answer(InputDecision.APPROVE))
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+    assert agents.sent == ["x"]
+    assert "sent {'sent': 'x'}" in output
+
+
+def test_a_program_too_large_to_park_continues_without_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sandbox, "MAX_PARKED_PROGRAM_BYTES", 0)
+    agents = Agents(
+        _execute(
+            "program",
+            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            '    print("failed:", error)',
+        )
+    )
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=3, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert PARK_REFUSED_MESSAGE.format(name="send") in output
+    ended = [event for event in events if isinstance(event, InputEndedEvent)]
+    assert [(event.request.request_id, event.answer) for event in ended] == [
+        (REQUEST_ID, None)
+    ]
+
+
+def test_a_restored_call_whose_tool_changed_does_not_run() -> None:
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+
+    agents.parameters = {"type": "object", "properties": {"other": {"type": "string"}}}
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert UNAVAILABLE_CALL_MESSAGE in output
+
+
+def test_a_run_that_ends_while_its_program_waits_closes_the_cell() -> None:
+    agents = Agents(_execute("program", PROGRAM))
+    events: list[AgentEvent] = []
+    run = agents.agent().start(
+        max_steps=3, messages=[UserMessage(content="Send")], on_event=events.append
+    )
+    _suspended(run)
+
+    run.cancel()
+    assert run.wait_for_idle(10)
+
+    snapshot = run.snapshot()
+    assert snapshot.status == RunStatus.CANCELLED
+    result = snapshot.steps[0].tools["program"].result
+    assert result is not None and "before" in result.text
+    assert agents.sent == []
+    ended = [event for event in events if isinstance(event, InputEndedEvent)]
+    assert [(event.request.request_id, event.answer) for event in ended] == [
+        (REQUEST_ID, None)
+    ]

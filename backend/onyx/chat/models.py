@@ -72,7 +72,10 @@ from onyx.tools.models import (
     SearchToolUsage,
     ToolCallInfo,
 )
-from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.code_mode.models import (
+    CodeModeExecutionResult,
+    SavedCodeCell,
+)
 from onyx.tools.tool_implementations.custom.base_tool_types import ToolResultType
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
@@ -811,6 +814,8 @@ class ChatFeatureState(BaseModel):
     chat_files: list[SavedChatFile]
     has_called_search_tool: bool
     search_context: SearchContext
+    # Cells whose observations wait for the user's input.
+    code_cells: list[SavedCodeCell] = Field(default_factory=list)
 
 
 class ReservedChatResponse(BaseModel):

@@ -210,8 +210,22 @@ def persist_checkpoint_files(
             progress = record.progress
             if progress.feature_state is not None:
                 state = _FEATURE_STATE.validate_python(progress.feature_state)
-                if isinstance(state, ChatFeatureState) and state.chat_files:
-                    for file in state.chat_files:
+                # Chat files, and each parked program's dump and its files for
+                # later calls.
+                files = (
+                    [
+                        *state.chat_files,
+                        *(
+                            file
+                            for cell in state.code_cells
+                            for file in (cell.program.dump, *cell.staged_files)
+                        ),
+                    ]
+                    if isinstance(state, ChatFeatureState)
+                    else []
+                )
+                if files:
+                    for file in files:
                         save(file)
                     progress.feature_state = _JSON_OBJECT.validate_python(
                         state.model_dump(mode="json")

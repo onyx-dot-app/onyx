@@ -10,7 +10,7 @@ observer.
 import json
 import threading
 import time
-from collections.abc import Collection, Iterator, Mapping, Sequence
+from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from functools import partial
 from typing import Literal, cast
@@ -18,21 +18,28 @@ from typing import Literal, cast
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from onyx.agents.models import ReleaseFailed, ToolResultAmendment
+from onyx.agents.tool_execution import DENIED_CALL_MESSAGE, UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
     BeforeToolCallFailed,
+    InputDecision,
+    NestedInputAnswer,
     NestedInputRequest,
+    NestedInputWait,
     ToolInvocation,
+    ToolOutcome,
     ToolProgress,
 )
 from onyx.chat.files import build_python_chat_files_from_search_docs
 from onyx.chat.models import StagedChatFiles
 from onyx.chat.tool_results import merged_chat_files, staged_result_details
 from onyx.context.search.models import SearchDocsResponse
+from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal, cancellation_scope
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import Message, ToolCall, ToolResult, ToolResultMessage
 from onyx.server.metrics import code_mode as metrics
 from onyx.tools.constants import PYTHON_TOOL_NAME
+from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
 from onyx.tools.models import (
     ChatFile,
@@ -66,8 +73,11 @@ from onyx.tools.tool_implementations.code_mode.models import (
     ExternalCall,
     LostStoreWrites,
     ObservationCut,
+    ParkedProgram,
     SandboxLimits,
     SandboxResult,
+    SavedCodeCell,
+    SavedProgram,
     StoreCommit,
     StoreSnapshot,
     code_mode_results,
@@ -79,10 +89,13 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
     observation_heading,
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
+    AWAITS_INPUT,
     BUSY_MESSAGE,
+    CHECKOUT_POLL_SECONDS,
     MAX_RUNNING_CELLS,
     StdoutCollector,
     execute_program,
+    resume_program,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     ProgramStore,
@@ -108,6 +121,13 @@ logger = setup_logger()
 
 CANCELLED_CALL_MESSAGE = "The tool call was cancelled."
 TERMINATED_MESSAGE = "The cell was terminated."
+# The result of a program call that waits for the user's input when its
+# program cannot pause, so the program continues without it.
+PARK_REFUSED_MESSAGE = (
+    "The {name} call needs the user's approval, and this program holds too "
+    "much data to pause for it, so the call did not run. Make the call from a "
+    "program that keeps less data."
+)
 # Text kept for each call in saved and streamed results. The program receives the
 # full result; later calls get less once the cell's budget is spent.
 MAX_SAVED_CALL_CHARS = 10_000
@@ -295,6 +315,13 @@ class CitationAllocator:
         with self._lock:
             return dict(self._mapping)
 
+    def add(self, citation_mapping: dict[int, str]) -> None:
+        """Take over the numbers that a saved cell's calls used."""
+        with self._lock:
+            self._mapping.update(citation_mapping)
+            self._max_used = max([self._max_used, *citation_mapping])
+            self._next = max(self._next, self._max_used + 1)
+
 
 def _call_result(
     tool: Tool, invocation: ToolInvocation, context: ToolContext
@@ -306,54 +333,49 @@ def _call_result(
     return outcome
 
 
-def _decided_result(
-    source: ToolInvocation,
-    call_id: str,
-    tool_name: str,
-    arguments: dict[str, JsonValue],
-) -> ToolResult | None:
-    """The result that the run's decision gives a program's call, as it gives a
-    direct call one: the before_tool_call hook, then the user's approval; None
-    to run the tool.
-
-    A program cannot wait for input, so a call that would wait fails with the
-    request's prompt, as a tool error does, and its request ends.
-    """
-    gate = source.nested_calls
-    if gate is None:
-        return None
-    decision = gate.decide(ToolCall(id=call_id, name=tool_name, arguments=arguments))
-    if isinstance(decision, NestedInputRequest):
-        gate.withdraw(decision)
-        raise RuntimeError(
-            f"{tool_name} needs the user's approval and cannot run inside a "
-            f"program: {decision.request.prompt}"
-        )
-    return decision
+def _delete_dump(program: SavedProgram) -> None:
+    """Delete a parked program's saved dump once nothing can resume it."""
+    file_id = program.dump.file_id
+    if file_id is None:
+        return
+    try:
+        get_default_file_store().delete_file(file_id, error_on_missing=False)
+    except Exception:
+        logger.exception("Could not delete the dump of a parked program")
 
 
 class _RunningCells:
     """The process-wide budget of running cells (MAX_RUNNING_CELLS)."""
 
     def __init__(self, limit: int) -> None:
-        self._lock = threading.Lock()
+        self._freed = threading.Condition()
         self._limit = limit
         self._running = 0
 
-    def acquire(self, tenant_id: str) -> bool:
-        with self._lock:
-            if self._running >= self._limit:
-                metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=tenant_id).inc()
-                return False
+    def acquire(
+        self, tenant_id: str, *, wait: CancellationSignal | None = None
+    ) -> bool:
+        """Take a slot if one is free; with `wait`, wait for one until `wait`
+        is cancelled."""
+        with self._freed:
+            while self._running >= self._limit:
+                if wait is None:
+                    metrics.CELL_BUSY_REJECTIONS.labels(tenant_id=tenant_id).inc()
+                    return False
+                if wait.cancelled:
+                    return False
+                # Cancellation sets no event, so the wait rechecks it.
+                self._freed.wait(CHECKOUT_POLL_SECONDS)
             self._running += 1
             metrics.CELLS_RUNNING.set(self._running)
             return True
 
     def release(self, tenant_id: str, held_seconds: float) -> None:
         """Free a slot that a cell of `tenant_id` held for `held_seconds`."""
-        with self._lock:
+        with self._freed:
             self._running -= 1
             metrics.CELLS_RUNNING.set(self._running)
+            self._freed.notify()
         metrics.CELL_SECONDS.labels(tenant_id=tenant_id).inc(held_seconds)
 
 
@@ -528,6 +550,12 @@ class CodeCell:
     The driver runs on its own thread. Each event (printed text, call start,
     progress, call end) goes to the attached observer, or waits in the window for
     the next one. The lock orders events with observer changes.
+
+    A program call that waits for the user's input does not block: the program
+    parks once it waits only for such calls (`_park`). The observation then
+    ends with NestedInputWait, the cell is saved with the run (`saved`), and a
+    continuation of that observation resumes the program (`resume`), in this
+    process or another one.
     """
 
     def __init__(
@@ -539,7 +567,10 @@ class CodeCell:
         store: _StoreCommits,
         invocation: ToolInvocation,
         context: ToolContext,
+        saved: SavedCodeCell | None = None,
     ) -> None:
+        """A new cell, or with `saved` a parked one whose observation
+        `invocation` waits for the user's input."""
         self.id = cell_id
         self._program = program
         self._citations = citations
@@ -605,10 +636,76 @@ class CodeCell:
         self._last: tuple[str, ToolResult, CodeModeExecutionResult] | None = None
         # Observations taken but not yet formatted; `close` waits for them.
         self._formatting = 0
+        # The store as the program sees it, from its start.
+        self._program_store: ProgramStore | None = None
+        # The parked program: it waits only for calls that wait for input. It
+        # holds no worker and no running-cell slot.
+        self._parked: SavedProgram | None = None
+        # The observation that ended with NestedInputWait while the program is
+        # parked; its continuation resumes the program.
+        self._waiting: CellObserver | None = None
+        # How the calls that waited for input run when the program resumes, by
+        # call index: an answer to their request, or the result they get.
+        self._answers: dict[int, NestedInputAnswer | ToolResult] = {}
+        self._holds_slot = saved is None
+        if saved is not None:
+            self._restore(saved)
+            return
         # Last, so a cell that exists holds a running-cell slot; `_end_program`
         # releases it.
         if not _running_cells.acquire(self._tenant_id):
             raise _rejected(BUSY_MESSAGE)
+
+    def _restore(self, saved: SavedCodeCell) -> None:
+        """Take the state of a parked cell saved in another process."""
+        self._call_id = saved.call_id
+        self._started_at = time.monotonic() - saved.program.elapsed_seconds
+        self._calls = {record.call.index: record for record in saved.calls}
+        self._saved_chars = saved.saved_chars
+        self._window = saved.window
+        self._stdout.write(saved.stdout)
+        self._observations = saved.observations
+        self._waiting = CellObserver(
+            invocation=self._source,
+            number=saved.observer_number,
+            max_tokens=saved.observer_max_tokens,
+        )
+        self._staged_files = [file.restore() for file in saved.staged_files]
+        self._lost_store_writes = saved.lost_store_writes
+        self._program_store = ProgramStore(saved.store)
+        for key, value in saved.store_writes.items():
+            self._program_store.store(key, value)
+        self._citations.add(saved.citations)
+        self._parked = saved.program
+
+    def saved(self) -> SavedCodeCell | None:
+        """The cell's saved form while an observation of it waits for input."""
+        with self._lock:
+            waiting, parked, store = self._waiting, self._parked, self._program_store
+            if waiting is None or parked is None or store is None:
+                return None
+            return SavedCodeCell(
+                cell_id=self.id,
+                call_id=self._call_id,
+                code=self._program.code,
+                limits=self._program.limits,
+                observations=self._observations,
+                window=self._window,
+                observer_call_id=waiting.invocation.call_id,
+                observer_number=waiting.number,
+                observer_max_tokens=waiting.max_tokens,
+                calls=list(self._calls.values()),
+                saved_chars=self._saved_chars,
+                stdout=self._stdout.text,
+                lost_store_writes=self._lost_store_writes,
+                store=store.snapshot,
+                store_writes=store.writes,
+                citations=self._citations.mapping(),
+                staged_files=[
+                    SavedChatFile.capture(file) for file in self._staged_files
+                ],
+                program=parked,
+            )
 
     def _collector(self) -> StdoutCollector:
         return StdoutCollector(
@@ -622,16 +719,75 @@ class CodeCell:
 
     def start(
         self, snapshot: StoreSnapshot, *, yield_seconds: float, max_tokens: int
-    ) -> ToolResult:
+    ) -> ToolOutcome:
         """Run the program; returns observation 0 to the call that started it."""
         with self._lock:
             if self._observations:
                 raise RuntimeError(f"Cell {self.id} already started")
             self._lost_store_writes = lost_store_writes(snapshot.dropped)
+            self._program_store = ProgramStore(snapshot)
             observer = self._attach(self._source, self._context, max_tokens)
+        self._start_driver(observer.invocation.cancellation, None)
+        return self._observe(observer, yield_seconds)
+
+    def resume(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+        *,
+        yield_seconds: float,
+    ) -> ToolOutcome:
+        """Continue the observation that waited for the answers: the program
+        resumes once the cell takes a running-cell slot, which it waits for."""
+        by_request = {
+            answered.request.request.request_id: answered.answer for answered in answers
+        }
+        with self._lock:
+            waiting, parked = self._waiting, self._parked
+            if waiting is None or parked is None:
+                raise _rejected(f"Cell {self.id} is not waiting for input.")
+            for index, record in self._calls.items():
+                request = record.request
+                if request is None:
+                    continue
+                answer = by_request[request.request.request_id]
+                function = self._program.stubs.functions.get(record.call.function_name)
+                unchanged = (
+                    function is not None
+                    and function.tool.tool_definition().parameters
+                    == parked.parameters.get(record.call.tool_name)
+                )
+                # A denial stands; an approval runs only an unchanged tool.
+                self._answers[index] = (
+                    NestedInputAnswer(request=request, answer=answer)
+                    if unchanged or answer.decision != InputDecision.APPROVE
+                    else ToolResult(content=UNAVAILABLE_CALL_MESSAGE, is_error=True)
+                )
+                record.request = None
+            self._waiting = None
+            self._parked = None
+            observer = self._attach(
+                invocation, context, waiting.max_tokens, number=waiting.number
+            )
+        if _running_cells.acquire(self._tenant_id, wait=invocation.cancellation):
+            with self._lock:
+                self._holds_slot = True
+                self._started_at = time.monotonic() - parked.elapsed_seconds
+            self._start_driver(invocation.cancellation, parked)
+        else:
+            self._end_program(
+                SandboxResult(status="cancelled", error="The execution was cancelled."),
+                parked,
+            )
+        return self._observe(observer, yield_seconds)
+
+    def _start_driver(
+        self, run_cancellation: CancellationSignal, parked: SavedProgram | None
+    ) -> None:
         try:
             start_thread_future(
-                partial(self._drive, snapshot, observer.invocation.cancellation),
+                partial(self._drive, run_cancellation, parked),
                 name=f"code-mode-cell-{self.id}",
             )
         except Exception as error:
@@ -641,9 +797,8 @@ class CodeCell:
                     status="failed",
                     error=f"The cell could not start: {type(error).__name__}: {error}",
                 ),
-                ProgramStore(snapshot),
+                parked,
             )
-        return self._observe(observer, yield_seconds)
 
     def observe(
         self,
@@ -653,12 +808,12 @@ class CodeCell:
         yield_seconds: float,
         max_tokens: int,
         terminate: bool,
-    ) -> ToolResult:
+    ) -> ToolOutcome:
         """A wait_code observation: new output, the final result, or termination."""
         with self._lock:
             if self._closed:
                 raise _rejected(f"Cell {self.id} already returned its final result.")
-            if self._observer is not None:
+            if self._observer is not None or self._waiting is not None:
                 raise _rejected(f"Cell {self.id} already has an active wait_code call.")
             observer = self._attach(invocation, context, max_tokens)
         if terminate:
@@ -666,14 +821,30 @@ class CodeCell:
         return self._observe(observer, yield_seconds)
 
     def stop(self, reason: StopReason) -> None:
-        """Stop the program; the first reason wins. No-op once it ended."""
+        """Stop the program; the first reason wins. No-op once it ended. A
+        parked program ends at once, without its dump."""
         with self._lock:
             if self._stop is not None or self._end is not None:
                 return
             self._stop = reason
             self._stopped_at = time.monotonic()
+            parked, self._parked = self._parked, None
             self._changed.notify_all()
         self._stopping.cancel()
+        if parked is not None:
+            self._end_program(
+                SandboxResult(
+                    status="cancelled", duration_seconds=parked.elapsed_seconds
+                ),
+                parked,
+            )
+
+    @property
+    def waiting_call_id(self) -> str | None:
+        """The call whose observation ended with NestedInputWait while the
+        parked program waits for its answers."""
+        with self._lock:
+            return None if self._waiting is None else self._waiting.invocation.call_id
 
     def wait_ended(self) -> None:
         """Wait for the program to end, at most STOP_GRACE_SECONDS after the first
@@ -707,7 +878,7 @@ class CodeCell:
         with self._lock:
             if self._closed:
                 return None
-            observer = self._observer
+            observer = self._observer or self._waiting
             taken = (
                 self._take(observer, final=True)
                 if observer is not None
@@ -765,14 +936,22 @@ class CodeCell:
     # Observations
 
     def _attach(
-        self, invocation: ToolInvocation, context: ToolContext, max_tokens: int
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        max_tokens: int,
+        *,
+        number: int | None = None,
     ) -> CellObserver:
         """Make `invocation` the observer and send it the window so far; the
-        caller holds the lock."""
+        caller holds the lock. A `number` continues that observation."""
         observer = CellObserver(
-            invocation=invocation, number=self._observations, max_tokens=max_tokens
+            invocation=invocation,
+            number=self._observations if number is None else number,
+            max_tokens=max_tokens,
         )
-        self._observations += 1
+        if number is None:
+            self._observations += 1
         self._observer = observer
         self._source = invocation
         self._context = context
@@ -786,7 +965,9 @@ class CodeCell:
         self._events.clear()
         return observer
 
-    def _observe(self, observer: CellObserver, yield_seconds: float) -> ToolResult:
+    def _observe(self, observer: CellObserver, yield_seconds: float) -> ToolOutcome:
+        """The observation's result, or NestedInputWait once the program parks:
+        the requests of its calls, which the run saves."""
         deadline = time.monotonic() + yield_seconds
         cancellation = observer.invocation.cancellation
 
@@ -798,6 +979,7 @@ class CodeCell:
             while not (
                 self._end is not None
                 or self._yielded is not None
+                or self._parked is not None
                 or cancellation.cancelled
             ):
                 now = time.monotonic()
@@ -818,6 +1000,18 @@ class CodeCell:
                     # stays attached, so `close` saves this observation at the
                     # run's end.
                     raise AgentCancelled()
+                if self._parked is not None:
+                    self._flush_stdout()
+                    # The window so far stays for the continuation's result.
+                    self._observer = None
+                    self._waiting = observer
+                    return NestedInputWait(
+                        requests=[
+                            record.request
+                            for _, record in sorted(self._calls.items())
+                            if record.request is not None
+                        ]
+                    )
                 cut = self._take(observer, final=False)
             failure = None
             if cut.end is not None:
@@ -1000,13 +1194,16 @@ class CodeCell:
     # Driver
 
     def _drive(
-        self, snapshot: StoreSnapshot, run_cancellation: CancellationSignal
+        self, run_cancellation: CancellationSignal, parked: SavedProgram | None
     ) -> None:
+        """Run the program, or continue the parked one, until it ends or parks."""
         # The cell's span is the parent of its nested tool spans.
         with function_span(CELL_SPAN_NAME, input=self._program.code) as span:
-            store = ProgramStore(snapshot)
-            end = self._execute(store, run_cancellation)
-            self._end_program(end, store)
+            end = self._execute(run_cancellation, parked)
+            if isinstance(end, ParkedProgram):
+                span.span_data.output = "parked"
+                return
+            self._end_program(end, None)
             with self._lock:
                 status = self._final_status()
                 span.span_data.output = status
@@ -1021,14 +1218,42 @@ class CodeCell:
                 }
 
     def _execute(
-        self, store: ProgramStore, run_cancellation: CancellationSignal
-    ) -> SandboxResult:
+        self, run_cancellation: CancellationSignal, parked: SavedProgram | None
+    ) -> SandboxResult | ParkedProgram:
         program = self._program
+        store = self._program_store
+        if store is None:
+            raise RuntimeError(f"Cell {self.id} has no store")
+        stubs = program.stubs.program_text(program.code)
         try:
             with run_cancellation.on_cancel(lambda: self.stop("cancelled")):
-                return execute_program(
-                    program.code,
-                    stubs=program.stubs.program_text(program.code),
+                if parked is None:
+                    return execute_program(
+                        program.code,
+                        stubs=stubs,
+                        function_names=frozenset(program.stubs.functions),
+                        plain_functions=store.functions,
+                        async_functions=program.stubs.async_functions,
+                        handler=self._call,
+                        cancellation=self._stopping,
+                        limits=program.limits,
+                        on_print=self._print,
+                        on_yield=self._yield_control,
+                        park=self._park,
+                    )
+                snapshot = parked.dump.restore().content
+                # Loaded once; another resume would repeat the program's calls.
+                _delete_dump(parked)
+                return resume_program(
+                    ParkedProgram(
+                        snapshot=snapshot,
+                        waiting=parked.waiting,
+                        settled=parked.settled,
+                        tool_calls=parked.tool_calls,
+                        elapsed_seconds=parked.elapsed_seconds,
+                        type_check_notes=parked.type_check_notes,
+                    ),
+                    stubs=stubs,
                     function_names=frozenset(program.stubs.functions),
                     plain_functions=store.functions,
                     async_functions=program.stubs.async_functions,
@@ -1037,6 +1262,7 @@ class CodeCell:
                     limits=program.limits,
                     on_print=self._print,
                     on_yield=self._yield_control,
+                    park=self._park,
                 )
         except BaseException as error:
             logger.exception("Code mode cell %s stopped with an error", self.id)
@@ -1044,28 +1270,91 @@ class CodeCell:
                 status="failed", error=f"{type(error).__name__}: {error}"
             )
 
-    def _end_program(self, end: SandboxResult, store: ProgramStore) -> None:
-        """Commit the program's store writes, make its end visible, and release
-        the cell's running-cell slot."""
+    def _park(self, parked: ParkedProgram | None) -> bool:
+        """Keep the program while it waits only for calls that wait for input.
+        Refuse it when it could not be dumped (None) or the cell stops: then
+        each such call ends its request and fails, and the program continues."""
+        with self._lock:
+            waiting = {
+                index: record
+                for index, record in self._calls.items()
+                if record.request is not None
+            }
+            if parked is not None and not self._stopping.cancelled:
+                functions = self._program.stubs.functions
+                self._parked = SavedProgram(
+                    dump=SavedChatFile(
+                        filename=f"code-cell-{self.id}.dump", content=parked.snapshot
+                    ),
+                    # The JSON copy of each call's arguments, to save.
+                    waiting={
+                        call_id: external.model_copy(
+                            update={
+                                "kwargs": tool_arguments(
+                                    functions[external.function_name], external.kwargs
+                                ).value
+                            }
+                        )
+                        for call_id, external in parked.waiting.items()
+                    },
+                    settled=parked.settled,
+                    tool_calls=parked.tool_calls,
+                    elapsed_seconds=parked.elapsed_seconds,
+                    type_check_notes=parked.type_check_notes,
+                    parameters={
+                        record.call.tool_name: functions[record.call.function_name]
+                        .tool.tool_definition()
+                        .parameters
+                        for record in waiting.values()
+                    },
+                )
+                self._release_slot()
+                self._changed.notify_all()
+                return True
+            requests = [record.request for record in waiting.values() if record.request]
+            for index, record in waiting.items():
+                record.request = None
+                self._answers[index] = ToolResult(
+                    content=PARK_REFUSED_MESSAGE.format(name=record.call.function_name),
+                    is_error=True,
+                )
+            gate = self._source.nested_calls
+        if gate is not None:
+            for request in requests:
+                gate.withdraw(request)
+        return False
+
+    def _release_slot(self) -> None:
+        """Give back the running-cell slot; the caller holds the lock."""
+        if self._holds_slot:
+            self._holds_slot = False
+            _running_cells.release(self._tenant_id, time.monotonic() - self._started_at)
+
+    def _end_program(self, end: SandboxResult, parked: SavedProgram | None) -> None:
+        """Commit the program's store writes, make its end visible, end the
+        requests of calls that still wait, and release the cell's running-cell
+        slot. A parked program's dump is deleted."""
+        requests: list[NestedInputRequest] = []
         try:
             # Calls the program never awaited stop with it.
             self._stopping.cancel()
             with self._lock:
+                store = self._program_store
                 # Under the lock with the end, so the observation that reports the
                 # end has the commit. A cell whose closing record was already
                 # saved reported that it stopped, so it commits nothing: no saved
                 # record would hold the commit, and later commits that follow it
                 # would be dropped.
                 commit: StoreCommit | None = None
-                commits = end.commits_store and not self._closed
+                commits = end.commits_store and not self._closed and store is not None
                 discarded = (
                     None
-                    if commits
+                    if commits or store is None
                     else DiscardedWrites(
                         keys=tuple(store.changed_writes), reason=STOPPED_BEFORE_END
                     )
                 )
-                if commits:
+                if commits and store is not None:
                     try:
                         commit = self._store.commit(
                             store.writes, self._source.recorded_results
@@ -1077,6 +1366,9 @@ class CodeCell:
                 self._commit = commit
                 self._discarded = discarded
                 for record in self._calls.values():
+                    if record.request is not None:
+                        requests.append(record.request)
+                        record.request = None
                     if record.ended_in is None:
                         self._record(record.call.unfinished())
                 self._ended_as = (
@@ -1090,7 +1382,14 @@ class CodeCell:
                 )
                 self._changed.notify_all()
         finally:
-            _running_cells.release(self._tenant_id, time.monotonic() - self._started_at)
+            with self._lock:
+                self._release_slot()
+                gate = self._source.nested_calls
+            if gate is not None:
+                for request in requests:
+                    gate.withdraw(request)
+            if parked is not None:
+                _delete_dump(parked)
 
     def _print(self, text: str) -> None:
         with self._lock:
@@ -1112,20 +1411,31 @@ class CodeCell:
         copied = tool_arguments(function, external.kwargs)
         # A dict: tool_arguments copies one.
         arguments = cast(dict[str, JsonValue], copied.value)
-        started = CodeModeCall(
-            index=external.index,
-            id=f"{self._call_id}:{external.index}",
-            tool_name=function.tool.name,
-            tool_id=function.tool.id,
-            display_name=function.tool.display_name,
-            function_name=function.function_name,
-            arguments=_bounded_arguments(arguments, MAX_SAVED_CALL_CHARS, copied.text),
-            state="running",
-        )
         with self._lock:
-            self._calls[external.index] = CellCallRecord(
-                call=started, started_in=self._window
-            )
+            record = self._calls.get(external.index)
+            # A call that waited for input runs again with its answer.
+            answered = self._answers.pop(external.index, None)
+            if record is None:
+                record = CellCallRecord(
+                    call=CodeModeCall(
+                        index=external.index,
+                        id=f"{self._call_id}:{external.index}",
+                        tool_name=function.tool.name,
+                        tool_id=function.tool.id,
+                        display_name=function.tool.display_name,
+                        function_name=function.function_name,
+                        arguments=_bounded_arguments(
+                            arguments, MAX_SAVED_CALL_CHARS, copied.text
+                        ),
+                        state="running",
+                    ),
+                    started_in=self._window,
+                )
+                self._calls[external.index] = record
+                self._emit(CodeModeCallStarted(call=record.call))
+            else:
+                record.thread_alive = True
+            started = record.call
             context = self._context.model_copy(
                 update={
                     "chat_files": merged_chat_files(
@@ -1134,9 +1444,32 @@ class CodeCell:
                 }
             )
             source = self._source
-            self._emit(CodeModeCallStarted(call=started))
+        call = ToolCall(id=started.id, name=function.tool.name, arguments=arguments)
+        gate = source.nested_calls
         try:
-            return self._run_call(function, started, arguments, context, source)
+            decided: ToolResult | NestedInputRequest | None
+            if isinstance(answered, ToolResult):
+                decided = answered
+            elif answered is not None and (
+                answered.answer.decision != InputDecision.APPROVE
+            ):
+                decided = answered.answer.result or ToolResult(
+                    content=DENIED_CALL_MESSAGE, is_error=True
+                )
+            elif gate is None:
+                decided = None
+            elif answered is not None:
+                decided = gate.decide_approved(call, answered.request)
+            else:
+                # The run's hook, then the user's approval, as for a direct call.
+                decided = gate.decide(call)
+            if isinstance(decided, NestedInputRequest):
+                with self._lock:
+                    record.request = decided
+                return AWAITS_INPUT
+            return self._run_call(
+                function, started, arguments, context, source, decided
+            )
         except AgentCancelled as error:
             # The program sees an error; the cell's end records the call as
             # unfinished.
@@ -1170,9 +1503,8 @@ class CodeCell:
         arguments: dict[str, JsonValue],
         context: ToolContext,
         source: ToolInvocation,
+        decided: ToolResult | None,
     ) -> object:
-        inner_tool = function.tool
-        decided = _decided_result(source, started.id, inner_tool.name, arguments)
         cites = function.result.cites and decided is None
         start = (
             self._citations.reserve(context.next_citation_num)
@@ -1292,7 +1624,8 @@ class CodeCells:
 
     Ids are unique in a conversation branch: 1 + the highest id in the recorded
     messages and in this response. When the response ends, `finish` stops every
-    open cell and returns the final records.
+    open cell and returns the final records. A cell whose observation waits for
+    the user's input is saved when the run suspends (`saved`, `restore`).
     """
 
     def __init__(self) -> None:
@@ -1302,6 +1635,9 @@ class CodeCells:
         self._finished = False
         self._citations = CitationAllocator()
         self._store = _StoreCommits()
+        # Builds the program of a restored cell with the current tools; set by
+        # the execute_code tool that shares these cells.
+        self.programs: Callable[[str, SandboxLimits], Program] | None = None
 
     def start(
         self,
@@ -1311,7 +1647,7 @@ class CodeCells:
         *,
         yield_seconds: float,
         max_tokens: int,
-    ) -> ToolResult:
+    ) -> ToolOutcome:
         """Start `program` as a new cell and return its first observation."""
         with self._lock:
             if self._finished:
@@ -1353,7 +1689,7 @@ class CodeCells:
         yield_seconds: float,
         max_tokens: int,
         terminate: bool,
-    ) -> ToolResult:
+    ) -> ToolOutcome:
         with self._lock:
             cell = self._cells.get(cell_id)
         if cell is None:
@@ -1370,6 +1706,58 @@ class CodeCells:
             max_tokens=max_tokens,
             terminate=terminate,
         )
+
+    def resume(
+        self,
+        invocation: ToolInvocation,
+        context: ToolContext,
+        answers: list[NestedInputAnswer],
+        *,
+        yield_seconds: float,
+    ) -> ToolOutcome:
+        """Continue the observation of `invocation`'s call that waited for the
+        answers."""
+        with self._lock:
+            cells = list(self._cells.values())
+        cell = next(
+            (cell for cell in cells if cell.waiting_call_id == invocation.call_id),
+            None,
+        )
+        if cell is None:
+            raise _rejected("The program that waited for this decision stopped.")
+        return cell.resume(invocation, context, answers, yield_seconds=yield_seconds)
+
+    def saved(self) -> list[SavedCodeCell]:
+        """The cells whose observations wait for input, to save with the run."""
+        with self._lock:
+            cells = list(self._cells.values())
+        return [saved for cell in cells if (saved := cell.saved()) is not None]
+
+    def restore(self, saved: Sequence[SavedCodeCell]) -> None:
+        """Take the saved cells of a suspended run, parked until their
+        observations continue."""
+        programs = self.programs
+        if not saved:
+            return
+        if programs is None:
+            raise ValueError("Saved code cells need the execute_code tool")
+        with self._lock:
+            for cell in saved:
+                self._cells[cell.cell_id] = CodeCell(
+                    cell_id=cell.cell_id,
+                    program=programs(cell.code, cell.limits),
+                    citations=self._citations,
+                    store=self._store,
+                    invocation=ToolInvocation(
+                        call_id=cell.observer_call_id,
+                        arguments={},
+                        cancellation=CancellationSignal(),
+                        update=lambda _progress: None,
+                    ),
+                    context=ToolContext(),
+                    saved=cell,
+                )
+                self._highest_id = max(self._highest_id, cell.cell_id)
 
     @property
     def has_open(self) -> bool:
@@ -1397,7 +1785,8 @@ class CodeCells:
         self, results: Sequence[ToolResultMessage]
     ) -> list[ToolResultAmendment]:
         """Stop every open cell when the run pauses, and return final records as
-        `finish` does. Later calls can start new cells."""
+        `finish` does. A cell whose observation waits for input stays, to save
+        with the run. Later calls can start new cells."""
         return self._close_all(results, "suspended")
 
     def _close_all(
@@ -1405,14 +1794,21 @@ class CodeCells:
     ) -> list[ToolResultAmendment]:
         with self._lock:
             cells = list(self._cells.values())
-        for cell in cells:
+        closing = [
+            cell
+            for cell in cells
+            if reason != "suspended" or cell.waiting_call_id is None
+        ]
+        for cell in closing:
             cell.stop("terminated")
-        for cell in cells:
+        for cell in closing:
             cell.wait_ended()
         amendments = [
-            amendment for cell in cells if (amendment := cell.close(reason)) is not None
+            amendment
+            for cell in closing
+            if (amendment := cell.close(reason)) is not None
         ]
-        for cell in cells:
+        for cell in closing:
             running = cell.running_calls()
             if running:
                 logger.warning(
@@ -1427,7 +1823,9 @@ class CodeCells:
         ]
         # A hook failure that no observation raised fails the run, as for a
         # direct call; the first one wins.
-        failures = [failure for cell in cells if (failure := cell.take_hook_failure())]
+        failures = [
+            failure for cell in closing if (failure := cell.take_hook_failure())
+        ]
         if failures:
             raise ReleaseFailed(failures[0].error, amendments)
         return amendments
