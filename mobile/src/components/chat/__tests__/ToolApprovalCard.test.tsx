@@ -1,6 +1,12 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 import type { Mock } from "jest-mock";
-import { fireEvent, render, waitFor } from "@testing-library/react-native";
+import type { ReactElement } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  fireEvent,
+  render as renderView,
+  waitFor,
+} from "@testing-library/react-native";
 
 import { postApprovalDecision } from "@/api/chat/approvals";
 import { ApiError } from "@/api/errors";
@@ -8,6 +14,7 @@ import type { Message } from "@/chat/interfaces";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
 } from "@/chat/streamingModels";
 import {
@@ -18,8 +25,13 @@ import {
 } from "@/chat/toolApprovals";
 import { MessageRow } from "@/components/chat/MessageRow";
 import { ToolApprovalCard } from "@/components/chat/ToolApprovalCard";
+import { recoverChatSession } from "@/hooks/useChatSessionController";
+import { useChatSessionStore } from "@/state/chatSessionStore";
 
 jest.mock("@/api/chat/approvals", () => ({ postApprovalDecision: jest.fn() }));
+jest.mock("@/hooks/useChatSessionController", () => ({
+  recoverChatSession: jest.fn(),
+}));
 // These reach native modules that jest cannot load.
 jest.mock("@/state/storage");
 jest.mock("@/components/chat/StreamingMarkdown", () => ({}));
@@ -38,8 +50,15 @@ const request: ToolApprovalRequest = {
   tool_name: "lookup",
   display_name: "Lookup",
   arguments: { query: "weather", limit: 3, filters: { site: "docs" } },
-  expires_at: "2099-01-01T15:45:00Z",
 };
+
+function render(element: ReactElement) {
+  return renderView(
+    <QueryClientProvider client={new QueryClient()}>
+      {element}
+    </QueryClientProvider>,
+  );
+}
 
 function approval(status: ApprovalStatus = "pending"): ToolApproval {
   return { turnIndex: 0, request, status };
@@ -51,11 +70,10 @@ describe("ToolApprovalCard", () => {
     useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
   });
 
-  it("shows a pending request with its deadline, arguments, and decisions", () => {
+  it("shows a pending request with its arguments and decisions", () => {
     const view = render(<ToolApprovalCard approval={approval()} />);
 
     expect(view.getByText("Approval requested: Lookup")).toBeTruthy();
-    expect(view.getByText(/^Approve by /)).toBeTruthy();
     expect(view.getByText("query")).toBeTruthy();
     expect(view.getByText("weather")).toBeTruthy();
     expect(view.getByText("3")).toBeTruthy();
@@ -73,7 +91,6 @@ describe("ToolApprovalCard", () => {
     ["approved", "Approved: Lookup"],
     ["approvedForSession", "Approved for this chat: Lookup"],
     ["rejected", "Not approved: Lookup"],
-    ["expired", "Timed out: Lookup"],
     ["disabled", "Disabled: Lookup"],
     ["closed", "No longer waiting: Lookup"],
   ])("records a %s request on one line", (status, text) => {
@@ -146,6 +163,69 @@ describe("ToolApprovalCard", () => {
   });
 });
 
+describe("ToolApprovalCard continuation", () => {
+  const recoverMock = recoverChatSession as unknown as Mock<
+    typeof recoverChatSession
+  >;
+  const pausedStop: Packet = {
+    placement: { turn_index: 0 },
+    obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+  };
+
+  function openPausedResponse(requests: ToolApprovalRequest[]) {
+    const node: Message = {
+      nodeId: 2,
+      messageId: 2,
+      parentNodeId: 1,
+      type: "assistant",
+      message: "",
+      files: [],
+      packets: [
+        ...requests.map((obj) => ({ placement: { turn_index: 0 }, obj })),
+        pausedStop,
+      ],
+    };
+    useChatSessionStore.setState({
+      currentSessionId: "s",
+      sessions: new Map(),
+    });
+    useChatSessionStore.getState().hydrateSession("s", new Map([[2, node]]));
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
+    postMock.mockResolvedValue({ decision: "APPROVED", decided_via: "USER" });
+  });
+
+  it("follows the continuation once no request of the paused response waits", async () => {
+    openPausedResponse([request]);
+    const view = render(<ToolApprovalCard approval={approval()} />);
+
+    fireEvent.press(view.getByText("Approve once"));
+
+    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+    expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", null]);
+    expect(useChatSessionStore.getState().sessions.get("s")?.chatState).toBe(
+      "settling",
+    );
+  });
+
+  it("waits while another request of the response still waits", async () => {
+    openPausedResponse([request, { ...request, approval_id: "a2" }]);
+    const view = render(<ToolApprovalCard approval={approval()} />);
+
+    fireEvent.press(view.getByText("Approve once"));
+
+    await waitFor(() =>
+      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
+        "approved",
+      ),
+    );
+    expect(recoverMock).not.toHaveBeenCalled();
+  });
+});
+
 describe("MessageRow approvals", () => {
   beforeEach(() => {
     useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
@@ -194,13 +274,13 @@ describe("MessageRow approvals", () => {
             obj: {
               type: PacketType.TOOL_APPROVAL_RESOLVED,
               approval_id: "a1",
-              outcome: "expired",
+              outcome: "rejected",
             },
           },
         ])}
         agent={null}
       />,
     );
-    expect(view.getByText("Timed out: Lookup")).toBeTruthy();
+    expect(view.getByText("Not approved: Lookup")).toBeTruthy();
   });
 });

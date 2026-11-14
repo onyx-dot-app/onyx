@@ -110,7 +110,6 @@ const approvalRequest = {
     tool_name: "lookup",
     display_name: "Lookup",
     arguments: {},
-    expires_at: "2099-01-01T00:00:00Z",
   },
 } as StreamEvent;
 function deltaPacket(content: string): StreamEvent {
@@ -232,7 +231,6 @@ describe("useChatController", () => {
             tool_name: "lookup",
             display_name: "Lookup",
             arguments: {},
-            expires_at: "2099-01-01T00:00:00Z",
           },
         } as StreamEvent,
       ]),
@@ -254,6 +252,36 @@ describe("useChatController", () => {
       "Approve or reject the pending tool calls first.",
     );
     expect(useToolApprovalUi.getState().nudgeSeq).toBe(1);
+  });
+
+  it("releases input when a response pauses for approval, keeping its card open", async () => {
+    useChatSessionStore.getState().ensureSession("s1");
+    streamMock.mockReturnValueOnce(
+      scripted([
+        idInfo,
+        approvalRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.AWAITING_APPROVAL,
+          },
+        } as StreamEvent,
+      ]),
+    );
+    const { result } = renderHook(() => useChatController("s1"), { wrapper });
+    await act(async () => {
+      await result.current.submit("Question");
+    });
+
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(
+      findPendingToolApprovalIds(
+        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
+      ),
+    ).toEqual(["a1"]);
+    expect(result.current.messages[1]?.streamingStartedAt).toBeUndefined();
+    expect(getSessionMock).not.toHaveBeenCalled();
   });
 
   it("reattaches to the run when the connection drops while an approval waits", async () => {
@@ -672,7 +700,6 @@ describe("useChatController", () => {
             tool_name: "lookup",
             display_name: "Lookup",
             arguments: {},
-            expires_at: "2099-01-01T00:00:00Z",
           },
         } as StreamEvent;
         await new Promise<void>((resolve) => {

@@ -8,6 +8,7 @@ import { getLatestMessageChain, MessageTreeState } from "@/chat/messageTree";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
   ToolApprovalResolved,
 } from "@/chat/streamingModels";
@@ -25,7 +26,6 @@ export type ApprovalStatus =
   | "approved"
   | "approvedForSession"
   | "rejected"
-  | "expired"
   | "disabled"
   | "closed";
 
@@ -46,12 +46,13 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
   "rejected",
-  "expired",
   "disabled",
   "cancelled",
 ]);
 
-// A resolution without a known outcome counts as no resolution.
+// A resolution without a known outcome counts as no resolution. Only a server stop that ends the
+// response stops it: a stop that waits for approval does not, and a stop without a reason is this
+// device's own.
 export function readToolApprovals(packets: Packet[]): {
   entries: ToolApprovalEntry[];
   stopped: boolean;
@@ -71,7 +72,11 @@ export function readToolApprovals(packets: Packet[]): {
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (packet.obj.type === PacketType.STOP) {
+    } else if (
+      packet.obj.type === PacketType.STOP &&
+      packet.obj.stop_reason !== undefined &&
+      packet.obj.stop_reason !== StopReason.AWAITING_APPROVAL
+    ) {
       stopped = true;
     }
   }
@@ -85,7 +90,7 @@ export function readToolApprovals(packets: Packet[]): {
 }
 
 // The server's outcome wins. Before it arrives, a decision made here decides it, and a stopped
-// response closes it. The device clock never does: the server resolves an expired request.
+// response closes it.
 export function toolApprovalStatus(
   entry: ToolApprovalEntry,
   localStatus: ApprovalStatus | undefined,
@@ -144,7 +149,7 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set) => ({
 }));
 
 // The requests of the latest turn that still wait for this user, in order. A failed response's run
-// has ended, so its requests wait for nothing; the server's send check expires them.
+// has ended, so its requests wait for nothing.
 export function findPendingToolApprovalIds(
   tree: MessageTreeState | undefined,
 ): string[] {

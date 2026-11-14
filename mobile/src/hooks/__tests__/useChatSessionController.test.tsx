@@ -19,7 +19,7 @@ import {
   getLatestMessageChain,
   getMessageByMessageId,
 } from "@/chat/messageTree";
-import { Packet, PacketType } from "@/chat/streamingModels";
+import { Packet, PacketType, StopReason } from "@/chat/streamingModels";
 import { findPendingToolApprovalIds } from "@/chat/toolApprovals";
 import {
   recoverChatSession,
@@ -935,7 +935,6 @@ describe("useChatSessionController", () => {
         tool_name: "lookup",
         display_name: "Lookup",
         arguments: {},
-        expires_at: "2099-01-01T00:00:00Z",
       },
     } as unknown as Packet;
     useChatSessionStore
@@ -1010,6 +1009,60 @@ describe("useChatSessionController", () => {
       )?.packets,
     ).toHaveLength(2);
     unmount();
+  });
+
+  it("restarts at cursor 0 when a paused response continues under the same stream ID", async () => {
+    seedLiveSession(2);
+    jest.mocked(getChatSessionStatus).mockResolvedValueOnce({
+      is_processing: true,
+      current_stream: { stream_id: 2 },
+    });
+    getSessionMock.mockResolvedValueOnce({
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: backendMessages("asked done"),
+      packets: [[historyPacket("asked done")]],
+      time_created: "",
+      current_stream: null,
+    });
+    resumeMock
+      .mockReturnValueOnce(
+        scripted([
+          startPacket("asked"),
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.STOP,
+              stop_reason: StopReason.AWAITING_APPROVAL,
+            },
+          },
+          cursor(2),
+        ]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          startPacket("asked"),
+          deltaPacket(" done"),
+          stopPacket(),
+          cursor(3),
+        ]),
+      );
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+
+    await waitFor(
+      () =>
+        expect(
+          useChatSessionStore.getState().sessions.get("s1")?.chatState,
+        ).toBe("input"),
+      { timeout: 3000 },
+    );
+    expect(resumeMock.mock.calls.map((call) => [call[1], call[2]])).toEqual([
+      [2, 0],
+      [2, 0],
+    ]);
+    expect(assistantText("s1", 2)).toBe("asked done");
   });
 
   it("follows a new stream instead of retrying one without a buffer", async () => {

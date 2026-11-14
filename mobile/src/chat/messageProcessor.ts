@@ -280,8 +280,13 @@ function handleStreamingStatusPacket(
   }
 }
 
+// A stop that waits for approval pauses the response; it does not end it.
 function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
-  if (packet.obj.type !== PacketType.STOP || state.stopPacketSeen) {
+  if (
+    packet.obj.type !== PacketType.STOP ||
+    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    state.stopPacketSeen
+  ) {
     return;
   }
 

@@ -29,7 +29,7 @@ import {
   getMessageByMessageId,
   upsertMessages,
 } from "@/chat/messageTree";
-import { Packet, PacketType } from "@/chat/streamingModels";
+import { Packet, PacketType, StopReason } from "@/chat/streamingModels";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 import { toast } from "@/hooks/useToast";
@@ -80,6 +80,9 @@ export async function recoverChatSession(
       // "lost": delivery ended before the run's stop, so a paced reattach follows. "noBuffer":
       // resume-stream answered 404, so only a new stream is followed.
       let end: "finished" | "lost" | "noBuffer" = "noBuffer";
+      // The stream ended while the response waits for approval decisions. The server continues
+      // it in a new stream, which can reuse the stream ID.
+      let paused = false;
       if (streamId !== null && stillCurrent()) {
         let target = getMessageByMessageId(
           store.getState().sessions.get(sessionId)?.messageTree ?? new Map(),
@@ -120,7 +123,7 @@ export async function recoverChatSession(
           }
           // Packets after the last cursor. A reattach delivers them again, so they wait for it.
           let batch: Packet[] = [];
-          let batchStops = false;
+          let batchStop: Packet | null = null;
           let pending: Packet[] = [];
           // The finished replay replaces the node's packets instead of extending them.
           let replacing = false;
@@ -161,8 +164,12 @@ export async function recoverChatSession(
               if (!stillCurrent()) break;
               if (isStreamCursor(event)) {
                 cursor = event.next_cursor;
-                stopped ||= batchStops;
-                batchStops = false;
+                if (batchStop?.obj.type === PacketType.STOP) {
+                  stopped = true;
+                  paused =
+                    batchStop.obj.stop_reason === StopReason.AWAITING_APPROVAL;
+                }
+                batchStop = null;
                 if (restored) {
                   pending.push(...batch);
                 } else {
@@ -203,7 +210,7 @@ export async function recoverChatSession(
               }
               if (isPacket(event) && !isHeartbeat(event)) {
                 batch.push(event);
-                if (event.obj.type === PacketType.STOP) batchStops = true;
+                if (event.obj.type === PacketType.STOP) batchStop = event;
               }
             }
           } catch (error) {
@@ -222,6 +229,12 @@ export async function recoverChatSession(
           // Only a 404 means no buffer. A clean end before the stop, a network error, a 5xx or a
           // 429 reattach; the status poll reports an auth failure.
           end = errored || stopped ? "finished" : missing ? "noBuffer" : "lost";
+          // The wait is not stream time; a continuation restarts the timer.
+          if (paused && stillCurrent()) {
+            store
+              .getState()
+              .patchNode(sessionId, nodeId, { streamingStartedAt: undefined });
+          }
         }
       }
       if (!stillOurs()) return;
@@ -233,21 +246,23 @@ export async function recoverChatSession(
         onUnconfirmed,
         // After a confirmed Stop only idle ends the wait.
         (next) =>
-          !controller.signal.aborted && (end === "lost" || next !== followed),
+          !controller.signal.aborted &&
+          (end === "lost" || paused || next !== followed),
       );
       if (wait.kind === "released") return;
       if (wait.kind === "idle") break;
-      if (wait.streamId !== streamId) {
+      if (wait.streamId === streamId) {
+        // Paces reattaching to a stream whose connection keeps failing.
+        await new Promise((resolve) =>
+          setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
+        );
+      }
+      if (wait.streamId !== streamId || paused) {
         streamId = wait.streamId;
         store.getState().setStreamId(sessionId, streamId);
         cursor = 0;
         restored = false;
         replay = [];
-      } else {
-        // Paces reattaching to a stream whose connection keeps failing.
-        await new Promise((resolve) =>
-          setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
-        );
       }
     }
     if (!stillOpen()) return;

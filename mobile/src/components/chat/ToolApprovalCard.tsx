@@ -2,13 +2,17 @@
 // request shows its arguments and decisions; a decided one leaves a one-line record.
 import { memo, useEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Platform, Pressable, View } from "react-native";
+import { useQueryClient } from "@tanstack/react-query";
 
 import { postApprovalDecision } from "@/api/chat/approvals";
 import { isApiError } from "@/api/errors";
+import { getLatestMessageChain } from "@/chat/messageTree";
+import { PacketType, StopReason } from "@/chat/streamingModels";
 import {
   ApprovalDecision,
   ApprovalStatus,
   decidedStatus,
+  findPendingToolApprovalIds,
   ToolApproval,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
@@ -17,30 +21,23 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
+import { recoverChatSession } from "@/hooks/useChatSessionController";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import SvgCheckSquare from "@/icons/check-square";
 import SvgChevronDown from "@/icons/chevron-down";
 import SvgClock from "@/icons/clock";
 import SvgLoader from "@/icons/loader";
 import SvgX from "@/icons/x";
+import { useChatSessionStore } from "@/state/chatSessionStore";
+import { useSession } from "@/state/session";
 
 const RECORD_PREFIX: Record<Exclude<ApprovalStatus, "pending">, string> = {
   approved: "Approved",
   approvedForSession: "Approved for this chat",
   rejected: "Not approved",
-  expired: "Timed out",
   disabled: "Disabled",
   closed: "No longer waiting",
 };
-
-function formatDeadline(expiresAt: string): string | null {
-  const deadline = new Date(expiresAt);
-  if (Number.isNaN(deadline.getTime())) return null;
-  return `Approve by ${deadline.toLocaleTimeString([], {
-    hour: "numeric",
-    minute: "2-digit",
-  })}`;
-}
 
 // iOS has no live regions; Android reads `accessibilityLiveRegion` instead.
 function announce(message: string): void {
@@ -51,6 +48,8 @@ function announce(message: string): void {
 function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
   const { request, status } = approval;
   const reduceMotion = useReducedMotion();
+  const serverUrl = useSession((state) => state.serverUrl);
+  const queryClient = useQueryClient();
   const [isOpen, setIsOpen] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
@@ -59,7 +58,6 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
   const header = `Approval requested: ${headline}`;
   const record =
     status === "pending" ? null : `${RECORD_PREFIX[status]}: ${headline}`;
-  const deadline = formatDeadline(request.expires_at);
 
   const message = record ?? header;
   const announced = useRef<string | null>(null);
@@ -96,6 +94,30 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
       }
     } finally {
       setSubmitting(false);
+    }
+    // A response paused for approvals continues in a new stream once none of its requests waits.
+    const store = useChatSessionStore.getState();
+    const sessionId = store.currentSessionId;
+    const session = sessionId ? store.sessions.get(sessionId) : undefined;
+    const lastPacket = session
+      ? getLatestMessageChain(session.messageTree).at(-1)?.packets.at(-1)
+      : undefined;
+    if (
+      sessionId &&
+      session &&
+      !session.abortController &&
+      lastPacket?.obj.type === PacketType.STOP &&
+      lastPacket.obj.stop_reason === StopReason.AWAITING_APPROVAL &&
+      findPendingToolApprovalIds(session.messageTree).length === 0
+    ) {
+      store.updateChatState(sessionId, "settling");
+      void recoverChatSession(
+        sessionId,
+        null,
+        serverUrl,
+        queryClient,
+        new AbortController(),
+      );
     }
   }
 
@@ -135,7 +157,7 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
         onPress={() => setIsOpen((open) => !open)}
         accessibilityRole="button"
         accessibilityLiveRegion="polite"
-        accessibilityLabel={deadline ? `${header}. ${deadline}` : header}
+        accessibilityLabel={header}
         accessibilityState={{ expanded: isOpen }}
         className="flex-row items-center gap-8 px-12 py-8 active:bg-background-tint-02"
       >
@@ -152,11 +174,6 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
         >
           {header}
         </Text>
-        {deadline ? (
-          <Text font="secondary-body" color="text-03" nowrap>
-            {deadline}
-          </Text>
-        ) : null}
         <View style={{ transform: [{ rotate: isOpen ? "0deg" : "-90deg" }] }}>
           <Icon as={SvgChevronDown} size={16} className="text-text-03" />
         </View>

@@ -140,6 +140,18 @@ returns to `input`. When the user leaves the chat, `useChatSessionController`
 aborts and releases the session's recovery, including one a send started, so
 reopening attaches a new one.
 
+**Approval waits.** A response that waits for tool approvals ends its stream
+with `stop` and reason `awaiting_approval`. The session goes to `input`, but
+`findPendingToolApprovalIds` blocks the next send. That stop does not finish
+the response in `chat/messageProcessor.ts` and does not close cards; only a
+server stop with another reason closes a card without an outcome. The client
+clears the response's `streamingStartedAt`, so the wait is not timed. After a
+decision, `components/chat/ToolApprovalCard.tsx` starts `recoverChatSession`
+with no stream when no reader runs and no request of the latest turn waits.
+The poll then finds the continuation stream. That stream can reuse the paused
+stream's id, so after a paused stream recovery and the send path follow the
+same id again, from cursor 0.
+
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
 `tab_index`). The backend closes each answer, reasoning and tool group with

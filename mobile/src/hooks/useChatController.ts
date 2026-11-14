@@ -37,6 +37,7 @@ import {
 import {
   Packet,
   PacketType,
+  StopReason,
   buildUserCancelledStopPacket,
 } from "@/chat/streamingModels";
 import {
@@ -143,6 +144,8 @@ async function runChatStream(
   let approvalPending = false;
   let streamId: number | null = null;
   let sawStop = false;
+  // The response waits for approval decisions; the server continues it in a new stream.
+  let paused = false;
 
   // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
   // stream rather than the session-create round trip that can precede it.
@@ -235,7 +238,10 @@ async function runChatStream(
           sawStreaming = true;
           store.getState().updateChatState(sessionId, "streaming");
         }
-        if (event.obj.type === PacketType.STOP) sawStop = true;
+        if (event.obj.type === PacketType.STOP) {
+          sawStop = true;
+          paused = event.obj.stop_reason === StopReason.AWAITING_APPROVAL;
+        }
         pending.push(event);
         scheduleFlush();
       }
@@ -271,6 +277,12 @@ async function runChatStream(
   if (!stillOurs()) return;
   // Delivery ended before the run's stop, and the run can go on without it.
   const lost = accepted && !signal.aborted && !hadError && !sawStop;
+  // The wait is not stream time; a continuation restarts the timer.
+  if (paused) {
+    store
+      .getState()
+      .patchNode(sessionId, agentNodeId, { streamingStartedAt: undefined });
+  }
   if (rejection !== null) {
     // The turn does not belong in the tree; the composer still holds its text.
     store.getState().updateSessionTree(sessionId, treeBeforeSend);
@@ -279,14 +291,14 @@ async function runChatStream(
   }
   store.getState().updateChatState(sessionId, "settling");
   try {
-    // Follow a run this send lost, or one that the server runs instead of it, such as a
-    // response that waits for an approval after a refused send.
+    // Follow a run this send lost, its continuation after approval decisions, or one that the
+    // server runs instead of it, such as a response whose approval refused this send.
     const wait = await waitForSessionIdle(
       sessionId,
       stillOurs,
       () => store.getState().updateChatState(sessionId, "unconfirmed"),
       // A Stop the server confirms during the wait ends following.
-      (next) => !signal.aborted && (lost || next !== streamId),
+      (next) => !signal.aborted && (lost || paused || next !== streamId),
     );
     // A lost send also reloads the saved session when the server is already idle, so the
     // answer and its approval outcomes replace the partial output.

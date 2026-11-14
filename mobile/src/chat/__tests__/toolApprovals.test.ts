@@ -33,8 +33,6 @@ function request(
       tool_name: toolName,
       display_name: "Lookup",
       arguments: { query: "q" },
-      // Long past: the device clock must never close a request.
-      expires_at: "2000-01-01T00:00:00Z",
     },
   };
 }
@@ -86,7 +84,7 @@ describe("toolApprovalStatus", () => {
     useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
   });
 
-  it("waits until something resolves the request, whatever the deadline", () => {
+  it("waits until something resolves the request", () => {
     expect(statusOf([request("a")])).toBe("pending");
   });
 
@@ -94,7 +92,6 @@ describe("toolApprovalStatus", () => {
     ["approved", "approved"],
     ["approved_for_chat", "approvedForSession"],
     ["rejected", "rejected"],
-    ["expired", "expired"],
     ["disabled", "disabled"],
     ["cancelled", "closed"],
   ])("maps the server outcome %s to %s", (outcome, status) => {
@@ -111,6 +108,25 @@ describe("toolApprovalStatus", () => {
 
   it("closes a request whose response stopped without an outcome", () => {
     expect(statusOf([request("a"), stop])).toBe("closed");
+  });
+
+  it.each<[string, Packet]>([
+    [
+      "waits for approval",
+      {
+        placement: { turn_index: 0 },
+        obj: {
+          type: PacketType.STOP,
+          stop_reason: StopReason.AWAITING_APPROVAL,
+        },
+      },
+    ],
+    [
+      "has no reason",
+      { placement: { turn_index: 0 }, obj: { type: PacketType.STOP } },
+    ],
+  ])("keeps a request open after a stop that %s", (_, pause) => {
+    expect(statusOf([request("a"), pause])).toBe("pending");
   });
 });
 
