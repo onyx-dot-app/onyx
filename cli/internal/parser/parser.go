@@ -20,8 +20,11 @@ func ParseStreamLine(line string) models.StreamEvent {
 		return nil
 	}
 
+	// Numbers stay exact, so tool arguments show the values the server runs.
 	var data map[string]any
-	if err := json.Unmarshal([]byte(line), &data); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(line))
+	decoder.UseNumber()
+	if err := decoder.Decode(&data); err != nil {
 		return models.ErrorEvent{Error: fmt.Sprintf("malformed stream data: %v", err), IsRetryable: false}
 	}
 
@@ -261,8 +264,9 @@ func parseSearchDocs(raw []any) []models.SearchDoc {
 
 func jsonInt(v any) int {
 	switch n := v.(type) {
-	case float64:
-		return int(n)
+	case json.Number:
+		i, _ := n.Int64()
+		return int(i)
 	case int:
 		return n
 	default:

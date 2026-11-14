@@ -366,7 +366,7 @@ func TestToolApprovalRequest(t *testing.T) {
 		"tool_call_id": "call-1",
 		"tool_name":    "mcp__3__linear__create_issue",
 		"display_name": "Create issue",
-		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2},
+		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2, "id": json.Number("9007199254740993")},
 		"expires_at":   "2026-11-13T10:00:00.123456+00:00",
 	}, 1, 0)
 	event := ParseStreamLine(line)
@@ -377,7 +377,7 @@ func TestToolApprovalRequest(t *testing.T) {
 	if e.ApprovalID != "a1" || e.ToolCallID != "call-1" || e.ToolName != "mcp__3__linear__create_issue" || e.DisplayName != "Create issue" {
 		t.Errorf("unexpected identity fields: %+v", e)
 	}
-	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != float64(2) {
+	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != json.Number("2") || e.Arguments["id"] != json.Number("9007199254740993") {
 		t.Errorf("arguments = %v", e.Arguments)
 	}
 	if e.ExpiresAt == nil || !e.ExpiresAt.Equal(time.Date(2026, 11, 13, 10, 0, 0, 123456000, time.UTC)) {
