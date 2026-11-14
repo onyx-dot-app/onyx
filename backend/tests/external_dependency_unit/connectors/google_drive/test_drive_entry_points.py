@@ -49,6 +49,8 @@ def _discard_raw_file(file: object, content_type: str) -> str:  # noqa: ARG001
 class _InlineRun:
     def __init__(self) -> None:
         self.document_ids: list[str] = []
+        self.documents: list[Document] = []
+        self.nodes: list[HierarchyNode] = []
         self.documents_per_call: list[int] = []
         self.failures: list[ConnectorFailure] = []
         self.final: GoogleDriveCheckpoint | None = None
@@ -78,6 +80,9 @@ def _index_inline(
             if isinstance(item, Document):
                 documents += 1
                 run.document_ids.append(item.id)
+                run.documents.append(item)
+            elif isinstance(item, HierarchyNode):
+                run.nodes.append(item)
             elif isinstance(item, ConnectorFailure):
                 run.failures.append(item)
         run.documents_per_call.append(documents)
@@ -158,6 +163,38 @@ def test_every_entry_point_lists_the_same_files(mock_drive: MockDrive) -> None:
     stub_state = stubs.checkpoints[-1].listing
     assert stub_state is not None
     assert stub_state.total_docs == len(stubs.stubs)
+
+
+@pytest.mark.usefixtures("small_calls", "db_session", "tenant_context")
+def test_inline_indexing_builds_the_folder_tree_without_the_walk(
+    mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Inline indexing on the shard engine gets its folders from the folder
+    listings and reads only the parents that no listing returned. The
+    per-file ancestor walk does not run."""
+    connector = mock_drive.build_connector()
+
+    def no_walk(*_args: object, **_kwargs: object) -> list[HierarchyNode]:
+        raise AssertionError("the per-file ancestor walk ran")
+
+    monkeypatch.setattr(connector, "_get_new_ancestors_for_files", no_walk)
+
+    run = _index_inline(connector)
+
+    assert run.failures == []
+    assert {_file_id(doc_id) for doc_id in run.document_ids} == (
+        mock_drive.content_file_ids()
+    )
+    node_ids = {node.raw_node_id for node in run.nodes}
+    # Each node is yielded once, and its parent is a yielded node.
+    assert len(node_ids) == len(run.nodes)
+    for node in run.nodes:
+        assert node.raw_parent_id is None or node.raw_parent_id in node_ids
+    # Each document's folder is a yielded node.
+    for document in run.documents:
+        assert document.parent_hierarchy_raw_node_id in node_ids, document.id
+    assert run.final is not None and run.final.listing is not None
+    assert run.final.listing.unresolved_parent_emails == {}
 
 
 @pytest.mark.usefixtures("small_calls", "db_session", "tenant_context")

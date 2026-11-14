@@ -1,4 +1,5 @@
 import copy
+import itertools
 import json
 import os
 import sys
@@ -25,6 +26,7 @@ from onyx.connectors.exceptions import (
     CredentialExpiredError,
     InsufficientPermissionsError,
 )
+from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
@@ -53,6 +55,7 @@ from onyx.connectors.google_drive.file_retrieval import (
     get_files_by_web_view_links_batch,
     get_files_in_shared_drive,
     get_folder_metadata,
+    has_link_only_permission,
     owner_email,
 )
 from onyx.connectors.google_drive.models import (
@@ -77,6 +80,7 @@ from onyx.connectors.google_drive.parallel_listing import (
     drive_document_type,
     extend_window,
     open_window_end,
+    retry_transient,
     window_ms,
 )
 from onyx.connectors.google_drive.source_operations import (
@@ -226,6 +230,32 @@ def _clean_requested_drive_ids(
 
     valid_requested_drive_ids = requested_drive_ids - invalid_requested_drive_ids
     return sorted(valid_requested_drive_ids), sorted(filtered_folder_ids)
+
+
+# Folders one step of the read of unlisted parents reads, and the most nodes
+# it holds before it yields them.
+PARENT_READ_BATCH_SIZE = 500
+# The most users kept as readers to try for one unlisted parent folder. It
+# bounds the checkpoint: the map has one entry for each such folder.
+MAX_PARENT_READERS = 4
+
+
+def _add_parent_reader(
+    unresolved: dict[str, list[str]], parent_id: str, email: str
+) -> None:
+    """Records ``email`` as a user who can try to read the parent. The first
+    user to see a child is not always one who can read its parent."""
+    readers = unresolved.setdefault(parent_id, [])
+    if email not in readers and len(readers) < MAX_PARENT_READERS:
+        readers.append(email)
+
+
+def _take[T](pending: dict[str, T], count: int) -> dict[str, T]:
+    """Removes up to ``count`` entries from ``pending`` and returns them."""
+    taken: dict[str, T] = {}
+    for key in list(itertools.islice(pending, count)):
+        taken[key] = pending.pop(key)
+    return taken
 
 
 def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
@@ -856,24 +886,8 @@ class GoogleDriveConnector(
                 # By creating first and then atomically checking/marking, we ensure that
                 # if creation fails, another thread can still try. If both succeed,
                 # only one will add to ancestors_to_add (the one that wins check_and_add).
-                if permission_sync_context:
-                    external_access = get_external_access_for_folder(
-                        folder,
-                        permission_sync_context.google_domain,
-                        self.ops,
-                        self.primary_admin_email,
-                        add_prefix,
-                    )
-                else:
-                    external_access = _public_access()
-
-                node = HierarchyNode(
-                    raw_node_id=current_id,
-                    raw_parent_id=folder_parent_id,
-                    display_name=folder.get("name", "Unknown Folder"),
-                    link=folder.get("webViewLink"),
-                    node_type=HierarchyNodeType.FOLDER,
-                    external_access=external_access,
+                node = self._folder_node(
+                    folder, permission_sync_context, add_prefix, raw_id=current_id
                 )
 
                 # Always remember the node we built; if this walk reaches a verified
@@ -932,6 +946,32 @@ class GoogleDriveConnector(
 
         return new_nodes
 
+    def _folder_node(
+        self,
+        folder: GoogleDriveFileType,
+        permission_sync_context: PermissionSyncContext | None,
+        add_prefix: bool,
+        raw_id: str | None = None,
+    ) -> HierarchyNode:
+        if permission_sync_context:
+            external_access = get_external_access_for_folder(
+                folder,
+                permission_sync_context.google_domain,
+                self.ops,
+                self.primary_admin_email,
+                add_prefix,
+            )
+        else:
+            external_access = _public_access()
+        return HierarchyNode(
+            raw_node_id=raw_id or folder["id"],
+            raw_parent_id=_get_parent_id_from_file(folder),
+            display_name=folder.get("name", "Unknown Folder"),
+            link=folder.get("webViewLink"),
+            node_type=HierarchyNodeType.FOLDER,
+            external_access=external_access,
+        )
+
     def _get_folder_metadata(
         self,
         folder_id: str,
@@ -959,14 +999,12 @@ class GoogleDriveConnector(
                 else None
             )
             if failed_ids and folder_id in failed_ids:
-                logger.debug(
-                    "Skipping folder %s using %s (previously confirmed no parents)",
-                    folder_id,
-                    email,
-                )
+                # Logged once, when the folder was added to the set.
                 continue
 
-            folder = get_folder_metadata(self.ops, email, folder_id, field_type)
+            folder = retry_transient(get_folder_metadata)(
+                self.ops, email, folder_id, field_type
+            )
 
             if not folder:
                 logger.debug("Failed to fetch folder %s using %s", folder_id, email)
@@ -983,6 +1021,11 @@ class GoogleDriveConnector(
             if failed_folder_ids_by_email is not None:
                 failed_folder_ids_by_email.setdefault(email, ThreadSafeSet()).add(
                     folder_id
+                )
+                logger.debug(
+                    "Folder %s has no parents for %s; later walks skip it",
+                    folder_id,
+                    email,
                 )
             if best_folder is None:
                 best_folder = folder
@@ -2142,14 +2185,19 @@ class GoogleDriveConnector(
             else None
         )
 
+        # Set when the shard engine lists. Its stream also holds folders,
+        # which become hierarchy nodes. No file waits for its folder:
+        # docfetching gives a document a STUB parent until the folder arrives.
+        listing = checkpoint.listing
         files_batch: list[RetrievedDriveFile] = []
+        folders_batch: list[RetrievedDriveFile] = []
         # Files awaiting their parent folder's node, keyed by folder raw id
         # (lightweight metadata, never documents). Released when the node is
         # emitted; whatever never resolves falls back to the source root.
+        # Only the serial listing uses it.
         pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
-        # Conversions run while the listing goes on; a file is submitted only
-        # after its parent's node was yielded, so nodes still precede their
-        # documents.
+        # Conversions run while the listing goes on, at most
+        # DRIVE_CONVERSION_MAX_IN_FLIGHT at once.
         with BoundedParallelRunner[Document | ConnectorFailure | None](
             max_workers=DRIVE_CONVERSION_WORKERS,
             max_in_flight=DRIVE_CONVERSION_MAX_IN_FLIGHT,
@@ -2159,21 +2207,58 @@ class GoogleDriveConnector(
                 if retrieved_file.error is not None:
                     yield _retrieval_failure(retrieved_file)
                     continue
-                if self._listing_skip_reason(retrieved_file.drive_file) is not None:
+                if listing is None:
+                    if self._listing_skip_reason(retrieved_file.drive_file) is not None:
+                        continue
+                    # The serial listing: a file is submitted only after its
+                    # parent's node was yielded.
+                    files_batch.append(retrieved_file)
+                    if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                        yield from self._convert_files_sub_batch(
+                            files_batch,
+                            checkpoint,
+                            permission_sync_context,
+                            pending_by_folder,
+                            runner,
+                        )
+                        files_batch = []
                     continue
-
-                files_batch.append(retrieved_file)
-                if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
-                    yield from self._convert_files_sub_batch(
-                        files_batch,
-                        checkpoint,
-                        permission_sync_context,
-                        pending_by_folder,
-                        runner,
+                if retrieved_file.drive_file.get("mimeType") == DRIVE_FOLDER_TYPE:
+                    folders_batch.append(retrieved_file)
+                elif self._listing_skip_reason(retrieved_file.drive_file) is not None:
+                    continue
+                else:
+                    # Kept only to record the file's parent.
+                    files_batch.append(retrieved_file)
+                    yield from _converted(
+                        runner.submit(
+                            self._convert_retrieved_file_to_document,
+                            retrieved_file,
+                            permission_sync_context,
+                        )
                     )
+                if len(folders_batch) + len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                    yield from self._listed_folder_nodes(
+                        listing,
+                        checkpoint,
+                        folders_batch,
+                        files_batch,
+                        permission_sync_context,
+                        add_prefix=True,
+                    )
+                    folders_batch = []
                     files_batch = []
 
-            if files_batch or pending_by_folder:
+            if listing is not None:
+                yield from self._listed_folder_nodes(
+                    listing,
+                    checkpoint,
+                    folders_batch,
+                    files_batch,
+                    permission_sync_context,
+                    add_prefix=True,
+                )
+            elif files_batch or pending_by_folder:
                 yield from self._convert_files_sub_batch(
                     files_batch,
                     checkpoint,
@@ -2335,6 +2420,11 @@ class GoogleDriveConnector(
                     checkpoint,
                     include_permissions,
                 )
+            if checkpoint.listing is not None and checkpoint.listing.is_done:
+                for parents in self._resolve_unlisted_parents(
+                    checkpoint, include_permissions, add_prefix=True
+                ):
+                    yield from parents
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
@@ -2464,32 +2554,52 @@ class GoogleDriveConnector(
         retrieval error to ``stub_failures``. Without it, a retrieval error is
         raised."""
         for_indexing = stub_failures is not None
+        drive_files = self._fetch_drive_items(
+            field_type=DriveFileFieldType.SLIM,
+            checkpoint=checkpoint,
+            start=start,
+            end=end,
+            include_permissions=include_permissions,
+        )
+        # Set when the shard engine lists. Its stream also holds folders,
+        # which become hierarchy nodes, and no per-file ancestor walk runs.
+        listing = checkpoint.listing
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
         files_batch: list[RetrievedDriveFile] = []
-        slim_batch: list[SlimDocument | HierarchyNode] = []
+        folders_batch: list[RetrievedDriveFile] = []
 
         def _yield_slim_batch() -> list[SlimDocument | HierarchyNode]:
             """Process files batch and return items to yield (hierarchy nodes + slim docs)."""
-            nonlocal files_batch, slim_batch
+            nonlocal files_batch, folders_batch
 
             # Get new ancestor hierarchy nodes first
-            permission_sync_context = (
-                PermissionSyncContext(
-                    primary_admin_email=self.primary_admin_email,
-                    google_domain=self.google_domain,
+            if listing is not None:
+                new_ancestors = self._listed_folder_nodes(
+                    listing,
+                    checkpoint,
+                    folders_batch,
+                    files_batch,
+                    permission_sync_context,
+                    add_prefix=False,
                 )
-                if include_permissions
-                else None
-            )
-            new_ancestors = self._get_new_ancestors_for_files(
-                files=files_batch,
-                seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
-                fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
-                failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
-                permission_sync_context=permission_sync_context,
-            )
+            else:
+                new_ancestors = self._get_new_ancestors_for_files(
+                    files=files_batch,
+                    seen_hierarchy_node_raw_ids=checkpoint.seen_hierarchy_node_raw_ids,
+                    fully_walked_hierarchy_node_raw_ids=checkpoint.fully_walked_hierarchy_node_raw_ids,
+                    failed_folder_ids_by_email=checkpoint.failed_folder_ids_by_email,
+                    permission_sync_context=permission_sync_context,
+                )
 
             # Build slim documents. With permissions, each may call permissions.list
-            slim_batch.extend(
+            slim_docs = [
                 doc
                 for doc in cast(
                     list[SlimDocument | None],
@@ -2514,23 +2624,16 @@ class GoogleDriveConnector(
                     ),
                 )
                 if doc
-            )
+            ]
 
             # Combine: hierarchy nodes first, then slim docs
             result: list[SlimDocument | HierarchyNode] = []
             result.extend(new_ancestors)
-            result.extend(slim_batch)
+            result.extend(slim_docs)
             files_batch = []
-            slim_batch = []
+            folders_batch = []
             return result
 
-        drive_files = self._fetch_drive_items(
-            field_type=DriveFileFieldType.SLIM,
-            checkpoint=checkpoint,
-            start=start,
-            end=end,
-            include_permissions=include_permissions,
-        )
         # Closed also when the caller fails or stops early, so the listing
         # threads stop now.
         with closing(drive_files):
@@ -2539,6 +2642,14 @@ class GoogleDriveConnector(
                     if stub_failures is None:
                         raise file.error
                     stub_failures.append(_retrieval_failure(file))
+                    continue
+                if (
+                    listing is not None
+                    and file.drive_file.get("mimeType") == DRIVE_FOLDER_TYPE
+                ):
+                    folders_batch.append(file)
+                    if len(folders_batch) >= SLIM_BATCH_SIZE:
+                        yield _yield_slim_batch()
                     continue
                 if self._listing_skip_reason(file.drive_file) is not None:
                     continue
@@ -2551,8 +2662,258 @@ class GoogleDriveConnector(
                     )
 
         # Yield remaining files
-        if files_batch:
+        if files_batch or folders_batch:
             yield _yield_slim_batch()
+        if listing is not None and listing.is_done:
+            for parents in self._resolve_unlisted_parents(
+                checkpoint, include_permissions, add_prefix=False
+            ):
+                parent_batch: list[SlimDocument | HierarchyNode] = list(parents)
+                yield parent_batch
+
+    def _listed_folder_nodes(
+        self,
+        listing: DriveListingState,
+        checkpoint: GoogleDriveCheckpoint,
+        folders: list[RetrievedDriveFile],
+        files: list[RetrievedDriveFile],
+        permission_sync_context: PermissionSyncContext | None,
+        add_prefix: bool,
+    ) -> list[HierarchyNode]:
+        """Hierarchy nodes for the listed folders that are new. Records each
+        parent that is not yielded yet, with a user who can see its child.
+        This replaces the per-file ancestor walk on the shard engine.
+
+        A user who cannot see a folder's parent gets the folder with no
+        parent. A later copy that shows the parent yields the node again
+        with it. A folder shared only by link, with link-only exclusion on,
+        is a node only as the parent of another node: the read of unlisted
+        parents yields it then."""
+        seen = checkpoint.seen_hierarchy_node_raw_ids
+        parentless = listing.parentless_folder_emails
+        new_folders: list[RetrievedDriveFile] = []
+        repaired: list[RetrievedDriveFile] = []
+        for folder in folders:
+            drive_file = folder.drive_file
+            folder_id = drive_file["id"]
+            if self.exclude_domain_link_only and has_link_only_permission(drive_file):
+                continue
+            if not seen.check_and_add(folder_id):
+                new_folders.append(folder)
+            elif folder_id in parentless and _get_parent_id_from_file(drive_file):
+                del parentless[folder_id]
+                repaired.append(folder)
+        yielded = [*new_folders, *repaired]
+        nodes = cast(
+            list[HierarchyNode],
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._folder_node,
+                        (folder.drive_file, permission_sync_context, add_prefix),
+                    )
+                    for folder in yielded
+                ],
+                max_workers=DRIVE_CONVERSION_WORKERS,
+            ),
+        )
+        unresolved = listing.unresolved_parent_emails
+        for folder in yielded:
+            unresolved.pop(folder.drive_file["id"], None)
+        for folder in new_folders:
+            if not _get_parent_id_from_file(folder.drive_file):
+                parentless[folder.drive_file["id"]] = folder.user_email
+        for item in [*yielded, *files]:
+            parent_id = _get_parent_id_from_file(item.drive_file)
+            if (
+                parent_id
+                and parent_id not in seen
+                and parent_id not in checkpoint.fully_walked_hierarchy_node_raw_ids
+            ):
+                _add_parent_reader(unresolved, parent_id, item.user_email)
+        return nodes
+
+    def _resolve_unlisted_parents(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        include_permissions: bool,
+        add_prefix: bool,
+    ) -> Iterator[list[HierarchyNode]]:
+        """After the listing: reads what no folder listing gave. First the
+        folders listed with no parent: a read as the lister or the admin can
+        show the parent. Then the parents that no folder listing yielded, for
+        example the folder of a file shared with a user who cannot see that
+        folder, or a drive root, up the tree. Each folder is read once in this
+        attempt. The reads stop at a folder already yielded and at a drive
+        root. Yields the nodes in batches of at most PARENT_READ_BATCH_SIZE
+        reads; the work left stays in the checkpoint."""
+        listing = checkpoint.listing
+        if listing is None:
+            return
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
+        seen = checkpoint.seen_hierarchy_node_raw_ids
+        walked = checkpoint.fully_walked_hierarchy_node_raw_ids
+        if listing.parentless_folder_emails or listing.unresolved_parent_emails:
+            logger.info(
+                "Reading %s folders listed with no parent and %s parent folders "
+                "that no folder listing returned",
+                len(listing.parentless_folder_emails),
+                len(listing.unresolved_parent_emails),
+            )
+        while listing.parentless_folder_emails:
+            batch = _take(listing.parentless_folder_emails, PARENT_READ_BATCH_SIZE)
+            nodes = [
+                node
+                for node in cast(
+                    list[HierarchyNode | None],
+                    run_functions_tuples_in_parallel(
+                        [
+                            (
+                                self._read_parentless_folder,
+                                (
+                                    folder_id,
+                                    email,
+                                    checkpoint,
+                                    permission_sync_context,
+                                    add_prefix,
+                                ),
+                            )
+                            for folder_id, email in batch.items()
+                        ],
+                        max_workers=DRIVE_CONVERSION_WORKERS,
+                    ),
+                )
+                if node is not None
+            ]
+            for node in nodes:
+                parent_id = node.raw_parent_id
+                if parent_id and parent_id not in seen and parent_id not in walked:
+                    _add_parent_reader(
+                        listing.unresolved_parent_emails,
+                        parent_id,
+                        batch[node.raw_node_id],
+                    )
+            # Also when no read gave a node: the consumer checks its stop
+            # signal and reports progress for each batch.
+            yield nodes
+        while listing.unresolved_parent_emails:
+            batch = _take(listing.unresolved_parent_emails, PARENT_READ_BATCH_SIZE)
+            batch = {
+                folder_id: emails
+                for folder_id, emails in batch.items()
+                if folder_id not in seen
+            }
+            results = cast(
+                list[tuple[HierarchyNode | None, str | None]],
+                run_functions_tuples_in_parallel(
+                    [
+                        (
+                            self._read_unlisted_folder,
+                            (
+                                folder_id,
+                                emails,
+                                checkpoint,
+                                permission_sync_context,
+                                add_prefix,
+                            ),
+                        )
+                        for folder_id, emails in batch.items()
+                    ],
+                    max_workers=DRIVE_CONVERSION_WORKERS,
+                ),
+            )
+            nodes = []
+            for (folder_id, emails), (node, parent_id) in zip(
+                batch.items(), results, strict=True
+            ):
+                if node is not None:
+                    nodes.append(node)
+                if (
+                    parent_id is not None
+                    and parent_id not in seen
+                    and (parent_id not in walked)
+                ):
+                    for email in emails:
+                        _add_parent_reader(
+                            listing.unresolved_parent_emails, parent_id, email
+                        )
+                logger.debug("Read unlisted folder %s as one of %s", folder_id, emails)
+            yield nodes
+
+    def _read_parentless_folder(
+        self,
+        folder_id: str,
+        email: str,
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+        add_prefix: bool,
+    ) -> HierarchyNode | None:
+        """The node of a folder listed with no parent, when the lister or the
+        admin can now see its parent. None leaves the folder at the root."""
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if permission_sync_context
+            else DriveFileFieldType.STANDARD
+        )
+        folder = self._get_folder_metadata(
+            folder_id, email, field_type, checkpoint.failed_folder_ids_by_email
+        )
+        if folder is None or not _get_parent_id_from_file(folder):
+            return None
+        return self._folder_node(
+            folder, permission_sync_context, add_prefix, raw_id=folder_id
+        )
+
+    def _read_unlisted_folder(
+        self,
+        folder_id: str,
+        emails: list[str],
+        checkpoint: GoogleDriveCheckpoint,
+        permission_sync_context: PermissionSyncContext | None,
+        add_prefix: bool,
+    ) -> tuple[HierarchyNode | None, str | None]:
+        """The node for one folder, and the parent to read next (None at a
+        root or when the folder cannot be read). Reads as each of ``emails``
+        and then as the admin, until one can read the folder."""
+        if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
+            return None, None
+        field_type = (
+            DriveFileFieldType.WITH_PERMISSIONS
+            if permission_sync_context
+            else DriveFileFieldType.STANDARD
+        )
+        folder: GoogleDriveFileType | None = None
+        email = ""
+        for email in emails:
+            folder = self._get_folder_metadata(
+                folder_id, email, field_type, checkpoint.failed_folder_ids_by_email
+            )
+            if folder is not None:
+                break
+        if folder is None:
+            # Documents under it keep their STUB parent.
+            return None, None
+        node = self._folder_node(
+            folder, permission_sync_context, add_prefix, raw_id=folder_id
+        )
+        if _is_shared_drive_root(folder):
+            drive_name = self._get_shared_drive_name(folder_id, email)
+            if drive_name:
+                node.display_name = drive_name
+            node.node_type = HierarchyNodeType.SHARED_DRIVE
+            checkpoint.fully_walked_hierarchy_node_raw_ids.add(folder_id)
+            return node, None
+        if self._is_my_drive_root(folder, email):
+            checkpoint.fully_walked_hierarchy_node_raw_ids.add(folder_id)
+            return node, None
+        return node, node.raw_parent_id
 
     def _retrieve_all_slim_docs_impl(
         self,
