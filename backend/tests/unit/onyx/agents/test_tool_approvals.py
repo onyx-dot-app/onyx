@@ -9,7 +9,7 @@ import pytest
 from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
-from onyx.agents.events import InputEndedEvent
+from onyx.agents.events import AgentEvent, InputEndedEvent
 from onyx.agents.models import RunStatus, ToolCallContext
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
@@ -83,6 +83,7 @@ def _run(
     tools: list[AgentTool],
     approvals: ToolApprovals | None,
     before_tool_call: Callable[[ToolCallContext], Outcome] | None = None,
+    on_event: Callable[[AgentEvent], None] | None = None,
 ) -> Run:
     replies = iter(
         [
@@ -95,7 +96,11 @@ def _run(
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         tools=tools,
         before_tool_call=before_tool_call,
-    ).start(max_steps=2, coordinator=AgentCoordinator(approvals=approvals))
+    ).start(
+        max_steps=2,
+        coordinator=AgentCoordinator(approvals=approvals),
+        on_event=on_event,
+    )
 
 
 def _recording_tool(
@@ -365,6 +370,7 @@ def test_a_failed_withdrawal_still_ends_the_request_and_the_run(nested: bool) ->
             raise RuntimeError("approval store unavailable")
 
     approvals = FailingApprovals({"send": _request("send-request")})
+    ends: list[str] = []
     run = _run(
         [ToolCall(id="call", name="program" if nested else "send", arguments={})],
         [
@@ -373,19 +379,19 @@ def test_a_failed_withdrawal_still_ends_the_request_and_the_run(nested: bool) ->
             else _recording_tool("send", [], approval_required=True)
         ],
         approvals,
-    )
-    ends: list[str] = []
-    run.subscribe(
-        lambda event: (
+        # Attached before the run starts, so no event is missed.
+        on_event=lambda event: (
             ends.append(event.request.request_id)
             if isinstance(event, InputEndedEvent)
             else None
-        )
+        ),
     )
     try:
         if nested:
             # The program's wait stops while the run continues.
             assert run.result(timeout=5).output.text == "done"
+            # Idle once the run's events are delivered.
+            assert run.wait_for_idle(5)
             assert _results(run) == {"call": "program stopped waiting"}
         else:
             _until_pending(run, "send-request")
