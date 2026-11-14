@@ -18,9 +18,8 @@ configure Helm as the overview page shows.
 | Pool | A pool with nested virtualization | gVisor (GKE Sandbox) pools. A gVisor pod gets no `/dev/kvm`. |
 | Network | Dataplane V2, which enforces NetworkPolicy | |
 
-The COS root file system is ext4 without reflink. {/* depends: loop store */}
-The host agent makes its XFS loop file in the data directory, so you do not need a data disk.
-Keep a boot disk of 200 GB or more for the loop file.
+The COS root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
+so you do not need a data disk. Keep a boot disk of 200 GB or more for the loop store.
 
 ## Option 1: Onyx Terraform modules
 
@@ -53,7 +52,7 @@ The `gcp/onyx` module makes the Firecracker sandbox pool. See [Google Cloud](/de
   </Step>
 
   <Step title="Add the pod sandbox pool">
-    {/* depends: terraform PR (#17786) */} Add `enable_craft_pod_sandbox_node_pool = true` to the module block.
+    Add `enable_craft_pod_sandbox_node_pool = true` to the module block.
     It needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`.
     The module then adds the pool `sandboxpod` (`n2-standard-4`, 1 to 2 nodes, boot disk `sandbox_node_disk_size_gb`).
     The pool has the label `onyx.app/workload=sandbox`, the taint `workload=sandbox:NoSchedule`,

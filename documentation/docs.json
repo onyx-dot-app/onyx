@@ -117,6 +117,7 @@
                   "deployment/kubernetes/craft-firecracker-aks",
                   "deployment/kubernetes/craft-firecracker-bare-metal",
                   "deployment/kubernetes/craft-firecracker-operations",
+                  "deployment/kubernetes/craft-firecracker-monitoring",
                   "deployment/kubernetes/craft-firecracker-sizing"
                 ]
               },

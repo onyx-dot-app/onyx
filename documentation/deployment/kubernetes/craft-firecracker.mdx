@@ -33,6 +33,10 @@ The platform guides add the steps for each cloud and for your own hardware.
     Upgrades, drains, certificates, alerts, and runbooks.
   </Card>
 
+  <Card title="Monitoring" icon="chart-line" href="/deployment/kubernetes/craft-firecracker-monitoring">
+    Metrics, the Grafana dashboard, and alert rules.
+  </Card>
+
   <Card title="Sizing and images" icon="ruler" href="/deployment/kubernetes/craft-firecracker-sizing">
     Node sizing and the image list for private registries.
   </Card>
@@ -76,7 +80,7 @@ For the isolation design, see [Firecracker isolation](/security/architecture/cra
 | File store | The object store that the chart bundles, S3, an S3-compatible store, Google Cloud Storage, or Azure Blob Storage. KVM nodes must reach it. An external store must use HTTPS. With `FILE_STORE_BACKEND=postgres`, Craft cannot save sessions. |
 | Network | A CNI that enforces Kubernetes NetworkPolicy. |
 
-{/* depends: azure presign PR (#17784) */} On Azure Blob Storage, the API server signs URLs with its workload identity.
+On Azure Blob Storage, the API server signs URLs with its workload identity.
 See the [AKS guide](/deployment/kubernetes/craft-firecracker-aks).
 
 ### Node pools
@@ -116,13 +120,20 @@ the agent checks the length of the Unix socket paths under it.
 The host agent clones microVM disks with reflink copies. The data directory needs one of these:
 
 - **XFS with reflink.** Amazon Linux 2023 root disks have this. A data disk made with `mkfs.xfs -m reflink=1` also has it.
-- **Any other file system, such as ext4.** {/* depends: loop store */} The host agent makes a sparse XFS file in the
-  data directory, mounts it as a loop device, and keeps its data there.
-  The node needs the `loop` kernel module and XFS support. By default the file can grow to 80% of the free disk,
-  between 20 GiB and 4 TiB. Set `craft.hostAgent.loopStore.sizeGiB` to choose another size.
+- **Any other file system, such as ext4.** The host agent makes its own XFS loop store. You do no manual step.
+  At its first start, the host agent makes the sparse file `<data directory>/.craft-fc-store.img`,
+  attaches it to a loop device, and mounts it at the data directory. After a restart or a node reboot,
+  the host agent mounts the same file again. It never formats a file that exists.
+  The node kernel needs the `loop` driver and XFS support.
 
-A dedicated XFS data disk gives better disk performance than the loop file. To use one,
-mount it at the data directory before the host agent starts.
+The default size of a new loop store is the free space of the node disk minus 1/5 of the disk size,
+from 20 GiB to 4 TiB. If this size is less than 20 GiB, the host agent refuses to start. {/* depends:
+chart PR (loopStore.sizeGiB value) */} To choose another size, set `craft.hostAgent.loopStore.sizeGiB`.
+A loop store that exists keeps its size.
+
+A dedicated XFS data disk with reflink gives better disk performance than the loop store. To use one,
+mount it at the data directory before the host agent starts. To make the host agent refuse to start without reflink,
+instead of making a loop store, add `--loop-store=off` to `craft.hostAgent.extraArgs`.
 
 ## Configure Helm
 
@@ -202,7 +213,7 @@ With `craft.sandboxRuntime: firecracker`, the chart:
 
 ### Versions
 
-{/* depends: chart PR (tags derived from global.version) and release image tags (images published on each release) */}
+{/* depends: chart PR (tags derived from global.version) */}
 The chart takes the Firecracker image tags from the Onyx version (`global.version`, without a `-dev` suffix).
 `global.version` must be a pinned Onyx release tag. With `latest`, `edge`, or `beta`, Helm refuses to render the chart.
 For Onyx `v5.2.0`, the chart uses:
@@ -228,7 +239,7 @@ Most deployments keep the defaults. These settings change often:
 | --- | --- | --- |
 | `craft.hostAgent.maxVms` | `60` | Most microVMs per node. Keep `60` on nested virtualization. On bare metal, raise it or set `0` (no limit). |
 | `craft.hostAgent.dataDir` | `/var/lib/craft-fc` | Set it to the mount point of a dedicated XFS disk. |
-| `craft.hostAgent.loopStore.sizeGiB` | 80% of the free disk, 20 GiB to 4 TiB | Only on nodes without reflink, to set the size of the XFS loop file. |
+| `craft.hostAgent.loopStore.sizeGiB` | The free disk minus 1/5 of the disk, 20 GiB to 4 TiB | Only on nodes without reflink, to set the size of a new XFS loop store. |
 | `craft.hostAgent.namespace` | `onyx-sandbox-runtime` | It must differ from the release namespace and `configMap.SANDBOX_NAMESPACE`. |
 | `craft.hostAgent.createNamespace` | `true` | Set `false` to make the namespace yourself. Give it the label `pod-security.kubernetes.io/enforce: privileged`. |
 | `craft.hostAgent.imagePullSecrets` | `[]` | Pull Secrets for a private registry. They must exist in the host agent namespace. |
@@ -313,7 +324,7 @@ the host agent accepts every client certificate that its CA signed.
     ```
 
     Each KVM node must print `RESULT: PASS`. A `WARN filesystem` line on an ext4 node is expected:
-    the host agent uses its XFS loop file there. Turn the preflight off after the check:
+    the host agent makes its XFS loop store there. Turn the preflight off after the check:
     set `craft.firecrackerPreflight.enabled: false` and upgrade.
   </Step>
 
@@ -430,8 +441,9 @@ Sessions that need a microVM cannot start until you turn Firecracker on again.
 
     - `/dev/kvm`: the node has no KVM. Use bare metal or a VM size with nested virtualization.
     - cgroup v2: use a node image with the unified cgroup hierarchy.
-    - reflink: the data directory has no reflink and the host agent cannot make its loop file.
-    Check the free disk space.
+    - reflink or loop store: the data directory has no reflink, and the host agent cannot make its loop store.
+    The error names the cause: less than 20 GiB free, no `/dev/loop-control`, no XFS in the node kernel,
+    or `--loop-store=off`.
   </Accordion>
 
   <Accordion title="Sessions fail with TEMPLATE_MISSING">

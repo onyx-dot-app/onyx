@@ -17,7 +17,7 @@ and kubeadm clusters on Intel hosts with KVM. After the nodes are ready, configu
 | Kernel | Onyx tests host kernel 6.18. The preflight check also accepts 5.10 and 6.1. Other versions give a warning. |
 | Kernel modules | `kvm_intel` and `loop` |
 | Sysctl | `vm.max_map_count` of `1048576` or more |
-| Data directory | `/var/lib/craft-fc` on XFS with reflink, or on another file system with free space for the host agent loop file |
+| Data directory | `/var/lib/craft-fc` on XFS with reflink, or on another file system with free space for the host agent loop store |
 | Network | A CNI that enforces NetworkPolicy |
 
 | Distribution | NetworkPolicy |
@@ -41,8 +41,9 @@ It never erases a disk.
     sudo ./craft-fc-node-prep.sh check
     ```
 
-    Each line starts with `PASS`, `WARN`, `FAIL`, or `INFO`. The last line is `RESULT: PASS` or `RESULT: FAIL`.
-    A `FAIL` line names the fix.
+    Each line starts with `PASS`, `WARN`, or `FAIL`. The last line is `RESULT: PASS` or `RESULT: FAIL`.
+    A `FAIL` line names the fix. A `WARN data-dir` line on a data directory without reflink is expected:
+    the host agent makes its XFS loop store there.
   </Step>
 
   <Step title="Apply the kernel settings">
@@ -58,7 +59,7 @@ It never erases a disk.
   </Step>
 
   <Step title="Optional: use a dedicated XFS disk">
-    A dedicated disk gives better disk performance than the host agent loop file.
+    A dedicated disk gives better disk performance than the host agent loop store.
     To format an empty disk with XFS and reflink, add it to `/etc/fstab`, and mount it at the data directory:
 
     ```bash

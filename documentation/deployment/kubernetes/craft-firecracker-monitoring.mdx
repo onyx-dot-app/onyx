@@ -1,0 +1,157 @@
+---
+title: "Firecracker Monitoring"
+description: "Set up the metrics, Grafana dashboard, and Prometheus alerts for Craft Firecracker sandboxes"
+icon: "chart-line"
+---
+
+This page is for operators who run [Craft on Firecracker](/deployment/kubernetes/craft-firecracker).
+It shows how to turn on the host agent metrics, the Grafana dashboard, and the Prometheus alert rules,
+and how to verify them.
+
+The Onyx Helm chart includes the dashboard and the alert rules for the Craft Firecracker host agent.
+They are off by default. They need the Prometheus Operator, for example kube-prometheus-stack.
+
+## Requirements
+
+| Item | Requirement |
+| --- | --- |
+| Prometheus Operator | The `ServiceMonitor` and `PrometheusRule` CRDs. |
+| kube-state-metrics | For the `CraftFcHostAgentPodsMissing` alert and the "Agent pods unavailable" panel. kube-prometheus-stack installs it. |
+| Grafana | The dashboard sidecar, with the label `grafana_dashboard: "1"`. The sidecar must watch the Onyx release namespace. |
+| Metrics token | `auth.metricsAuth` with a token. Without a token, every scrape gets `401`. |
+
+## Turn on monitoring
+
+<Steps>
+  <Step title="Set the metrics token">
+    The host agent uses the same token as the API server `/metrics`. Make a Secret with the token in the Onyx namespace,
+    and a copy in the host agent namespace (default `onyx-sandbox-runtime`). Use the same key in both Secrets:
+
+    ```bash
+    TOKEN=$(openssl rand -hex 32)
+    kubectl -n onyx create secret generic onyx-metrics-auth \
+      --from-literal=metrics_auth_token="$TOKEN"
+    kubectl -n onyx-sandbox-runtime create secret generic craft-fc-host-agent-metrics-auth \
+      --from-literal=metrics_auth_token="$TOKEN"
+    ```
+
+    If you set the token in `auth.metricsAuth.values` instead, the chart makes both Secrets.
+    Then do not set `existingSecret` and `authExistingSecret` in the next step.
+  </Step>
+
+  <Step title="Set the Helm values">
+    ```yaml craft-fc-monitoring-values.yaml
+    auth:
+      metricsAuth:
+        enabled: true
+        existingSecret: onyx-metrics-auth
+
+    craft:
+      hostAgent:
+        metrics:
+          enabled: true
+          authExistingSecret: craft-fc-host-agent-metrics-auth
+          # Prometheus runs in the "monitoring" namespace. Remove this value if
+          # Prometheus runs in the Onyx release namespace.
+          networkPolicyFrom:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: monitoring
+              podSelector:
+                matchLabels:
+                  app.kubernetes.io/name: prometheus
+
+    monitoring:
+      grafana:
+        dashboards:
+          enabled: true
+      serviceMonitors:
+        enabled: true
+        labels:
+          release: kube-prometheus-stack   # your Prometheus serviceMonitorSelector
+      prometheusRules:
+        enabled: true
+        labels:
+          release: kube-prometheus-stack   # your Prometheus ruleSelector
+    ```
+
+    `auth.metricsAuth` also protects the `/metrics` of the API server and the MCP server.
+    The chart ServiceMonitors send the token. Do not set `DISABLE_METRICS_AUTH: "true"` to fix a `401`:
+    it removes the auth of the API server metrics.
+
+    A NetworkPolicy lets only the pods in `networkPolicyFrom` reach the host agent metrics port (9464).
+    When `networkPolicyFrom` is empty, only Prometheus Operator pods in the release namespace can reach it.
+  </Step>
+
+  <Step title="Let Grafana find the dashboard">
+    If Grafana reads dashboards only from its own namespace, set the sidecar to search all namespaces.
+    For kube-prometheus-stack:
+
+    ```yaml
+    grafana:
+      sidecar:
+        dashboards:
+          searchNamespace: ALL
+          folderAnnotation: grafana_folder
+          provider:
+            foldersFromFilesStructure: true
+    ```
+  </Step>
+
+  <Step title="Upgrade Onyx">
+    Add the new values file to your `helm upgrade` command, with the values files that you use for Firecracker.
+  </Step>
+</Steps>
+
+## Verify monitoring
+
+<Steps>
+  <Step title="Check the scrape targets">
+    In Prometheus, open **Status → Targets**. The `onyx-craft-fc-host-agent` target of each KVM node must be `UP`.
+  </Step>
+
+  <Step title="Check the alert rules">
+    In Prometheus, open **Alerts**. The group `craft-fc-host-agent` must have 8 rules.
+  </Step>
+
+  <Step title="Check the dashboard">
+    In Grafana, open **Onyx → Onyx Craft Firecracker Host Agent**. "Agents up" must equal the number of KVM nodes.
+    Most panels show data only after the first Craft sandboxes start.
+  </Step>
+</Steps>
+
+## Alerts
+
+| Alert | Severity | Fires when |
+| --- | --- | --- |
+| [CraftFcHostAgentDown](/deployment/kubernetes/craft-firecracker-operations#craftfchostagentdown) | critical | Prometheus cannot scrape a host agent for 5 minutes. |
+| [CraftFcHostAgentPodsMissing](/deployment/kubernetes/craft-firecracker-operations#craftfchostagentpodsmissing) | warning | The host agent DaemonSet has fewer available pods than it wants for 15 minutes. |
+| [CraftFcCreateFailures](/deployment/kubernetes/craft-firecracker-operations#craftfccreatefailures) | warning | More than 20% of the admitted microVM starts on a node fail in 15 minutes (3 or more failures). |
+| [CraftFcAdmissionRefusals](/deployment/kubernetes/craft-firecracker-operations#craftfcadmissionrefusals) | warning | A node refuses 10 or more microVMs in 15 minutes for capacity, egress CA, or sandbox-in-doubt reasons, for 15 minutes. |
+| [CraftFcSessionTransferFailures](/deployment/kubernetes/craft-firecracker-operations#craftfcsessiontransferfailures) | warning | 3 or more session save or restore calls fail on a node in 30 minutes. |
+| [CraftFcRelayErrors](/deployment/kubernetes/craft-firecracker-operations#craftfcrelayerrors) | warning | More than 10% of the microVM egress connections on a node fail in 10 minutes (10 or more failures). |
+| [CraftFcNodeMemoryLow](/deployment/kubernetes/craft-firecracker-operations#craftfcnodememorylow) | warning | A node has less than 10% of its memory available for 15 minutes. |
+| [CraftFcTemplateUnusable](/deployment/kubernetes/craft-firecracker-operations#craftfctemplateunusable) | warning | For 15 minutes, a node has no usable template, refuses microVMs for a missing or incompatible template, or fails a template build. |
+
+Each alert has a `runbook_url` annotation that links to its runbook in [Firecracker
+Operations](/deployment/kubernetes/craft-firecracker-operations#alert-runbooks).
+To link to your own copy of the runbooks, set `craft.hostAgent.alerts.runbookUrl`.
+The chart adds `#<alert name in lower case>` to the URL.
+
+Tune the thresholds in `craft.hostAgent.alerts`:
+
+| Value | Default | Alert |
+| --- | --- | --- |
+| `createFailureRatio` | `0.2` | `CraftFcCreateFailures` |
+| `admissionRefusals` | `10` | `CraftFcAdmissionRefusals` |
+| `sessionTransferFailures` | `3` | `CraftFcSessionTransferFailures` |
+| `relayErrorRatio` | `0.1` | `CraftFcRelayErrors` |
+| `memoryAvailableRatio` | `0.1` | `CraftFcNodeMemoryLow` |
+
+To add routing labels to every rule, set `craft.hostAgent.alerts.extraLabels`.
+
+## Use another scrape configuration
+
+If your Prometheus does not use the chart ServiceMonitor,
+set `craft.hostAgent.metrics.job` to the `job` label of the host agent series. The dashboard and the alert rules use it.
+Keep a `node` label with the Kubernetes node name on each host agent series.

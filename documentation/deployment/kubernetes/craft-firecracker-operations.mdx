@@ -87,9 +87,9 @@ follow the release notes for the downgrade first.
 
 ## Drain a node
 
-{/* depends: save on drain. Update steps 4 and 5 when the API server saves and stops microVMs on a draining node. */}
-Running microVMs keep running during a drain. The API server does not move them to another node.
-Let them stop after their sessions are saved.
+When a node drains, the API server saves the sessions of each microVM on the node and stops the microVM.
+You do not stop microVMs by hand. The API server does not move a running microVM.
+The next request for the sandbox starts a new microVM on another node and restores the saved sessions.
 
 <Steps>
   <Step title="Set the manual drain flag">
@@ -106,19 +106,15 @@ Let them stop after their sessions are saved.
     New microVMs on this node now get `NODE_DRAINING`, and the API server places them on other nodes.
   </Step>
 
-  <Step title="Stop the microVMs">
+  <Step title="Let the API server save and stop the microVMs">
+    The host agent reports the drain state to the API server every 20 seconds. On a draining node,
+    the API server does not wait for the idle timeout: it saves and stops each microVM at once.
+    A microVM that runs a command stays until the command ends. Check with `agent List`.
+
     <Warning>
-      A direct `agent Stop` does not save the session first. Changes after the last session save are lost.
-      No operator command shows when a session was last saved.
+      Do not use `agent Stop` to empty the node. A direct `agent Stop` does not save the session first,
+      and the changes after the last save are lost.
     </Warning>
-
-    Wait until the microVMs stop by themselves:
-    the API server saves a session and stops its microVM after it is idle (15 minutes by default).
-    Check with `agent List`. To stop a microVM at once and accept the data loss, run:
-
-    ```bash
-    agent Stop '{"sandbox_id": "<id>", "attempt": <n>, "generation": <n>}'
-    ```
   </Step>
 
   <Step title="Remove the node">
@@ -196,57 +192,51 @@ The registration value lets host agents register their node signing keys. Change
   </Step>
 </Steps>
 
+## Session saves
+
+The API server saves the session files of a microVM to the file store at these times:
+
+| When | Setting |
+| --- | --- |
+| At the end of a turn, if the last save of that session is older than the interval. The save runs in the background and does not delay the user. | `SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default `300`. `0` turns off turn-end saves. |
+| Before it stops an idle microVM. | `SANDBOX_FC_IDLE_TIMEOUT_SECONDS`, default `900`. |
+| Before it stops a microVM on a draining node. See [Drain a node](#drain-a-node). | None |
+
+Set the values in `configMap` of your Onyx values file. A session archive can be at most 1 GiB.
+If a node stops without a drain, for example after a spot reclaim or a hardware failure,
+the changes after the last save of each session are lost.
+
 ## Purge data
 
 | Data | Where it is | How it is removed |
 | --- | --- | --- |
 | A microVM disk | The node data directory | `agent Stop` removes the microVM directory, its disk, and its egress identity. A record without user data stays for 24 hours. |
 | Session file transfers | The node data directory | The host agent deletes a transfer file after a successful upload, after 15 minutes, and at each start. |
-| Saved session files | The file store | The API server owns them. The host agent has no storage credentials. {/* depends: delete hooks. Describe what deletes saved sessions when a user or session is deleted. */} |
+| Saved session files | The file store | The API server owns them. The host agent has no storage credentials. See [Delete user data](#delete-user-data). |
 | All data of a node | The node data directory | Drain the node and remove it from the cluster. Then erase `craft.hostAgent.dataDir` on the host, or destroy the node disk. Deleting the Kubernetes node object alone does not erase the disk. |
+
+### Delete user data
+
+The API server deletes the Firecracker data of a session or a user when you delete them in Onyx:
+
+- **Craft session delete.** The API server deletes the saves of the session from the file store,
+  and the session directory on the running microVM. It cancels the commands of the session.
+  The artifacts that the session published stay.
+- **User delete.** The API server stops the microVM of the user. The host agent removes the microVM disk.
+  The API server deletes all saves and published artifacts of the user's sandbox from the file store.
+
+A save that is in progress during the delete does not commit, and the API server deletes its archive.
+If a delete step fails,
+the API server logs `sandbox_fc_session_purge_failed` or `sandbox_fc_sandbox_purge_failed` and continues with the other
+steps. If a microVM stop fails, the API server still removes the sandbox record,
+and the API server stops the microVM as an orphan at the next node report of the host agent.
 
 ## Monitoring
 
 The chart includes Prometheus metrics, a Grafana dashboard, and alert rules for the host agent. All are off by default.
-They need the Prometheus Operator (for example kube-prometheus-stack).
-The alert `CraftFcHostAgentPodsMissing` also needs kube-state-metrics.
+To turn them on and verify them, see [Firecracker Monitoring](/deployment/kubernetes/craft-firecracker-monitoring).
 
-```yaml
-auth:
-  metricsAuth:
-    enabled: true
-    values:
-      metrics_auth_token: "<openssl rand -hex 32>"
-craft:
-  hostAgent:
-    metrics:
-      enabled: true
-monitoring:
-  serviceMonitors:
-    enabled: true
-    labels:
-      release: <your Prometheus release>
-  prometheusRules:
-    enabled: true
-    labels:
-      release: <your Prometheus release>
-  grafana:
-    dashboards:
-      enabled: true
-```
-
-- The host agent serves metrics on port 9464 (`craft.hostAgent.metrics.port`). Scrapes need the
-  `auth.metricsAuth` token. The chart copies the token into the host agent namespace.
-  If `auth.metricsAuth` uses `existingSecret`,
-  create a Secret with the same key in the host agent namespace and set `craft.hostAgent.metrics.authExistingSecret`.
-- A NetworkPolicy lets only Prometheus Operator pods in the release namespace reach the port. If Prometheus runs in
-  another namespace, set `craft.hostAgent.metrics.networkPolicyFrom`.
-- The dashboard is "Onyx Craft Firecracker Host Agent". The Grafana sidecar must watch the release namespace for the
-  label `grafana_dashboard=1`.
-- If another scrape configuration collects the host agent metrics, set `craft.hostAgent.metrics.job` to its job label.
-- Thresholds are in `craft.hostAgent.alerts`. Tune them for your deployment.
-
-{/* depends: chart PR (monitoring). Each alert links to the matching heading below. */}
+Each alert links to its runbook below:
 
 | Alert | Impact |
 | --- | --- |
@@ -266,13 +256,13 @@ It writes the serial console and Firecracker log of each microVM to stdout (`kin
 Your cluster log pipeline collects both. The audit line has `method`, `caller`, `sandbox_id`, `result`, and `reason`.
 It never has request bodies or keys.
 
-These signals have no metric. Use the host agent log:
+These signals have no alert. The dashboard row "Node registration,
+templates and VM slots" shows the time since the last success. The host agent log shows each failure:
 
 | Signal | Log line |
 | --- | --- |
 | Node state report | `node state report failed`, then `node state report sent again` |
 | Node key registration | `node signing key registered` or `node signing key registration failed` |
-| Template build at start | `template ready` or `template build at start-up failed` |
 
 ## Alert runbooks
 
@@ -474,9 +464,10 @@ or when processes other than microVMs use the memory.
 
 ### CraftFcTemplateUnusable
 
-**Meaning.** For 15 minutes, a node refused microVM starts with `TEMPLATE_MISSING` or `TEMPLATE_INCOMPATIBLE`,
-or a template build failed. The node cannot start microVMs for that template. The template build at start has no metric:
-read the host agent log after each start.
+**Meaning.** For 15 minutes, a node had no usable template,
+refused microVM starts with `TEMPLATE_MISSING` or `TEMPLATE_INCOMPATIBLE`, or failed a template build.
+The node cannot start microVMs for that template.
+The API server places no new microVMs on a node without a usable template.
 
 **Check.**
 

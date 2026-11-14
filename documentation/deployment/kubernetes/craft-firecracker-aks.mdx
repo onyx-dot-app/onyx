@@ -19,9 +19,8 @@ configure Helm as the overview page shows.
 
 Ubuntu 24.04 node images set `vm.max_map_count` to `1048576`, so no sysctl change is necessary.
 
-The Ubuntu root file system is ext4 without reflink. {/* depends: loop store */}
-The host agent makes its XFS loop file in the data directory, so you do not need a data disk.
-Size the OS disk for the loop file: 200 GB or more.
+The Ubuntu root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
+so you do not need a data disk. Size the OS disk for the loop store: 200 GB or more.
 
 ## Option 1: Onyx Terraform modules
 
@@ -50,7 +49,7 @@ The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deploym
   </Step>
 
   <Step title="Add the pod sandbox pool">
-    {/* depends: terraform PR (#17786) */} Add the pod sandbox pool variables to the module block.
+    Add the pod sandbox pool variables to the module block.
     The pool needs `enable_sandbox_node_pool = true` and `craft_sandbox_runtime = "firecracker"`:
 
     ```hcl
@@ -126,7 +125,6 @@ The `azure/onyx` module makes the Firecracker sandbox pool. See [Azure](/deploym
 
 ## Azure Blob Storage file store
 
-{/* depends: azure presign PR (#17784) */}
 The host agent uploads and downloads session files with presigned Azure Blob URLs (SAS).
 The API server signs user delegation SAS URLs with its workload identity. Do not set an account key:
 shared key access can stay off.
