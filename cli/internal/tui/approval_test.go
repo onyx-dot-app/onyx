@@ -288,9 +288,10 @@ func TestEscWhileApprovalWaitsUsesStop(t *testing.T) {
 			t.Fatalf("%s must request Stop and keep the turn until it settles", key.String())
 		}
 	}
+	// The Stop rejects the request; the cut stream reports no outcome.
 	m, _ = m.finishStream(nil)
-	if got := approvalEntry(t, m, "a1"); got != "● No longer waiting: Create issue" || len(m.approvals) != 0 {
-		t.Fatalf("finished stream left a waiting card: %q", got)
+	if got := approvalEntry(t, m, "a1"); got != "● Not approved: Create issue" || len(m.approvals) != 0 {
+		t.Fatalf("stopped stream left %q, want the rejection", got)
 	}
 }
 
