@@ -365,11 +365,11 @@ publishes the host agent.
    reason and an expiry. An ALAS ID covers all of its CVEs:
    `ods audit ignore add <ID> --ecosystem craft-fc --reason "<why>" --expires <YYYY-MM-DD>`.
 3. Else change the version. Follow "Change a version" in `deployment/craft-fc/README.md`: the
-   newest `microvm-kernel-<series>.*` tag of `amazonlinux/linux`, or the fixed Firecracker
-   release, with its SHA256 pins. In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile`
-   to the new tag and update the binary pins in `microvm/internal/binaries`. The host agent build
-   checks that `ARTIFACTS_TAG` matches `Dockerfile.artifacts`. If no newer `microvm-kernel` tag has
-   the fix, escalate.
+   newest kernel tag of the series in `amazonlinux/linux` (`kernel<series>-<version>`, the AL2023
+   package source, or `microvm-kernel`), or the fixed Firecracker release, with its SHA256 pins.
+   In the same change, set `ARTIFACTS_TAG` in `microvm/Dockerfile` to the new tag and update the
+   binary pins in `microvm/internal/binaries`. The host agent build checks that `ARTIFACTS_TAG`
+   matches `Dockerfile.artifacts`. If no kernel tag of the series has the fix yet, escalate.
 4. Do the boot test, and run the "Craft Firecracker Host Agent KVM" workflow (full lane) on the
    branch. Until the new artifacts tag is published, CI builds the artifacts from the branch.
 5. Merge. Then publish `craft-fc-artifacts` from `main` (it pushes the `-source` tag first),

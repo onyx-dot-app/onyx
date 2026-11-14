@@ -24,7 +24,7 @@
 ARG BASE_IMAGE_REGISTRY=docker.io
 # Tag of onyxdotapp/craft-fc-artifacts. It must match the ARG values in
 # deployment/craft-fc/Dockerfile.artifacts and the SHA256 pins in internal/binaries.
-ARG ARTIFACTS_TAG=6.18.25-57.115-fc1.17.0
+ARG ARTIFACTS_TAG=6.18.62-127.179-fc1.17.0
 ARG ARTIFACTS_IMAGE=${BASE_IMAGE_REGISTRY}/onyxdotapp/craft-fc-artifacts:${ARTIFACTS_TAG}
 
 # A named build context "artifacts" (a local Dockerfile.artifacts build) replaces this stage.
