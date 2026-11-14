@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "متتبع مشكلات Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "إدارة خدمات تكنولوجيا المعلومات"
+        },
         "productboard": {
           "description": "إدارة المنتجات"
         },
@@ -4245,6 +4248,45 @@
             "jql_query": {
               "label": "استعلام JQL",
               "description": "استعلام JQL مخصص لتصفية مسائل Jira.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصيغة."
+            },
+            "comment_email_blacklist": {
+              "label": "قائمة حظر البريد الإلكتروني للتعليقات",
+              "description": "مفيد عادةً لتجاهل بعض الروبوتات. أضف البريد الإلكتروني للمستخدمين الذين يجب ألا تُفهرس تعليقاتهم."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تهيئة موصل Jira Service Management",
+          "subtext": "حدّد محتوى Jira Service Management المراد فهرسته. يمكنك فهرسة كل شيء أو تحديد مشروع معين.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://nitaquk.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "مشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "يفهرس كل تذكرة يمكن للحساب قراءتها",
+              "description": "يفهرس Onyx جميع التذاكر في كل مشروع JSM يمكن للحساب المحدد قراءته. لفهرسة عدد أقل، اختر علامة تبويب أخرى."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع JSM محدد للفهرسة (مثل \"SUPPORT\")."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية تذاكر JSM.\n\nمهم: لا تضمّن أي مرشحات زمنية في استعلام JQL لأنها تتعارض مع منطق الموصل. كذلك لا تضمّن عبارات ORDER BY.\n\nراجع [توثيق JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) من Atlassian لمزيد من التفاصيل حول الصيغة."
             },
             "comment_email_blacklist": {
               "label": "قائمة حظر البريد الإلكتروني للتعليقات",

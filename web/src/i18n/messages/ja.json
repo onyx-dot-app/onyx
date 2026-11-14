@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Atlassian の課題管理"
         },
+        "jiraServiceManagement": {
+          "description": "IT サービス管理"
+        },
         "productboard": {
           "description": "プロダクトマネジメント"
         },
@@ -4245,6 +4248,45 @@
             "jql_query": {
               "label": "JQL クエリ",
               "description": "Jira の Issue を絞り込むカスタム JQL クエリ。\n\n重要: コネクターのロジックと競合するため、JQL クエリに時間ベースのフィルターを含めないでください。また、ORDER BY 句も含めないでください。\n\n構文の詳細は、Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)を参照してください。"
+            },
+            "comment_email_blacklist": {
+              "label": "コメントのメール除外リスト",
+              "description": "特定のボットを無視する場合に便利です。コメントをインデックスしないユーザーのメールアドレスを追加してください。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management コネクターを設定",
+          "subtext": "インデックスする Jira Service Management コンテンツを設定します。すべてをインデックスすることも、特定のプロジェクトを指定することもできます。",
+          "fields": {
+            "jira_base_url": {
+              "label": "サイト URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "すべて"
+                },
+                "project": {
+                  "label": "プロジェクト"
+                },
+                "jql": {
+                  "label": "JQL クエリ"
+                }
+              }
+            },
+            "everything": {
+              "label": "アカウントが読み取れるすべてのチケットをインデックスします",
+              "description": "Onyx は、選択したアカウントが読み取れるすべての JSM プロジェクトのすべてのチケットをインデックスします。対象を絞るには、別のタブを選択してください。"
+            },
+            "project_key": {
+              "label": "プロジェクトキー",
+              "description": "インデックスする特定の JSM プロジェクトのキー(例: 'SUPPORT')。"
+            },
+            "jql_query": {
+              "label": "JQL クエリ",
+              "description": "JSM チケットを絞り込むカスタム JQL クエリ。\n\n重要: コネクターのロジックと競合するため、JQL クエリに時間ベースのフィルターを含めないでください。また、ORDER BY 句も含めないでください。\n\n構文の詳細は、Atlassian の [JQL ドキュメント](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)を参照してください。"
             },
             "comment_email_blacklist": {
               "label": "コメントのメール除外リスト",

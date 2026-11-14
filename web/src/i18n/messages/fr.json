@@ -1368,6 +1368,9 @@
         "jira": {
           "description": "Suivi des tickets Atlassian"
         },
+        "jiraServiceManagement": {
+          "description": "Gestion des services informatiques"
+        },
         "productboard": {
           "description": "Gestion de produit"
         },
@@ -4245,6 +4248,45 @@
             "jql_query": {
               "label": "Requête JQL",
               "description": "Une requête JQL personnalisée pour filtrer les tickets Jira.\n\nIMPORTANT : n'incluez aucun filtre temporel dans la requête JQL, car il entrerait en conflit avec la logique du connecteur. N'incluez pas non plus de clauses ORDER BY.\n\nConsultez la [documentation JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) d'Atlassian pour plus de détails sur la syntaxe."
+            },
+            "comment_email_blacklist": {
+              "label": "Liste noire d'e-mails des commentaires",
+              "description": "Utile en général pour ignorer certains bots. Ajoutez les e-mails des utilisateurs dont les commentaires ne doivent PAS être indexés."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configurer le connecteur Jira Service Management",
+          "subtext": "Configurez le contenu Jira Service Management à indexer. Vous pouvez tout indexer ou indiquer un projet précis.",
+          "fields": {
+            "jira_base_url": {
+              "label": "URL du site",
+              "placeholder": "https://votre-domaine.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "Tout"
+                },
+                "project": {
+                  "label": "Projet"
+                },
+                "jql": {
+                  "label": "Requête JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "Indexe tous les tickets que le compte peut lire",
+              "description": "Onyx indexe tous les tickets de chaque projet JSM que le compte sélectionné peut lire. Pour en indexer moins, choisissez un autre onglet."
+            },
+            "project_key": {
+              "label": "Clé du projet",
+              "description": "La clé d'un projet JSM précis à indexer (par ex. 'SUPPORT')."
+            },
+            "jql_query": {
+              "label": "Requête JQL",
+              "description": "Une requête JQL personnalisée pour filtrer les tickets JSM.\n\nIMPORTANT : n'incluez aucun filtre temporel dans la requête JQL, car il entrerait en conflit avec la logique du connecteur. N'incluez pas non plus de clauses ORDER BY.\n\nConsultez la [documentation JQL](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) d'Atlassian pour plus de détails sur la syntaxe."
             },
             "comment_email_blacklist": {
               "label": "Liste noire d'e-mails des commentaires",
