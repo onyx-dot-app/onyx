@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "공유가 꺼져 있습니다",
           "description": "관리자가 사람 및 그룹과의 공유를 껐습니다. 스킬 관리자에게 이 스킬을 공유해 달라고 요청하세요."
+        },
+        "groupAccess": {
+          "title": "그룹 액세스",
+          "description": "기본적으로 모든 그룹은 조직 설정을 사용합니다. 그룹 설정은 더 엄격한 경우에도 그룹 구성원에 대해 조직 설정을 대체합니다.",
+          "add": "그룹 추가",
+          "select": "{name} 설정",
+          "remove": "{name} 제거",
+          "shared": "이 그룹과 공유됨",
+          "settingOnly": "그룹 설정만"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "다른 검색어를 사용해 보세요.",
-          "title": "일치하는 스킬 없음"
+          "title": "일치하는 스킬 없음",
+          "groupDescription": "이 그룹에서 일치하는 스킬이 없습니다. 다른 그룹이나 검색어를 사용해 보세요."
         },
         "noSkills": {
           "title": "아직 사용자 지정 스킬이 없습니다",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {조직 설정({policy})} other {기본 액세스({policy})}}",
         "description": "{scope, select, group {그룹 설정이 없습니다. 그룹은 조직 설정을 사용합니다.} other {자체 설정이 없습니다. 관리자가 변경한 후에도 스킬은 기본 액세스를 사용합니다.}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "그룹으로 필터링",
+        "all": "모든 그룹"
+      },
+      "card": "그룹: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

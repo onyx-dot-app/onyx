@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "Le partage est désactivé",
           "description": "Un administrateur a désactivé le partage avec des personnes et des groupes. Demandez à un gestionnaire de skills de partager ce skill."
+        },
+        "groupAccess": {
+          "title": "Accès des groupes",
+          "description": "Par défaut, chaque groupe utilise le paramètre de l'organisation. Un paramètre de groupe le remplace pour les membres du groupe, même s'il est plus strict.",
+          "add": "Ajouter un groupe",
+          "select": "Paramètre pour {name}",
+          "remove": "Retirer {name}",
+          "shared": "Partagé avec ce groupe",
+          "settingOnly": "Paramètre de groupe uniquement"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "Essayez une autre recherche.",
-          "title": "Aucune compétence correspondante"
+          "title": "Aucune compétence correspondante",
+          "groupDescription": "Aucune compétence de ce groupe ne correspond. Essayez un autre groupe ou une autre recherche."
         },
         "noSkills": {
           "title": "Aucune compétence personnalisée pour le moment",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {Paramètre de l'organisation ({policy})} other {Accès par défaut ({policy})}}",
         "description": "{scope, select, group {Aucun paramètre de groupe. Le groupe utilise le paramètre de l'organisation.} other {Aucun paramètre propre. La compétence utilise l'accès par défaut, même après une modification par un administrateur.}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "Filtrer par groupe",
+        "all": "Tous les groupes"
+      },
+      "card": "Groupes : {groups}",
+      "entry": "{name} : {policy}"
     }
   },
   "opensearchHealth": {

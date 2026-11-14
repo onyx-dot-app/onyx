@@ -23,11 +23,13 @@ from onyx.db.plugin_access import (
     load_plugin_access,
     plugin_ids_in_managed_scope,
 )
+from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import SkillUserState, may_delete_skill, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.models import (
     SkillExternalAppDependencyResponse,
+    SkillGroupSummary,
     SkillPreviewResponse,
     SkillResponse,
     SkillsList,
@@ -104,15 +106,41 @@ def user_permission_for_skill(
 
 def _managed_scope(
     user: User, skill_ids: Iterable[UUID], db_session: Session
-) -> set[UUID]:
-    """The skills among ``skill_ids`` in a group manager's managed scope.
-    Empty for other users."""
+) -> tuple[set[int], set[UUID]]:
+    """The groups a group manager manages, and the skills among ``skill_ids``
+    in their managed scope. Both empty for other users."""
     if (
         has_permission(user, Permission.MANAGE_PLUGINS)
         is not PermissionAuthority.SCOPED
     ):
-        return set()
-    return plugin_ids_in_managed_scope(skill_ids, user, db_session)
+        return set(), set()
+    return fetch_managed_group_ids(user, db_session), plugin_ids_in_managed_scope(
+        skill_ids, user, db_session
+    )
+
+
+def _group_summaries(
+    access: PluginAccess | None,
+    user_permission: SkillAccessLevel | None,
+    managed_user_group_ids: set[int] | None,
+) -> list[SkillGroupSummary]:
+    """The group rows the caller may see: every row for a user who may edit
+    the skill (the rule of the share details), else the rows of the groups a
+    scoped manager manages."""
+    if access is None:
+        return []
+    can_edit = user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
+    managed = managed_user_group_ids or set()
+    return [
+        SkillGroupSummary(
+            group_id=row.group_id,
+            group_name=row.group_name,
+            permission=row.permission,
+            installation_policy=row.installation_policy,
+        )
+        for row in access.group_rows
+        if can_edit or row.group_id in managed
+    ]
 
 
 def skill_response_for_user(
@@ -122,6 +150,7 @@ def skill_response_for_user(
     *,
     state: SkillUserState | None = None,
     user_group_ids: set[int] | None = None,
+    managed_user_group_ids: set[int] | None = None,
     managed_scope_ids: set[UUID] | None = None,
     include_share_details: bool = False,
     plugin_access: dict[UUID, PluginAccess] | None = None,
@@ -146,8 +175,10 @@ def skill_response_for_user(
 
     if user_group_ids is None:
         user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    if managed_scope_ids is None:
-        managed_scope_ids = _managed_scope(user, [skill.id], db_session)
+    if managed_user_group_ids is None or managed_scope_ids is None:
+        managed_user_group_ids, managed_scope_ids = _managed_scope(
+            user, [skill.id], db_session
+        )
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = plugin_access.get(skill.id)
@@ -170,6 +201,12 @@ def skill_response_for_user(
             user=user,
         ),
         include_share_details=include_share_details,
+        # Edit access from managed scope alone shows only the managed groups.
+        group_summaries=_group_summaries(
+            access,
+            user_permission_for_skill(skill, access, user, user_group_ids),
+            managed_user_group_ids,
+        ),
         external_app=_dependency_response(state.external_app_dependency),
         current_version_id=shown_version_id,
     )
@@ -183,7 +220,7 @@ def skills_list_response_for_user(
     builtins: list[SkillResponse] = []
     customs: list[SkillResponse] = []
     user_group_ids = get_user_group_ids_for_user(db_session, user.id)
-    managed_scope_ids = _managed_scope(
+    managed_user_group_ids, managed_scope_ids = _managed_scope(
         user, (skill.id for skill in rows if skill.is_custom), db_session
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
@@ -208,6 +245,7 @@ def skills_list_response_for_user(
             db_session,
             state=states[skill.id],
             user_group_ids=user_group_ids,
+            managed_user_group_ids=managed_user_group_ids,
             managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
         )

@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "共享已关闭",
           "description": "管理员已关闭与他人和群组共享。请让技能管理员共享此技能。"
+        },
+        "groupAccess": {
+          "title": "群组访问",
+          "description": "默认情况下，每个群组都使用组织设置。群组设置会为该群组的成员替换组织设置，即使它更严格。",
+          "add": "添加群组",
+          "select": "{name} 的设置",
+          "remove": "移除 {name}",
+          "shared": "已与此群组共享",
+          "settingOnly": "仅群组设置"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "请尝试其他搜索。",
-          "title": "没有匹配的技能"
+          "title": "没有匹配的技能",
+          "groupDescription": "此群组中没有匹配的技能。请尝试其他群组或搜索。"
         },
         "noSkills": {
           "title": "暂无自定义技能",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {组织设置（{policy}）} other {默认访问权限（{policy}）}}",
         "description": "{scope, select, group {没有群组设置。群组使用组织设置。} other {没有自己的设置。即使管理员更改了默认访问，技能也会使用它。}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "按群组筛选",
+        "all": "所有群组"
+      },
+      "card": "群组：{groups}",
+      "entry": "{name}：{policy}"
     }
   },
   "opensearchHealth": {

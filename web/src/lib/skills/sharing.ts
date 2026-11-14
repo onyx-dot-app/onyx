@@ -1,5 +1,17 @@
-import type { CustomSkill } from "@/lib/skills/types";
-import type { SkillShareUpdatePayload } from "@/lib/skills/api";
+import type {
+  CustomSkill,
+  SkillGroupShare,
+  SkillSharePermission,
+} from "@/lib/skills/types";
+import type {
+  SkillGroupSettingPayload,
+  SkillShareUpdatePayload,
+} from "@/lib/skills/api";
+import {
+  INHERIT,
+  fromPolicyChoice,
+  type PolicyChoice,
+} from "@/lib/skills/installationPolicy";
 
 export type SkillSharingDraft = Pick<
   CustomSkill,
@@ -82,4 +94,75 @@ export function serializeSkillSharing(
       permission: share.permission,
     })),
   };
+}
+
+/** A group's own setting, as the dialog edits it. The share of the group
+ * comes from the share draft. */
+export interface GroupSettingRow {
+  group_id: number;
+  group_name: string;
+  choice: PolicyChoice;
+}
+
+/** One row of Group access: a group, its share and its setting. */
+export interface GroupAccessRow extends GroupSettingRow {
+  /** Null for a group with no share. */
+  permission: SkillSharePermission | null;
+}
+
+/** The group settings to send: a changed row, a new row with a setting, and
+ * null for a removed row that had one. */
+export function groupSettingChanges(
+  initial: readonly GroupSettingRow[],
+  current: readonly GroupSettingRow[]
+): SkillGroupSettingPayload[] {
+  const before = new Map(initial.map((row) => [row.group_id, row.choice]));
+  const changes: SkillGroupSettingPayload[] = current
+    .filter((row) => row.choice !== (before.get(row.group_id) ?? INHERIT))
+    .map((row) => ({
+      group_id: row.group_id,
+      installation_policy: fromPolicyChoice(row.choice),
+    }));
+  const kept = new Set(current.map((row) => row.group_id));
+  for (const row of initial) {
+    if (!kept.has(row.group_id) && row.choice !== INHERIT) {
+      changes.push({ group_id: row.group_id, installation_policy: null });
+    }
+  }
+  return changes;
+}
+
+/** The rows of Group access: each setting with its share from the share
+ * draft, then each shared group with no setting. A group with a share cannot
+ * be Not available, so a share on such a group uses the Organization setting
+ * (the save sends that); the stored choice is kept for an unstaged share. */
+export function groupAccessRows(
+  settings: readonly GroupSettingRow[],
+  shares: readonly SkillGroupShare[]
+): GroupAccessRow[] {
+  const permissionOf = new Map(
+    shares.map((share) => [share.group_id, share.permission])
+  );
+  const rows: GroupAccessRow[] = settings.map((row) => {
+    const permission = permissionOf.get(row.group_id) ?? null;
+    return {
+      ...row,
+      permission,
+      choice:
+        permission !== null && row.choice === "NOT_AVAILABLE"
+          ? INHERIT
+          : row.choice,
+    };
+  });
+  const present = new Set(rows.map((row) => row.group_id));
+  for (const share of shares) {
+    if (present.has(share.group_id)) continue;
+    rows.push({
+      group_id: share.group_id,
+      group_name: share.group_name,
+      permission: share.permission,
+      choice: INHERIT,
+    });
+  }
+  return rows;
 }

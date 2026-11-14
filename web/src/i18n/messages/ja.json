@@ -17472,6 +17472,15 @@
         "sharingOff": {
           "title": "共有はオフです",
           "description": "管理者がユーザーやグループとの共有をオフにしました。このスキルの共有はスキル管理者に依頼してください。"
+        },
+        "groupAccess": {
+          "title": "グループアクセス",
+          "description": "デフォルトでは、各グループは組織の設定を使用します。グループの設定は、より厳しい場合でも、そのグループのメンバーに対して組織の設定を置き換えます。",
+          "add": "グループを追加",
+          "select": "{name} の設定",
+          "remove": "{name} を削除",
+          "shared": "このグループと共有済み",
+          "settingOnly": "グループ設定のみ"
         }
       },
       "placeholders": {
@@ -17556,7 +17565,8 @@
       "empty": {
         "noMatches": {
           "description": "別の検索をお試しください。",
-          "title": "一致するスキルがありません"
+          "title": "一致するスキルがありません",
+          "groupDescription": "このグループに一致するスキルはありません。別のグループまたは検索を試してください。"
         },
         "noSkills": {
           "title": "カスタムスキルはまだありません",
@@ -17737,6 +17747,14 @@
         "labelWithPolicy": "{scope, select, group {組織の設定（{policy}）} other {デフォルトのアクセス（{policy}）}}",
         "description": "{scope, select, group {グループ設定はありません。グループは組織の設定を使用します。} other {独自の設定はありません。管理者が変更した後も、スキルはデフォルトアクセスを使用します。}}"
       }
+    },
+    "groups": {
+      "filter": {
+        "placeholder": "グループで絞り込む",
+        "all": "すべてのグループ"
+      },
+      "card": "グループ: {groups}",
+      "entry": "{name}: {policy}"
     }
   },
   "opensearchHealth": {

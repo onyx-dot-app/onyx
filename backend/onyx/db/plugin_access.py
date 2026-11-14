@@ -630,10 +630,23 @@ class PluginGroupShare:
     permission: SkillSharePermission
 
 
+class PluginGroupRowAccess(BaseModel):
+    """One plugin__user_group row. A row with no permission holds only a
+    setting."""
+
+    model_config = ConfigDict(frozen=True)
+
+    group_id: int
+    group_name: str
+    permission: SkillSharePermission | None
+    installation_policy: PluginInstallationPolicy | None
+
+
 @dataclass(frozen=True)
 class PluginAccess:
-    """A plugin's grants and the values one user sees. Shares hold only rows
-    with a permission."""
+    """A plugin's grants and the values one user sees. User shares and
+    ``group_shares`` hold only rows with a permission; ``group_rows`` holds
+    every group row."""
 
     plugin_id: UUID
     author_user_id: UUID | None
@@ -654,12 +667,24 @@ class PluginAccess:
     # Lazy validity of the version the user runs.
     is_valid: bool | None
     user_shares: tuple[PluginUserShare, ...]
-    group_shares: tuple[PluginGroupShare, ...]
+    group_rows: tuple[PluginGroupRowAccess, ...]
 
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
     # ``plugin_required_for_anyone``.
     required_for_anyone: bool
+
+    @property
+    def group_shares(self) -> tuple[PluginGroupShare, ...]:
+        return tuple(
+            PluginGroupShare(
+                group_id=row.group_id,
+                group_name=row.group_name,
+                permission=row.permission,
+            )
+            for row in self.group_rows
+            if row.permission is not None
+        )
 
 
 def load_plugin_access(
@@ -721,24 +746,25 @@ def load_plugin_access(
             PluginUserShare(user_id=share_user_id, email=email, permission=permission)
         )
 
-    group_shares: dict[UUID, list[PluginGroupShare]] = {}
-    for plugin_id, group_id, group_name, permission in db_session.execute(
+    group_rows: dict[UUID, list[PluginGroupRowAccess]] = {}
+    for plugin_id, group_id, group_name, permission, policy in db_session.execute(
         select(
             Plugin__UserGroup.plugin_id,
             Plugin__UserGroup.user_group_id,
             UserGroup.name,
             Plugin__UserGroup.permission,
+            Plugin__UserGroup.installation_policy,
         )
         .join(UserGroup, UserGroup.id == Plugin__UserGroup.user_group_id)
-        .where(
-            Plugin__UserGroup.plugin_id.in_(ids),
-            Plugin__UserGroup.permission.is_not(None),
-        )
-        .order_by(Plugin__UserGroup.plugin_id, UserGroup.name)
+        .where(Plugin__UserGroup.plugin_id.in_(ids))
+        .order_by(Plugin__UserGroup.plugin_id, UserGroup.name, UserGroup.id)
     ):
-        group_shares.setdefault(plugin_id, []).append(
-            PluginGroupShare(
-                group_id=group_id, group_name=group_name, permission=permission
+        group_rows.setdefault(plugin_id, []).append(
+            PluginGroupRowAccess(
+                group_id=group_id,
+                group_name=group_name,
+                permission=permission,
+                installation_policy=policy,
             )
         )
 
@@ -761,7 +787,7 @@ def load_plugin_access(
             is_valid=row[14],
             required_for_anyone=bool(row[15]),
             user_shares=tuple(user_shares.get(row[0], ())),
-            group_shares=tuple(group_shares.get(row[0], ())),
+            group_rows=tuple(group_rows.get(row[0], ())),
         )
         for row in plugin_rows
     }

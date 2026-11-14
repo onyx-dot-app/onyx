@@ -11,6 +11,7 @@ import {
   Collapsible,
   InputTypeIn,
   InputCheckbox,
+  InputSingleSelect,
   MessageCard,
   Dropdown,
   type DropdownMenuRow,
@@ -37,6 +38,7 @@ import {
   SvgShare,
   SvgTrash,
   SvgUploadCloud,
+  SvgUsers,
   SvgXCircle,
 } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
@@ -105,6 +107,7 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
   const deleteModal = useCreateModal();
   const [deleting, setDeleting] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [groupFilter, setGroupFilter] = useState("");
   const [builtinsOpen, setBuiltinsOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const githubImportModal = useCreateModal();
@@ -359,17 +362,41 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
     [items]
   );
 
+  // The groups of the summaries the caller may see.
+  const groupOptions = useMemo(() => {
+    const names = new Map<number, string>();
+    for (const item of items) {
+      if (item.source !== "custom") continue;
+      for (const summary of item.skill.group_summaries) {
+        names.set(summary.group_id, summary.group_name);
+      }
+    }
+    return Array.from(names, ([id, name]) => ({ id, name })).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" })
+    );
+  }, [items]);
+  const activeGroupId =
+    groupOptions.find((group) => String(group.id) === groupFilter)?.id ?? null;
+  // A group that left every summary after a refresh clears the filter, so it
+  // does not come back on when the group returns.
+  if (groupFilter !== "" && activeGroupId === null) setGroupFilter("");
+
   const visibleItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return items.filter(
       (item) =>
         (focusedAppName === null ||
           item.external_app?.external_app_id === focusedExternalAppId) &&
+        (activeGroupId === null ||
+          (item.source === "custom" &&
+            item.skill.group_summaries.some(
+              (summary) => summary.group_id === activeGroupId
+            ))) &&
         (!q ||
           item.name.toLowerCase().includes(q) ||
           item.description.toLowerCase().includes(q))
     );
-  }, [focusedAppName, focusedExternalAppId, items, searchQuery]);
+  }, [activeGroupId, focusedAppName, focusedExternalAppId, items, searchQuery]);
 
   const selectableItems = visibleItems.filter(
     (item): item is CustomSkillCardItem => item.source === "custom"
@@ -533,18 +560,64 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
           </Dropdown>,
         ]}
       >
-        <InputTypeIn
-          ref={searchInputRef}
-          placeholder={t("page.search.placeholder")}
-          value={searchQuery}
-          readOnly={bulkBusy}
-          onChange={(event) => {
-            setSearchQuery(event.target.value);
-            setSelectedIds(new Set());
-            setBulkFailures([]);
-          }}
-          icon="search"
-        />
+        <Section
+          flexDirection="row"
+          wrap
+          gap={2}
+          height="auto"
+          alignItems="stretch"
+        >
+          <Section
+            height="auto"
+            alignItems="stretch"
+            className="min-w-0 grow-[3] basis-64"
+          >
+            <InputTypeIn
+              ref={searchInputRef}
+              placeholder={t("page.search.placeholder")}
+              value={searchQuery}
+              readOnly={bulkBusy}
+              onChange={(event) => {
+                setSearchQuery(event.target.value);
+                setSelectedIds(new Set());
+                setBulkFailures([]);
+              }}
+              icon="search"
+            />
+          </Section>
+          {groupOptions.length > 0 && (
+            <Section
+              height="auto"
+              alignItems="stretch"
+              className="min-w-0 grow basis-48"
+            >
+              <InputSingleSelect
+                search
+                placeholder={t("groups.filter.placeholder")}
+                value={activeGroupId === null ? "all" : String(activeGroupId)}
+                defaultOption="all"
+                disabled={bulkBusy}
+                options={[
+                  {
+                    value: "all",
+                    title: t("groups.filter.all"),
+                    icon: SvgUsers,
+                  },
+                  ...groupOptions.map((group) => ({
+                    value: String(group.id),
+                    title: group.name,
+                    icon: SvgUsers,
+                  })),
+                ]}
+                onValueChange={(value) => {
+                  setGroupFilter(value);
+                  setSelectedIds(new Set());
+                  setBulkFailures([]);
+                }}
+              />
+            </Section>
+          )}
+        </Section>
       </SettingsLayouts.Header>
 
       <SettingsLayouts.Body>
@@ -602,7 +675,9 @@ export default function SkillsPage({ admin = false }: SkillsPageProps) {
                 description={
                   items.length === 0
                     ? t("page.empty.noSkills.description")
-                    : t("page.empty.noMatches.description")
+                    : activeGroupId !== null
+                      ? t("page.empty.noMatches.groupDescription")
+                      : t("page.empty.noMatches.description")
                 }
               />
             ) : (
