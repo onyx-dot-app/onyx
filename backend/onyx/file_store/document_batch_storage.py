@@ -1,22 +1,35 @@
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from enum import Enum
 from io import StringIO
-from typing import List, Optional, TypeAlias
+from typing import List, Optional, TypeAlias, TypeVar
 
 from pydantic import BaseModel
 
 from onyx.configs.constants import FileOrigin
-from onyx.connectors.models import DocExtractionContext, DocIndexingContext, Document
+from onyx.connectors.models import (
+    DocExtractionContext,
+    DocIndexingContext,
+    Document,
+    ListingPayload,
+    SlimDocumentStub,
+)
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
+_ItemT = TypeVar("_ItemT")
+
 _BATCH_PATH_PREFIX = "iab"
 # Backfill batches live apart, so a backfill never deletes or reissues the
 # leftover batches a normal attempt resumes from, and vice versa.
 _BACKFILL_BATCH_PATH_PREFIX = "iab_backfill"
+# Stub batches wait for the conversion stage. Stub batch N becomes document
+# batch N.
+_STUB_BATCH_PATH_PREFIX = "isb"
+_BACKFILL_STUB_BATCH_PATH_PREFIX = "isb_backfill"
 
 
 def _has_legacy_tabular_section(doc_dict: dict) -> bool:
@@ -156,10 +169,12 @@ class DocumentBatchStorage(ABC):
         doc_dict["metadata"] = normalized_metadata
         return doc_dict
 
+    def _path_prefix(self) -> str:
+        return _BACKFILL_BATCH_PATH_PREFIX if self.is_backfill else _BATCH_PATH_PREFIX
+
     def _per_cc_pair_base_path(self) -> str:
         """Get the base path for the cc pair."""
-        prefix = _BACKFILL_BATCH_PATH_PREFIX if self.is_backfill else _BATCH_PATH_PREFIX
-        return f"{prefix}/{self.cc_pair_id}"
+        return f"{self._path_prefix()}/{self.cc_pair_id}"
 
 
 class FileStoreDocumentBatchStorage(DocumentBatchStorage):
@@ -181,6 +196,20 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
     def store_batch(self, batch_num: int, documents: list[Document]) -> None:
         """Store a batch of documents using FileStore."""
+        self._write_batch_file(
+            batch_num,
+            lambda: self._serialize_documents(documents),
+            len(documents),
+            f"Document Batch {batch_num}",
+        )
+
+    def _write_batch_file(
+        self,
+        batch_num: int,
+        serialize: Callable[[], str],
+        item_count: int,
+        display_name: str,
+    ) -> None:
         file_name = self._get_batch_file_name(batch_num)
         # An overwrite would repoint a re-issued batch's record at this batch
         # and lose its documents.
@@ -191,25 +220,24 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         ):
             raise RuntimeError(f"Batch {file_name} already exists")
         try:
-            data = self._serialize_documents(documents)
-            content = StringIO(data)
+            content = StringIO(serialize())
 
             self.file_store.save_file(
                 file_id=file_name,
                 content=content,
-                display_name=f"Document Batch {batch_num}",
+                display_name=display_name,
                 file_origin=FileOrigin.OTHER,
                 file_type="application/json",
                 file_metadata={
                     "batch_num": batch_num,
-                    "document_count": str(len(documents)),
+                    "document_count": str(item_count),
                 },
             )
 
             logger.debug(
-                "Stored batch %s with %s documents to FileStore as %s",
+                "Stored batch %s with %s items to FileStore as %s",
                 batch_num,
-                len(documents),
+                item_count,
                 file_name,
             )
         except Exception as e:
@@ -218,6 +246,11 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
 
     def get_batch(self, batch_num: int) -> list[Document] | None:
         """Retrieve a batch of documents from FileStore."""
+        return self._read_batch_file(batch_num, self._deserialize_documents)
+
+    def _read_batch_file(
+        self, batch_num: int, deserialize: Callable[[str], list[_ItemT]]
+    ) -> list[_ItemT] | None:
         file_name = self._get_batch_file_name(batch_num)
         try:
             # Check if file exists
@@ -234,13 +267,13 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
             content_io = self.file_store.read_file(file_name)
             data = content_io.read().decode("utf-8")
 
-            documents = self._deserialize_documents(data)
+            items = deserialize(data)
             logger.debug(
-                "Retrieved batch %s with %s documents from FileStore",
+                "Retrieved batch %s with %s items from FileStore",
                 batch_num,
-                len(documents),
+                len(items),
             )
-            return documents
+            return items
         except Exception as e:
             logger.error("Failed to retrieve batch %s: %s", batch_num, e)
             raise
@@ -259,9 +292,12 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         )
 
     def cleanup_all_batches(self) -> None:
-        """Clean up all batches for this index attempt."""
+        """Delete all batches of the cc pair, and its stub batches too."""
         for batch_file_name in self.get_all_batches_for_cc_pair():
             self.delete_batch_by_name(batch_file_name)
+        _StubBatchFiles(
+            self.cc_pair_id, self.index_attempt_id, self.file_store, self.is_backfill
+        ).cleanup_all_batches()
 
     def get_all_batches_for_cc_pair(self) -> list[str]:
         """Get all IDs of batches stored in the file store for the cc pair
@@ -318,6 +354,102 @@ class FileStoreDocumentBatchStorage(DocumentBatchStorage):
         except Exception as e:
             logger.error("Failed to extract path info from %s: %s", path, e)
             return None
+
+
+class _StubBatchFiles(FileStoreDocumentBatchStorage):
+    """The file operations of the document batch store, under the stub
+    batch prefix. Only `StubBatchStorage` uses it."""
+
+    def _path_prefix(self) -> str:
+        return (
+            _BACKFILL_STUB_BATCH_PATH_PREFIX
+            if self.is_backfill
+            else _STUB_BATCH_PATH_PREFIX
+        )
+
+    def cleanup_all_batches(self) -> None:
+        for batch_file_name in self.get_all_batches_for_cc_pair():
+            self.delete_batch_by_name(batch_file_name)
+
+
+class StubBatchStorage:
+    """Stores the stub batches of an index attempt: listed documents that
+    the conversion stage has not fetched yet. Same file layout and API as
+    the document batch store, under its own prefix."""
+
+    def __init__(
+        self,
+        cc_pair_id: int,
+        index_attempt_id: int,
+        file_store: FileStore,
+        is_backfill: bool = False,
+    ):
+        self._files = _StubBatchFiles(
+            cc_pair_id, index_attempt_id, file_store, is_backfill
+        )
+
+    def store_batch(self, batch_num: int, stubs: list[SlimDocumentStub]) -> None:
+        self._files._write_batch_file(
+            batch_num,
+            lambda: json.dumps([stub.model_dump(mode="json") for stub in stubs]),
+            len(stubs),
+            f"Stub Batch {batch_num}",
+        )
+
+    def get_batch(
+        self,
+        batch_num: int,
+        payload_type: type[ListingPayload] | None = None,
+    ) -> list[SlimDocumentStub] | None:
+        """`payload_type` is the connector's `ListingPayload` subclass.
+        Without it, the listing payload loads as the base model and loses
+        its fields."""
+        return self._files._read_batch_file(
+            batch_num, lambda data: _deserialize_stubs(data, payload_type)
+        )
+
+    def delete_batch_by_num(self, batch_num: int) -> None:
+        self._files.delete_batch_by_num(batch_num)
+
+    def delete_batch_by_name(self, batch_file_name: str) -> None:
+        self._files.delete_batch_by_name(batch_file_name)
+
+    def cleanup_all_batches(self) -> None:
+        self._files.cleanup_all_batches()
+
+    def get_all_batches_for_cc_pair(self) -> list[str]:
+        return self._files.get_all_batches_for_cc_pair()
+
+    def update_old_batches_to_new_index_attempt(
+        self, batch_names: list[str]
+    ) -> list[str]:
+        return self._files.update_old_batches_to_new_index_attempt(batch_names)
+
+    def extract_path_info(self, path: str) -> BatchStoragePathInfo | None:
+        return self._files.extract_path_info(path)
+
+
+def _deserialize_stubs(
+    data: str, payload_type: type[ListingPayload] | None
+) -> list[SlimDocumentStub]:
+    stubs: list[SlimDocumentStub] = []
+    for stub_dict in json.loads(data):
+        raw_payload = stub_dict.pop("listing_payload", None)
+        stub = SlimDocumentStub.model_validate(stub_dict)
+        if raw_payload is not None:
+            stub.listing_payload = (payload_type or ListingPayload).model_validate(
+                raw_payload
+            )
+        stubs.append(stub)
+    return stubs
+
+
+def get_stub_batch_storage(
+    cc_pair_id: int, index_attempt_id: int, *, is_backfill: bool
+) -> StubBatchStorage:
+    return StubBatchStorage(
+        cc_pair_id, index_attempt_id, get_default_file_store(), is_backfill
+    )
 
 
 def get_document_batch_storage(

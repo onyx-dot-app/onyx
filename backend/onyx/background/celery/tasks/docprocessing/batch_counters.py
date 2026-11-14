@@ -1,8 +1,8 @@
-"""Batch counter signal handlers for docprocessing tasks.
+"""Batch counter signal handlers for docprocessing and docconversion tasks.
 
-Maintains two per-attempt Redis counters (id = IndexAttempt.id):
-  docprocessing_pending_{id}   - batches dispatched but not yet picked up
-  docprocessing_in_flight_{id} - batches picked up but not yet completed
+Maintains two per-attempt Redis counters for each stage (id = IndexAttempt.id):
+  {stage}_pending_{id}   - batches dispatched but not yet picked up
+  {stage}_in_flight_{id} - batches picked up but not yet completed
 
 These counters let the monitor distinguish worker crashes (in_flight > 0)
 from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
@@ -14,14 +14,17 @@ from sqlalchemy import update
 from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.models import IndexAttempt
-from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_docprocessing import BatchStage, RedisDocprocessing
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 logger = setup_logger()
 
-_TRACKED_TASK = OnyxCeleryTask.DOCPROCESSING_TASK
+_TRACKED_TASK_STAGES: dict[str, BatchStage] = {
+    OnyxCeleryTask.DOCPROCESSING_TASK: BatchStage.DOCPROCESSING,
+    OnyxCeleryTask.DOCCONVERSION_TASK: BatchStage.DOCCONVERSION,
+}
 
 
 def on_docprocessing_task_prerun(
@@ -31,7 +34,8 @@ def on_docprocessing_task_prerun(
 ) -> None:
     if task is None or task_id is None or kwargs is None:
         return
-    if (task.name or "") != _TRACKED_TASK:
+    stage = _TRACKED_TASK_STAGES.get(task.name or "")
+    if stage is None:
         return
 
     index_attempt_id = kwargs.get("index_attempt_id")
@@ -64,7 +68,7 @@ def on_docprocessing_task_prerun(
 
     try:
         r = get_redis_client(tenant_id=tenant_id)
-        RedisDocprocessing(index_attempt_id, r).decr_pending_incr_in_flight()
+        RedisDocprocessing(index_attempt_id, r, stage).decr_pending_incr_in_flight()
     except Exception:
         logger.debug(
             "Failed to update docprocessing counters on prerun for attempt %s",
@@ -81,7 +85,8 @@ def on_docprocessing_task_postrun(
 ) -> None:
     if task is None or task_id is None or kwargs is None:
         return
-    if (task.name or "") != _TRACKED_TASK:
+    stage = _TRACKED_TASK_STAGES.get(task.name or "")
+    if stage is None:
         return
 
     index_attempt_id = kwargs.get("index_attempt_id")
@@ -91,7 +96,7 @@ def on_docprocessing_task_postrun(
 
     try:
         r = get_redis_client(tenant_id=tenant_id)
-        RedisDocprocessing(index_attempt_id, r).decr_in_flight()
+        RedisDocprocessing(index_attempt_id, r, stage).decr_in_flight()
     except Exception:
         logger.debug(
             "Failed to update docprocessing counters on postrun for attempt %s",
