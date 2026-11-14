@@ -17,9 +17,8 @@ from onyx.db.models import LLMProvider, ModelConfiguration
 from onyx.llm.exceptions import litellm_exception_to_safe_error
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
 from onyx.llm.model_capabilities import (
-    catalog_model_supports_image_input,
+    catalog_model_or_alias_supports_image_input,
     get_max_input_tokens,
-    model_identity_names,
 )
 from onyx.llm.models import (
     GenerationOptions,
@@ -322,7 +321,6 @@ def model_supports_image_input(
     # Fallback to looking up the model in the model catalog. A
     # custom provider (e.g. Azure AI Foundry) may carry the real model
     # identity only in the deployment alias.
-    return any(
-        catalog_model_supports_image_input(name, model_provider)
-        for name in model_identity_names(model_name, deployment_name)
+    return catalog_model_or_alias_supports_image_input(
+        model_name, model_provider, deployment_name
     )

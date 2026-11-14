@@ -1064,7 +1064,13 @@ def _initial_auto_update_models(
     if catalog is None:
         catalog = fetch_models_for_provider(provider_name)
     return [
-        ModelConfigurationUpsertRequest(name=name, is_visible=name in recommended)
+        ModelConfigurationUpsertRequest(
+            name=name,
+            is_visible=name in recommended,
+            supports_image_input=catalog_model_supports_image_input(
+                name, provider_name
+            ),
+        )
         for name in catalog + [name for name in recommended if name not in catalog]
     ]
 

@@ -761,6 +761,17 @@ def model_identity_names(model_name: str, deployment_name: str | None) -> list[s
     return [name for name in (model_name, deployment_name) if name]
 
 
+def catalog_model_or_alias_supports_image_input(
+    model_name: str, model_provider: str, deployment_name: str | None
+) -> bool:
+    """Whether the model catalog marks the model, or its deployment alias, as
+    image-capable. Reads no stored flows."""
+    return any(
+        catalog_model_supports_image_input(name, model_provider)
+        for name in model_identity_names(model_name, deployment_name)
+    )
+
+
 class ReasoningParamStyle(str, Enum):
     """The shape of the reasoning parameters a model accepts."""
 

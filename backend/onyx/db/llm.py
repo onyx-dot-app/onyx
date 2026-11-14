@@ -36,7 +36,11 @@ from onyx.llm.constants import (
     SOURCE_API_CONTEXT_LIMIT_PROVIDERS,
     LlmProviderNames,
 )
-from onyx.llm.model_capabilities import get_max_input_tokens
+from onyx.llm.model_capabilities import (
+    catalog_model_or_alias_supports_image_input,
+    catalog_model_supports_image_input,
+    get_max_input_tokens,
+)
 from onyx.llm.model_catalog import model_supports_chat, model_supports_decisions
 from onyx.llm.models import ReasoningEffort
 from onyx.llm.utils import model_supports_image_input
@@ -1587,6 +1591,30 @@ def update_default_vision_provider(
             f"Model '{vision_model}' for provider '{provider.provider} does not support image input"
         )
 
+    # Older auto-update syncs stored image-capable models without the VISION
+    # flow. Add it when the catalog marks the model as image-capable. The check
+    # above can also match a row of another provider with the same type.
+    model_config = db_session.scalar(
+        select(ModelConfiguration).where(
+            ModelConfiguration.llm_provider_id == provider_id,
+            ModelConfiguration.name == vision_model,
+        )
+    )
+    if (
+        model_config is not None
+        and LLMModelFlowType.VISION not in model_config.llm_model_flow_types
+        and catalog_model_or_alias_supports_image_input(
+            vision_model, provider.provider, provider.deployment_name
+        )
+    ):
+        create_new_flow_mapping__no_commit(
+            db_session=db_session,
+            model_configuration_id=model_config.id,
+            flow_type=LLMModelFlowType.VISION,
+        )
+        model_config.supports_image_input = True
+        db_session.flush()
+
     update_default_model(
         db_session=db_session,
         provider_id=provider_id,
@@ -1760,13 +1788,14 @@ def sync_auto_mode_models(
     for model_name in released_model_names:
         if model_name in existing_names:
             continue
+        supported_flows = _model_protocol_flows(provider.provider, model_name, None)
+        if catalog_model_supports_image_input(model_name, provider.provider):
+            supported_flows.add(LLMModelFlowType.VISION)
         insert_new_model_configuration__no_commit(
             db_session=db_session,
             llm_provider_id=provider.id,
             model_name=model_name,
-            supported_flows=list(
-                _model_protocol_flows(provider.provider, model_name, None)
-            ),
+            supported_flows=list(supported_flows),
             is_visible=True,
             max_input_tokens=None,
             display_name=(display_names or {}).get(model_name),
