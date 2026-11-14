@@ -330,8 +330,13 @@ health calls are not retried.
     (`max_tool_calls`, 100 per cell) and output. Compute time excludes time
     spent in tools, so the lifetime is the outer bound. The lifetime and the
     reported duration start at the first worker checkout, so queueing does not
-    count. At most `MAX_CONCURRENT_TOOL_CALLS` (16) nested calls of a cell run
-    at once; later calls queue without a thread, and queued calls never start
+    count. The lifetime also stops while the program waits for input: it
+    waits for tool calls only, and each of its calls that runs waits for the
+    user's approval
+    (`tools/tool_implementations/code_mode/cells.py:CodeCell._update_waiting`).
+    Other work of the program, such as a call, a sleep or its code, keeps the
+    lifetime running. At most `MAX_CONCURRENT_TOOL_CALLS` (16) nested calls of
+    a cell run at once; later calls queue without a thread, and queued calls never start
     after the program ends. A server process runs at most
     `MAX_TOOL_CALL_THREADS` (192) nested calls at once
     (`tools/tool_implementations/code_mode/sandbox.py`). While several programs
@@ -349,7 +354,11 @@ health calls are not retried.
     tool and its dump does not fit in `MAX_SUSPENDED_BYTES`. A server process runs at most
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
     (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
-    and does not start. A new program that finds no free worker for
+    and does not start. A program that waits for input, as defined for the
+    lifetime above, does not count. Its work resumes only when the cell takes
+    a slot again: a call waits for a free one (`CodeCell._wait_for_slot`), and
+    the program keeps waiting in the sandbox, where it can still give up its
+    worker (`CodeCell._on_program_blocked`). A new program that finds no free worker for
     `CHECKOUT_TIMEOUT_SECONDS` gets `BUSY_MESSAGE`; a resumed program waits for
     a worker up to its lifetime. A program that waits (an `await` on
     unfinished tool calls or sleeps, or a synchronous `time.sleep`) keeps its

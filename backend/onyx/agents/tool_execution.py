@@ -300,6 +300,7 @@ class ToolBatch:
             tool is None
             or tool.merge_arguments is None
             or self.run.before_tool_call is not None
+            or call.name in self.run.approval_required
             or not call.arguments_complete
             or call.argument_error
             or self.message.stop_reason == "length"

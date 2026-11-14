@@ -238,3 +238,37 @@ def test_yield_control_ends_the_observation_while_a_call_waits() -> None:
     program.approve(0)
     final = program.wait_code()
     assert (final.status, final.stdout) == ("completed", "sent a\n")
+
+
+@pytest.mark.parametrize("other_work", ["tool_call", "sleep"])
+def test_a_waiting_call_keeps_the_slot_while_other_work_of_the_program_runs(
+    other_work: str,
+) -> None:
+    program = Program()
+    other = "hold(value='b')" if other_work == "tool_call" else "asyncio.sleep(1)"
+    observed = program.start(
+        f"import asyncio\nprint(await asyncio.gather(send(value='a'), {other}))\n",
+        yield_time_ms=60_000,
+    )
+    until(lambda: program.waiting(1))
+    cell = program.cells._cells[1]
+
+    def blocked() -> bool:
+        with cell._lock:
+            return cell._program_blocked
+
+    if other_work == "tool_call":
+        until(blocked)
+    # The other work counts toward the budget and the lifetime.
+    assert _running() == 1
+
+    if other_work == "tool_call":
+        program.hold.set()
+    # Only the waiting call is left.
+    until(lambda: _running() == 0)
+
+    program.approve(0)
+    finished = _details(observed.result(timeout=10))
+    assert finished.status == "completed", finished
+    assert program.sent == ["a"]
+    until(lambda: _running() == 0)

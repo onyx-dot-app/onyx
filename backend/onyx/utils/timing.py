@@ -117,15 +117,19 @@ class PausableClock:
 
     def now(self) -> float:
         """Monotonic seconds less the time spent paused."""
-        return time.monotonic() - self.paused_seconds
+        with self._lock:
+            now = time.monotonic()
+            return now - self._paused_at(now)
 
     @property
     def paused_seconds(self) -> float:
         with self._lock:
-            since = self._paused_since
-            return self._paused_seconds + (
-                0.0 if since is None else time.monotonic() - since
-            )
+            return self._paused_at(time.monotonic())
+
+    def _paused_at(self, now: float) -> float:
+        """Seconds spent paused up to `now`. The caller holds the lock."""
+        since = self._paused_since
+        return self._paused_seconds + (0.0 if since is None else now - since)
 
     def set_paused(self, paused: bool) -> None:
         with self._lock:

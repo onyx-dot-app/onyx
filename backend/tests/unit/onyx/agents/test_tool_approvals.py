@@ -2,8 +2,10 @@
 
 import threading
 import time
+from functools import partial
 
 import pytest
+from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import AgentCoordinator, ToolApprovals
 from onyx.agents.runtime import Agent, Run
@@ -23,6 +25,7 @@ from onyx.llm.models import (
     ToolDefinition,
     ToolResult,
 )
+from onyx.tools.interface import merge_tool_arguments
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
 
@@ -144,8 +147,11 @@ def test_a_run_without_approvals_cannot_ask() -> None:
     assert executed == []
 
 
+@pytest.mark.parametrize("answered", [True, False], ids=["answered", "cancelled"])
 @pytest.mark.parametrize("nested", [False, True], ids=["direct", "program_call"])
-def test_input_wait_time_counts_the_time_calls_waited(nested: bool) -> None:
+def test_input_wait_time_counts_the_time_calls_waited(
+    nested: bool, answered: bool
+) -> None:
     approvals = Approvals({"send": _request("send-request")})
 
     def program(invocation: ToolInvocation) -> ToolResult:
@@ -181,14 +187,64 @@ def test_input_wait_time_counts_the_time_calls_waited(nested: bool) -> None:
         time.sleep(0.3)
         assert run.input_wait_seconds >= 0.3
 
-        run.submit(_approve("send-request"))
-
-        assert run.result(timeout=5).output.text == "done"
+        if answered:
+            run.submit(_approve("send-request"))
+            assert run.result(timeout=5).output.text == "done"
+        else:
+            run.cancel()
+            assert run.wait_for_idle(5)
         waited = run.input_wait_seconds
         assert 0.3 <= waited <= time.monotonic() - started
         time.sleep(0.1)
-        # The clock stops when the answer arrives.
+        # The clock stops when the answer arrives or the run ends.
         assert run.input_wait_seconds == waited
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(5)
+
+
+def test_calls_that_require_approval_are_not_merged() -> None:
+    executed: list[dict[str, JsonValue]] = []
+
+    class PerCallApprovals(Approvals):
+        def request_approval(self, run: Run, call: ToolCall) -> Outcome:
+            super().request_approval(run, call)
+            return _request(f"{call.id}-request")
+
+    def execute(invocation: ToolInvocation) -> ToolResult:
+        executed.append(invocation.arguments)
+        return ToolResult(content="searched")
+
+    approvals = PerCallApprovals({"search": None})
+    run = _run(
+        [
+            ToolCall(id="a", name="search", arguments={"queries": ["a"]}),
+            ToolCall(id="b", name="search", arguments={"queries": ["b"]}),
+        ],
+        [
+            AgentTool(
+                definition=ToolDefinition(name="search", description="", parameters={}),
+                execute=execute,
+                merge_arguments=partial(merge_tool_arguments, field="queries"),
+                approval_required=["search"],
+            )
+        ],
+        approvals,
+    )
+    try:
+        deadline = time.monotonic() + 5
+        while len(run.pending_inputs) < 2:
+            assert run.snapshot().failure is None
+            assert time.monotonic() < deadline
+            time.sleep(0.01)
+        assert sorted(approvals.requested) == ["a", "b"]
+
+        run.submit(_approve("a-request"))
+        run.submit(_approve("b-request"))
+
+        assert run.result(timeout=5).output.text == "done"
+        assert run.wait_for_idle(5)
+        assert sorted(executed, key=str) == [{"queries": ["a"]}, {"queries": ["b"]}]
     finally:
         run.cancel()
         assert run.wait_for_idle(5)
