@@ -606,3 +606,46 @@ func TestFailedReloadKeepsTheWaitingRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestResponseStartedAfterTheStopIsFollowed(t *testing.T) {
+	ended, started := 7, 9
+	next := make(chan models.StreamEvent)
+	client := &followingClient{streams: []chan models.StreamEvent{next}}
+	client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
+	client.sent = make(chan models.StreamEvent)
+	m, ch := streamingModel(client)
+	session := followedSession
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: ended})
+	m = receive(t, m, ch, models.StopEvent{})
+
+	// The ended response still saves: wait without replaying it.
+	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &ended})
+	if cmd == nil || !m.isStreaming || len(client.requests) != 0 {
+		t.Fatalf("the ended response was followed again: %+v", client.requests)
+	}
+	if _, polled := cmd().(sessionReadyMsg); !polled {
+		t.Fatal("the readiness check stopped")
+	}
+
+	// Another client starts a response.
+	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &started}
+	updated, reload := m.Update(sessionReadyMsg{sessionID: followedSession, channel: m.streamCh, status: client.status})
+	m = updated.(Model)
+	if reload == nil {
+		t.Fatal("the new response is not followed")
+	}
+	resumed, ok := reload().(SessionResumedMsg)
+	if !ok {
+		t.Fatal("the new response is not followed")
+	}
+	updated, _ = m.Update(resumed)
+	m = updated.(Model)
+	if m.streamCh != next || len(client.requests) != 1 || *client.requests[0].streamID != started || client.requests[0].cursor != 0 {
+		t.Fatalf("requests = %+v, want stream 9 from cursor 0", client.requests)
+	}
+	m = receive(t, m, next, approvalRequest("a1"))
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
+		t.Fatal("the new response's request cannot be decided")
+	}
+}

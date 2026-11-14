@@ -196,7 +196,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			running := msg.status.StreamID
 			// A message that the server did not accept owns no running response.
 			owned := m.following || m.streamID != nil
-			if msg.err == nil && running != nil && owned && !m.stopReceived && !m.stopRequested &&
+			// After its stop, only a response that another client started is followed.
+			another := m.streamID == nil || *m.streamID != *running
+			if msg.err == nil && running != nil && owned && (!m.stopReceived || another) && !m.stopRequested &&
 				(m.unbufferedStreamID == nil || *m.unbufferedStreamID != *running) {
 				if m.streamID != nil && *m.streamID == *running && m.resumeCursor != nil {
 					// Continue after the last complete batch, so no event repeats.
