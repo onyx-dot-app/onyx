@@ -5201,10 +5201,20 @@
           "description": "Nur Admins veröffentlichen Skills für die Organisation."
         },
         "saveSuccess": {
-          "message": "Veröffentlichungseinstellung gespeichert."
+          "message": "Einstellung gespeichert."
         },
         "saveError": {
-          "message": "Die Veröffentlichungseinstellung konnte nicht gespeichert werden."
+          "message": "Einstellung konnte nicht gespeichert werden."
+        },
+        "defaultAccess": {
+          "title": "Standardzugriff",
+          "description": "Gilt für jeden veröffentlichten Skill ohne eigene Einstellung, auch für später veröffentlichte Skills.",
+          "loadFailed": "Standardzugriff konnte nicht geladen werden.",
+          "retry": "Erneut versuchen"
+        },
+        "sharing": {
+          "title": "Teilen",
+          "description": "Mitglieder können Skills mit Personen und Gruppen teilen. Skill-Manager können immer teilen."
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Zur Installation verfügbar",
-          "default": "Standardmäßig installiert",
-          "required": "Erforderlich",
-          "availableDescription": "Nutzer können jederzeit installieren oder deinstallieren.",
-          "defaultDescription": "Automatisch installiert. Nutzer können jederzeit deaktivieren oder deinstallieren.",
-          "requiredDescription": "Automatisch installiert. Nutzer können nicht deaktivieren oder deinstallieren.",
           "description": "Wählen Sie, wie dieser Skill für alle Personen mit Zugriff installiert wird."
         },
         "description": "Wählen Sie, wer diesen Skill nutzen kann und wie er installiert wird.",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "Die Veröffentlichung ist deaktiviert",
           "description": "Ein Admin hat die Veröffentlichung in der Organisation deaktiviert. Bitten Sie einen Admin, diesen Skill zu veröffentlichen."
+        },
+        "sharingOff": {
+          "title": "Teilen ist deaktiviert",
+          "description": "Ein Admin hat das Teilen mit Personen und Gruppen deaktiviert. Bitte einen Skill-Manager, diesen Skill zu teilen."
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · Erste Veröffentlichung",
         "update": "v{number} · Update von v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Erforderlich",
+        "description": "Installiert und immer aktiv. Mitglieder können es nicht deaktivieren."
+      },
+      "DEFAULT": {
+        "label": "Standardmäßig installiert",
+        "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
+      },
+      "AVAILABLE": {
+        "label": "Zur Installation verfügbar",
+        "description": "Mitglieder finden es und aktivieren es bei Bedarf."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Nicht verfügbar",
+        "description": "Ausgeblendet. Mitglieder können es weder finden noch aktivieren."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Einstellung der Organisation} other {Standardzugriff}}",
+        "labelWithPolicy": "{scope, select, group {Einstellung der Organisation ({policy})} other {Standardzugriff ({policy})}}",
+        "description": "{scope, select, group {Keine Gruppeneinstellung. Die Gruppe verwendet die Einstellung der Organisation.} other {Keine eigene Einstellung. Der Skill verwendet den Standardzugriff, auch nachdem ein Admin ihn ändert.}}"
       }
     }
   },

@@ -22,11 +22,14 @@ from onyx.db.external_app import (
 )
 from onyx.db.models import Skill, User
 from onyx.db.plugin import (
+    check_sharing_allowed,
+    get_organization_library_default,
     get_plugin_current_version_id,
     get_plugin_version,
     get_stored_version_content,
     list_plugin_versions,
     lock_skill_plugin__no_commit,
+    set_organization_library_default__no_commit,
 )
 from onyx.db.skill import (
     SkillManagementPolicy,
@@ -65,6 +68,7 @@ from onyx.server.features.skill.models import (
     GitHubSkillsImportResponse,
     GitHubSkillsPreviewRequest,
     GitHubSkillsPreviewResponse,
+    OrganizationLibraryDefaultAccess,
     SkillBulkActionRequest,
     SkillBulkFailure,
     SkillBulkResponse,
@@ -114,7 +118,10 @@ from onyx.skills.ingest import (
 from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import GITHUB_SKILL_MAX_COUNT
-from onyx.skills.push import push_skill_to_affected_sandboxes, push_skills_for_users
+from onyx.skills.push import (
+    push_skill_to_affected_sandboxes,
+    push_skills_and_commit,
+)
 from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
@@ -184,9 +191,7 @@ def _import_skill_bundles(
         for file_id in bundle_file_ids:
             delete_bundle_blob(file_store, file_id)
         raise
-    if affected:
-        push_skills_for_users(affected, db_session)
-        db_session.commit()
+    push_skills_and_commit(affected, db_session)
     return _import_response(created, not_imported, auto_enable, user, db_session)
 
 
@@ -356,8 +361,7 @@ def bulk_update_skills(
             affected |= item_affected
             deleted_file_ids.extend(item_file_ids)
     db_session.commit()
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     delete_files_best_effort(deleted_file_ids, context=_BUNDLE_CLEANUP)
     return SkillBulkResponse(succeeded=succeeded, failed=failed)
 
@@ -377,8 +381,7 @@ def set_skill_enabled_for_current_user(
         db_session=db_session,
     )
     db_session.commit()
-    push_skills_for_users({user.id}, db_session)
-    db_session.commit()
+    push_skills_and_commit({user.id}, db_session)
     return skill_response_for_user(skill, user, db_session)
 
 
@@ -391,6 +394,32 @@ def list_skill_review_requests(
         SkillReviewRequestResponse.model_validate(row, from_attributes=True)
         for row in list_review_requests(db_session)
     ]
+
+
+@user_router.get("/organization-library/default-access")
+def get_organization_library_default_access(
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> OrganizationLibraryDefaultAccess:
+    return OrganizationLibraryDefaultAccess(
+        installation_policy=get_organization_library_default(db_session)
+    )
+
+
+@user_router.put("/organization-library/default-access")
+def set_organization_library_default_access(
+    request: OrganizationLibraryDefaultAccess,
+    _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
+    db_session: Session = Depends(get_session),
+) -> OrganizationLibraryDefaultAccess:
+    affected = set_organization_library_default__no_commit(
+        request.installation_policy, db_session
+    )
+    db_session.commit()
+    push_skills_and_commit(affected, db_session)
+    return OrganizationLibraryDefaultAccess(
+        installation_policy=request.installation_policy
+    )
 
 
 @user_router.get("/{skill_id}")
@@ -832,9 +861,7 @@ def publish_current_user_skill(
     )
     db_session.commit()
     db_session.expire(skill)
-    if affected:
-        push_skills_for_users(affected, db_session)
-        db_session.commit()
+    push_skills_and_commit(affected, db_session)
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
@@ -849,8 +876,7 @@ def approve_skill_review(
     affected = approve_skill_review__no_commit(skill, version_id, db_session)
     db_session.commit()
     db_session.expire(skill)
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     return skill_response_for_user(skill, user, db_session, include_share_details=True)
 
 
@@ -1068,8 +1094,7 @@ def patch_current_user_skill(
     visibility_changed = old_public_permission != skill.public_permission
     if files_changed or visibility_changed:
         after_affected = affected_user_ids_for_skill(skill, db_session)
-        push_skills_for_users(before_affected | after_affected, db_session)
-        db_session.commit()
+        push_skills_and_commit(before_affected | after_affected, db_session)
 
     return skill_response_for_user(
         skill,
@@ -1115,6 +1140,7 @@ def share_current_user_skill(
     if (
         share_req.user_shares is None
         and share_req.group_shares is None
+        and share_req.group_settings is None
         and "installation_policy" not in share_req.model_fields_set
         and "public_permission" not in share_req.model_fields_set
     ):
@@ -1128,8 +1154,7 @@ def share_current_user_skill(
     affected = share_skill__no_commit(skill, share_req.to_change(), user, db_session)
     db_session.commit()
     db_session.expire(skill)
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     return skill_response_for_user(
         skill,
         user,
@@ -1191,6 +1216,9 @@ def transfer_current_user_skill_ownership(
             OnyxErrorCode.INVALID_INPUT,
             "This user already owns the skill.",
         )
+    # The previous owner keeps an EDITOR share, which Sharing off forbids.
+    if not has_global_permission(user, Permission.MANAGE_PLUGINS):
+        check_sharing_allowed()
 
     before_affected = affected_user_ids_for_skill(skill, db_session)
     transfer_skill_ownership(
@@ -1202,8 +1230,7 @@ def transfer_current_user_skill_ownership(
     after_affected = affected_user_ids_for_skill(skill, db_session)
     db_session.commit()
     db_session.expire(skill)
-    push_skills_for_users(before_affected | after_affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(before_affected | after_affected, db_session)
     return skill_response_for_user(
         skill,
         user,
@@ -1231,6 +1258,5 @@ def delete_current_user_skill(
     affected, file_ids = delete_skill_for_user__no_commit(skill, user, db_session)
     db_session.commit()
 
-    push_skills_for_users(affected, db_session)
-    db_session.commit()
+    push_skills_and_commit(affected, db_session)
     delete_files_best_effort(file_ids, context=_BUNDLE_CLEANUP)

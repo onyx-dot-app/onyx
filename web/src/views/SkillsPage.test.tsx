@@ -170,6 +170,9 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    required_for_user: false,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -518,10 +521,10 @@ describe("SkillsPage preference toggles", () => {
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
   });
 
-  it("does not let an owner who is not a manager delete a published skill", async () => {
+  it("does not offer bulk delete when the server refuses one skill", async () => {
     skillsData.customs = [
       { ...customSkill("private", "private-skill"), public_permission: null },
-      customSkill("published", "published-skill"),
+      { ...customSkill("published", "published-skill"), can_delete: false },
     ].map((skill) => ({ ...skill, user_permission: "OWNER" as const }));
     render(<SkillsPage />);
     const user = setupUser();

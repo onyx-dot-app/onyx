@@ -141,6 +141,9 @@ class Settings(BaseModel):
     # Who can publish skills to the organization. Organization-wide skill
     # managers always publish at once.
     plugin_publishing: PluginPublishingPolicy = PluginPublishingPolicy.OPEN
+    # Whether members can share skills with people and groups.
+    # Organization-wide skill managers always can.
+    plugin_sharing: bool = True
 
     # Workspace-wide instructions injected into every Craft agent's AGENTS.md
     # as an "Organization instructions" section.

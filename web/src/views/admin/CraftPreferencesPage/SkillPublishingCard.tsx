@@ -2,37 +2,106 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { mutate } from "swr";
-import { Card, InputSingleSelect } from "@opal/components";
-import { InputHorizontal, Section, toast } from "@opal/layouts";
+import useSWR, { mutate } from "swr";
+import {
+  Button,
+  Card,
+  InputSingleSelect,
+  InputSwitch,
+  Text,
+} from "@opal/components";
+import { InputHorizontal, Section, toast, useErrorToast } from "@opal/layouts";
+import { DropdownLoader } from "@opal/loaders";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import { updateAdminSettings } from "@/lib/settings/svc";
+import { setOrganizationLibraryDefaultAccess } from "@/lib/skills/api";
+import { usePolicyOptions } from "@/lib/skills/hooks";
+import type {
+  OrganizationLibraryDefaultAccess,
+  OrganizationLibraryDefaultPolicy,
+} from "@/lib/skills/types";
+
+const DEFAULT_ACCESS_POLICIES = [
+  "AVAILABLE",
+  "DEFAULT",
+  "NOT_AVAILABLE",
+] as const satisfies readonly OrganizationLibraryDefaultPolicy[];
 
 function isPublishingPolicy(value: string): value is PluginPublishingPolicy {
   return Object.values<string>(PluginPublishingPolicy).includes(value);
 }
 
+function isDefaultAccessPolicy(
+  value: string
+): value is OrganizationLibraryDefaultPolicy {
+  return DEFAULT_ACCESS_POLICIES.some((policy) => policy === value);
+}
+
+/** The admin skill policies: Publishing, Default access of the Organization
+ * library, and Sharing. */
 export default function SkillPublishingCard() {
   const t = useTranslations("admin.craftPreferences.publishing");
   const settings = useSettings();
   const policy = settings.plugin_publishing ?? PluginPublishingPolicy.OPEN;
+  const sharing = settings.plugin_sharing ?? true;
+  const {
+    data: defaultAccess,
+    error: defaultAccessError,
+    mutate: reloadDefaultAccess,
+  } = useSWR<OrganizationLibraryDefaultAccess>(
+    SWR_KEYS.organizationLibraryDefaultAccess,
+    errorHandlingFetcher
+  );
+  useErrorToast(defaultAccessError, {
+    id: "skill-default-access-load-failed",
+    message: t("defaultAccess.loadFailed"),
+    retry: {
+      label: t("defaultAccess.retry"),
+      onRetry: () => void reloadDefaultAccess(),
+    },
+  });
   const [isSaving, setIsSaving] = useState(false);
+  const defaultAccessOptions = usePolicyOptions({
+    levels: DEFAULT_ACCESS_POLICIES,
+  });
 
-  async function save(next: PluginPublishingPolicy) {
-    if (next === policy) return;
+  async function saveSetting(run: () => Promise<void>, key: string) {
     setIsSaving(true);
     try {
-      await updateAdminSettings({ plugin_publishing: next });
-      await mutate(SWR_KEYS.settings);
+      await run();
+      await mutate(key);
       toast.success(t("saveSuccess.message"));
     } catch (err) {
-      console.error("Failed to save the Publishing setting", err);
+      console.error("Failed to save a skill setting", err);
       toast.error(err instanceof Error ? err.message : t("saveError.message"));
     } finally {
       setIsSaving(false);
     }
+  }
+
+  async function save(next: PluginPublishingPolicy) {
+    if (next === policy) return;
+    await saveSetting(
+      () => updateAdminSettings({ plugin_publishing: next }),
+      SWR_KEYS.settings
+    );
+  }
+
+  async function saveDefaultAccess(next: OrganizationLibraryDefaultPolicy) {
+    if (next === defaultAccess?.installation_policy) return;
+    await saveSetting(async () => {
+      await setOrganizationLibraryDefaultAccess(next);
+    }, SWR_KEYS.organizationLibraryDefaultAccess);
+  }
+
+  async function saveSharing(next: boolean) {
+    await saveSetting(
+      () => updateAdminSettings({ plugin_sharing: next }),
+      SWR_KEYS.settings
+    );
   }
 
   const descriptions = {
@@ -65,6 +134,50 @@ export default function SkillPublishingCard() {
               },
               { value: PluginPublishingPolicy.OFF, title: t("off.label") },
             ]}
+          />
+        </InputHorizontal>
+        <InputHorizontal
+          title={t("defaultAccess.title")}
+          description={t("defaultAccess.description")}
+          withLabel
+        >
+          {defaultAccessError ? (
+            // A failed read shows no level rather than a wrong one.
+            <Section flexDirection="row" gap={1} height="auto" width="auto">
+              <Text font="secondary-body" color="text-03">
+                {t("defaultAccess.loadFailed")}
+              </Text>
+              <Button
+                prominence="secondary"
+                size="sm"
+                onClick={() => void reloadDefaultAccess()}
+              >
+                {t("defaultAccess.retry")}
+              </Button>
+            </Section>
+          ) : defaultAccess === undefined ? (
+            <DropdownLoader />
+          ) : (
+            <InputSingleSelect
+              value={defaultAccess.installation_policy}
+              placeholder={t("defaultAccess.title")}
+              disabled={isSaving}
+              onValueChange={(value: string) => {
+                if (isDefaultAccessPolicy(value)) void saveDefaultAccess(value);
+              }}
+              options={defaultAccessOptions}
+            />
+          )}
+        </InputHorizontal>
+        <InputHorizontal
+          title={t("sharing.title")}
+          description={t("sharing.description")}
+          withLabel
+        >
+          <InputSwitch
+            checked={sharing}
+            disabled={isSaving}
+            onCheckedChange={(checked: boolean) => void saveSharing(checked)}
           />
         </InputHorizontal>
       </Section>

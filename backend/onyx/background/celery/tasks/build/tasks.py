@@ -76,6 +76,26 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.PUSH_SKILLS_TO_USERS,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def push_skills_to_users_task(
+    self: Task,  # noqa: ARG001
+    *,
+    user_ids: list[str],
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """Push skills to the users' running sandboxes, out of the request that
+    changed their access (``onyx.skills.push.enqueue_skill_push``)."""
+    from onyx.skills.push import push_skills_and_commit
+
+    with get_session_with_current_tenant() as db_session:
+        push_skills_and_commit({UUID(user_id) for user_id in user_ids}, db_session)
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
     name=OnyxCeleryTask.RECONCILE_SANDBOX_RUNTIMES,
     soft_time_limit=TIMEOUT_SECONDS,
     bind=True,

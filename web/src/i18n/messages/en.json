@@ -5201,10 +5201,20 @@
           "description": "Only admins publish skills to the organization."
         },
         "saveSuccess": {
-          "message": "Publishing setting saved."
+          "message": "Setting saved."
         },
         "saveError": {
-          "message": "Couldn't save the Publishing setting."
+          "message": "Couldn't save the setting."
+        },
+        "defaultAccess": {
+          "title": "Default Access",
+          "description": "Applies to every published skill that doesn't have its own setting, including skills published later.",
+          "loadFailed": "Could not load Default Access.",
+          "retry": "Try again"
+        },
+        "sharing": {
+          "title": "Sharing",
+          "description": "Members can share skills with people and groups. Skill managers can always share."
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "Installation",
-          "available": "Available to install",
-          "default": "Installed by default",
-          "required": "Required",
-          "availableDescription": "Users can install or uninstall anytime.",
-          "defaultDescription": "Installed automatically. Users can disable or uninstall anytime.",
-          "requiredDescription": "Installed automatically. Users cannot disable or uninstall.",
           "description": "Choose how this skill is installed for everyone with access."
         },
         "description": "Choose who can use this skill and how it is installed.",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "Publishing is turned off",
           "description": "An admin turned off publishing to the organization. Ask an admin to publish this skill."
+        },
+        "sharingOff": {
+          "title": "Sharing is turned off",
+          "description": "An admin turned off sharing with people and groups. Ask a skill manager to share this skill."
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · First publish",
         "update": "v{number} · Update from v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Required",
+        "description": "Installed and always on. Members can't turn it off."
+      },
+      "DEFAULT": {
+        "label": "Installed by default",
+        "description": "Installed for every member. Members can turn it off."
+      },
+      "AVAILABLE": {
+        "label": "Available to install",
+        "description": "Members find it and turn it on if they want it."
+      },
+      "NOT_AVAILABLE": {
+        "label": "Not available",
+        "description": "Hidden. Members can't find or turn it on."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Organization setting} other {Default access}}",
+        "labelWithPolicy": "{scope, select, group {Organization setting ({policy})} other {Default access ({policy})}}",
+        "description": "{scope, select, group {No group setting. The group uses the organization setting.} other {No own setting. The skill uses Default access, also after an admin changes it.}}"
       }
     }
   },

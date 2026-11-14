@@ -5201,10 +5201,20 @@
           "description": "Solo los administradores publican habilidades en la organización."
         },
         "saveSuccess": {
-          "message": "Se guardó la configuración de publicación."
+          "message": "Configuración guardada."
         },
         "saveError": {
-          "message": "No se pudo guardar la configuración de publicación."
+          "message": "No se pudo guardar la configuración."
+        },
+        "defaultAccess": {
+          "title": "Acceso predeterminado",
+          "description": "Se aplica a cada skill publicado que no tiene su propia configuración, incluidos los que se publiquen después.",
+          "loadFailed": "No se pudo cargar el acceso predeterminado.",
+          "retry": "Reintentar"
+        },
+        "sharing": {
+          "title": "Compartir",
+          "description": "Los miembros pueden compartir skills con personas y grupos. Los administradores de skills siempre pueden compartir."
         }
       }
     },
@@ -17435,12 +17445,6 @@
         },
         "installation": {
           "title": "Instalación",
-          "available": "Disponible para instalar",
-          "default": "Instalado de forma predeterminada",
-          "required": "Obligatorio",
-          "availableDescription": "Los usuarios pueden instalar o desinstalar en cualquier momento.",
-          "defaultDescription": "Se instala automáticamente. Los usuarios pueden desactivar o desinstalar en cualquier momento.",
-          "requiredDescription": "Se instala automáticamente. Los usuarios no pueden desactivar ni desinstalar.",
           "description": "Elige cómo se instala esta habilidad para quienes tienen acceso."
         },
         "description": "Elige quién puede usar esta habilidad y cómo se instala.",
@@ -17464,6 +17468,10 @@
         "publishOff": {
           "title": "La publicación está desactivada",
           "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique esta habilidad."
+        },
+        "sharingOff": {
+          "title": "El uso compartido está desactivado",
+          "description": "Un administrador desactivó el uso compartido con personas y grupos. Pide a un administrador de skills que comparta este skill."
         }
       },
       "placeholders": {
@@ -17705,6 +17713,29 @@
       "version": {
         "firstPublish": "v{number} · Primera publicación",
         "update": "v{number} · Actualización de v{published}"
+      }
+    },
+    "installationPolicy": {
+      "REQUIRED": {
+        "label": "Obligatorio",
+        "description": "Instalado y siempre activo. Los miembros no pueden desactivarlo."
+      },
+      "DEFAULT": {
+        "label": "Instalado de forma predeterminada",
+        "description": "Instalado para cada miembro. Los miembros pueden desactivarlo."
+      },
+      "AVAILABLE": {
+        "label": "Disponible para instalar",
+        "description": "Los miembros lo encuentran y lo activan si lo quieren."
+      },
+      "NOT_AVAILABLE": {
+        "label": "No disponible",
+        "description": "Oculto. Los miembros no pueden encontrarlo ni activarlo."
+      },
+      "inherit": {
+        "label": "{scope, select, group {Configuración de la organización} other {Acceso predeterminado}}",
+        "labelWithPolicy": "{scope, select, group {Configuración de la organización ({policy})} other {Acceso predeterminado ({policy})}}",
+        "description": "{scope, select, group {Sin configuración de grupo. El grupo usa la configuración de la organización.} other {Sin configuración propia. El skill usa el acceso predeterminado, también después de que un administrador lo cambie.}}"
       }
     }
   },

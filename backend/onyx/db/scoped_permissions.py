@@ -40,6 +40,13 @@ def fetch_managed_group_ids(user: User, db_session: Session) -> set[int]:
     return set(db_session.scalars(scoped_group_ids_subquery(user)).all())
 
 
+def managed_group_member_ids_subquery(user: User) -> Select:
+    """Subquery of the members of the groups ``user`` manages."""
+    return select(User__UserGroup.user_id).where(
+        User__UserGroup.user_group_id.in_(scoped_group_ids_subquery(user))
+    )
+
+
 def within_managed_scope_clause(
     *,
     resource_id_col: InstrumentedAttribute[_ResourceId],

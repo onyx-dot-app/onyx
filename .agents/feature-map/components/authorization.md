@@ -162,8 +162,9 @@ the guards decide.
    adding or removing an agent's group share is a `MANAGE_AGENTS` action
    (`ee/onyx/db/persona.py:_assert_group_share_within_scope`), and changing a
    skill's group shares is a `MANAGE_PLUGINS` action
-   (`db/plugin.py:apply_plugin_access_change__no_commit`). A skill's company
-   install setting needs global `MANAGE_PLUGINS`.
+   (`db/plugin.py:apply_plugin_access_change__no_commit`). A skill's
+   organization and group install settings need global `MANAGE_PLUGINS`, so a
+   group manager cannot raise a skill to Required for their group.
 8. `scoped-pat-fails-closed` **A scoped PAT fails closed; an unscoped PAT does
    not.** A scoped PAT reaches only routes with `require_permission` or
    `scope_exempt()`, and only when its scopes imply the required permission. A
