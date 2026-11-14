@@ -324,10 +324,50 @@
       "details": "详细信息",
       "serverDetails": "服务器详情",
       "authentication": "身份验证",
-      "back": "返回"
+      "back": "返回",
+      "checking": "正在检查服务器…",
+      "continue": "继续"
     },
     "policyEditor": {
       "toolCount": "{count, plural, other {#个操作}}"
+    },
+    "addOpenApiModal": {
+      "cancelButton": {
+        "label": "取消"
+      },
+      "copyButton": {
+        "tooltip": "复制定义"
+      },
+      "definition": {
+        "invalidJson": "JSON 格式无效",
+        "placeholder": "在此输入您的 OpenAPI 架构",
+        "required": "必须填写 OpenAPI 架构定义",
+        "subDescription": "指定一个 OpenAPI 架构，用于定义您想作为此插件一部分开放的 API。您可以在架构的任意位置使用占位符 `CHAT_SESSION_ID`、`MESSAGE_ID`、`USER_ID` 和 `USER_EMAIL`（例如服务器 URL、路径、参数默认值），调用时它们会被替换为当前请求的值。详细了解 [OpenAPI 插件]({docsUrl})。",
+        "title": "OpenAPI 架构定义"
+      },
+      "empty": {
+        "description": "提供 OpenAPI 架构后即可在此预览操作。",
+        "title": "未找到操作"
+      },
+      "formatButton": {
+        "tooltip": "格式化定义"
+      },
+      "method": {
+        "noSummary": "未提供摘要"
+      },
+      "toasts": {
+        "actionCreated": "OpenAPI 插件创建成功",
+        "invalidJson": "OpenAPI 架构定义中的 JSON 格式无效"
+      },
+      "humanDescription": {
+        "title": "面向用户的描述",
+        "hint": "显示在插件卡片和插件详情中。"
+      },
+      "agentDescription": {
+        "title": "面向智能体的描述",
+        "hint": "编辑 OpenAPI 架构中的 info.description。",
+        "disabled": "请输入有效的架构以编辑此字段。"
+      }
     }
   },
   "admin": {
@@ -598,6 +638,9 @@
         },
         "federatedSlack": {
           "description": "查询时搜索 Slack"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 服务台工单"
         }
       }
     },
@@ -3984,6 +4027,45 @@
               "none": "此应用注册上没有其他连接器设置每分钟 RU。",
               "hidden": "{count, plural, other {# 个您无法查看的连接器}}",
               "unavailable": "无法加载此应用注册上其他连接器的每分钟 RU。"
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "配置 Jira Service Management 连接器",
+          "subtext": "配置要编入索引的 Jira Service Management 内容。您可以索引全部工单，或限定为特定项目或 JQL 查询。",
+          "fields": {
+            "jira_base_url": {
+              "label": "站点 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "全部"
+                },
+                "project": {
+                  "label": "项目"
+                },
+                "jql": {
+                  "label": "JQL 查询"
+                }
+              }
+            },
+            "everything": {
+              "label": "索引该账号有权读取的所有工单",
+              "description": "Onyx 会索引所选账号可以读取的所有工单。如需缩小范围，请选择其他选项卡。"
+            },
+            "project_key": {
+              "label": "项目键",
+              "description": "要索引的特定项目的键（例如 'IT'）。"
+            },
+            "jql_query": {
+              "label": "JQL 查询",
+              "description": "用于筛选 Jira Service Management 工单的自定义 JQL 查询。\n\n重要提示：请勿在 JQL 查询中包含任何基于时间的过滤条件，否则会与连接器逻辑冲突；同时请勿包含 ORDER BY 子句。\n\n有关语法详情，请参阅 [Atlassian JQL 文档](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)。"
+            },
+            "comment_email_blacklist": {
+              "label": "评论邮箱黑名单",
+              "description": "通常用于忽略特定机器人的评论。请添加不应被索引其评论的用户邮箱地址。"
             }
           }
         }
@@ -9064,7 +9146,9 @@
         }
       },
       "toasts": {
-        "unexpectedError": "发生意外错误。"
+        "unexpectedError": "发生意外错误。",
+        "connected": "{label} 已连接",
+        "disconnected": "{label} 已断开连接"
       },
       "providers": {
         "braintrust": {
@@ -10366,7 +10450,11 @@
         "createFailed": "无法添加集成。",
         "preset": {
           "loadFailed": "无法加载预设。",
-          "credentialRequired": "请填写此值。"
+          "credentialRequired": "请填写此值。",
+          "title": "起点",
+          "instructions": "设置说明",
+          "description": "预设会填写内置应用的名称和登录方式。选择“自定义应用”可设置任意 HTTP 服务。",
+          "custom": "自定义应用"
         },
         "name": {
           "title": "名称",
@@ -10384,13 +10472,15 @@
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
             "unreachable": "Onyx 无法访问此服务器。请检查 URL。",
-            "forbidden": "只有管理员可以在添加前检查此服务器。您仍然可以添加它。"
+            "forbidden": "只有管理员可以在添加前检查此服务器。您仍然可以添加它。",
+            "checking": "正在检查服务器…"
           },
           "transport": {
             "title": "传输方式",
             "streamableHttp": "可流式 HTTP",
             "sse": "服务器发送事件 (SSE)"
-          }
+          },
+          "suggested": "推荐的服务器"
         },
         "owner": {
           "title": "所有者",
@@ -10509,6 +10599,53 @@
           "copyCallbackUrl": "复制回调 URL",
           "scopes": "作用域",
           "open": "打开 {name}"
+        },
+        "title": "添加集成",
+        "description": "连接服务，以便人们在对话和 Craft 中使用它。",
+        "openapi": {
+          "title": "添加 OpenAPI 应用",
+          "schema": {
+            "title": "架构",
+            "description": "添加定义操作的 OpenAPI 架构。",
+            "added": "{count, plural, other {该架构有 # 个路径。}}",
+            "required": "请添加架构。",
+            "add": "添加架构",
+            "edit": "编辑架构"
+          }
+        },
+        "descriptionField": {
+          "title": "描述",
+          "placeholder": "添加描述"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL 模式",
+            "description": "每行填写一个 URL 模式，例如 https://api.example.com/*。",
+            "placeholder": "https://api.example.com/*",
+            "required": "请至少添加一个 URL 模式。"
+          }
+        },
+        "type": {
+          "title": "类型",
+          "description": "选择 Onyx 连接该服务的方式。",
+          "mcp_server": {
+            "title": "MCP 服务器",
+            "description": "通过 URL 连接远程 MCP 服务器。"
+          },
+          "openapi": {
+            "title": "OpenAPI 应用",
+            "description": "根据 OpenAPI 架构创建操作。"
+          },
+          "app": {
+            "title": "应用",
+            "description": "从 GitHub 等预设或自定义应用开始。"
+          }
+        },
+        "details": {
+          "title": "详细信息"
+        },
+        "signIn": {
+          "title": "登录"
         }
       },
       "filters": {
@@ -10647,14 +10784,20 @@
           "urlPatternApp": {
             "title": "此应用使用 URL 模式",
             "description": "Onyx 不再添加 URL 模式应用。要替换此应用，请为其 URL 模式涉及的每个主机添加一个自定义 REST 应用。删除此应用前，请完成文档中的设置步骤。"
-          }
+          },
+          "type": "类型"
         },
         "configuration": {
           "readOnly": "您可以查看此集成，但无法更改。",
           "connection": {
             "title": "连接",
             "serverUrl": "服务器 URL",
-            "serverUrlError": "请输入有效的服务器 URL。"
+            "serverUrlError": "请输入有效的服务器 URL。",
+            "urlPatterns": "URL 模式",
+            "urlPatternsDescription": "每行填写一个 URL 模式。",
+            "schema": "OpenAPI 架构",
+            "schemaDescription": "保存修改后的架构时，Onyx 会重新同步操作。",
+            "schemaError": "请以 JSON 对象的形式输入架构。"
           },
           "signIn": {
             "title": "登录",
@@ -10758,7 +10901,8 @@
         "healthGreen": "绿色：所有分片副本都已分配。",
         "healthYellow": "黄色：部分副本分片未分配。搜索正常，但丢失数据节点可能导致数据丢失。",
         "healthYellowSingleNode": "黄色：副本需要第二个数据节点。对于只有一个数据节点的集群，这是正常状态，搜索可以正常工作。",
-        "healthRed": "红色：部分主分片未分配，因此索引的一部分无法搜索。"
+        "healthRed": "红色：部分主分片未分配，因此索引的一部分无法搜索。",
+        "health": "状态 {health}"
       },
       "searches": {
         "loadTitle": "搜索负载",
@@ -11872,6 +12016,36 @@
       },
       "shareMenu": {
         "label": "分享或导出"
+      },
+      "delete": {
+        "label": "删除"
+      },
+      "deleteModal": {
+        "description": "确定要删除此聊天吗？此操作无法撤销。",
+        "submitButton": {
+          "label": "删除"
+        },
+        "title": "删除聊天"
+      },
+      "exportAs": {
+        "label": "导出为…"
+      },
+      "exportFailed": {
+        "message": "导出聊天失败。请重试。"
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "纯文本"
+      },
+      "fullWidth": {
+        "ariaLabel": "切换全宽聊天",
+        "fitTooltip": "适应宽度",
+        "fullTooltip": "全宽"
+      },
+      "moveToProject": {
+        "label": "移动到项目"
       }
     },
     "banners": {
@@ -12056,7 +12230,11 @@
           "waitHint": "请等待回复完成。",
           "ctrlKey": "Ctrl"
         },
-        "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。"
+        "questionAttachmentsHint": "回答智能体的问题时不能包含文件。请移除文件后再回答。",
+        "subagentsWorking": "子代理正在工作",
+        "stopSubagentsButton": {
+          "label": "停止子代理"
+        }
       },
       "baseInputBar": {
         "input": {
@@ -12202,7 +12380,8 @@
         "withdrawFailed": "无法移除待处理消息。",
         "loadFailed": "无法加载待处理消息。",
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
-        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。"
+        "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
+        "stopSubagentsFailed": "无法停止子代理。"
       },
       "pendingToolApproval": {
         "toast": "请先批准或拒绝待处理的工具调用。"
@@ -12254,6 +12433,10 @@
         "wrapButton": {
           "unwrapLabel": "取消换行",
           "wrapLabel": "自动换行"
+        },
+        "copyButton": {
+          "copiedLabel": "已复制！",
+          "label": "复制"
         }
       },
       "customTool": {
@@ -12301,6 +12484,9 @@
         },
         "callFailedStatus": {
           "text": "{toolName} 失败"
+        },
+        "waitingIndicator": {
+          "text": "正在等待响应..."
         }
       },
       "customToolAuth": {
@@ -12583,6 +12769,9 @@
           },
           "browsing": {
             "label": "正在浏览网页..."
+          },
+          "thinkingEllipsis": {
+            "label": "思考中..."
           }
         },
         "internalSearch": {
@@ -12681,6 +12870,9 @@
             "message": "消息 {id}",
             "allRetrieved": "所有检索到的",
             "nextPage": "下一页"
+          },
+          "listed": {
+            "label": "{count, plural, one {已列出 # 个文档} other {已列出 # 个文档}}"
           }
         },
         "python": {
@@ -12701,6 +12893,12 @@
           },
           "ran": {
             "status": "已运行 Python"
+          },
+          "runningCode": {
+            "label": "正在运行代码..."
+          },
+          "writingCode": {
+            "status": "正在编写代码..."
           }
         },
         "reasoning": {
@@ -12867,6 +13065,9 @@
             "history": {
               "status": "{phase, select, running {{history, select, back {正在后退} forward {正在前进} other {正在重新加载页面}}} failed {无法切换页面} canceled {已取消} other {{history, select, back {已后退} forward {已前进} other {已重新加载页面}}}}"
             }
+          },
+          "output": {
+            "title": "输出"
           }
         },
         "skill": {
@@ -12915,6 +13116,12 @@
           },
           "activity": "正在使用 {tool}",
           "open": "打开 {name}"
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {已生成 # 张图片} other {已生成 # 张图片}}"
+        },
+        "interruptedThinking": {
+          "label": "思考已中断"
         }
       },
       "toolApproval": {
@@ -12973,6 +13180,17 @@
         },
         "stopButton": {
           "tooltip": "停止播放"
+        }
+      },
+      "agentResults": {
+        "received": "已收到子代理结果"
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "取消"
+        },
+        "submitButton": {
+          "label": "提交"
         }
       }
     },
@@ -13262,6 +13480,33 @@
         },
         "error": {
           "description": "无法加载该 PDF 文件。"
+        }
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 个字} other {# 个字}}"
+      },
+      "pptx": {
+        "controls": {
+          "label": "演示文稿控件"
+        },
+        "thumbnails": {
+          "toggle": "显示或隐藏幻灯片缩略图",
+          "resize": "调整幻灯片缩略图宽度"
+        },
+        "slides": {
+          "label": "幻灯片"
+        },
+        "previous": {
+          "label": "上一张幻灯片"
+        },
+        "next": {
+          "label": "下一张幻灯片"
+        },
+        "slide": {
+          "counter": "幻灯片 {current} / {total}"
+        },
+        "empty": {
+          "label": "此演示文稿中没有幻灯片"
         }
       }
     },
@@ -13652,6 +13897,10 @@
       },
       "browserTab": {
         "label": "浏览器"
+      },
+      "downloadButton": {
+        "label": "下载",
+        "tooltip": "下载文件"
       }
     },
     "export": {
@@ -14496,6 +14745,11 @@
       },
       "submitError": "无法提交你的决定。请重试。",
       "actionWithDescription": "{action}：{description}"
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "文"
+      }
     }
   },
   "craft": {
@@ -16159,7 +16413,13 @@
           "mismatch": "两次输入的密码不一致",
           "newRequired": "新密码为必填项"
         }
-      }
+      },
+      "email": {
+        "anonymousFallback": "匿名",
+        "description": "您的账户电子邮件地址。",
+        "title": "电子邮件"
+      },
+      "title": "账户"
     },
     "apiKeys": {
       "createModal": {
@@ -16299,7 +16559,8 @@
       "dynamicConversations": {
         "title": "动态对话",
         "description": "在滚动浏览长对话时加载和卸载消息。这样可以提升性能，但屏幕阅读器无法访问已卸载的消息。关闭此选项可保持所有消息处于加载状态。"
-      }
+      },
+      "title": "外观"
     },
     "chats": {
       "autoScroll": {
@@ -16341,7 +16602,8 @@
         "description": "选择在回答过程中按 Enter 键和发送按钮的行为。Ctrl/Cmd+Enter 始终将后续消息加入队列。",
         "afterStep": "当前步骤完成后",
         "interrupt": "中断当前工作"
-      }
+      },
+      "title": "对话"
     },
     "connectors": {
       "connectButton": "连接",
@@ -16355,12 +16617,14 @@
       },
       "status": {
         "connected": "已连接",
-        "notConnected": "未连接"
+        "notConnected": "未连接",
+        "paused": "已暂停"
       },
       "title": "连接器",
       "toasts": {
         "disconnectFailed": "断开连接失败"
-      }
+      },
+      "emptyMessage": "您的组织尚未设置任何连接器。"
     },
     "dangerZone": {
       "deleteAllChats": {
@@ -16421,7 +16685,8 @@
       },
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
-      }
+      },
+      "title": "语言"
     },
     "layout": {
       "header": {
@@ -16445,6 +16710,18 @@
         },
         "thirdPartyAccess": {
           "label": "第三方访问"
+        },
+        "accountsAccess": {
+          "label": "账户与访问"
+        },
+        "connectors": {
+          "label": "连接器"
+        },
+        "general": {
+          "label": "常规"
+        },
+        "llmGateway": {
+          "label": "LLM 网关"
         }
       }
     },
@@ -16589,7 +16866,8 @@
       "toggle": {
         "description": "启用快捷方式以快速插入常用提示词。",
         "title": "使用提示词快捷方式"
-      }
+      },
+      "title": "提示词快捷方式"
     },
     "usage": {
       "budget": {
@@ -16649,6 +16927,9 @@
       "usageThisPeriod": {
         "description": "已花费 {amount}",
         "title": "本期使用情况"
+      },
+      "header": {
+        "title": "使用情况"
       }
     },
     "voice": {
@@ -17035,6 +17316,18 @@
         "toggleSidebar": {
           "label": "切换侧边栏"
         }
+      },
+      "createNamedProject": {
+        "label": "创建新项目“<name>{projectName}</name>”"
+      },
+      "newProject": {
+        "label": "新建项目"
+      },
+      "noMoreResults": {
+        "text": "没有更多结果"
+      },
+      "projectsFilter": {
+        "label": "项目"
       }
     },
     "notifications": {
@@ -17385,6 +17678,10 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
+        },
+        "marketplace": {
+          "title": "添加市场",
+          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -17619,7 +17916,11 @@
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分"
+          "notUsed": "Onyx 不使用的部分",
+          "noDescription": "无描述。",
+          "skills": "技能",
+          "description": "描述",
+          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
         },
         "skills": {
           "off": "已关闭",
@@ -17633,7 +17934,11 @@
           "title": "使用此插件",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
-          "unavailable": "你无法开启或关闭此插件。"
+          "unavailable": "你无法开启或关闭此插件。",
+          "failed": "无法更改插件。",
+          "on": "已开启。默认智能体可以使用此插件。",
+          "off": "已关闭。开启后，默认智能体即可使用此插件。",
+          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
         },
         "actions": {
           "share": "分享",
@@ -17653,7 +17958,8 @@
           "title": "由 {name} 市场管理",
           "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
           "open": "打开市场"
-        }
+        },
+        "syncedFrom": "同步自 {repository}"
       },
       "connection": {
         "askAdmin": "请询问管理员",
@@ -17699,7 +18005,9 @@
         "retry": {
           "label": "重试"
         },
-        "readOnlyDescription": "管理员设置每个操作的运行方式。"
+        "readOnlyDescription": "管理员设置每个操作的运行方式。",
+        "title": "始终允许",
+        "readOnlyTitle": "操作"
       },
       "oauthCallback": {
         "processing": "正在连接你的账户…",
@@ -17762,7 +18070,10 @@
         "not_supported": "不支持"
       },
       "note": {
-        "askAdmin": "请询问管理员"
+        "askAdmin": "请询问管理员",
+        "turnedOff": "已被您的管理员关闭",
+        "moreThanOne": "有多个集成匹配",
+        "notSupported": "Onyx 不支持"
       },
       "localServer": "本地服务器",
       "noUrl": "无服务器 URL",
@@ -17998,6 +18309,10 @@
       "errors": {
         "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
         "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      },
+      "empty": {
+        "title": "还没有市场",
+        "description": "添加 GitHub 仓库以获取其插件。"
       }
     },
     "bulk": {
@@ -18107,7 +18422,8 @@
         "upload": "上传技能",
         "create": "创建技能",
         "uploadPlugin": "上传插件",
-        "marketplace": "添加市场"
+        "marketplace": "添加市场",
+        "manageMarketplaces": "管理市场"
       },
       "groups": {
         "mine": "由你创建",
@@ -18149,6 +18465,11 @@
         "title": "没有匹配的技能",
         "description": "请尝试其他搜索或筛选条件。",
         "clear": "显示所有技能"
+      },
+      "sort": {
+        "label": "排序",
+        "updated": "最近更新",
+        "name": "名称"
       }
     },
     "integrations": {
@@ -18172,6 +18493,11 @@
       "noMatches": {
         "title": "没有匹配的集成",
         "description": "请尝试其他搜索。"
+      },
+      "add": {
+        "label": "添加",
+        "integration": "添加集成",
+        "manage": "管理集成"
       }
     },
     "plugins": {
@@ -18189,7 +18515,9 @@
         "clear": "显示所有插件"
       },
       "integrations": "{needed} 个集成中有 {available} 个可用",
-      "nameHeld": "已关闭：{names} 使用了相同的技能名称"
+      "nameHeld": "已关闭：{names} 使用了相同的技能名称",
+      "contents": "{skills, plural, one {1 个技能} other {{skills} 个技能}}",
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。"
     },
     "skillPage": {
       "title": "技能",
@@ -18255,7 +18583,8 @@
       "loadFailed": "你无法使用此集成。",
       "tabs": {
         "overview": "概览",
-        "actions": "操作"
+        "actions": "操作",
+        "configuration": "配置"
       },
       "overview": {
         "type": "类型",
@@ -18267,7 +18596,13 @@
           "title": "使用此集成",
           "description": "开启后，你可以在对话和 Craft 中使用它。",
           "required": "管理员已将此集成设为必需。你无法将其关闭。"
-        }
+        },
+        "description": "描述",
+        "noDescription": "没有描述。",
+        "status": "状态"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {你与此集成的连接。只有你使用它。} shared {此集成的账户。所有有权访问的人都使用它。} other {此集成无需登录。}}"
       }
     },
     "pluginPage": {
@@ -18473,5 +18808,18 @@
         "label": "管理层"
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch 需要更多资源",
+    "disk": "OpenSearch 数据节点的磁盘使用率至少为 85%。磁盘空间耗尽时，索引可能停止。",
+    "jvmMemory": "多次检查显示 OpenSearch JVM 内存使用率持续超过 85%。搜索和索引可能失败。",
+    "vectorMemory": "OpenSearch 向量内存接近满载或已达到上限。搜索和索引可能失败。",
+    "contact": "请联系系统管理员或通过 [support@onyx.app](mailto:support@onyx.app) 联系 Onyx 团队。",
+    "stale": "最新检查不可用。此警告反映上次成功检查的结果，尚未确认恢复。",
+    "dismiss": "关闭",
+    "diskTitle": "磁盘空间",
+    "jvmMemoryTitle": "JVM 内存",
+    "vectorMemoryTitle": "向量内存",
+    "viewDetails": "查看详情"
   }
 }

@@ -324,10 +324,50 @@
       "details": "세부 정보",
       "serverDetails": "서버 세부 정보",
       "authentication": "인증",
-      "back": "뒤로"
+      "back": "뒤로",
+      "checking": "서버 확인 중…",
+      "continue": "계속"
     },
     "policyEditor": {
       "toolCount": "{count, plural, other {작업 #개}}"
+    },
+    "addOpenApiModal": {
+      "cancelButton": {
+        "label": "취소"
+      },
+      "copyButton": {
+        "tooltip": "정의 복사"
+      },
+      "definition": {
+        "invalidJson": "잘못된 JSON 형식입니다",
+        "placeholder": "여기에 OpenAPI 스키마를 입력하세요",
+        "required": "OpenAPI 스키마 정의는 필수입니다",
+        "subDescription": "이 플러그인의 일부로 제공할 API를 정의하는 OpenAPI 스키마를 지정하세요. 스키마의 어느 위치(예: 서버 URL, 경로, 파라미터 기본값)에나 `CHAT_SESSION_ID`, `MESSAGE_ID`, `USER_ID`, `USER_EMAIL` 자리 표시자를 사용할 수 있으며, 호출 시점에 현재 요청의 값으로 대체됩니다. [OpenAPI 플러그인]({docsUrl})에 대해 자세히 알아보세요.",
+        "title": "OpenAPI 스키마 정의"
+      },
+      "empty": {
+        "description": "OpenAPI 스키마를 입력하면 여기에서 액션을 미리 볼 수 있습니다.",
+        "title": "액션을 찾을 수 없음"
+      },
+      "formatButton": {
+        "tooltip": "정의 서식 지정"
+      },
+      "method": {
+        "noSummary": "요약이 제공되지 않음"
+      },
+      "toasts": {
+        "actionCreated": "OpenAPI 플러그인을 만들었습니다",
+        "invalidJson": "OpenAPI 스키마 정의의 JSON 형식이 잘못되었습니다"
+      },
+      "humanDescription": {
+        "title": "사용자를 위한 설명",
+        "hint": "플러그인 카드와 세부 정보에 표시됩니다."
+      },
+      "agentDescription": {
+        "title": "에이전트를 위한 설명",
+        "hint": "OpenAPI 스키마의 info.description을 편집합니다.",
+        "disabled": "이 필드를 편집하려면 유효한 스키마를 입력하세요."
+      }
     }
   },
   "admin": {
@@ -598,6 +638,9 @@
         },
         "federatedSlack": {
           "description": "질의 시 Slack 검색"
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 서비스 데스크 티켓"
         }
       }
     },
@@ -3984,6 +4027,45 @@
               "none": "이 앱 등록에서 분당 RU를 설정한 다른 커넥터가 없습니다.",
               "hidden": "{count, plural, other {볼 수 없는 커넥터 #개}}",
               "unavailable": "이 앱 등록을 사용하는 다른 커넥터의 분당 RU를 불러올 수 없습니다."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Jira Service Management 커넥터 구성",
+          "subtext": "인덱싱할 Jira Service Management 콘텐츠를 구성합니다. 모든 티켓을 인덱싱하거나 특정 프로젝트 또는 JQL 쿼리로 범위를 제한할 수 있습니다.",
+          "fields": {
+            "jira_base_url": {
+              "label": "사이트 URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "전체"
+                },
+                "project": {
+                  "label": "프로젝트"
+                },
+                "jql": {
+                  "label": "JQL 쿼리"
+                }
+              }
+            },
+            "everything": {
+              "label": "계정이 읽을 수 있는 모든 티켓을 인덱싱합니다",
+              "description": "Onyx는 선택한 계정이 읽을 수 있는 모든 티켓을 인덱싱합니다. 범위를 좁히려면 다른 탭을 선택하세요."
+            },
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "인덱싱할 특정 프로젝트의 키(예: 'IT')입니다."
+            },
+            "jql_query": {
+              "label": "JQL 쿼리",
+              "description": "Jira Service Management 티켓을 필터링하기 위한 사용자 지정 JQL 쿼리입니다.\n\n중요: 커넥터 로직과 충돌하므로 JQL 쿼리에 시간 기반 필터나 ORDER BY 절을 포함하지 마세요.\n\n구문에 대한 자세한 내용은 [Atlassian JQL 문서](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/)를 참조하세요."
+            },
+            "comment_email_blacklist": {
+              "label": "댓글 제외 이메일 목록",
+              "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자 이메일을 추가하세요."
             }
           }
         }
@@ -9064,7 +9146,9 @@
         }
       },
       "toasts": {
-        "unexpectedError": "예기치 않은 오류가 발생했습니다."
+        "unexpectedError": "예기치 않은 오류가 발생했습니다.",
+        "connected": "{label}에 연결했습니다",
+        "disconnected": "{label} 연결을 해제했습니다"
       },
       "providers": {
         "braintrust": {
@@ -10366,7 +10450,11 @@
         "createFailed": "연동을 추가할 수 없습니다.",
         "preset": {
           "loadFailed": "프리셋을 불러올 수 없습니다.",
-          "credentialRequired": "이 값을 입력하세요."
+          "credentialRequired": "이 값을 입력하세요.",
+          "title": "시작점",
+          "instructions": "설정 안내",
+          "description": "프리셋은 기본 제공 앱의 이름과 로그인을 채웁니다. 모든 HTTP 서비스를 설정하려면 사용자 지정 앱을 선택하세요.",
+          "custom": "사용자 지정 앱"
         },
         "name": {
           "title": "이름",
@@ -10384,13 +10472,15 @@
             "oauth": "이 서버는 OAuth 로그인을 사용합니다.",
             "authUnknown": "이 서버는 로그인이 필요합니다. API 키 헤더 또는 OAuth를 추가하세요.",
             "unreachable": "Onyx가 이 서버에 연결할 수 없습니다. URL을 확인하세요.",
-            "forbidden": "추가하기 전에 이 서버를 확인할 수 있는 사람은 관리자뿐입니다. 그래도 추가할 수 있습니다."
+            "forbidden": "추가하기 전에 이 서버를 확인할 수 있는 사람은 관리자뿐입니다. 그래도 추가할 수 있습니다.",
+            "checking": "서버 확인 중…"
           },
           "transport": {
             "title": "전송 방식",
             "streamableHttp": "Streamable HTTP",
             "sse": "서버 전송 이벤트(SSE)"
-          }
+          },
+          "suggested": "추천 서버"
         },
         "owner": {
           "title": "소유자",
@@ -10509,6 +10599,53 @@
           "copyCallbackUrl": "콜백 URL 복사",
           "scopes": "범위",
           "open": "{name} 열기"
+        },
+        "title": "연동 추가",
+        "description": "서비스를 연결하면 채팅과 Craft에서 사용할 수 있습니다.",
+        "openapi": {
+          "title": "OpenAPI 앱 추가",
+          "schema": {
+            "title": "스키마",
+            "description": "작업을 정의하는 OpenAPI 스키마를 추가하세요.",
+            "added": "{count, plural, other {스키마에 경로가 #개 있습니다.}}",
+            "required": "스키마를 추가하세요.",
+            "add": "스키마 추가",
+            "edit": "스키마 편집"
+          }
+        },
+        "descriptionField": {
+          "title": "설명",
+          "placeholder": "설명 입력"
+        },
+        "custom": {
+          "patterns": {
+            "title": "URL 패턴",
+            "description": "한 줄에 URL 패턴을 하나씩 입력하세요. 예: https://api.example.com/*",
+            "placeholder": "https://api.example.com/*",
+            "required": "URL 패턴을 하나 이상 입력하세요."
+          }
+        },
+        "type": {
+          "title": "유형",
+          "description": "Onyx가 서비스에 연결하는 방법을 선택하세요.",
+          "mcp_server": {
+            "title": "MCP 서버",
+            "description": "URL로 원격 MCP 서버를 연결합니다."
+          },
+          "openapi": {
+            "title": "OpenAPI 앱",
+            "description": "OpenAPI 스키마에서 작업을 만듭니다."
+          },
+          "app": {
+            "title": "앱",
+            "description": "GitHub 같은 프리셋이나 사용자 지정 앱에서 시작합니다."
+          }
+        },
+        "details": {
+          "title": "세부 정보"
+        },
+        "signIn": {
+          "title": "로그인"
         }
       },
       "filters": {
@@ -10647,14 +10784,20 @@
           "urlPatternApp": {
             "title": "이 앱은 URL 패턴을 사용합니다",
             "description": "Onyx는 더 이상 URL 패턴 앱을 추가하지 않습니다. 이 앱을 대체하려면 URL 패턴이 대상으로 하는 각 호스트마다 사용자 지정 REST 앱을 추가하세요. 이 앱을 삭제하기 전에 문서의 설정 단계를 수행하세요."
-          }
+          },
+          "type": "유형"
         },
         "configuration": {
           "readOnly": "이 연동을 볼 수는 있지만 변경할 수는 없습니다.",
           "connection": {
             "title": "연결",
             "serverUrl": "서버 URL",
-            "serverUrlError": "올바른 서버 URL을 입력하세요."
+            "serverUrlError": "올바른 서버 URL을 입력하세요.",
+            "urlPatterns": "URL 패턴",
+            "urlPatternsDescription": "한 줄에 URL 패턴을 하나씩 입력하세요.",
+            "schema": "OpenAPI 스키마",
+            "schemaDescription": "변경된 스키마를 저장하면 Onyx가 작업을 다시 동기화합니다.",
+            "schemaError": "스키마를 JSON 객체로 입력하세요."
           },
           "signIn": {
             "title": "로그인",
@@ -10758,7 +10901,8 @@
         "healthGreen": "초록: 모든 샤드 복사본이 할당되었습니다.",
         "healthYellow": "노랑: 일부 복제본 샤드가 할당되지 않았습니다. 검색은 동작하지만 데이터 노드를 잃으면 데이터가 손실될 수 있습니다.",
         "healthYellowSingleNode": "노랑: 복제본 사본에는 두 번째 데이터 노드가 필요합니다. 데이터 노드가 하나인 클러스터에서는 정상이며, 검색은 작동합니다.",
-        "healthRed": "빨강: 일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다."
+        "healthRed": "빨강: 일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다.",
+        "health": "상태 {health}"
       },
       "searches": {
         "loadTitle": "검색 부하",
@@ -11872,6 +12016,36 @@
       },
       "shareMenu": {
         "label": "공유 또는 내보내기"
+      },
+      "delete": {
+        "label": "삭제"
+      },
+      "deleteModal": {
+        "description": "이 채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
+        "submitButton": {
+          "label": "삭제"
+        },
+        "title": "채팅 삭제"
+      },
+      "exportAs": {
+        "label": "다른 형식으로 내보내기…"
+      },
+      "exportFailed": {
+        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
+      },
+      "exportMarkdown": {
+        "label": "Markdown"
+      },
+      "exportPlaintext": {
+        "label": "일반 텍스트"
+      },
+      "fullWidth": {
+        "ariaLabel": "전체 너비 채팅 전환",
+        "fitTooltip": "너비 맞춤",
+        "fullTooltip": "전체 너비"
+      },
+      "moveToProject": {
+        "label": "프로젝트로 이동"
       }
     },
     "banners": {
@@ -12056,7 +12230,11 @@
           "waitHint": "응답이 끝날 때까지 기다리세요.",
           "ctrlKey": "Ctrl"
         },
-        "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요."
+        "questionAttachmentsHint": "에이전트의 질문에 대한 답변에는 파일을 포함할 수 없습니다. 답변하려면 파일을 제거하세요.",
+        "subagentsWorking": "하위 에이전트 작업 중",
+        "stopSubagentsButton": {
+          "label": "하위 에이전트 중지"
+        }
       },
       "baseInputBar": {
         "input": {
@@ -12202,7 +12380,8 @@
         "withdrawFailed": "대기 중인 메시지를 삭제하지 못했습니다.",
         "loadFailed": "대기 중인 메시지를 불러오지 못했습니다.",
         "alreadyAccepted": "이 메시지는 이미 수락되어 더 이상 대기 중이 아닙니다.",
-        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다."
+        "interruptFailed": "지금 메시지를 전송하지 못했습니다. 메시지는 대기 중입니다.",
+        "stopSubagentsFailed": "하위 에이전트를 중지할 수 없습니다."
       },
       "pendingToolApproval": {
         "toast": "먼저 대기 중인 도구 호출을 승인하거나 거부하세요."
@@ -12254,6 +12433,10 @@
         "wrapButton": {
           "unwrapLabel": "줄 바꿈 해제",
           "wrapLabel": "줄 바꿈"
+        },
+        "copyButton": {
+          "copiedLabel": "복사됨!",
+          "label": "복사"
         }
       },
       "customTool": {
@@ -12301,6 +12484,9 @@
         },
         "callFailedStatus": {
           "text": "{toolName} 실패"
+        },
+        "waitingIndicator": {
+          "text": "응답 대기 중..."
         }
       },
       "customToolAuth": {
@@ -12583,6 +12769,9 @@
           },
           "browsing": {
             "label": "웹 페이지 탐색 중..."
+          },
+          "thinkingEllipsis": {
+            "label": "생각 중..."
           }
         },
         "internalSearch": {
@@ -12681,6 +12870,9 @@
             "message": "메시지 {id}",
             "allRetrieved": "검색된 모든 항목",
             "nextPage": "다음 페이지"
+          },
+          "listed": {
+            "label": "{count, plural, one {문서 #개 나열됨} other {문서 #개 나열됨}}"
           }
         },
         "python": {
@@ -12701,6 +12893,12 @@
           },
           "ran": {
             "status": "Python을 실행했습니다"
+          },
+          "runningCode": {
+            "label": "코드 실행 중..."
+          },
+          "writingCode": {
+            "status": "코드 작성 중..."
           }
         },
         "reasoning": {
@@ -12867,6 +13065,9 @@
             "history": {
               "status": "{phase, select, running {{history, select, back {뒤로 가는 중} forward {앞으로 가는 중} other {페이지 새로 고치는 중}}} failed {페이지를 바꿀 수 없음} canceled {취소됨} other {{history, select, back {뒤로 감} forward {앞으로 감} other {페이지를 새로 고침}}}}"
             }
+          },
+          "output": {
+            "title": "출력"
           }
         },
         "skill": {
@@ -12915,6 +13116,12 @@
           },
           "activity": "{tool} 사용 중",
           "open": "{name} 열기"
+        },
+        "generatedImages": {
+          "label": "{count, plural, one {이미지 #개 생성됨} other {이미지 #개 생성됨}}"
+        },
+        "interruptedThinking": {
+          "label": "중단된 사고"
         }
       },
       "toolApproval": {
@@ -12973,6 +13180,17 @@
         },
         "stopButton": {
           "tooltip": "재생 중지"
+        }
+      },
+      "agentResults": {
+        "received": "하위 에이전트 결과를 받았습니다"
+      },
+      "messageEditing": {
+        "cancelButton": {
+          "label": "취소"
+        },
+        "submitButton": {
+          "label": "제출"
         }
       }
     },
@@ -13262,6 +13480,33 @@
         },
         "error": {
           "description": "PDF 파일을 불러올 수 없습니다."
+        }
+      },
+      "wordCount": {
+        "label": "{count, plural, one {단어 #개} other {단어 #개}}"
+      },
+      "pptx": {
+        "controls": {
+          "label": "프레젠테이션 컨트롤"
+        },
+        "thumbnails": {
+          "toggle": "슬라이드 썸네일 표시 전환",
+          "resize": "슬라이드 썸네일 크기 조정"
+        },
+        "slides": {
+          "label": "슬라이드"
+        },
+        "previous": {
+          "label": "이전 슬라이드"
+        },
+        "next": {
+          "label": "다음 슬라이드"
+        },
+        "slide": {
+          "counter": "슬라이드 {current} / {total}"
+        },
+        "empty": {
+          "label": "이 프레젠테이션에 슬라이드가 없습니다"
         }
       }
     },
@@ -13652,6 +13897,10 @@
       },
       "browserTab": {
         "label": "브라우저"
+      },
+      "downloadButton": {
+        "label": "다운로드",
+        "tooltip": "파일 다운로드"
       }
     },
     "export": {
@@ -14496,6 +14745,11 @@
       },
       "submitError": "결정을 제출할 수 없습니다. 다시 시도하세요.",
       "actionWithDescription": "{action}: {description}"
+    },
+    "colorSwatch": {
+      "sample": {
+        "text": "가"
+      }
     }
   },
   "craft": {
@@ -16159,7 +16413,13 @@
           "mismatch": "비밀번호가 일치하지 않습니다",
           "newRequired": "새 비밀번호는 필수입니다"
         }
-      }
+      },
+      "email": {
+        "anonymousFallback": "익명",
+        "description": "계정 이메일 주소입니다.",
+        "title": "이메일"
+      },
+      "title": "계정"
     },
     "apiKeys": {
       "createModal": {
@@ -16299,7 +16559,8 @@
       "dynamicConversations": {
         "title": "동적 대화",
         "description": "긴 대화를 스크롤할 때 메시지를 불러오고 해제합니다. 성능이 향상되지만, 스크린 리더는 해제된 메시지에 접근할 수 없습니다. 모든 메시지를 불러온 상태로 유지하려면 이 기능을 끄세요."
-      }
+      },
+      "title": "모양"
     },
     "chats": {
       "autoScroll": {
@@ -16341,7 +16602,8 @@
         "description": "응답 중 Enter 키와 전송 버튼의 동작을 선택하세요. Ctrl/Cmd+Enter는 항상 후속 메시지를 대기열에 추가합니다.",
         "afterStep": "현재 단계 후",
         "interrupt": "현재 작업 중단"
-      }
+      },
+      "title": "채팅"
     },
     "connectors": {
       "connectButton": "연결",
@@ -16355,12 +16617,14 @@
       },
       "status": {
         "connected": "연결됨",
-        "notConnected": "연결 안 됨"
+        "notConnected": "연결 안 됨",
+        "paused": "일시 중지됨"
       },
       "title": "커넥터",
       "toasts": {
         "disconnectFailed": "연결을 해제하지 못했습니다"
-      }
+      },
+      "emptyMessage": "조직에 설정된 커넥터가 없습니다."
     },
     "dangerZone": {
       "deleteAllChats": {
@@ -16421,7 +16685,8 @@
       },
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
-      }
+      },
+      "title": "언어"
     },
     "layout": {
       "header": {
@@ -16445,6 +16710,18 @@
         },
         "thirdPartyAccess": {
           "label": "타사 액세스"
+        },
+        "accountsAccess": {
+          "label": "계정 및 액세스"
+        },
+        "connectors": {
+          "label": "커넥터"
+        },
+        "general": {
+          "label": "일반"
+        },
+        "llmGateway": {
+          "label": "LLM 게이트웨이"
         }
       }
     },
@@ -16589,7 +16866,8 @@
       "toggle": {
         "description": "단축어를 활성화하면 자주 쓰는 프롬프트를 빠르게 넣을 수 있습니다.",
         "title": "프롬프트 단축어 사용"
-      }
+      },
+      "title": "프롬프트 단축어"
     },
     "usage": {
       "budget": {
@@ -16649,6 +16927,9 @@
       "usageThisPeriod": {
         "description": "{amount} 사용",
         "title": "이 기간의 사용량"
+      },
+      "header": {
+        "title": "사용량"
       }
     },
     "voice": {
@@ -17035,6 +17316,18 @@
         "toggleSidebar": {
           "label": "사이드바 전환"
         }
+      },
+      "createNamedProject": {
+        "label": "새 프로젝트 \"<name>{projectName}</name>\" 생성"
+      },
+      "newProject": {
+        "label": "새 프로젝트"
+      },
+      "noMoreResults": {
+        "text": "더 이상 결과가 없습니다"
+      },
+      "projectsFilter": {
+        "label": "프로젝트"
       }
     },
     "notifications": {
@@ -17385,6 +17678,10 @@
         "upload": {
           "description": "SKILL.md 파일, ZIP 파일 또는 스킬 폴더를 가져오세요.",
           "title": "스킬 업로드"
+        },
+        "marketplace": {
+          "title": "마켓플레이스 추가",
+          "description": "저장소에서 추가하고 해당 플러그인을 동기화합니다."
         }
       },
       "empty": {
@@ -17619,7 +17916,11 @@
           "author": "작성자",
           "homepage": "홈페이지",
           "license": "라이선스",
-          "notUsed": "Onyx에서 사용하지 않음"
+          "notUsed": "Onyx에서 사용하지 않음",
+          "noDescription": "설명이 없습니다.",
+          "skills": "스킬",
+          "description": "설명",
+          "marketplace": "{name} 마켓플레이스, {scope, select, personal {개인} other {회사}} ({repository})"
         },
         "skills": {
           "off": "꺼짐",
@@ -17633,7 +17934,11 @@
           "title": "이 플러그인 사용",
           "label": "{name} 사용",
           "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
-          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다."
+          "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
+          "failed": "플러그인을 변경할 수 없습니다.",
+          "on": "켜짐. 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
+          "off": "꺼짐. 켜면 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
+          "nameHeld": "{names}이(가) 같은 스킬 이름을 사용하므로 꺼져 있습니다. 대신 이 플러그인을 사용하려면 켜세요."
         },
         "actions": {
           "share": "공유",
@@ -17653,7 +17958,8 @@
           "title": "{name} 마켓플레이스에서 관리합니다",
           "description": "Onyx는 이 플러그인을 {repository}에서 동기화합니다. GitHub에서 변경한 다음 마켓플레이스를 동기화하세요.",
           "open": "마켓플레이스 열기"
-        }
+        },
+        "syncedFrom": "{repository}에서 동기화됨"
       },
       "connection": {
         "askAdmin": "관리자에게 문의하세요",
@@ -17699,7 +18005,9 @@
         "retry": {
           "label": "다시 시도"
         },
-        "readOnlyDescription": "관리자가 각 작업의 실행 방식을 설정합니다."
+        "readOnlyDescription": "관리자가 각 작업의 실행 방식을 설정합니다.",
+        "title": "항상 허용",
+        "readOnlyTitle": "작업"
       },
       "oauthCallback": {
         "processing": "계정을 연결하는 중…",
@@ -17762,7 +18070,10 @@
         "not_supported": "지원되지 않음"
       },
       "note": {
-        "askAdmin": "관리자에게 문의하세요"
+        "askAdmin": "관리자에게 문의하세요",
+        "turnedOff": "관리자가 껐습니다",
+        "moreThanOne": "두 개 이상의 통합이 일치합니다",
+        "notSupported": "Onyx에서 지원되지 않음"
       },
       "localServer": "로컬 서버",
       "noUrl": "서버 URL 없음",
@@ -17998,6 +18309,10 @@
       "errors": {
         "rateLimited": "GitHub API 사용 한도에 도달했습니다. 몇 분 후에 다시 시도하세요. 한도를 늘리려면 GitHub를 연결하세요.",
         "rateLimitedUntil": "GitHub API 사용 한도에 도달했습니다. {time}에 재설정됩니다. 한도를 늘리려면 GitHub를 연결하세요."
+      },
+      "empty": {
+        "title": "아직 마켓플레이스가 없습니다",
+        "description": "GitHub 저장소를 추가하여 해당 플러그인을 받으세요."
       }
     },
     "bulk": {
@@ -18107,7 +18422,8 @@
         "upload": "스킬 업로드",
         "create": "스킬 만들기",
         "uploadPlugin": "플러그인 업로드",
-        "marketplace": "마켓플레이스 추가"
+        "marketplace": "마켓플레이스 추가",
+        "manageMarketplaces": "마켓플레이스 관리"
       },
       "groups": {
         "mine": "내가 만든 항목",
@@ -18149,6 +18465,11 @@
         "title": "일치하는 스킬이 없습니다",
         "description": "다른 검색어나 필터를 사용해 보세요.",
         "clear": "모든 스킬 보기"
+      },
+      "sort": {
+        "label": "정렬",
+        "updated": "최근 업데이트",
+        "name": "이름"
       }
     },
     "integrations": {
@@ -18172,6 +18493,11 @@
       "noMatches": {
         "title": "일치하는 통합이 없습니다",
         "description": "다른 검색어를 사용해 보세요."
+      },
+      "add": {
+        "label": "추가",
+        "integration": "통합 추가",
+        "manage": "통합 관리"
       }
     },
     "plugins": {
@@ -18189,7 +18515,9 @@
         "clear": "모든 플러그인 보기"
       },
       "integrations": "{needed}개 중 {available}개 통합 사용 가능",
-      "nameHeld": "꺼짐: {names}이(가) 같은 스킬 이름을 사용합니다"
+      "nameHeld": "꺼짐: {names}이(가) 같은 스킬 이름을 사용합니다",
+      "contents": "{skills, plural, one {스킬 1개} other {스킬 {skills}개}}",
+      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶은 것입니다. Claude Code 또는 Codex 플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인으로 제공됩니다."
     },
     "skillPage": {
       "title": "스킬",
@@ -18255,7 +18583,8 @@
       "loadFailed": "이 통합을 사용할 수 없습니다.",
       "tabs": {
         "overview": "개요",
-        "actions": "작업"
+        "actions": "작업",
+        "configuration": "구성"
       },
       "overview": {
         "type": "유형",
@@ -18267,7 +18596,13 @@
           "title": "이 통합 사용",
           "description": "켜져 있으면 채팅과 Craft에서 사용할 수 있습니다.",
           "required": "관리자가 이 통합을 필수로 설정했습니다. 끌 수 없습니다."
-        }
+        },
+        "description": "설명",
+        "noDescription": "설명이 없습니다.",
+        "status": "상태"
+      },
+      "configuration": {
+        "description": "{mode, select, individual {이 통합에 대한 내 연결입니다. 나만 사용합니다.} shared {이 통합의 계정입니다. 접근 권한이 있는 모든 사람이 사용합니다.} other {이 통합은 로그인이 필요하지 않습니다.}}"
       }
     },
     "pluginPage": {
@@ -18473,5 +18808,18 @@
         "label": "경영진"
       }
     }
+  },
+  "opensearchHealth": {
+    "title": "OpenSearch에 더 많은 리소스가 필요합니다",
+    "disk": "OpenSearch 데이터 노드의 디스크 사용률이 85% 이상입니다. 디스크가 가득 차면 인덱싱이 중단될 수 있습니다.",
+    "jvmMemory": "반복 검사에서 OpenSearch JVM 메모리 사용률이 85%를 초과했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "vectorMemory": "OpenSearch 벡터 메모리가 거의 가득 찼거나 한도에 도달했습니다. 검색 및 인덱싱이 실패할 수 있습니다.",
+    "contact": "시스템 관리자 또는 Onyx 팀([support@onyx.app](mailto:support@onyx.app))에 문의하세요.",
+    "stale": "최신 검사를 사용할 수 없습니다. 이 경고는 마지막으로 성공한 검사를 반영하며 복구는 확인되지 않았습니다.",
+    "dismiss": "닫기",
+    "diskTitle": "디스크 공간",
+    "jvmMemoryTitle": "JVM 메모리",
+    "vectorMemoryTitle": "벡터 메모리",
+    "viewDetails": "세부 정보 보기"
   }
 }
