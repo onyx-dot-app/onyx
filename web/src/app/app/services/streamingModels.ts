@@ -129,6 +129,9 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   /** The turn reached its execution deadline. */
   TIMED_OUT = "timed_out",
+  /** The stream ended while tool calls wait for the user's approval. The
+   * response continues in a new stream after the decisions. */
+  AWAITING_APPROVAL = "awaiting_approval",
 }
 
 export interface Stop extends BaseObj {
@@ -540,8 +543,6 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
-  // ISO 8601 UTC; the server resolves the request when it passes
-  expires_at: string;
 }
 
 export interface ToolApprovalResolved extends BaseObj {
@@ -554,7 +555,6 @@ export interface ToolApprovalResolved extends BaseObj {
     | "approved"
     | "approved_for_chat"
     | "rejected"
-    | "expired"
     | "disabled"
     | "cancelled";
 }

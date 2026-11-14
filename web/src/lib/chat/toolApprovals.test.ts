@@ -1,6 +1,7 @@
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
@@ -20,8 +21,7 @@ import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline
 
 function request(
   approvalId: string,
-  toolName = "mcp__3__github__create_issue",
-  expiresAt = "2099-01-01T00:00:00Z"
+  toolName = "mcp__3__github__create_issue"
 ): Packet {
   return {
     placement: { turn_index: 1, tab_index: 0 },
@@ -32,7 +32,6 @@ function request(
       tool_name: toolName,
       display_name: "Create issue",
       arguments: {},
-      expires_at: expiresAt,
     },
   };
 }
@@ -51,10 +50,14 @@ function resolved(
   };
 }
 
-const stop: Packet = {
-  placement: { turn_index: 9, tab_index: 0 },
-  obj: { type: PacketType.STOP },
-};
+function stopPacket(stopReason?: StopReason): Packet {
+  return {
+    placement: { turn_index: 9, tab_index: 0 },
+    obj: { type: PacketType.STOP, stop_reason: stopReason },
+  };
+}
+
+const stop = stopPacket(StopReason.FINISHED);
 
 /** A user question and one response per packet list, as a multi-model turn. */
 function chat(...responses: Packet[][]): MessageTreeState {
@@ -107,24 +110,17 @@ describe("toolApprovalStatus", () => {
     ["approved", "approved"],
     ["approved_for_chat", "approvedForSession"],
     ["rejected", "rejected"],
-    ["expired", "expired"],
     ["disabled", "disabled"],
     ["cancelled", "closed"],
   ] as const)("shows the %s outcome as %s", (outcome, status) => {
     expect(statuses([request("a"), resolved("a", outcome)])).toEqual([status]);
   });
 
-  it("keeps a request pending past its deadline until the server resolves it", () => {
-    expect(statuses([request("a", undefined, "2020-01-01T00:00:00Z")])).toEqual(
-      ["pending"]
-    );
-  });
-
   it("uses a local decision until the resolution arrives, then the resolution", () => {
     const local = new Map([["a", "approved" as const]]);
     expect(statuses([request("a")], local)).toEqual(["approved"]);
-    expect(statuses([request("a"), resolved("a", "expired")], local)).toEqual([
-      "expired",
+    expect(statuses([request("a"), resolved("a", "rejected")], local)).toEqual([
+      "rejected",
     ]);
   });
 
@@ -143,8 +139,17 @@ describe("toolApprovalStatus", () => {
     expect(statuses([request("a"), unknown])).toEqual(["pending"]);
   });
 
-  it("closes an unresolved request once the response stops", () => {
+  it("closes an unresolved request once the server ends the response", () => {
     expect(statuses([request("a"), stop])).toEqual(["closed"]);
+  });
+
+  it.each([
+    ["the approval wait's stop", StopReason.AWAITING_APPROVAL],
+    ["a stop this client added", undefined],
+  ])("keeps a request pending after %s", (_, stopReason) => {
+    expect(statuses([request("a"), stopPacket(stopReason)])).toEqual([
+      "pending",
+    ]);
   });
 });
 

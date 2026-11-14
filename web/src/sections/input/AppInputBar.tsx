@@ -30,6 +30,10 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
+import {
+  findPendingToolApprovalId,
+  useToolApprovalUi,
+} from "@/lib/chat/toolApprovals";
 import type {
   ChatSessionQueue,
   ComposedMessage,
@@ -191,7 +195,23 @@ const AppInputBar = React.memo(
     const responding = chatState === "loading" || chatState === "streaming";
     // Once the stop packet arrives, Stop would reach a finished stream.
     const responseStopped = useCurrentResponseStopped();
-    const canStopGeneration = responding && !responseStopped;
+    // A turn that waits for approval has no stream, but Stop still ends it.
+    // A live turn can stop anyway, so only an idle chat needs the check.
+    const idleTree = useChatSessionStore((state) => {
+      const session = state.currentSessionId
+        ? state.sessions.get(state.currentSessionId)
+        : undefined;
+      return session?.chatState === "input" ? session.messageTree : undefined;
+    });
+    const localApprovalStatuses = useToolApprovalUi(
+      (state) => state.localStatuses
+    );
+    const approvalWaiting = useMemo(
+      () => findPendingToolApprovalId(idleTree, localApprovalStatuses) !== null,
+      [idleTree, localApprovalStatuses]
+    );
+    const canStopGeneration =
+      (responding && !responseStopped) || approvalWaiting;
     const tReadiness = useTranslations("chat.readiness");
     const queuedMessages = queue.messages;
     // Typing during an edit's withdrawal would collide with the returned text.
@@ -1085,7 +1105,7 @@ const AppInputBar = React.memo(
               />
             ))}
 
-          {canStopGeneration && hasPendingInput && (
+          {canStopGeneration && Boolean(message.trim()) && (
             <Button
               prominence="tertiary"
               icon={SvgStop}
@@ -1133,7 +1153,8 @@ const AppInputBar = React.memo(
                   ? SvgRefreshCw
                   : isClassifying || chatState === "cancelling"
                     ? IconLoader
-                    : chatState !== "input" && message.trim()
+                    : (chatState !== "input" || canStopGeneration) &&
+                        message.trim()
                       ? SvgArrowUp
                       : canStopGeneration || isVoicePlaybackControllable
                         ? SvgStop
@@ -1167,7 +1188,10 @@ const AppInputBar = React.memo(
               const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
                 void submitPendingMessage(sendDelivery);
-              } else if (canStopGeneration) {
+              } else if (
+                canStopGeneration &&
+                !(canSubmitNormally && message.trim())
+              ) {
                 stopTTS({ manual: true });
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {

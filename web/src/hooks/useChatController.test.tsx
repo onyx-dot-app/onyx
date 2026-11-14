@@ -429,7 +429,7 @@ test.each([false, true])(
   }
 );
 
-test("a lost stream keeps a waiting approval open until the server is idle", async () => {
+test("a lost stream keeps its waiting approval open after the server is idle", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const idle = Promise.withResolvers<number | null>();
@@ -450,7 +450,6 @@ test("a lost stream keeps a waiting approval open until the server is idle", asy
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: {},
-        expires_at: "2099-01-01T00:00:00Z",
       },
     };
     throw new Error("network error");
@@ -488,7 +487,8 @@ test("a lost stream keeps a waiting approval open until the server is idle", asy
     idle.resolve(null);
     await sending;
   });
-  expect(findPendingToolApprovalId(tree())).toBeNull();
+  // An idle server can still wait for the decision.
+  expect(findPendingToolApprovalId(tree())).toBe("approval");
 });
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {
@@ -533,7 +533,6 @@ test("a send refused for a waiting approval restores the draft and points at the
               tool_name: "mcp__3__github__create_issue",
               display_name: "Create issue",
               arguments: {},
-              expires_at: "2099-01-01T00:00:00Z",
             },
           },
         ],

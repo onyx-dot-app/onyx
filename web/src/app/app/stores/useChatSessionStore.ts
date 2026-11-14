@@ -15,6 +15,7 @@ import {
 } from "../services/messageTree";
 import { useMemo } from "react";
 import type { ChatToolSelection } from "@/lib/tools/types";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
 
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
@@ -665,7 +666,7 @@ export const useCurrentChatState = () =>
 /**
  * The reader has the server's stop packet for every response of the open
  * chat's latest turn. Only rendering and settlement remain, so the turn cannot
- * be stopped.
+ * be stopped. An approval wait's stop does not count: the response continues.
  */
 export const useCurrentResponseStopped = () =>
   useChatSessionStore((state) => {
@@ -678,7 +679,13 @@ export const useCurrentResponseStopped = () =>
     const turn = getLatestTurn(currentSession.messageTree);
     return (
       turn.length > 0 &&
-      turn.every((node) => node.packets.at(-1)?.obj.type === "stop")
+      turn.every((node) => {
+        const last = node.packets.at(-1)?.obj;
+        return (
+          last?.type === PacketType.STOP &&
+          last.stop_reason !== StopReason.AWAITING_APPROVAL
+        );
+      })
     );
   });
 

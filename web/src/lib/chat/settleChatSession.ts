@@ -9,7 +9,12 @@ import { FetchError } from "@/lib/fetcher";
 import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { ChatHistoryPage } from "@/lib/chat/types";
-import type { Packet } from "@/app/app/services/streamingModels";
+import {
+  type Packet,
+  PacketType,
+  StopReason,
+} from "@/app/app/services/streamingModels";
+import { findPendingToolApprovalId } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   CHAT_STATUS_POLL_MS,
@@ -26,6 +31,9 @@ interface SettleChatSessionOptions {
   refreshHistory?: boolean;
   /** Resume returned 404: the stream has no buffer, so it cannot reattach. */
   streamUnavailable?: boolean;
+  /** The stream ended at an approval wait that now has every decision, so
+   * the server continues the response in a new stream. */
+  continuation?: boolean;
 }
 
 /** The answers a live stream writes: its response, or each answer of a
@@ -103,8 +111,14 @@ export function prepareSavedChat(
     streamId === undefined ? null : streamResponses(saved, streamId);
   if (streamId === undefined || !target || !responses)
     return { messageTree: saved, replayStreamId: null };
+  // A cursor resumes only a stream that still runs. After a stop, the
+  // response can continue only in a new stream, from cursor 0.
   const retainedTree =
-    local && getMessageByMessageId(local, streamId)?.replayCursor !== undefined
+    local &&
+    getMessageByMessageId(local, streamId)?.replayCursor !== undefined &&
+    !streamResponses(local, streamId)?.some((response) =>
+      response.packets.some((packet) => packet.obj.type === "stop")
+    )
       ? local
       : undefined;
   const messageTree = new Map(saved);
@@ -123,7 +137,10 @@ export function prepareSavedChat(
         childrenNodeIds: node.childrenNodeIds,
         latestChildNodeId: node.latestChildNodeId,
       });
-    else if (node !== target || target.type !== "user")
+    else if (node === target && target.type === "user")
+      // The question holds the cursor of a multi-model stream.
+      messageTree.set(node.nodeId, { ...node, replayCursor: undefined });
+    else
       messageTree.set(node.nodeId, {
         ...node,
         // Replay rebuilds a row this client marked failed when its stream dropped.
@@ -139,6 +156,7 @@ export function prepareSavedChat(
         message: "",
         packets: [],
         packetCount: 0,
+        replayCursor: undefined,
       });
   }
   return { messageTree, replayStreamId: streamId };
@@ -254,6 +272,7 @@ export async function settleChatSession({
   mode = "completion",
   refreshHistory = true,
   streamUnavailable = false,
+  continuation = false,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -283,19 +302,21 @@ export async function settleChatSession({
       if (!ownsSettlement()) return;
     }
     // A reader that lost a running stream reattaches: from its saved cursor,
-    // or from the start into reset rows. The received rows stay on screen
-    // until the replay delivers its first batch.
+    // or from the start into reset rows. A continuation after approvals
+    // replays from the start. The received rows stay on screen until the
+    // replay delivers its first batch.
     const local = useChatSessionStore.getState().sessions.get(sessionId);
     if (
       typeof streamId === "number" &&
       !streamUnavailable &&
       local &&
       local.chatState !== "cancelling" &&
-      streamResponses(local.messageTree, streamId)?.some(
-        (response) =>
-          response.streamLost ||
-          !response.packets.some((packet) => packet.obj.type === "stop")
-      )
+      (continuation ||
+        streamResponses(local.messageTree, streamId)?.some(
+          (response) =>
+            response.streamLost ||
+            !response.packets.some((packet) => packet.obj.type === "stop")
+        ))
     ) {
       await new Promise<void>((resolve) =>
         setTimeout(resolve, CHAT_STATUS_POLL_MS)
@@ -423,6 +444,53 @@ export async function settleChatSession({
     store.updateChatState(sessionId, "unconfirmed");
     store.setUncaughtError(sessionId, { error: errorMessage });
   }
+}
+
+/**
+ * After the last decision on a response that waits for approval, follows the
+ * stream that continues it. A reader that still runs needs nothing: its own
+ * stream delivers the continuation.
+ */
+export function followApprovalContinuation(
+  sessionId: string,
+  errorMessage: string
+): void {
+  const store = useChatSessionStore.getState();
+  const session = store.sessions.get(sessionId);
+  if (!session || session.chatState === "cancelling") return;
+  const tree = session.messageTree;
+  const latest = getLatestMessageChain(tree).at(-1);
+  const question =
+    latest?.parentNodeId == null ? undefined : tree.get(latest.parentNodeId);
+  const streamId =
+    question && getMultiModelChildren(question, tree)
+      ? question.messageId
+      : latest?.messageId;
+  if (
+    streamId === undefined ||
+    findPendingToolApprovalId(tree) !== null ||
+    !streamResponses(tree, streamId)?.some((response) => {
+      const last = response.packets.at(-1)?.obj;
+      return (
+        last?.type === PacketType.STOP &&
+        last.stop_reason === StopReason.AWAITING_APPROVAL
+      );
+    })
+  )
+    return;
+  // A new reader promise ends the ownership of a settlement that still runs.
+  store.updateSessionData(sessionId, {
+    chatState: "streaming",
+    sendAcknowledged: Promise.resolve(streamId),
+    readerFinished: Promise.resolve(),
+    streamingStartTime: Date.now(),
+  });
+  void settleChatSession({
+    sessionId,
+    controller: session.abortController,
+    errorMessage,
+    continuation: true,
+  });
 }
 
 // A stream has one replay reader even if navigation and refresh overlap.

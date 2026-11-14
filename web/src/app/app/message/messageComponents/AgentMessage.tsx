@@ -57,8 +57,6 @@ export interface AgentMessageProps {
   rawPackets: Packet[];
   restoredPacketCount?: number;
   packetCount?: number; // Tracked separately for React memo comparison (avoids reading from mutated array)
-  /** This client lost the stream, so a stop here does not close approvals. */
-  streamLost?: boolean;
   chatState: FullChatState;
   nodeId: number;
   messageId?: number;
@@ -108,7 +106,6 @@ function arePropsEqual(
     // A replay or reload replaces the array, possibly at the same length.
     prev.rawPackets === next.rawPackets &&
     prev.restoredPacketCount === next.restoredPacketCount &&
-    prev.streamLost === next.streamLost &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&
     prev.chatState.docs === next.chatState.docs &&
     prev.chatState.citations === next.chatState.citations &&
@@ -132,7 +129,6 @@ const AgentMessage = React.memo(function AgentMessage({
   rawPackets,
   packetCount,
   restoredPacketCount: replayPacketCount = 0,
-  streamLost = false,
   chatState,
   nodeId,
   messageId,
@@ -231,7 +227,7 @@ const AgentMessage = React.memo(function AgentMessage({
     );
 
   const authErrors = useAuthErrors(rawPackets);
-  const toolApprovals = useToolApprovals(rawPackets, streamLost);
+  const toolApprovals = useToolApprovals(rawPackets);
 
   const sections = useMemo(() => {
     const sections: ResponseSection[] = [

@@ -336,10 +336,15 @@ export class InputBar {
   }
 
   /** The composer accepts a normal send, and the empty composer cannot send. */
-  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+  /** No turn streams, so the composer sends a normal message. */
+  async expectAcceptsSend(timeout = POLL_TIMEOUT): Promise<void> {
     await expect(this.container).toHaveAttribute("data-accepts-send", "true", {
       timeout,
     });
+  }
+
+  async expectIdle(timeout = POLL_TIMEOUT): Promise<void> {
+    await this.expectAcceptsSend(timeout);
     await expect(this.textbox).toHaveAttribute("data-empty", "");
     await expect(this.sendButton).toBeDisabled();
   }

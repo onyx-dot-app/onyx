@@ -413,12 +413,7 @@ describe("a replay that rebuilds the packets", () => {
   test("a longer replay replaces the output of a lost stream", async () => {
     const lost = [start(), delta("Kept text."), stop()];
     const view = render(
-      <AgentMessage
-        {...props}
-        rawPackets={lost}
-        packetCount={lost.length}
-        streamLost
-      />
+      <AgentMessage {...props} rawPackets={lost} packetCount={lost.length} />
     );
     expect(await screen.findByText("Kept text.")).toBeInTheDocument();
 
@@ -692,7 +687,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
   }
 });
 
-test("a program call that waits for approval shows the nested tool and a waiting header", async () => {
+test("a program call whose stream stopped for approval shows the nested tool and a waiting header", async () => {
   seedSessionAwaitingAnswer();
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const cell = { turn_index: 0, tab_index: 0 };
@@ -720,8 +715,12 @@ test("a program call that waits for approval shows the nested tool and a waiting
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: { title: "Fix login" },
-        expires_at: "2099-01-01T00:00:00Z",
       },
+    },
+    // The stream ends while the call waits; the response is not finished.
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
     },
   ];
   const view = render(
@@ -738,7 +737,7 @@ test("a program call that waits for approval shows the nested tool and a waiting
   try {
     expect(
       await screen.findByRole("button", {
-        name: /^Approval requested: Create issue Approve by/,
+        name: /^Approval requested: Create issue/,
       })
     ).toBeInTheDocument();
     expect(screen.getByText("Waiting for your approval")).toBeInTheDocument();

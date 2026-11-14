@@ -86,15 +86,12 @@ function isApprovalPendingError(error: unknown): boolean {
 }
 
 /** The approval requests of one response, each with its final status. */
-export function useToolApprovals(
-  rawPackets: Packet[],
-  streamLost = false
-): ToolApproval[] {
+export function useToolApprovals(rawPackets: Packet[]): ToolApproval[] {
   // Streams append to the same array, so its length keys the result too.
   const packetCount = rawPackets.length;
   const { entries, stopped } = useMemo(
-    () => readToolApprovals(rawPackets.slice(0, packetCount), streamLost),
-    [rawPackets, packetCount, streamLost]
+    () => readToolApprovals(rawPackets.slice(0, packetCount)),
+    [rawPackets, packetCount]
   );
   // Only this response's statuses, so other decisions do not re-render it.
   const localStatuses = useToolApprovalUi(

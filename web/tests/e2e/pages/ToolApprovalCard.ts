@@ -18,10 +18,11 @@ export class ToolApprovalCard {
   }
 
   async expectPending(toolName: string): Promise<void> {
-    // The header names the action and its deadline.
+    // The header names the action. A request has no deadline.
     await expect(
       this.card.getByRole("button", {
-        name: new RegExp(`^Approval requested: ${toolName} Approve by`),
+        name: `Approval requested: ${toolName}`,
+        exact: true,
       })
     ).toBeVisible({ timeout: 30_000 });
   }

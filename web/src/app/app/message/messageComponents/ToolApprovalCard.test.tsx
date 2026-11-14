@@ -31,7 +31,6 @@ const request: ToolApprovalRequest = {
   tool_name: "mcp__3__github__create_issue",
   display_name: "Create issue",
   arguments: { title: "Fix login", labels: ["bug", "p1"] },
-  expires_at: "2099-01-01T00:00:00Z",
 };
 const requestPacket: Packet = { placement: { turn_index: 1 }, obj: request };
 const approval: ToolApproval = { turnIndex: 1, status: "pending", request };
@@ -77,7 +76,7 @@ describe("Pending request", () => {
 
     expect(
       screen.getByRole("button", {
-        name: /^Approval requested: Create issue Approve by/,
+        name: /^Approval requested: Create issue/,
       })
     ).toBeInTheDocument();
     expect(screen.getByText("Fix login")).toBeVisible();

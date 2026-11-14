@@ -7,6 +7,8 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
 import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
+import type { Message } from "@/app/app/types";
+import { PacketType, StopReason } from "@/app/app/services/streamingModels";
 
 jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
@@ -254,4 +256,54 @@ test("Stop reaches a server turn that has not published its stream", async () =>
     expect.objectContaining({ method: "POST" })
   );
   expect(controller.signal.aborted).toBe(false);
+});
+
+test.each([
+  ["a turn that waits for approval", true],
+  ["an idle chat", false],
+])("Stop on %s posts to the server: %s", async (_, waits) => {
+  const tree = new Map<number, Message>([
+    [
+      1,
+      {
+        nodeId: 1,
+        type: "assistant",
+        message: "",
+        files: [],
+        toolCall: null,
+        parentNodeId: null,
+        packets: waits
+          ? [
+              {
+                placement: { turn_index: 1, tab_index: 0 },
+                obj: {
+                  type: PacketType.TOOL_APPROVAL_REQUEST,
+                  approval_id: "approval",
+                  tool_call_id: "call",
+                  tool_name: "mcp__3__github__create_issue",
+                  display_name: "Create issue",
+                  arguments: {},
+                },
+              },
+              {
+                placement: { turn_index: 0 },
+                obj: {
+                  type: PacketType.STOP,
+                  stop_reason: StopReason.AWAITING_APPROVAL,
+                },
+              },
+            ]
+          : [],
+      },
+    ],
+  ]);
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "input",
+    messageTree: tree,
+    sendAcknowledged: undefined,
+  });
+
+  await stopChatSession("session", errorMessage);
+
+  expect(fetchMock).toHaveBeenCalledTimes(waits ? 1 : 0);
 });

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   Packet,
   PacketType,
+  StopReason,
   ToolApprovalRequest,
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
@@ -31,21 +32,18 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "approved",
   "approved_for_chat",
   "rejected",
-  "expired",
   "disabled",
   "cancelled",
 ]);
 
 /**
- * The requests in one response's packets, and whether the response stopped.
- * A resolution without a known outcome counts as no resolution. The stop that
- * closes a lost stream is this client's own, so it does not count: the server
- * can still wait for a decision.
+ * The requests in one response's packets, and whether the server ended the
+ * response. A resolution without a known outcome counts as no resolution.
+ * Only a server stop has a reason. A stop that this client adds does not
+ * count, and neither does an approval wait's stop, because the server still
+ * waits for a decision.
  */
-export function readToolApprovals(
-  packets: Packet[],
-  streamLost = false
-): {
+export function readToolApprovals(packets: Packet[]): {
   entries: ToolApprovalEntry[];
   stopped: boolean;
 } {
@@ -64,7 +62,11 @@ export function readToolApprovals(
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (packet.obj.type === PacketType.STOP && !streamLost) {
+    } else if (
+      packet.obj.type === PacketType.STOP &&
+      packet.obj.stop_reason !== undefined &&
+      packet.obj.stop_reason !== StopReason.AWAITING_APPROVAL
+    ) {
       stopped = true;
     }
   }
@@ -79,8 +81,7 @@ export function readToolApprovals(
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision this
- * client made decides it; a stopped response closes the request. The deadline
- * never does: the server resolves an expired request.
+ * client made decides it; a stopped response closes the request.
  */
 export function toolApprovalStatus(
   entry: ToolApprovalEntry,
@@ -184,15 +185,15 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
 
 /** The first request of the latest turn that still waits for this user. */
 export function findPendingToolApprovalId(
-  tree: MessageTreeState | undefined
+  tree: MessageTreeState | undefined,
+  localStatuses: ReadonlyMap<
+    string,
+    ApprovalStatus
+  > = useToolApprovalUi.getState().localStatuses
 ): string | null {
   if (!tree) return null;
-  const { localStatuses } = useToolApprovalUi.getState();
   for (const response of getLatestTurn(tree)) {
-    const { entries, stopped } = readToolApprovals(
-      response.packets,
-      response.streamLost
-    );
+    const { entries, stopped } = readToolApprovals(response.packets);
     const pending = entries.find(
       (entry) =>
         toolApprovalStatus(

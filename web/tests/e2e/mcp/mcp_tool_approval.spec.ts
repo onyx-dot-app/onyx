@@ -27,7 +27,8 @@ const TOOL_OUTPUT = "Secret value 200!";
 
 /**
  * An MCP tool on the default (ASK) policy pauses the chat run until the user
- * approves or rejects the call in the answer's approval card.
+ * approves or rejects the call in the answer's approval card. The turn's
+ * stream ends while it waits, and the reply continues after the decision.
  */
 test.describe("MCP tool approval in chat @code-mode", () => {
   test.describe.configure({ mode: "serial" });
@@ -130,6 +131,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.expectPending(toolDisplayName);
     await card.expectArgument(nonce);
     const chat = new ChatPage(page);
+    await chat.inputBar.expectAcceptsSend();
 
     await test.step("a send waits for the decision and keeps the draft", async () => {
       const draft = `Next question ${nonce}`;
@@ -144,11 +146,14 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     await card.approve();
 
-    await card.expectApproved(toolDisplayName);
-    await chat.expectLatestReplyComplete();
-    await expect(chat.answerText(answer)).toBeVisible();
-    await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
-    await card.expectApproved(toolDisplayName);
+    await test.step("the reply continues in the same message", async () => {
+      await card.expectApproved(toolDisplayName);
+      await chat.expectLatestReplyComplete();
+      await expect(chat.answerText(answer)).toBeVisible();
+      await expect(chat.aiMessages).toHaveCount(1);
+      await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
+      await card.expectApproved(toolDisplayName);
+    });
 
     await chat.reload();
     await card.expectApproved(toolDisplayName);
@@ -211,7 +216,9 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     ).toBe(true);
   });
 
-  test("A waiting card stays decidable after a reload", async ({ page }) => {
+  test("A waiting card survives a reload while its turn is suspended", async ({
+    page,
+  }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
     const { answer } = await askForToolCall(page);
@@ -219,13 +226,17 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
     const chat = new ChatPage(page);
+    await chat.inputBar.expectAcceptsSend();
     await chat.reload();
 
+    // The saved response replays the request; no stream runs.
     await card.expectPending(toolDisplayName);
+    await chat.inputBar.expectAcceptsSend();
     await card.approve();
     await card.expectApproved(toolDisplayName);
     await chat.expectLatestReplyComplete();
     await expect(chat.answerText(answer)).toBeVisible();
+    await expect(chat.aiMessages).toHaveCount(1);
     await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
   });
 

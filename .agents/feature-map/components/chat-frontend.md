@@ -55,19 +55,23 @@
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
 - **A tool call needs approval.** An approval card shows in the answer with
-  the tool's arguments and a deadline. The user approves once, approves for
-  the chat, or rejects; the card then becomes a one-line record of the
-  outcome, or of "No longer waiting" when the server returns 409 or 404. A
-  Stop rejects the requests that wait, and the record reads "Not approved".
-  Once the stop packet arrives, a card without a resolution reads as no longer
-  waiting (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The stop that the
-  client adds when it loses the stream does not count: the node's `streamLost`
-  mark keeps the card open, because the server can still wait for the
-  decision. The saved answer replays the same records, so they stay after the
-  answer settles and after a reload.
+  the tool's arguments. The request has no deadline. The user approves once,
+  approves for the chat, or rejects; the card then becomes a one-line record
+  of the outcome, or of "No longer waiting" when the server returns 409 or
+  404. While the turn waits, its stream ends with `stop(awaiting_approval)` and
+  the chat goes idle. That stop pauses the answer: `processPackets` does not
+  count it, and it never closes a card. A server stop with another reason
+  closes a card without a resolution
+  (`lib/chat/toolApprovals.ts:readToolApprovals`); a stop that the client adds
+  has no reason and never does. After the last decision,
+  `lib/chat/settleChatSession.ts:followApprovalContinuation` follows the new
+  stream that continues the answer, from cursor 0 into the same rows. Stop
+  stays available on the idle chat while a card waits; the server rejects the
+  requests, and the record reads "Not approved". A reload replays the request
+  and the stop the same way. The saved answer replays the records, so they
+  stay after the answer settles and after a reload.
   While the card waits, the timeline header reads "Waiting for your approval",
-  also after a preamble and for parallel tool calls, and its timer leaves out
-  the wait.
+  also after a preamble and for parallel tool calls.
   While a card waits, the user can type but not send: the composer keeps
   the draft, scrolls to the card, shakes it and shows a toast
   (`lib/chat/hooks.ts:useToolApprovalSendGuard`). In a multi-model turn,
@@ -333,7 +337,9 @@ the local tree into the tree to show and the stream to replay; load and
 `refreshChatSession` both use it. The ID names an assistant node, or the
 user node of a multi-model turn. `lib/chat/settleChatSession.ts:followChatSession`
 calls `resumeStream` with the stream ID and that node's `replayCursor` (0 on a
-fresh page). In a multi-model turn it routes each packet to the answer at
+fresh page). `prepareSavedChat` keeps a cursor only while the stream's answers
+have no stop: a continuation after approvals can reuse the stream ID, and its
+new stream starts at cursor 0. In a multi-model turn it routes each packet to the answer at
 `placement.model_index`, in `getMultiModelChildren` order, and gives the
 overall stop to every answer. It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
@@ -357,8 +363,9 @@ in one of these states, or it stays busy.
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader. If the reader ended without a stop, or marked its answers
-`streamLost`, settlement waits one poll interval and reads `/status`. When the
+reader. If the reader ended without a stop, marked its answers
+`streamLost`, or follows an approval continuation, settlement waits one poll
+interval and reads `/status`. When the
 same stream still runs, it attaches a new reader to it through
 `prepareSavedChat` and `followChatSession`: from the stream node's
 `replayCursor`, or from cursor 0 into reset rows when the send stream had no

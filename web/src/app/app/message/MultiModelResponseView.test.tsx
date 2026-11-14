@@ -49,7 +49,6 @@ function response(modelIndex: number, approvalId?: string): MultiModelResponse {
               tool_name: "mcp__3__github__create_issue",
               display_name: "Create issue",
               arguments: {},
-              expires_at: "2099-01-01T00:00:00Z",
             },
           },
         ]

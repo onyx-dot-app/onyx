@@ -1,9 +1,12 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
+import { followApprovalContinuation } from "@/lib/chat/settleChatSession";
+import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
   decidedStatus,
@@ -19,6 +22,7 @@ interface ToolApprovalCardProps {
 /** A chat tool call's approval request on the shared approval card. */
 function ToolApprovalCard({ approval }: ToolApprovalCardProps) {
   const { request } = approval;
+  const tReadiness = useTranslations("chat.readiness");
   const nudge = useToolApprovalUi((state) =>
     state.nudge?.approvalId === request.approval_id ? state.nudge.seq : null
   );
@@ -43,8 +47,10 @@ function ToolApprovalCard({ approval }: ToolApprovalCardProps) {
   }, [nudge]);
 
   // The decided status shows at once; the resolution packet then confirms it.
+  // The last decision of a stopped wait starts the response's continuation.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
+    const sessionId = useChatSessionStore.getState().currentSessionId;
     try {
       recordStatus(
         request.approval_id,
@@ -62,6 +68,8 @@ function ToolApprovalCard({ approval }: ToolApprovalCardProps) {
       }
       recordStatus(request.approval_id, "closed");
     }
+    if (sessionId !== null)
+      followApprovalContinuation(sessionId, tReadiness("checkFailed"));
   }
 
   return (
@@ -76,7 +84,6 @@ function ToolApprovalCard({ approval }: ToolApprovalCardProps) {
       <ApprovalCard
         actions={[{ id: request.tool_name, name: request.display_name }]}
         payload={request.arguments}
-        expiresAt={request.expires_at}
         sessionScope="chat"
         status={approval.status}
         onDecide={submit}

@@ -6,15 +6,19 @@ import type {
 } from "@/app/app/types";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
-import type { Packet } from "@/app/app/services/streamingModels";
+import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  followApprovalContinuation,
   followChatSession,
   preserveFailedMessages,
   refreshChatSession,
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
-import { findPendingToolApprovalId } from "@/lib/chat/toolApprovals";
+import {
+  findPendingToolApprovalId,
+  useToolApprovalUi,
+} from "@/lib/chat/toolApprovals";
 import {
   fetchSettledChatSession,
   waitForChatResponseEnd,
@@ -50,7 +54,6 @@ function approvalRequest(approvalId: string, modelIndex?: number): Packet {
       tool_name: "mcp__3__github__create_issue",
       display_name: "Create issue",
       arguments: {},
-      expires_at: "2099-01-01T00:00:00Z",
     },
   };
 }
@@ -132,6 +135,7 @@ beforeEach(() => {
   jest.mocked(resumeStream).mockImplementation(actualLib.resumeStream);
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("session");
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
 });
 
 afterEach(() => jest.restoreAllMocks());
@@ -514,7 +518,8 @@ describe("with stubbed server checks", () => {
     expect(settled.chatState).toBe("input");
     expect(settled.messageTree.get(2)?.streamLost).toBeUndefined();
     expect(settled.messageTree.get(3)?.streamLost).toBeUndefined();
-    expect(findPendingToolApprovalId(settled.messageTree)).toBeNull();
+    // The server can still wait for a decision; only its own stop closes cards.
+    expect(findPendingToolApprovalId(settled.messageTree)).toBe("approval-2");
   });
 
   test("an old rejected attempt does not hide the latest saved answer", async () => {
@@ -715,7 +720,6 @@ describe("with a scripted fetch", () => {
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: {},
-        expires_at: "2099-01-01T00:00:00Z",
       },
     });
     const stop: Packet = {
@@ -897,6 +901,114 @@ describe("with a scripted fetch", () => {
         useChatSessionStore.getState().sessions.get("session")!.messageTree
       )
     ).toBe("approval");
+  });
+
+  describe("after the last approval decision", () => {
+    const awaitingStop: Packet = {
+      placement: { turn_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+    };
+    const resolved: Packet = {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_resolved",
+        approval_id: "approval",
+        outcome: "approved",
+      },
+    };
+
+    /** A response whose stream stopped at an approval wait. */
+    function waitingChat(packets: Packet[]) {
+      const raw = [
+        { ...savedMessage(81, "user", "Question"), latest_child_message: 82 },
+        savedMessage(82, "assistant", ""),
+      ];
+      const tree = processRawChatHistory(raw, [[]]);
+      // The cursor of the stream that stopped never applies to its continuation.
+      tree.set(82, { ...tree.get(82)!, replayCursor: 9, packets });
+      useChatSessionStore.getState().updateSessionData("session", {
+        chatState: "input",
+        messageTree: tree,
+      });
+    }
+
+    test("follows the continuation stream from cursor 0", async () => {
+      waitingChat([approvalRequest("approval"), awaitingStop]);
+      useToolApprovalUi.setState({
+        localStatuses: new Map([["approval", "approved"]]),
+      });
+      const statuses = [
+        { is_processing: true, current_stream: { stream_id: 82 } },
+      ];
+      const fetchMock = jest
+        .spyOn(global, "fetch")
+        .mockImplementation(async (input) => {
+          const status = statuses.shift();
+          if (String(input).endsWith("/status") && status)
+            return Response.json(status);
+          // Leave later checks pending; this test covers the continuation.
+          return new Promise<Response>(() => {});
+        });
+      const answerText: Packet = {
+        placement: { turn_index: 2 },
+        obj: { type: "message_delta", content: "Created the issue." },
+      };
+      jest.mocked(resumeStream).mockImplementation(async function* () {
+        yield approvalRequest("approval");
+        yield resolved;
+        yield { stream_id: 82, next_cursor: 2, replay_complete: true };
+        yield answerText;
+        yield { stream_id: 82, next_cursor: 3, replay_complete: true };
+        await new Promise<never>(() => {});
+      });
+
+      followApprovalContinuation("session", errorMessage);
+
+      const session = () =>
+        useChatSessionStore.getState().sessions.get("session")!;
+      expect(session().chatState).toBe("streaming");
+      for (
+        let tick = 0;
+        tick < 300 && session().messageTree.get(82)?.replayCursor !== 3;
+        tick++
+      )
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(fetchMock.mock.calls[0]?.[0]).toEqual(
+        expect.stringContaining("/status")
+      );
+      expect(resumeStream).toHaveBeenCalledWith(
+        "session",
+        82,
+        0,
+        expect.anything()
+      );
+      expect(session().messageTree.get(82)?.packets).toEqual([
+        approvalRequest("approval"),
+        resolved,
+        answerText,
+      ]);
+    });
+
+    test.each([
+      [
+        "another request still waits",
+        [approvalRequest("approval"), approvalRequest("other"), awaitingStop],
+      ],
+      ["the stream still runs", [approvalRequest("approval")]],
+    ])("does nothing while %s", (_, packets) => {
+      waitingChat(packets);
+      useToolApprovalUi.setState({
+        localStatuses: new Map([["approval", "approved"]]),
+      });
+      const fetchMock = jest.spyOn(global, "fetch");
+
+      followApprovalContinuation("session", errorMessage);
+
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(
+        useChatSessionStore.getState().sessions.get("session")!.chatState
+      ).toBe("input");
+    });
   });
 
   test("a resume stream the server cannot find is not retried", async () => {
@@ -1129,7 +1241,7 @@ describe("with a scripted fetch", () => {
     });
   });
 
-  test("a waiting approval of a lost stream stays open until its run ends", () => {
+  test("a lost stream keeps its mark only while its run continues", () => {
     const raw = [
       { ...savedMessage(1, "user", "Question"), latest_child_message: 2 },
       savedMessage(2, "assistant", ""),
@@ -1150,7 +1262,6 @@ describe("with a scripted fetch", () => {
             tool_name: "mcp__3__github__create_issue",
             display_name: "Create issue",
             arguments: {},
-            expires_at: "2099-01-01T00:00:00Z",
           },
         },
         { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
@@ -1162,8 +1273,9 @@ describe("with a scripted fetch", () => {
       return preserveFailedMessages(saved, local);
     };
 
-    expect(findPendingToolApprovalId(merged("running"))).toBe("approval");
-    expect(findPendingToolApprovalId(merged("error"))).toBeNull();
+    expect(merged("running").get(2)?.streamLost).toBe(true);
+    expect(merged("suspended").get(2)?.streamLost).toBe(true);
+    expect(merged("error").get(2)?.streamLost).toBe(false);
   });
 
   test.each(["completion", "refresh"])(
