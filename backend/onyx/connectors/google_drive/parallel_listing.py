@@ -32,9 +32,9 @@ from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.file_retrieval import (
     RESOLVED_FROM_SHORTCUT_KEY,
     DriveFileFieldType,
-    _get_fields_for_file_type,
-    _resolve_file_or_shortcut,
+    get_fields_for_file_type,
     owner_email,
+    resolve_file_or_shortcut,
 )
 from onyx.connectors.google_drive.models import (
     DriveListingState,
@@ -351,7 +351,7 @@ class ParallelDriveLister:
         self._checkpoint = checkpoint
         self._state: DriveListingState = checkpoint.listing
         self._field_type = field_type
-        self._fields = _get_fields_for_file_type(field_type)
+        self._fields = get_fields_for_file_type(field_type)
         self._requested_shared_drive_ids = requested_shared_drive_ids
         self._choose_drive_principal = choose_drive_principal
         self._check_impersonation = check_impersonation
@@ -624,7 +624,7 @@ class ParallelDriveLister:
 
         def resolve() -> GoogleDriveFileType | None:
             try:
-                return _resolve_file_or_shortcut(
+                return resolve_file_or_shortcut(
                     self._ops, user_email, file, self._field_type
                 )
             except GoogleDriveHttpError as error:
