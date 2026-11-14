@@ -386,6 +386,81 @@ test("a failed streaming answer stops its existing autoplay session", async () =
   expect(mockStopTTS).toHaveBeenCalledTimes(1);
 });
 
+describe("a replay that rebuilds the packets", () => {
+  const start = (): Packet => ({
+    placement,
+    obj: {
+      type: PacketType.MESSAGE_START,
+      id: "answer",
+      content: "",
+      final_documents: null,
+    },
+  });
+  const delta = (content: string): Packet => ({
+    placement,
+    obj: { type: PacketType.MESSAGE_DELTA, content },
+  });
+  const stop = (): Packet => ({ placement, obj: { type: PacketType.STOP } });
+  const props = {
+    nodeId: 202,
+    chatState,
+    parentMessage: message(201, null, "user"),
+    llmManager: null,
+    hideFooter: true,
+    disableTTS: true,
+  };
+
+  test("a longer replay replaces the output of a lost stream", async () => {
+    const lost = [start(), delta("Kept text."), stop()];
+    const view = render(
+      <AgentMessage
+        {...props}
+        rawPackets={lost}
+        packetCount={lost.length}
+        streamLost
+      />
+    );
+    expect(await screen.findByText("Kept text.")).toBeInTheDocument();
+
+    const replay = [
+      start(),
+      delta("Kept text."),
+      delta(" Replayed text."),
+      delta(" Live text."),
+    ];
+    view.rerender(
+      <AgentMessage
+        {...props}
+        rawPackets={replay}
+        packetCount={replay.length}
+      />
+    );
+
+    expect(
+      await screen.findByText("Kept text. Replayed text. Live text.")
+    ).toBeInTheDocument();
+  });
+
+  test("a replay of the same length replaces the shown packets", async () => {
+    const saved = [start(), delta("Old text."), stop()];
+    const view = render(
+      <AgentMessage {...props} rawPackets={saved} packetCount={saved.length} />
+    );
+    expect(await screen.findByText("Old text.")).toBeInTheDocument();
+
+    const replay = [start(), delta("New text."), stop()];
+    view.rerender(
+      <AgentMessage
+        {...props}
+        rawPackets={replay}
+        packetCount={replay.length}
+      />
+    );
+
+    expect(await screen.findByText("New text.")).toBeInTheDocument();
+  });
+});
+
 test("a timed out answer explains its deadline without claiming the user stopped it", async () => {
   seedSessionAwaitingAnswer();
   const packets: Packet[] = [

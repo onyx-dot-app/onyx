@@ -105,6 +105,8 @@ function arePropsEqual(
     // Compare packetCount (primitive) instead of rawPackets.length
     // The array is mutated in place, so reading .length from prev and next would return same value
     prev.packetCount === next.packetCount &&
+    // A replay or reload replaces the array, possibly at the same length.
+    prev.rawPackets === next.rawPackets &&
     prev.restoredPacketCount === next.restoredPacketCount &&
     prev.streamLost === next.streamLost &&
     prev.chatState.agent?.id === next.chatState.agent?.id &&

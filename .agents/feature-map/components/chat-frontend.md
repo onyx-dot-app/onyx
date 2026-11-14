@@ -463,14 +463,15 @@ up its own branding.
 
 ## Contracts and traps
 
-1. `packet-list-append-only` **A message's packet list is append-only.**
-   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:processPackets`
-   resets only when the list gets shorter or the `nodeId` changes. Otherwise it
-   processes only the packets past `nextPacketIndex`, so a list replaced with
-   one of the same or greater length keeps the state built from the old
-   packets. `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage`
-   memoizes on `packetCount`, not on the array. Update both together, as
-   `web/src/lib/chat/settleChatSession.ts:followChatSession` does.
+1. `packet-list-append-only` **A message's packet list grows by appending,
+   or is replaced.**
+   `app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts:usePacketProcessor`
+   processes only the packets past `nextPacketIndex`. It starts again when the
+   `nodeId` changes, the list gets shorter, or the packet at the last processed
+   index is a different object, as after a replay or a reload. So append to the
+   same packet objects, and give a rebuilt list new ones.
+   `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
+   on `packetCount` and the array, because a send mutates its array in place.
 2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
    [[streaming-protocol]] lists the hand-mirrored places, including
    `findRenderer`. The web client keeps more hand-written sets that switch on
