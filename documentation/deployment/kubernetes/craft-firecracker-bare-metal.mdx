@@ -1,0 +1,164 @@
+---
+title: "Firecracker on Bare-Metal Kubernetes"
+description: "Prepare your own Intel KVM hosts for Craft Firecracker sandboxes"
+icon: "server"
+---
+
+This guide prepares a Kubernetes cluster on your own hardware for [Craft on
+Firecracker](/deployment/kubernetes/craft-firecracker). It applies to k3s, RKE2,
+and kubeadm clusters on Intel hosts with KVM. After the nodes are ready, configure Helm as the overview page shows.
+
+## Host requirements
+
+| Item | Requirement |
+| --- | --- |
+| CPU | Intel x86_64 with VT-x turned on in the BIOS. A VM works as a node only if its hypervisor exposes VT-x (nested virtualization). |
+| OS | A Linux distribution with systemd and cgroup v2, for example Ubuntu 24.04, Debian 13, RHEL 9, or Amazon Linux 2023. |
+| Kernel | Onyx tests host kernel 6.18. The preflight check also accepts 5.10 and 6.1. Other versions give a warning. |
+| Kernel modules | `kvm_intel` and `loop` |
+| Sysctl | `vm.max_map_count` of `1048576` or more |
+| Data directory | `/var/lib/craft-fc` on XFS with reflink, or on another file system with free space for the host agent loop store |
+| Network | A CNI that enforces NetworkPolicy |
+| Other nodes | At least one node without the sandbox taints for the Onyx pods, and nodes for the pod sandbox pool. A KVM node cannot run the Onyx pods. |
+
+| Distribution | NetworkPolicy |
+| --- | --- |
+| k3s | The embedded network policy controller enforces it. Do not start k3s with `--disable-network-policy`. A new pod can be blocked for about 2 seconds while the controller adds it. |
+| RKE2 | The default CNI, Canal, enforces it. |
+| kubeadm | Install a CNI that enforces it, for example Calico or Cilium. Flannel alone does not. |
+
+## Prepare the nodes
+
+Onyx provides a node preparation script:
+[`deployment/craft-fc-node-prep/craft-fc-node-prep.sh`](https://github.com/onyx-dot-app/onyx/blob/main/deployment/craft-fc-node-prep/craft-fc-node-prep.sh).
+It checks a node, sets the kernel settings that it can, and adds the Kubernetes labels and taints.
+It never erases a disk.
+
+<Steps>
+  <Step title="Check the node">
+    Copy the script to each KVM host and run:
+
+    ```bash
+    sudo ./craft-fc-node-prep.sh check
+    ```
+
+    Each line starts with `PASS`, `WARN`, or `FAIL`. The last line is `RESULT: PASS` or `RESULT: FAIL`.
+    A `FAIL` line names the fix. A `WARN data-dir` line on a data directory without reflink is expected:
+    the host agent makes its XFS loop store there.
+  </Step>
+
+  <Step title="Apply the kernel settings">
+    ```bash
+    sudo ./craft-fc-node-prep.sh apply --dry-run   # show the changes
+    sudo ./craft-fc-node-prep.sh apply
+    ```
+
+    `apply` loads `kvm_intel` and `loop` and keeps them in `/etc/modules-load.d/onyx-craft-fc.conf`.
+    It sets `vm.max_map_count=1048576` and keeps it in `/etc/sysctl.d/99-zz-onyx-firecracker.conf`.
+    It makes the data directory, then runs `check` again. It cannot turn on VT-x or cgroup v2:
+    change the BIOS or the boot settings for these.
+  </Step>
+
+  <Step title="Optional: use a dedicated XFS disk">
+    A dedicated disk gives better disk performance than the host agent loop store.
+    To format an empty disk with XFS and reflink, add it to `/etc/fstab`, and mount it at the data directory:
+
+    ```bash
+    sudo ./craft-fc-node-prep.sh apply --xfs-device /dev/nvme1n1
+    ```
+
+    The script refuses a disk that has a file system other than XFS, and a data directory that is not empty.
+  </Step>
+
+  <Step title="Label and taint the nodes">
+    From a machine where `kubectl` reaches the cluster:
+
+    ```bash
+    # Firecracker (KVM) nodes
+    ./craft-fc-node-prep.sh label --context <kube-context> <kvm-node> [<kvm-node> ...]
+    # Pod sandbox nodes
+    ./craft-fc-node-prep.sh label --context <kube-context> --pod-sandbox <pod-node>
+    ```
+
+    Add `--dry-run` to show the `kubectl` commands first.
+
+    On k3s, the bundled add-ons (for example traefik) can start on a node before you taint it,
+    and `NoSchedule` does not move them. To prevent this, join each KVM node with the labels and taints:
+
+    ```bash
+    k3s agent --node-label onyx.app/workload=sandbox --node-label onyx.app/kvm=true \
+      --node-taint workload=sandbox:NoSchedule --node-taint onyx.app/kvm=true:NoSchedule
+    ```
+
+    On a node that already joined, move its other pods before microVMs run on it.
+    `kubectl drain` respects PodDisruptionBudgets and keeps the DaemonSet pods:
+
+    ```bash
+    kubectl get pods -A -o wide --field-selector spec.nodeName=<kvm-node>
+    kubectl drain <kvm-node> --ignore-daemonsets
+    kubectl uncordon <kvm-node>
+    ```
+
+    If `drain` stops on a pod with local data or without a controller, move that pod yourself.
+  </Step>
+</Steps>
+
+## Configure the file store
+
+The object store that the Onyx chart bundles works as it is. Its traffic stays inside the cluster and uses HTTP.
+When the bundled store is on and `FILE_STORE_BACKEND` is `s3` (the default),
+the chart lets the host agent accept HTTP presigned URLs. If the DNS domain of your cluster is not `cluster.local`,
+set `global.clusterDomain` to it.
+
+An external store must use HTTPS: the host agent refuses plain HTTP URLs for it.
+To use an external S3-compatible store that KVM nodes reach, set the S3 file store values:
+
+```yaml
+configMap:
+  FILE_STORE_BACKEND: "s3"
+  S3_ENDPOINT_URL: "https://s3.example.internal"
+  S3_FILE_STORE_BUCKET_NAME: "onyx-file-store"
+minio:
+  enabled: false
+objectStore:
+  enabled: false
+```
+
+If the endpoint uses a private CA, the KVM nodes and the Onyx pods must trust it.
+
+## Configure Helm
+
+For a new install, set the [base chart values](/deployment/kubernetes/craft-firecracker#base-chart-values).
+Then follow [Configure Helm](/deployment/kubernetes/craft-firecracker#configure-helm). On bare metal,
+also set the microVM limit for your hosts:
+
+```yaml
+craft:
+  hostAgent:
+    maxVms: 0   # no limit; or a number that fits your hosts
+```
+
+The default limit of 60 microVMs protects nested virtualization hosts. Bare-metal hosts do not need it.
+The host agent still refuses new microVMs when node memory or disk is low.
+See [Sizing and images](/deployment/kubernetes/craft-firecracker-sizing).
+
+Then follow [Verify the deployment](/deployment/kubernetes/craft-firecracker#verify-the-deployment).
+
+## OpenShift
+
+Onyx has not tested OpenShift. These are the differences that the security model of OpenShift causes:
+
+- OpenShift uses Security Context Constraints instead of Pod Security labels. Grant the `privileged` SCC to the host
+  agent service account,
+  `<fullname>-craft-fc-host-agent` in the host agent namespace (`onyx-craft-fc-host-agent` for the release `onyx`):
+
+  ```bash
+  oc adm policy add-scc-to-user privileged -z onyx-craft-fc-host-agent -n onyx-sandbox-runtime
+  ```
+
+- The preflight check is a privileged pod with the `default` service account of the release namespace.
+  Grant it the `privileged` SCC while you run the check, then remove the grant.
+- Pod sandboxes need the `NET_ADMIN` capability for their firewall. Give the sandbox namespace an SCC that allows it,
+  or follow the network enforcement options in the Helm chart README.
+- Set the same sysctl and kernel module with a `MachineConfig`, or run the node preparation script on each node.
+  Run `check` on one node to see the data directory file system.
