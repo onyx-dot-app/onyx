@@ -26,7 +26,7 @@ import {
 } from "@/app/app/types";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import { isSessionEndedResponse } from "@/lib/auth/utils";
 import { revalidateCurrentUser } from "@/lib/users/svc";
 
@@ -359,7 +359,11 @@ export async function* resumeStream(
 
   if (!response.ok) {
     const data: ErrorResponseBody = await response.json().catch(() => ({}));
-    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+    throw new FetchError(
+      data.detail ?? `HTTP error! status: ${response.status}`,
+      response.status,
+      data
+    );
   }
 
   yield* readChatStream<PacketType | StreamCursor>(

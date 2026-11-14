@@ -9,6 +9,7 @@ import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  followChatSession,
   preserveFailedMessages,
   refreshChatSession,
   settleChatSession,
@@ -38,6 +39,21 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
 }));
 
 const errorMessage = "Check again";
+
+function approvalRequest(approvalId: string, modelIndex?: number): Packet {
+  return {
+    placement: { turn_index: 1, tab_index: 0, model_index: modelIndex },
+    obj: {
+      type: "tool_approval_request",
+      approval_id: approvalId,
+      tool_call_id: "call",
+      tool_name: "mcp__3__github__create_issue",
+      display_name: "Create issue",
+      arguments: {},
+      expires_at: "2099-01-01T00:00:00Z",
+    },
+  };
+}
 
 function message(nodeId: number, type: Message["type"], text: string): Message {
   return {
@@ -462,6 +478,45 @@ describe("with stubbed server checks", () => {
     });
   });
 
+  test("confirmed idle closes every lost answer of an incognito multi-model turn", async () => {
+    const lostAnswer = (nodeId: number, model: string): Message => ({
+      ...message(nodeId, "error", ""),
+      parentNodeId: 1,
+      modelDisplayName: model,
+      errorMessage: "network error",
+      streamLost: true,
+      packets: [
+        approvalRequest(`approval-${nodeId}`),
+        { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
+      ],
+    });
+    const tree = new Map<number, Message>([
+      [
+        1,
+        {
+          ...message(1, "user", "Question"),
+          childrenNodeIds: [2, 3],
+          latestChildNodeId: 3,
+        },
+      ],
+      [2, lostAnswer(2, "First")],
+      [3, lostAnswer(3, "Second")],
+    ]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      incognito: true,
+      messageTree: tree,
+    });
+    expect(findPendingToolApprovalId(tree)).toBe("approval-2");
+
+    await settle();
+
+    const settled = useChatSessionStore.getState().sessions.get("session")!;
+    expect(settled.chatState).toBe("input");
+    expect(settled.messageTree.get(2)?.streamLost).toBeUndefined();
+    expect(settled.messageTree.get(3)?.streamLost).toBeUndefined();
+    expect(findPendingToolApprovalId(settled.messageTree)).toBeNull();
+  });
+
   test("an old rejected attempt does not hide the latest saved answer", async () => {
     const user = {
       ...message(1, "user", "Question"),
@@ -691,6 +746,204 @@ describe("with a scripted fetch", () => {
     expect(tree().get(2)?.packets).toEqual([approvalRequest(0), stop]);
     expect(tree().get(3)?.packets).toEqual([approvalRequest(1), stop]);
     expect(tree().get(3)?.restoredPacketCount).toBe(1);
+  });
+
+  test("a lost resume stream reattaches from its saved cursor while the same stream runs", async () => {
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    const raw = [
+      { ...savedMessage(21, "user", "Question"), latest_child_message: 22 },
+      savedMessage(22, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    const statuses = [
+      { is_processing: true, current_stream: { stream_id: 22 } },
+    ];
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const status = statuses.shift();
+      if (String(input).endsWith("/status") && status)
+        return Response.json(status);
+      // Leave later checks pending; this test covers the reattached stream.
+      return new Promise<Response>(() => {});
+    });
+    const delta = (content: string): Packet => ({
+      placement: { turn_index: 0 },
+      obj: { type: "message_delta", content },
+    });
+    jest
+      .mocked(resumeStream)
+      .mockImplementationOnce(async function* () {
+        yield delta("Saved");
+        yield { stream_id: 22, next_cursor: 1, replay_complete: true };
+        yield delta("Not acknowledged");
+        throw new TypeError("network error");
+      })
+      .mockImplementationOnce(async function* () {
+        yield delta("Not acknowledged");
+        yield approvalRequest("approval");
+        yield { stream_id: 22, next_cursor: 3, replay_complete: true };
+        // The run waits for the decision.
+        await new Promise<never>(() => {});
+      });
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get("session")!.abortController;
+
+    await followChatSession({
+      sessionId: "session",
+      controller,
+      errorMessage,
+      streamId: 22,
+      messageMap: tree,
+    });
+
+    const answer = () =>
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(22);
+    for (let tick = 0; tick < 300 && answer()?.replayCursor !== 3; tick++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    log.mockRestore();
+    expect(resumeStream).toHaveBeenCalledTimes(2);
+    expect(resumeStream).toHaveBeenLastCalledWith(
+      "session",
+      22,
+      1,
+      expect.anything()
+    );
+    expect(answer()?.packets).toEqual([
+      delta("Saved"),
+      delta("Not acknowledged"),
+      approvalRequest("approval"),
+    ]);
+    expect(
+      findPendingToolApprovalId(
+        useChatSessionStore.getState().sessions.get("session")!.messageTree
+      )
+    ).toBe("approval");
+  });
+
+  test("a lost send stream replays its running response into a reset row", async () => {
+    const raw = [
+      { ...savedMessage(41, "user", "Question"), latest_child_message: 42 },
+      savedMessage(42, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    const partial: Packet = {
+      placement: { turn_index: 0 },
+      obj: { type: "message_delta", content: "Partial" },
+    };
+    tree.set(42, {
+      ...tree.get(42)!,
+      type: "error",
+      errorMessage: "network error",
+      streamLost: true,
+      packets: [
+        partial,
+        { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
+      ],
+    });
+    const store = useChatSessionStore.getState();
+    const controller = store.sessions.get("session")!.abortController;
+    store.updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+      sendAcknowledged: Promise.resolve(42),
+      readerFinished: Promise.resolve(),
+    });
+    const statuses = [
+      { is_processing: true, current_stream: { stream_id: 42 } },
+    ];
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const status = statuses.shift();
+      if (String(input).endsWith("/status") && status)
+        return Response.json(status);
+      return new Promise<Response>(() => {});
+    });
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield partial;
+      yield approvalRequest("approval");
+      yield { stream_id: 42, next_cursor: 2, replay_complete: true };
+      await new Promise<never>(() => {});
+    });
+
+    await settleChatSession({ sessionId: "session", controller, errorMessage });
+
+    const answer = () =>
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(42);
+    for (let tick = 0; tick < 300 && answer()?.replayCursor !== 2; tick++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(resumeStream).toHaveBeenCalledWith(
+      "session",
+      42,
+      0,
+      expect.anything()
+    );
+    expect(answer()).toMatchObject({
+      type: "assistant",
+      errorMessage: undefined,
+      streamLost: undefined,
+      packets: [partial, approvalRequest("approval")],
+    });
+    expect(
+      findPendingToolApprovalId(
+        useChatSessionStore.getState().sessions.get("session")!.messageTree
+      )
+    ).toBe("approval");
+  });
+
+  test("a resume stream the server cannot find is not retried", async () => {
+    const log = jest.spyOn(console, "error").mockImplementation(() => {});
+    const raw = [
+      { ...savedMessage(31, "user", "Question"), latest_child_message: 32 },
+      savedMessage(32, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    const statuses = [
+      { is_processing: true, current_stream: { stream_id: 32 } },
+      { is_processing: false, current_stream: null },
+    ];
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.endsWith("/status")) return Response.json(statuses.shift());
+      if (url.includes("resume-stream"))
+        return Response.json(
+          { detail: "No resumable stream for this chat session" },
+          { status: 404 }
+        );
+      return Response.json(savedSession(raw, null));
+    });
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get("session")!.abortController;
+
+    await followChatSession({
+      sessionId: "session",
+      controller,
+      errorMessage,
+      streamId: 32,
+      messageMap: tree,
+    });
+
+    const chatState = () =>
+      useChatSessionStore.getState().sessions.get("session")!.chatState;
+    for (let tick = 0; tick < 300 && chatState() !== "input"; tick++)
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    log.mockRestore();
+    expect(chatState()).toBe("input");
+    expect(statuses).toEqual([]);
+    expect(resumeStream).toHaveBeenCalledTimes(1);
   });
 
   test("a waiting approval of a lost stream stays open until its run ends", () => {

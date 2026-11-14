@@ -2,15 +2,19 @@ import type { BackendChatSession, Message } from "@/app/app/types";
 import { resumeStream } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
+  getLatestTurn,
   getMessageByMessageId,
 } from "@/app/app/services/messageTree";
+import { FetchError } from "@/lib/fetcher";
 import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  CHAT_STATUS_POLL_MS,
   fetchSettledChatSession,
+  readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
 
@@ -20,6 +24,21 @@ interface SettleChatSessionOptions {
   errorMessage: string;
   mode?: "completion" | "recovery";
   refreshHistory?: boolean;
+  /** The reader found no buffer for its stream, so it cannot reattach. */
+  streamUnavailable?: boolean;
+}
+
+/** The answers a live stream writes: its response, or each answer of a
+ * multi-model question. */
+function streamResponses(
+  tree: Map<number, Message>,
+  streamId: number
+): Message[] | null {
+  const target = getMessageByMessageId(tree, streamId);
+  if (target?.type === "user") return getMultiModelChildren(target, tree);
+  return target?.type === "assistant" || target?.type === "error"
+    ? [target]
+    : null;
 }
 
 export function preserveFailedMessages(
@@ -81,11 +100,7 @@ export function prepareSavedChat(
     streamId === undefined ? undefined : getMessageByMessageId(saved, streamId);
   // A multi-model turn streams under its question; its answers take the output.
   const responses =
-    target?.type === "assistant"
-      ? [target]
-      : target?.type === "user"
-        ? getMultiModelChildren(target, saved)
-        : null;
+    streamId === undefined ? null : streamResponses(saved, streamId);
   if (streamId === undefined || !target || !responses)
     return { messageTree: saved, replayStreamId: null };
   const retainedTree =
@@ -108,9 +123,19 @@ export function prepareSavedChat(
         childrenNodeIds: node.childrenNodeIds,
         latestChildNodeId: node.latestChildNodeId,
       });
-    else if (node !== target || target.type === "assistant")
+    else if (node !== target || target.type !== "user")
       messageTree.set(node.nodeId, {
         ...node,
+        // Replay rebuilds a row this client marked failed when its stream dropped.
+        ...(node.streamLost && {
+          type: "assistant",
+          errorMessage: undefined,
+          errorCode: undefined,
+          stackTrace: undefined,
+          isRetryable: undefined,
+          errorDetails: undefined,
+          streamLost: undefined,
+        }),
         message: "",
         packets: [],
         packetCount: 0,
@@ -228,6 +253,7 @@ export async function settleChatSession({
   errorMessage,
   mode = "completion",
   refreshHistory = true,
+  streamUnavailable = false,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -255,6 +281,57 @@ export async function settleChatSession({
     if (readerFinished) {
       await readerFinished;
       if (!ownsSettlement()) return;
+    }
+    // A reader that lost a running stream reattaches: from its saved cursor,
+    // or from the start into reset rows.
+    const local = useChatSessionStore.getState().sessions.get(sessionId);
+    if (
+      typeof streamId === "number" &&
+      !streamUnavailable &&
+      local &&
+      local.chatState !== "cancelling" &&
+      streamResponses(local.messageTree, streamId)?.some(
+        (response) =>
+          response.streamLost ||
+          !response.packets.some((packet) => packet.obj.type === "stop")
+      )
+    ) {
+      await new Promise<void>((resolve) =>
+        setTimeout(resolve, CHAT_STATUS_POLL_MS)
+      );
+      const status = await readChatSessionStatus(sessionId);
+      const current = useChatSessionStore.getState().sessions.get(sessionId);
+      if (!current || !ownsSettlement()) return;
+      if (
+        status.is_processing &&
+        status.current_stream?.stream_id === streamId &&
+        current.chatState !== "cancelling"
+      ) {
+        const { messageTree, replayStreamId } = prepareSavedChat(
+          current.messageTree,
+          current.messageTree,
+          streamId
+        );
+        if (replayStreamId !== null) {
+          useChatSessionStore.getState().updateSessionData(sessionId, {
+            messageTree,
+            chatState: "streaming",
+            uncaughtError:
+              current.uncaughtError?.error === errorMessage
+                ? null
+                : current.uncaughtError,
+          });
+          void followChatSession({
+            sessionId,
+            controller,
+            errorMessage,
+            mode,
+            streamId: replayStreamId,
+            messageMap: messageTree,
+          });
+          return;
+        }
+      }
     }
     let nextStreamId = await waitForChatResponseEnd(sessionId, streamId);
     if (!ownsSettlement()) return;
@@ -294,33 +371,38 @@ export async function settleChatSession({
         });
       } else {
         // Content-free history cannot close a lost stream. Confirmed idle can.
-        const latest = getLatestMessageChain(current.messageTree).at(-1);
-        const stopped = latest?.packets.some(
-          (packet) => packet.obj.type === "stop"
-        );
-        if (
-          (latest?.type === "assistant" ||
-            (latest?.type === "error" && latest.packets.length > 0)) &&
-          (!stopped || latest.streamLost)
-        ) {
+        const messageTree = new Map(current.messageTree);
+        let closed = false;
+        for (const response of getLatestTurn(current.messageTree)) {
+          const stopped = response.packets.some(
+            (packet) => packet.obj.type === "stop"
+          );
+          if (
+            !(
+              response.type === "assistant" ||
+              (response.type === "error" && response.packets.length > 0)
+            ) ||
+            (stopped && !response.streamLost)
+          )
+            continue;
           const packets: Message["packets"] = stopped
-            ? latest.packets
+            ? response.packets
             : [
-                ...latest.packets,
+                ...response.packets,
                 {
                   placement: { turn_index: 0, tab_index: 0 },
                   obj: { type: "stop" },
                 },
               ];
-          const messageTree = new Map(current.messageTree);
-          messageTree.set(latest.nodeId, {
-            ...latest,
+          messageTree.set(response.nodeId, {
+            ...response,
             packets,
             packetCount: packets.length,
             streamLost: undefined,
           });
-          store.updateSessionMessageTree(sessionId, messageTree);
+          closed = true;
         }
+        if (closed) store.updateSessionMessageTree(sessionId, messageTree);
       }
     }
     const store = useChatSessionStore.getState();
@@ -371,19 +453,14 @@ export async function followChatSession({
     return;
   }
   const retained = getMessageByMessageId(messageMap, streamId);
-  if (!retained || resumingStreams.has(streamId)) {
+  const responses = streamResponses(messageMap, streamId)?.map((response) => ({
+    ...response,
+  }));
+  if (!retained || !responses || resumingStreams.has(streamId)) {
     return;
   }
   // A multi-model turn streams under its question; packets name their answer.
   const multiModel = retained.type === "user";
-  const responses = (
-    multiModel
-      ? (getMultiModelChildren(retained, messageMap) ?? [])
-      : [retained]
-  ).map((response) => ({ ...response }));
-  if (responses.length === 0) {
-    return;
-  }
   // The stream's own row holds the replay cursor.
   const streamNode = multiModel ? { ...retained } : responses[0]!;
   // Added and deleted in this function only, so an entry can never
@@ -419,6 +496,9 @@ export async function followChatSession({
       .updateSessionMessageTree(sessionId, new Map(messageMap));
   };
   const abortController = new AbortController();
+  // A stream without a buffer is not retried; a new stream can follow it.
+  let streamUnavailable = false;
+  let receivedCursor = false;
   try {
     for await (const rawPacket of resumeStream(
       sessionId,
@@ -431,8 +511,10 @@ export async function followChatSession({
       }
       if ("next_cursor" in rawPacket) {
         if (rawPacket.stream_id !== streamId) {
+          streamUnavailable = true;
           throw new Error("Replay cursor belongs to another response");
         }
+        receivedCursor = true;
         if (restoring) {
           responses.forEach((response, index) => {
             response.restoredPacketCount = accumulated[index]!.length;
@@ -493,7 +575,11 @@ export async function followChatSession({
         for (const output of accumulated) output.push(packet);
       else accumulated[modelIndex ?? 0]?.push(packet);
     }
+    // A response that ends before its first cursor has no buffer to replay.
+    streamUnavailable = !receivedCursor;
   } catch (error) {
+    if (error instanceof FetchError && error.status < 500)
+      streamUnavailable = true;
     console.error("Failed to resume in-flight run", { streamId, error });
   } finally {
     abortController.abort();
@@ -503,7 +589,13 @@ export async function followChatSession({
     } finally {
       resumingStreams.delete(streamId);
       resolveReaderFinished();
-      void settleChatSession({ sessionId, controller, errorMessage, mode });
+      void settleChatSession({
+        sessionId,
+        controller,
+        errorMessage,
+        mode,
+        streamUnavailable,
+      });
     }
   }
 }

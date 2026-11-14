@@ -4,6 +4,8 @@ import { chatPageUrl } from "@/lib/chat/pagedSession";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
+export const CHAT_STATUS_POLL_MS = 1000;
+
 const pendingChecks = new Map<string, Promise<number | null>>();
 
 /** Wait for this response to release the session; another queued turn can own it next. */
@@ -28,26 +30,35 @@ async function pollSession(
 ): Promise<number | null> {
   // A successful busy response confirms live work, regardless of its duration.
   while (true) {
-    const response = await fetch(SWR_KEYS.chatSessionStatus(sessionId), {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!response.ok) {
-      throw new Error(`Session readiness check failed: ${response.status}`);
-    }
-    const status: ChatSessionStatus = await response.json();
-    // Share each read with the chat's status subscribers.
-    void mutate(SWR_KEYS.chatSessionStatus(sessionId), status, {
-      revalidate: false,
-    });
-    if (status.is_processing === false) return null;
-    if (status.is_processing !== true)
-      throw new Error("Session readiness response is invalid");
+    const status = await readChatSessionStatus(sessionId);
+    if (!status.is_processing) return null;
     const nextStreamId = status.current_stream?.stream_id;
     if (nextStreamId !== undefined && nextStreamId !== streamId)
       return nextStreamId;
-    await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+    await new Promise<void>((resolve) =>
+      setTimeout(resolve, CHAT_STATUS_POLL_MS)
+    );
   }
+}
+
+/** One status read, shared with the chat's status subscribers. */
+export async function readChatSessionStatus(
+  sessionId: string
+): Promise<ChatSessionStatus> {
+  const response = await fetch(SWR_KEYS.chatSessionStatus(sessionId), {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
+  });
+  if (!response.ok) {
+    throw new Error(`Session readiness check failed: ${response.status}`);
+  }
+  const status: ChatSessionStatus = await response.json();
+  void mutate(SWR_KEYS.chatSessionStatus(sessionId), status, {
+    revalidate: false,
+  });
+  if (typeof status.is_processing !== "boolean")
+    throw new Error("Session readiness response is invalid");
+  return status;
 }
 
 export async function fetchSettledChatSession(

@@ -83,10 +83,11 @@
 - **A user attaches files** by drag and drop, paste or the input bar. If the
   active model has no vision support, an upload that contains an image is
   refused with a message, and none of its files attach.
-- **A user reloads during an answer.** With one model, the buffered part
-  appears at once, without animation, and the rest streams live. With several
-  models, the answers appear when the run ends; the input stays busy until
-  then.
+- **A user reloads during an answer.** The buffered part appears at once,
+  without animation, and the rest streams live. With several models, each
+  answer gets its own part. If the stream drops while the run continues, the
+  chat attaches again and later output, such as an approval card, still
+  appears.
 - **A user rates, copies or shares an answer.** Copy turns markdown tables into
   tab-separated text so a spreadsheet keeps the columns. A share link opens a
   read-only copy. The page needs a session, so a visitor with none goes to
@@ -166,7 +167,8 @@ AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatControl
   drain loop, one store update per animation frame
     updateSessionMessageTree(frozenSessionId, ...)
   settleChatSession                                 web/src/lib/chat/settleChatSession.ts
-    await ack and reader -> waitForChatResponseEnd -> follow next stream or release input
+    await ack and reader -> reattach a lost running stream, or
+    waitForChatResponseEnd -> follow next stream or release input
 AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
   groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
   tool groups -> timeline steps;  display groups -> answer
@@ -353,7 +355,15 @@ in one of these states, or it stays busy.
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader, then `lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
+reader. If the reader ended without a stop, or marked its answers
+`streamLost`, settlement waits one poll interval and reads `/status`. When the
+same stream still runs, it attaches a new reader to it through
+`prepareSavedChat` and `followChatSession`: from the stream node's
+`replayCursor`, or from cursor 0 into reset rows when the send stream had no
+cursor. A reader that got a 4xx from `resume-stream`, or a response that ended
+before its first cursor, passes `streamUnavailable`; settlement then does not
+reattach to that stream, because it has no buffer. Otherwise
+`lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
 until that response releases ownership. The status includes the current stream
 ID. A queued response can take ownership without making the session idle;
 `refreshChatSession` loads the latest page and `followChatSession` attaches to
@@ -373,8 +383,8 @@ history. `preserveFailedMessages` keeps a local error unless the saved row's
 the field is absent). It keeps the local `streamLost` mark only while the
 saved row is `running` or `suspended`. After a clean send, the streamed tree stays. Settlement
 never reloads history for an incognito session, in either record mode; on a
-reload or recovery it only adds a stop packet to the last answer if it has
-none, and clears its `streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+reload or recovery it only adds a stop packet to each answer of the latest
+turn (`getLatestTurn`) that has none, and clears their `streamLost` marks. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
 A newly active stream during reload transfers to the same replay reader. Recovery comes
 from the input bar's manual check or from loading the session again (see
 Resume).
@@ -605,9 +615,6 @@ up its own branding.
   multi-model turn `onSubmit` drops a `StreamingError` without
   `details.model_index`, and the 429 packet has none. The panels also get no
   stop packet.
-- **Resume covers one model only.** For a multi-model turn, `current_stream`
-  is the user message id, so `followChatSession` does not replay it. The page shows no
-  live output for that turn; settlement loads the answers when the run ends.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
   latest mainline". This is inferred from the code, not seen in a test.

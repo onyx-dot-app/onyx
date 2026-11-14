@@ -16,7 +16,7 @@ import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ToolApprovalCard } from "@tests/e2e/pages/ToolApprovalCard";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
-const PORT = Number(process.env.MCP_APPROVAL_TEST_PORT || "8008");
+const BASE_PORT = Number(process.env.MCP_APPROVAL_TEST_PORT || "8008");
 // A shared mock server gets a query string, so specs that clean up servers by
 // URL never delete this spec's server.
 const SHARED_SERVER_URL = process.env.MCP_API_KEY_TEST_URL
@@ -39,11 +39,15 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   let qualifiedToolName: string;
   let toolDisplayName: string;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, workerInfo) => {
     let serverUrl = SHARED_SERVER_URL;
     if (!serverUrl) {
+      // Projects that select this spec can run in parallel workers.
+      const projectIndex = workerInfo.config.projects.findIndex(
+        (project) => project.name === workerInfo.project.name
+      );
       serverProcess = await startMcpApiKeyServer({
-        port: PORT,
+        port: BASE_PORT + projectIndex,
         apiKey: API_KEY,
       });
       serverUrl = `http://${serverProcess.address.host}:${serverProcess.address.port}/mcp`;

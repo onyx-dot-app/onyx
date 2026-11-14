@@ -38,6 +38,14 @@ jest.mock("@/app/app/services/lib", () => ({
   resumeStream: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  CHAT_STATUS_POLL_MS: 0,
+  readChatSessionStatus: jest.fn(async () => ({
+    is_processing: false,
+    current_stream: null,
+    has_startable_input: false,
+    has_active_subagents: false,
+    latest_response_id: null,
+  })),
   waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(),
 }));
