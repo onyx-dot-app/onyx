@@ -27,6 +27,9 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     is_purged,
     mark_purged,
 )
+from onyx.server.features.build.sandbox.firecracker.session_saves import (
+    session_save_lock,
+)
 from onyx.server.settings.models import Settings
 from shared_configs.contextvars import get_current_tenant_id
 from tests.external_dependency_unit.craft.db_helpers import make_sandbox, make_user
@@ -140,6 +143,16 @@ def test_retention_purges_the_saves_it_no_longer_keeps(
         )
         # A build session opened again later can save new work.
         assert not is_purged(tenant_cache, sandbox_id, old_build)
+
+        # A save in flight keeps the mark, so it cannot bring the files back.
+        purged.clear()
+        with session_save_lock(tenant_cache, old_build) as acquired:
+            assert acquired
+            purge_module.purge_expired_harness_sessions(
+                _RETENTION_DAYS, limit=100, deadline=time.monotonic() + 60
+            )
+        assert (sandbox_id, old_build) in purged
+        assert is_purged(tenant_cache, sandbox_id, old_build)
 
         purged.clear()
         purge_module.purge_expired_harness_sessions(

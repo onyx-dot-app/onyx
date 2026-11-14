@@ -96,6 +96,9 @@ def purge_expired_harness_sessions(
             clear_session_purge_mark,
             get_ids,
         )
+        from onyx.server.features.build.sandbox.firecracker.session_saves import (
+            session_save_lock,
+        )
 
         tenant_cache = get_cache_backend(tenant_id=get_current_tenant_id())
         expired: list[tuple[UUID, UUID]] = []
@@ -127,10 +130,12 @@ def purge_expired_harness_sessions(
             continue
         purge_harness_session(sandbox_id, session_id)
         # Unlike a delete, the session can be opened again: let it save new
-        # work. The session was idle for the whole window, so no save of it
-        # is in flight.
+        # work. Only with no save in flight, which could bring back the
+        # purged files; otherwise the mark expires on its own.
         try:
-            clear_session_purge_mark(tenant_cache, session_id)
+            with session_save_lock(tenant_cache, session_id) as no_save_runs:
+                if no_save_runs:
+                    clear_session_purge_mark(tenant_cache, session_id)
         except Exception:
             logger.exception(
                 "sandbox_fc_purge_mark_clear_failed session=%s", session_id
