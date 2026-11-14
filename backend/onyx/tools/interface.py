@@ -2,7 +2,8 @@ import abc
 import traceback
 from collections.abc import Callable
 from functools import partial
-from typing import TYPE_CHECKING, final
+from types import NoneType
+from typing import TYPE_CHECKING, final, get_args
 
 from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
@@ -59,11 +60,26 @@ def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage
 def parse_tool_arguments[T: BaseModel](
     model: type[T], arguments: dict[str, JsonValue]
 ) -> T:
+    """Validate a call with the model of `tool_definition_from_arguments`. Null
+    for a defaulted argument whose type does not accept null selects the
+    default, as strict definitions ask."""
     try:
-        return model.model_validate(arguments)
+        return model.model_validate(
+            {
+                key: value
+                for key, value in arguments.items()
+                if value is not None
+                or (field := model.model_fields.get(key)) is None
+                or field.is_required()
+                or NoneType in get_args(field.annotation)
+            }
+        )
     except ValidationError as error:
         message = "; ".join(
-            item["msg"] for item in error.errors(include_input=False, include_url=False)
+            f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+            if item["loc"]
+            else item["msg"]
+            for item in error.errors(include_input=False, include_url=False)
         )
         raise ToolCallException(
             message=f"Invalid tool arguments: {message}",
@@ -269,13 +285,42 @@ class Tool(abc.ABC):
 
 
 def tool_definition_from_arguments(
-    name: str, description: str, arguments: type[BaseModel]
+    name: str,
+    description: str,
+    arguments: type[BaseModel],
+    *,
+    strict: bool = False,
 ) -> ToolDefinition:
     """A tool definition whose parameters are the JSON schema of the Pydantic
-    model that `parse_tool_arguments` validates the call with."""
+    model that `parse_tool_arguments` validates the call with.
+
+    A strict definition is closed and requires every argument, as OpenAI strict
+    mode does: an argument with a default accepts null, which
+    `parse_tool_arguments` reads as the default. Its argument types must be
+    inline, so a nested model or an enum, which Pydantic emits as a `$defs`
+    reference, is an error; use a `Literal` for an enum."""
     schema = arguments.model_json_schema()
     # Titles repeat the property names; leave them out of every request.
     schema.pop("title", None)
-    for field in schema["properties"].values():
-        field.pop("title", None)
-    return ToolDefinition(name=name, description=description, parameters=schema)
+    properties = schema["properties"]
+    for field_schema in properties.values():
+        field_schema.pop("title", None)
+    if strict:
+        if "$defs" in schema:
+            raise ValueError(
+                f"{arguments.__name__} has referenced types; a strict definition "
+                "supports only inline argument types"
+            )
+        schema["additionalProperties"] = False
+        for field_name in set(properties) - set(schema.get("required", [])):
+            field_schema = properties[field_name]
+            field_schema.pop("default", None)
+            if {"type": "null"} not in field_schema.get("anyOf", []):
+                nullable = {"anyOf": [field_schema, {"type": "null"}]}
+                if "description" in field_schema:
+                    nullable["description"] = field_schema.pop("description")
+                properties[field_name] = nullable
+        schema["required"] = list(properties)
+    return ToolDefinition(
+        name=name, description=description, parameters=schema, strict=strict
+    )

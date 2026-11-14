@@ -172,7 +172,15 @@ a short JSON summary, not the SKILL.md text.
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and
 `tools/interface.py:tool_definition_from_arguments` makes the tool's
 definition from its JSON schema without titles, so the schema and the parser
-cannot drift. The skill and subagent tools use it.
+cannot drift. Field descriptions, defaults and constraints go on the model.
+With `strict=True` the function makes a closed OpenAI strict schema: every
+argument is required, and a defaulted argument accepts null. For a defaulted
+argument whose type does not accept null, `parse_tool_arguments` reads null as
+the default. A strict model has only inline argument types (a `Literal`, not an
+enum or a nested model). Parsing ignores unknown arguments unless the model
+sets `extra="forbid"`, because not every provider enforces the schema. A
+validation error names the argument and returns to the model as a tool error.
+The skill, subagent, memory, file reader and knowledge graph tools use it.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
@@ -453,7 +461,10 @@ Their control functions, such as `think_tool`, `generate_report` and
   `tools/built_in_tools.py:BUILT_IN_TOOL_MAP`. The INDEX.md Common tasks row
   gives the recipes in other documents that the task also needs.
   1. Put the class in `tools/tool_implementations/<name>/`, subclass `Tool`,
-     and implement `_run`. Parse arguments with
+     and implement `_run`. Declare the arguments as one `*Arguments` model
+     ("Argument models" above). Build `tool_definition()` from it with
+     `tools/interface.py:tool_definition_from_arguments` (`strict=True` for a
+     built-in tool), and parse calls with
      `tools/interface.py:parse_tool_arguments`.
   2. Add it to `BUILT_IN_TOOL_TYPES` and `BUILT_IN_TOOL_MAP`. Define `name` on
      the class itself (a `str` or a property), or the import of

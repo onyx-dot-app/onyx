@@ -14,22 +14,23 @@ from onyx.llm.cancellation import check_cancelled
 from onyx.llm.interfaces import LLM
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.secondary_llm_flows.memory_update import process_memory_update
-from onyx.tools.interface import Tool, parse_tool_arguments, tool_message_history
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+    tool_message_history,
+)
 from onyx.tools.models import (
     CodeModeExposure,
     MemoryArguments,
     MemoryOperation,
     MemoryUpdated,
-    ToolCallException,
     ToolContext,
 )
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_incognito_record_mode
 
 logger = setup_logger()
-
-
-MEMORY_FIELD = "memory"
 
 
 class MemoryTool(Tool):
@@ -72,39 +73,12 @@ class MemoryTool(Tool):
 
     @override
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    MEMORY_FIELD: {
-                        "type": "string",
-                        "description": (
-                            "The text of the memory to add or update. "
-                            "Should be a concise, standalone statement that "
-                            "captures the key information. For example: "
-                            "'User prefers dark mode' or 'User's favorite frontend framework is React'."
-                        ),
-                    },
-                },
-                "required": [MEMORY_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, MemoryArguments, strict=True
         )
 
     @override
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        if MEMORY_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{MEMORY_FIELD}' parameter in add_memory tool call",
-                llm_facing_message=(
-                    f"The add_memory tool requires a '{MEMORY_FIELD}' parameter containing "
-                    f"the memory text to save. Please provide like: "
-                    f'{{"memory": "User prefers dark mode"}}'
-                ),
-            )
         memory = parse_tool_arguments(MemoryArguments, invocation.arguments).memory
 
         user_memory = context.user_memory_context
