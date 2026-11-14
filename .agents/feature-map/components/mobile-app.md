@@ -136,7 +136,9 @@ reattaches from the last cursor while the poll reports the same stream,
 paced by `SESSION_POLL_INTERVAL_MS`. Only a 404 marks a stream as having no
 buffer; recovery then waits for a new stream id or for idle. A lost send
 whose first poll is already idle still reloads the saved session before it
-returns to `input`.
+returns to `input`. When the user leaves the chat, `useChatSessionController`
+aborts and releases the session's recovery, including one a send started, so
+reopening attaches a new one.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

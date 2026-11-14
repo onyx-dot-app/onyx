@@ -21,7 +21,10 @@ import {
 } from "@/chat/messageTree";
 import { Packet, PacketType } from "@/chat/streamingModels";
 import { findPendingToolApprovalIds } from "@/chat/toolApprovals";
-import { useChatSessionController } from "@/hooks/useChatSessionController";
+import {
+  recoverChatSession,
+  useChatSessionController,
+} from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
 const SERVER_URL = "https://example.test";
@@ -1227,6 +1230,46 @@ describe("useChatSessionController", () => {
     );
     expect(resumeMock).toHaveBeenCalledTimes(1);
     warn.mockRestore();
+  });
+
+  it("releases a send-started recovery when the user leaves, so reopening attaches", async () => {
+    seedLiveSession(2);
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: true,
+      current_stream: { stream_id: 2 },
+    });
+    resumeMock
+      .mockImplementationOnce((_id, _streamId, _cursor, signal) =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          // A stalled connection: nothing arrives until the reader is aborted.
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        })(),
+      )
+      .mockImplementationOnce(() =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          yield startPacket("again");
+          yield cursor(1);
+          await new Promise(() => {});
+        })(),
+      );
+    const handOff = new AbortController();
+    void recoverChatSession("s1", 2, SERVER_URL, client, handOff);
+    await waitFor(() => expect(resumeMock).toHaveBeenCalledTimes(1));
+
+    const first = renderHook(() => useChatSessionController("s1"), {
+      wrapper,
+    });
+    first.unmount();
+    expect(handOff.signal.aborted).toBe(true);
+    const second = renderHook(() => useChatSessionController("s1"), {
+      wrapper,
+    });
+
+    await waitFor(() => expect(assistantText("s1", 2)).toBe("again"));
+    expect(resumeMock).toHaveBeenCalledTimes(2);
+    second.unmount();
   });
 
   it("does not render heartbeat packets during resume", async () => {

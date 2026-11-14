@@ -34,6 +34,10 @@ import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
 import { toast } from "@/hooks/useToast";
 
+// Controllers of running recoveries, whoever started them. The open chat's
+// useChatSessionController aborts and releases them when the user leaves.
+const recoveries = new WeakSet<AbortController>();
+
 // Follows a live run until the server is idle, then settles from the saved session.
 export async function recoverChatSession(
   sessionId: string,
@@ -48,6 +52,7 @@ export async function recoverChatSession(
   if (runId === null && data.chatState === "input") return;
 
   store.getState().setAbortController(sessionId, controller);
+  recoveries.add(controller);
   // Stop targets the stream this recovery follows.
   if (runId !== null) store.getState().setStreamId(sessionId, runId);
   const stillOurs = () =>
@@ -332,18 +337,19 @@ export function useChatSessionController(sessionId: string | null): void {
 
   useEffect(() => {
     if (sessionId == null) return;
-    const controller = new AbortController();
     void recoverChatSession(
       sessionId,
       runId,
       serverUrl,
       queryClient,
-      controller,
+      new AbortController(),
     );
     return () => {
-      controller.abort();
+      // The session's recovery may be one a send started; a send itself keeps running.
       const store = useChatSessionStore.getState();
-      if (store.sessions.get(sessionId)?.abortController !== controller) return;
+      const owner = store.sessions.get(sessionId)?.abortController;
+      if (!owner || !recoveries.has(owner)) return;
+      owner.abort();
       // Release the reader immediately; reopening must not wait for a blocked read or status call.
       store.updateChatState(sessionId, "settling");
       store.setAbortController(sessionId, null);
