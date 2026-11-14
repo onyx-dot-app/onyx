@@ -5,9 +5,9 @@ only a drive organizer sees, an organizer reached through a group, a drive with
 no organizer, a drive nobody can list, shortcuts into covered scopes, a file
 shared with several users, and a user whose impersonation fails.
 
-The org tests run on the shard engine, which lists a service account with no
-requested folders, and on the serial phased engine, which still lists
-requested folders and everything else of such a connector.
+The org tests run on the shard engine, which lists every service account,
+and on the serial phased engine, forced on. The requested folder tests run on
+the shard engine.
 """
 
 from collections import Counter
@@ -338,7 +338,7 @@ def _old_stage_checkpoint(
 def test_old_stage_checkpoint_restarts_with_phases(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The serial engine, as for a connector with requested folders."""
+    """The serial engine, forced on."""
     monkeypatch.setattr(
         GoogleDriveConnector, "_plan_parallel_listing", lambda *_args: False
     )
