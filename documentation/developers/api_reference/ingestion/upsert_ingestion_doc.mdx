@@ -1,0 +1,10 @@
+---
+title: "Upsert Ingestion Doc"
+openapi: "POST /onyx-api/ingestion"
+---
+
+<Info>
+  **Required permission:** Manage Connectors & Document Sets (`manage:connectors`), or Admin (`admin`).
+  A **Group Manager** can also call this, limited to connector-credential pairs in the groups they manage.
+  The default pair is public, so a Group Manager cannot ingest into it.
+</Info>
