@@ -3,7 +3,8 @@
 It replaces the listing functions and the gateway operations the connector
 calls (not the raw Google client), so tests control who sees what and how
 listings paginate. For the shard engine it reads only the parts of the query
-that engine writes: the owner terms and the modifiedTime range. Page tokens
+that engine writes: the folder-only term, the owner terms and the
+modifiedTime range. The tenant lists no folders. Page tokens
 are scoped to the listing that issued them; reusing one for a different
 principal or partition fails the test.
 """
@@ -18,6 +19,7 @@ from unittest.mock import MagicMock, patch
 
 from onyx.connectors.google_drive import connector as connector_mod
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
+from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.drive_access import (
     DriveMember,
     DriveRole,
@@ -42,6 +44,7 @@ PAGE_SIZE = 2
 
 _OWNER_TERM = re.compile(r"'([^']+)' in owners")
 _TIME_TERM = re.compile(r"modifiedTime (>=|<) '([^']+)'")
+_FOLDERS_TERM = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
 
 
 def drive_file(
@@ -236,7 +239,9 @@ class FakeTenant:
         if user_email in self.broken_users:
             raise GoogleDriveRefreshError("token_refresh_failed")
         query = query or ""
-        if variant is DriveCorpus.DRIVE and drive_id is not None:
+        if _FOLDERS_TERM in query:
+            files: list[dict[str, Any]] = []
+        elif variant is DriveCorpus.DRIVE and drive_id is not None:
             files = self._drive_listing(user_email, drive_id)
         elif "not 'me' in owners" in query:
             files = list(self.shared_with.get(user_email, []))
