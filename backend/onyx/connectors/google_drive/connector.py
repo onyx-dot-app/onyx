@@ -2,6 +2,7 @@ import copy
 import json
 import os
 import sys
+from collections import deque
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime
 from typing import Any, Protocol, cast
@@ -129,6 +130,10 @@ DRIVE_CONVERSION_MAX_IN_FLIGHT: int = 2 * DRIVE_CONVERSION_WORKERS
 # Pool width for reindex and slim-document builds (pruning, permission sync).
 # GOOGLE_DRIVE_CONVERSION_WORKERS does not change it.
 DRIVE_FETCH_WORKERS = 8
+
+# Listed files read ahead of conversion so conversions spread over users. Each
+# holds only metadata.
+DRIVE_INTERLEAVE_LOOKAHEAD = 2000
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -320,6 +325,47 @@ def _retrieval_failure(retrieved_file: RetrievedDriveFile) -> ConnectorFailure:
         ),
         exception=retrieved_file.error,
     )
+
+
+def _interleave_by_user(
+    files: Iterator[RetrievedDriveFile], lookahead: int
+) -> Iterator[RetrievedDriveFile]:
+    """The files of `files`, taken round-robin across their retriever users,
+    reading at most `lookahead` files ahead.
+
+    Partitions list one after another, each as one user. Taken in order, every
+    conversion in flight acts as that one user and meets Google's per-user
+    quotas (the Docs API allows 300 reads a minute per user) long before the
+    project's. Interleaved, the conversions spread over the users of every
+    partition listed so far. A connector call converts everything it lists
+    before it returns, so the order does not change what the checkpoint
+    records."""
+    queues: dict[str, deque[RetrievedDriveFile]] = {}
+    turns: deque[str] = deque()
+    buffered = 0
+    exhausted = False
+    while True:
+        while not exhausted and buffered < lookahead:
+            retrieved_file = next(files, None)
+            if retrieved_file is None:
+                exhausted = True
+                break
+            queue = queues.get(retrieved_file.user_email)
+            if queue is None:
+                queue = queues[retrieved_file.user_email] = deque()
+                turns.append(retrieved_file.user_email)
+            queue.append(retrieved_file)
+            buffered += 1
+        if not turns:
+            return
+        user_email = turns.popleft()
+        queue = queues[user_email]
+        yield queue.popleft()
+        buffered -= 1
+        if queue:
+            turns.append(user_email)
+        else:
+            del queues[user_email]
 
 
 class CredentialedRetrievalMethod(Protocol):
@@ -2177,11 +2223,14 @@ class GoogleDriveConnector(
                 if include_permissions or self.exclude_domain_link_only
                 else DriveFileFieldType.STANDARD
             )
-            drive_files_iter = self._fetch_drive_items(
-                field_type=field_type,
-                checkpoint=checkpoint,
-                start=start,
-                end=end,
+            drive_files_iter = _interleave_by_user(
+                self._fetch_drive_items(
+                    field_type=field_type,
+                    checkpoint=checkpoint,
+                    start=start,
+                    end=end,
+                ),
+                DRIVE_INTERLEAVE_LOOKAHEAD,
             )
             yield from self._convert_retrieved_files_to_documents(
                 drive_files_iter, checkpoint, include_permissions
