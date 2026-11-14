@@ -2,7 +2,7 @@ import copy
 import json
 import os
 import sys
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -12,6 +12,7 @@ from typing_extensions import override
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
     GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD,
+    GOOGLE_DRIVE_CONVERSION_WORKERS,
     INDEX_BATCH_SIZE,
 )
 from onyx.configs.constants import DocumentSource
@@ -100,10 +101,10 @@ from onyx.connectors.models import (
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
-from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 from onyx.utils.threadpool_concurrency import (
+    BoundedParallelRunner,
     ThreadSafeDict,
     ThreadSafeSet,
     run_functions_tuples_in_parallel,
@@ -115,17 +116,25 @@ logger = setup_logger()
 
 BATCHES_PER_CHECKPOINT = 1
 
-# Documents converted per sub-batch. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS
-# (~10 MB) each, 50 caps resident docs near ~500 MB regardless of drive size.
+# Files whose ancestor folders resolve together before they convert.
 DRIVE_CONVERSION_BATCH_SIZE = 50
-# Per-file Drive calls (download, permissions.list) run this wide per batch
-DRIVE_CONVERSION_WORKERS = 8
+# Files converting at once. Each conversion makes one to three Drive calls
+# (download or export, Docs API, permissions.list), so this sets the requests
+# in flight. At up to CONNECTOR_MAX_EXTRACTED_TEXT_CHARS (~10 MB) a document,
+# it also bounds resident documents. Against Google's latency, past 32 the
+# conversions' parsing (one core, under the GIL) limits a run, not the calls.
+DRIVE_CONVERSION_WORKERS: int = GOOGLE_DRIVE_CONVERSION_WORKERS
+# Conversions submitted and not yet yielded. Waiting ones hold only metadata.
+DRIVE_CONVERSION_MAX_IN_FLIGHT: int = 2 * DRIVE_CONVERSION_WORKERS
+# Pool width for reindex and slim-document builds (pruning, permission sync).
+# GOOGLE_DRIVE_CONVERSION_WORKERS does not change it.
+DRIVE_FETCH_WORKERS = 8
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
 OAUTH_PAGES_PER_CHECKPOINT = 2
 # Partitions (drives or users) started per service account checkpoint call.
-PARTITIONS_PER_CHECKPOINT = 4
+PARTITIONS_PER_CHECKPOINT: int = 4
 
 # Upper bound on the dedup set. Drive file ids measure ~119 bytes per entry with
 # deep_getsizeof, so this holds it near 95 MB, well under
@@ -279,6 +288,37 @@ def _public_access() -> ExternalAccess:
         external_user_emails=set(),
         external_user_group_ids=set(),
         is_public=True,
+    )
+
+
+def _converted(
+    results: Iterable[Document | ConnectorFailure | None],
+) -> Iterator[Document | ConnectorFailure]:
+    """The conversion results to yield; None is a file with nothing to index."""
+    return (result for result in results if result is not None)
+
+
+def _retrieval_failure(retrieved_file: RetrievedDriveFile) -> ConnectorFailure:
+    failure_stage = retrieved_file.completion_stage.value
+    logger.error(
+        "retrieval failure during stage: %s, user: %s, "
+        "parent drive/folder: %s, error: %s",
+        failure_stage,
+        retrieved_file.user_email,
+        retrieved_file.parent_id,
+        retrieved_file.error,
+    )
+    return ConnectorFailure(
+        failed_entity=EntityFailure(
+            entity_id=retrieved_file.drive_file.get("id", failure_stage),
+        ),
+        failure_message=(
+            f"retrieval failure during stage: {failure_stage}, "
+            f"user: {retrieved_file.user_email}, "
+            f"parent drive/folder: {retrieved_file.parent_id}, "
+            f"error: {retrieved_file.error}"
+        ),
+        exception=retrieved_file.error,
     )
 
 
@@ -1964,55 +2004,44 @@ class GoogleDriveConnector(
         # (lightweight metadata, never documents). Released when the node is
         # emitted; whatever never resolves falls back to the source root.
         pending_by_folder: dict[str, list[RetrievedDriveFile]] = {}
-        for retrieved_file in drive_files_iter:
-            if self.exclude_domain_link_only and has_link_only_permission(
-                retrieved_file.drive_file
-            ):
-                continue
-            if retrieved_file.error is not None:
-                failure_stage = retrieved_file.completion_stage.value
-                logger.error(
-                    "retrieval failure during stage: %s, user: %s, "
-                    "parent drive/folder: %s, error: %s",
-                    failure_stage,
-                    retrieved_file.user_email,
-                    retrieved_file.parent_id,
-                    retrieved_file.error,
-                )
-                yield ConnectorFailure(
-                    failed_entity=EntityFailure(
-                        entity_id=retrieved_file.drive_file.get("id", failure_stage),
-                    ),
-                    failure_message=(
-                        f"retrieval failure during stage: {failure_stage}, "
-                        f"user: {retrieved_file.user_email}, "
-                        f"parent drive/folder: {retrieved_file.parent_id}, "
-                        f"error: {retrieved_file.error}"
-                    ),
-                    exception=retrieved_file.error,
-                )
-                continue
+        # Conversions run while the listing goes on; a file is submitted only
+        # after its parent's node was yielded, so nodes still precede their
+        # documents.
+        with BoundedParallelRunner[Document | ConnectorFailure | None](
+            max_workers=DRIVE_CONVERSION_WORKERS,
+            max_in_flight=DRIVE_CONVERSION_MAX_IN_FLIGHT,
+        ) as runner:
+            for retrieved_file in drive_files_iter:
+                yield from _converted(runner.ready())
+                if self.exclude_domain_link_only and has_link_only_permission(
+                    retrieved_file.drive_file
+                ):
+                    continue
+                if retrieved_file.error is not None:
+                    yield _retrieval_failure(retrieved_file)
+                    continue
 
-            files_batch.append(retrieved_file)
-            # Flush in bounded sub-batches so resident converted documents stay
-            # capped (pending metadata is bounded by one checkpoint's fetch).
-            if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                files_batch.append(retrieved_file)
+                if len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
+                    yield from self._convert_files_sub_batch(
+                        files_batch,
+                        checkpoint,
+                        permission_sync_context,
+                        pending_by_folder,
+                        runner,
+                    )
+                    files_batch = []
+
+            if files_batch or pending_by_folder:
                 yield from self._convert_files_sub_batch(
                     files_batch,
                     checkpoint,
                     permission_sync_context,
                     pending_by_folder,
+                    runner,
+                    force_flush=True,
                 )
-                files_batch = []
-
-        if files_batch or pending_by_folder:
-            yield from self._convert_files_sub_batch(
-                files_batch,
-                checkpoint,
-                permission_sync_context,
-                pending_by_folder,
-                force_flush=True,
-            )
+            yield from _converted(runner.drain())
 
     def _convert_files_sub_batch(
         self,
@@ -2020,13 +2049,15 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
         pending_by_folder: dict[str, list[RetrievedDriveFile]],
+        runner: "BoundedParallelRunner[Document | ConnectorFailure | None]",
         force_flush: bool = False,
     ) -> Iterator[Document | ConnectorFailure | HierarchyNode]:
-        """Emit this sub-batch's new ancestor nodes, then convert the files whose
-        parent node is now in `seen`. Resolution fetches each parent folder by id
-        (file's user + admin), so a parent normally resolves in the file's own
-        sub-batch; parking is only the cross-user case — a folder reachable solely
-        by a later sub-batch's user — held in `pending_by_folder` until its node is
+        """Emit this sub-batch's new ancestor nodes, then submit the files whose
+        parent node is now in `seen`, yielding the conversions that finish
+        meanwhile. Resolution fetches each parent folder by id (file's user +
+        admin), so a parent normally resolves in the file's own sub-batch;
+        parking is only the cross-user case — a folder reachable solely by a
+        later sub-batch's user — held in `pending_by_folder` until its node is
         emitted. `force_flush` roots whatever never resolves."""
         new_ancestors = (
             self._get_new_ancestors_for_files(
@@ -2074,26 +2105,14 @@ class GoogleDriveConnector(
             pending_by_folder.clear()
         ready_files.extend(newly_ready)
 
-        # Chunk so resident documents never exceed one chunk, however many resolved.
-        for chunk in batch_generator(ready_files, DRIVE_CONVERSION_BATCH_SIZE):
-            func_with_args = [
-                (
+        for retrieved_file in ready_files:
+            yield from _converted(
+                runner.submit(
                     self._convert_retrieved_file_to_document,
-                    (retrieved_file, permission_sync_context),
+                    retrieved_file,
+                    permission_sync_context,
                 )
-                for retrieved_file in chunk
-            ]
-            raw_results = cast(
-                list[Document | ConnectorFailure | None],
-                run_functions_tuples_in_parallel(
-                    func_with_args, max_workers=DRIVE_CONVERSION_WORKERS
-                ),
             )
-            results: list[Document | ConnectorFailure] = [
-                r for r in raw_results if r is not None
-            ]
-            logger.debug("sub-batch has %s docs or failures", len(results))
-            yield from results
 
     def _convert_retrieved_file_to_document(
         self,
@@ -2274,7 +2293,7 @@ class GoogleDriveConnector(
         results = cast(
             list[Document | ConnectorFailure | None],
             run_functions_tuples_in_parallel(
-                func_with_args, max_workers=DRIVE_CONVERSION_WORKERS
+                func_with_args, max_workers=DRIVE_FETCH_WORKERS
             ),
         )
         for result in results:
@@ -2331,7 +2350,7 @@ class GoogleDriveConnector(
                             )
                             for file in files_batch
                         ],
-                        max_workers=DRIVE_CONVERSION_WORKERS,
+                        max_workers=DRIVE_FETCH_WORKERS,
                     ),
                 )
                 if doc

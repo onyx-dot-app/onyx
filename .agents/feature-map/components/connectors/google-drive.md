@@ -63,6 +63,13 @@ listings share the crawl (`GoogleDriveConnector._fetch_drive_items`).
 `GoogleDriveConnector.normalize_url` returns several candidate ids for a pasted
 URL, because the URL often does not say the file type.
 
+**Conversion.** Each connector call converts what it lists on a pool of
+`DRIVE_CONVERSION_WORKERS` threads (`BoundedParallelRunner`, default 32,
+`GOOGLE_DRIVE_CONVERSION_WORKERS`) while the listing goes on. A call converts
+everything it lists before it returns, so the order does not change what the
+checkpoint records. A file's parent node is yielded before the file is
+submitted, so nodes still precede their documents.
+
 **Clients.** `connectors/google_utils/resources.py:get_google_service` builds the Docs,
 Drive, Admin and Gmail clients from a `GoogleService` member, and impersonates
 the given user with a service-account key. The gateway keeps one Drive client
