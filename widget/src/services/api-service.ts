@@ -3,16 +3,44 @@
  */
 
 import {
+  ApprovalDecisionResponse,
+  ChatSessionDetail,
   Packet,
   CreateSessionRequest,
   CreateSessionResponse,
   SendMessageRequest,
 } from "@/types/api-types";
 import { TokenProvider } from "@/types/widget-types";
+import type { ApprovalDecision } from "@/services/approvals";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
 
 class SessionUnavailableError extends Error {}
+
+/** A rejected request, with the backend's `error_code` when it sent one. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode?: string
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function apiErrorFrom(response: Response): Promise<ApiError> {
+  let detail = response.statusText;
+  let errorCode: string | undefined;
+  try {
+    const body = await response.json();
+    if (body.detail) detail = body.detail;
+    if (typeof body.error_code === "string") errorCode = body.error_code;
+  } catch {
+    // Fall back to statusText if body isn't JSON
+  }
+  return new ApiError(detail, response.status, errorCode);
+}
 
 export class ApiService {
   private maxRetries = 3;
@@ -169,20 +197,85 @@ export class ApiService {
     );
 
     if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const body = await response.json();
-        if (body.detail) {
-          detail = body.detail;
-        }
-      } catch {
-        // Fall back to statusText if body isn't JSON
-      }
-      throw new Error(detail);
+      throw await apiErrorFrom(response);
     }
 
     // Parse SSE stream
     yield* this.parseSSEStream(response);
+  }
+
+  /**
+   * Replay the session's running response from its start, then follow it.
+   * Ends without packets when the session has no running response (404).
+   */
+  async *resumeStream(
+    chatSessionId: string,
+    signal: AbortSignal
+  ): AsyncGenerator<Packet, void, unknown> {
+    const response = await this.fetchWithRetry(
+      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?cursor=0`,
+      async () => ({ headers: await this.getHeaders(), signal })
+    );
+    if (response.status === 404) return;
+    if (!response.ok) throw await apiErrorFrom(response);
+    yield* this.parseSSEStream(response);
+  }
+
+  /** The session's saved messages, with a replay packet list for each response. */
+  async getChatSession(
+    chatSessionId: string,
+    signal: AbortSignal
+  ): Promise<ChatSessionDetail> {
+    const response = await this.fetchWithRetry(
+      `${this.backendUrl}/chat/get-chat-session/${encodeURIComponent(chatSessionId)}`,
+      async () => ({ headers: await this.getHeaders(), signal })
+    );
+    if (!response.ok) throw await apiErrorFrom(response);
+    const body: unknown = await response.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("messages" in body) ||
+      !Array.isArray(body.messages) ||
+      !("packets" in body) ||
+      !Array.isArray(body.packets)
+    ) {
+      throw new Error("Invalid chat session response");
+    }
+    return body as ChatSessionDetail;
+  }
+
+  /**
+   * Submit a decision on a tool call's approval request. Returns "closed"
+   * when the request no longer waits for a decision (404 or 409).
+   */
+  async submitApprovalDecision(
+    approvalId: string,
+    decision: ApprovalDecision
+  ): Promise<ApprovalDecisionResponse | "closed"> {
+    // No retry: a repeated decision on a decided request only returns 409.
+    const response = await fetch(
+      `${this.backendUrl}/chat/approvals/${encodeURIComponent(approvalId)}/decision`,
+      {
+        method: "POST",
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ decision }),
+      }
+    );
+    if (response.status === 404 || response.status === 409) return "closed";
+    if (!response.ok) throw await apiErrorFrom(response);
+    const body: unknown = await response.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("decision" in body) ||
+      (body.decision !== "APPROVED" && body.decision !== "REJECTED") ||
+      !("decided_via" in body) ||
+      typeof body.decided_via !== "string"
+    ) {
+      throw new Error("Invalid approval decision response");
+    }
+    return { decision: body.decision, decided_via: body.decided_via };
   }
 
   /**
@@ -224,6 +317,9 @@ export class ApiService {
                   obj: rawData as any,
                 };
                 yield packet;
+              } else if ("next_cursor" in rawData && !("obj" in rawData)) {
+                // A resumed stream's replay position; the widget always
+                // replays from the start.
               } else {
                 // Regular packet with placement and obj
                 yield rawData as Packet;

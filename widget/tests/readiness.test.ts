@@ -296,29 +296,26 @@ describe("widget readiness", () => {
     expect(widget["inputValue"]).toBe("");
   });
 
-  it("keeps an acknowledged prompt without restoring it as a duplicate draft", async () => {
+  it("keeps an acknowledged prompt and follows its response again", async () => {
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
     widget["inputValue"] = "accepted question";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
-    let errorDuringWait: string | undefined;
-    let statusDuringWait = "";
-    api.waitForSessionIdle = mock(
-      async (_sessionId, _signal, onUnconfirmed) => {
-        onUnconfirmed();
-        errorDuringWait = widget["error"];
-        statusDuringWait = widget["streamingStatus"];
-      }
-    );
+    api.waitForSessionIdle = mock(async () => {});
+    let errorDuringResume: string | undefined;
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       throw new Error("delivery failed");
     });
+    // The server ran the turn on; nothing is left to replay.
+    api.resumeStream = mock(async function* () {
+      errorDuringResume = widget["error"];
+    });
     widget["apiService"] = api;
     await widget["sendMessage"]();
-    expect(errorDuringWait).toBe("delivery failed");
-    expect(statusDuringWait).toContain("Waiting to confirm");
+    expect(api.resumeStream).toHaveBeenCalledWith("session", expect.anything());
+    expect(errorDuringResume).toBe("delivery failed");
     expect(widget["messages"]).toHaveLength(1);
     expect(widget["messages"][0]).toMatchObject({
       id: 1,

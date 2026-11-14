@@ -85,7 +85,13 @@ send → ApiService                                   services/api-service.ts
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
-  └─ finally: waitForSessionIdle again, then enable Send
+  ├─ finally: waitForSessionIdle again, then enable Send
+  └─ stream ended before its response, or 409 APPROVAL_PENDING → resumeStream
+restore / resumeStream                              widget.ts
+  ├─ GET /chat/chat-session/{id}/resume-stream?cursor=0 (404: nothing to replay)
+  ├─ waitForSessionIdle
+  └─ a response still unfinished → GET /chat/get-chat-session/{id}, replay
+       its saved packets; on failure it stays unfinished for the next load
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -220,8 +226,9 @@ panel picks up the new session when the user returns.
 12. `widget-send-waits-for-idle` **The end of the stream does not enable
     Send.** `widget/src/widget.ts:OnyxChatWidget.sendMessage` polls
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
-    send to an existing session and after every send, because the server can
-    still save the turn after the stream ends. Failed polls retry and keep
+    send to an existing session and after every send or resumed stream
+    (`OnyxChatWidget.resumeStream`), because the server can still save the
+    turn after the stream ends. Failed polls retry and keep
     Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
     401s in a row end the wait with an error, and none counts as idle. A
     backend without the status route answers 404, so a new bundle on an older
