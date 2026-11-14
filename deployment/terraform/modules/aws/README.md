@@ -296,12 +296,14 @@ Key inputs include:
 
 Set `manage_core_addons = true` when you create a new cluster. The upstream EKS module v21 creates a cluster
 without vpc-cni, kube-proxy, and CoreDNS, so without this the nodes never become Ready
-("cni plugin not initialized"). With `true`, the module installs the three as EKS addons, and installs
-vpc-cni before the node groups. `vpc_cni_addon_version` pins the vpc-cni version.
+("cni plugin not initialized"). With `true`, the module installs the three as EKS addons, installs
+vpc-cni before the node groups, and turns on NetworkPolicy enforcement. `vpc_cni_addon_version` pins the vpc-cni version.
+Do not also set `enable_network_policy`: the module refuses the combination.
 
-Keep `false` on a cluster that already runs these components (for example a cluster made with module v20).
-On such a cluster, `true` adopts the running components as EKS addons and can change their settings.
-`enable_network_policy` alone still adopts only vpc-cni, as before.
+Keep `false` on a cluster that already runs these components (for example a cluster made with module v20),
+and use `enable_network_policy = true` there to turn on enforcement. On a cluster that already has
+`enable_network_policy = true`, do not switch to `manage_core_addons`: the CNI addon would move to another
+Terraform resource, and Terraform would replace the running CNI.
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version

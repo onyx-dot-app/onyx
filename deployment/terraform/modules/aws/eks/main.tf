@@ -14,31 +14,27 @@ moved {
 }
 
 locals {
-  vpc_cni_addon = merge(
-    {
-      # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
-      addon_version = var.vpc_cni_addon_version
-      most_recent   = false
-      # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
-      # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
-      resolve_conflicts_on_create = "OVERWRITE"
-      resolve_conflicts_on_update = "PRESERVE"
-    },
-    var.enable_network_policy ? {
-      configuration_values = jsonencode({
-        enableNetworkPolicy = "true"
-      })
-    } : {},
-  )
+  # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
+  # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
+  # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
+  vpc_cni_addon = {
+    addon_version               = var.vpc_cni_addon_version
+    most_recent                 = false
+    resolve_conflicts_on_create = "OVERWRITE"
+    resolve_conflicts_on_update = "PRESERVE"
+    configuration_values = jsonencode({
+      enableNetworkPolicy = "true"
+    })
+  }
 
   # Upstream v21 creates a cluster without the default vpc-cni, kube-proxy and
-  # CoreDNS. manage_core_addons installs them as EKS addons; the CNI goes in
-  # before the node groups, or the nodes never become Ready.
-  # enable_network_policy alone keeps adopting only the CNI, as before, so
-  # existing clusters plan no change. The cloud cluster has legacy
-  # NetworkPolicies of unknown effect, so enforcement stays opt-in.
+  # CoreDNS. manage_core_addons (new clusters) installs them as EKS addons, the
+  # CNI before the node groups and with NetworkPolicy enforcement on.
+  # enable_network_policy (existing clusters) adopts only the CNI, after the
+  # node groups. Upstream keeps the two CNI placements in different resources,
+  # so the flags are exclusive: switching would replace the running CNI.
   cluster_addons = merge(
-    var.enable_network_policy && !var.manage_core_addons ? {
+    var.enable_network_policy ? {
       vpc-cni = local.vpc_cni_addon
     } : {},
     var.manage_core_addons ? {

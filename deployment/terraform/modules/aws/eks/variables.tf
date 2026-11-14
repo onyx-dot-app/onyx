@@ -394,8 +394,13 @@ variable "enable_network_policy" {
 
 variable "manage_core_addons" {
   type        = bool
-  description = "Install vpc-cni, kube-proxy and CoreDNS as EKS addons (vpc-cni before the node groups). Set true for a new cluster: the upstream EKS module v21 creates no default addons, so without them the nodes never become Ready. Keep false on a cluster that already runs these components: true adopts them as EKS addons."
+  description = "New clusters only. Install vpc-cni (before the node groups, with NetworkPolicy enforcement on), kube-proxy and CoreDNS as EKS addons. The upstream EKS module v21 creates no default addons, so without them the nodes of a new cluster never become Ready. Keep false on a cluster that already runs these components. Cannot be combined with enable_network_policy: on a cluster that already has it, the CNI addon would move to another resource and be replaced."
   default     = false
+
+  validation {
+    condition     = !(var.manage_core_addons && var.enable_network_policy)
+    error_message = "Set only one of manage_core_addons and enable_network_policy. manage_core_addons (new clusters) already turns on NetworkPolicy enforcement. On an existing cluster with enable_network_policy = true, keep manage_core_addons = false: switching moves the vpc-cni addon to another resource, and Terraform would replace the running CNI."
+  }
 }
 
 variable "vpc_cni_addon_version" {

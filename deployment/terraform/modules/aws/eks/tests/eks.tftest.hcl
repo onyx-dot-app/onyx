@@ -388,12 +388,15 @@ run "new_cluster_core_addons_plan" {
   }
 
   assert {
-    condition     = !can(local.cluster_addons["vpc-cni"].configuration_values)
-    error_message = "Without enable_network_policy the CNI keeps its default configuration."
+    condition     = jsondecode(local.cluster_addons["vpc-cni"].configuration_values).enableNetworkPolicy == "true"
+    error_message = "manage_core_addons turns on NetworkPolicy enforcement, so new clusters do not need enable_network_policy."
   }
 }
 
-run "new_cluster_core_addons_with_network_policy_plan" {
+# Upstream keeps a before_compute CNI and an after-compute CNI in different
+# resources. On a cluster that already has enable_network_policy, adding
+# manage_core_addons would move the CNI and replace it (a CNI outage).
+run "core_addons_refuse_network_policy_cluster" {
   command = plan
 
   variables {
@@ -401,12 +404,5 @@ run "new_cluster_core_addons_with_network_policy_plan" {
     enable_network_policy = true
   }
 
-  assert {
-    condition = (
-      toset(keys(module.eks.cluster_addons)) == toset(["coredns", "kube-proxy", "vpc-cni"]) &&
-      try(local.cluster_addons["vpc-cni"].before_compute, false) &&
-      jsondecode(local.cluster_addons["vpc-cni"].configuration_values).enableNetworkPolicy == "true"
-    )
-    error_message = "With both flags, one CNI addon goes in before the node groups with NetworkPolicy enforcement on."
-  }
+  expect_failures = [var.manage_core_addons]
 }

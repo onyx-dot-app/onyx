@@ -610,7 +610,7 @@ variable "enable_network_policy" {
 
 variable "manage_core_addons" {
   type        = bool
-  description = "Install vpc-cni, kube-proxy and CoreDNS as EKS addons. Set true for a new cluster: the upstream EKS module v21 creates no default addons, so without them the nodes never become Ready. Keep false on a cluster that already runs these components: true adopts them as EKS addons."
+  description = "New clusters only. Install vpc-cni (with NetworkPolicy enforcement on), kube-proxy and CoreDNS as EKS addons. The upstream EKS module v21 creates no default addons, so without them the nodes of a new cluster never become Ready. Keep false on a cluster that already runs these components. Cannot be combined with enable_network_policy."
   default     = false
 }
 
