@@ -327,13 +327,15 @@ func cmdResume(m Model, sessionIDStr string, origin <-chan models.StreamEvent) (
 			}
 		}
 
+		// Status comes first: a response that ends before the snapshot is in
+		// the snapshot, and one that ends after the status is followed.
+		// A failed status query counts as running. Following a session that
+		// runs nothing ends at once, and its readiness check reports the failure.
+		status, _ := client.ChatSessionStatus(context.Background(), targetID)
 		detail, err := client.GetChatSession(context.Background(), targetID)
 		if err != nil {
 			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s: %w", sessionIDStr, err), Origin: origin}
 		}
-		// A failed status query counts as running. Following a session that
-		// runs nothing ends at once, and its readiness check reports the failure.
-		status, _ := client.ChatSessionStatus(context.Background(), detail.ChatSessionID)
 		return SessionResumedMsg{Detail: detail, Status: status, Origin: origin}
 	}
 }

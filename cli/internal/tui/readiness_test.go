@@ -669,3 +669,44 @@ func TestFailedStatusAfterAStreamIdentifiedItselfKeepsPolling(t *testing.T) {
 		t.Fatal("a failed status check stopped the readiness loop")
 	}
 }
+
+// finishingClient ends the session's running response right after the first
+// of the status and session reads.
+type finishingClient struct {
+	followingClient
+	reads int
+}
+
+func (c *finishingClient) read() bool {
+	c.reads++
+	return c.reads == 1
+}
+
+func (c *finishingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
+	streamID := 7
+	if c.read() {
+		return models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}, nil
+	}
+	return models.ChatSessionStatus{}, nil
+}
+
+func (c *finishingClient) GetChatSession(context.Context, string) (*models.ChatSessionDetailResponse, error) {
+	answer := "Filed ENG-1."
+	if c.read() {
+		answer = "Filing"
+	}
+	return &models.ChatSessionDetailResponse{
+		ChatSessionID: followedSession,
+		Messages:      []models.ChatMessageDetail{{MessageID: 7, MessageType: "assistant", Message: answer}},
+	}, nil
+}
+
+func TestResumeWhileTheResponseEndsShowsItsEnd(t *testing.T) {
+	client := &finishingClient{}
+	_, cmd := cmdResume(NewModel(config.DefaultConfig(), client), followedSession, nil)
+	msg := cmd().(SessionResumedMsg)
+	complete := msg.Detail.Messages[0].Message == "Filed ENG-1."
+	if !complete && !msg.Status.IsProcessing {
+		t.Fatal("the resumed session neither shows the end of the response nor follows it")
+	}
+}
