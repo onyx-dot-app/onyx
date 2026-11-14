@@ -48,6 +48,10 @@ func TestMaxVMsCountsEveryFirecrackerProcess(t *testing.T) {
 	if info, err := f.m.NodeInfo(); err != nil || info.VMCount != 1 || info.VMSlotsUsed != 2 || f.m.ScaleDownHolds() != 2 {
 		t.Fatalf("NodeInfo with a build %+v %v", info, err)
 	}
+	// Create runs the callback after it releases the lock.
+	for admits.Load() < 2 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if n := admits.Load(); n != 2 {
 		t.Fatalf("%d admits for a Create and a build", n)
 	}
@@ -145,6 +149,39 @@ func TestScaleDownHoldsRescansDoubts(t *testing.T) {
 	if n := f.m.ScaleDownHolds(); n != 0 {
 		t.Fatalf("process gone: %d holds", n)
 	}
+
+	// A scan that hangs adds a hold and does not block the guard.
+	defer func(d time.Duration) { scaleDownScanWait = d }(scaleDownScanWait)
+	scaleDownScanWait = 10 * time.Millisecond
+	release := make(chan struct{})
+	f.m.mu.Lock()
+	f.m.adopter = blockingTable{fakeTable: table, release: release}
+	f.m.doubt["kept"] = &doubt{reason: "test"}
+	f.m.mu.Unlock()
+	for range 2 { // the second call finds the first scan still running
+		if n := f.m.ScaleDownHolds(); n != 2 {
+			t.Fatalf("hung scan: %d holds", n)
+		}
+	}
+	close(release)
+	deadline := time.Now().Add(5 * time.Second)
+	for f.m.ScaleDownHolds() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("holds stay after the scan ends")
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+// blockingTable is a fakeTable whose Scan waits for release.
+type blockingTable struct {
+	*fakeTable
+	release chan struct{}
+}
+
+func (b blockingTable) Scan() ([]Candidate, error) {
+	<-b.release
+	return b.fakeTable.Scan()
 }
 
 // The scan at the cap finds a process of the requested sandbox: Create

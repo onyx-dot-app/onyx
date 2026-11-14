@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/onyx-dot-app/onyx/microvm/internal/apierr"
@@ -192,6 +193,8 @@ type Manager struct {
 	// adopter rescans the processes for the doubt rules (doubt.go).
 	adopter Adopter
 	scanMu  sync.Mutex
+	// guardScan is set while a ScaleDownHolds scan runs.
+	guardScan atomic.Bool
 
 	mu      sync.Mutex
 	vms     map[string]*entry
@@ -622,25 +625,43 @@ func (m *Manager) vmSlotsUsedLocked() int {
 	return n
 }
 
+// scaleDownScanWait bounds how long ScaleDownHolds waits for a process scan.
+var scaleDownScanWait = 5 * time.Second
+
 // ScaleDownHolds counts what keeps the node from scale-down: the VM slots in
 // use (starting and running VMs, template build VMs and processes in
 // doubt), plus one while no process scan has worked. With processes in
 // doubt or no scan that worked, it scans the processes first, so a doubt
-// whose process exited stops holding the node.
+// whose process exited stops holding the node. A scan that does not end
+// within scaleDownScanWait goes on in the background, and the count has one
+// more hold.
 func (m *Manager) ScaleDownHolds() int {
 	m.mu.Lock()
 	need := len(m.doubt) > 0 || m.needScan
 	m.mu.Unlock()
-	if need && m.adopter != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		if err := m.rescan(ctx); err != nil {
-			m.log.Error("process scan for the scale-down guard failed", "err", err)
+	extra := 0
+	if need && m.adopter != nil && m.guardScan.CompareAndSwap(false, true) {
+		done := make(chan struct{})
+		go func() {
+			defer m.guardScan.Store(false)
+			defer close(done)
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if err := m.rescan(ctx); err != nil {
+				m.log.Error("process scan for the scale-down guard failed", "err", err)
+			}
+		}()
+		select {
+		case <-done:
+		case <-time.After(scaleDownScanWait):
+			extra = 1
 		}
-		cancel()
+	} else if need && m.adopter != nil {
+		extra = 1 // an earlier scan still runs
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	n := m.vmSlotsUsedLocked()
+	n := m.vmSlotsUsedLocked() + extra
 	if m.needScan {
 		n++
 	}
