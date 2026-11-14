@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "Erstellt Plan"
           },
+          "queryingKnowledgeBase": {
+            "label": "Wissensdatenbank wird abgefragt"
+          },
           "reading": {
             "label": "Liest"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "Erinnerung aktualisiert"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "Wissensdatenbank abgefragt"
+          },
+          "querying": {
+            "status": "Wissensdatenbank wird abgefragt"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "Bild generieren",
           "generatePlan": "Plan erstellen",
           "internalSearch": "Interne Suche",
+          "knowledgeBaseQuery": "Wissensdatenbank-Abfrage",
           "memory": "Erinnerung",
           "openUrls": "URLs öffnen",
           "researchAgent": "Recherche-Agent",

@@ -61,6 +61,8 @@ function stepHeaderText(
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
       return t("header.updatingMemory.label");
+    case PacketType.POSTGRES_TOOL_START:
+      return t("header.queryingKnowledgeBase.label");
     case PacketType.REASONING_START:
       return t("header.thinking.label");
     case PacketType.DEEP_RESEARCH_PLAN_START:

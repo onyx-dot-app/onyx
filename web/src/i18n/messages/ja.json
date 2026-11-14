@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "プランを生成中"
           },
+          "queryingKnowledgeBase": {
+            "label": "ナレッジベースを照会中"
+          },
           "reading": {
             "label": "読み取り中"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "メモリを更新しました"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "ナレッジベースを照会しました"
+          },
+          "querying": {
+            "status": "ナレッジベースを照会中"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "画像生成",
           "generatePlan": "プラン生成",
           "internalSearch": "社内検索",
+          "knowledgeBaseQuery": "ナレッジベースクエリ",
           "memory": "メモリ",
           "openUrls": "URL を開く",
           "researchAgent": "リサーチエージェント",

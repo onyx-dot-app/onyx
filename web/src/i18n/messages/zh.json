@@ -13063,6 +13063,9 @@
           "generatingPlan": {
             "label": "正在生成计划"
           },
+          "queryingKnowledgeBase": {
+            "label": "正在查询知识库"
+          },
           "reading": {
             "label": "正在读取"
           },
@@ -13130,6 +13133,14 @@
           },
           "updated": {
             "label": "已更新记忆"
+          }
+        },
+        "postgres": {
+          "queried": {
+            "status": "已查询知识库"
+          },
+          "querying": {
+            "status": "正在查询知识库"
           }
         },
         "python": {
@@ -13210,6 +13221,7 @@
           "generateImage": "生成图片",
           "generatePlan": "生成计划",
           "internalSearch": "内部搜索",
+          "knowledgeBaseQuery": "知识库查询",
           "memory": "记忆",
           "openUrls": "打开 URL",
           "researchAgent": "研究智能体",

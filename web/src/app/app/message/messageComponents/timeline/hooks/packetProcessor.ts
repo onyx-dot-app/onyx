@@ -6,6 +6,7 @@ import {
   CitationInfo,
   SearchToolDocumentsDelta,
   FetchToolDocuments,
+  PostgresToolDocuments,
   Stop,
   GeneratedImage,
   MessageStart,
@@ -180,6 +181,7 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.FETCH_TOOL_START,
   PacketType.MEMORY_TOOL_START,
   PacketType.MEMORY_TOOL_NO_ACCESS,
+  PacketType.POSTGRES_TOOL_START,
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
@@ -268,6 +270,13 @@ function handleDocumentPacket(state: ProcessorState, packet: Packet): void {
         if (doc.document_id) {
           state.documentMap.set(doc.document_id, doc);
         }
+      }
+    }
+  } else if (packet.obj.type === PacketType.POSTGRES_TOOL_DOCUMENTS) {
+    const postgresDocuments = packet.obj as PostgresToolDocuments;
+    for (const doc of postgresDocuments.documents) {
+      if (doc.document_id) {
+        state.documentMap.set(doc.document_id, doc);
       }
     }
   }
