@@ -14,6 +14,7 @@ from ee.onyx.server.enterprise_settings.models import (
 )
 from ee.onyx.server.enterprise_settings.store import store_analytics_script, upload_logo
 from ee.onyx.server.enterprise_settings.store import store_settings as store_ee_settings
+from onyx.configs.app_configs import REQUIRE_EMAIL_VERIFICATION
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType
 from onyx.db.llm import (
@@ -270,6 +271,14 @@ def seed_db() -> None:
     if seed_config is None:
         logger.debug("No seeding configuration file passed")
         return
+
+    if seed_config.admin_user_emails and not REQUIRE_EMAIL_VERIFICATION:
+        logger.warning(
+            "admin_user_emails is seeded but REQUIRE_EMAIL_VERIFICATION is off. "
+            "Password signups for these addresses get admin access only after "
+            "they verify their email, and signup does not ask them to. Use SSO "
+            "for these users or turn on REQUIRE_EMAIL_VERIFICATION."
+        )
 
     with get_session_with_current_tenant() as db_session:
         if seed_config.llms is not None:
