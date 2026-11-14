@@ -36,6 +36,7 @@ function baseInput(
     parallelActiveStepHasCollapsedContent: false,
     finalAnswerComing: false,
     codeModeWorking: false,
+    awaitingApproval: false,
     ...overrides,
   };
 }

@@ -3,7 +3,7 @@
 // goes uncalled, because its only web consumers are that flag and the memory tag, which lands with
 // the memory renderer; `streamingStartTime` is a prop, since mobile stamps it per assistant node
 // rather than once per session; and the expanded body has no entrance animation.
-import { memo, useMemo } from "react";
+import { memo, useLayoutEffect, useMemo, useRef } from "react";
 import { View } from "react-native";
 
 import type { StopReason } from "@/chat/streamingModels";
@@ -28,6 +28,7 @@ import { ShimmerText } from "@/components/chat/timeline/ShimmerText";
 import { timelineTokens } from "@/components/chat/timeline/primitives/timelineTokens";
 import { TimelineHeaderRow } from "@/components/chat/timeline/primitives/TimelineHeaderRow";
 import { TimelineRoot } from "@/components/chat/timeline/primitives/TimelineRoot";
+import type { ExcludedWait } from "@/hooks/timeline/useStreamingDuration";
 import { useTimelineExpansion } from "@/hooks/timeline/useTimelineExpansion";
 import { useTimelineHeader } from "@/hooks/timeline/useTimelineHeader";
 import { useTimelineMetrics } from "@/hooks/timeline/useTimelineMetrics";
@@ -59,6 +60,8 @@ export interface AgentTimelineProps {
   streamingStartTime?: number;
   // A code mode program works between tool calls; it has no step.
   codeModeWorking?: boolean;
+  // A tool call waits for the user's decision; the timer does not count the wait.
+  awaitingApproval?: boolean;
 }
 
 function TimelineContainer({
@@ -99,7 +102,8 @@ function areAgentTimelinePropsEqual(
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
     prev.streamingStartTime === next.streamingStartTime &&
-    prev.codeModeWorking === next.codeModeWorking
+    prev.codeModeWorking === next.codeModeWorking &&
+    prev.awaitingApproval === next.awaitingApproval
   );
 }
 
@@ -117,11 +121,36 @@ export const AgentTimeline = memo(function AgentTimeline({
   toolProcessingDuration,
   streamingStartTime,
   codeModeWorking = false,
+  awaitingApproval = false,
 }: AgentTimelineProps) {
+  // The stream's approval waits. Owned here, not by the header, because collapsing a parallel turn
+  // swaps the header out. A ref, so the timeline does not re-render with the timer; a layout effect,
+  // so the header's timer reads the current wait.
+  const excludedWait = useRef<ExcludedWait & { startTime?: number }>({
+    totalMs: 0,
+    since: null,
+  });
+  useLayoutEffect(() => {
+    const wait = excludedWait.current;
+    const now = Date.now();
+    if (wait.startTime !== streamingStartTime) {
+      wait.startTime = streamingStartTime;
+      wait.totalMs = 0;
+      wait.since = null;
+    }
+    if (awaitingApproval && wait.since === null) {
+      wait.since = now;
+    } else if (!awaitingApproval && wait.since !== null) {
+      wait.totalMs += now - wait.since;
+      wait.since = null;
+    }
+  }, [awaitingApproval, streamingStartTime]);
+
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
     codeModeWorking,
+    awaitingApproval,
   );
 
   const {
@@ -200,6 +229,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
+      awaitingApproval,
     }),
     [
       stopPacketSeen,
@@ -216,6 +246,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
       codeModeWorking,
+      awaitingApproval,
     ],
   );
 
@@ -289,6 +320,7 @@ export const AgentTimeline = memo(function AgentTimeline({
         onToggle={handleToggle}
         streamingStartTime={streamingStartTime}
         toolProcessingDuration={toolProcessingDuration}
+        excludedWait={excludedWait}
       />
     );
   } else if (uiState === TimelineUIState.STOPPED) {

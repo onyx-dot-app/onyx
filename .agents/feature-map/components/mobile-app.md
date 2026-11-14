@@ -107,14 +107,20 @@ them as liveness ticks. Stop calls `stop-chat-session` with the response id
 from the message-id packet and aborts the local `AbortController`, because a
 client abort alone leaves the backend generating. Before that packet arrives,
 `mobile/src/hooks/useChatController.ts:stop` waits for it (`STOP_ACK_TIMEOUT_MS`), then
-aborts locally and never sends an unscoped Stop.
+aborts locally and never sends an unscoped Stop. The server's Stop rejects the
+tool approval requests that wait, and the cut stream does not deliver their
+resolutions, so a confirmed Stop records them as rejected on the device
+(`stopAcknowledgedStream`, `chat/toolApprovals.ts:findPendingToolApprovalIds`).
 
 **Readiness.** When delivery ends, the session goes to `settling` and
 `chat/sessionReadiness.ts:waitForSessionIdle` polls
 `GET /chat/chat-session/{id}/status` until `is_processing` is `false`. Only
 then does the chat state return to `input`. A resumed stream in
 `hooks/useChatSessionController.ts` also waits for idle before it loads the
-saved history.
+saved history. A connection that drops after the server accepts a turn does
+not end the run, so the send hands the session to `recoverChatSession`. It
+replays the run through resume-stream, which keeps a waiting approval card
+on screen.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

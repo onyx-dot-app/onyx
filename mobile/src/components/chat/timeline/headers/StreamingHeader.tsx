@@ -1,10 +1,13 @@
-import { memo } from "react";
+import { memo, type RefObject } from "react";
 import { View } from "react-native";
 
 import { ShimmerText } from "@/components/chat/timeline/ShimmerText";
 import { timelineTokens } from "@/components/chat/timeline/primitives/timelineTokens";
 import { Button } from "@/components/ui/button";
-import { useStreamingDuration } from "@/hooks/timeline/useStreamingDuration";
+import {
+  type ExcludedWait,
+  useStreamingDuration,
+} from "@/hooks/timeline/useStreamingDuration";
 import SvgExpand from "@/icons/expand";
 import SvgFold from "@/icons/fold";
 import { formatDurationSeconds } from "@/lib/time";
@@ -18,6 +21,9 @@ export interface StreamingHeaderProps {
   streamingStartTime?: number;
   // Backend `pre_answer_processing_seconds`; freezes the timer once it arrives.
   toolProcessingDuration?: number;
+  // Approval waits, which the timer does not count. The timeline owns them so they outlive this
+  // header when a parallel turn swaps it out.
+  excludedWait?: RefObject<ExcludedWait>;
 }
 
 export const StreamingHeader = memo(function StreamingHeader({
@@ -28,11 +34,13 @@ export const StreamingHeader = memo(function StreamingHeader({
   onToggle,
   streamingStartTime,
   toolProcessingDuration,
+  excludedWait,
 }: StreamingHeaderProps) {
   const elapsedSeconds = useStreamingDuration(
     toolProcessingDuration === undefined,
     streamingStartTime,
     toolProcessingDuration,
+    excludedWait,
   );
   const showElapsedTime =
     isExpanded && streamingStartTime !== undefined && elapsedSeconds > 0;
