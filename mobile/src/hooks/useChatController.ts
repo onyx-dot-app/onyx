@@ -46,6 +46,7 @@ import {
 } from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
+import { recoverChatSession } from "@/hooks/useChatSessionController";
 import { toast } from "@/hooks/useToast";
 
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
@@ -58,14 +59,14 @@ function showPendingApproval(): void {
   toast.warning("Approve or reject the pending tool calls first.");
 }
 
-interface AutoNameContext {
+interface ServerContext {
   serverUrl: string | null;
   queryClient: QueryClient;
 }
 
 async function nameNewSession(
   sessionId: string,
-  ctx: AutoNameContext,
+  ctx: ServerContext,
 ): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, AUTO_NAME_DELAY_MS));
   try {
@@ -112,7 +113,8 @@ async function runChatStream(
   agentNodeId: number,
   body: SendMessageBody,
   controller: AbortController,
-  autoName: AutoNameContext | null,
+  server: ServerContext,
+  isNewSession: boolean,
   onAccepted?: () => void,
 ): Promise<void> {
   const store = useChatSessionStore;
@@ -127,6 +129,9 @@ async function runChatStream(
   // Set when the server answered without saving the turn.
   let rejection: string | null = null;
   let approvalPending = false;
+  let streamId: number | null = null;
+  // The connection dropped after the server accepted the turn; the run goes on without it.
+  let reattach = false;
 
   // Anchors the timeline's elapsed timer. Stamped here, not at node creation, so it measures the
   // stream rather than the session-create round trip that can precede it.
@@ -165,6 +170,7 @@ async function runChatStream(
       if (signal.aborted || !stillOurs()) break;
       if (isMessageIdInfo(event)) {
         accepted = true;
+        streamId = event.reserved_assistant_message_id;
         onAccepted?.();
         onAccepted = undefined;
         if (event.user_message_id != null) {
@@ -224,13 +230,15 @@ async function runChatStream(
       }
     }
   } catch (error) {
-    // Abort is the normal stop path; any other failure marks the assistant node errored.
-    if (!signal.aborted && stillOurs()) {
+    // Abort is the normal stop path. A lost connection does not end an accepted run, so it
+    // reattaches; any other failure marks the assistant node errored.
+    if (!signal.aborted && stillOurs() && accepted) {
+      reattach = true;
+    } else if (!signal.aborted && stillOurs()) {
       hadError = true;
       const message =
         error instanceof Error ? error.message : "Something went wrong.";
       if (
-        !accepted &&
         error instanceof StreamHttpError &&
         error.status < 500 &&
         error.status !== 408
@@ -252,6 +260,17 @@ async function runChatStream(
     }
   }
   if (!stillOurs()) return;
+  if (reattach && streamId !== null) {
+    store.getState().setAbortController(sessionId, null);
+    void recoverChatSession(
+      sessionId,
+      streamId,
+      server.serverUrl,
+      server.queryClient,
+      new AbortController(),
+    );
+    return;
+  }
   if (rejection !== null) {
     // The turn does not belong in the tree; the composer still holds its text.
     store.getState().updateSessionTree(sessionId, treeBeforeSend);
@@ -266,8 +285,8 @@ async function runChatStream(
     if (!idle || !stillOurs()) return;
     store.getState().updateChatState(sessionId, "input");
     // name a new session once it streamed output; skip stop/abort and thrown transport failures
-    if (autoName && !signal.aborted && sawStreaming && !hadError) {
-      void nameNewSession(sessionId, autoName);
+    if (isNewSession && !signal.aborted && sawStreaming && !hadError) {
+      void nameNewSession(sessionId, server);
     }
   } catch (error) {
     if (!stillOurs()) return;
@@ -484,7 +503,8 @@ export function useChatController(
           initialAgentNode.nodeId,
           body,
           controller,
-          isNewSession ? { serverUrl, queryClient } : null,
+          { serverUrl, queryClient },
+          isNewSession,
           onAccepted,
         );
       } finally {
