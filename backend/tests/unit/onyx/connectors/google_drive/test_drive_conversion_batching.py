@@ -218,7 +218,49 @@ def test_defers_documents_until_ancestor_available() -> None:
     # file_0 waited for its folder; both convert after the node appears.
     assert isinstance(out[0], HierarchyNode)
     assert len(out) == 3
-    assert conversions.converted_ids == ["file_0", "file_1"]
+    assert sorted(conversions.converted_ids) == ["file_0", "file_1"]
+
+
+def test_filtered_tail_still_yields_finished_conversions() -> None:
+    connector = _make_connector()
+    connector.exclude_domain_link_only = True
+    conversions = _Conversions()
+    n_tail = 20
+    consumed = {"count": 0}
+
+    def _files() -> Iterator[RetrievedDriveFile]:
+        for i in range(2):
+            consumed["count"] += 1
+            yield _make_file(i)
+        # Let both submitted conversions finish before the filtered tail.
+        deadline = time.monotonic() + 5
+        while len(conversions.converted_ids) < 2 and time.monotonic() < deadline:
+            time.sleep(0.005)
+        time.sleep(0.05)
+        for i in range(2, 2 + n_tail):
+            consumed["count"] += 1
+            yield _make_file(i)
+
+    # A window larger than the sub-batch, so submission never waits.
+    with (
+        _patched(connector, conversions, batch_size=2, max_in_flight=10),
+        patch(
+            f"{_CONN_MODULE}.has_link_only_permission",
+            side_effect=lambda drive_file: (
+                int(str(drive_file["id"]).removeprefix("file_")) >= 2
+            ),
+        ),
+    ):
+        gen = connector._convert_retrieved_files_to_documents(
+            _files(), _make_checkpoint(), include_permissions=False
+        )
+        next(gen)
+        consumed_at_first = consumed["count"]
+        rest = list(gen)
+
+    # The first document arrives while the filtered tail is still listing.
+    assert consumed_at_first < 2 + n_tail
+    assert len(rest) == 1
 
 
 def test_force_flush_converts_files_whose_folder_never_resolves() -> None:

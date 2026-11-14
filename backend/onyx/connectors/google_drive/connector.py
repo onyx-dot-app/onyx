@@ -2009,6 +2009,7 @@ class GoogleDriveConnector(
             max_in_flight=DRIVE_CONVERSION_MAX_IN_FLIGHT,
         ) as runner:
             for retrieved_file in drive_files_iter:
+                yield from _converted(runner.ready())
                 if self.exclude_domain_link_only and has_link_only_permission(
                     retrieved_file.drive_file
                 ):
@@ -2027,7 +2028,6 @@ class GoogleDriveConnector(
                         runner,
                     )
                     files_batch = []
-                yield from _converted(runner.ready())
 
             if files_batch or pending_by_folder:
                 yield from self._convert_files_sub_batch(
