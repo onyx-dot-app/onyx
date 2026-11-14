@@ -898,6 +898,15 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		return m, nil
 	}
 	if msg.Err != nil {
+		if msg.Origin != nil && api.IsRetryableReadinessError(msg.Err) {
+			// The response can still wait for approval: check again and retry.
+			m.reloading = false
+			if !m.readinessUnconfirmed {
+				m.readinessUnconfirmed = true
+				m.viewport.addWarning("Waiting to confirm conversation readiness.")
+			}
+			return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
+		}
 		m.viewport.addError("Could not load session: " + msg.Err.Error())
 		if msg.Origin != nil {
 			return m.finishStream(nil)

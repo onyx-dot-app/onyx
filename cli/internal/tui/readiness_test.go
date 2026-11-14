@@ -212,6 +212,7 @@ type followingClient struct {
 	sent     chan models.StreamEvent
 	status   models.ChatSessionStatus
 	saved    *models.ChatSessionDetailResponse
+	loadErr  error
 	streams  []chan models.StreamEvent
 	requests []resumeRequest
 }
@@ -241,6 +242,9 @@ func (c *followingClient) ChatSessionStatus(context.Context, string) (models.Cha
 }
 
 func (c *followingClient) GetChatSession(context.Context, string) (*models.ChatSessionDetailResponse, error) {
+	if c.loadErr != nil {
+		return nil, c.loadErr
+	}
 	return c.saved, nil
 }
 
@@ -546,5 +550,59 @@ func TestFollowedResponseKeepsTheSessionName(t *testing.T) {
 	m = receive(t, m, stream, models.SessionCreatedEvent{ChatSessionID: followedSession})
 	if m.needsRename {
 		t.Fatal("the replayed session creation asks to rename the session")
+	}
+}
+
+func TestFailedReloadKeepsTheWaitingRequest(t *testing.T) {
+	for name, tc := range map[string]struct {
+		err     error
+		pending bool
+	}{
+		"connection error": {errors.New("connection reset"), true},
+		"server error":     {&api.OnyxAPIError{StatusCode: 503, Detail: "unavailable"}, true},
+		"session gone":     {&api.OnyxAPIError{StatusCode: 404, Detail: "Not found"}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			streamID := 7
+			first, again := make(chan models.StreamEvent, 1), make(chan models.StreamEvent)
+			first <- approvalRequest("a1")
+			close(first)
+			client := &followingClient{streams: []chan models.StreamEvent{first, again}}
+			client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+			client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
+			m := NewModel(config.DefaultConfig(), client)
+			updated, _ := m.Update(SessionResumedMsg{Detail: client.saved, Status: client.status})
+			m = drain(t, updated.(Model))
+			// The stream drops before its first cursor, and the reload fails.
+			m, reload := endStream(t, m, client.status)
+			client.loadErr = tc.err
+			updated, cmd := m.Update(reload())
+			m = updated.(Model)
+			if !tc.pending {
+				if m.isStreaming {
+					t.Fatal("a session that is gone keeps input blocked")
+				}
+				return
+			}
+			if !m.isStreaming || !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
+				t.Fatal("a failed reload closed the waiting request")
+			}
+			if cmd == nil {
+				t.Fatal("recovery stopped after a failed reload")
+			}
+			ready, ok := cmd().(sessionReadyMsg)
+			if !ok {
+				t.Fatal("recovery stopped after a failed reload")
+			}
+
+			// The next readiness check reloads again, and the reload succeeds.
+			client.loadErr = nil
+			updated, reload = m.Update(ready)
+			updated, _ = updated.(Model).Update(reload())
+			m = updated.(Model)
+			if m.streamCh != again || len(client.requests) != 2 {
+				t.Fatalf("the response is not followed again: %+v", client.requests)
+			}
+		})
 	}
 }

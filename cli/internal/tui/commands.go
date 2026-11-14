@@ -329,7 +329,7 @@ func cmdResume(m Model, sessionIDStr string, origin <-chan models.StreamEvent) (
 
 		detail, err := client.GetChatSession(context.Background(), targetID)
 		if err != nil {
-			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr), Origin: origin}
+			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s: %w", sessionIDStr, err), Origin: origin}
 		}
 		// A failed status query counts as running. Following a session that
 		// runs nothing ends at once, and its readiness check reports the failure.
