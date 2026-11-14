@@ -362,10 +362,23 @@ class DriveListingState(BaseModel):
     # True after open_window_end: shards that start from now on have no
     # upper bound.
     open_end: bool = False
-    # Parent folder id -> a user who saw a child of it, for parents that no
+    # Parent folder id -> users who saw a child of it, for parents that no
     # folder listing has yielded yet. After the listing, only the ones still
-    # missing are read with files.get. Its size follows the folders.
-    unresolved_parent_emails: dict[str, str] = {}
+    # missing are read with files.get, as each of these users in turn until
+    # one can read the folder. Its size follows the folders.
+    unresolved_parent_emails: dict[str, list[str]] = {}
+
+    @field_validator("unresolved_parent_emails", mode="before")
+    @classmethod
+    def _one_email_to_list(cls, value: object) -> object:
+        """A checkpoint from before this field held lists has one email."""
+        if not isinstance(value, dict):
+            return value
+        return {
+            parent_id: [emails] if isinstance(emails, str) else emails
+            for parent_id, emails in value.items()
+        }
+
     # Folder id -> the user who listed it, for folders yielded with no parent
     # because that user cannot see the parent. A later copy with the parent,
     # or a read after the listing, yields the folder again with it.

@@ -919,12 +919,17 @@ def persist_stub_hierarchy_nodes_for_cc_pair(
         )
         .on_conflict_do_nothing(index_elements=["raw_node_id", "source"])
     )
+    # The key-share lock makes a concurrent STUB cleanup wait for this commit,
+    # so it cannot delete a node between this read and the link insert.
     nodes = list(
         db_session.execute(
-            select(HierarchyNode).where(
+            select(HierarchyNode)
+            .where(
                 HierarchyNode.source == source,
                 HierarchyNode.raw_node_id.in_(raw_ids),
             )
+            .order_by(HierarchyNode.id)
+            .with_for_update(key_share=True)
         ).scalars()
     )
     upsert_hierarchy_node_cc_pair_entries(
@@ -987,10 +992,12 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
 
     The documents and nodes under each STUB move to the source root, so they
     stay in the tree. A STUB that another cc_pair also links to stays: that
-    pair's attempt can still fill it. Each batch locks its STUBs and checks
-    them again before it moves anything, so a STUB that a concurrent attempt
-    fills or links keeps its children. Commits in batches. Returns the raw
-    ids of the removed STUBs, for the hierarchy cache."""
+    pair's attempt can still fill it. This pair's link to it is removed, so
+    the STUB goes when the last pair that waits for it succeeds. Each batch
+    locks its STUBs and then checks them again in a new statement, so a STUB
+    that a concurrent attempt fills or links keeps its children. Commits in
+    batches. Returns the raw ids of the removed STUBs, for the hierarchy
+    cache."""
     source_node = get_source_hierarchy_node(db_session, source)
     if source_node is None:
         return []
@@ -1012,7 +1019,6 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
                 link.credential_id == credential_id,
                 HierarchyNode.source == source,
                 HierarchyNode.node_type == HierarchyNodeType.STUB,
-                only_this_pair,
             )
             .order_by(HierarchyNode.id)
         )
@@ -1021,18 +1027,44 @@ def remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
     )
     removed: list[str] = []
     for batch in batch_generator(candidate_ids, _STUB_CLEANUP_BATCH_SIZE):
-        stub_ids = list(
+        # Lock first. The check below is a new statement, so it sees every
+        # link that committed before the locks were granted. A check in the
+        # locking statement would use the snapshot from before the wait.
+        locked_ids = list(
             db_session.execute(
                 select(HierarchyNode.id)
-                .where(
-                    HierarchyNode.id.in_(batch),
-                    HierarchyNode.node_type == HierarchyNodeType.STUB,
-                    only_this_pair,
-                )
+                .where(HierarchyNode.id.in_(batch))
                 .order_by(HierarchyNode.id)
                 .with_for_update(of=HierarchyNode)
             ).scalars()
         )
+        still_stub_ids = list(
+            db_session.execute(
+                select(HierarchyNode.id).where(
+                    HierarchyNode.id.in_(locked_ids),
+                    HierarchyNode.node_type == HierarchyNodeType.STUB,
+                )
+            ).scalars()
+        )
+        stub_ids = list(
+            db_session.execute(
+                select(HierarchyNode.id).where(
+                    HierarchyNode.id.in_(still_stub_ids), only_this_pair
+                )
+            ).scalars()
+        )
+        # Another pair still waits for these. This pair's attempt succeeded
+        # without the parent, so it waits no more: drop its link. The STUB
+        # and what is under it go when the last pair lets go.
+        shared_ids = sorted(set(still_stub_ids) - set(stub_ids))
+        if shared_ids:
+            db_session.execute(
+                delete(link).where(
+                    link.hierarchy_node_id.in_(shared_ids),
+                    link.connector_id == connector_id,
+                    link.credential_id == credential_id,
+                )
+            )
         if not stub_ids:
             db_session.commit()
             continue

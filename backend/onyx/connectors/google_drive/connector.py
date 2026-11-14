@@ -235,11 +235,24 @@ def _clean_requested_drive_ids(
 # Folders one step of the read of unlisted parents reads, and the most nodes
 # it holds before it yields them.
 PARENT_READ_BATCH_SIZE = 500
+# The most users kept as readers to try for one unlisted parent folder. It
+# bounds the checkpoint: the map has one entry for each such folder.
+MAX_PARENT_READERS = 4
 
 
-def _take(pending: dict[str, str], count: int) -> dict[str, str]:
+def _add_parent_reader(
+    unresolved: dict[str, list[str]], parent_id: str, email: str
+) -> None:
+    """Records ``email`` as a user who can try to read the parent. The first
+    user to see a child is not always one who can read its parent."""
+    readers = unresolved.setdefault(parent_id, [])
+    if email not in readers and len(readers) < MAX_PARENT_READERS:
+        readers.append(email)
+
+
+def _take[T](pending: dict[str, T], count: int) -> dict[str, T]:
     """Removes up to ``count`` entries from ``pending`` and returns them."""
-    taken: dict[str, str] = {}
+    taken: dict[str, T] = {}
     for key in list(itertools.islice(pending, count)):
         taken[key] = pending.pop(key)
     return taken
@@ -2717,7 +2730,7 @@ class GoogleDriveConnector(
                 and parent_id not in seen
                 and parent_id not in checkpoint.fully_walked_hierarchy_node_raw_ids
             ):
-                unresolved.setdefault(parent_id, item.user_email)
+                _add_parent_reader(unresolved, parent_id, item.user_email)
         return nodes
 
     def _resolve_unlisted_parents(
@@ -2782,16 +2795,19 @@ class GoogleDriveConnector(
             for node in nodes:
                 parent_id = node.raw_parent_id
                 if parent_id and parent_id not in seen and parent_id not in walked:
-                    listing.unresolved_parent_emails.setdefault(
-                        parent_id, batch[node.raw_node_id]
+                    _add_parent_reader(
+                        listing.unresolved_parent_emails,
+                        parent_id,
+                        batch[node.raw_node_id],
                     )
-            if nodes:
-                yield nodes
+            # Also when no read gave a node: the consumer checks its stop
+            # signal and reports progress for each batch.
+            yield nodes
         while listing.unresolved_parent_emails:
             batch = _take(listing.unresolved_parent_emails, PARENT_READ_BATCH_SIZE)
             batch = {
-                folder_id: email
-                for folder_id, email in batch.items()
+                folder_id: emails
+                for folder_id, emails in batch.items()
                 if folder_id not in seen
             }
             results = cast(
@@ -2802,19 +2818,19 @@ class GoogleDriveConnector(
                             self._read_unlisted_folder,
                             (
                                 folder_id,
-                                email,
+                                emails,
                                 checkpoint,
                                 permission_sync_context,
                                 add_prefix,
                             ),
                         )
-                        for folder_id, email in batch.items()
+                        for folder_id, emails in batch.items()
                     ],
                     max_workers=DRIVE_CONVERSION_WORKERS,
                 ),
             )
             nodes = []
-            for (folder_id, email), (node, parent_id) in zip(
+            for (folder_id, emails), (node, parent_id) in zip(
                 batch.items(), results, strict=True
             ):
                 if node is not None:
@@ -2824,10 +2840,12 @@ class GoogleDriveConnector(
                     and parent_id not in seen
                     and (parent_id not in walked)
                 ):
-                    listing.unresolved_parent_emails.setdefault(parent_id, email)
-                logger.debug("Read unlisted folder %s as %s", folder_id, email)
-            if nodes:
-                yield nodes
+                    for email in emails:
+                        _add_parent_reader(
+                            listing.unresolved_parent_emails, parent_id, email
+                        )
+                logger.debug("Read unlisted folder %s as one of %s", folder_id, emails)
+            yield nodes
 
     def _read_parentless_folder(
         self,
@@ -2856,13 +2874,14 @@ class GoogleDriveConnector(
     def _read_unlisted_folder(
         self,
         folder_id: str,
-        email: str,
+        emails: list[str],
         checkpoint: GoogleDriveCheckpoint,
         permission_sync_context: PermissionSyncContext | None,
         add_prefix: bool,
     ) -> tuple[HierarchyNode | None, str | None]:
         """The node for one folder, and the parent to read next (None at a
-        root or when the folder cannot be read)."""
+        root or when the folder cannot be read). Reads as each of ``emails``
+        and then as the admin, until one can read the folder."""
         if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
             return None, None
         field_type = (
@@ -2870,9 +2889,14 @@ class GoogleDriveConnector(
             if permission_sync_context
             else DriveFileFieldType.STANDARD
         )
-        folder = self._get_folder_metadata(
-            folder_id, email, field_type, checkpoint.failed_folder_ids_by_email
-        )
+        folder: GoogleDriveFileType | None = None
+        email = ""
+        for email in emails:
+            folder = self._get_folder_metadata(
+                folder_id, email, field_type, checkpoint.failed_folder_ids_by_email
+            )
+            if folder is not None:
+                break
         if folder is None:
             # Documents under it keep their STUB parent.
             return None, None
