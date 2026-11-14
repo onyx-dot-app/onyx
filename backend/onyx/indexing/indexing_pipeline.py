@@ -1666,6 +1666,8 @@ def index_doc_batch(
         llm_tokenizer = get_tokenizer(
             model_name=llm.config.model_name,
             provider_type=llm.config.model_provider,
+            deployment_name=llm.config.deployment_name,
+            resolve_from_model=True,
         )
 
         # Because the chunker's tokens are different from the LLM's tokens,
