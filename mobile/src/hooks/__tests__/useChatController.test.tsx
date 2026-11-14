@@ -1424,6 +1424,57 @@ describe("useChatController", () => {
     expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
   });
 
+  it("keeps following after a late acknowledgement and a failed scoped Stop", async () => {
+    jest.useFakeTimers();
+    try {
+      useChatSessionStore.getState().ensureSession("s1");
+      const acknowledgement = Promise.withResolvers<void>();
+      stopSessionMock.mockRejectedValueOnce(new Error("offline"));
+      streamMock.mockImplementation((_body, signal) =>
+        (async function* (): AsyncGenerator<StreamEvent> {
+          await acknowledgement.promise;
+          yield idInfo;
+          yield approvalRequest;
+          await new Promise<void>((resolve) =>
+            signal.addEventListener("abort", () => resolve(), { once: true }),
+          );
+        })(),
+      );
+      const { result, unmount } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("hi");
+      });
+      const controller = useChatSessionStore
+        .getState()
+        .sessions.get("s1")?.abortController;
+      act(() => result.current.stop());
+      await act(async () => {
+        acknowledgement.resolve();
+      });
+      expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")?.stopRequested,
+      ).toBe(false);
+
+      await act(async () => {
+        jest.advanceTimersByTime(10_000);
+      });
+
+      expect(controller?.signal.aborted).toBe(false);
+      expect(
+        findPendingToolApprovalIds(
+          useChatSessionStore.getState().sessions.get("s1")?.messageTree,
+        ),
+      ).toEqual(["a1"]);
+      controller?.abort();
+      unmount();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("stops waiting for a missing acknowledgement without sending an unscoped Stop", async () => {
     jest.useFakeTimers();
     try {

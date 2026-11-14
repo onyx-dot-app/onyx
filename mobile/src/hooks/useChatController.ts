@@ -549,11 +549,13 @@ export function useChatController(
       return;
     }
     // A lost acknowledgement must not prevent Stop from reaching the readiness check.
+    // Once the acknowledgement arrives, the scoped Stop decides instead.
     const controller = current.abortController;
     const timeout = setTimeout(() => {
+      const session = useChatSessionStore.getState().sessions.get(sessionId);
       if (
-        useChatSessionStore.getState().sessions.get(sessionId)
-          ?.abortController === controller
+        session?.abortController === controller &&
+        session.streamId === null
       ) {
         controller.abort();
       }
