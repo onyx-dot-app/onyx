@@ -358,6 +358,10 @@ class ParallelDriveLister:
         # INLINE_CALL_BUDGET_FILES, so the files that wait for conversion
         # stay few.
         inline: bool = False,
+        # The shared-with-user listing also returns shared drive files, for
+        # files shared directly from a drive the user is not a member of.
+        # Files of the drives that are listed are dropped as covered.
+        shared_with_all_drives: bool = False,
     ) -> None:
         if checkpoint.listing is None:
             raise ValueError("The checkpoint has no listing state")
@@ -373,6 +377,7 @@ class ParallelDriveLister:
         self._listing_denied = listing_denied
         self._admit_file = admit_file
         self._inline = inline
+        self._shared_with_all_drives = shared_with_all_drives
         self._budget_files = INLINE_CALL_BUDGET_FILES if inline else CALL_BUDGET_FILES
 
         # Guards the state, the checkpoint fields this class writes, and the
@@ -694,10 +699,14 @@ class ParallelDriveLister:
                 files.append(item)
         return files, next_token
 
-    @staticmethod
-    def _variant(shard: ListingShard) -> DriveCorpus:
+    def _variant(self, shard: ListingShard) -> DriveCorpus:
         if shard.partition.kind is ListingPartitionKind.SHARED_DRIVE:
             return DriveCorpus.DRIVE
+        if (
+            shard.partition.kind is ListingPartitionKind.SHARED_WITH_USER
+            and self._shared_with_all_drives
+        ):
+            return DriveCorpus.ALL_DRIVES
         return DriveCorpus.USER
 
     @staticmethod

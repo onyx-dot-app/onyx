@@ -3118,6 +3118,10 @@ class GoogleDriveConnector(
         def listing_denied(
             partition: ListingPartition, email: str, error: GoogleDriveHttpError
         ) -> list[RetrievedDriveFile]:
+            if not self._is_service_account:
+                # No other principal can list the OAuth user's files. A
+                # denied page read as empty would read as deleted files.
+                raise error
             logger.warning(
                 "Drive denied the %s listing of %s as %s: %s",
                 partition.kind.value,
@@ -3160,6 +3164,13 @@ class GoogleDriveConnector(
             listing_denied=listing_denied,
             admit_file=admit_file,
             inline=inline,
+            # As the serial OAuth listing's allDrives corpus.
+            shared_with_all_drives=(
+                not self._is_service_account
+                and self.include_shared_drives
+                and self.include_my_drives
+                and self.include_files_shared_with_me
+            ),
         )
         state = checkpoint.listing
         if state is None:
