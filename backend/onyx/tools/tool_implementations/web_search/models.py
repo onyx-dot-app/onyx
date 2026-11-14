@@ -3,7 +3,8 @@ from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
+from pydantic_core import PydanticKnownError
 
 from onyx.utils.url import normalize_url
 
@@ -20,6 +21,36 @@ class ProviderType(Enum):
 
     GOOGLE = "google"
     EXA = "exa"
+
+
+class WebSearchArguments(BaseModel):
+    queries: list[str] = Field(
+        description="One or more queries to look up on the web. Must contain only printable characters"
+    )
+
+    @field_validator("queries", mode="before")
+    @classmethod
+    def sanitize_queries(cls, raw: object) -> list[str]:
+        """Accept a bare string or a list of any values. Remove control
+        characters, collapse whitespace and drop empty queries. With no query
+        left, the argument is missing."""
+        if isinstance(raw, str):
+            raw = [raw]
+        elif not isinstance(raw, list):
+            raw = []
+        sanitized = (
+            " ".join(
+                "".join(
+                    char for char in str(item) if ord(char) >= 32 and ord(char) != 127
+                ).split()
+            )
+            for item in raw
+            if item is not None
+        )
+        queries = [query for query in sanitized if query]
+        if not queries:
+            raise PydanticKnownError("missing")
+        return queries
 
 
 class WebSearchResult(BaseModel):

@@ -43,3 +43,6 @@ FULL_DOC_NUM_CHUNKS_AROUND = 5
 # This avoids documents with good titles or generally strong matches to flood out the rest of the search results.
 # If there are multiple indepedent sections from the doc, this won't truncate it, only if they're connected.
 MAX_CHUNKS_FOR_RELEVANCE = 3
+
+# Search queries one call runs; later queries are ignored.
+MAX_QUERIES_PER_CALL = 3
