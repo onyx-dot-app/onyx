@@ -2,8 +2,10 @@ import copy
 import json
 import os
 import sys
+import time
 from collections import deque
 from collections.abc import Callable, Collection, Generator, Iterable, Iterator
+from contextlib import closing
 from datetime import datetime
 from typing import Any, Protocol, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -31,6 +33,7 @@ from onyx.connectors.google_drive.doc_conversion import (
     build_slim_document,
     build_slim_document_stub,
     convert_drive_item_to_document,
+    drive_file_size,
     drive_file_skip_reason,
     onyx_document_id_from_drive_file,
 )
@@ -112,7 +115,6 @@ from onyx.connectors.models import (
     EntityFailure,
     HierarchyNode,
     SlimDocument,
-    SlimDocumentStub,
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
@@ -316,15 +318,37 @@ def _retrieval_failure(retrieved_file: RetrievedDriveFile) -> ConnectorFailure:
     )
 
 
-def _count_stub(checkpoint: GoogleDriveCheckpoint, stub: SlimDocumentStub) -> None:
-    """Adds a stub to the running count of the parallel listing."""
-    state = checkpoint.listing
-    if state is None:
-        return
-    label = drive_document_type(stub.mime_type or "")
+def _count_listed_file(
+    state: DriveListingState, drive_file: GoogleDriveFileType
+) -> None:
+    """Adds a file that passed the metadata check to the running count."""
+    label = drive_document_type(drive_file.get("mimeType") or "")
     state.docs_by_type[label] = state.docs_by_type.get(label, 0) + 1
-    if stub.size_bytes is not None:
-        state.bytes_by_type[label] = state.bytes_by_type.get(label, 0) + stub.size_bytes
+    size = drive_file_size(drive_file)
+    if size is not None:
+        state.bytes_by_type[label] = state.bytes_by_type.get(label, 0) + size
+
+
+def _drop_listing_state(checkpoint: GoogleDriveCheckpoint) -> None:
+    """Clears what a listing recorded, so the attempt lists again from its
+    window start. Documents are keyed by id, so a file listed twice is
+    stored once. The hierarchy nodes already sent stay recorded."""
+    checkpoint.completion_stage = DriveRetrievalStage.START
+    checkpoint.completion_map = ThreadSafeDict()
+    checkpoint.phase_progress = None
+    checkpoint.listing = None
+    # The claims of the old listing would make the new one drop those files.
+    checkpoint.retrieved_drive_file_ids = set()
+    # Cleared in place: the connector holds a reference to it.
+    checkpoint.retrieved_folder_and_drive_ids.clear()
+    checkpoint.drive_ids_to_retrieve = None
+    checkpoint.folder_ids_to_retrieve = None
+    checkpoint.user_emails = None
+    checkpoint.organizer_email_by_drive_id = {}
+    checkpoint.incomplete_drive_ids = set()
+    checkpoint.failed_impersonation_emails = set()
+    checkpoint.crawled_target_ids = set()
+    checkpoint.unreachable_target_ids = set()
 
 
 def _public_access() -> ExternalAccess:
@@ -1018,7 +1042,7 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
+    ) -> Generator[RetrievedDriveFile, None, None]:
         """Service account retrieval: one pass per phase over exact partitions.
 
         Each item belongs to one partition with one principal guaranteed to see
@@ -1902,7 +1926,7 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
+    ) -> Generator[RetrievedDriveFile, None, None]:
         drive_files = retrieval_method(
             field_type=field_type,
             checkpoint=checkpoint,
@@ -2054,7 +2078,18 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
-    ) -> Iterator[RetrievedDriveFile]:
+        include_permissions: bool = False,
+        inline: bool = False,
+    ) -> Generator[RetrievedDriveFile, None, None]:
+        """One call of the listing. A service account with no requested
+        folders lists through ``ParallelDriveLister``. The OAuth flow and
+        requested folders use the serial listing. ``field_type`` is for the
+        serial listing. The shard engine asks for permissions only when
+        ``include_permissions`` or the link-only filter needs them. With
+        ``inline``, the caller converts each file in this call (see
+        ``ParallelDriveLister``)."""
+        if self._plan_parallel_listing(checkpoint, start, end):
+            return self._parallel_listing(checkpoint, include_permissions, inline)
         if self._is_service_account:
             return self._phased_retrieval(
                 field_type=field_type,
@@ -2092,6 +2127,10 @@ class GoogleDriveConnector(
         """
         Converts retrieved files to documents, yielding HierarchyNode
         objects for ancestor folders before the converted documents.
+
+        The one step of inline indexing after the listing: it takes the
+        listing's file stream as it is, so the conversion loop can change
+        without a change to either listing engine.
         """
         permission_sync_context = (
             PermissionSyncContext(
@@ -2278,18 +2317,23 @@ class GoogleDriveConnector(
                 if include_permissions or self.exclude_domain_link_only
                 else DriveFileFieldType.STANDARD
             )
-            drive_files_iter = _interleave_by_user(
+            # Closed also when this call fails or its caller stops early, so
+            # the listing threads stop now.
+            with closing(
                 self._fetch_drive_items(
                     field_type=field_type,
                     checkpoint=checkpoint,
                     start=start,
                     end=end,
-                ),
-                DRIVE_INTERLEAVE_LOOKAHEAD,
-            )
-            yield from self._convert_retrieved_files_to_documents(
-                drive_files_iter, checkpoint, include_permissions
-            )
+                    include_permissions=include_permissions,
+                    inline=True,
+                )
+            ) as listed_files:
+                yield from self._convert_retrieved_files_to_documents(
+                    _interleave_by_user(listed_files, DRIVE_INTERLEAVE_LOOKAHEAD),
+                    checkpoint,
+                    include_permissions,
+                )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
@@ -2413,8 +2457,7 @@ class GoogleDriveConnector(
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
         stub_failures: list[ConnectorFailure] | None = None,
-        drive_files: Iterator[RetrievedDriveFile] | None = None,
-    ) -> GenerateSlimDocumentOutput:
+    ) -> Generator[list[SlimDocument | HierarchyNode], None, None]:
         """Lists the files that indexing would index. With ``stub_failures``,
         the listing is for indexing: it yields ``SlimDocumentStub``s and adds a
         retrieval error to ``stub_failures``. Without it, a retrieval error is
@@ -2480,28 +2523,31 @@ class GoogleDriveConnector(
             slim_batch = []
             return result
 
-        if drive_files is None:
-            drive_files = self._fetch_drive_items(
-                field_type=DriveFileFieldType.SLIM,
-                checkpoint=checkpoint,
-                start=start,
-                end=end,
-            )
-        for file in drive_files:
-            if file.error is not None:
-                if stub_failures is None:
-                    raise file.error
-                stub_failures.append(_retrieval_failure(file))
-                continue
-            if self._listing_skip_reason(file.drive_file) is not None:
-                continue
-            files_batch.append(file)
+        drive_files = self._fetch_drive_items(
+            field_type=DriveFileFieldType.SLIM,
+            checkpoint=checkpoint,
+            start=start,
+            end=end,
+            include_permissions=include_permissions,
+        )
+        # Closed also when the caller fails or stops early, so the listing
+        # threads stop now.
+        with closing(drive_files):
+            for file in drive_files:
+                if file.error is not None:
+                    if stub_failures is None:
+                        raise file.error
+                    stub_failures.append(_retrieval_failure(file))
+                    continue
+                if self._listing_skip_reason(file.drive_file) is not None:
+                    continue
+                files_batch.append(file)
 
-            if len(files_batch) >= SLIM_BATCH_SIZE:
-                yield _yield_slim_batch()
-                _stop_or_report_progress(
-                    callback, "_extract_slim_docs_from_google_drive"
-                )
+                if len(files_batch) >= SLIM_BATCH_SIZE:
+                    yield _yield_slim_batch()
+                    _stop_or_report_progress(
+                        callback, "_extract_slim_docs_from_google_drive"
+                    )
 
         # Yield remaining files
         if files_batch:
@@ -2513,10 +2559,13 @@ class GoogleDriveConnector(
         end: SecondsSinceUnixEpoch | None = None,
         callback: IndexingHeartbeatInterface | None = None,
         include_permissions: bool = True,
-        fail_on_unreachable_targets: bool = False,
+        for_pruning: bool = False,
         checkpoint: GoogleDriveCheckpoint | None = None,
         on_checkpoint: Callable[[GoogleDriveCheckpoint], None] | None = None,
     ) -> GenerateSlimDocumentOutput:
+        """Runs the listing to its end in this process, one call at a time.
+        ``for_pruning`` raises ``UnreachableTargetsError`` at the end when a
+        requested target was not listed."""
         try:
             if checkpoint is None:
                 checkpoint = self.build_dummy_checkpoint()
@@ -2524,24 +2573,36 @@ class GoogleDriveConnector(
             self._retrieved_folder_and_drive_ids = (
                 checkpoint.retrieved_folder_and_drive_ids
             )
-            while checkpoint.completion_stage != DriveRetrievalStage.DONE:
-                yield from self._extract_slim_docs_from_google_drive(
-                    checkpoint=checkpoint,
-                    start=start,
-                    end=end,
-                    callback=callback,
-                    include_permissions=include_permissions,
-                )
-                # The caller consumed every batch yielded so far before this resumed
-                if (
-                    on_checkpoint
-                    and checkpoint.completion_stage != DriveRetrievalStage.DONE
-                ):
-                    on_checkpoint(checkpoint)
-                # A pass ends after a page budget or a partition even when every
-                # file was filtered or none changed, so it counts as progress
-                _stop_or_report_progress(callback, "_retrieve_all_slim_docs_impl")
-            if fail_on_unreachable_targets and checkpoint.unreachable_target_ids:
+            call_end = end
+            # The shard engine lists [start, end). Pruning reads a missing
+            # file as deleted, but a file edited during the listing moves past
+            # the end. So pruning lists the time since the end once more.
+            catch_up = for_pruning and end is None
+            while True:
+                while checkpoint.completion_stage != DriveRetrievalStage.DONE:
+                    yield from self._extract_slim_docs_from_google_drive(
+                        checkpoint=checkpoint,
+                        start=start,
+                        end=call_end,
+                        callback=callback,
+                        include_permissions=include_permissions,
+                    )
+                    # The caller consumed every batch yielded so far before
+                    # this resumed
+                    if (
+                        on_checkpoint
+                        and checkpoint.completion_stage != DriveRetrievalStage.DONE
+                    ):
+                        on_checkpoint(checkpoint)
+                    # A pass ends after a budget or a partition even when every
+                    # file was filtered or none changed, so it counts as progress
+                    _stop_or_report_progress(callback, "_retrieve_all_slim_docs_impl")
+                if not catch_up or checkpoint.listing is None:
+                    break
+                catch_up = False
+                checkpoint.completion_stage = DriveRetrievalStage.START
+                call_end = time.time()
+            if for_pruning and checkpoint.unreachable_target_ids:
                 # Pruning deletes whatever this listing lacks, which for an
                 # unreachable target is every document indexed from it.
                 raise UnreachableTargetsError(
@@ -2567,7 +2628,7 @@ class GoogleDriveConnector(
             end=end,
             callback=callback,
             include_permissions=False,
-            fail_on_unreachable_targets=True,
+            for_pruning=True,
         )
 
     def retrieve_all_slim_docs_perm_sync(
@@ -2597,9 +2658,9 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         include_permissions: bool = False,
     ) -> SlimCheckpointOutput[GoogleDriveCheckpoint]:
-        """One pass of the slim listing, for indexing. The serial listing
-        ends where it saves a page token or finishes a partition. The parallel
-        listing ends only at its time or file budget (CALL_BUDGET_SECONDS,
+        """One call of the slim listing, for indexing. The serial listing
+        ends where it saves a page token or finishes a partition. The shard
+        engine ends only at its time or file budget (CALL_BUDGET_SECONDS,
         CALL_BUDGET_FILES). The returned checkpoint covers exactly the stubs
         this call yielded."""
         if self._ops is None or self._primary_admin_email is None:
@@ -2609,37 +2670,28 @@ class GoogleDriveConnector(
         checkpoint = copy.deepcopy(checkpoint)
         self._retrieved_folder_and_drive_ids = checkpoint.retrieved_folder_and_drive_ids
         failures: list[ConnectorFailure] = []
-        drive_files: Generator[RetrievedDriveFile, None, None] | None = None
         try:
-            if self._plan_parallel_listing(checkpoint, start, end):
-                drive_files = self._parallel_listing(checkpoint, include_permissions)
-            for batch in self._extract_slim_docs_from_google_drive(
-                checkpoint=checkpoint,
-                start=start,
-                end=end,
-                include_permissions=include_permissions,
-                stub_failures=failures,
-                drive_files=drive_files,
-            ):
-                yield from failures
-                failures.clear()
-                for item in batch:
-                    if isinstance(item, SlimDocumentStub):
-                        _count_stub(checkpoint, item)
-                    yield item
+            # Closed also when the caller stops early, so the listing threads
+            # stop now.
+            with closing(
+                self._extract_slim_docs_from_google_drive(
+                    checkpoint=checkpoint,
+                    start=start,
+                    end=end,
+                    include_permissions=include_permissions,
+                    stub_failures=failures,
+                )
+            ) as batches:
+                for batch in batches:
+                    yield from failures
+                    failures.clear()
+                    yield from batch
             yield from failures
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise
-        finally:
-            if drive_files is not None:
-                # Also when this call fails or its caller stops early: stop
-                # the listing threads now, not when the generator is collected.
-                drive_files.close()
         checkpoint.retrieved_folder_and_drive_ids = self._retrieved_folder_and_drive_ids
-        if checkpoint.listing is not None and checkpoint.listing.is_done:
-            checkpoint.completion_stage = DriveRetrievalStage.DONE
         if checkpoint.completion_stage == DriveRetrievalStage.DONE:
             checkpoint.has_more = False
         return checkpoint
@@ -2647,23 +2699,33 @@ class GoogleDriveConnector(
     def _plan_parallel_listing(
         self,
         checkpoint: GoogleDriveCheckpoint,
-        start: SecondsSinceUnixEpoch,
-        end: SecondsSinceUnixEpoch,
+        start: SecondsSinceUnixEpoch | None,
+        end: SecondsSinceUnixEpoch | None,
     ) -> bool:
         """Sets up ``checkpoint.listing`` for this call. Returns False when
-        the connector must use the serial listing: the OAuth flow, and a
-        connector with requested folders, because a folder crawl has no
-        time-range shards yet.
+        the connector must use the serial listing: the OAuth flow, and
+        requested folders, because a folder crawl has no time-range shards
+        yet. With no ``end``, a new listing ends now and a started one keeps
+        its end.
 
         The first call plans the partitions: shared drives, then My Drives,
         then the files shared with each user."""
         if not self._is_service_account or self._requested_folder_ids:
             return False
-        if checkpoint.phase_progress is not None:
-            # The serial listing started on an earlier call.
-            return False
-        t0, t1 = window_ms(start, end)
         state = checkpoint.listing
+        if state is None and checkpoint.folder_ids_to_retrieve:
+            # The serial listing lists a requested drive id that is a folder.
+            return False
+        if state is None and (
+            checkpoint.phase_progress is not None
+            or checkpoint.completion_stage is not DriveRetrievalStage.START
+        ):
+            logger.warning(
+                "Dropping a checkpoint of the serial listing; listing again "
+                "from the window start."
+            )
+            _drop_listing_state(checkpoint)
+        t0, t1 = window_ms(start or 0, time.time() if end is None else end)
         if state is not None and state.window_t0 != t0:
             logger.warning(
                 "The listing window start changed from %s to %s; listing again "
@@ -2672,15 +2734,11 @@ class GoogleDriveConnector(
                 t0,
             )
             state = None
-            # The new listing starts with no claims. A claim of the old one
-            # would make the new one drop that file.
-            checkpoint.listing = None
-            checkpoint.retrieved_drive_file_ids = set()
-            checkpoint.incomplete_drive_ids = set()
-            checkpoint.organizer_email_by_drive_id = {}
+            _drop_listing_state(checkpoint)
         if state is not None:
-            # A resumed attempt has a later end. List the added range too.
-            extend_window(state, t1)
+            if end is not None:
+                # A resumed attempt has a later end. List the added range too.
+                extend_window(state, t1)
             return True
 
         self._run_inventory(checkpoint)
@@ -2708,9 +2766,13 @@ class GoogleDriveConnector(
         return True
 
     def _parallel_listing(
-        self, checkpoint: GoogleDriveCheckpoint, include_permissions: bool
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        include_permissions: bool,
+        inline: bool,
     ) -> Generator[RetrievedDriveFile, None, None]:
-        """One call of the parallel sharded listing."""
+        """One call of the shard engine. Counts the files that pass the
+        metadata check, and marks the checkpoint done at the end."""
 
         def choose_drive_principal(
             drive_id: str, busy: Collection[str]
@@ -2749,8 +2811,21 @@ class GoogleDriveConnector(
             check_impersonation=check_impersonation,
             impersonation_failed=impersonation_failed,
             admit_file=admit_file,
+            inline=inline,
         )
-        yield from lister.run()
+        state = checkpoint.listing
+        if state is None:
+            raise RuntimeError("The listing has no state")
+        with closing(lister.run()) as files:
+            for file in files:
+                if (
+                    file.error is None
+                    and self._listing_skip_reason(file.drive_file) is None
+                ):
+                    _count_listed_file(state, file.drive_file)
+                yield file
+        if state.is_done:
+            checkpoint.completion_stage = DriveRetrievalStage.DONE
 
     def validate_connector_settings(self) -> None:
         if self._ops is None:
