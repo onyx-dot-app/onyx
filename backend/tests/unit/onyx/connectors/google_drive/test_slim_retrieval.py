@@ -24,6 +24,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 from onyx.connectors.google_drive.file_retrieval import DriveFileFieldType
 from onyx.connectors.google_drive.models import (
     DriveRetrievalStage,
+    GDriveMimeType,
     GoogleDriveCheckpoint,
     ImpersonationError,
     RetrievedDriveFile,
@@ -285,7 +286,11 @@ class TestSlimPoolWidth:
         """The conversion setting must not widen the slim (permission sync) pool."""
         connector = _make_connector()
         retrieved = RetrievedDriveFile(
-            drive_file={"id": "f1"},
+            drive_file={
+                "id": "f1",
+                "name": "f1",
+                "mimeType": GDriveMimeType.DOC.value,
+            },
             user_email=_ADMIN_EMAIL,
             completion_stage=DriveRetrievalStage.DONE,
         )
