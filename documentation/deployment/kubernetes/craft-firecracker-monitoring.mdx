@@ -128,7 +128,7 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
   </Step>
 
   <Step title="Check the alert rules">
-    In Prometheus, open **Alerts**. The group `craft-fc-host-agent` must have 8 rules.
+    {/* depends: #17824 (9 rules) */} In Prometheus, open **Alerts**. The group `craft-fc-host-agent` must have 9 rules.
   </Step>
 
   <Step title="Check the dashboard">
@@ -143,6 +143,7 @@ They are off by default. They need the Prometheus Operator, for example kube-pro
 | --- | --- | --- |
 | [CraftFcHostAgentDown](/deployment/kubernetes/craft-firecracker-operations#craftfchostagentdown) | critical | Prometheus cannot scrape a host agent for 5 minutes. |
 | [CraftFcHostAgentPodsMissing](/deployment/kubernetes/craft-firecracker-operations#craftfchostagentpodsmissing) | warning | The host agent DaemonSet has fewer available pods than it wants for 15 minutes. |
+| [CraftFcNodeReportsStale](/deployment/kubernetes/craft-firecracker-operations#craftfcnodereportsstale) | critical | The API server has accepted no node state report from a host agent for more than 300 seconds, for 5 minutes. |
 | [CraftFcCreateFailures](/deployment/kubernetes/craft-firecracker-operations#craftfccreatefailures) | warning | More than 20% of the admitted microVM starts on a node fail in 15 minutes (3 or more failures). |
 | [CraftFcAdmissionRefusals](/deployment/kubernetes/craft-firecracker-operations#craftfcadmissionrefusals) | warning | A node refuses 10 or more microVMs in 15 minutes for capacity, egress CA, or sandbox-in-doubt reasons, for 15 minutes. |
 | [CraftFcSessionTransferFailures](/deployment/kubernetes/craft-firecracker-operations#craftfcsessiontransferfailures) | warning | 3 or more session save or restore calls fail on a node in 30 minutes. |
@@ -159,6 +160,7 @@ Tune the thresholds in `craft.hostAgent.alerts`:
 
 | Value | Default | Alert |
 | --- | --- | --- |
+| `nodeReportStaleSeconds` | `300` | `CraftFcNodeReportsStale` |
 | `createFailureRatio` | `0.2` | `CraftFcCreateFailures` |
 | `admissionRefusals` | `10` | `CraftFcAdmissionRefusals` |
 | `sessionTransferFailures` | `3` | `CraftFcSessionTransferFailures` |

@@ -21,8 +21,9 @@ configure Helm as the overview page shows.
 The COS root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
 so you do not need a data disk. Keep a boot disk of 200 GB or more for the loop store.
 
-In the preflight results on COS nodes, a `WARN kernel` line for a 6.12 kernel is expected, for example `WARN kernel:
-6.12.x is not a Firecracker-tested host kernel`. So is the `WARN filesystem` line for the ext4 root disk.
+COS nodes run a host kernel that Onyx does not test (6.12),
+so a `WARN kernel` line in the preflight results is expected.
+The `WARN filesystem` line for the ext4 root disk is also expected.
 
 <Note>
   If your network inspects TLS, `kubectl` can fail to reach the public endpoint of the cluster.

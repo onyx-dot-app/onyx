@@ -249,6 +249,7 @@ Each alert links to its runbook below:
 | --- | --- |
 | [CraftFcHostAgentDown](#craftfchostagentdown) | No new microVMs and no egress on one node |
 | [CraftFcHostAgentPodsMissing](#craftfchostagentpodsmissing) | A KVM node takes no new microVMs |
+| [CraftFcNodeReportsStale](#craftfcnodereportsstale) | The API server places no new microVMs on one node |
 | [CraftFcCreateFailures](#craftfccreatefailures) | microVM starts fail on one node |
 | [CraftFcAdmissionRefusals](#craftfcadmissionrefusals) | A node is full or cannot admit microVMs |
 | [CraftFcSessionTransferFailures](#craftfcsessiontransferfailures) | Session saves or restores fail |
@@ -262,14 +263,6 @@ The host agent writes its own log and one audit line for each API call (`kind=au
 It writes the serial console and Firecracker log of each microVM to stdout (`kind=guest_log`, with `sandbox_id`).
 Your cluster log pipeline collects both. The audit line has `method`, `caller`, `sandbox_id`, `result`, and `reason`.
 It never has request bodies or keys.
-
-These signals have no alert. The dashboard row "Node registration,
-templates and VM slots" shows the time since the last success. The host agent log shows each failure:
-
-| Signal | Log line |
-| --- | --- |
-| Node state report | `node state report failed`, then `node state report sent again` |
-| Node key registration | `node signing key registered` or `node signing key registration failed` |
 
 ## Alert runbooks
 
@@ -327,6 +320,49 @@ kubectl $K -n $NS get events --sort-by=.lastTimestamp | tail -20
 **Fix.** Fix the image, the pull Secret, the toleration, or the node resources. Then delete the failed pod.
 
 **Contact Onyx support** when a node with `onyx.app/kvm=true` gets no host agent pod after the fix.
+
+### CraftFcNodeReportsStale
+
+{/* depends: #17824 (CraftFcNodeReportsStale alert, chart 0.9.46) */}
+
+**Meaning.** The host agent on one node answers scrapes,
+but for 5 minutes the API server has not accepted a node state report from it in the last 300 seconds
+(`craft.hostAgent.alerts.nodeReportStaleSeconds`). If the node had an accepted report before,
+the API server places no new microVMs on the node after `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (default 180 seconds).
+The next wake of a sandbox on the node starts it on another node. The microVMs on the node continue to run.
+`CraftFcHostAgentDown` does not fire.
+
+The alert also fires when the host agent has no accepted report since it started.
+The alert then shows an age of about 56 years.
+The host agent sends reports only after its node key registration succeeds.
+
+**Check.**
+
+```bash
+kubectl $K -n $NS logs "$(pod_on <node>)" --tail=300 | grep -E 'node state report|node signing key'
+kubectl $K -n $REL logs -l app=api-server --prefix --tail=500 \
+  | grep -E 'sandbox_fc_node_report_rejected|sandbox_node_signing_key_registered'
+```
+
+The dashboard panel "Time since last accepted report / key registration" shows both values for each node.
+
+- `node signing key registration failed` with `HTTP 401`: the registration value of the host agent is not the same as the value of the API server. This usually comes after a rotation. The registered key expires 1 hour after the last good registration. Then the reports also get `HTTP 401`, so this alert fires about 1 hour after a wrong rotation.
+- `node state report failed` with `HTTP 401`, and `sandbox_fc_node_report_rejected` in the API server log: the API server does not know the node key, for example after a Redis flush. The host agent registers again only every 20 minutes.
+- `HTTP 409` (`node has no registered agent_address`): the API server has no address for the host agent. The host agent sends it again at its next registration.
+- An error with no HTTP status: the host agent cannot reach `craft.hostAgent.apiServerUrl` (DNS, NetworkPolicy, ingress, or WAF).
+- `HTTP 5xx`: find the error in the API server log.
+
+**Fix.**
+
+- For a wrong registration value, do the steps in [Rotate the registration value](#rotate-the-registration-value)
+  with the correct value.
+- For an unknown node key, delete the host agent pod. The new pod registers at once and adopts its running microVMs.
+- For a network error, fix the path to the API server, or set `craft.hostAgent.apiServerUrl` to the in-cluster URL of the API server Service.
+
+The alert clears when the API server accepts reports again. After many failures,
+the host agent waits up to 2 minutes between reports, so the first accepted report can come 2 minutes after the fix.
+
+**Contact Onyx support** when the reports are still rejected after the host agent logs `node signing key registered`.
 
 ### CraftFcCreateFailures
 
