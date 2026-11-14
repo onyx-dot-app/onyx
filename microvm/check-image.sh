@@ -54,7 +54,7 @@ else
 fi
 
 # The image copies mkfs.xfs, not the xfsprogs package, which pulls in python3.
-if run sh -c 'command -v python3 || ls /usr/bin/python3* /usr/lib/python3*' >/dev/null 2>&1; then
+if run sh -c 'command -v python3 || ls -d /usr/bin/python3* /usr/lib/python3* 2>/dev/null | grep -q .' >/dev/null 2>&1; then
   fail "python3 is in the image"
 else
   pass "no python3"
