@@ -1,0 +1,87 @@
+---
+title: "Jira Service Management"
+description: "Access tickets and portal metadata from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the tickets (customer requests) of your service desk projects.
+Onyx checks Jira Service Management for new and changed tickets on the connector's refresh schedule. The default is every **30** minutes.
+
+For every ticket, this connector pulls:
+
+- Title
+- Description
+- Comments
+- [Common fields](#indexed-metadata), including JSM portal fields when available
+
+Tickets are indexed under their own document source, so they stay distinguishable from plain Jira issues.
+When the Service Desk API answers, each ticket is enriched with its request type, portal status, and SLA breach summary.
+Enrichment is best effort: if JSM is not installed or the account lacks service-desk access, tickets still index with the regular Jira fields.
+
+The connector can index only the content that its account can access.
+An API token does not give its owner additional Jira permissions.
+
+## Jira Service Management Cloud setup
+
+Jira Service Management Cloud is hosted and updated by Atlassian. Its site URL usually ends in `atlassian.net`.
+
+### 1. Choose a connector account
+
+Use a dedicated Jira account for the connector, with access to the service desk projects you want to index.
+
+### 2. Create an API token
+
+Follow the same steps as the [Jira connector](/admins/connectors/official/jira#jira-cloud-setup): create an Atlassian API token for the connector account.
+
+If you use a scoped API token, it needs the Jira scopes listed on the Jira page plus `read:servicedesk-request` for portal metadata.
+
+## Jira Service Management Data Center setup
+
+For a self-managed JSM Data Center deployment, use a personal access token instead of an email + API token,
+following the [Jira Data Center setup](/admins/connectors/official/jira#jira-data-center-setup).
+Leave the email field empty and enter the personal access token. Portal metadata (request type, portal status,
+SLA summary) is available only when the Service Desk API is enabled on the instance.
+
+## Configure the connector
+
+<Steps>
+  <Step title="Provide credentials">
+    Go to **Admin Panel → Connectors** and select **Jira Service Management**. Select **New Jira Service Management Account**.
+    On JSM Cloud, enter the connector account's email address and API token. On Data Center, leave the email empty and enter
+    the personal access token, as described above. Select **Create**.
+  </Step>
+
+  <Step title="Configure the source">
+    Enter the site in **Site URL**. For JSM Cloud, the URL is usually `https://your-domain.atlassian.net`.
+    Enable **Scoped API Token** if you created a Jira Cloud token with scopes.
+  </Step>
+
+  <Step title="Choose what to index">
+    Select one indexing mode:
+
+    - **Everything** indexes the tickets of every service desk project the connector account can access. Issues from other Jira project types (software, business) are skipped.
+    - **Project** indexes one service desk project. Enter its project key, such as `IT`.
+    - **JQL Query** indexes tickets that match a custom JQL query. A JQL scope can span project types; issues from non-service-desk projects index with the regular Jira fields only, without portal metadata.
+    Do not include time filters or an `ORDER BY` clause.
+
+    To exclude comments from specified accounts, add their email addresses to **Comment Email Blacklist**.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. It is enabled when the required checks pass.
+  </Step>
+</Steps>
+
+### Indexed metadata
+
+The standard Jira fields the Jira connector indexes (issue key, summary, description, comments, priority, status, resolution, labels, dates, issue type, reporter, assignee, project, parent), plus, when the Service Desk API is reachable and the issue is a service desk request:
+
+- **Request Type** - the portal request type name, such as "Get IT help"
+- **Portal Status** - the customer-visible status, such as "Waiting for support"
+- **SLA Breached** - "true" when any SLA cycle has breached, "false" when cycles report no breach; omitted when no SLA cycle reports breach data

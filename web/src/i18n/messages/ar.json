@@ -1529,6 +1529,9 @@
         },
         "federatedSlack": {
           "description": "البحث في Slack عند الاستعلام"
+        },
+        "jiraServiceManagement": {
+          "description": "تذاكر مكتب الخدمة في Jira Service Management"
         }
       }
     },
@@ -4940,6 +4943,45 @@
             "mailboxes": {
               "label": "صناديق البريد",
               "description": "حدّد صناديق البريد المراد فهرستها (مثل INBOX وSent وDrafts). اتركه فارغًا لفهرسة جميع صناديق البريد."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "تكوين موصل Jira Service Management",
+          "subtext": "حدّد محتوى Jira Service Management المراد فهرسته. يمكنك فهرسة كل تذكرة أو قصر الفهرسة على مشروع محدد أو استعلام JQL.",
+          "fields": {
+            "jira_base_url": {
+              "label": "عنوان URL للموقع",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "indexing_scope": {
+              "tabs": {
+                "everything": {
+                  "label": "كل شيء"
+                },
+                "project": {
+                  "label": "المشروع"
+                },
+                "jql": {
+                  "label": "استعلام JQL"
+                }
+              }
+            },
+            "everything": {
+              "label": "فهرسة كل تذكرة يمكن للحساب قراءتها",
+              "description": "يفهرس Onyx جميع التذاكر في كل مشروع مكتب خدمة يمكن للحساب المحدد قراءته. لتقليل النطاق، اختر علامة تبويب أخرى."
+            },
+            "project_key": {
+              "label": "مفتاح المشروع",
+              "description": "مفتاح مشروع محدد لفهرسته (على سبيل المثال، 'IT')."
+            },
+            "jql_query": {
+              "label": "استعلام JQL",
+              "description": "استعلام JQL مخصص لتصفية تذاكر Jira Service Management.\n\nمهم: لا تُدرج أي عوامل تصفية زمنية في استعلام JQL لأن ذلك سيتعارض مع منطق الموصل. كما يُرجى عدم تضمين جمل ORDER BY.\n\nراجع [وثائق JQL من Atlassian](https://support.atlassian.com/jira-software-cloud/docs/advanced-search-reference-jql-fields/) لمزيد من التفاصيل حول الصياغة."
+            },
+            "comment_email_blacklist": {
+              "label": "القائمة السوداء لبريد التعليقات",
+              "description": "يفيد ذلك عمومًا لتجاهل حسابات الروبوتات. أضف عناوين البريد الإلكتروني للمستخدمين التي لا ينبغي فهرسة تعليقاتهم."
             }
           }
         }
