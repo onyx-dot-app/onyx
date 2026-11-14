@@ -48,6 +48,8 @@ export interface FeatureFlags {
   tier: Tier | undefined;
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
+  // The playground has no billing: the trial is free and sales handles the rest.
+  isPlayground: boolean;
   hooksEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
@@ -448,7 +450,7 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Organization",
     requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.hasSubscription,
+    visibleWhen: (f: FeatureFlags) => f.hasSubscription && !f.isPlayground,
   },
   THEME: {
     path: "/admin/theme",

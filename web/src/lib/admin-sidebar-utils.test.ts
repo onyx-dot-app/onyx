@@ -13,10 +13,37 @@ const flags: FeatureFlags = {
   tier: Tier.COMMUNITY,
   customAnalyticsEnabled: false,
   hasSubscription: false,
+  isPlayground: false,
   hooksEnabled: false,
   queryHistoryEnabled: false,
   craftAvailable: false,
 };
+
+test("offers Upgrade Plan to an admin without a subscription", () => {
+  const items = buildItems([Permission.FULL_ADMIN_PANEL_ACCESS], flags, null);
+  expect(items.map((item) => item.nameId)).toContain("upgradePlan");
+});
+
+test("hides Plans & Billing and Upgrade Plan on the playground", () => {
+  const playground: FeatureFlags = { ...flags, isPlayground: true };
+  const items = buildItems(
+    [Permission.FULL_ADMIN_PANEL_ACCESS],
+    playground,
+    null
+  );
+  expect(items.map((item) => item.nameId)).not.toContain("upgradePlan");
+  expect(items.map((item) => item.link)).not.toContain(
+    ADMIN_ROUTES.BILLING.path
+  );
+
+  const subscribed: FeatureFlags = { ...playground, hasSubscription: true };
+  const links = buildItems(
+    [Permission.FULL_ADMIN_PANEL_ACCESS],
+    subscribed,
+    null
+  ).map((item) => item.link);
+  expect(links).not.toContain(ADMIN_ROUTES.BILLING.path);
+});
 
 test("shows one Plugins link for an action manager", () => {
   expect(

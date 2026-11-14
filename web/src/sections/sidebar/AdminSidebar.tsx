@@ -83,6 +83,7 @@ export default function AdminSidebar() {
     tier,
     customAnalyticsEnabled: CUSTOM_ANALYTICS_ENABLED,
     hasSubscription: hasSubscriptionOrLicense,
+    isPlayground: settings?.is_playground ?? false,
     hooksEnabled: settings?.hooks_enabled ?? false,
     queryHistoryEnabled:
       settings?.query_history_type !== "disabled" &&

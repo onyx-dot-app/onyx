@@ -57,7 +57,7 @@ from onyx.main import lifespan as lifespan_base
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IS_PLAYGROUND, MULTI_TENANT
 
 logger = setup_logger()
 
@@ -155,9 +155,10 @@ def get_application() -> FastAPI:
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 
-    # Unified billing API - always registered in EE.
-    # Each endpoint is protected by admin permission checks.
-    include_router_with_global_prefix_prepended(application, billing_router)
+    # Unified billing API. Each endpoint is protected by admin permission checks.
+    # Not mounted on the playground, which has no Stripe.
+    if not IS_PLAYGROUND:
+        include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
         # Tenant management

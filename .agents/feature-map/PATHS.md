@@ -188,7 +188,7 @@ covers new files that match it.
 | `backend/ee/onyx/server/billing/`, `backend/ee/onyx/server/license/`, `backend/ee/onyx/server/metrics/`, `backend/scripts/seed_dev_license.py` | billing |
 | `backend/ee/onyx/server/middleware/license_enforcement.py`, `backend/ee/onyx/db/license.py`, `backend/ee/onyx/utils/license.py`, `backend/ee/onyx/utils/license_expiry.py`, `backend/ee/onyx/background/celery/tasks/license_reclaim/` | billing |
 | `backend/ee/onyx/server/tenants/proxy.py`, `backend/ee/onyx/server/tenants/product_gating.py`, `backend/ee/onyx/configs/multi_tenant_gating_config.py` | billing |
-| `backend/ee/onyx/server/tenants/billing.py`, `backend/ee/onyx/server/tenants/billing_api.py`, `backend/ee/onyx/server/tenants/tier_management.py` | billing |
+| `backend/ee/onyx/server/tenants/billing.py`, `backend/ee/onyx/server/tenants/billing_api.py`, `backend/ee/onyx/server/tenants/control_plane_api.py`, `backend/ee/onyx/server/tenants/tier_management.py` | billing |
 | `backend/ee/onyx/utils/tier.py`, `backend/ee/onyx/server/settings/` | billing, editions-and-gating |
 | `backend/ee/onyx/db/community_downgrade.py` | billing |
 | `backend/ee/onyx/server/enterprise_settings/` | whitelabelling-and-theme |
