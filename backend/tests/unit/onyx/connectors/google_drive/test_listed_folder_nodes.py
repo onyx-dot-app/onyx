@@ -11,7 +11,6 @@ from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.models import (
     DriveListingState,
-    DriveRetrievalStage,
     GoogleDriveCheckpoint,
     GoogleDriveFileType,
     RetrievedDriveFile,
@@ -49,7 +48,6 @@ def _folder(
             {"type": "domain", "role": "reader", "allowFileDiscovery": False}
         ]
     return RetrievedDriveFile(
-        completion_stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
         drive_file=drive_file,
         user_email=_LISTER,
     )

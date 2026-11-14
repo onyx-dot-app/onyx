@@ -166,18 +166,12 @@ def test_every_entry_point_lists_the_same_files(mock_drive: MockDrive) -> None:
 
 
 @pytest.mark.usefixtures("small_calls", "db_session", "tenant_context")
-def test_inline_indexing_builds_the_folder_tree_without_the_walk(
-    mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+def test_inline_indexing_builds_the_folder_tree_from_listings(
+    mock_drive: MockDrive,
 ) -> None:
     """Inline indexing on the shard engine gets its folders from the folder
-    listings and reads only the parents that no listing returned. The
-    per-file ancestor walk does not run."""
+    listings and reads only the parents that no listing returned."""
     connector = mock_drive.build_connector()
-
-    def no_walk(*_args: object, **_kwargs: object) -> list[HierarchyNode]:
-        raise AssertionError("the per-file ancestor walk ran")
-
-    monkeypatch.setattr(connector, "_get_new_ancestors_for_files", no_walk)
 
     run = _index_inline(connector)
 

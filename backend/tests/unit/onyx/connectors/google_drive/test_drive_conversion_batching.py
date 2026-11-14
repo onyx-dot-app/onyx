@@ -1,7 +1,7 @@
-"""Regression coverage for the Drive connector's bounded conversion: at most
+"""Regression coverage for the Drive connector's inline conversion: at most
 DRIVE_CONVERSION_MAX_IN_FLIGHT conversions are pending at a time, every file
-converts once, and hierarchy-deferred files wait for their ancestor node before
-converting."""
+converts once and does not wait for its folder, and conversions take the
+listing's users in turn."""
 
 import threading
 import time
@@ -14,8 +14,9 @@ from onyx.connectors.google_drive.connector import (
     GoogleDriveConnector,
     _interleave_by_user,
 )
+from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalStage,
+    DriveListingState,
     GDriveMimeType,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
@@ -24,7 +25,6 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import Document, HierarchyNode
-from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
 
 _BATCH = 10
 _CONN_MODULE = "onyx.connectors.google_drive.connector"
@@ -35,24 +35,21 @@ def _make_connector() -> GoogleDriveConnector:
     connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
     connector._primary_admin_email = "admin@example.com"
     connector.exclude_domain_link_only = False
-    connector._retrieved_folder_and_drive_ids = set()
     return connector
 
 
 def _make_checkpoint() -> GoogleDriveCheckpoint:
-    return GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=DriveRetrievalStage.DONE,
-        completion_map=ThreadSafeDict(),
-        retrieved_drive_file_ids=set(),
-        has_more=False,
-    )
+    return GoogleDriveCheckpoint(retrieved_drive_file_ids=set(), has_more=False)
+
+
+def _listing() -> DriveListingState:
+    """A listing with no partition left to list."""
+    return DriveListingState(window_t0=0, window_t1=0)
 
 
 def _make_file(idx: int, parent_id: str | None = None) -> RetrievedDriveFile:
     rf = MagicMock(spec=RetrievedDriveFile)
     rf.error = None
-    rf.completion_stage = DriveRetrievalStage.DONE
     rf.user_email = f"user{idx}@example.com"
     rf.parent_id = parent_id
     drive_file: dict[str, object] = {
@@ -63,6 +60,15 @@ def _make_file(idx: int, parent_id: str | None = None) -> RetrievedDriveFile:
     if parent_id is not None:
         drive_file["parents"] = [parent_id]
     rf.drive_file = drive_file
+    return rf
+
+
+def _make_folder(folder_id: str) -> RetrievedDriveFile:
+    rf = MagicMock(spec=RetrievedDriveFile)
+    rf.error = None
+    rf.user_email = "user@example.com"
+    rf.parent_id = None
+    rf.drive_file = {"id": folder_id, "name": folder_id, "mimeType": DRIVE_FOLDER_TYPE}
     return rf
 
 
@@ -99,7 +105,7 @@ class _Conversions:
 def _patched(
     connector: GoogleDriveConnector,
     conversions: _Conversions,
-    ancestors: Callable[..., list[HierarchyNode]] | None = None,
+    folder_nodes: Callable[..., list[HierarchyNode]] | None = None,
     batch_size: int = _BATCH,
     max_in_flight: int = 4,
 ) -> Iterator[None]:
@@ -109,8 +115,8 @@ def _patched(
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_MAX_IN_FLIGHT", max_in_flight),
         patch.object(
             connector,
-            "_get_new_ancestors_for_files",
-            side_effect=ancestors or (lambda **_: []),
+            "_listed_folder_nodes",
+            side_effect=folder_nodes or (lambda *_args, **_kwargs: []),
         ),
         patch.object(
             connector, "_convert_retrieved_file_to_document", side_effect=conversions
@@ -126,7 +132,7 @@ def _convert(
         list[Document | HierarchyNode],
         list(
             connector._convert_retrieved_files_to_documents(
-                iter(files), _make_checkpoint(), include_permissions=False
+                iter(files), _make_checkpoint(), _listing(), include_permissions=False
             )
         ),
     )
@@ -159,72 +165,53 @@ def test_yields_incrementally_without_draining_whole_drive() -> None:
             consumed["count"] += 1
             yield _make_file(i)
 
-    # A window smaller than a sub-batch: submitting the first sub-batch blocks
-    # until a conversion finishes, and that document is yielded at once.
-    with _patched(connector, _Conversions(), max_in_flight=_BATCH // 2):
+    # Each file is submitted when it is listed. Once the window is full, the
+    # next submission waits for a conversion, and that document is yielded.
+    max_in_flight = _BATCH // 2
+    with _patched(connector, _Conversions(), max_in_flight=max_in_flight):
         gen = connector._convert_retrieved_files_to_documents(
-            _counting_iter(), _make_checkpoint(), include_permissions=False
+            _counting_iter(), _make_checkpoint(), _listing(), include_permissions=False
         )
         first = next(gen)
         # Closing it shuts down the conversion pool.
         cast(Generator[object, None, None], gen).close()
 
     assert isinstance(first, MagicMock)
-    assert consumed["count"] == _BATCH
+    assert consumed["count"] <= max_in_flight + 1
 
 
-def test_hierarchy_nodes_precede_their_documents() -> None:
-    connector = _make_connector()
-    n_files = _BATCH * 2
-
-    def _node_per_batch(**kwargs: object) -> list[HierarchyNode]:
-        files = cast("list[RetrievedDriveFile]", kwargs["files"])
-        seen = cast("ThreadSafeSet[str]", kwargs["seen_hierarchy_node_raw_ids"])
-        folder = files[0].drive_file["parents"]
-        node_id = cast(list[str], folder)[0]
-        seen.add(node_id)
-        return [MagicMock(spec=HierarchyNode, raw_node_id=node_id)]
-
-    files = [_make_file(i, parent_id=f"folder_{i // _BATCH}") for i in range(n_files)]
-    with _patched(connector, _Conversions(), ancestors=_node_per_batch):
-        out = _convert(connector, files)
-
-    emitted: set[str] = set()
-    for item in out:
-        if isinstance(item, HierarchyNode):
-            emitted.add(item.raw_node_id)
-            continue
-        file_index = int(str(item.id).removeprefix("file_"))
-        assert f"folder_{file_index // _BATCH}" in emitted
-    assert len([x for x in out if not isinstance(x, HierarchyNode)]) == n_files
-
-
-def test_defers_documents_until_ancestor_available() -> None:
+def test_files_do_not_wait_for_their_folder() -> None:
     connector = _make_connector()
     conversions = _Conversions()
-    parent_id = "folder_1"
-    called = False
+    node = MagicMock(spec=HierarchyNode, raw_node_id="folder")
+    flushed: list[tuple[list[str], list[str]]] = []
 
-    def _fake_ancestors(**kwargs: object) -> list[HierarchyNode]:
-        # First invocation: ancestors unavailable; second invocation resolves the folder.
-        nonlocal called
-        if not called:
-            called = True
-            return []
-        seen = cast(ThreadSafeSet[str], kwargs["seen_hierarchy_node_raw_ids"])
-        seen.add(parent_id)
-        return [MagicMock(spec=HierarchyNode, raw_node_id=parent_id)]
-
-    with _patched(connector, conversions, ancestors=_fake_ancestors, batch_size=1):
-        out = _convert(
-            connector,
-            [_make_file(0, parent_id=parent_id), _make_file(1, parent_id=parent_id)],
+    def _folder_nodes(
+        _listing_state: DriveListingState,
+        _checkpoint: GoogleDriveCheckpoint,
+        folders: list[RetrievedDriveFile],
+        files: list[RetrievedDriveFile],
+        *_args: object,
+        **_kwargs: object,
+    ) -> list[HierarchyNode]:
+        flushed.append(
+            (
+                [str(f.drive_file["id"]) for f in folders],
+                [str(f.drive_file["id"]) for f in files],
+            )
         )
+        return [node] if folders else []
 
-    # file_0 waited for its folder; both convert after the node appears.
-    assert isinstance(out[0], HierarchyNode)
-    assert len(out) == 3
-    assert sorted(conversions.converted_ids) == ["file_0", "file_1"]
+    # The folder comes after its files in the stream.
+    files = [_make_file(i, parent_id="folder") for i in range(3)]
+    with _patched(connector, conversions, folder_nodes=_folder_nodes):
+        out = _convert(connector, [*files, _make_folder("folder")])
+
+    assert sorted(conversions.converted_ids) == ["file_0", "file_1", "file_2"]
+    assert [item for item in out if isinstance(item, HierarchyNode)] == [node]
+    assert len(out) == 4
+    # The folder and the files' parents are recorded in one flush.
+    assert flushed == [(["folder"], ["file_0", "file_1", "file_2"])]
 
 
 def test_filtered_tail_still_yields_finished_conversions() -> None:
@@ -258,7 +245,7 @@ def test_filtered_tail_still_yields_finished_conversions() -> None:
         ),
     ):
         gen = connector._convert_retrieved_files_to_documents(
-            _files(), _make_checkpoint(), include_permissions=False
+            _files(), _make_checkpoint(), _listing(), include_permissions=False
         )
         next(gen)
         consumed_at_first = consumed["count"]
@@ -267,50 +254,6 @@ def test_filtered_tail_still_yields_finished_conversions() -> None:
     # The first document arrives while the filtered tail is still listing.
     assert consumed_at_first < 2 + n_tail
     assert len(rest) == 1
-
-
-def test_force_flush_converts_files_whose_folder_never_resolves() -> None:
-    connector = _make_connector()
-    conversions = _Conversions()
-    n_files = _BATCH * 2 + 2
-
-    with _patched(connector, conversions):
-        out = _convert(
-            connector, [_make_file(i, parent_id="folder") for i in range(n_files)]
-        )
-
-    assert len(out) == n_files
-    assert len(conversions.converted_ids) == n_files
-
-
-def test_deferred_files_wait_for_their_folder_then_all_resolve() -> None:
-    connector = _make_connector()
-    conversions = _Conversions()
-    n_files = 300  # large enough to rule out any fixed-size deferral cap
-    folder = "shared_folder"
-
-    # The folder node is emitted only when the LAST file is walked, so all 300
-    # files defer first. None may be force-converted early; every one must wait
-    # and then resolve once the folder appears (its node ahead of every doc).
-    def _fake_ancestors(**kwargs: object) -> list[HierarchyNode]:
-        files = cast("list[RetrievedDriveFile]", kwargs["files"])
-        seen = cast("ThreadSafeSet[str]", kwargs["seen_hierarchy_node_raw_ids"])
-        if any(f.drive_file["id"] == f"file_{n_files - 1}" for f in files):
-            seen.add(folder)
-            return [MagicMock(spec=HierarchyNode, raw_node_id=folder)]
-        return []
-
-    with _patched(connector, conversions, ancestors=_fake_ancestors):
-        out = _convert(
-            connector, [_make_file(i, parent_id=folder) for i in range(n_files)]
-        )
-
-    nodes = [x for x in out if isinstance(x, HierarchyNode)]
-    docs = [x for x in out if not isinstance(x, HierarchyNode)]
-    assert len(docs) == n_files  # nothing dropped or orphaned by a cap
-    assert len(nodes) == 1
-    assert isinstance(out[0], HierarchyNode)  # folder node precedes every document
-    assert conversions.peak_running <= 2  # the release still converts boundedly
 
 
 def test_skipped_conversions_are_dropped_not_counted() -> None:
@@ -375,6 +318,7 @@ def test_checkpoint_load_submits_conversions_in_user_turns() -> None:
     with (
         _patched(connector, conversions),
         patch(f"{_CONN_MODULE}.DRIVE_CONVERSION_WORKERS", 1),
+        patch.object(connector, "_plan_listing", return_value=_listing()),
         patch.object(connector, "_fetch_drive_items", return_value=(f for f in files)),
     ):
         out = list(

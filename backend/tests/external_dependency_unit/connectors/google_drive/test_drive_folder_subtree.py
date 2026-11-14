@@ -3,6 +3,7 @@ partitions. Each entry point must give exactly the folder's subtree, with no
 gaps and no duplicates, across resumes that send the checkpoint through
 JSON."""
 
+import json
 import threading
 import time
 from collections import Counter
@@ -17,15 +18,11 @@ from onyx.connectors.google_drive.connector import (
     UnreachableTargetsError,
 )
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalPhase,
-    GoogleDriveCheckpoint,
     GoogleDriveFileType,
     ListingPartitionKind,
     ListingShard,
-    PhaseProgress,
 )
-from onyx.connectors.models import HierarchyNode
-from onyx.utils.threadpool_concurrency import ThreadSafeDict, ThreadSafeSet
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from tests.external_dependency_unit.connectors.google_drive.conftest import MockDrive
 from tests.external_dependency_unit.connectors.google_drive.test_checkpointed_slim_listing import (
     _file_id,
@@ -157,11 +154,7 @@ def test_every_entry_point_lists_exactly_the_subtree(
     def connector() -> GoogleDriveConnector:
         return _connector(own_mock_drive, shared_folder_urls=_folder_url(root_id))
 
-    def no_walk(*_args: object, **_kwargs: object) -> list[HierarchyNode]:
-        raise AssertionError("the per-file ancestor walk ran")
-
     inline_connector = connector()
-    monkeypatch.setattr(inline_connector, "_get_new_ancestors_for_files", no_walk)
     folder_reads: list[str] = []
     read_folder = inline_connector._get_folder_metadata
 
@@ -374,6 +367,49 @@ def test_an_unreachable_requested_folder_fails_the_prune(
     _assert_exact("permission sync", perm_sync, _content_ids(mock_drive, folder_id))
 
 
+def test_a_denied_walk_page_makes_the_folder_unreachable(
+    own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A page of a folder walk that Drive denies fails that walk, with a
+    reported failure. No other user walks the folder, so the folder is
+    unreachable: the listing ends and pruning refuses to run."""
+    own_mock_drive.set_corpus(
+        {
+            **_BASE_CORPUS,
+            "folder_trees": [{"container": "my_drive", "index": 1, "depth": 1}],
+        }
+    )
+    folder_id = _summary(own_mock_drive)["folder_tree_root_ids"][0]
+    fetch_page = parallel_listing.ParallelDriveLister._fetch_page
+
+    def deny_walk(
+        self: parallel_listing.ParallelDriveLister, shard: ListingShard
+    ) -> tuple[list[GoogleDriveFileType], str | None]:
+        if shard.partition.kind is ListingPartitionKind.FOLDER_SUBTREE:
+            raise GoogleDriveHttpError(
+                status_code=403,
+                reasons=("insufficientFilePermissions",),
+                access_denied=True,
+                message="The user does not have sufficient permissions",
+            )
+        return fetch_page(self, shard)
+
+    monkeypatch.setattr(parallel_listing.ParallelDriveLister, "_fetch_page", deny_walk)
+
+    stubs = list_with_resume(
+        _connector(own_mock_drive, shared_folder_urls=_folder_url(folder_id))
+    )
+
+    assert stubs.failures, "the denied walk was not reported"
+    assert folder_id in stubs.checkpoints[-1].unreachable_target_ids
+    with pytest.raises(GoogleDriveHttpError):
+        list(
+            _connector(
+                own_mock_drive, shared_folder_urls=_folder_url(folder_id)
+            ).retrieve_all_slim_docs()
+        )
+
+
 def test_pruning_lists_folder_files_edited_during_the_listing(
     own_mock_drive: MockDrive, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -438,29 +474,34 @@ def test_a_serial_folder_checkpoint_is_dropped(own_mock_drive: MockDrive) -> Non
     root_id = _summary(own_mock_drive)["folder_tree_root_ids"][0]
     expected = _content_ids(own_mock_drive, root_id)
     connector = _connector(own_mock_drive, shared_folder_urls=_folder_url(root_id))
-    old = GoogleDriveCheckpoint(
-        retrieved_folder_and_drive_ids=set(),
-        completion_stage=connector.build_dummy_checkpoint().completion_stage,
-        completion_map=ThreadSafeDict(),
-        retrieved_drive_file_ids=set(expected),
-        has_more=True,
-        user_emails=["admin@onyx-mock.test"],
-        drive_ids_to_retrieve=[],
-        folder_ids_to_retrieve=[root_id],
-        phase_progress=PhaseProgress(
-            phase=DriveRetrievalPhase.REQUESTED_TARGETS,
-            partition_keys=[f"{root_id}|admin@onyx-mock.test"],
-        ),
-        seen_hierarchy_node_raw_ids=ThreadSafeSet(),
-    )
-    old = connector.validate_checkpoint_json(old.model_dump_json())
+    # main's JSON format, in the requested-target phase.
+    old_json = {
+        "has_more": True,
+        "retrieved_folder_and_drive_ids": [],
+        "completion_stage": "start",
+        "completion_map": {},
+        "retrieved_drive_file_ids": sorted(expected),
+        "user_emails": ["admin@onyx-mock.test"],
+        "drive_ids_to_retrieve": [],
+        "folder_ids_to_retrieve": [root_id],
+        "phase_progress": {
+            "phase": "requested_targets",
+            "partition_keys": [f"{root_id}|admin@onyx-mock.test"],
+            "partition_index": 0,
+            "next_page_token": None,
+            "completed_until": 0,
+        },
+        "crawled_target_ids": [],
+        "seen_hierarchy_node_raw_ids": [],
+    }
+    old = connector.validate_checkpoint_json(json.dumps(old_json))
 
     run = _index_inline(connector, checkpoint=old)
 
     assert run.failures == []
     _assert_exact("inline", run.document_ids, expected)
     assert run.final is not None
-    assert run.final.phase_progress is None
+    assert "phase_progress" not in run.final.model_dump()
     assert run.final.listing is not None and run.final.listing.is_done
 
 
