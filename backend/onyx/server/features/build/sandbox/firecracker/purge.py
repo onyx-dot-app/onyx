@@ -9,8 +9,11 @@ raise: a failure is logged. The heavy client stack loads only when enabled.
   records. Its published artifacts stay.
 - Sandbox (user or tenant delete): the VM is stopped (the node agent removes
   its disk), and every save archive, artifact and record of the sandbox goes.
+- Chat retention: each saved session that retention no longer keeps is
+  purged as on session delete.
 """
 
+from datetime import datetime, timedelta, timezone
 from uuid import UUID
 
 from onyx.microvm.configs import FIRECRACKER_ENABLED, SANDBOX_FC_TEMPLATE
@@ -67,6 +70,42 @@ def purge_harness_sandboxes(targets: dict[UUID, list[UUID]]) -> None:
             )
         except Exception:
             logger.exception("sandbox_fc_sandbox_purge_failed sandbox=%s", sandbox_id)
+
+
+def purge_expired_harness_sessions(retention_days: float) -> None:
+    """Purge each saved session whose chat session is gone or whose build
+    session had no activity in `retention_days`. Run after the retention
+    deletes commit."""
+    if not HARNESS_PURGE_ENABLED:
+        return
+    cutoff = datetime.now(tz=timezone.utc) - timedelta(days=retention_days)
+    try:
+        from onyx.cache.factory import get_cache_backend
+        from onyx.db.engine.sql_engine import get_session_with_current_tenant
+        from onyx.server.features.build.db.sandbox import (
+            get_all_sandbox_ids,
+            get_retained_session_ids,
+        )
+        from onyx.server.features.build.sandbox.firecracker.harness_state import (
+            SAVED_SESSIONS_PREFIX,
+            get_ids,
+        )
+
+        tenant_cache = get_cache_backend(tenant_id=get_current_tenant_id())
+        expired: list[tuple[UUID, UUID]] = []
+        with get_session_with_current_tenant() as db_session:
+            for sandbox_id in get_all_sandbox_ids(db_session):
+                saved = [
+                    UUID(i)
+                    for i in get_ids(tenant_cache, SAVED_SESSIONS_PREFIX, sandbox_id)
+                ]
+                kept = get_retained_session_ids(db_session, saved, cutoff)
+                expired += [(sandbox_id, s) for s in saved if s not in kept]
+    except Exception:
+        logger.exception("sandbox_fc_retention_purge_failed")
+        return
+    for sandbox_id, session_id in expired:
+        purge_harness_session(sandbox_id, session_id)
 
 
 def purge_harness_sandboxes_in_background(targets: dict[UUID, list[UUID]]) -> None:

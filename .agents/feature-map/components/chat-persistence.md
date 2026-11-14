@@ -370,6 +370,8 @@ to. The EE task
 `ee/onyx/background/celery/tasks/ttl_management/tasks.py:perform_ttl_management_task`
 hard-deletes in batches the sessions whose last activity, child sessions
 included, is older than the window (`db/chat.py:get_chat_sessions_older_than`).
+When the chain ends, it also purges the Craft Firecracker session saves that
+the window no longer keeps ([[craft-sandboxes]]).
 A change to `maximum_chat_retention_days` needs the Enterprise tier, and the
 Community downgrade clears it ([[billing]]).
 

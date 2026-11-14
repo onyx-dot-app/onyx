@@ -16,6 +16,9 @@ from onyx.db.chat import delete_chat_session, get_chat_sessions_older_than
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_expired_harness_sessions,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -147,6 +150,8 @@ def perform_ttl_management_task(
             _release_chain_if_owned(redis_client, chain_token)
             raise
     else:
+        # Once per chain, after its deletes commit. Never raises.
+        purge_expired_harness_sessions(retention_limit_days)
         _release_chain_if_owned(redis_client, chain_token)
 
 
