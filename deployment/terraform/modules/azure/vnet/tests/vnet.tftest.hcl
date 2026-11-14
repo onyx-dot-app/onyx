@@ -28,6 +28,11 @@ run "default_subnets" {
   }
 
   assert {
+    condition     = contains(azurerm_subnet.this["postgres"].service_endpoints, "Microsoft.Storage")
+    error_message = "The postgres subnet must declare the Microsoft.Storage endpoint that the Flexible Server adds, or every plan after the apply shows a change."
+  }
+
+  assert {
     condition     = one(azurerm_subnet.this["postgres"].delegation).service_delegation[0].name == "Microsoft.DBforPostgreSQL/flexibleServers"
     error_message = "The postgres subnet must be delegated to PostgreSQL Flexible Server."
   }

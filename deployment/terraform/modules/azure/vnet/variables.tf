@@ -55,10 +55,12 @@ variable "subnets" {
       address_prefixes = ["10.0.16.0/24"]
     }
     # PostgreSQL Flexible Server requires a delegated subnet of its own and
-    # does not need egress.
+    # does not need egress. The server adds the Microsoft.Storage endpoint to
+    # its subnet, so it is declared here to keep later plans clean.
     postgres = {
-      address_prefixes = ["10.0.17.0/24"]
-      delegation       = "Microsoft.DBforPostgreSQL/flexibleServers"
+      address_prefixes  = ["10.0.17.0/24"]
+      service_endpoints = ["Microsoft.Storage"]
+      delegation        = "Microsoft.DBforPostgreSQL/flexibleServers"
     }
     # Application Gateway requires a dedicated subnet and does not support a
     # NAT gateway on it.
