@@ -174,7 +174,7 @@ func main() {
 	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
 	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
 	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload, or for one whole restore download (all range parts)")
-	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (test object stores only)")
+	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs (only for an object store inside the cluster, or a test store)")
 	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
 	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")
 	flag.DurationVar(&f.imageGCEvery, "image-gc-interval", 15*time.Minute, "how often the image GC removes managed images and old templates that no VM used for --image-gc-grace (0 = off)")
