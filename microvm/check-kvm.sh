@@ -16,7 +16,9 @@
 #
 # Optional env: KVM_VMS (default 4), BASE_IMAGE_REGISTRY (a Docker Hub
 # pull-through cache), KVM_ONLY (a test name regex, to run fewer tests),
-# KVM_S3_BUCKET (TestSavesKVM; without it the test skips), KVM_KEEP_WORK=1.
+# KVM_S3_BUCKET (TestSavesKVM; without it the test skips), KVM_KEEP_WORK=1,
+# KVM_AGENT_IMAGE (a local image the agent containers run, e.g. a build of
+# microvm/Dockerfile; default: Debian with the agent's tool packages).
 set -euo pipefail
 
 if [ "$#" -ne 3 ] || [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ] || [ "$(id -u)" -ne 0 ]; then
@@ -154,11 +156,16 @@ pull_as() {
 }
 pull_as "${source_image}" "${source_image}"
 mkdir -p "${work}/agent-image"
-cat >"${work}/agent-image/Dockerfile" <<EOF
+if [ -n "${KVM_AGENT_IMAGE:-}" ]; then
+  # Some tests pass the agent binary as the command: no entrypoint.
+  printf 'FROM %s\nENTRYPOINT []\n' "${KVM_AGENT_IMAGE}" >"${work}/agent-image/Dockerfile"
+else
+  cat >"${work}/agent-image/Dockerfile" <<EOF
 FROM ${registry}/library/debian:trixie-slim
 RUN apt-get update && apt-get install -y --no-install-recommends e2fsprogs util-linux xfsprogs ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 EOF
+fi
 docker build -q -t craft-fc-kvm-agent:local "${work}/agent-image" >/dev/null
 
 # The kit root drive: the source image with fc-init and the prototype guest
