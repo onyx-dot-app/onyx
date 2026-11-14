@@ -11,6 +11,7 @@
 #                              come from the host, not from this image (setns into the host
 #                              mount namespace also sets the root and cwd to the host's root)
 #   mkfs.ext4 (e2fsprogs)      `mkfs.ext4 -d` builds the read-only managed (skills) drive images
+#   mkfs.xfs (xfsprogs)        makes the loop store image when the data dir has no reflink (--loop-store)
 #
 # Local build while the artifacts image is not published, from the repo root:
 #   docker buildx build --platform linux/amd64 -f deployment/craft-fc/Dockerfile.artifacts \
@@ -42,9 +43,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 FROM ${BASE_IMAGE_REGISTRY}/library/debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 ARG DEBIAN_FRONTEND=noninteractive
 # ca-certificates: the node key registration calls the api_server (--api-server-url).
-# e2fsprogs: mkfs.ext4 -d for the managed drive images.
+# e2fsprogs: mkfs.ext4 -d for the managed drive images. xfsprogs: the loop store.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends ca-certificates e2fsprogs util-linux \
+    && apt-get install -y --no-install-recommends ca-certificates e2fsprogs util-linux xfsprogs \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=artifacts /craft-fc/ /opt/craft-fc/
 COPY --from=builder /out/host-agent /usr/local/bin/host-agent

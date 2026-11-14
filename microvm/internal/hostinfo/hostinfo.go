@@ -13,6 +13,8 @@ import (
 // Stats implements agent.HostStats for a data dir.
 type Stats struct {
 	DataDir string
+	// NodeDir is the node file system under a loop store data dir, or "".
+	NodeDir string
 }
 
 // MemInfo returns MemTotal and MemAvailable in MiB.
@@ -53,8 +55,28 @@ func parseMemInfo(r io.Reader) (total, avail uint64, err error) {
 	return total, avail, nil
 }
 
-// DiskFreeBytes returns the space that is free for root on the data dir.
-func (s Stats) DiskFreeBytes() (uint64, error) { return diskFree(s.DataDir) }
+// DiskFreeBytes returns the space that is free for root on the data dir. On
+// a loop store (a sparse image) it is at most the space on NodeDir above the
+// 10% that kubelet keeps free (nodefs hard eviction).
+func (s Stats) DiskFreeBytes() (uint64, error) {
+	free, err := diskFree(s.DataDir)
+	if err != nil || s.NodeDir == "" {
+		return free, err
+	}
+	avail, total, err := diskAvail(s.NodeDir)
+	if err != nil {
+		return 0, err
+	}
+	return min(free, aboveEviction(avail, total)), nil
+}
+
+// aboveEviction is avail minus 10% of total, or 0.
+func aboveEviction(avail, total uint64) uint64 {
+	if reserve := total / 10; avail > reserve {
+		return avail - reserve
+	}
+	return 0
+}
 
 // CPUModel returns the first "model name" in /proc/cpuinfo.
 func CPUModel() string {

@@ -8,7 +8,8 @@
 #                  onyxdotapp/craft-fc-artifacts).
 #   SOURCE_IMAGE   onyxdotapp/sandbox:<tag>, the source of the root drives.
 #
-# smoke: TestCoreKVM, TestDialKVM, TestRestartKVM (kit root drive only).
+# smoke: TestCoreKVM, TestDialKVM, TestRestartKVM, TestLoopStoreKVM (kit root
+#        drive only).
 # full:  smoke, then the egress, pass-through, template, managed drive,
 #        memory, root drive delivery and VM cap tests. It needs KVM_PYTHON: a Python
 #        with backend/requirements/default.txt (the egress proxy harness).
@@ -50,7 +51,7 @@ if [ "${lane}" = full ]; then
   KVM_PYTHON="$(cd "$(dirname "${KVM_PYTHON}")" && pwd)/$(basename "${KVM_PYTHON}")"
   export KVM_PYTHON
 fi
-tests="TestCoreKVM TestDialKVM TestRestartKVM"
+tests="TestCoreKVM TestDialKVM TestRestartKVM TestLoopStoreKVM"
 if [ "${lane}" = full ]; then
   tests="${tests} TestEgressKVM TestPassthroughKVM TestSavesKVM TestTemplateBuildKVM TestManagedSwapKVM"
   tests="${tests} TestMemAdmissionKVM TestMemOOMKVM TestRootfsDeliveryKVM TestMaxVMsKVM"
@@ -80,7 +81,7 @@ if mountpoint -q "${xfs}"; then
   echo "${xfs} is already mounted" >&2
   exit 1
 fi
-containers="kvm-redis ha1 ha2 pt-a1 pt-a2 tb-a1 tb-a2 ms-a1 mem-a1 mem-oom-a1 rd-a1 rd-a2 sv-a1"
+containers="kvm-redis ha1 ha2 ls1 ls2 ls3 pt-a1 pt-a2 tb-a1 tb-a2 ms-a1 mem-a1 mem-oom-a1 rd-a1 rd-a2 sv-a1"
 cleanup_vms() {
   # A Go test timeout panic does not run t.Cleanup.
   # shellcheck disable=SC2086
@@ -89,6 +90,17 @@ cleanup_vms() {
   for proc in /proc/[0-9]*; do
     case "$(readlink "${proc}/root" 2>/dev/null)" in "${xfs}"/*) kill -KILL "${proc#/proc/}" 2>/dev/null || true ;; esac
   done
+  # TestLoopStoreKVM: its VMs run in host scopes outside ${xfs}; then its
+  # loop store and the ext4 mount under it.
+  case " ${tests} " in *" TestLoopStoreKVM "*) ;; *) return 0 ;; esac
+  systemctl kill --signal=KILL 'fcvm-*.scope' >/dev/null 2>&1 || true
+  for _ in $(seq 150); do
+    pgrep -x firecracker >/dev/null || break
+    sleep 0.1
+  done
+  loop_data="${KVM_LOOP_DATA_DIR:-/mnt/fcext4/craft-fc}"
+  while mountpoint -q "${loop_data}"; do umount "${loop_data}" || break; done
+  if mountpoint -q "$(dirname "${loop_data}")"; then umount "$(dirname "${loop_data}")" || true; fi
 }
 test_pid="" mitm=""
 cleanup() {
@@ -144,7 +156,7 @@ pull_as "${source_image}" "${source_image}"
 mkdir -p "${work}/agent-image"
 cat >"${work}/agent-image/Dockerfile" <<EOF
 FROM ${registry}/library/debian:trixie-slim
-RUN apt-get update && apt-get install -y --no-install-recommends e2fsprogs util-linux ca-certificates \
+RUN apt-get update && apt-get install -y --no-install-recommends e2fsprogs util-linux xfsprogs ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 EOF
 docker build -q -t craft-fc-kvm-agent:local "${work}/agent-image" >/dev/null

@@ -196,7 +196,7 @@ pod unready, so `helm upgrade --wait` does not stop.
 | `cgroup` | cgroup v2 | Use a node image with the unified cgroup hierarchy |
 | `kernel` | 5.10, 6.1 or 6.18 (WARN only) | Use AL2023 with kernel 6.18 |
 | `max-map-count` | `vm.max_map_count` >= 1048576 | Set the sysctl on the node pool |
-| `filesystem` | `scratchHostPath` is writable, and is XFS with reflink (WARN if not XFS) | Free space or fix permissions; on ext4, the host agent will use an XFS loop file |
+| `filesystem` | `scratchHostPath` is writable, and is XFS with reflink (WARN if not) | Free space or fix permissions; without reflink, the host agent makes a sparse XFS loop store in its data dir |
 | `free-disk` | At least `minFreeDiskGi` free (WARN only) | Use a larger root disk |
 
 The filesystem and disk checks run in `scratchHostPath`
@@ -291,12 +291,15 @@ To manage the agent namespace yourself, set `craft.hostAgent.createNamespace:
 false` and give the namespace the label
 `pod-security.kubernetes.io/enforce: privileged`.
 The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
-must be on XFS with reflink. The preflight above checks
+needs reflink copies. On XFS with reflink (for example the AL2023 root on
+EKS, or an XFS data disk) the agent uses it directly. On other file systems
+(the ext4 roots of GKE COS and AKS Ubuntu) the agent makes a sparse XFS image
+`<dataDir>/.craft-fc-store.img` (the free disk space less 1/5 of the disk, at least 20 GiB)
+and mounts it at the data dir on a loop device. To set the image size, add
+`--loop-store-gib=<GiB>` to `craft.hostAgent.extraArgs`. To refuse a data dir
+without reflink, add `--loop-store=off`. The preflight above checks
 `craft.firecrackerPreflight.scratchHostPath`, not the data dir. Set
-`scratchHostPath` to the same path as `dataDir` for the check, or check the
-data dir on a node (`stat -f -c %T <dataDir>` must print `xfs`, and
-`xfs_info` must show `reflink=1`). The agent also checks reflink support at
-start-up and does not start without it.
+`scratchHostPath` to the same path as `dataDir` for the check.
 
 To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
 (port `craft.hostAgent.metrics.port`, default 9464). With
