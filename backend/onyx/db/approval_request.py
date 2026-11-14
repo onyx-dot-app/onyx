@@ -14,6 +14,9 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ApprovalRequest, ChatSession
 
+# A decided request's decision, how it was made, and its action ID.
+type SavedDecision = tuple[ApprovalDecision, ApprovalDecidedVia | None, str]
+
 
 def lock_session_grants__no_commit(db_session: Session, chat_session_id: UUID) -> None:
     """Serialize session grants with new requests of the chat until commit, so
@@ -139,11 +142,13 @@ def settle_approval_requests__no_commit(
     approval_ids: Collection[UUID],
     *,
     timeout: datetime.timedelta,
-) -> dict[UUID, tuple[ApprovalDecision, ApprovalDecidedVia | None, str]]:
+) -> dict[UUID, SavedDecision | None]:
     """Expire the pending requests older than `timeout`, then return the
     decisions of the decided ones, how they were made, and their action IDs.
-    The decision API's conditional update and this one decide whether a
-    decision or the expiry wins."""
+    A request whose row no longer exists maps to None: deleting its tool's
+    server, chat, or response deletes it, and nothing can decide it. The
+    decision API's conditional update and this one decide whether a decision
+    or the expiry wins."""
     db_session.execute(
         update(ApprovalRequest)
         .where(
@@ -153,7 +158,7 @@ def settle_approval_requests__no_commit(
         )
         .values(decision=ApprovalDecision.EXPIRED, decided_at=func.now())
     )
-    return {
+    saved = {
         approval_id: (decision, decided_via, action_id)
         for approval_id, decision, decided_via, action_id in db_session.execute(
             select(
@@ -161,13 +166,19 @@ def settle_approval_requests__no_commit(
                 ApprovalRequest.decision,
                 ApprovalRequest.decided_via,
                 ApprovalRequest.action_id,
-            ).where(
-                ApprovalRequest.id.in_(approval_ids),
-                ApprovalRequest.decision.is_not(None),
-            )
+            ).where(ApprovalRequest.id.in_(approval_ids))
         ).tuples()
-        if decision is not None
     }
+    settled: dict[UUID, SavedDecision | None] = {}
+    for approval_id in approval_ids:
+        row = saved.get(approval_id)
+        if row is None:
+            settled[approval_id] = None
+            continue
+        decision, decided_via, action_id = row
+        if decision is not None:
+            settled[approval_id] = (decision, decided_via, action_id)
+    return settled
 
 
 def expire_approval_requests__no_commit(

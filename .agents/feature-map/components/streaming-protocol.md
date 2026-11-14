@@ -130,7 +130,7 @@ requests that `ToolApprovals` opened (`PendingToolInput.approval`).
 `tool_approval_resolved` carries an `outcome`: `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
 earlier one), `rejected`, `expired`, `disabled` (an approval of a tool that the
-policy now disables), or `cancelled` for a call that stopped waiting. The
+policy now disables, or a request deleted with its tool's server), or `cancelled` for a call that stopped waiting. The
 request's `expires_at` is the row's `created_at` plus the timeout
 (`PendingToolInput.expires_at`). A run that ends publishes
 `input_ended` for every request still open, direct or nested, before

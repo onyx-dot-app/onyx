@@ -49,12 +49,13 @@ def _is_lock_timeout(error: DBAPIError) -> bool:
 
 
 def _with_bounded_lock_wait(change: Callable[[], None]) -> None:
-    """Runs a change that locks chat_session, chat_message and gated_app.
+    """Runs a change of this migration with a bounded lock wait.
 
-    Creating or dropping foreign keys to those tables waits for their open
-    transactions, and chat writes queue behind the wait. A short lock_timeout
-    keeps that stall short; each attempt runs in a savepoint, so a timeout
-    retries instead of failing the migration.
+    Creating or dropping foreign keys to chat_session, chat_message and
+    gated_app waits for their open transactions, and the transaction then
+    holds those locks until it ends. Chat writes queue behind any wait. A short
+    lock_timeout keeps each wait short; each attempt runs in a savepoint, so a
+    timeout retries instead of failing the migration.
     """
     bind = op.get_bind()
     for attempt in range(1, _LOCK_ATTEMPTS + 1):
@@ -68,7 +69,7 @@ def _with_bounded_lock_wait(change: Callable[[], None]) -> None:
             if attempt == _LOCK_ATTEMPTS or not _is_lock_timeout(e):
                 raise
             logger.warning(
-                "Could not lock the chat tables for approval_request "
+                "A chat tool approvals change timed out waiting for a lock "
                 "(attempt %s/%s). Retrying in %ss.",
                 attempt,
                 _LOCK_ATTEMPTS,
@@ -141,16 +142,14 @@ def _drop_approval_request() -> None:
     op.drop_table("approval_request")
 
 
-def upgrade() -> None:
-    _with_bounded_lock_wait(_create_approval_request)
-
-    # Chat ran MCP tools without approval. Keep that for tools that exist now,
-    # except on servers that a tenant that uses Craft makes available in Craft.
-    # A server or policy that the application writes meanwhile wins.
+def _keep_chat_auto_approve() -> None:
+    """Chat ran MCP tools without approval. Keep that for tools that exist
+    now, except on servers that a tenant that uses Craft makes available in
+    Craft. A server or policy that the application writes meanwhile wins."""
     keeps_auto_approve = (
         "(NOT server.available_in_craft OR NOT EXISTS (SELECT 1 FROM build_session))"
     )
-    op.execute(
+    op.execute(  # migration-determinism: allow (copies existing rows, not seeded data)
         f"""
         INSERT INTO gated_app (mcp_server_id)
         SELECT server.id FROM mcp_server AS server
@@ -158,7 +157,7 @@ def upgrade() -> None:
         ON CONFLICT (mcp_server_id) DO NOTHING
         """
     )
-    op.execute(
+    op.execute(  # migration-determinism: allow (copies existing rows, not seeded data)
         f"""
         INSERT INTO workspace_action_policy (gated_app_id, action_id, policy)
         SELECT DISTINCT gated_app.id, tool.name, 'ALWAYS'
@@ -169,6 +168,13 @@ def upgrade() -> None:
         ON CONFLICT (gated_app_id, action_id) DO NOTHING
         """
     )
+
+
+def upgrade() -> None:
+    _with_bounded_lock_wait(_create_approval_request)
+    # The chat tables stay locked until the transaction ends, and an insert
+    # can wait on a concurrent write of the same server or policy.
+    _with_bounded_lock_wait(_keep_chat_auto_approve)
 
 
 def downgrade() -> None:

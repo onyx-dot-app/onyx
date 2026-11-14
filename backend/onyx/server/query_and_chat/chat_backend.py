@@ -999,7 +999,7 @@ def handle_send_chat_message(
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
 
-    # TODO(Discord approval buttons): Discord cannot show approval requests
+    # TODO(wenxi-onyx): Discord cannot show approval requests
     # yet, so turns of the Discord bot's service API key run the tools that
     # would ask. Authentication identifies the key, not a request field.
     ask_for_approval = not getattr(  # ods: ignore[getattr]

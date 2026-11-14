@@ -491,8 +491,8 @@ class ToolApprovalRequest(BaseObj):
 # How a tool approval request ended: the user's decision, an approval of the
 # action for the rest of the chat session (approved_for_chat: this request's or
 # an earlier request's), no decision in time, an approval that the action
-# policy blocked (disabled), or the call stopped waiting because its run or
-# program stopped.
+# policy blocked or a request deleted with its tool's server (disabled), or the
+# call stopped waiting because its run or program stopped.
 ToolApprovalOutcome = Literal[
     "approved", "approved_for_chat", "rejected", "expired", "disabled", "cancelled"
 ]

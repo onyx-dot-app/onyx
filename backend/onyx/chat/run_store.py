@@ -18,6 +18,7 @@ from onyx.agents.agent_coordination import (
     AgentDirectory,
     RunOwnership,
     RunStore,
+    ToolApprovals,
 )
 from onyx.agents.concurrency import OPERATION_TIMEOUT_SECONDS
 from onyx.agents.models import (
@@ -288,7 +289,7 @@ class _OwnedRun:
         self.owner = lease.owner
 
 
-class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
+class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
     """Persist and authorize runs on one chat branch. The application polls control while ownership remains."""
 
     def __init__(
@@ -1294,11 +1295,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory):
         except Exception:
             logger.exception("Could not read tool approval decisions; will retry")
             return
-        for approval_id, (decision, decided_via, action_id) in decisions.items():
+        for approval_id, saved in decisions.items():
             try:
-                runs[waiting[approval_id]].submit(
-                    tool_answer(approval_id, decision, decided_via, action_id)
-                )
+                runs[waiting[approval_id]].submit(tool_answer(approval_id, saved))
             except Exception:
                 logger.exception("Could not deliver a tool approval decision")
 

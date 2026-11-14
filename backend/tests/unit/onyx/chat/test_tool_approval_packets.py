@@ -1,6 +1,5 @@
 """How a tool call that waits for approval ends, as its card shows it."""
 
-import threading
 from datetime import UTC, datetime
 from uuid import UUID
 
@@ -20,6 +19,7 @@ from onyx.agents.tools import (
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter
 from onyx.chat.tool_approvals import tool_answer
+from onyx.db.approval_request import SavedDecision
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.llm.cancellation import AgentCancelled, CancellationSignal
 from onyx.llm.interfaces import GenerationContext
@@ -41,6 +41,7 @@ from onyx.server.query_and_chat.streaming_models import (
 )
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.fakes import FakeModelClient
+from tests.unit.onyx.tools.code_mode.fakes import until
 
 CALL = ToolCall(id="send-call", name="send_email", arguments={"to": "team"})
 
@@ -61,21 +62,31 @@ class _Approvals(ToolApprovals):
         pass
 
 
-@pytest.mark.parametrize("ends", ["expired", "disabled"])
+@pytest.mark.parametrize(
+    ("saved", "ends"),
+    [
+        ((ApprovalDecision.EXPIRED, None, CALL.name), "expired"),
+        (
+            (ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY, CALL.name),
+            "disabled",
+        ),
+        # The request's row was deleted with its tool's server.
+        (None, "disabled"),
+    ],
+)
 def test_a_program_call_that_ends_without_a_decision_reports_how(
+    saved: SavedDecision | None,
     ends: ToolApprovalOutcome,
 ) -> None:
     """Integration covers decided direct calls, and external dependency tests
-    a stopped program; a request can also expire."""
+    a stopped program; a request can also expire or lose its row."""
     scope = CancellationSignal()
-    waiting = threading.Event()
 
     def program(invocation: ToolInvocation) -> ToolResult:
         gate = invocation.nested_calls
         assert gate is not None
         request = gate.decide(CALL)
         assert isinstance(request, PendingToolInput)
-        waiting.set()
         try:
             gate.wait_for_input(CALL, request, scope)
         except AgentCancelled:
@@ -110,20 +121,9 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         on_event=ResponsePresenter(Emitter(live.append)).consume,
     )
     try:
-        assert waiting.wait(5)
-        if ends == "expired":
-            run.submit(
-                tool_answer(APPROVAL_ID, ApprovalDecision.EXPIRED, None, CALL.name)
-            )
-        else:
-            run.submit(
-                tool_answer(
-                    APPROVAL_ID,
-                    ApprovalDecision.REJECTED,
-                    ApprovalDecidedVia.POLICY,
-                    CALL.name,
-                )
-            )
+        # The nested request is open once the program waits on it.
+        until(lambda: bool(run.pending_inputs), timeout=5)
+        run.submit(tool_answer(APPROVAL_ID, saved))
         assert run.result(timeout=5).output.text == "done"
         assert run.wait_for_idle(5)
     finally:

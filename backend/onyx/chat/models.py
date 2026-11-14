@@ -149,7 +149,8 @@ class ToolApprovalDenial(BaseModel):
     """Metadata of the result that a denied approval request gives the model:
     why the call did not run. Saved responses drop it."""
 
-    # disabled: the action policy blocked the call when the user approved it.
+    # disabled: the action policy blocked the call when the user approved it,
+    # or the tool's server was deleted while the call waited.
     outcome: Literal["rejected", "expired", "disabled"]
 
 
