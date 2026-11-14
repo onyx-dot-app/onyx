@@ -437,7 +437,10 @@ Do the steps in this order, so that no pod sandbox lands on a KVM node:
 
   <Step title="Check pod sessions">
     Users reopen their Craft sessions.
-    A session whose pod stopped during the node change starts a new pod on the pod sandbox pool and restores its files.
+    A session whose pod stopped during the node change starts a new pod on the pod sandbox pool and restores the last
+    snapshot of the session. Changes after that snapshot are lost,
+    and a session without a snapshot starts with a new workspace.
+    Plan the node change for a time when few sessions are active, and tell users to stop their work before it.
   </Step>
 </Steps>
 

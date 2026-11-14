@@ -18,6 +18,9 @@ configure Helm as the overview page shows.
 | Pool | A pool with nested virtualization | gVisor (GKE Sandbox) pools. A gVisor pod gets no `/dev/kvm`. |
 | Network | Dataplane V2, which enforces NetworkPolicy | |
 
+Use kube-dns as the cluster DNS provider. With Cloud DNS, NodeLocal DNSCache answers on 169.254.20.10,
+and the sandbox proxy policy blocks that range.
+
 The COS root file system is ext4 without reflink. The host agent makes its XFS loop store in the data directory,
 so you do not need a data disk. Keep a boot disk of 200 GB or more for the loop store.
 
@@ -33,11 +36,12 @@ The `WARN filesystem` line for the ext4 root disk is also expected.
 </Note>
 
 <Warning>
-  {/* depends: proxy egress fix (sandbox-proxy egress NetworkPolicy on Dataplane V2) */} On GKE Dataplane V2,
+  {/* depends: #17842 (proxy egress fix, chart 0.9.49). Remove this Warning when the release ships. */}
+  On GKE Dataplane V2,
   the sandbox proxy egress NetworkPolicy of the chart blocks DNS and in-cluster traffic from the sandbox proxy.
   Dataplane V2 does not match pod IP addresses with `ipBlock` rules, and NodeLocal DNSCache pods answer DNS.
   Then microVM egress fails: `curl` in the sandbox hangs,
-  and the sandbox proxy logs `Temporary failure in name resolution`. Until a chart fix ships,
+  and the sandbox proxy logs `Temporary failure in name resolution`. With Onyx chart versions before 0.9.49,
   apply this extra NetworkPolicy in the release namespace. NetworkPolicies add up, so it only adds the missing paths.
 
   ```yaml sandbox-proxy-dns.yaml

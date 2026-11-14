@@ -160,7 +160,7 @@ On a cluster that already runs pod sandboxes, do the steps in this order:
     and set `vpc_cni_addon_version` to the version that runs now:
 
     ```bash
-    kubectl -n kube-system get ds aws-node -o jsonpath='{.spec.template.spec.containers[0].image}'
+    aws eks describe-addon --cluster-name <cluster> --addon-name vpc-cni --query 'addon.addonVersion' --output text
     ```
   </Step>
 
