@@ -283,6 +283,73 @@ class SimilarCredentialSnapshot(CredentialSnapshot):
     refusal_reason: str | None = None
 
 
+class IndexAttemptProgress(BaseModel):
+    """Progress of an attempt that uses the conversion stage: docfetching
+    lists documents in batches, a conversion task fetches each batch, and
+    docprocessing indexes it."""
+
+    # False while docfetching still lists. The totals are then not final.
+    listing_done: bool
+    # Documents the listing found, and those it dropped as unchanged.
+    docs_listed: int
+    docs_skipped: int
+    docs_indexed: int
+    docs_failed: int
+    # Batches of listed documents. `batches_total` is set when listing is done.
+    batches_listed: int
+    batches_converted: int
+    batches_indexed: int
+    batches_total: int | None
+    # Seconds until the slowest stage finishes at its rate so far. None while
+    # the listing runs, before a stage finished a batch, and after the end.
+    eta_seconds: int | None
+
+    @classmethod
+    def from_index_attempt(
+        cls, index_attempt: IndexAttempt, error_count: int
+    ) -> "IndexAttemptProgress | None":
+        if not index_attempt.uses_conversion_stage:
+            return None
+        total = index_attempt.total_batches
+        converted = index_attempt.stub_batches_converted
+        indexed = index_attempt.completed_batches or 0
+        return IndexAttemptProgress(
+            listing_done=total is not None,
+            docs_listed=index_attempt.stubs_listed,
+            docs_skipped=index_attempt.stubs_skipped,
+            docs_indexed=index_attempt.total_docs_indexed or 0,
+            docs_failed=error_count,
+            batches_listed=index_attempt.stub_batches_stored,
+            batches_converted=converted,
+            batches_indexed=indexed,
+            batches_total=total,
+            eta_seconds=_attempt_eta_seconds(index_attempt, [converted, indexed]),
+        )
+
+
+def _attempt_eta_seconds(
+    index_attempt: IndexAttempt, batches_done_by_stage: list[int]
+) -> int | None:
+    """The time the slowest stage still needs, at its average rate since the
+    attempt started. Nothing records when each batch finished, so there is
+    no rate of the last minutes to use."""
+    total = index_attempt.total_batches
+    started = index_attempt.time_started
+    if total is None or started is None or index_attempt.status.is_terminal():
+        return None
+    elapsed = (datetime.now(timezone.utc) - started).total_seconds()
+    if elapsed <= 0:
+        return None
+    eta = 0.0
+    for done in batches_done_by_stage:
+        if done >= total:
+            continue
+        if done <= 0:
+            return None
+        eta = max(eta, (total - done) * elapsed / done)
+    return int(eta)
+
+
 class IndexAttemptSnapshot(BaseModel):
     id: int
     status: IndexingStatus | None
@@ -310,6 +377,8 @@ class IndexAttemptSnapshot(BaseModel):
     is_backfill: bool = False
     # Indexed under the FUTURE search settings of a running model switch.
     is_new_model: bool = False
+    # Set for an attempt that uses the conversion stage.
+    progress: IndexAttemptProgress | None = None
 
     @classmethod
     def from_index_attempt_db_model(
@@ -346,6 +415,9 @@ class IndexAttemptSnapshot(BaseModel):
                 and index_attempt.search_settings.status.is_future()
             ),
             is_backfill=index_attempt.is_backfill,
+            progress=IndexAttemptProgress.from_index_attempt(
+                index_attempt, error_count
+            ),
         )
 
 

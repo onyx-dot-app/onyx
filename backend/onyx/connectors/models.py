@@ -573,6 +573,15 @@ class DocumentTypeLabel(str, Enum):
     OTHER = "other"
 
 
+class ListingCounts(BaseModel):
+    """What a listing found, by document type. ``partial`` means the listing
+    could not reach a part of the source, so the real total is at least this."""
+
+    docs_by_type: dict[DocumentTypeLabel, int] = {}
+    bytes_by_type: dict[DocumentTypeLabel, int] = {}
+    partial: bool = False
+
+
 class ConnectorCheckpoint(BaseModel):
     # TODO: maybe move this to something disk-based to handle extremely large checkpoints?
     has_more: bool
