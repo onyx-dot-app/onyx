@@ -126,6 +126,9 @@ DRIVE_CONVERSION_BATCH_SIZE = 50
 DRIVE_CONVERSION_WORKERS: int = GOOGLE_DRIVE_CONVERSION_WORKERS
 # Conversions submitted and not yet yielded. Waiting ones hold only metadata.
 DRIVE_CONVERSION_MAX_IN_FLIGHT: int = 2 * DRIVE_CONVERSION_WORKERS
+# Pool width for reindex and slim-document builds (pruning, permission sync).
+# GOOGLE_DRIVE_CONVERSION_WORKERS does not change it.
+DRIVE_FETCH_WORKERS = 8
 
 SHARED_DRIVE_PAGES_PER_CHECKPOINT = 2
 MY_DRIVE_PAGES_PER_CHECKPOINT = 2
@@ -2290,7 +2293,7 @@ class GoogleDriveConnector(
         results = cast(
             list[Document | ConnectorFailure | None],
             run_functions_tuples_in_parallel(
-                func_with_args, max_workers=DRIVE_CONVERSION_WORKERS
+                func_with_args, max_workers=DRIVE_FETCH_WORKERS
             ),
         )
         for result in results:
@@ -2347,7 +2350,7 @@ class GoogleDriveConnector(
                             )
                             for file in files_batch
                         ],
-                        max_workers=DRIVE_CONVERSION_WORKERS,
+                        max_workers=DRIVE_FETCH_WORKERS,
                     ),
                 )
                 if doc
