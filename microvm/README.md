@@ -170,7 +170,8 @@ process. VMs and their programs keep running; callers retry.
    Each VM gets its own cgroup (the scope) in the host slice, outside the agent's container cgroup, so it
    survives an agent restart. The scope has `memory.max` = guest memory + `--vm-mem-overhead-mib` and
    `cpu.max` = one CPU per vCPU (see Memory, admission and drain). The jailer gives it its own UID/GID (from `--uid-base`, `--uid-count`), a
-   chroot and a PID namespace.
+   chroot and a PID namespace. The agent starts the command in a new, empty network namespace (loopback
+   only), so Firecracker cannot reach the pod network. The VM has no NIC; vsock uses Unix sockets.
 4. The agent checks the PID (`comm` is `firecracker`, the cgroup is the VM scope), restores the snapshot
    and resumes the VM.
 
