@@ -5,13 +5,12 @@ only a drive organizer sees, an organizer reached through a group, a drive with
 no organizer, a drive nobody can list, shortcuts into covered scopes, a file
 shared with several users, and a user whose impersonation fails.
 
-The org tests run on the shard engine, which lists every service account,
-and on the serial phased engine, forced on. The requested folder tests run on
-the shard engine.
+Every scenario runs on the shard engine, the one listing of the connector.
 """
 
+import json
 from collections import Counter
-from collections.abc import Callable
+from typing import Any
 from unittest.mock import patch
 
 import pytest
@@ -28,17 +27,11 @@ from onyx.connectors.google_drive.drive_access import (
     PrincipalType,
 )
 from onyx.connectors.google_drive.models import (
-    DriveRetrievalPhase,
-    DriveRetrievalStage,
-    GoogleDriveCheckpoint,
     ImpersonationError,
-    PhaseProgress,
     RetrievedDriveFile,
-    StageCompletion,
 )
 from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
 from onyx.connectors.models import SlimDocument
-from onyx.utils.threadpool_concurrency import ThreadSafeDict
 from tests.unit.onyx.connectors.google_drive.fake_drive import (
     DOMAIN,
     FakeTenant,
@@ -143,16 +136,6 @@ _EXPECTED_ORG_FILES = {
 }
 
 
-@pytest.fixture(params=["shard", "serial"])
-def engine(request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch) -> str:
-    """The shard engine, or the serial engine forced on."""
-    if request.param == "serial":
-        monkeypatch.setattr(
-            GoogleDriveConnector, "_plan_parallel_listing", lambda *_args: False
-        )
-    return request.param
-
-
 def _full_org_connector() -> GoogleDriveConnector:
     return make_service_account_connector(
         include_shared_drives=True,
@@ -161,7 +144,6 @@ def _full_org_connector() -> GoogleDriveConnector:
     )
 
 
-@pytest.mark.usefixtures("engine")
 @pytest.mark.parametrize(
     ("pages_per_call", "partitions_per_call"),
     [(1, 1), (1, 3), (2, 4), (100, 100)],
@@ -176,12 +158,7 @@ def test_each_file_is_yielded_exactly_once(
 
     with (
         tenant.patch(connector),
-        patch.object(
-            connector_mod, "SHARED_DRIVE_PAGES_PER_CHECKPOINT", pages_per_call
-        ),
-        patch.object(connector_mod, "MY_DRIVE_PAGES_PER_CHECKPOINT", pages_per_call),
-        patch.object(connector_mod, "PARTITIONS_PER_CHECKPOINT", partitions_per_call),
-        # The shard engine: files per page, and files per inline call.
+        # Files per page, and files per inline call.
         patch.object(parallel_listing, "LISTING_PAGE_SIZE", pages_per_call),
         patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", partitions_per_call),
     ):
@@ -198,7 +175,6 @@ def test_each_file_is_yielded_exactly_once(
     assert isinstance(result.errors[0].error, ImpersonationError)
 
 
-@pytest.mark.usefixtures("engine")
 def test_restricted_folder_is_listed_by_the_organizer() -> None:
     tenant = _org_tenant()
     connector = _full_org_connector()
@@ -216,7 +192,6 @@ def test_restricted_folder_is_listed_by_the_organizer() -> None:
     assert final.failed_impersonation_emails == {CAROL}
 
 
-@pytest.mark.usefixtures("engine")
 def test_interrupted_call_loses_nothing() -> None:
     """A call that dies mid-stream never saves its checkpoint. Retrying from
     the last saved one must still reach every file."""
@@ -226,9 +201,6 @@ def test_interrupted_call_loses_nothing() -> None:
 
     with (
         tenant.patch(connector),
-        patch.object(connector_mod, "SHARED_DRIVE_PAGES_PER_CHECKPOINT", 1),
-        patch.object(connector_mod, "MY_DRIVE_PAGES_PER_CHECKPOINT", 1),
-        patch.object(connector_mod, "PARTITIONS_PER_CHECKPOINT", 1),
         patch.object(parallel_listing, "LISTING_PAGE_SIZE", 1),
         patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", 1),
     ):
@@ -256,7 +228,6 @@ def test_interrupted_call_loses_nothing() -> None:
     assert seen == _EXPECTED_ORG_FILES
 
 
-@pytest.mark.usefixtures("engine")
 def test_checkpoint_size_does_not_grow_with_document_count() -> None:
     """The regression the redesign exists for: exact partitions keep no
     per-document state, so ten times the files leaves the checkpoint flat."""
@@ -279,8 +250,6 @@ def test_checkpoint_size_does_not_grow_with_document_count() -> None:
         )
         with (
             tenant.patch(connector),
-            patch.object(connector_mod, "SHARED_DRIVE_PAGES_PER_CHECKPOINT", 25),
-            patch.object(connector_mod, "MY_DRIVE_PAGES_PER_CHECKPOINT", 25),
             patch.object(parallel_listing, "LISTING_PAGE_SIZE", 50),
             patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", 50),
             # The tenant gives every file one modifiedTime, so a shard keeps
@@ -298,7 +267,6 @@ def test_checkpoint_size_does_not_grow_with_document_count() -> None:
     assert large - small < 50
 
 
-@pytest.mark.usefixtures("engine")
 def test_owner_pass_suppresses_shared_copies_but_not_a_failed_owners() -> None:
     tenant = _org_tenant()
     connector = _full_org_connector()
@@ -313,83 +281,73 @@ def test_owner_pass_suppresses_shared_copies_but_not_a_failed_owners() -> None:
     assert sources["c1"] == 1
 
 
-def _old_stage_checkpoint(
-    connector: GoogleDriveConnector,
-) -> GoogleDriveCheckpoint:
-    """A checkpoint of the per-user stage loop that came before the phases."""
-    old = connector.build_dummy_checkpoint()
-    old.completion_stage = DriveRetrievalStage.MY_DRIVE_FILES
-    old.user_emails = [ADMIN, ALICE]
-    old.drive_ids_to_retrieve = ["d1"]
-    old.folder_ids_to_retrieve = []
-    old.completion_map = ThreadSafeDict(
-        {
-            ALICE: StageCompletion(
-                stage=DriveRetrievalStage.SHARED_DRIVE_FILES,
-                completed_until=0,
-                current_folder_or_drive_id="d1",
-                next_page_token="token-from-the-old-loop",
-            )
+# Checkpoints that main's serial listing wrote, in its JSON format. Their
+# claims cover every file, so a listing that kept them would yield nothing.
+_MAIN_STAGE_CHECKPOINT: dict[str, Any] = {
+    "has_more": True,
+    "retrieved_folder_and_drive_ids": ["d1"],
+    "completion_stage": "my_drive_files",
+    "completion_map": {
+        ALICE: {
+            "stage": "shared_drive_files",
+            "completed_until": 1717200000.0,
+            "current_folder_or_drive_id": "d1",
+            "next_page_token": "token-from-the-old-loop",
         }
-    )
-    return connector.validate_checkpoint_json(old.model_dump_json())
+    },
+    "retrieved_drive_file_ids": sorted(_EXPECTED_ORG_FILES),
+    "drive_ids_to_retrieve": ["d1"],
+    "folder_ids_to_retrieve": [],
+    "user_emails": [ADMIN, ALICE],
+    "seen_hierarchy_node_raw_ids": [],
+    "fully_walked_hierarchy_node_raw_ids": [],
+    "failed_folder_ids_by_email": {},
+}
+_MAIN_PHASED_CHECKPOINT: dict[str, Any] = {
+    **_MAIN_STAGE_CHECKPOINT,
+    "completion_stage": "start",
+    "completion_map": {},
+    "drive_ids_to_retrieve": ["d1", "d2", "d3", "d4"],
+    "user_emails": [ADMIN, ALICE, BOB, CAROL],
+    "phase_progress": {
+        "phase": "my_drives",
+        "partition_keys": [ADMIN, ALICE, BOB, CAROL],
+        "partition_index": 1,
+        "next_page_token": "token-from-the-phased-engine",
+        "completed_until": 0,
+    },
+    "organizer_email_by_drive_id": {"d1": ALICE},
+    "incomplete_drive_ids": ["d3"],
+    "crawled_target_ids": ["f1"],
+    "unreachable_target_ids": ["f2"],
+}
 
 
-def test_old_stage_checkpoint_restarts_with_phases(
-    monkeypatch: pytest.MonkeyPatch,
+@pytest.mark.parametrize(
+    "old_json",
+    [_MAIN_STAGE_CHECKPOINT, _MAIN_PHASED_CHECKPOINT],
+    ids=["stage", "phased"],
+)
+def test_a_checkpoint_from_main_parses_and_lists_again(
+    old_json: dict[str, Any],
 ) -> None:
-    """The serial engine, forced on."""
-    monkeypatch.setattr(
-        GoogleDriveConnector, "_plan_parallel_listing", lambda *_args: False
-    )
+    """The serial listing's keys are ignored, and the attempt lists again
+    from its window start with the shard engine."""
     tenant = _org_tenant()
     connector = _full_org_connector()
-    old = _old_stage_checkpoint(connector)
-
-    with tenant.patch(connector):
-        result = run_to_completion(connector, checkpoint=old)
-
-    assert set(result.file_ids) == _EXPECTED_ORG_FILES
-    assert result.checkpoints[-1].phase_progress is not None
-    assert result.checkpoints[-1].phase_progress.phase is DriveRetrievalPhase.DONE
-
-
-def _phased_checkpoint(connector: GoogleDriveConnector) -> GoogleDriveCheckpoint:
-    """A checkpoint of the phased engine in the middle of the My Drive phase,
-    with claims that would make a new listing drop those files."""
-    old = connector.build_dummy_checkpoint()
-    old.user_emails = [ADMIN, ALICE, BOB, CAROL]
-    old.drive_ids_to_retrieve = ["d1", "d2", "d3", "d4"]
-    old.folder_ids_to_retrieve = []
-    old.organizer_email_by_drive_id = {"d1": ALICE}
-    old.retrieved_drive_file_ids = set(_EXPECTED_ORG_FILES)
-    old.phase_progress = PhaseProgress(
-        phase=DriveRetrievalPhase.MY_DRIVES,
-        partition_keys=[ADMIN, ALICE, BOB, CAROL],
-        partition_index=1,
-        next_page_token="token-from-the-phased-engine",
-    )
-    return connector.validate_checkpoint_json(old.model_dump_json())
-
-
-@pytest.mark.parametrize("make_old", [_old_stage_checkpoint, _phased_checkpoint])
-def test_shard_engine_drops_a_serial_checkpoint(
-    make_old: Callable[[GoogleDriveConnector], GoogleDriveCheckpoint],
-) -> None:
-    """A service account checkpoint of the serial engine is dropped: the
-    attempt lists again from its window start with the shard engine."""
-    tenant = _org_tenant()
-    connector = _full_org_connector()
-    old = make_old(connector)
+    old = connector.validate_checkpoint_json(json.dumps(old_json))
+    assert old.listing is None
 
     with tenant.patch(connector):
         result = run_to_completion(connector, checkpoint=old)
 
     assert Counter(result.file_ids) == Counter(_EXPECTED_ORG_FILES)
     final = result.checkpoints[-1]
-    assert final.phase_progress is None
-    assert final.completion_map._dict == {}
     assert final.listing is not None and final.listing.is_done
+    assert final.unreachable_target_ids == set()
+    dumped = final.model_dump()
+    for key in ("completion_stage", "completion_map", "phase_progress"):
+        assert key not in dumped
 
 
 # --- requested folders -------------------------------------------------------
@@ -450,7 +408,6 @@ def test_unreachable_target_blocks_pruning_but_not_perm_sync() -> None:
 
     with (
         tenant.patch(connector),
-        patch.object(connector, "_get_new_ancestors_for_files", return_value=[]),
         patch.object(
             connector_mod,
             "build_slim_document",
@@ -495,7 +452,6 @@ def test_specific_user_emails_limit_who_is_impersonated() -> None:
     assert final.unreachable_target_ids == {"fadmin"}
 
 
-@pytest.mark.usefixtures("engine")
 def test_server_error_on_member_read_fails_the_run() -> None:
     """A 500 is not evidence the drive has no members. Skipping the drive would
     let a prune delete everything indexed from it, so the run must fail."""

@@ -1,5 +1,4 @@
-from collections.abc import Callable, Iterator
-from datetime import datetime, timezone
+from collections.abc import Callable
 from enum import Enum
 from typing import cast
 from urllib.parse import parse_qs, urlparse
@@ -11,17 +10,12 @@ from onyx.connectors.google_drive.constants import (
 )
 from onyx.connectors.google_drive.models import (
     DriveBatchResult,
-    DriveRetrievalStage,
     GoogleDriveFileType,
-    RetrievedDriveFile,
 )
 from onyx.connectors.google_drive.source_operations import (
-    DriveCorpus,
-    GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.google_utils import GoogleFields
-from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
@@ -72,22 +66,6 @@ HIERARCHY_FIELDS_WITH_PERMISSIONS = (
 )
 
 
-def generate_time_range_filter(
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
-) -> str:
-    time_range_filter = ""
-    if start is not None:
-        time_start = datetime.fromtimestamp(start, tz=timezone.utc).isoformat()
-        time_range_filter += (
-            f" and {GoogleFields.MODIFIED_TIME.value} >= '{time_start}'"
-        )
-    if end is not None:
-        time_stop = datetime.fromtimestamp(end, tz=timezone.utc).isoformat()
-        time_range_filter += f" and {GoogleFields.MODIFIED_TIME.value} <= '{time_stop}'"
-    return time_range_filter
-
-
 def owner_email(drive_file: GoogleDriveFileType) -> str | None:
     """Lowercased owner of a My Drive file. Drive allows one owner; shared
     drive files have none."""
@@ -113,42 +91,6 @@ def has_link_only_permission(file: GoogleDriveFileType) -> bool:
         if permission.get("allowFileDiscovery") is False:
             return True
     return False
-
-
-def files_only(
-    items: Iterator[GoogleDriveFileType | str],
-) -> Iterator[GoogleDriveFileType]:
-    """The files of a listing made without ``max_num_pages``, which yields no
-    page token."""
-    for item in items:
-        if isinstance(item, str):
-            raise RuntimeError("Bug: an unbounded listing yielded a page token.")
-        yield item
-
-
-def _get_folders_in_parent(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    parent_id: str | None = None,
-) -> Iterator[GoogleDriveFileType]:
-    query = f"(mimeType = '{DRIVE_FOLDER_TYPE}' or mimeType = '{DRIVE_SHORTCUT_TYPE}')"
-    query += " and trashed = false"
-
-    if parent_id:
-        query += f" and '{parent_id}' in parents"
-
-    for file in files_only(
-        ops.list_files(
-            variant=DriveCorpus.ALL_DRIVES,
-            user_email=user_email,
-            query=query,
-            fields=FOLDER_FIELDS,
-            continue_on_404_or_403=True,
-        )
-    ):
-        folder = _resolve_folder_or_shortcut(ops, user_email, file)
-        if folder:
-            yield folder
 
 
 def get_folder_metadata(
@@ -354,290 +296,6 @@ def resolve_shortcut(
     # partitioned retrieval does not count it as part of the listing's scope.
     target[RESOLVED_FROM_SHORTCUT_KEY] = shortcut.get("id")
     return target
-
-
-def _resolve_folder_or_shortcut(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    file: GoogleDriveFileType,
-) -> GoogleDriveFileType | None:
-    if not _is_drive_shortcut(file):
-        return file
-
-    target = _resolve_shortcut_target(
-        ops=ops,
-        user_email=user_email,
-        shortcut=file,
-        target_fields=HIERARCHY_FIELDS,
-    )
-    if target is None or target.get("mimeType") != DRIVE_FOLDER_TYPE:
-        return None
-
-    logger.debug(
-        "Resolved Drive folder shortcut %s to target %s",
-        file.get("id"),
-        target.get("id"),
-    )
-    return target
-
-
-def _resolve_file_shortcuts(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    files: Iterator[GoogleDriveFileType | str],
-    field_type: DriveFileFieldType,
-) -> Iterator[GoogleDriveFileType | str]:
-    for file in files:
-        if isinstance(file, str):
-            yield file
-            continue
-
-        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
-        if resolved_file is not None:
-            yield resolved_file
-
-
-def _get_files_in_parent(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    parent_id: str,
-    field_type: DriveFileFieldType,
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
-) -> Iterator[GoogleDriveFileType]:
-    query = f"mimeType != '{DRIVE_FOLDER_TYPE}' and '{parent_id}' in parents"
-    query += " and trashed = false"
-    query += generate_time_range_filter(start, end)
-
-    for file in files_only(
-        ops.list_files(
-            variant=DriveCorpus.ALL_DRIVES,
-            user_email=user_email,
-            query=query,
-            fields=get_fields_for_file_type(field_type),
-            order_by=GoogleFields.MODIFIED_TIME.value,
-            continue_on_404_or_403=True,
-        )
-    ):
-        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
-        if resolved_file is not None:
-            yield resolved_file
-
-
-def crawl_folders_for_files(
-    ops: GoogleDriveSourceOperations,
-    parent_id: str,
-    field_type: DriveFileFieldType,
-    user_email: str,
-    traversed_parent_ids: set[str],
-    update_traversed_ids_func: Callable[[str], None],
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
-    active_parent_ids: set[str] | None = None,
-) -> Iterator[RetrievedDriveFile]:
-    """
-    This function starts crawling from any folder. It is slower though.
-    """
-    logger.info("Entered crawl_folders_for_files with parent_id: " + parent_id)
-    if active_parent_ids is None:
-        active_parent_ids = set()
-    if parent_id in active_parent_ids:
-        logger.info("Skipping folder cycle at parent_id: %s", parent_id)
-        return
-
-    active_parent_ids.add(parent_id)
-    try:
-        if parent_id not in traversed_parent_ids:
-            logger.info("Parent id not in traversed parent ids, getting files")
-            found_files = False
-            file = {}
-            try:
-                for file in _get_files_in_parent(
-                    ops=ops,
-                    user_email=user_email,
-                    parent_id=parent_id,
-                    field_type=field_type,
-                    start=start,
-                    end=end,
-                ):
-                    logger.info(
-                        "Found file: %s, user email: %s", file["name"], user_email
-                    )
-                    found_files = True
-                    yield RetrievedDriveFile(
-                        drive_file=file,
-                        user_email=user_email,
-                        parent_id=parent_id,
-                        completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                    )
-                # Only mark a folder as done if it was fully traversed without errors
-                # This usually indicates that the owner of the folder was impersonated.
-                # In cases where this never happens, most likely the folder owner is
-                # not part of the google workspace in question (or for oauth, the authenticated
-                # user doesn't own the folder)
-                if found_files:
-                    update_traversed_ids_func(parent_id)
-            except Exception as e:
-                if isinstance(e, GoogleDriveHttpError) and e.status_code == 403:
-                    # don't yield an error here because this is expected behavior
-                    # when a user doesn't have access to a folder
-                    logger.debug("Error getting files in parent %s: %s", parent_id, e)
-                else:
-                    logger.error("Error getting files in parent %s: %s", parent_id, e)
-                    yield RetrievedDriveFile(
-                        drive_file=file,
-                        user_email=user_email,
-                        parent_id=parent_id,
-                        completion_stage=DriveRetrievalStage.FOLDER_FILES,
-                        error=e,
-                    )
-        else:
-            logger.info(
-                "Skipping files since parent is already traversed: %s", parent_id
-            )
-
-        for subfolder in _get_folders_in_parent(
-            ops=ops,
-            user_email=user_email,
-            parent_id=parent_id,
-        ):
-            logger.info("Fetching all files in subfolder: " + subfolder["name"])
-            yield from crawl_folders_for_files(
-                ops=ops,
-                parent_id=subfolder["id"],
-                field_type=field_type,
-                user_email=user_email,
-                traversed_parent_ids=traversed_parent_ids,
-                update_traversed_ids_func=update_traversed_ids_func,
-                start=start,
-                end=end,
-                active_parent_ids=active_parent_ids,
-            )
-    finally:
-        active_parent_ids.remove(parent_id)
-
-
-def get_files_in_shared_drive(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    drive_id: str,
-    field_type: DriveFileFieldType,
-    max_num_pages: int,
-    update_traversed_ids_func: Callable[[str], None] = lambda _: None,
-    cache_folders: bool = True,
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
-    page_token: str | None = None,
-) -> Iterator[GoogleDriveFileType | str]:
-    if page_token:
-        logger.info("Using page token: %s", page_token)
-
-    if cache_folders:
-        # If we know we are going to folder crawl later, we can cache the folders here
-        # Get all folders being queried and add them to the traversed set
-        folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-        folder_query += " and trashed = false"
-        for folder in files_only(
-            ops.list_files(
-                variant=DriveCorpus.DRIVE,
-                user_email=user_email,
-                drive_id=drive_id,
-                query=folder_query,
-                fields="nextPageToken, files(id)",
-                continue_on_404_or_403=True,
-            )
-        ):
-            update_traversed_ids_func(folder["id"])
-
-    # Get all files in the shared drive
-    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    file_query += " and trashed = false"
-    file_query += generate_time_range_filter(start, end)
-
-    for file in ops.list_files(
-        variant=DriveCorpus.DRIVE,
-        user_email=user_email,
-        drive_id=drive_id,
-        query=file_query,
-        fields=get_fields_for_file_type(field_type),
-        order_by=GoogleFields.MODIFIED_TIME.value,
-        page_token=page_token,
-        max_num_pages=max_num_pages,
-        continue_on_404_or_403=True,
-    ):
-        if isinstance(file, str):
-            yield file
-            continue
-
-        resolved_file = resolve_file_or_shortcut(ops, user_email, file, field_type)
-        if resolved_file is None:
-            continue
-        # If we found any files, mark this drive as traversed. When a user has access to a drive,
-        # they have access to all the files in the drive. Also not a huge deal if we re-traverse
-        # empty drives.
-        # NOTE: ^^ the above is not actually true due to folder restrictions:
-        # https://support.google.com/a/users/answer/12380484?hl=en
-        # So we may have to change this logic for people who use folder restrictions.
-        update_traversed_ids_func(drive_id)
-        yield resolved_file
-
-
-def get_all_files_in_my_drive_and_shared(
-    ops: GoogleDriveSourceOperations,
-    user_email: str,
-    update_traversed_ids_func: Callable,
-    field_type: DriveFileFieldType,
-    include_shared_with_me: bool,
-    max_num_pages: int,
-    start: SecondsSinceUnixEpoch | None = None,
-    end: SecondsSinceUnixEpoch | None = None,
-    cache_folders: bool = True,
-    page_token: str | None = None,
-) -> Iterator[GoogleDriveFileType | str]:
-    if page_token:
-        logger.info("Using page token: %s", page_token)
-
-    if cache_folders:
-        # If we know we are going to folder crawl later, we can cache the folders here
-        # Get all folders being queried and add them to the traversed set
-        folder_query = f"mimeType = '{DRIVE_FOLDER_TYPE}'"
-        folder_query += " and trashed = false"
-        if not include_shared_with_me:
-            folder_query += " and 'me' in owners"
-        found_folders = False
-        for folder in files_only(
-            ops.list_files(
-                variant=DriveCorpus.USER,
-                user_email=user_email,
-                query=folder_query,
-                fields=get_fields_for_file_type(field_type),
-            )
-        ):
-            update_traversed_ids_func(folder[GoogleFields.ID])
-            found_folders = True
-        if found_folders:
-            update_traversed_ids_func(ops.get_root_folder_id(user_email=user_email))
-
-    # Then get the files
-    file_query = f"mimeType != '{DRIVE_FOLDER_TYPE}'"
-    file_query += " and trashed = false"
-    if not include_shared_with_me:
-        file_query += " and 'me' in owners"
-    file_query += generate_time_range_filter(start, end)
-    yield from _resolve_file_shortcuts(
-        ops,
-        user_email,
-        ops.list_files(
-            variant=DriveCorpus.USER,
-            user_email=user_email,
-            query=file_query,
-            fields=get_fields_for_file_type(field_type),
-            order_by=GoogleFields.MODIFIED_TIME.value,
-            page_token=page_token,
-            max_num_pages=max_num_pages,
-        ),
-        field_type,
-    )
 
 
 def _extract_file_id_from_web_view_link(web_view_link: str) -> str:

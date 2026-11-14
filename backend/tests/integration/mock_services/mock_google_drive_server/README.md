@@ -159,7 +159,7 @@ Useful scenarios:
 --perm-sync
 
 # Override the connector's tunables for the run
---conversion-workers 16 --partitions-per-checkpoint 8
+--conversion-workers 16
 
 # Write cProfile stats of every thread (read them with pstats)
 --profile /tmp/drive.pstats
