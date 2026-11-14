@@ -91,12 +91,15 @@ so the scheduler must keep other pods off the KVM nodes.
 | **Firecracker** | `onyx.app/workload=sandbox`, `onyx.app/kvm=true` | `workload=sandbox:NoSchedule`, `onyx.app/kvm=true:NoSchedule` | The host agent and the preflight check |
 | **Pod sandbox** | `onyx.app/workload=sandbox` | `workload=sandbox:NoSchedule` | Pod sandboxes and the sandbox image prepuller |
 
-<Warning>
-  The cluster autoscaler does not see microVMs: they are not pods. It can remove a KVM node that runs microVMs,
-  and the changes after the last session save are lost.
-  Set the minimum node count of the Firecracker pool to the number of KVM nodes that you need,
-  so that the autoscaler does not remove them.
-</Warning>
+<Note>
+  {/* depends: #17840 (scale-down guard, chart 0.9.48) */} The cluster autoscaler does not see microVMs:
+  they are not pods. The host agent blocks scale-down while microVMs run.
+  It sets `cluster-autoscaler.kubernetes.io/scale-down-disabled=true` on its node,
+  and removes it when the node has had no microVMs for 10 minutes (`craft.hostAgent.scaleDownGuard.grace`).
+  This works with the GKE, AKS, and EKS cluster autoscalers. Karpenter does not read this annotation: with Karpenter,
+  use a fixed-size Firecracker pool.
+  See [Cluster autoscaler](/deployment/kubernetes/craft-firecracker-operations#cluster-autoscaler).
+</Note>
 
 Only the host agent and the preflight check tolerate the `onyx.app/kvm` taint.
 The chart refuses a `sandboxPod.tolerations` value that tolerates it.

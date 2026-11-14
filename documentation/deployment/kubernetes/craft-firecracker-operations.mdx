@@ -123,6 +123,20 @@ The next request for the sandbox starts a new microVM on another node and restor
 
 To put the node back, run `kubectl $K uncordon <node>` and `agent SetDrain '{"drain": false}'`.
 
+## Cluster autoscaler
+
+{/* depends: #17840 (scale-down guard, chart 0.9.48) */} The host agent blocks scale-down while microVMs run.
+It also drains a node that the autoscaler taints with `ToBeDeletedByClusterAutoscaler`.
+To remove a node that runs microVMs, [drain it](#drain-a-node) first.
+The host agent removes the annotation after the grace period, and then the autoscaler can remove the node.
+
+If you set `craft.hostAgent.scaleDownGuard.enabled=false`, remove a left-over annotation by hand:
+
+```bash
+kubectl $K annotate node <node> cluster-autoscaler.kubernetes.io/scale-down-disabled- \
+  onyx.app/craft-fc-scale-down-guard-
+```
+
 ## Rotate the certificates
 
 The host agent reads its certificate files again on the next connection after they change, so it needs no restart.
