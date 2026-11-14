@@ -15882,6 +15882,12 @@
       "resetDefaults": "全部重置为默认值",
       "resetAll": "全部重置为工作区默认值",
       "workspaceDisabledTooltip": "管理员已在工作区中禁用此操作。"
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, other {# 个技能未加载}}",
+      "description": "此会话无法使用 {names}。你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。关闭不需要的技能以腾出空间。",
+      "manage": "管理技能",
+      "dismiss": "关闭"
     }
   },
   "knowledge": {
@@ -17755,6 +17761,15 @@
       },
       "card": "群组：{groups}",
       "entry": "{name}：{policy}"
+    },
+    "limit": {
+      "refused": "此更改会使你超出 {maxSize} 或 {maxFiles, number} 个文件的技能上限。关闭不使用的技能，然后重试。",
+      "banner": {
+        "title": "{count, plural, other {# 位用户超出技能上限}}",
+        "description": "群组设置和共享可能使用户的技能超过 {maxSize} 或 {maxFiles, number} 个文件。此时其部分技能可能无法加载。请更改群组设置，或请用户关闭技能。",
+        "user": "{email}：{size}，{files, plural, other {# 个文件}}，{notLoaded, plural, other {# 个技能未加载}}",
+        "more": "另有 {count, number} 人。"
+      }
     }
   },
   "opensearchHealth": {

@@ -132,6 +132,7 @@ export function useBuildSessionController({
           return;
         updateSessionData(sessionId, {
           skillsStale: session.skills_stale,
+          skillOmissions: session.skill_omissions,
         });
       } catch {
         // Keep the usable cached session on transient refresh failures.

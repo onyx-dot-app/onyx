@@ -1,3 +1,4 @@
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import {
   act,
   deferred,
@@ -904,6 +905,29 @@ describe("SkillsPage preference toggles", () => {
       expect(firstSwitch).toBeEnabled();
     });
     expect(mockToastError).toHaveBeenCalledWith("Preference update failed");
+  });
+
+  it("shows a user the limit when the skill limit refuses a toggle", async () => {
+    const user = setupUser();
+    const refused = new FetchError("Refused", 413, {
+      error_code: "SKILL_LIMIT_EXCEEDED",
+      detail: "Refused",
+      skill_limit: {
+        usage: { bytes: 520 * 1024 * 1024, files: 140 },
+        max_bytes: 500 * 1024 * 1024,
+        max_files: 5000,
+      },
+    } as ErrorResponseBody);
+    mockSetSkillEnabled.mockRejectedValueOnce(refused);
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(
+        "This change puts you past the skill limit of 500 MB or 5,000 files. Turn off skills you do not use, then try again."
+      )
+    );
   });
 
   it("keeps a successful update when background revalidation fails", async () => {

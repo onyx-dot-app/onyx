@@ -71,6 +71,7 @@ import { useUser } from "@/providers/UserProvider";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
+import { useSkillLimitCopy } from "@/lib/skills/hooks";
 
 interface SkillEditorPageProps {
   skillId?: string;
@@ -86,6 +87,7 @@ export default function SkillEditorPage({
   externalAppName,
 }: SkillEditorPageProps) {
   const t = useTranslations("skills");
+  const { describeError } = useSkillLimitCopy();
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
@@ -342,9 +344,7 @@ export default function SkillEditorPage({
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(
-        err instanceof Error ? err.message : t("editor.toasts.saveFailed")
-      );
+      toast.error(describeError(err, t("editor.toasts.saveFailed")));
     } finally {
       setIsSaving(false);
     }

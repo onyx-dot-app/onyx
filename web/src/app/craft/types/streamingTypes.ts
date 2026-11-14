@@ -1,3 +1,5 @@
+import type { SkillLimitNotice } from "@/lib/skills/limits";
+
 // =============================================================================
 // Sharing Types
 // =============================================================================
@@ -92,6 +94,8 @@ export interface ApiSandboxResponse {
 
 export interface ApiSandboxStatusResponse {
   status: ApiSandboxStatus | null;
+  skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiSessionResponse {
@@ -109,10 +113,12 @@ export interface ApiSessionResponse {
   agent_provider: string | null;
   agent_model: string | null;
   skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiSessionSkillsState {
   skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

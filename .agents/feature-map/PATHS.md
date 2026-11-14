@@ -301,7 +301,7 @@ covers new files that match it.
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/lib/externalApps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
-| `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx` | skills |
+| `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
 | `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 

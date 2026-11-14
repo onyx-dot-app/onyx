@@ -340,6 +340,7 @@ Onyx refuses a change by a user who is within both limits when the change puts t
 | A user connects an App, or joins a group | Always allowed. |
 
 A change that is always allowed can put users past the limit. Their sessions then leave out the Skills that do not fit.
+The admin banner lists those users and how many of their Skills did not load. The session notice names the Skills.
 See [Skills in a session](#skills-in-a-session).
 
 The API returns HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `usage`,
@@ -366,10 +367,16 @@ a Skill whose counted size fits still does not load. It shows in the same list.
 
 A running session gets changed Skills at once, not at its next message. A turn that is running can read the new files.
 
-To see which users are past 500 MB or 5,000 files, call `GET /api/skills/users-over-limit`.
-You need the organization-wide `manage:plugins` permission. The response lists each user with their size, file count,
-and `skills_not_loaded`, the number of their Skills that the last push to their sandbox left out.
-It is 0 when the user has no sandbox. A settings change shows in this number after the next push.
+When the run-time limit leaves Skills out, the session shows a notice above the message box.
+It names each Skill that the limit left out,
+and **Manage skills** opens **Skills** so that the user can turn off Skills they do not need.
+A Skill that does not load for another reason, such as a bundle that cannot be read, does not show in this notice.
+
+When users are past 500 MB or 5,000 files, the admin **Skills** page shows a banner.
+It lists each user with their Skill size, file count,
+and the number of their Skills that the last push to their sandbox left out.
+That number is 0 when the user has no sandbox. A settings change shows in it after the next push.
+The same list is at `GET /api/skills/users-over-limit`. You need the organization-wide `manage:plugins` permission.
 
 ## Maintain a Skill
 

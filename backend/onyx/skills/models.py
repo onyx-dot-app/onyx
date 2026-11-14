@@ -209,6 +209,14 @@ class SkillOmission(BaseModel):
     reason: Literal["bytes", "files"]
 
 
+class SkillLimitNotice(BaseModel):
+    """The plugins the run-time limit left out, and that limit."""
+
+    skills: list[SkillOmission]
+    max_bytes: int
+    max_files: int
+
+
 class SandboxSkillsState(BaseModel):
     """The skill content a sandbox got: its hash and the plugins the run-time
     skill limit left out of it."""

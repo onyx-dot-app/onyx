@@ -15882,6 +15882,12 @@
       "resetDefaults": "Tout rétablir par défaut",
       "resetAll": "Tout réinitialiser aux valeurs de l’espace de travail",
       "workspaceDisabledTooltip": "Un administrateur a désactivé cette action pour l’espace de travail."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill n’a pas été chargé} other {# skills n’ont pas été chargés}}",
+      "description": "Cette session ne peut pas utiliser {names}. Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
+      "manage": "Gérer les skills",
+      "dismiss": "Ignorer"
     }
   },
   "knowledge": {
@@ -17755,6 +17761,15 @@
       },
       "card": "Groupes : {groups}",
       "entry": "{name} : {policy}"
+    },
+    "limit": {
+      "refused": "Cette modification vous fait dépasser la limite de skills de {maxSize} ou {maxFiles, number} fichiers. Désactivez les skills que vous n’utilisez pas, puis réessayez.",
+      "banner": {
+        "title": "{count, plural, one {# utilisateur dépasse la limite de skills} other {# utilisateurs dépassent la limite de skills}}",
+        "description": "Les paramètres de groupe et les partages peuvent faire dépasser à un utilisateur {maxSize} ou {maxFiles, number} fichiers de compétences. Certaines de ses compétences risquent alors de ne pas se charger. Modifiez les paramètres de groupe ou demandez aux utilisateurs de désactiver des compétences.",
+        "user": "{email} : {size}, {files, plural, one {# fichier} other {# fichiers}}, {notLoaded, plural, one {# skill non chargé} other {# skills non chargés}}",
+        "more": "Et {count, number} de plus."
+      }
     }
   },
   "opensearchHealth": {

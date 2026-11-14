@@ -15882,6 +15882,12 @@
       "resetDefaults": "Reset all to defaults",
       "resetAll": "Reset all to workspace defaults",
       "workspaceDisabledTooltip": "An admin disabled this action for the workspace."
+    },
+    "skillRuntimeNotice": {
+      "title": "{count, plural, one {# skill did not load} other {# skills did not load}}",
+      "description": "This session cannot use {names}. Your skills must fit in {maxSize} and {maxFiles, number} files. Turn off skills you do not need to make room.",
+      "manage": "Manage skills",
+      "dismiss": "Dismiss"
     }
   },
   "knowledge": {
@@ -17755,6 +17761,15 @@
       },
       "card": "Groups: {groups}",
       "entry": "{name}: {policy}"
+    },
+    "limit": {
+      "refused": "This change puts you past the skill limit of {maxSize} or {maxFiles, number} files. Turn off skills you do not use, then try again.",
+      "banner": {
+        "title": "{count, plural, one {# user is past the skill limit} other {# users are past the skill limit}}",
+        "description": "Group settings and shares can put a user past {maxSize} or {maxFiles, number} files of skills. Some of their skills may then not load. Change group settings, or ask users to turn off skills.",
+        "user": "{email}: {size}, {files, plural, one {# file} other {# files}}, {notLoaded, plural, one {# skill did not load} other {# skills did not load}}",
+        "more": "And {count, number} more."
+      }
     }
   },
   "opensearchHealth": {
