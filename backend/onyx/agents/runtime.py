@@ -9,7 +9,7 @@ from contextvars import copy_context
 from datetime import datetime, timezone
 from functools import partial
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Literal, NamedTuple, Protocol, TypedDict, cast
+from typing import TYPE_CHECKING, Literal, Protocol, TypedDict, cast
 from uuid import uuid4
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
@@ -511,28 +511,6 @@ class Agent:
         )
 
 
-class _InputWait(NamedTuple):
-    """An input request that a call of the run waits for, with the place of
-    the call that shows it; `nested_call` is the call that the tool made, or
-    None when `tool_call` itself waits. The fields of the input events."""
-
-    message_id: str
-    step_index: int
-    tool_call: ToolCall
-    request: PendingToolInput
-    nested_call: ToolCall | None
-
-
-def _nested_wait(nested: NestedInputRequest) -> _InputWait:
-    return _InputWait(
-        nested.message_id,
-        nested.step_index,
-        nested.tool_call,
-        nested.request,
-        nested.nested_call,
-    )
-
-
 class Run:
     """Own lifecycle, controls, and accepted output.
 
@@ -840,7 +818,7 @@ class Run:
     ) -> None:
         with self.execution_lock:
             self.cancellation_signal.check()
-            shown: list[_InputWait] = []
+            shown: list[NestedInputRequest] = []
             if isinstance(pending, PendingToolInput):
                 self._check_new_request_id(pending.request_id)
                 shown = self._input_waits(call, pending)
@@ -852,13 +830,13 @@ class Run:
                     # A request that the gate opened is already shown.
                     if self._open_nested.pop(nested.request.request_id, None) is None:
                         self._check_new_request_id(nested.request.request_id)
-                        shown.append(_nested_wait(nested))
+                        shown.append(nested)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
             self._state.revision += 1
             if self.is_accepting and self.event_delivery:
                 for wait in shown:
                     self.event_delivery.publish(
-                        InputRequiredEvent(**self.event_context, **wait._asdict())
+                        InputRequiredEvent(**self.event_context, **dict(wait))
                     )
 
     def _check_new_request_id(self, request_id: str) -> None:
@@ -884,9 +862,7 @@ class Run:
                 deep=True
             )
             self.publish_event(
-                InputRequiredEvent(
-                    **self.event_context, **_nested_wait(request)._asdict()
-                )
+                InputRequiredEvent(**self.event_context, **dict(request))
             )
 
     def withdraw_nested_input(self, request: NestedInputRequest) -> None:
@@ -909,25 +885,31 @@ class Run:
                     "Run %s could not withdraw approval request %s", self.id, request_id
                 )
         self.publish_event(
-            InputEndedEvent(
-                **self.event_context, **_nested_wait(request)._asdict(), answer=answer
-            )
+            InputEndedEvent(**self.event_context, **dict(request), answer=answer)
         )
 
     def _input_waits(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
-    ) -> list[_InputWait]:
+    ) -> list[NestedInputRequest]:
         """The input requests that `call` of the current step waits for. Call
         under the execution lock."""
         if isinstance(pending, NestedInputWait):
-            return [_nested_wait(nested) for nested in pending.requests]
+            return list(pending.requests)
         if not isinstance(pending, PendingToolInput):
             return []
         step_index = self._progress.step_index
         message_id = self._state.steps[step_index].message.id
         if message_id is None:
             raise RuntimeError("Tool execution requires a message ID")
-        return [_InputWait(message_id, step_index, call, pending, None)]
+        return [
+            NestedInputRequest(
+                message_id=message_id,
+                step_index=step_index,
+                tool_call=call,
+                nested_call=None,
+                request=pending,
+            )
+        ]
 
     def _withdraw_pending_inputs(self) -> None:
         """Report the requests that end with the run: saved ones and those that
@@ -935,7 +917,7 @@ class Run:
         user's rejection when the user stopped it. A direct call that an answer
         denies keeps the denial as its result, so later runs see it. Call under
         the execution lock."""
-        ended: list[_InputWait] = []
+        ended: list[NestedInputRequest] = []
         progress = self._state.progress
         answers = progress.human_tool_answers if progress is not None else {}
         if progress is not None and progress.pending_tool_calls:
@@ -967,14 +949,14 @@ class Run:
                     if result.is_error
                     else ExecutionStatus.COMPLETE
                 )
-        ended.extend(_nested_wait(nested) for nested in self._open_nested.values())
+        ended.extend(self._open_nested.values())
         self._open_nested.clear()
         if self.event_delivery:
             for wait in ended:
                 self.event_delivery.publish(
                     InputEndedEvent(
                         **self.event_context,
-                        **wait._asdict(),
+                        **dict(wait),
                         answer=answers.get(wait.request.request_id),
                     )
                 )
@@ -989,7 +971,7 @@ class Run:
                 self.publish_event(
                     InputEndedEvent(
                         **self.event_context,
-                        **wait._asdict(),
+                        **dict(wait),
                         answer=progress.human_tool_answers.get(wait.request.request_id),
                     )
                 )

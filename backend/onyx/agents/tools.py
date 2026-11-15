@@ -97,16 +97,18 @@ class ChildRunWait(BaseModel):
 
 
 class NestedInputRequest(BaseModel):
-    """A request of a call that a tool makes for the model, such as a program's.
+    """An input request that a call of the run waits for, with the place of
+    the call that shows it.
 
-    `tool_call` is the call of the run that shows the request: the call whose
-    tool made `nested_call`, or an earlier call of the same tool.
+    `nested_call` is the call that a tool makes for the model, such as a
+    program's; `tool_call` is then the call whose tool made it, or an earlier
+    call of the same tool. It is None when `tool_call` itself waits.
     """
 
     message_id: str
     step_index: int
     tool_call: ToolCall
-    nested_call: ToolCall
+    nested_call: ToolCall | None
     request: PendingToolInput
 
 
