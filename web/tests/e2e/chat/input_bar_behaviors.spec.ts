@@ -813,12 +813,12 @@ test.describe("Skill Mentions", () => {
       await chatPage.inputBar.typeText(`use @${name.slice(0, -1)}`);
       await chatPage.inputBar.pickSkill(name, "Enter");
       // A word typed against the tile, without the space the pick added.
-      await chatPage.page.keyboard.press("Backspace");
-      await chatPage.page.keyboard.type("now)");
+      await chatPage.inputBar.press("Backspace");
+      await chatPage.inputBar.typeText("now)");
       // `(` typed against the tile's other side.
       await chatPage.inputBar.clickAtTextOffset("use".length);
-      await chatPage.page.keyboard.press("ArrowRight");
-      await chatPage.page.keyboard.type("(");
+      await chatPage.inputBar.press("ArrowRight");
+      await chatPage.inputBar.typeText("(");
       await expect(chatPage.inputBar.textbox).toHaveText(`use (@${name}now)`);
       await expect(chatPage.inputBar.tile).toHaveCount(1);
 
@@ -849,7 +849,7 @@ test.describe("Skill Mentions", () => {
       // The caret sits after the skill name, but the word is still `<name>xyz`.
       await chatPage.inputBar.clickAtTextOffset(`@${name}`.length);
       await expect(chatPage.inputBar.skillPicker).toBeHidden();
-      await chatPage.page.keyboard.press("Backspace");
+      await chatPage.inputBar.press("Backspace");
       await expect(chatPage.inputBar.skillPicker).toBeHidden();
 
       // Typing completes the name with the caret inside the word, and a pick
@@ -858,7 +858,7 @@ test.describe("Skill Mentions", () => {
       await chatPage.inputBar.typeText(`@${name.charAt(0)}${name.slice(2)}`);
       await expect(chatPage.inputBar.skillPicker).toBeHidden();
       await chatPage.inputBar.clickAtTextOffset(2);
-      await chatPage.page.keyboard.type(name.charAt(1));
+      await chatPage.inputBar.typeText(name.charAt(1));
       await chatPage.inputBar.pickSkill(name, "Enter");
       await expect(chatPage.inputBar.tile).toHaveCount(1);
       await expect(chatPage.inputBar.textbox).toHaveText(`@${name}`);
@@ -882,7 +882,7 @@ test.describe("Skill Mentions", () => {
       await expect(chatPage.inputBar.skillPicker).toBeHidden();
       // Unlike Esc, the click does not hide the word: deleting its last
       // character is input that opens the picker again.
-      await chatPage.page.keyboard.press("Delete");
+      await chatPage.inputBar.press("Delete");
       await expect(chatPage.inputBar.skillPicker).toBeVisible();
       await expect(chatPage.inputBar.textbox).toHaveText(typed.slice(0, -1));
     } finally {

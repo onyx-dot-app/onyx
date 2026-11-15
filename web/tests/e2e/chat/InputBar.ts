@@ -92,6 +92,11 @@ export class InputBar {
     await this.textbox.focus();
   }
 
+  /** Presses a key in the input, where the caret is. */
+  async press(key: string): Promise<void> {
+    await this.textbox.press(key);
+  }
+
   /** Clicks the text so the caret lands before character `offset`. */
   async clickAtTextOffset(offset: number): Promise<void> {
     const point = await this.textbox.evaluate((el, at) => {
