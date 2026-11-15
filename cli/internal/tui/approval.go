@@ -326,22 +326,29 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	}
 	m, load := m.noteApprovalsVersion(msg.status)
 	var follow tea.Cmd
-	latest := msg.status.LatestResponseID
-	switch {
-	case m.isStreaming:
-	case msg.status.CurrentStream != nil:
+	if msg.status.CurrentStream != nil && !m.isStreaming {
 		m, follow = m.followContinuation(*msg.status.CurrentStream)
-	case latest != nil && *latest != m.reloadedResponseID && *latest != m.reloadingResponseID &&
-		!slices.ContainsFunc(m.viewport.entries, func(entry chatEntry) bool { return entry.responseID == *latest }):
-		// A response that ended between reads shows in the saved session.
-		m.reloadingResponseID = *latest
-		m, follow = cmdReload(m, sessionReload{sessionID: msg.sessionID, responseID: *latest})
+	} else {
+		m, follow = m.reloadUnseenResponse(msg.sessionID, msg.status)
 	}
 	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
 	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable {
 		return m, tea.Batch(load, follow)
 	}
 	return m, tea.Batch(load, follow, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
+}
+
+// reloadUnseenResponse loads the saved session when a status read, while no
+// stream runs, names a response that the chat does not show, such as an
+// agent's follow-up reply that ended between reads.
+func (m Model) reloadUnseenResponse(sessionID string, status models.ChatSessionStatus) (Model, tea.Cmd) {
+	latest := status.LatestResponseID
+	if m.isStreaming || latest == nil || *latest == m.reloadedResponseID || *latest == m.reloadingResponseID ||
+		slices.ContainsFunc(m.viewport.entries, func(entry chatEntry) bool { return entry.responseID == *latest }) {
+		return m, nil
+	}
+	m.reloadingResponseID = *latest
+	return cmdReload(m, sessionReload{sessionID: sessionID, responseID: *latest})
 }
 
 // resolveApproval replaces a card with a one-line record of how it ended.

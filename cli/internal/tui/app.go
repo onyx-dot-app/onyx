@@ -266,15 +266,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reloading = true
 			return cmdResume(m, msg.sessionID, m.streamCh)
 		}
-		var finish, poll tea.Cmd
+		var finish, poll, reload tea.Cmd
 		m, finish = m.finishStream(nil)
+		if msg.err == nil {
+			m, reload = m.reloadUnseenResponse(msg.sessionID, msg.status)
+		}
 		if msg.err == nil && (msg.status.HasActiveSubagents || msg.status.HasStartableInput || len(m.approvals) > 0) {
 			// Background agents' requests, decisions that other clients send,
 			// and turns that the server starts show only in status reads.
 			m.approvalsPoll++
 			poll = pollApprovals(m.client, msg.sessionID, m.approvalsPoll, api.StatusPollInterval)
 		}
-		return m, tea.Batch(load, finish, poll)
+		return m, tea.Batch(load, finish, poll, reload)
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
@@ -954,8 +957,8 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		if m.reloadingResponseID == reload.responseID {
 			m.reloadingResponseID = 0
 		}
-		if m.chatSessionID == nil || *m.chatSessionID != reload.sessionID || m.isStreaming {
-			// The user left the chat, or a stream now shows it.
+		if m.chatSessionID == nil || *m.chatSessionID != reload.sessionID || m.isStreaming || reload.streams != m.streams {
+			// The user left the chat, or a newer stream shows it.
 			return m, nil
 		}
 		if msg.Err != nil {

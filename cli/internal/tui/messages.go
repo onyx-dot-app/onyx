@@ -37,6 +37,8 @@ type sessionReload struct {
 	sessionID string
 	// responseID is the unseen response that the load shows, or 0.
 	responseID int
+	// streams is the model's stream count when the load started.
+	streams int
 }
 
 // FileUploadedMsg carries an uploaded file descriptor.
