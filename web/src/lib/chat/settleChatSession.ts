@@ -219,10 +219,16 @@ export function refreshChatSession(
     const session = useChatSessionStore.getState().sessions.get(sessionId);
     if (!session || session.incognito) return;
     const controller = session.abortController;
-    // A send that starts during the fetch owns the session.
-    const ownsRefresh = () =>
-      useChatSessionStore.getState().sessions.get(sessionId)
-        ?.abortController === controller;
+    const reader = session.readerFinished;
+    // A send or a reader, such as a continuation, that starts during the
+    // fetch owns the session.
+    const ownsRefresh = () => {
+      const current = useChatSessionStore.getState().sessions.get(sessionId);
+      return (
+        current?.abortController === controller &&
+        current.readerFinished === reader
+      );
+    };
     try {
       const saved = savedSession ?? (await fetchSettledChatSession(sessionId));
       const store = useChatSessionStore.getState();
@@ -437,11 +443,13 @@ export async function settleChatSession({
         const messageTree = new Map(latest.messageTree);
         let closed = false;
         for (const response of candidates) {
+          // The saved copy decides: a replay that failed can have emptied
+          // the local answer.
           const copy = saved.get(response.nodeId);
           if (
             copy &&
             (copy.responseStatus === "suspended" ||
-              readToolApprovals(response.packets).entries.length > 0)
+              readToolApprovals(copy.packets).entries.length > 0)
           ) {
             messageTree.set(response.nodeId, copy);
             closed = true;
@@ -640,7 +648,10 @@ export async function followChatSession({
   // Only a 404 means the stream has no buffer; a new stream can follow it.
   let streamUnavailable = false;
   let streamUnread = false;
-  let batches = 0;
+  // Unread until a batch with content lands; a stream can send its first
+  // cursor before its buffered packets.
+  let contentSeen = false;
+  let contentRead = false;
   try {
     for await (const rawPacket of resumeStream(
       sessionId,
@@ -657,7 +668,7 @@ export async function followChatSession({
         if (rawPacket.stream_id !== streamId) {
           throw new Error("Replay cursor belongs to another response");
         }
-        batches += 1;
+        if (contentSeen) contentRead = true;
         if (restoring) {
           responses.forEach((response, index) => {
             response.restoredPacketCount = accumulated[index]!.length;
@@ -714,6 +725,7 @@ export async function followChatSession({
       ) {
         continue;
       }
+      contentSeen = true;
       const modelIndex = packet.placement.model_index;
       if (!multiModel) accumulated[0]!.push(packet);
       // The overall stop has no model and ends every answer.
@@ -724,7 +736,7 @@ export async function followChatSession({
   } catch (error) {
     if (error instanceof FetchError && error.status === 404)
       streamUnavailable = true;
-    streamUnread = batches === 0;
+    streamUnread = !contentRead;
     console.error("Failed to resume in-flight run", { streamId, error });
   } finally {
     abortController.abort();

@@ -842,6 +842,138 @@ describe("with stubbed server checks", () => {
     );
   });
 
+  test("incognito reads the saved answer of a continuation that dropped after only its first cursor", async () => {
+    const asked = approvalRequest("approval");
+    const waited: Packet = {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+    };
+    const finalText: Packet = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta", content: "Created the issue." },
+    };
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      incognito: true,
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [
+          2,
+          {
+            ...message(2, "assistant", ""),
+            messageId: 81,
+            parentNodeId: 1,
+            packets: [asked, waited],
+          },
+        ],
+      ]),
+    });
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield { stream_id: 995, next_cursor: 0, replay_complete: false };
+      throw new TypeError("network error");
+    });
+    // The continuation ended on the server.
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(async () =>
+        Response.json({ is_processing: false, current_stream: null })
+      );
+    jest.mocked(processRawChatHistory).mockReturnValue(
+      new Map([
+        [
+          9,
+          {
+            ...message(9, "assistant", "Created the issue."),
+            messageId: 81,
+            responseStatus: "complete" as const,
+            packets: [asked, finalText],
+          },
+        ],
+      ])
+    );
+
+    followChatStream("session", stream(995, [81]), errorMessage);
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")
+      ).toMatchObject({ chatState: "input" })
+    );
+    await waitFor(() =>
+      expect(
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")!
+          .messageTree.get(2)?.packets
+      ).toEqual([asked, finalText])
+    );
+  });
+
+  test("a refresh in flight when a continuation takes over does not apply", async () => {
+    const asked = approvalRequest("approval");
+    const continued: Packet = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta", content: "Continued" },
+    };
+    const answer: Message = {
+      ...message(2, "assistant", ""),
+      messageId: 82,
+      parentNodeId: 1,
+      packets: [asked],
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [2, answer],
+      ]),
+    });
+    const page = Promise.withResolvers<BackendChatSession>();
+    jest.mocked(fetchSettledChatSession).mockReturnValue(page.promise);
+    jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield continued;
+      yield { stream_id: 996, next_cursor: 1, replay_complete: true };
+      await new Promise<never>(() => {});
+    });
+
+    const refresh = refreshChatSession("session", errorMessage);
+    followChatStream("session", stream(996, [82]), errorMessage);
+    await waitFor(() =>
+      expect(
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")!
+          .messageTree.get(2)?.packets
+      ).toEqual([continued])
+    );
+    // The idle snapshot still shows the answer waiting.
+    jest.mocked(processRawChatHistory).mockReturnValue(new Map([[2, answer]]));
+    page.resolve(savedSession([], null));
+    await refresh;
+
+    const session = useChatSessionStore.getState().sessions.get("session")!;
+    expect(session.chatState).toBe("streaming");
+    expect(session.messageTree.get(2)?.packets).toEqual([continued]);
+  });
+
   test("an answer that a newer stream took over stays with it after that stream ends", () => {
     expect(claimStreamReader(stream(992, [79]))).toBe(true);
     expect(claimStreamReader(stream(993, [79]))).toBe(true);

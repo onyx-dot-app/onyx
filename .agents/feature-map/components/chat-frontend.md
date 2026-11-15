@@ -427,7 +427,8 @@ status into the SWR status cache, so `lib/chat/hooks.ts:useChatSessionQueue`
 sees every status read; a changed `latest_response_id` also reloads the
 pending list.
 Overlapping calls for one session share one in-flight refresh. It drops its
-result if a new send replaced the session's `AbortController`. Refresh and
+result if a new send replaced the session's `AbortController`, or a reader
+such as a continuation took the session (`readerFinished`). Refresh and
 settlement merge saved pages through one function that keeps local failed
 turns and remaps the selected response.
 After a resume, a Stop, an error or a failed save it also reloads saved
@@ -440,8 +441,8 @@ never reloads the whole history of an incognito session, in either record
 mode. On a reload or recovery, each answer of the latest turn
 (`getLatestTurn`) that lost its stream, and each answer of a named stream
 that this browser could not read (it ended first, or its resume failed
-before its first batch), takes its saved copy if the
-server parked it or the answer asked for approval (`savedAnswers`; only a
+before its first batch with content), takes its saved copy if the
+server parked it or the saved copy asked for approval (`savedAnswers`; only a
 chat that saves content parks an answer or asks).
 Each other lost answer gets a stop packet if it has none, and loses its
 `streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
