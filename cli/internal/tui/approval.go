@@ -226,7 +226,24 @@ func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd
 		}
 		return m, nil
 	}
-	return m.showSavedApprovals(msg.detail), nil
+	// A root request that the load resolves was decided elsewhere; its
+	// response continues on a stream that the status names.
+	var waiting []approvalCard
+	for _, card := range m.approvals {
+		if card.request.AgentName == "" {
+			waiting = append(waiting, card)
+		}
+	}
+	m = m.showSavedApprovals(msg.detail)
+	if m.isStreaming {
+		return m, nil
+	}
+	for _, card := range waiting {
+		if m.approvalIndex(card.request.ApprovalID) < 0 {
+			return m.followResponse(*m.chatSessionID, card.responseID)
+		}
+	}
+	return m, nil
 }
 
 // continuationMsg carries the stream that continues a decided response, or
@@ -287,7 +304,8 @@ func pollApprovals(client api.ClientAPI, sessionID string, poll int, delay time.
 }
 
 // handleApprovalsPoll loads the session cards when the approvals version
-// changes, and reads again while background agents run or wait to resume.
+// changes, and reads again while background agents run or wait to resume, or
+// while a card waits.
 func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	if msg.poll != m.approvalsPoll || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
 		return m, nil
@@ -299,7 +317,7 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m, load := m.noteApprovalsVersion(msg.status)
-	if !msg.status.HasActiveSubagents {
+	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 {
 		return m, load
 	}
 	return m, tea.Batch(load, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
@@ -368,6 +386,12 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 		// The stream that this client reads writes the response.
 		return m, nil
 	}
+	return m.followResponse(msg.sessionID, msg.responseID)
+}
+
+// followResponse reads the status until a stream continues the decided
+// response, or until the idle session shows how it went on.
+func (m Model) followResponse(sessionID string, responseID int) (Model, tea.Cmd) {
 	if m.followCancel != nil {
 		m.followCancel()
 	}
@@ -375,7 +399,7 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 	m.followCancel = cancel
 	m.follow++
 	follow := m.follow
-	client, sessionID, responseID, streamID := m.client, msg.sessionID, msg.responseID, 0
+	client, streamID := m.client, 0
 	if m.isStreaming && m.streamID != nil {
 		streamID = *m.streamID
 	}

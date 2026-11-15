@@ -918,8 +918,10 @@ func TestApprovalsVersionChangeLoadsTheSessionCards(t *testing.T) {
 	m.streamCh, m.isStreaming = ch, true
 	updated, _ = m.Update(StreamDoneMsg{Channel: ch})
 	updated, cmd = updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: "v2"}})
-	if len(messages(t, cmd)) != 0 {
-		t.Fatal("an unchanged version loaded the session")
+	for _, msg := range messages(t, cmd) {
+		if _, loaded := msg.(approvalsLoadedMsg); loaded {
+			t.Fatal("an unchanged version loaded the session")
+		}
 	}
 	m = updated.(Model)
 	m.streamCh, m.isStreaming = ch, true
@@ -1124,15 +1126,20 @@ func agentAsks(id string) map[string]any {
 	return map[string]any{"type": "tool_approval_request", "approval_id": id, "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
 }
 
-func TestAgentDecisionReadsTheStatusOnceWhenNoAgentWaits(t *testing.T) {
+func TestAgentDecisionReadsTheStatusUntilItsCardResolves(t *testing.T) {
+	resolved := map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "approved"}
 	client := &pollingClient{
 		resumingClient: &resumingClient{},
-		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v1"}},
-		sessions:       map[string]*models.ChatSessionDetailResponse{"v1": agentSession(t, "v1", agentAsks("b1"))},
+		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v1"}, {ApprovalsVersion: "v2"}},
+		sessions: map[string]*models.ChatSessionDetailResponse{
+			"v1": agentSession(t, "v1", agentAsks("b1")),
+			"v2": agentSession(t, "v2", agentAsks("b1"), resolved),
+		},
 	}
-	watchAgentDecision(t, client)
-	if client.reads != 1 {
-		t.Fatalf("reads = %d, want 1", client.reads)
+	m := watchAgentDecision(t, client)
+	// The read after the load that resolves the card is the last one.
+	if client.reads != 3 || len(m.approvals) != 0 {
+		t.Fatalf("reads = %d, want reads until the card resolves; cards = %d", client.reads, len(m.approvals))
 	}
 }
 
@@ -1146,21 +1153,90 @@ func TestAgentDecisionPollsWhileTheAgentRuns(t *testing.T) {
 			// The resumed agent asks again, then waits for that decision.
 			{ApprovalsVersion: "v3", HasActiveSubagents: true},
 			{ApprovalsVersion: "v3"},
+			// Another client rejects the later request.
+			{ApprovalsVersion: "v4"},
 		},
 		sessions: map[string]*models.ChatSessionDetailResponse{
 			"v1": agentSession(t, "v1", agentAsks("b1")),
 			"v2": agentSession(t, "v2", agentAsks("b1"), resolved),
 			"v3": agentSession(t, "v3", agentAsks("b1"), resolved, agentAsks("b2")),
+			"v4": agentSession(t, "v4", agentAsks("b1"), resolved, agentAsks("b2"),
+				map[string]any{"type": "tool_approval_resolved", "approval_id": "b2", "outcome": "rejected"}),
 		},
 	}
 	m := watchAgentDecision(t, client)
-	if client.reads != 3 {
-		t.Fatalf("reads = %d, want reads until no agent is active", client.reads)
+	if client.reads != 5 {
+		t.Fatalf("reads = %d, want reads while an agent is active or a card waits", client.reads)
 	}
 	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" {
 		t.Fatalf("b1 = %q, want the server's outcome", got)
 	}
-	if !strings.Contains(approvalEntry(t, m, "b2"), "triage wants to run Create issue") || len(m.approvals) != 1 || m.approvalsVersion != "v3" {
-		t.Fatal("the resumed agent's later request does not show")
+	if got := approvalEntry(t, m, "b2"); got != "● Not approved: Create issue" || len(m.approvals) != 0 || m.approvalsVersion != "v4" {
+		t.Fatalf("b2 = %q, want the other client's outcome", got)
+	}
+}
+
+// rootDecidedElsewhere answers status reads as if another client decided
+// a1 and a2 of response 2, which continues on stream 3.
+func rootDecidedElsewhere(t *testing.T) *pollingClient {
+	t.Helper()
+	decided := waitingSession(t)
+	decided.Packets[0] = append(decided.Packets[0][:2],
+		savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "approved"}),
+		savedPacket(t, map[string]any{"type": "tool_approval_request", "approval_id": "a2", "tool_name": "mcp__3__linear__create_issue", "display_name": "Create issue"}),
+		savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a2", "outcome": "approved"}))
+	decided.ApprovalsVersion = "v2"
+	return &pollingClient{
+		resumingClient: &resumingClient{running: make(chan models.StreamEvent, 8)},
+		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v2", IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}}},
+		sessions:       map[string]*models.ChatSessionDetailResponse{"v2": decided},
+	}
+}
+
+// runUntilStreaming feeds cmd's messages, and the commands they start, until
+// the model streams.
+func runUntilStreaming(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	pending := []tea.Cmd{cmd}
+	for len(pending) > 0 && !m.isStreaming {
+		next := pending[0]
+		pending = pending[1:]
+		for _, msg := range messages(t, next) {
+			updated, follow := m.Update(msg)
+			m = updated.(Model)
+			if follow != nil {
+				pending = append(pending, follow)
+			}
+		}
+	}
+	return m
+}
+
+func TestRootRequestsDecidedElsewhereFollowTheContinuation(t *testing.T) {
+	client := rootDecidedElsewhere(t)
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, approvalRequest("a1"))
+	m = receive(t, m, ch, approvalRequest("a2"))
+	reason := models.StopReasonAwaitingApproval
+	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})
+	m = runUntilStreaming(t, updated.(Model), cmd)
+	if len(m.approvals) != 0 || len(client.requests) != 1 || *client.requests[0].streamID != 3 || m.streamCh != client.running {
+		t.Fatalf("cards = %d, requests = %+v, want stream 3 followed", len(m.approvals), client.requests)
+	}
+}
+
+func TestResumedRootRequestDecidedElsewhereFollowsTheContinuation(t *testing.T) {
+	client := rootDecidedElsewhere(t)
+	m := NewModel(config.DefaultConfig(), client)
+	updated, cmd := m.Update(SessionResumedMsg{Detail: waitingSession(t)})
+	m = runUntilStreaming(t, updated.(Model), cmd)
+	if len(m.approvals) != 0 || len(client.requests) != 1 || *client.requests[0].streamID != 3 || m.streamCh != client.running {
+		t.Fatalf("cards = %d, requests = %+v, want stream 3 followed", len(m.approvals), client.requests)
 	}
 }
