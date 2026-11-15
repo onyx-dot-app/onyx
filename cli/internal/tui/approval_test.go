@@ -20,7 +20,9 @@ type decidingClient struct {
 	decisions []models.ApprovalDecision
 	// The decision the server saves; by default, the one sent.
 	result *models.ApprovalDecisionResult
-	err    error
+	// The continuation that the default result names.
+	continuation *models.ChatStream
+	err          error
 }
 
 func (c *decidingClient) DecideApproval(_ context.Context, approvalID string, decision models.ApprovalDecision) (models.ApprovalDecisionResult, error) {
@@ -28,7 +30,7 @@ func (c *decidingClient) DecideApproval(_ context.Context, approvalID string, de
 	if c.result != nil {
 		return *c.result, c.err
 	}
-	result := models.ApprovalDecisionResult{ApprovalID: approvalID, Decision: "APPROVED", DecidedVia: "USER"}
+	result := models.ApprovalDecisionResult{ApprovalID: approvalID, Decision: "APPROVED", DecidedVia: "USER", Continuation: c.continuation}
 	switch decision {
 	case models.RejectApproval:
 		result.Decision = "REJECTED"
@@ -150,11 +152,11 @@ func TestServerOutcomeOutranksTheLocalDecision(t *testing.T) {
 		t.Fatalf("record = %q, want the server outcome", got)
 	}
 
-	// Without the server's outcome, the card keeps this client's decision.
+	// Until the server's outcome arrives, the card keeps this client's decision.
 	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
 	m = decide(t, m, cmd)
 	m, _ = m.finishStream(nil)
-	if got := approvalEntry(t, m, "a2"); got != "● Not approved: Create issue" || len(m.approvals) != 0 {
+	if got := approvalEntry(t, m, "a2"); got != "● Not approved: Create issue" || len(m.approvals) != 1 {
 		t.Fatalf("record = %q", got)
 	}
 }
@@ -275,8 +277,14 @@ func TestApprovalQueueActivatesInOrder(t *testing.T) {
 	}
 }
 
-func TestEscWhileApprovalWaitsUsesStop(t *testing.T) {
-	m, ch := streamingModel(&decidingClient{})
+func TestStopLeavesTheOutcomeToTheServer(t *testing.T) {
+	saved := waitingSession(t)
+	// The Stop rejected the request.
+	saved.Packets[0] = append(saved.Packets[0][:2], savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "rejected"}))
+	client := &resumingClient{saved: saved}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
 	m = receive(t, m, ch, approvalRequest("a1"))
 	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: 'c', Mod: tea.ModCtrl}} {
 		cancelled := false
@@ -286,10 +294,48 @@ func TestEscWhileApprovalWaitsUsesStop(t *testing.T) {
 			t.Fatalf("%s must request Stop and keep the turn until it settles", key.String())
 		}
 	}
-	// The Stop rejects the request; the cut stream reports no outcome.
-	m, _ = m.finishStream(nil)
+	if got := approvalEntry(t, m, "a1"); !strings.HasPrefix(got, "● Approval requested: Create issue") {
+		t.Fatalf("Stop marked the card before the server reported its outcome: %q", got)
+	}
+
+	// The cut stream drops the resolution; the session load reports it.
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})
+	m = updated.(Model)
+	if m.isStreaming {
+		t.Fatal("the stopped response keeps input blocked")
+	}
+	if got := approvalEntry(t, m, "a1"); !strings.HasPrefix(got, "● Approval requested: Create issue") {
+		t.Fatalf("the end of the stream marked the card: %q", got)
+	}
+	for _, msg := range messages(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
 	if got := approvalEntry(t, m, "a1"); got != "● Not approved: Create issue" || len(m.approvals) != 0 {
-		t.Fatalf("stopped stream left %q, want the rejection", got)
+		t.Fatalf("record = %q, want the server's outcome", got)
+	}
+}
+
+func TestEscAfterTheStopForDecisionsDoesNothing(t *testing.T) {
+	client := &resumingClient{stops: make(chan int, 1)}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, approvalRequest("a1"))
+	reason := models.StopReasonAwaitingApproval
+	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
+	// The stream has not closed yet.
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: 'c', Mod: tea.ModCtrl}} {
+		m.streamCancel = func() { t.Fatalf("%s cut the stream of a response that waits", key.String()) }
+		m, _ = press(t, m, key)
+	}
+	if m.stopRequested || !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
+		t.Fatalf("Esc acted on a response that waits:\n%s", approvalEntry(t, m, "a1"))
+	}
+	if strings.Contains(approvalEntry(t, m, "a1"), "esc stop the response") {
+		t.Fatal("the card offers Stop for a response that waits")
 	}
 }
 
@@ -324,6 +370,8 @@ type resumingClient struct {
 	decidingClient
 	running chan models.StreamEvent
 	resumed []string
+	// requests records the stream and cursor of each resume.
+	requests []resumeRequest
 	// sent answers SendMessageStream.
 	sent chan models.StreamEvent
 	// saved answers GetChatSession.
@@ -340,8 +388,9 @@ func (c *resumingClient) SendMessageStream(context.Context, string, *string, int
 	return c.sent
 }
 
-func (c *resumingClient) ResumeChatStream(_ context.Context, sessionID string, _ *int, _ int) <-chan models.StreamEvent {
+func (c *resumingClient) ResumeChatStream(_ context.Context, sessionID string, streamID *int, cursor int) <-chan models.StreamEvent {
 	c.resumed = append(c.resumed, sessionID)
+	c.requests = append(c.requests, resumeRequest{streamID, cursor})
 	return c.running
 }
 
@@ -351,16 +400,37 @@ func (c *resumingClient) StopChatSession(_ context.Context, _ string, streamID i
 
 const waitingSessionID = "11111111-2222-3333-4444-555555555555"
 
+func savedPacket(t *testing.T, obj map[string]any) json.RawMessage {
+	t.Helper()
+	line, err := json.Marshal(map[string]any{"placement": map[string]any{"turn_index": 0}, "obj": obj})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return line
+}
+
+// messages runs cmd, and each command of a batch, and returns their messages.
+func messages(t *testing.T, cmd tea.Cmd) []tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		return []tea.Msg{msg}
+	}
+	var all []tea.Msg
+	for _, each := range batch {
+		all = append(all, messages(t, each)...)
+	}
+	return all
+}
+
 // waitingSession is a saved session whose response 2 waits for a1.
 func waitingSession(t *testing.T) *models.ChatSessionDetailResponse {
 	t.Helper()
-	packet := func(obj map[string]any) json.RawMessage {
-		line, err := json.Marshal(map[string]any{"placement": map[string]any{"turn_index": 0}, "obj": obj})
-		if err != nil {
-			t.Fatal(err)
-		}
-		return line
-	}
+	packet := func(obj map[string]any) json.RawMessage { return savedPacket(t, obj) }
 	return &models.ChatSessionDetailResponse{
 		ChatSessionID: waitingSessionID,
 		Messages: []models.ChatMessageDetail{
@@ -386,7 +456,7 @@ func run(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 }
 
 func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
-	client := &resumingClient{sent: make(chan models.StreamEvent), saved: waitingSession(t)}
+	client := &resumingClient{sent: make(chan models.StreamEvent, 1), saved: waitingSession(t)}
 	m, ch := streamingModel(client)
 	session := waitingSessionID
 	m.chatSessionID = &session
@@ -395,7 +465,12 @@ func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
 	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
 	m, _ = m.finishStream(nil)
 
-	m, _ = m.sendMessage("follow-up")
+	// The client does not check for waiting requests; the server rejects the message.
+	m, cmd := m.sendMessage("follow-up")
+	if cmd == nil {
+		t.Fatal("the message was not sent")
+	}
+	m.input.textInput.SetValue("")
 	updated, cmd := m.handleStreamEvent(StreamEventMsg{Channel: client.sent, Event: models.ErrorEvent{Error: "HTTP 409: Approve or reject", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending}})
 	m = updated.(Model)
 	var warning string
@@ -408,8 +483,12 @@ func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
 		t.Fatalf("message = %q", warning)
 	}
 
-	// The waiting response has no stream; the saved session shows its request.
-	m, _ = run(t, m, cmd)
+	// The session load shows the request that waits.
+	close(client.sent)
+	for _, msg := range messages(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
 	if len(client.resumed) != 0 {
 		t.Fatalf("followed a stream: resumed=%v", client.resumed)
 	}
@@ -429,58 +508,104 @@ func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
 	if shown != 1 || cards != 1 {
 		t.Fatalf("the response shows %d times and its request %d times", shown, cards)
 	}
-	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
 		t.Fatal("the waiting request cannot be decided")
 	}
 }
 
-func TestStopForDecisionsKeepsCardsAndTheLastDecisionFollowsTheContinuation(t *testing.T) {
-	client := &resumingClient{running: make(chan models.StreamEvent)}
+// stoppedForDecisions is a chat whose response 2 stopped its stream to wait
+// for a1 and a2.
+func stoppedForDecisions(t *testing.T, client *resumingClient) Model {
+	t.Helper()
 	m, ch := streamingModel(client)
 	session := waitingSessionID
 	m.chatSessionID = &session
 	m.viewport.startAgent()
 	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, models.MessageDeltaEvent{Content: "Filing the ticket."})
 	m = receive(t, m, ch, approvalRequest("a1"))
 	m = receive(t, m, ch, approvalRequest("a2"))
 	reason := models.StopReasonAwaitingApproval
 	m = receive(t, m, ch, models.StopEvent{StopReason: &reason})
-	updated, cmd := m.Update(StreamDoneMsg{Channel: ch})
-	m = updated.(Model)
-	if cmd != nil {
-		t.Fatal("the client keeps reading after the stream stopped for decisions")
-	}
-	if !m.isStreaming || m.activeApproval() != 0 {
-		t.Fatal("the cards are not actionable")
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, _ = updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})
+	return updated.(Model)
+}
+
+func TestDecisionsFollowTheContinuationThatTheServerNames(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
+	m := stoppedForDecisions(t, client)
+	if m.isStreaming || m.activeApproval() != 0 {
+		t.Fatal("the cards are not actionable after the stream stopped")
 	}
 
-	// The first decision leaves a2 waiting, so nothing follows yet.
-	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	// a2 still waits, so the server names no continuation.
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
 	m, next := run(t, m, cmd)
-	if next != nil || m.activeApproval() != 1 {
-		t.Fatal("followed the response before every request was decided")
+	if next != nil || m.activeApproval() != 1 || len(client.resumed) != 0 {
+		t.Fatal("followed a response that the server did not continue")
 	}
 
-	// The last decision checks the status, which names the continuation.
-	client.status = &models.ChatSessionStatus{IsProcessing: true, StreamID: new(3)}
-	client.saved = &models.ChatSessionDetailResponse{
-		ChatSessionID: session,
-		Messages: []models.ChatMessageDetail{
-			{MessageID: 1, MessageType: "user", Message: "file a ticket"},
-			{MessageID: 2, MessageType: "assistant"},
-		},
-	}
+	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
 	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
-	m, ready := run(t, m, cmd)
-	m, reload := run(t, m, ready)
-	m, _ = run(t, m, reload)
-	if len(client.resumed) != 1 || m.streamCh != client.running {
-		t.Fatalf("did not follow the continuation: resumed=%v", client.resumed)
+	m, _ = run(t, m, cmd)
+	if len(client.requests) != 1 || *client.requests[0].streamID != 3 || client.requests[0].cursor != 0 || m.streamCh != client.running {
+		t.Fatalf("requests = %+v, want stream 3 from cursor 0", client.requests)
+	}
+	// The continuation replays the response, then resolves the requests.
+	for _, event := range []models.StreamEvent{
+		models.StreamCursorEvent{StreamID: 3},
+		models.MessageIDEvent{ReservedAgentMessageID: 2},
+		models.MessageDeltaEvent{Content: "Filing the ticket."},
+		approvalRequest("a1"),
+		approvalRequest("a2"),
+	} {
+		m = receive(t, m, client.running, event)
+	}
+	if m.activeApproval() >= 0 || m.streamID == nil || *m.streamID != 3 {
+		t.Fatalf("the replay made a decided card actionable again or renamed the stream: %+v", m.streamID)
 	}
 	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a1", Outcome: "approved"})
+	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a2", Outcome: "rejected"})
 	m = receive(t, m, client.running, models.MessageDeltaEvent{Content: "Filed ENG-1."})
-	if view := stripANSI(m.viewport.view(20)); !strings.Contains(view, "Filed ENG-1.") {
-		t.Fatalf("the continuation does not show:\n%s", view)
+	view := stripANSI(m.viewport.view(40))
+	if strings.Count(view, "Filing the ticket.") != 1 || !strings.Contains(view, "Filed ENG-1.") {
+		t.Fatalf("the continuation does not replace the response:\n%s", view)
+	}
+	if strings.Count(view, "Approved: Create issue") != 1 || strings.Count(view, "Not approved: Create issue") != 1 || len(m.approvals) != 0 {
+		t.Fatalf("the cards do not show the server's outcomes once:\n%s", view)
+	}
+}
+
+func TestSessionGrantThatDecidesTheOtherRequestsFollowsTheContinuation(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
+	m := stoppedForDecisions(t, client)
+	// The grant also approves a2 on the server, so the response continues.
+	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m, _ = run(t, m, cmd)
+	if len(client.requests) != 1 || *client.requests[0].streamID != 3 {
+		t.Fatalf("a decision that continued the response is not followed: %+v", client.requests)
+	}
+	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a2", Outcome: "approved_for_chat"})
+	if got := approvalEntry(t, m, "a2"); got != "● Approved for this session: Create issue" {
+		t.Fatalf("a2 = %q, want the grant's outcome", got)
+	}
+}
+
+func TestDecisionThatAnotherClientMadeFollowsTheCurrentStream(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
+	m := stoppedForDecisions(t, client)
+	client.err = &api.OnyxAPIError{StatusCode: 409, Detail: "already decided"}
+	client.status = &models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}}
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, read := run(t, m, cmd)
+	if got := approvalEntry(t, m, "a1"); got != "● No longer waiting: Create issue" {
+		t.Fatalf("record = %q", got)
+	}
+	m, _ = run(t, m, read)
+	if len(client.requests) != 1 || *client.requests[0].streamID != 3 || client.requests[0].cursor != 0 || m.streamCh != client.running {
+		t.Fatalf("requests = %+v, want stream 3 from cursor 0", client.requests)
 	}
 }
 
@@ -488,7 +613,7 @@ func TestResumingAWaitingSessionShowsItsRequestThatStopCannotEnd(t *testing.T) {
 	client := &resumingClient{stops: make(chan int, 1)}
 	m := NewModel(config.DefaultConfig(), client)
 	m, _ = run(t, m, func() tea.Msg { return SessionResumedMsg{Detail: waitingSession(t)} })
-	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
 		t.Fatal("the waiting request cannot be decided")
 	}
 	if len(client.resumed) != 0 {
@@ -511,7 +636,7 @@ func TestResumingAWaitingSessionShowsItsRequestThatStopCannotEnd(t *testing.T) {
 		t.Fatalf("sent Stop for stream %d", got)
 	default:
 	}
-	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") || !m.isStreaming {
+	if !strings.Contains(approvalEntry(t, m, "a1"), "> Approve once (y)") {
 		t.Fatal("the waiting request cannot be decided after Esc")
 	}
 }
@@ -687,5 +812,97 @@ func TestApprovalCardShowsAllArgumentsOnRequest(t *testing.T) {
 	decide(t, m, cmd)
 	if len(client.decisions) != 1 || client.decisions[0] != models.ApproveOnce {
 		t.Fatalf("decisions = %v", client.decisions)
+	}
+}
+
+func agentRequest(id string) models.ToolApprovalRequestEvent {
+	request := approvalRequest(id)
+	request.AgentName = "triage"
+	return request
+}
+
+func TestAgentCardNeitherEndsWithTheResponseNorBlocksSends(t *testing.T) {
+	client := &resumingClient{sent: make(chan models.StreamEvent)}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m = receive(t, m, ch, agentRequest("b1"))
+	card := approvalEntry(t, m, "b1")
+	if !strings.Contains(card, "triage wants to run Create issue") || strings.Contains(card, "esc stop the response") {
+		t.Fatalf("the agent card does not name its agent, or offers Stop for it:\n%s", card)
+	}
+	m.input.textInput.Focus()
+	m.input.textInput.SetValue("next question")
+	m, _ = press(t, m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	for _, e := range m.viewport.entries {
+		if strings.Contains(e.content, "Approve or reject the tool call first") {
+			t.Fatal("an agent's request asks to be decided before the next message")
+		}
+	}
+	m.input.textInput.SetValue("")
+
+	m.streamCancel = func() {}
+	m, _ = press(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	m, _ = m.finishStream(nil)
+	if !strings.Contains(approvalEntry(t, m, "b1"), "> Approve once (y)") {
+		t.Fatalf("Stop or the end of the response closed the agent card:\n%s", approvalEntry(t, m, "b1"))
+	}
+	if _, cmd := m.sendMessage("next question"); cmd == nil {
+		t.Fatal("an agent's request blocked the next message")
+	}
+}
+
+func TestApprovalsVersionChangeLoadsTheSessionCards(t *testing.T) {
+	saved := waitingSession(t)
+	request := map[string]any{"type": "tool_approval_request", "approval_id": "b1", "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
+	saved.Packets[0] = []json.RawMessage{savedPacket(t, request)}
+	client := &resumingClient{saved: saved}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.approvalsVersion = "v1"
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: "v2"}})
+	m = updated.(Model)
+	for _, msg := range messages(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if !strings.Contains(approvalEntry(t, m, "b1"), "triage wants to run Create issue") {
+		t.Fatal("the agent's request does not show")
+	}
+
+	// The agent's request ends with no live resolution; the next version shows it.
+	saved.Packets[0] = append(saved.Packets[0], savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "cancelled"}))
+	ch = make(chan models.StreamEvent)
+	m.streamCh, m.isStreaming = ch, true
+	updated, _ = m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd = updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: "v2"}})
+	if len(messages(t, cmd)) != 0 {
+		t.Fatal("an unchanged version loaded the session")
+	}
+	m = updated.(Model)
+	m.streamCh, m.isStreaming = ch, true
+	updated, _ = m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd = updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: "v3"}})
+	m = updated.(Model)
+	for _, msg := range messages(t, cmd) {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if got := approvalEntry(t, m, "b1"); got != "● No longer waiting: Create issue" || len(m.approvals) != 0 {
+		t.Fatalf("record = %q", got)
+	}
+}
+
+func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
+	m := stoppedForDecisions(t, client)
+	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	m, _ = cmdNew(m)
+	m, _ = run(t, m, cmd)
+	if len(client.requests) != 0 || m.isStreaming {
+		t.Fatalf("a new chat followed the old chat's response: %+v", client.requests)
 	}
 }

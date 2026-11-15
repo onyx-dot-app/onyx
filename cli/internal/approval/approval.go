@@ -31,6 +31,16 @@ func Title(req models.ToolApprovalRequestEvent) string {
 	return "Tool call"
 }
 
+// AgentRequest names the background agent that asks to run the tool, as the
+// web card does. It is empty for the chat's own agent.
+func AgentRequest(req models.ToolApprovalRequestEvent) string {
+	agent := truncate(sanitize.Line(req.AgentName), maxKeyRunes)
+	if agent == "" {
+		return ""
+	}
+	return agent + " wants to run " + Title(req)
+}
+
 // Arguments returns one "key: value" line per argument, sorted by key.
 // Long values and long argument lists are truncated; AllArguments shows them.
 func Arguments(args map[string]any) []string {

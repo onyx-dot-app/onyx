@@ -86,3 +86,14 @@ func TestTitleFallsBack(t *testing.T) {
 		t.Errorf("Title = %q", got)
 	}
 }
+
+func TestAgentRequestNamesTheAgent(t *testing.T) {
+	req := models.ToolApprovalRequestEvent{ToolName: "create_issue", DisplayName: "Create issue"}
+	if got := AgentRequest(req); got != "" {
+		t.Fatalf("the chat's own request names an agent: %q", got)
+	}
+	req.AgentName = "triage\x1b]52;c;ZWNobyBoaQ==\x07"
+	if got := AgentRequest(req); got != "triage wants to run Create issue" {
+		t.Fatalf("AgentRequest = %q", got)
+	}
+}

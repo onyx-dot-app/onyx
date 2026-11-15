@@ -366,13 +366,14 @@ func TestToolApprovalRequest(t *testing.T) {
 		"tool_name":    "mcp__3__linear__create_issue",
 		"display_name": "Create issue",
 		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2, "id": json.Number("9007199254740993")},
+		"agent_name":   "researcher",
 	}, 1, 0)
 	event := ParseStreamLine(line)
 	e, ok := event.(models.ToolApprovalRequestEvent)
 	if !ok {
 		t.Fatalf("expected ToolApprovalRequestEvent, got %T", event)
 	}
-	if e.ApprovalID != "a1" || e.ToolCallID != "call-1" || e.ToolName != "mcp__3__linear__create_issue" || e.DisplayName != "Create issue" {
+	if e.ApprovalID != "a1" || e.ToolCallID != "call-1" || e.ToolName != "mcp__3__linear__create_issue" || e.DisplayName != "Create issue" || e.AgentName != "researcher" {
 		t.Errorf("unexpected identity fields: %+v", e)
 	}
 	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != json.Number("2") || e.Arguments["id"] != json.Number("9007199254740993") {

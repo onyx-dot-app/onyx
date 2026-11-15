@@ -222,6 +222,7 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 			ToolCallID:  jsonString(obj["tool_call_id"]),
 			ToolName:    jsonString(obj["tool_name"]),
 			DisplayName: jsonString(obj["display_name"]),
+			AgentName:   jsonString(obj["agent_name"]),
 		}
 		event.Arguments, _ = obj["arguments"].(map[string]any)
 		return event

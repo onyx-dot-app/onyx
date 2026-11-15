@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/approval"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
 
 // approvalCard is a tool approval request whose outcome the server has not
@@ -22,7 +24,7 @@ type approvalCard struct {
 	// sending is the decision in flight; empty while the user decides.
 	sending models.ApprovalDecision
 	// decided labels the outcome of this client's decision. The card shows it
-	// until the server reports the outcome, which replaces it.
+	// until the server's resolution or a session load replaces it.
 	decided string
 	// expanded shows every argument in full instead of the compact list.
 	expanded bool
@@ -40,18 +42,24 @@ var approvalActions = []struct {
 
 // approvalDecidedMsg carries the server's answer to a decision.
 type approvalDecidedMsg struct {
+	// sessionID is the chat that showed the request, or empty.
+	sessionID  string
 	approvalID string
 	result     models.ApprovalDecisionResult
 	err        error
 }
 
 // renderApprovalCard renders a request. Only the active card, the oldest
-// undecided one, takes input. A suspended response cannot be stopped.
-func renderApprovalCard(card approvalCard, active, suspended bool, width int) string {
+// undecided one, takes input. stoppable offers Stop for the running response
+// that waits for the request.
+func renderApprovalCard(card approvalCard, active, stoppable bool, width int) string {
 	if card.decided != "" {
 		return approvalRecord(card.request, card.decided)
 	}
 	lines := []string{warnStyle.Render("● Approval requested: " + approval.Title(card.request))}
+	if agent := approval.AgentRequest(card.request); agent != "" {
+		lines = append(lines, dimInfoStyle.Render("    "+agent))
+	}
 	if card.expanded {
 		// Wrap instead of truncating, so no part of a value is hidden.
 		wrapAt := max(width-5, 16)
@@ -89,7 +97,7 @@ func renderApprovalCard(card approvalCard, active, suspended bool, width int) st
 			details = "d show less"
 		}
 		hint := "    ↑↓ select • enter confirm • y/a/n • " + details
-		if !suspended {
+		if stoppable {
 			hint += " • esc stop the response"
 		}
 		lines = append(lines, dimInfoStyle.Render(hint))
@@ -127,9 +135,99 @@ func (m Model) activeApproval() int {
 
 func (m Model) renderApprovals() {
 	active := m.activeApproval()
+	// Stop ends the chat's running response, not a background agent.
+	running := m.isStreaming && !m.awaitingApproval
 	for i, card := range m.approvals {
-		m.viewport.setApproval(card.request.ApprovalID, renderApprovalCard(card, i == active, m.suspended(), m.viewport.width))
+		stoppable := running && card.request.AgentName == ""
+		m.viewport.setApproval(card.request.ApprovalID, renderApprovalCard(card, i == active, stoppable, m.viewport.width))
 	}
+}
+
+// showSavedApprovals shows the waiting requests of a session load, including
+// the requests of background agents, and the outcomes of shown requests.
+func (m Model) showSavedApprovals(detail *models.ChatSessionDetailResponse) Model {
+	var requests []models.ToolApprovalRequestEvent
+	outcomes := map[string]string{}
+	for _, packets := range detail.Packets {
+		for _, packet := range packets {
+			if !bytes.Contains(packet, []byte("tool_approval_")) {
+				continue
+			}
+			switch e := parser.ParseStreamLine(string(packet)).(type) {
+			case models.ToolApprovalRequestEvent:
+				requests = append(requests, e)
+			case models.ToolApprovalResolvedEvent:
+				outcomes[e.ApprovalID] = e.Outcome
+			}
+		}
+	}
+	for _, request := range requests {
+		index := m.approvalIndex(request.ApprovalID)
+		outcome, resolved := outcomes[request.ApprovalID]
+		switch {
+		case resolved && index >= 0:
+			m = m.resolveApproval(index, approval.OutcomeLabel(outcome))
+		case !resolved && index < 0:
+			m.approvals = append(m.approvals, approvalCard{request: request})
+		}
+	}
+	m.renderApprovals()
+	return m
+}
+
+// approvalsLoadedMsg carries a session load that shows the session's
+// approval requests.
+type approvalsLoadedMsg struct {
+	detail *models.ChatSessionDetailResponse
+	err    error
+}
+
+func loadApprovals(client api.ClientAPI, sessionID string) tea.Cmd {
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		detail, err := client.GetChatSession(ctx, sessionID)
+		return approvalsLoadedMsg{detail, err}
+	}
+}
+
+func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil || m.chatSessionID == nil || msg.detail.ChatSessionID != *m.chatSessionID {
+		return m, nil
+	}
+	return m.showSavedApprovals(msg.detail), nil
+}
+
+// currentStreamMsg carries the session status read after a decision that
+// the server did not apply.
+type currentStreamMsg struct {
+	sessionID string
+	status    models.ChatSessionStatus
+	err       error
+}
+
+// handleCurrentStream follows the stream that another client's decision
+// started.
+func (m Model) handleCurrentStream(msg currentStreamMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
+		return m, nil
+	}
+	m, load := m.noteApprovalsVersion(msg.status)
+	if msg.status.CurrentStream == nil {
+		return m, load
+	}
+	m, follow := m.followContinuation(*msg.status.CurrentStream)
+	return m, tea.Batch(load, follow)
+}
+
+// noteApprovalsVersion loads the session's approval requests when a status
+// reports a version that the shown cards do not reflect.
+func (m Model) noteApprovalsVersion(status models.ChatSessionStatus) (Model, tea.Cmd) {
+	if status.ApprovalsVersion == m.approvalsVersion || m.chatSessionID == nil {
+		return m, nil
+	}
+	m.approvalsVersion = status.ApprovalsVersion
+	return m, loadApprovals(m.client, *m.chatSessionID)
 }
 
 // resolveApproval replaces a card with a one-line record of how it ended.
@@ -144,35 +242,68 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 	m.approvals[index].sending = decision
 	m.renderApprovals()
 	client, approvalID := m.client, m.approvals[index].request.ApprovalID
+	sessionID := ""
+	if m.chatSessionID != nil {
+		sessionID = *m.chatSessionID
+	}
 	return m, func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := client.DecideApproval(ctx, approvalID, decision)
-		return approvalDecidedMsg{approvalID: approvalID, result: result, err: err}
+		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, result: result, err: err}
 	}
 }
 
 func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd) {
-	index := m.approvalIndex(msg.approvalID)
-	if index < 0 {
-		// The stream already reported how the request ended.
+	noLongerWaiting := api.IsApprovalNoLongerWaiting(msg.err)
+	// A card that the stream already resolved is gone.
+	if index := m.approvalIndex(msg.approvalID); index >= 0 {
+		m.approvals[index].sending = ""
+		switch {
+		case msg.err == nil:
+			m.approvals[index].decided = approval.OutcomeLabel(approval.DecisionOutcome(msg.result))
+		case noLongerWaiting:
+			m.approvals[index].decided = approval.NoLongerWaiting
+		default:
+			m.viewport.addError("Could not send the approval decision: " + msg.err.Error())
+		}
+		m.renderApprovals()
+	}
+	if m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
+		// The user left the chat that showed the request.
 		return m, nil
 	}
-	m.approvals[index].sending = ""
 	switch {
-	case msg.err == nil:
-		m.approvals[index].decided = approval.OutcomeLabel(approval.DecisionOutcome(msg.result))
-	case api.IsApprovalNoLongerWaiting(msg.err):
-		m.approvals[index].decided = approval.NoLongerWaiting
-	default:
-		m.viewport.addError("Could not send the approval decision: " + msg.err.Error())
-	}
-	m.renderApprovals()
-	if m.suspended() && m.activeApproval() < 0 && m.chatSessionID != nil {
-		// The response continues on a new stream; the readiness check follows it.
-		return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
+	case msg.err == nil && msg.result.Continuation != nil:
+		return m.followContinuation(*msg.result.Continuation)
+	case noLongerWaiting:
+		// Another client decided; the status names the stream it started.
+		client, sessionID := m.client, msg.sessionID
+		return m, func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			status, err := client.ChatSessionStatus(ctx, sessionID)
+			return currentStreamMsg{sessionID, status, err}
+		}
 	}
 	return m, nil
+}
+
+// followContinuation shows the response from the start of the stream that
+// continues it, in place of its earlier display.
+func (m Model) followContinuation(stream models.ChatStream) (Model, tea.Cmd) {
+	if m.isStreaming && m.streamID != nil && *m.streamID == stream.StreamID {
+		return m, nil
+	}
+	if m.isStreaming {
+		m.viewport.finishAgent()
+		m.viewport.endResponse()
+	}
+	m.viewport.startAgent()
+	if len(stream.ResponseIDs) > 0 {
+		m.viewport.showResponse(stream.ResponseIDs[0])
+	}
+	return m.followRunningResponse(&stream.StreamID)
 }
 
 // handleApprovalKey applies a key to the active card. It reports false for

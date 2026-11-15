@@ -132,18 +132,20 @@ The chat shows a card with the tool name and its arguments. The request waits un
 
 The card shows at most 10 arguments and shortens long values. Press `d` to read every argument before you decide.
 
-The shortcuts work when the input is empty. While a request waits, you can type a draft, but you cannot send it.
-After the decision, the card changes to a one-line record: **Approved**, **Approved for this session**,
-**Not approved**, **Disabled**, or **No longer waiting**. When every request of the response has a decision,
-the response continues and the chat shows the rest of it.
+The shortcuts work when the input is empty. After the decision, the card changes to a one-line record: **Approved**,
+**Approved for this session**, **Not approved**, **Disabled**, or **No longer waiting**.
+When the server continues the response, the chat shows the rest of it.
 
 While a request waits, the response is paused on the server. A paused response cannot be stopped,
 so `Escape` and `Ctrl+C` do nothing to it; decide each request instead.
 If you stop a running response while a request is open, Onyx rejects the request, and the record shows **Not approved**.
 You can quit the chat and decide later: if you open the session with `/resume`,
-the chat shows the response with its card. If you send a message while a request waits,
-the chat does the same and keeps your message as a draft. If the connection to a running response drops,
+the chat shows the response with its card. If you send a message while the response waits, Onyx refuses it:
+the chat keeps your message as a draft and shows the card. If the connection to a running response drops,
 the chat connects to it again.
+
+A request from a background agent names the agent, for example `triage wants to run Create issue`.
+It does not pause the chat: you can send messages while it waits, and its card stays after the response ends or stops.
 
 ### One-Shot Questions
 
@@ -174,11 +176,11 @@ approve once / [a] approve for session / [d] show all arguments / [N] reject`.
 The request shows at most 10 arguments and shortens long values. Answer `d` to show every argument in full,
 then answer the prompt again. If the server ends the request first,
 for example because the program that made the call ended, the prompt ends and `ask` shows the outcome.
-`ask` ignores input that you typed before the prompt showed. When every request of the response has an answer,
-`ask` follows the response as it continues and prints the rest of the answer.
-If you interrupt `ask` at a prompt while the response waits, `ask` exits with code `11` without a decision.
-The request keeps waiting, and you can decide it in another client, for example with `/resume` in `onyx-cli chat`.
-An interrupt while the response still runs stops it.
+`ask` ignores input that you typed before the prompt showed. When the response continues after the answers,
+`ask` follows it and prints the rest of the answer. It does not print again the text, tool,
+or search lines that it already printed. If you interrupt `ask` at a prompt while the response waits,
+`ask` exits with code `11` without a decision. The request keeps waiting, and you can decide it in another client,
+for example with `/resume` in `onyx-cli chat`. An interrupt while the response still runs stops it.
 
 Without a terminal, in CI, or with `--json`, `ask` does not wait for input. It uses `--approve` instead:
 

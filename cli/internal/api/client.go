@@ -437,10 +437,9 @@ func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision
 // failed query reports a running session.
 func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error) {
 	var status struct {
-		IsProcessing  *bool `json:"is_processing"`
-		CurrentStream *struct {
-			StreamID int `json:"stream_id"`
-		} `json:"current_stream"`
+		IsProcessing     *bool              `json:"is_processing"`
+		CurrentStream    *models.ChatStream `json:"current_stream"`
+		ApprovalsVersion string             `json:"approvals_version"`
 	}
 	unknown := models.ChatSessionStatus{IsProcessing: true}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
@@ -453,11 +452,11 @@ func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (model
 	if status.IsProcessing == nil {
 		return unknown, fmt.Errorf("invalid chat readiness response")
 	}
-	result := models.ChatSessionStatus{IsProcessing: *status.IsProcessing}
-	if status.CurrentStream != nil {
-		result.StreamID = &status.CurrentStream.StreamID
-	}
-	return result, nil
+	return models.ChatSessionStatus{
+		IsProcessing:     *status.IsProcessing,
+		CurrentStream:    status.CurrentStream,
+		ApprovalsVersion: status.ApprovalsVersion,
+	}, nil
 }
 
 // WaitForChatSessionIdle keeps completion separate from delivery.

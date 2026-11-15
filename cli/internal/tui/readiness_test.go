@@ -284,7 +284,7 @@ func TestResumeDuringPreparationFollowsTheStreamOnceItStarts(t *testing.T) {
 	}
 
 	// The stream starts: the chat loads the session and follows it.
-	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 	client.streams = []chan models.StreamEvent{started}
 	m, cmd = endStream(t, m, client.status)
 	if cmd == nil {
@@ -312,14 +312,14 @@ func TestDroppedFollowContinuesFromItsCursor(t *testing.T) {
 	m := NewModel(config.DefaultConfig(), client)
 	updated, _ := m.Update(SessionResumedMsg{
 		Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession},
-		Status: models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID},
+		Status: models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}},
 	})
 	m = updated.(Model)
 	m = receive(t, m, first, models.MessageDeltaEvent{Content: "Filing the ticket."})
 	m = receive(t, m, first, models.StreamCursorEvent{StreamID: streamID, NextCursor: 4})
 
 	// The connection drops while the response still runs.
-	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}})
 	if len(client.requests) != 2 || client.requests[1].streamID == nil || *client.requests[1].streamID != streamID || client.requests[1].cursor != 4 {
 		t.Fatalf("requests = %+v, want stream 7 from cursor 4", client.requests)
 	}
@@ -339,7 +339,7 @@ func TestStreamWithoutBufferIsNotRequestedAgain(t *testing.T) {
 	streamID := 7
 	client := &followingClient{}
 	m := NewModel(config.DefaultConfig(), client)
-	running := models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	running := models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 	updated, _ := m.Update(SessionResumedMsg{Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession}, Status: running})
 	m = drain(t, updated.(Model))
 	m, cmd := endStream(t, m, running)
@@ -356,7 +356,7 @@ func TestStoppedFollowIsNotFollowedAgain(t *testing.T) {
 	stream := make(chan models.StreamEvent)
 	client := &followingClient{streams: []chan models.StreamEvent{stream}}
 	m := NewModel(config.DefaultConfig(), client)
-	running := models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	running := models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 	updated, _ := m.Update(SessionResumedMsg{Detail: &models.ChatSessionDetailResponse{ChatSessionID: followedSession}, Status: running})
 	m = updated.(Model)
 	m = receive(t, m, stream, models.StreamCursorEvent{StreamID: streamID, NextCursor: 1})
@@ -374,7 +374,7 @@ func TestRejectedMessageDoesNotFollowAnotherResponse(t *testing.T) {
 	session := followedSession
 	m.chatSessionID = &session
 	m = receive(t, m, ch, models.ErrorEvent{Error: "HTTP 400: bad request", StatusCode: 400})
-	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}})
 	if cmd == nil || !m.isStreaming || len(client.requests) != 0 {
 		t.Fatalf("a rejected message followed another response: %+v", client.requests)
 	}
@@ -413,7 +413,7 @@ func TestStopAfterReattachReachesTheServer(t *testing.T) {
 	m.streamID = &streamID
 	m.resumeCursor = &cursor
 	m.streamCh = ended
-	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID})
+	m, _ = endStream(t, m, models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}})
 	for {
 		event, ok := <-m.streamCh
 		if !ok {
@@ -452,7 +452,7 @@ func TestDroppedResponseKeepsInputBlockedUntilTheSessionLoads(t *testing.T) {
 	streamID := 7
 	running := make(chan models.StreamEvent)
 	client := &followingClient{streams: []chan models.StreamEvent{running}}
-	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 	client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
 	client.sent = make(chan models.StreamEvent)
 	m, ch := streamingModel(client)
@@ -480,7 +480,7 @@ func TestCleanCloseBeforeTheFirstCursorIsRetried(t *testing.T) {
 	closed, again := make(chan models.StreamEvent), make(chan models.StreamEvent)
 	close(closed)
 	client := &followingClient{streams: []chan models.StreamEvent{closed, again}}
-	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+	client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 	client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
 	m := NewModel(config.DefaultConfig(), client)
 	updated, _ := m.Update(SessionResumedMsg{Detail: client.saved, Status: client.status})
@@ -518,7 +518,7 @@ func TestReloadAfterTheUserLeavesIsIgnored(t *testing.T) {
 			streamID := 7
 			other := make(chan models.StreamEvent)
 			client := &followingClient{streams: []chan models.StreamEvent{other}}
-			client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+			client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 			client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
 			client.sent = make(chan models.StreamEvent)
 			m, ch := streamingModel(client)
@@ -568,7 +568,7 @@ func TestFailedReloadKeepsTheWaitingRequest(t *testing.T) {
 			first <- approvalRequest("a1")
 			close(first)
 			client := &followingClient{streams: []chan models.StreamEvent{first, again}}
-			client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}
+			client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}
 			client.saved = &models.ChatSessionDetailResponse{ChatSessionID: followedSession}
 			m := NewModel(config.DefaultConfig(), client)
 			updated, _ := m.Update(SessionResumedMsg{Detail: client.saved, Status: client.status})
@@ -620,7 +620,7 @@ func TestResponseStartedAfterTheStopIsFollowed(t *testing.T) {
 	m = receive(t, m, ch, models.StopEvent{})
 
 	// The ended response still saves: wait without replaying it.
-	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, StreamID: &ended})
+	m, cmd := endStream(t, m, models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: ended}})
 	if cmd == nil || !m.isStreaming || len(client.requests) != 0 {
 		t.Fatalf("the ended response was followed again: %+v", client.requests)
 	}
@@ -629,7 +629,7 @@ func TestResponseStartedAfterTheStopIsFollowed(t *testing.T) {
 	}
 
 	// Another client starts a response.
-	client.status = models.ChatSessionStatus{IsProcessing: true, StreamID: &started}
+	client.status = models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: started}}
 	updated, reload := m.Update(sessionReadyMsg{sessionID: followedSession, channel: m.streamCh, status: client.status})
 	m = updated.(Model)
 	if reload == nil {
@@ -685,7 +685,7 @@ func (c *finishingClient) read() bool {
 func (c *finishingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
 	streamID := 7
 	if c.read() {
-		return models.ChatSessionStatus{IsProcessing: true, StreamID: &streamID}, nil
+		return models.ChatSessionStatus{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: streamID}}, nil
 	}
 	return models.ChatSessionStatus{}, nil
 }

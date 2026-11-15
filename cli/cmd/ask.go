@@ -148,9 +148,12 @@ waiting for another client.`,
 			gotStop := false
 			// The stream stopped while the response waits for decisions.
 			awaiting := false
-			// Bytes of answer text shown. A continuation replays the response
-			// from its start, so it skips the text already shown.
-			shownText, skipText := 0, 0
+			// The stream that a decision named to continue the response.
+			var continuation *models.ChatStream
+			// A continuation first replays the response from its start. ask
+			// drops the replay up to the first live resolution of a request
+			// that waited, so it shows nothing twice.
+			replaying := false
 			// approvalErr ends the run after a decision failed. The owner of a
 			// running stream stops its response; a waiting response keeps waiting.
 			var approvalErr error
@@ -215,6 +218,9 @@ waiting for another client.`,
 						fmt.Fprintln(ios.ErrOut)
 					}
 					fmt.Fprintf(ios.ErrOut, "Approval requested: %s\n", title)
+					if agent := approval.AgentRequest(req); agent != "" {
+						fmt.Fprintf(ios.ErrOut, "  %s\n", agent)
+					}
 					for _, arg := range approval.Arguments(req.Arguments) {
 						fmt.Fprintf(ios.ErrOut, "  %s\n", arg)
 					}
@@ -286,9 +292,13 @@ waiting for another client.`,
 					approvalRequired = exitcodes.Newf(exitcodes.ApprovalRequired,
 						"tool call %q needed approval, so ask rejected it; rerun on a terminal, or with --approve=once, --approve=session, or --approve=reject", title)
 				}
-				_, err := client.DecideApproval(ctx, req.ApprovalID, decision)
+				result, err := client.DecideApproval(ctx, req.ApprovalID, decision)
 				switch {
-				case err == nil || ctx.Err() != nil:
+				case ctx.Err() != nil:
+				case err == nil:
+					if result.Continuation != nil {
+						continuation = result.Continuation
+					}
 				case api.IsApprovalNoLongerWaiting(err):
 					if !askJSON {
 						fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.NoLongerWaiting, title)
@@ -301,7 +311,6 @@ waiting for another client.`,
 				}
 			}
 
-		follow:
 			for {
 				for {
 					var event models.StreamEvent
@@ -312,12 +321,24 @@ waiting for another client.`,
 					} else {
 						break
 					}
-					if approvalErr != nil {
+					if approvalErr != nil || undecided {
 						// Drain so the stream owner can stop the turn before exit.
 						if stop, ok := event.(models.StopEvent); ok {
 							awaiting = stop.AwaitingApproval()
 						}
 						continue
+					}
+					if replaying {
+						switch e := event.(type) {
+						case models.ErrorEvent:
+						case models.ToolApprovalResolvedEvent:
+							if _, waited := asked[e.ApprovalID]; !waited || reported[e.ApprovalID] {
+								continue
+							}
+							replaying = false
+						default:
+							continue
+						}
 					}
 					switch e := event.(type) {
 					case models.SessionCreatedEvent:
@@ -334,15 +355,6 @@ waiting for another client.`,
 						// and the rename below reads the saved history.
 						gotStop = true
 						awaiting = e.AwaitingApproval()
-					case models.MessageDeltaEvent:
-						skipped := min(skipText, len(e.Content))
-						skipText -= skipped
-						if skipped == len(e.Content) {
-							continue
-						}
-						e.Content = e.Content[skipped:]
-						shownText += len(e.Content)
-						event = e
 					case models.ToolApprovalRequestEvent:
 						if _, seen := asked[e.ApprovalID]; seen {
 							continue
@@ -426,32 +438,25 @@ waiting for another client.`,
 				if !awaiting || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
 					break
 				}
-				// Every request got its decision, so the response continues on a
-				// new stream. Follow it from its start once the status names it.
-				stopped := streamID
-				for {
+				// The response continues on the stream that a decision named.
+				// When another client's decision started it, the status names it.
+				next := continuation
+				if next == nil || next.StreamID == streamID {
 					status, err := client.ChatSessionStatus(ctx, sessionID)
 					if ctx.Err() != nil {
-						break follow
-					}
-					if err != nil && !api.IsRetryableReadinessError(err) {
-						return fmt.Errorf("cannot follow the response after the approval decisions: %w", err)
-					}
-					if err == nil && !status.IsProcessing {
-						return exitcodes.New(exitcodes.General, "the response did not continue after the approval decisions; open the chat to see it")
-					}
-					if err == nil && status.StreamID != nil && *status.StreamID != stopped {
-						streamID = *status.StreamID
 						break
 					}
-					select {
-					case <-ctx.Done():
-						break follow
-					case <-time.After(time.Second):
+					if err != nil {
+						return fmt.Errorf("cannot follow the response after the approval decisions: %w", err)
 					}
+					next = status.CurrentStream
 				}
+				if next == nil || next.StreamID == streamID {
+					return exitcodes.New(exitcodes.General, "the response did not continue after the approval decisions; open the chat to see it")
+				}
+				streamID = next.StreamID
 				ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, 0)
-				skipText = shownText
+				replaying = true
 				gotStop, awaiting = false, false
 			}
 

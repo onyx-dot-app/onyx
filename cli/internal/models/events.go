@@ -206,6 +206,9 @@ type ToolApprovalRequestEvent struct {
 	ToolName    string         `json:"tool_name"`
 	DisplayName string         `json:"display_name"`
 	Arguments   map[string]any `json:"arguments"`
+	// AgentName names the background agent that asks; empty for the chat's
+	// own agent. An agent's request never blocks the chat.
+	AgentName string `json:"agent_name,omitempty"`
 }
 
 func (e ToolApprovalRequestEvent) EventType() string { return EventToolApprovalRequest }

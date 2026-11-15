@@ -16,7 +16,6 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/approval"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
-	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
 
 // Model is the root Bubble Tea model.
@@ -51,14 +50,17 @@ type Model struct {
 	// approvals holds the tool approval requests whose outcome the server has
 	// not reported yet, oldest first.
 	approvals []approvalCard
+	// approvalsVersion is the session's approvals version that the cards
+	// reflect.
+	approvalsVersion string
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool
 	// stopReceived marks a stream that delivered the response's stop packet.
 	stopReceived bool
-	// awaitingApproval marks a response that waits for decisions after its
-	// stream stopped. Its cards stay actionable, and the last decision
-	// follows the continuation, a new stream of the response.
+	// awaitingApproval marks a stream that stopped while its response waits
+	// for decisions. Nothing runs, so Stop does not apply. A decision names
+	// the stream that continues the response.
 	awaitingApproval bool
 	// stopRequested marks a response that the user stopped.
 	stopRequested bool
@@ -188,6 +190,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case approvalDecidedMsg:
 		return m.handleApprovalDecided(msg)
+	case currentStreamMsg:
+		return m.handleCurrentStream(msg)
+	case approvalsLoadedMsg:
+		return m.handleApprovalsLoaded(msg)
 	case sessionReadyMsg:
 		if msg.channel != m.streamCh || !m.isStreaming {
 			return m, nil
@@ -197,8 +203,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.addError("Cannot confirm conversation readiness: " + msg.err.Error())
 			return m, nil
 		}
+		var load tea.Cmd
+		if msg.err == nil {
+			m, load = m.noteApprovalsVersion(msg.status)
+		}
 		if msg.err != nil || msg.status.IsProcessing {
-			running := msg.status.StreamID
+			var running *int
+			if msg.status.CurrentStream != nil {
+				running = &msg.status.CurrentStream.StreamID
+			}
 			// A message that the server did not accept owns no running response.
 			owned := m.following || m.streamID != nil
 			// After its stop, only a response that another client started is followed.
@@ -214,7 +227,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					ctx, cancel := context.WithCancel(context.Background())
 					m.streamCancel = cancel
 					m.streamCh = m.client.ResumeChatStream(ctx, msg.sessionID, running, *m.resumeCursor)
-					return m, WaitForStreamEvent(m.streamCh)
+					return m, tea.Batch(load, WaitForStreamEvent(m.streamCh))
 				}
 				// Show the running response from its start over the saved session.
 				m.reloading = true
@@ -224,15 +237,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.readinessUnconfirmed = true
 				m.viewport.addWarning("Waiting to confirm conversation readiness.")
 			}
-			return m, checkSessionReady(m.client, msg.sessionID, msg.channel)
+			return m, tea.Batch(load, checkSessionReady(m.client, msg.sessionID, msg.channel))
 		}
-		// The saved session finishes a followed response that ended unseen, and
-		// one whose continuation ended before it was followed.
-		if (m.following && !m.stopReceived) || (m.awaitingApproval && !m.stopRequested) {
+		// The saved session finishes a followed response that ended unseen.
+		if m.following && !m.stopReceived {
 			m.reloading = true
 			return cmdResume(m, msg.sessionID, m.streamCh)
 		}
-		return m.finishStream(nil)
+		if load == nil && m.stopRequested && len(m.approvals) > 0 {
+			// A stopped stream drops the resolutions that its Stop caused.
+			load = loadApprovals(m.client, msg.sessionID)
+		}
+		var finish tea.Cmd
+		m, finish = m.finishStream(nil)
+		return m, tea.Batch(load, finish)
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
@@ -340,7 +358,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "ctrl+c":
-		if m.isStreaming && !m.suspended() {
+		if m.isStreaming && !m.awaitingApproval {
 			return m.cancelStream()
 		}
 
@@ -353,7 +371,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.cancelConfigure()
 		}
 		if m.isStreaming {
-			if m.suspended() {
+			if m.awaitingApproval {
 				// Only the decisions end a wait; Stop is for running work.
 				return m, nil
 			}
@@ -372,7 +390,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if m.quitPending {
 			return m, tea.Quit
 		}
-		if m.isStreaming && !m.suspended() {
+		if m.isStreaming && !m.awaitingApproval {
 			m, _ = m.cancelStream()
 		}
 		m.quitPending = true
@@ -410,7 +428,7 @@ func (m Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.isStreaming && !strings.HasPrefix(strings.TrimSpace(m.input.textInput.Value()), "/") {
-			if m.activeApproval() >= 0 && m.input.textInput.Value() != "" {
+			if active := m.activeApproval(); active >= 0 && m.approvals[active].request.AgentName == "" && m.input.textInput.Value() != "" {
 				m.viewport.addWarning("Approve or reject the tool call first. Your draft is kept.")
 			}
 			return m, nil
@@ -466,21 +484,7 @@ func (m Model) handleFileDrop(path string) (tea.Model, tea.Cmd) {
 	return cmdAttach(m, path)
 }
 
-// suspended reports a response that waits for decisions after its stream
-// stopped. No work runs, so it cannot be stopped.
-func (m Model) suspended() bool {
-	return m.awaitingApproval && m.settling
-}
-
 func (m Model) cancelStream() (Model, tea.Cmd) {
-	// The server's Stop rejects the requests that wait, and the cut stream
-	// does not deliver their outcomes.
-	for i := range m.approvals {
-		if m.approvals[i].decided == "" {
-			m.approvals[i].decided = approval.OutcomeLabel(models.ApprovalOutcomeRejected)
-		}
-	}
-	m.renderApprovals()
 	// While a stream is open, its API owner sends Stop once the stream names
 	// its response; after the stream ends, this client sends it.
 	if m.settling && m.streamID != nil && m.chatSessionID != nil {
@@ -572,7 +576,10 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.status.setSession(e.ChatSessionID)
 
 	case models.MessageIDEvent:
-		m.streamID = &e.ReservedAgentMessageID
+		// A followed stream's message ID names its response, not the stream.
+		if !m.following {
+			m.streamID = &e.ReservedAgentMessageID
+		}
 		m.parentMessageID = &e.ReservedAgentMessageID
 		m.viewport.showResponse(e.ReservedAgentMessageID)
 
@@ -636,10 +643,11 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		m.viewport.appendToken(e.Content)
 
 	case models.ToolApprovalRequestEvent:
+		// A replay shows a card that this client already shows at its place.
 		if m.approvalIndex(e.ApprovalID) < 0 {
 			m.approvals = append(m.approvals, approvalCard{request: e})
-			m.renderApprovals()
 		}
+		m.renderApprovals()
 
 	case models.ToolApprovalResolvedEvent:
 		if index := m.approvalIndex(e.ApprovalID); index >= 0 {
@@ -650,6 +658,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		// Delivery completion does not confirm the save. Drain the stream.
 		m.stopReceived = true
 		m.awaitingApproval = e.AwaitingApproval()
+		m.renderApprovals()
 
 	case models.StreamUnavailableEvent:
 		if m.streamID != nil {
@@ -674,14 +683,11 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 		}
 		// The server did not accept the message; the draft keeps it.
 		m.viewport.withdrawUserMessage()
-		if m.chatSessionID == nil {
-			m.viewport.addWarning("A tool call in this session waits for approval. Approve or reject it, then send again.")
-			break
+		m.viewport.addWarning("A tool call in this session waits for approval. Approve or reject it, then send again.")
+		if m.chatSessionID != nil {
+			// The session load shows the request that waits.
+			return m, tea.Batch(loadApprovals(m.client, *m.chatSessionID), WaitForStreamEvent(m.streamCh))
 		}
-		m.viewport.addWarning("A tool call in this session waits for approval. Approve or reject it below, then send again.")
-		// The waiting response has no stream; the saved session shows it.
-		m.reloading = true
-		return cmdResume(m, *m.chatSessionID, m.streamCh)
 	}
 
 	return m, WaitForStreamEvent(m.streamCh)
@@ -712,23 +718,12 @@ func (m Model) handleStreamDone(msg StreamDoneMsg) (tea.Model, tea.Cmd) {
 		return m.finishStream(msg.Err)
 	}
 	m.settling = true
-	if m.awaitingApproval && m.activeApproval() >= 0 {
-		// The last decision follows the continuation.
-		m.renderApprovals()
-		return m, nil
-	}
 	return m, checkSessionReady(m.client, *m.chatSessionID, m.streamCh)
 }
 
+// finishStream ends the display of a response. Its cards wait for the
+// server's outcome.
 func (m Model) finishStream(err error) (Model, tea.Cmd) {
-	// Without the server's outcome, a card keeps this client's decision.
-	for len(m.approvals) > 0 {
-		label := m.approvals[0].decided
-		if label == "" {
-			label = approval.NoLongerWaiting
-		}
-		m = m.resolveApproval(0, label)
-	}
 	m.viewport.finishAgent()
 	if m.agentStarted && len(m.citations) > 0 {
 		m.viewport.addCitations(m.citations)
@@ -745,6 +740,7 @@ func (m Model) finishStream(err error) (Model, tea.Cmd) {
 	m.streamID = nil
 	m.settling = false
 	m.reloading = false
+	m.renderApprovals()
 
 	// Auto-rename new sessions
 	if m.needsRename && m.chatSessionID != nil {
@@ -957,6 +953,8 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 
 	detail := msg.Detail
 	m.chatSessionID = &detail.ChatSessionID
+	m.approvals = nil
+	m.approvalsVersion = msg.Status.ApprovalsVersion
 	m.viewport.clearDisplay()
 	m.status.setSession(detail.ChatSessionID)
 
@@ -994,49 +992,17 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		desc = *detail.Description
 	}
 	m.viewport.addInfo("Resumed session: " + desc)
+	// The saved replay shows every request that waits, also those of a
+	// response that waits for decisions and has no stream.
+	m = m.showSavedApprovals(detail)
 	if msg.Status.IsProcessing {
 		m.viewport.startAgent()
-		return m.followRunningResponse(msg.Status.StreamID)
-	}
-	// A response that waits for decisions has no stream. Its saved replay
-	// ends with its requests and a stop for them.
-	last := len(detail.Messages) - 1
-	if last < 0 || detail.Messages[last].MessageType != "assistant" || len(detail.Packets) == 0 {
-		return m, nil
-	}
-	var waiting []models.ToolApprovalRequestEvent
-	resolved := map[string]bool{}
-	awaiting := false
-	for _, packet := range detail.Packets[len(detail.Packets)-1] {
-		switch e := parser.ParseStreamLine(string(packet)).(type) {
-		case models.ToolApprovalRequestEvent:
-			waiting = append(waiting, e)
-		case models.ToolApprovalResolvedEvent:
-			resolved[e.ApprovalID] = true
-		case models.StopEvent:
-			awaiting = e.AwaitingApproval()
+		var streamID *int
+		if msg.Status.CurrentStream != nil {
+			streamID = &msg.Status.CurrentStream.StreamID
 		}
+		return m.followRunningResponse(streamID)
 	}
-	if !awaiting {
-		return m, nil
-	}
-	for _, request := range waiting {
-		if !resolved[request.ApprovalID] && m.approvalIndex(request.ApprovalID) < 0 {
-			m.approvals = append(m.approvals, approvalCard{request: request})
-		}
-	}
-	if len(m.approvals) == 0 {
-		return m, nil
-	}
-	// Wait as after a stream that stopped for the decisions.
-	responseID := detail.Messages[last].MessageID
-	m.streamID = &responseID
-	m.isStreaming = true
-	m.settling = true
-	m.stopReceived = true
-	m.awaitingApproval = true
-	m.status.setStreaming(true)
-	m.renderApprovals()
 	return m, nil
 }
 

@@ -95,6 +95,8 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 		m, _ = m.finishStream(nil)
 	}
 	m.chatSessionID = nil
+	m.approvals = nil
+	m.approvalsVersion = ""
 	parentID := -1
 	m.parentMessageID = &parentID
 	m.needsRename = false

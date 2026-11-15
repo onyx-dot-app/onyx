@@ -50,11 +50,23 @@ type ChatSessionDetailResponse struct {
 	Packets [][]json.RawMessage `json:"packets"`
 }
 
+// ChatStream is a running response stream and the response rows it writes.
+// A stream ID is not a message ID.
+type ChatStream struct {
+	StreamID int `json:"stream_id"`
+	// One response for each model, in model order.
+	ResponseIDs []int `json:"response_ids"`
+}
+
 // ChatSessionStatus reports whether the server still runs a response of a
-// session. StreamID names the running response that has a stream, or is nil.
+// session.
 type ChatSessionStatus struct {
 	IsProcessing bool
-	StreamID     *int
+	// CurrentStream is the running response that has a stream, or nil.
+	CurrentStream *ChatStream
+	// ApprovalsVersion changes when the session's waiting approval requests
+	// change. A session load shows the requests of the version.
+	ApprovalsVersion string
 }
 
 // ChatFileType represents a file type for uploads.
@@ -159,6 +171,9 @@ type ApprovalDecisionResult struct {
 	// USER, SESSION_GRANT, or POLICY: the action policy disabled the tool, so
 	// the approval rejected the call.
 	DecidedVia string `json:"decided_via"`
+	// Continuation is the stream that continues the response after the
+	// decision, or nil while other requests still wait or nothing resumed.
+	Continuation *ChatStream `json:"continuation"`
 }
 
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
