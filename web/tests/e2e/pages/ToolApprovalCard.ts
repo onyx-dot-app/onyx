@@ -33,7 +33,7 @@ export class ToolApprovalCard {
   }
 
   async expectPending(toolName: string): Promise<void> {
-    // The header names the action. A request has no deadline.
+    // The header names the action.
     await expect(
       this.card.getByRole("button", {
         name: `Approval requested: ${toolName}`,

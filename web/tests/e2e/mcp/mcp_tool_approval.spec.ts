@@ -158,6 +158,58 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     return { nonce, answer, conversation };
   }
 
+  /**
+   * Script a turn that starts a background agent whose tool call asks for
+   * approval. The reply ends at once; the agent reports after the decision,
+   * and its report wakes the chat with `followUp`.
+   */
+  async function startBackgroundAgent(
+    page: Page
+  ): Promise<{ followUp: string }> {
+    const nonce = mockLlmNonce();
+    const task = `Greet ${nonce} in the background`;
+    const callId = `agent-call-${nonce}`;
+    const report = `Mailer report ${nonce}`;
+    const followUp = `The mailer reported ${nonce}`;
+    await addMockLlmConversation({
+      name: `root-${nonce}`,
+      conditions: { prompt_contains: [`Start a mailer ${nonce}`] },
+      replies: [
+        {
+          // Agent tools stay direct tools in code mode.
+          tool_calls: [
+            {
+              id: `spawn-${nonce}`,
+              name: "spawn_agent",
+              arguments: { name: "mailer", instruction: task },
+            },
+          ],
+          conditions: { offers: ["spawn_agent"] },
+        },
+        {
+          text: `Started ${nonce}`,
+          conditions: { has_results_for: [`spawn-${nonce}`] },
+        },
+        { text: followUp, conditions: { prompt_contains: [report] } },
+      ],
+    });
+    await addMockLlmConversation({
+      name: `agent-${nonce}`,
+      conditions: { prompt_contains: [task] },
+      replies: [
+        mockLlmToolCallReply([
+          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
+        ]),
+        { text: report, conditions: { has_results_for: [callId] } },
+      ],
+    });
+    const chat = new ChatPage(page);
+    await chat.gotoAgent(agentId, agentName);
+    await chat.inputBar.fill(`Start a mailer ${nonce}`);
+    await chat.inputBar.send();
+    return { followUp };
+  }
+
   test("Approve runs the tool and the answer continues", async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
@@ -282,47 +334,8 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    const nonce = mockLlmNonce();
-    const task = `Greet ${nonce} in the background`;
-    const callId = `agent-call-${nonce}`;
-    const report = `Mailer report ${nonce}`;
-    const followUp = `The mailer reported ${nonce}`;
-    await addMockLlmConversation({
-      name: `root-${nonce}`,
-      conditions: { prompt_contains: [`Start a mailer ${nonce}`] },
-      replies: [
-        {
-          // Agent tools stay direct tools in code mode.
-          tool_calls: [
-            {
-              id: `spawn-${nonce}`,
-              name: "spawn_agent",
-              arguments: { name: "mailer", instruction: task },
-            },
-          ],
-          conditions: { offers: ["spawn_agent"] },
-        },
-        {
-          text: `Started ${nonce}`,
-          conditions: { has_results_for: [`spawn-${nonce}`] },
-        },
-        { text: followUp, conditions: { prompt_contains: [report] } },
-      ],
-    });
-    await addMockLlmConversation({
-      name: `agent-${nonce}`,
-      conditions: { prompt_contains: [task] },
-      replies: [
-        mockLlmToolCallReply([
-          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
-        ]),
-        { text: report, conditions: { has_results_for: [callId] } },
-      ],
-    });
+    const { followUp } = await startBackgroundAgent(page);
     const chat = new ChatPage(page);
-    await chat.gotoAgent(agentId, agentName);
-    await chat.inputBar.fill(`Start a mailer ${nonce}`);
-    await chat.inputBar.send();
 
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
@@ -341,6 +354,47 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     });
     await card.expectApproved(toolDisplayName);
     await chat.reload();
+    await card.expectApproved(toolDisplayName);
+  });
+
+  test("A background agent's card stays actionable after a reload and does not block sends", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const { followUp } = await startBackgroundAgent(page);
+    const chat = new ChatPage(page);
+    const card = new ToolApprovalCard(page);
+    await card.expectPending(toolDisplayName);
+    await chat.expectLatestReplyComplete();
+
+    // The session load replays the agent's waiting request.
+    await chat.reload();
+    await card.expectPending(toolDisplayName);
+    await expect(
+      card.card.getByText(`mailer wants to run ${toolDisplayName}`, {
+        exact: true,
+      })
+    ).toBeVisible();
+
+    await test.step("a send runs while the agent's card waits", async () => {
+      const nonce = mockLlmNonce();
+      await addMockLlmConversation({
+        name: `beside-agent-${nonce}`,
+        conditions: { prompt_contains: [nonce] },
+        replies: [{ text: `Hello beside ${nonce}` }],
+      });
+      await chat.inputBar.fill(`Say hello ${nonce}`);
+      await chat.inputBar.send();
+      await chat.expectLatestReplyComplete();
+      await expect(chat.answerText(`Hello beside ${nonce}`, 1)).toBeVisible();
+      await card.expectPending(toolDisplayName);
+    });
+
+    await card.approve();
+    await expect(chat.answerText(followUp, 2)).toBeVisible({
+      timeout: 60_000,
+    });
     await card.expectApproved(toolDisplayName);
   });
 
