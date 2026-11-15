@@ -58,14 +58,15 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   }, [nudge]);
 
   // The decided status shows until the resolution packet confirms it. The
-  // client follows the stream that the server names as the continuation; a
-  // live response has none and its reader keeps reading. A background
-  // agent's request continues without a stream: one status read starts the
-  // chat's background work polling, which shows the agent's later requests.
+  // client follows the stream that the server names as the continuation.
+  // Without one, the response continues in a later turn or in a live reader,
+  // or an agent continues in the background: a status read hands the chat to
+  // its status subscriber, which follows server turns until the chat is idle
+  // and then loads the saved session.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
-    let continuation: ChatStream | null = null;
+    let continuation: ChatStream | null;
     try {
       const response = await postChatApprovalDecision(
         request.approval_id,
@@ -82,17 +83,22 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
         throw cause;
       }
       recordStatus(request.approval_id, "closed");
-      // Another decision can have started the continuation.
-      if (sessionId !== null) {
-        const status = await readChatSessionStatus(sessionId);
-        if (status.is_processing) continuation = status.current_stream;
-      }
+      if (sessionId === null) return;
+      // Another decision can have started the continuation. The read also
+      // reaches the status subscriber.
+      const status = await readChatSessionStatus(sessionId);
+      if (status.is_processing && status.current_stream)
+        followChatStream(
+          sessionId,
+          status.current_stream,
+          tReadiness("checkFailed")
+        );
+      return;
     }
     if (sessionId === null) return;
     if (continuation)
       followChatStream(sessionId, continuation, tReadiness("checkFailed"));
-    else if (request.agent_name !== null)
-      void mutate(SWR_KEYS.chatSessionStatus(sessionId));
+    else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 
   const agentRequest =

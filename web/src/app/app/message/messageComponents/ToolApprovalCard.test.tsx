@@ -169,7 +169,7 @@ describe("Continuation", () => {
 
   it.each([
     ["reads the chat's status for the resumed agent", "Researcher", null],
-    ["leaves a root request to its continuation", null, null],
+    ["reads the chat's status for the root's later turn", null, null],
     ["follows the agent's named stream instead", "Researcher", continuation],
   ] as const)("after a decision, %s", async (_, agentName, next) => {
     respond(200, decided("APPROVED", "USER", next));
@@ -180,9 +180,8 @@ describe("Continuation", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(record("approved"))
     );
-    const agentWithoutStream = agentName !== null && next === null;
     await waitFor(() =>
-      expect(statusReads).toHaveBeenCalledTimes(agentWithoutStream ? 1 : 0)
+      expect(statusReads).toHaveBeenCalledTimes(next === null ? 1 : 0)
     );
   });
 
