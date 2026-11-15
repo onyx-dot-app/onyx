@@ -1,5 +1,6 @@
 import { toast } from "@opal/layouts";
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableHead,
@@ -12,12 +13,13 @@ import { PageSelector } from "@/components/PageSelector";
 import { DocumentBoostStatus } from "@/lib/types";
 import { updateHiddenStatus } from "../lib";
 import { numToDisplay } from "./constants";
-import { FiEye, FiEyeOff } from "react-icons/fi";
+import { SvgEye, SvgEyeOff } from "@opal/icons";
 import { getErrorMsg } from "@/lib/fetchUtils";
 import { HoverPopup } from "@/components/HoverPopup";
-import { Checkbox } from "@opal/components";
+import { InputCheckbox } from "@opal/components";
 import { ScoreSection } from "../ScoreEditor";
 import { truncateString } from "@/lib/utils";
+import { clickOnKeyDown } from "@opal/utils";
 
 const IsVisibleSection = ({
   document,
@@ -26,39 +28,43 @@ const IsVisibleSection = ({
   document: DocumentBoostStatus;
   onUpdate: (response: Response) => void;
 }) => {
+  const t = useTranslations("admin.documents");
+
+  async function setHidden(hidden: boolean) {
+    onUpdate(await updateHiddenStatus(document.document_id, hidden));
+  }
+
   return (
     <HoverPopup
       mainContent={
         document.hidden ? (
           <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                false
-              );
-              onUpdate(response);
-            }}
+            role="button"
+            tabIndex={0}
+            aria-label={t("visibility.unhide.ariaLabel")}
+            onKeyDown={clickOnKeyDown(() => void setHidden(false))}
+            onClick={() => void setHidden(false)}
             className="flex text-error cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="select-none">Hidden</div>
-            <div className="ml-1 my-auto">
-              <Checkbox checked={false} />
+            <div className="select-none">{t("visibility.hidden.label")}</div>
+            <div className="ms-1 my-auto">
+              <InputCheckbox checked={false} />
             </div>
           </div>
         ) : (
           <div
-            onClick={async () => {
-              const response = await updateHiddenStatus(
-                document.document_id,
-                true
-              );
-              onUpdate(response);
-            }}
+            role="button"
+            tabIndex={0}
+            aria-label={t("visibility.hide.ariaLabel")}
+            onKeyDown={clickOnKeyDown(() => void setHidden(true))}
+            onClick={() => void setHidden(true)}
             className="flex cursor-pointer hover:bg-accent-background-hovered py-1 px-2 w-fit rounded-full"
           >
-            <div className="my-auto select-none">Visible</div>
-            <div className="ml-1 my-auto">
-              <Checkbox checked={true} />
+            <div className="my-auto select-none">
+              {t("visibility.visible.label")}
+            </div>
+            <div className="ms-1 my-auto">
+              <InputCheckbox checked={true} />
             </div>
           </div>
         )
@@ -67,12 +73,13 @@ const IsVisibleSection = ({
         <div className="text-xs">
           {document.hidden ? (
             <div className="flex">
-              <FiEye className="my-auto mr-1" /> Unhide
+              <SvgEye className="my-auto me-1" size={12} />{" "}
+              {t("visibility.unhide.label")}
             </div>
           ) : (
             <div className="flex">
-              <FiEyeOff className="my-auto mr-1" />
-              Hide
+              <SvgEyeOff className="my-auto me-1" size={12} />
+              {t("visibility.hide.label")}
             </div>
           )}
         </div>
@@ -89,6 +96,7 @@ export const DocumentFeedbackTable = ({
   documents: DocumentBoostStatus[];
   refresh: () => void;
 }) => {
+  const t = useTranslations("admin.documents");
   const [page, setPage] = useState(1);
 
   return (
@@ -96,9 +104,9 @@ export const DocumentFeedbackTable = ({
       <Table className="overflow-visible">
         <TableHeader>
           <TableRow>
-            <TableHead>Document Name</TableHead>
-            <TableHead>Is Searchable?</TableHead>
-            <TableHead>Score</TableHead>
+            <TableHead>{t("feedback.table.name.header")}</TableHead>
+            <TableHead>{t("feedback.table.searchable.header")}</TableHead>
+            <TableHead>{t("feedback.table.score.header")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -125,9 +133,9 @@ export const DocumentFeedbackTable = ({
                           refresh();
                         } else {
                           toast.error(
-                            `Error updating hidden status - ${getErrorMsg(
-                              response
-                            )}`
+                            t("feedback.updateHiddenFailed.toast", {
+                              detail: await getErrorMsg(response),
+                            })
                           );
                         }
                       }}
@@ -137,7 +145,7 @@ export const DocumentFeedbackTable = ({
                     <div className="relative">
                       <div
                         key={document.document_id}
-                        className="h-10 ml-auto mr-8"
+                        className="h-10 ms-auto me-8"
                       >
                         <ScoreSection
                           documentId={document.document_id}

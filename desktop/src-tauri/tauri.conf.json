@@ -15,6 +15,7 @@
         "title": "Onyx",
         "label": "main",
         "url": "index.html",
+        "create": false,
         "width": 1232,
         "height": 800,
         "minWidth": 800,
@@ -64,6 +65,13 @@
   "plugins": {
     "shell": {
       "open": true
+    },
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "onyx"
+        ]
+      }
     }
   }
 }

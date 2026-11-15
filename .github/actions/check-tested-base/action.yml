@@ -1,0 +1,22 @@
+name: "Check tested base"
+description: >-
+  Merge-queue guard for a required check whose verdict comes from the
+  pull_request event only. Accepts the verdict when the base it was computed
+  against landed in the target branch, directly or through a parent PR.
+inputs:
+  context:
+    description: "Commit status context the pull_request run recorded (for example ci/tested-base/integration)"
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - name: Check tested base
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        CONTEXT: ${{ inputs.context }}
+        REPO: ${{ github.repository }}
+        MERGE_GROUP_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        MERGE_GROUP_BASE_REF: ${{ github.event.merge_group.base_ref }}
+        MERGE_GROUP_HEAD_COMMIT_MESSAGE: ${{ github.event.merge_group.head_commit.message }}
+      run: bash "${GITHUB_ACTION_PATH}/check-tested-base.sh"

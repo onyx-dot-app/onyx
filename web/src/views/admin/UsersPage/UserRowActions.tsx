@@ -1,7 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Divider } from "@opal/components";
+import { useTranslations } from "next-intl";
+import {
+  Button,
+  Dropdown,
+  Text,
+  useCreateModal,
+  type DropdownMenuItem,
+  type DropdownMenuRow,
+} from "@opal/components";
 import {
   SvgMoreHorizontal,
   SvgUsers,
@@ -10,15 +18,12 @@ import {
   SvgUserPlus,
   SvgUserX,
   SvgKey,
+  SvgUserManage,
 } from "@opal/icons";
-import { Disabled } from "@opal/core";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import { Popover } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
-import Text from "@/refresh-components/texts/Text";
-import { UserStatus } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { toast } from "@opal/layouts";
-import { approveRequest } from "./svc";
+import { approveRequest, setUserAdminAccess } from "./svc";
+import { useCanManageGroups } from "@/lib/permissions/hooks";
 import EditUserModal from "./EditUserModal";
 import {
   CancelInviteModal,
@@ -27,7 +32,7 @@ import {
   DeleteUserModal,
   ResetPasswordModal,
 } from "./UserActionModals";
-import type { UserRow } from "./interfaces";
+import type { UserRow } from "./types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,215 +60,283 @@ export default function UserRowActions({
   user,
   onMutate,
 }: UserRowActionsProps) {
+  const t = useTranslations("admin.users");
   const [modal, setModal] = useState<Modal | null>(null);
-  const [popoverOpen, setPopoverOpen] = useState(false);
+  const actionModal = useCreateModal();
+  const [menuOpen, setMenuOpen] = useState(false);
+  // below Business the group editor is empty, so don't offer it
+  const canManageGroups = useCanManageGroups();
 
   const openModal = (type: Modal) => {
-    setPopoverOpen(false);
     setModal(type);
+    actionModal.toggle(true);
   };
 
-  const closeModal = () => setModal(null);
+  // Keep `modal` set on close so the modal stays mounted while it animates out.
+  const closeModal = () => actionModal.toggle(false);
 
   const closeAndMutate = () => {
-    setModal(null);
+    actionModal.toggle(false);
     onMutate();
   };
 
-  // Status-aware action menus
-  const actionButtons = (() => {
-    // SCIM-managed users get limited actions — most changes would be
-    // overwritten on the next IdP sync.
+  // the only edition-independent way to promote/demote; group editing is EE-only
+  const toggleAdminAccess = () => {
+    void (async () => {
+      try {
+        await setUserAdminAccess(user.email, !user.is_admin);
+        onMutate();
+        toast.success(
+          user.is_admin
+            ? t("rowActions.toasts.adminAccessRemoved")
+            : t("rowActions.toasts.adminAccessGranted")
+        );
+      } catch (err) {
+        toast.error(
+          err instanceof Error ? err.message : t("rowActions.toasts.error")
+        );
+      }
+    })();
+  };
+
+  const editGroupsItem: DropdownMenuRow[] =
+    user.id && canManageGroups
+      ? [
+          {
+            kind: "action",
+            id: "edit-groups",
+            icon: SvgUsers,
+            title: t("rowActions.editGroups.label"),
+            onSelect: () => openModal(Modal.EDIT_GROUPS),
+          },
+        ]
+      : [];
+  const adminAccessItem: DropdownMenuRow[] =
+    user.id && user.account_type === AccountType.STANDARD
+      ? [
+          {
+            kind: "action",
+            id: "admin-access",
+            icon: SvgUserManage,
+            title: user.is_admin
+              ? t("rowActions.removeAdmin.label")
+              : t("rowActions.makeAdmin.label"),
+            onSelect: toggleAdminAccess,
+          },
+        ]
+      : [];
+  const resetPasswordItem: DropdownMenuRow = {
+    kind: "action",
+    id: "reset-password",
+    icon: SvgKey,
+    title: t("rowActions.resetPassword.label"),
+    onSelect: () => openModal(Modal.RESET_PASSWORD),
+  };
+
+  // Status-aware action menus. A line sits between groups.
+  const menuItems: DropdownMenuItem[] = (() => {
+    // SCIM-managed users get limited actions: most changes would be
+    // overwritten on the next IdP sync. Deactivate shows, so a SCIM admin
+    // can see the action exists, but never fires.
     if (user.is_scim_synced) {
-      return (
-        <>
-          {user.id && (
-            <LineItem
-              icon={SvgUsers}
-              onClick={() => openModal(Modal.EDIT_GROUPS)}
-            >
-              Groups &amp; Roles
-            </LineItem>
-          )}
-          <Disabled disabled>
-            <LineItem danger icon={SvgUserX}>
-              Deactivate User
-            </LineItem>
-          </Disabled>
-          <Divider paddingPerpendicular="md" />
-          <Text as="p" secondaryBody text03 className="px-3 py-1">
-            This is a synced SCIM user managed by your identity provider.
-          </Text>
-        </>
-      );
+      return [
+        {
+          kind: "group",
+          items: [
+            ...editGroupsItem,
+            {
+              kind: "action",
+              id: "deactivate",
+              icon: SvgUserX,
+              danger: true,
+              disabled: true,
+              title: t("rowActions.deactivate.label"),
+              onSelect: () => {},
+            },
+          ],
+        },
+        {
+          kind: "group",
+          items: [
+            {
+              kind: "custom",
+              id: "scim-notice",
+              disabled: true,
+              render: ({ props }) => (
+                <div {...props}>
+                  <div className="px-3 py-1">
+                    <Text as="p" font="secondary-body" color="text-03">
+                      {t("rowActions.scimNotice.description")}
+                    </Text>
+                  </div>
+                </div>
+              ),
+            },
+          ],
+        },
+      ];
     }
 
     switch (user.status) {
       case UserStatus.INVITED:
-        return (
-          <LineItem
-            danger
-            icon={SvgXCircle}
-            onClick={() => openModal(Modal.CANCEL_INVITE)}
-          >
-            Cancel Invite
-          </LineItem>
-        );
+        return [
+          {
+            kind: "action",
+            id: "cancel-invite",
+            icon: SvgXCircle,
+            danger: true,
+            title: t("rowActions.cancelInvite.label"),
+            onSelect: () => openModal(Modal.CANCEL_INVITE),
+          },
+        ];
 
       case UserStatus.REQUESTED:
-        return (
-          <LineItem
-            icon={SvgUserCheck}
-            onClick={() => {
-              setPopoverOpen(false);
+        return [
+          {
+            kind: "action",
+            id: "approve",
+            icon: SvgUserCheck,
+            title: t("rowActions.approve.label"),
+            onSelect: () => {
               void (async () => {
                 try {
                   await approveRequest(user.email);
                   onMutate();
-                  toast.success("Request approved");
+                  toast.success(t("rowActions.toasts.requestApproved"));
                 } catch (err) {
                   toast.error(
-                    err instanceof Error ? err.message : "An error occurred"
+                    err instanceof Error
+                      ? err.message
+                      : t("rowActions.toasts.error")
                   );
                 }
               })();
-            }}
-          >
-            Approve
-          </LineItem>
-        );
+            },
+          },
+        ];
 
       case UserStatus.ACTIVE:
-        return (
-          <>
-            {user.id && (
-              <LineItem
-                icon={SvgUsers}
-                onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
-            )}
-            <LineItem
-              icon={SvgKey}
-              onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
-            <Divider paddingPerpendicular="md" />
-            <LineItem
-              danger
-              icon={SvgUserX}
-              onClick={() => openModal(Modal.DEACTIVATE)}
-            >
-              Deactivate User
-            </LineItem>
-          </>
-        );
+        return [
+          {
+            kind: "group",
+            items: [...editGroupsItem, ...adminAccessItem, resetPasswordItem],
+          },
+          {
+            kind: "group",
+            items: [
+              {
+                kind: "action",
+                id: "deactivate",
+                icon: SvgUserX,
+                danger: true,
+                title: t("rowActions.deactivate.label"),
+                onSelect: () => openModal(Modal.DEACTIVATE),
+              },
+            ],
+          },
+        ];
 
       case UserStatus.INACTIVE:
-        return (
-          <>
-            {user.id && (
-              <LineItem
-                icon={SvgUsers}
-                onClick={() => openModal(Modal.EDIT_GROUPS)}
-              >
-                Groups &amp; Roles
-              </LineItem>
-            )}
-            <LineItem
-              icon={SvgKey}
-              onClick={() => openModal(Modal.RESET_PASSWORD)}
-            >
-              Reset Password
-            </LineItem>
-            <Divider paddingPerpendicular="md" />
-            <LineItem
-              icon={SvgUserPlus}
-              onClick={() => openModal(Modal.ACTIVATE)}
-            >
-              Activate User
-            </LineItem>
-            <Divider paddingPerpendicular="md" />
-            <LineItem
-              danger
-              icon={SvgUserX}
-              onClick={() => openModal(Modal.DELETE)}
-            >
-              Delete User
-            </LineItem>
-          </>
-        );
+        return [
+          {
+            kind: "group",
+            items: [...editGroupsItem, ...adminAccessItem, resetPasswordItem],
+          },
+          {
+            kind: "group",
+            items: [
+              {
+                kind: "action",
+                id: "activate",
+                icon: SvgUserPlus,
+                title: t("rowActions.activate.label"),
+                onSelect: () => openModal(Modal.ACTIVATE),
+              },
+            ],
+          },
+          {
+            kind: "group",
+            items: [
+              {
+                kind: "action",
+                id: "delete",
+                icon: SvgUserX,
+                danger: true,
+                title: t("rowActions.delete.label"),
+                onSelect: () => openModal(Modal.DELETE),
+              },
+            ],
+          },
+        ];
 
       default: {
         const _exhaustive: never = user.status;
-        return null;
+        return [];
       }
     }
   })();
 
   return (
     <>
-      <Popover open={popoverOpen} onOpenChange={setPopoverOpen}>
-        <Popover.Trigger asChild>
-          <Button prominence="tertiary" icon={SvgMoreHorizontal} />
-        </Popover.Trigger>
-        <Popover.Content align="end" width="sm">
-          <Section
-            gap={0.5}
-            height="auto"
-            alignItems="stretch"
-            justifyContent="start"
-          >
-            {actionButtons}
-          </Section>
-        </Popover.Content>
-      </Popover>
-
-      {modal === Modal.EDIT_GROUPS && user.id && (
-        <EditUserModal
-          user={user as UserRow & { id: string }}
-          onClose={closeModal}
-          onMutate={onMutate}
+      <Dropdown open={menuOpen} onOpenChange={setMenuOpen}>
+        <Dropdown.Trigger asChild>
+          <Button
+            prominence="tertiary"
+            icon={SvgMoreHorizontal}
+            aria-label={t("rowActions.menuButton.ariaLabel")}
+          />
+        </Dropdown.Trigger>
+        <Dropdown.Data
+          label={t("rowActions.menuButton.ariaLabel")}
+          items={menuItems}
         />
-      )}
+      </Dropdown>
 
-      {modal === Modal.CANCEL_INVITE && (
-        <CancelInviteModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+      <actionModal.Provider>
+        {modal === Modal.EDIT_GROUPS && user.id && (
+          <EditUserModal
+            user={user as UserRow & { id: string }}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.DEACTIVATE && (
-        <DeactivateUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.CANCEL_INVITE && (
+          <CancelInviteModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.ACTIVATE && (
-        <ActivateUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.DEACTIVATE && (
+          <DeactivateUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.DELETE && (
-        <DeleteUserModal
-          email={user.email}
-          onClose={closeModal}
-          onMutate={onMutate}
-        />
-      )}
+        {modal === Modal.ACTIVATE && (
+          <ActivateUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
 
-      {modal === Modal.RESET_PASSWORD && (
-        <ResetPasswordModal email={user.email} onClose={closeModal} />
-      )}
+        {modal === Modal.DELETE && (
+          <DeleteUserModal
+            email={user.email}
+            onClose={closeModal}
+            onMutate={onMutate}
+          />
+        )}
+
+        {modal === Modal.RESET_PASSWORD && (
+          <ResetPasswordModal email={user.email} onClose={closeModal} />
+        )}
+      </actionModal.Provider>
     </>
   );
 }

@@ -6,9 +6,4 @@
 /web/STANDARDS.md @raunakab @Weves
 
 # Beta cherry-pick workflow owners
-/.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara @jmelahman
-
-# Enterprise Edition code owners
-/backend/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
-/web/src/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
-/web/src/app/ee/ @evan-onyx @Weves @jmelahman @justin-tahara
+/.github/workflows/post-merge-beta-cherry-pick.yml @justin-tahara

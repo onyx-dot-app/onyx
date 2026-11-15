@@ -1,7 +1,7 @@
 "use client";
 
+import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useState, useRef, useMemo } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { Route } from "next";
 
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -48,7 +48,7 @@ function usePaginatedFetch<T extends PaginatedType>({
   refreshIntervalInMs = 5000,
   disableUrlSync = false,
 }: PaginationConfig): PaginatedHookReturnData<T> {
-  const router = useRouter();
+  const navigation = useNavigation();
   const currentPath = usePathname();
   const searchParams = useSearchParams();
 
@@ -65,7 +65,16 @@ function usePaginatedFetch<T extends PaginatedType>({
   );
 
   // Tracks ongoing requests to avoid duplicate requests, uses ref to persist across renders
-  const ongoingRequestsRef = useRef<Set<number>>(new Set());
+  const requestKey = useMemo(
+    () =>
+      JSON.stringify({ endpoint, query, filter, itemsPerPage, pagesPerBatch }),
+    [endpoint, query, filter, itemsPerPage, pagesPerBatch]
+  );
+  const requestKeyRef = useRef(requestKey);
+  useEffect(() => {
+    requestKeyRef.current = requestKey;
+  }, [requestKey]);
+  const ongoingRequestsRef = useRef<Set<string>>(new Set());
 
   const totalPages = useMemo(() => {
     if (totalItems === 0) return 1;
@@ -79,14 +88,20 @@ function usePaginatedFetch<T extends PaginatedType>({
     return { batchNum, batchPageNum };
   }, [currentPage, pagesPerBatch]);
 
+  const currentBatchRef = useRef(batchAndPageIndices.batchNum);
+  useEffect(() => {
+    currentBatchRef.current = batchAndPageIndices.batchNum;
+  }, [batchAndPageIndices]);
+
   // Fetches a batch of data and stores it in the cache
   const fetchBatchData = useCallback(
     async (batchNum: number) => {
+      const requestId = `${requestKey}:${batchNum}`;
       // Prevents duplicate requests
-      if (ongoingRequestsRef.current.has(batchNum)) {
+      if (ongoingRequestsRef.current.has(requestId)) {
         return;
       }
-      ongoingRequestsRef.current.add(batchNum);
+      ongoingRequestsRef.current.add(requestId);
 
       try {
         // Build query params
@@ -110,6 +125,10 @@ function usePaginatedFetch<T extends PaginatedType>({
         const url = `${endpoint}?${params.toString()}`;
         const responseData =
           await errorHandlingFetcher<PaginatedApiResponse<T>>(url);
+
+        if (requestKeyRef.current !== requestKey) {
+          return;
+        }
 
         // Validate response data structure
         if (
@@ -138,12 +157,22 @@ function usePaginatedFetch<T extends PaginatedType>({
           [batchNum]: pagesInBatch,
         }));
       } catch (error) {
+        console.error("Paginated fetch failed", { endpoint, batchNum, error });
+        if (
+          requestKeyRef.current !== requestKey ||
+          batchNum !== currentBatchRef.current
+        ) {
+          return;
+        }
         setError(error instanceof Error ? error : new Error(String(error)));
+        // no batch will land in the cache now, and that is the only other place
+        // isLoading is cleared — without this a denied fetch spins forever
+        setIsLoading(false);
       } finally {
-        ongoingRequestsRef.current.delete(batchNum);
+        ongoingRequestsRef.current.delete(requestId);
       }
     },
-    [endpoint, pagesPerBatch, itemsPerPage, query, filter]
+    [endpoint, pagesPerBatch, itemsPerPage, query, filter, requestKey]
   );
 
   // Updates the URL with the current page number
@@ -152,11 +181,13 @@ function usePaginatedFetch<T extends PaginatedType>({
       if (disableUrlSync || !currentPath || !searchParams) return;
       const params = new URLSearchParams(searchParams);
       params.set("page", page.toString());
-      router.replace(`${currentPath}?${params.toString()}` as Route, {
+      // SAFETY: currentPath is the current pathname, a route of this app.
+      navigation.go(`${currentPath}?${params.toString()}` as Route, {
+        replace: true,
         scroll: false,
       });
     },
-    [disableUrlSync, currentPath, router, searchParams]
+    [disableUrlSync, currentPath, navigation, searchParams]
   );
 
   // Updates the current page

@@ -1,14 +1,17 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect, useRef, useCallback } from "react";
-import { useRouter } from "next/navigation";
-import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
+import {
+  canReuseSession,
+  useBuildSessionStore,
+} from "@/app/craft/hooks/useBuildSessionStore";
 import { usePreProvisionPolling } from "@/app/craft/hooks/usePreProvisionPolling";
 import { useSandboxStatusReconciler } from "@/app/craft/hooks/useSandboxStatusReconciler";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import { hasSupportedCraftProvider } from "@/app/craft/onboarding/constants";
-import { useLLMProviders } from "@/lib/languageModels/hooks";
+import { useLanguageModels } from "@/lib/languageModels/hooks";
 import {
   checkPreProvisionedSession,
   fetchSession,
@@ -36,14 +39,14 @@ interface UseBuildSessionControllerProps {
 export function useBuildSessionController({
   existingSessionId,
 }: UseBuildSessionControllerProps) {
-  const router = useRouter();
+  const navigation = useNavigation();
   useSandboxStatusReconciler();
 
   // Pre-provisioning gates only on having a visible configured model. When one
   // exists we start provisioning
   // immediately — even while the onboarding intro is still open — so the user
   // exits onboarding to a ready sandbox.
-  const { llmProviders } = useLLMProviders();
+  const { llmProviders } = useLanguageModels();
   const hasAnyProvider = hasSupportedCraftProvider(llmProviders);
 
   // Track previous existingSessionId to detect navigation transitions
@@ -84,7 +87,7 @@ export function useBuildSessionController({
   const isLoading = useBuildSessionStore((state) => {
     if (!state.currentSessionId) return false;
     const session = state.sessions.get(state.currentSessionId);
-    return session ? !session.isLoaded : false;
+    return session ? !session.isLoaded && !session.loadError : false;
   });
 
   const isStreaming = useBuildSessionStore((state) => {
@@ -104,6 +107,15 @@ export function useBuildSessionController({
         .sessions.get(sessionId);
       if (!cachedSession?.isLoaded) return;
       const skillsStaleRevision = cachedSession.skillsStaleRevision;
+      if (
+        cachedSession.status !== "running" &&
+        cachedSession.status !== "creating" &&
+        cachedSession.activeTurnId === null
+      ) {
+        void useBuildSessionStore
+          .getState()
+          .refreshOutputInventory(sessionId, { silent: true });
+      }
 
       try {
         const session = await fetchSession(sessionId, {
@@ -112,7 +124,12 @@ export function useBuildSessionController({
         const currentSession = useBuildSessionStore
           .getState()
           .sessions.get(sessionId);
-        if (currentSession?.skillsStaleRevision !== skillsStaleRevision) return;
+        if (
+          currentSession?.instanceId !== cachedSession.instanceId ||
+          currentSession.turnGeneration !== cachedSession.turnGeneration ||
+          currentSession.skillsStaleRevision !== skillsStaleRevision
+        )
+          return;
         updateSessionData(sessionId, {
           skillsStale: session.skills_stale,
         });
@@ -138,6 +155,7 @@ export function useBuildSessionController({
       // Reset state when transitioning FROM a session TO new build
       // This ensures we fetch fresh pre-provisioned status from backend
       if (prevExistingSessionId !== null) {
+        setControllerLoaded(null);
         setControllerTriggered(null);
         // Clear pre-provisioned state to force a fresh check from backend
         useBuildSessionStore.setState({ preProvisioning: { status: "idle" } });
@@ -179,12 +197,13 @@ export function useBuildSessionController({
       const currentState = useBuildSessionStore.getState();
       const cachedSession = currentState.sessions.get(existingSessionId);
 
-      if (cachedSession?.isLoaded) {
+      if (canReuseSession(cachedSession)) {
         setCurrentSession(existingSessionId);
         return;
       }
 
-      // Need to load from API
+      // Navigation belongs to the controller, not background loads.
+      setCurrentSession(existingSessionId);
       await loadSession(existingSessionId);
     }
 
@@ -277,6 +296,10 @@ export function useBuildSessionController({
         try {
           // Check if session is still valid WITHOUT resetting state
           const { valid } = await checkPreProvisionedSession(cachedSessionId);
+          if (
+            useBuildSessionStore.getState().preProvisioning !== preProvisioning
+          )
+            return;
 
           if (!valid) {
             // Session was consumed by another tab - now reset and re-provision
@@ -326,11 +349,11 @@ export function useBuildSessionController({
    */
   const navigateToSession = useCallback(
     (sessionId: string) => {
-      router.push(
+      navigation.go(
         `${CRAFT_PATH}?${CRAFT_SEARCH_PARAM_NAMES.SESSION_ID}=${sessionId}`
       );
     },
-    [router]
+    [navigation]
   );
 
   /**
@@ -339,8 +362,8 @@ export function useBuildSessionController({
    * allowing it to continue in the background.
    */
   const navigateToNewBuild = useCallback(() => {
-    router.push(CRAFT_PATH);
-  }, [router]);
+    navigation.go(CRAFT_PATH);
+  }, [navigation]);
 
   // Poll to verify pre-provisioned session is still valid (multi-tab support)
   // Only poll on welcome page (existingSessionId === null) - no point polling on session pages

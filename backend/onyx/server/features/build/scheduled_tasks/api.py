@@ -18,12 +18,16 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as celery_app
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryQueues, OnyxCeleryTask
+from onyx.db.action_policy import (
+    get_task_action_policies,
+    list_action_policies,
+)
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import (
     Permission,
@@ -31,7 +35,6 @@ from onyx.db.enums import (
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
-from onyx.db.external_app import get_external_apps
 from onyx.db.models import ScheduledTask, ScheduledTaskRun, User
 from onyx.db.scheduled_task import (
     create_scheduled_task,
@@ -39,11 +42,14 @@ from onyx.db.scheduled_task import (
     insert_run,
     list_runs_for_task,
     list_scheduled_tasks_for_user,
+    mark_runs_viewed,
     soft_delete_scheduled_task,
+    unread_run_counts_for_user,
     update_scheduled_task,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.models import AppActionPoliciesView, TaskAppActionPolicies
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EDITOR_PAYLOAD_MODELS,
     EditorMode,
@@ -70,6 +76,9 @@ NEXT_RUNS_PREVIEW_COUNT = 3
 # Default and max page sizes for the runs listing endpoint.
 RUNS_DEFAULT_PAGE_SIZE = 50
 RUNS_MAX_PAGE_SIZE = 100
+
+# Max run IDs accepted by one bulk mark-viewed request.
+RUNS_VIEWED_MAX_ENTRIES = 1000
 
 
 router = APIRouter(prefix="/scheduled-tasks")
@@ -121,7 +130,7 @@ class ScheduledTaskCreate(_Forbid):
     editor_payload: EditorPayload
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE
     run_immediately: bool = False
-    pre_approved_app_ids: list[int] = Field(default_factory=list)
+    action_policies: list[TaskAppActionPolicies] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -138,7 +147,7 @@ class ScheduledTaskPatch(_Forbid):
     editor_mode: EditorMode | None = None
     editor_payload: EditorPayload | None = None
     status: ScheduledTaskStatus | None = None
-    pre_approved_app_ids: list[int] | None = None
+    action_policies: list[TaskAppActionPolicies] | None = None
 
     _dispatch = model_validator(mode="before")(_dispatch_editor_payload)
 
@@ -163,6 +172,8 @@ class RunSummary(BaseModel):
     summary: str | None
     skip_reason: str | None
     error_class: str | None
+    revision: int
+    viewed_revision: int | None
 
     @classmethod
     def from_model(cls, run: ScheduledTaskRun) -> "RunSummary":
@@ -176,6 +187,8 @@ class RunSummary(BaseModel):
             summary=run.summary,
             skip_reason=run.skip_reason,
             error_class=run.error_class,
+            revision=run.version,
+            viewed_revision=run.viewed_revision,
         )
 
 
@@ -190,6 +203,7 @@ class ScheduledTaskListItem(BaseModel):
     status: ScheduledTaskStatus
     next_run_at: datetime | None
     last_run: RunSummary | None
+    unviewed_run_count: int
     created_at: datetime
     updated_at: datetime
 
@@ -209,7 +223,7 @@ class ScheduledTaskDetail(BaseModel):
     next_run_at: datetime | None
     next_runs: list[datetime]
     last_run: RunSummary | None
-    pre_approved_app_ids: list[int]
+    action_policies: list[TaskAppActionPolicies]
     created_at: datetime
     updated_at: datetime
 
@@ -221,6 +235,18 @@ class ScheduledTaskListResponse(BaseModel):
 class RunListResponse(BaseModel):
     items: list[RunSummary]
     next_cursor: str | None
+
+
+class UnviewedTaskCountResponse(BaseModel):
+    count: int
+
+
+class RunsViewedRequest(BaseModel):
+    revisions: dict[UUID, PositiveInt] = Field(max_length=RUNS_VIEWED_MAX_ENTRIES)
+
+
+class RunViewedRequest(BaseModel):
+    revision: int = Field(gt=0)
 
 
 class RunNowResponse(BaseModel):
@@ -257,6 +283,7 @@ def _list_item(
     db_session: Session,
     task: ScheduledTask,
     user_id: UUID,
+    unviewed_run_count: int,
 ) -> ScheduledTaskListItem:
     last_run = _latest_run(db_session, task, user_id)
     return ScheduledTaskListItem(
@@ -268,6 +295,7 @@ def _list_item(
         status=task.status,
         next_run_at=task.next_run_at,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
+        unviewed_run_count=unviewed_run_count,
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
@@ -297,29 +325,10 @@ def _detail(
         next_run_at=task.next_run_at,
         next_runs=next_runs,
         last_run=RunSummary.from_model(last_run) if last_run is not None else None,
-        pre_approved_app_ids=task.pre_approved_external_app_ids,
+        action_policies=get_task_action_policies(db_session, task.id),
         created_at=task.created_at,
         updated_at=task.updated_at,
     )
-
-
-def _validated_app_ids(db_session: Session, app_ids: list[int]) -> list[int]:
-    """Dedupe (order-preserving) and verify each id is a configured app.
-
-    Existence-only: a grant on an app that never produces an ASK match is
-    inert, so credential / has-ASK-action filtering stays editor-side.
-    """
-    deduped = list(dict.fromkeys(app_ids))
-    if not deduped:
-        return []
-    known_ids = {app.id for app in get_external_apps(db_session)}
-    unknown = [app_id for app_id in deduped if app_id not in known_ids]
-    if unknown:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Unknown external app id(s): {unknown}",
-        )
-    return deduped
 
 
 def _enqueue_executor(run_id: UUID) -> None:
@@ -372,8 +381,22 @@ def list_scheduled_tasks(
 ) -> ScheduledTaskListResponse:
     """List the caller's scheduled tasks, newest first."""
     tasks = list_scheduled_tasks_for_user(db_session=db_session, user_id=user.id)
-    items = [_list_item(db_session, task, user.id) for task in tasks]
+    unviewed = unread_run_counts_for_user(db_session=db_session, user_id=user.id)
+    items = [
+        _list_item(db_session, task, user.id, unviewed.get(task.id, 0))
+        for task in tasks
+    ]
     return ScheduledTaskListResponse(items=items)
+
+
+@router.get("/unviewed-count")
+def get_unviewed_task_count(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UnviewedTaskCountResponse:
+    """Number of the caller's tasks with run results they have not opened."""
+    unviewed = unread_run_counts_for_user(db_session=db_session, user_id=user.id)
+    return UnviewedTaskCountResponse(count=len(unviewed))
 
 
 @router.post("")
@@ -401,9 +424,7 @@ def create_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_external_app_ids=_validated_app_ids(
-            db_session, request.pre_approved_app_ids
-        ),
+        action_policies=request.action_policies,
     )
 
     if request.run_immediately:
@@ -464,11 +485,7 @@ def patch_task(
         cron_expression=cron_expression,
         editor_mode=request.editor_mode,
         status=request.status,
-        pre_approved_external_app_ids=(
-            _validated_app_ids(db_session, request.pre_approved_app_ids)
-            if request.pre_approved_app_ids is not None
-            else None
-        ),
+        action_policies=request.action_policies,
     )
     db_session.commit()
     db_session.refresh(task)
@@ -517,6 +534,7 @@ def list_task_runs(
     task_id: UUID,
     cursor: str | None = Query(default=None),
     limit: int = Query(default=RUNS_DEFAULT_PAGE_SIZE, ge=1, le=RUNS_MAX_PAGE_SIZE),
+    unviewed: bool = Query(default=False),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> RunListResponse:
@@ -524,7 +542,8 @@ def list_task_runs(
 
     ``cursor`` is the ``started_at`` (ISO-8601) of the last row returned by
     the previous page. ``next_cursor`` is ``None`` when the last page is
-    reached.
+    reached. ``unviewed`` keeps only runs with results the owner has not
+    opened.
 
     Raises ``OnyxError(NOT_FOUND)`` when the task is missing, soft-deleted,
     or owned by another user (ownership check happens inside the DB op).
@@ -536,6 +555,7 @@ def list_task_runs(
         user_id=user.id,
         cursor=cursor_dt,
         limit=limit,
+        unviewed_only=unviewed,
     )
     next_cursor: str | None = None
     if len(runs) == limit:
@@ -546,3 +566,60 @@ def list_task_runs(
         items=[RunSummary.from_model(run) for run in runs],
         next_cursor=next_cursor,
     )
+
+
+@router.patch("/{task_id}/runs/viewed")
+def view_task_runs(
+    task_id: UUID,
+    body: RunsViewedRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> RunListResponse:
+    try:
+        runs = mark_runs_viewed(
+            db_session=db_session,
+            task_id=task_id,
+            user_id=user.id,
+            revisions=body.revisions,
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
+    response = RunListResponse(
+        items=[RunSummary.from_model(run) for run in runs], next_cursor=None
+    )
+    db_session.commit()
+    return response
+
+
+@router.patch("/{task_id}/runs/{run_id}/viewed")
+def view_task_run(
+    task_id: UUID,
+    run_id: UUID,
+    body: RunViewedRequest,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> RunSummary:
+    try:
+        runs = mark_runs_viewed(
+            db_session=db_session,
+            task_id=task_id,
+            user_id=user.id,
+            revisions={run_id: body.revision},
+        )
+    except ValueError as error:
+        raise OnyxError(OnyxErrorCode.CONFLICT, str(error)) from error
+    if not runs:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
+    response = RunSummary.from_model(runs[0])
+    db_session.commit()
+    return response
+
+
+@router.get("/{task_id}/action-policies")
+def list_task_action_policies(
+    task_id: UUID,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> list[AppActionPoliciesView]:
+    get_scheduled_task(db_session=db_session, task_id=task_id, user_id=user.id)
+    return list_action_policies(db_session, user, task_id=task_id)

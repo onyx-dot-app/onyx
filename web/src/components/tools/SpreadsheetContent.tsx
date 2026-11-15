@@ -3,7 +3,9 @@
 // CSV text (instead of raw binary bytes); anything else (e.g. a real CSV) is
 // passed through raw by the backend and rendered as a single CSV sheet, so
 // routing here never depends solely on the file's display name.
+import { IconLoader } from "@opal/loaders";
 import React, { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import {
   Table,
   TableBody,
@@ -13,21 +15,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ContentComponentProps } from "./ExpandableContentWrapper";
-import { parseCSV } from "./CSVContent";
-import { SvgAlertCircle, SvgSimpleLoader } from "@opal/icons";
+import { parseSpreadsheetPreview, parseSpreadsheetCsv } from "@/lib/csv";
+import type { SpreadsheetSheet } from "@/lib/types";
+import { SvgAlertCircle } from "@opal/icons";
 import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
-
-export interface SpreadsheetSheet {
-  name: string;
-  csv: string;
-  truncated: boolean;
-}
-
-export interface SpreadsheetPreviewData {
-  sheets: SpreadsheetSheet[];
-}
 
 const SPREADSHEET_EXTENSIONS = [".xlsx", ".xlsm"];
 
@@ -42,50 +35,30 @@ export function isSpreadsheetFileName(
   return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
 }
 
-export function parseSpreadsheetPreview(
-  jsonText: string
-): SpreadsheetPreviewData | null {
-  try {
-    const parsed: unknown = JSON.parse(jsonText);
-    if (
-      typeof parsed !== "object" ||
-      parsed === null ||
-      !Array.isArray((parsed as SpreadsheetPreviewData).sheets)
-    ) {
-      return null;
-    }
-    return parsed as SpreadsheetPreviewData;
-  } catch {
-    return null;
-  }
-}
-
 interface SheetTableProps {
   sheet: SpreadsheetSheet;
 }
 
 function SheetTable({ sheet }: SheetTableProps) {
-  let rows: string[][] = [];
-  try {
-    // Drop at most one trailing newline; trimming any further would mutate
-    // cell data (significant leading/trailing whitespace).
-    rows = parseCSV(sheet.csv.replace(/\r?\n$/, ""));
-  } catch (error) {
-    console.error(
-      `Failed to parse CSV for spreadsheet preview sheet "${sheet.name}":`,
-      error
-    );
-    rows = [];
-  }
+  const t = useTranslations("common.spreadsheet");
+  const { rows, error: parseError } = parseSpreadsheetCsv(sheet.csv);
   const headers = rows[0];
+
+  if (parseError) {
+    return (
+      <div role="alert" className="py-8">
+        <Text font="main-ui-body" color="text-03">
+          {t("error.title")}
+        </Text>
+      </div>
+    );
+  }
 
   if (!headers || headers.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center gap-2 py-8">
         <Text as="p" font="main-ui-body" color="text-03">
-          {sheet.truncated
-            ? "This sheet is too large to preview — download the file to view it."
-            : "This sheet is empty."}
+          {sheet.truncated ? t("sheet.tooLarge") : t("sheet.empty")}
         </Text>
       </div>
     );
@@ -111,7 +84,7 @@ function SheetTable({ sheet }: SheetTableProps) {
             {headers.map((_, cellIndex) => (
               <TableCell
                 className={cn(
-                  cellIndex === 0 && "sticky left-0 bg-background-tint-01",
+                  cellIndex === 0 && "sticky start-0 bg-background-tint-01",
                   "py-0 px-4"
                 )}
                 key={cellIndex}
@@ -125,7 +98,7 @@ function SheetTable({ sheet }: SheetTableProps) {
           <TableRow>
             <TableCell colSpan={headers.length} className="py-2 px-4">
               <Text as="p" font="secondary-body" color="text-04">
-                Preview truncated — download the file to see all rows.
+                {t("preview.truncated")}
               </Text>
             </TableCell>
           </TableRow>
@@ -144,6 +117,7 @@ export function SpreadsheetSheetsView({
   sheets,
   className,
 }: SpreadsheetSheetsViewProps) {
+  const t = useTranslations("common.spreadsheet");
   const [activeSheetIndex, setActiveSheetIndex] = useState(0);
   const activeSheet = sheets[activeSheetIndex] ?? sheets[0];
 
@@ -152,7 +126,7 @@ export function SpreadsheetSheetsView({
       <div className="flex flex-col items-center justify-center gap-2 py-8">
         <SvgAlertCircle className="w-8 h-8 stroke-error" />
         <Text as="p" font="main-ui-body" color="text-03">
-          Unable to preview this spreadsheet.
+          {t("preview.unavailable")}
         </Text>
       </div>
     );
@@ -185,6 +159,7 @@ function SpreadsheetContent({
   fileDescriptor,
   expanded = false,
 }: ContentComponentProps) {
+  const t = useTranslations("common.spreadsheet");
   const [sheets, setSheets] = useState<SpreadsheetSheet[] | null>(null);
   const [isFetching, setIsFetching] = useState(true);
 
@@ -229,7 +204,11 @@ function SpreadsheetContent({
             );
           }
           fetchedSheets = [
-            { name: "Sheet 1", csv: await response.text(), truncated: false },
+            {
+              name: t("sheet.defaultName"),
+              csv: await response.text(),
+              truncated: false,
+            },
           ];
         }
 
@@ -252,12 +231,12 @@ function SpreadsheetContent({
     return () => {
       cancelled = true;
     };
-  }, [cacheKey]);
+  }, [cacheKey, t]);
 
   if (isFetching) {
     return (
       <div className="flex items-center justify-center h-[300px]">
-        <SvgSimpleLoader />
+        <IconLoader />
       </div>
     );
   }
@@ -267,10 +246,10 @@ function SpreadsheetContent({
       <div className="flex flex-col items-center justify-center gap-2 py-8">
         <SvgAlertCircle className="w-8 h-8 stroke-error" />
         <Text as="p" font="main-ui-body" color="text-03">
-          Error loading spreadsheet
+          {t("error.title")}
         </Text>
         <Text as="p" font="main-ui-body" color="text-04">
-          The spreadsheet may be corrupted or couldn&apos;t be loaded properly.
+          {t("error.description")}
         </Text>
       </div>
     );
@@ -287,3 +266,6 @@ function SpreadsheetContent({
 export default SpreadsheetContent;
 
 const spreadsheetCache = new Map<string, SpreadsheetSheet[]>();
+
+export { parseSpreadsheetPreview } from "@/lib/csv";
+export type { SpreadsheetSheet, SpreadsheetPreviewData } from "@/lib/types";

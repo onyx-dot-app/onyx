@@ -1,18 +1,18 @@
 "use client";
 
-import { SearchDocWithContent } from "@/lib/search/interfaces";
+import { Section } from "@opal/layouts";
+import { Badge, Text } from "@opal/components";
+import { SearchDocWithContent } from "@/lib/search/types";
 import { SourceIcon } from "@/components/SourceIcon";
 import { WebResultIcon } from "@/components/WebResultIcon";
-import Text from "@/refresh-components/texts/Text";
-import Chip from "@/refresh-components/Chip";
 import { buildDocumentSummaryDisplay } from "@/components/search/DocumentDisplay";
-import { ValidSources } from "@/lib/types";
-import { MinimalOnyxDocument } from "@/lib/search/interfaces";
-import { Section } from "@/layouts/general-layouts";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { MinimalOnyxDocument } from "@/lib/search/types";
 import { Interactive } from "@opal/core";
-import Truncated from "@/refresh-components/texts/Truncated";
+import { richNodes } from "@opal/utils";
 import { timeAgo } from "@opal/time";
 import { useMemo } from "react";
+import { useLocale } from "next-intl";
 
 export interface SearchResultCardProps {
   /** The search result document to display */
@@ -33,6 +33,7 @@ export default function SearchCard({
   document,
   onDocumentClick,
 }: SearchResultCardProps) {
+  const locale = useLocale();
   const isWebSource =
     document.is_internet || document.source_type === ValidSources.Web;
 
@@ -57,13 +58,13 @@ export default function SearchCard({
   return (
     <Interactive.Stateless onClick={handleClick} prominence="secondary">
       <Interactive.Container size="fit" width="full">
-        <Section alignItems="start" gap={0} padding={0.25}>
+        <Section alignItems="start" gap={0} padding={1}>
           {/* Title Row */}
           <Section
             flexDirection="row"
             justifyContent="start"
-            gap={0.25}
-            padding={0.25}
+            gap={1}
+            padding={1}
           >
             {isWebSource && document.link ? (
               <WebResultIcon url={document.link} size={18} />
@@ -71,36 +72,43 @@ export default function SearchCard({
               <SourceIcon sourceType={document.source_type} iconSize={16} />
             )}
 
-            <Truncated mainUiAction className="text-left">
+            <Text
+              maxLines={1}
+              overflowTooltip
+              as="p"
+              textPosition="text-start"
+              font="main-ui-action"
+              color="text-05"
+            >
               {document.semantic_identifier}
-            </Truncated>
+            </Text>
           </Section>
 
           {/* Body Row */}
           <div className="px-1 pb-1">
-            <Section alignItems="start" gap={0.25}>
+            <Section alignItems="start" gap={1}>
               {/* Metadata */}
-              <Section flexDirection="row" justifyContent="start" gap={0.25}>
+              <Section flexDirection="row" justifyContent="start" gap={1}>
                 {(document.primary_owners ?? []).map((owner, index) => (
-                  <Chip key={index}>{owner}</Chip>
+                  <Badge key={index} title={owner} />
                 ))}
                 {document.metadata?.tags &&
                   (Array.isArray(document.metadata.tags)
                     ? document.metadata.tags
                     : [document.metadata.tags]
-                  ).map((tag, index) => <Chip key={index}>{tag}</Chip>)}
+                  ).map((tag, index) => <Badge key={index} title={tag} />)}
                 {document.updated_at &&
                   !isNaN(new Date(document.updated_at).getTime()) && (
-                    <Text secondaryBody text02>
-                      {timeAgo(document.updated_at)}
+                    <Text font="secondary-body" color="text-02">
+                      {timeAgo(document.updated_at, locale) ?? ""}
                     </Text>
                   )}
               </Section>
 
               {/* Blurb */}
               {content && (
-                <Text secondaryBody text03 className="text-left">
-                  {content}
+                <Text font="secondary-body" color="text-03">
+                  {richNodes(content)}
                 </Text>
               )}
             </Section>

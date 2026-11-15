@@ -4,7 +4,7 @@
 #![allow(clippy::needless_pass_by_value)]
 
 use crate::config::{get_config_dir, get_config_path, save_config, AppConfig, ConfigState};
-use crate::window::{build_and_setup_window, open_in_default_browser};
+use crate::window::{build_and_setup_window, is_externally_openable, open_in_default_browser};
 use serde::Serialize;
 use std::fs;
 use tauri::Manager;
@@ -37,9 +37,8 @@ pub async fn check_server_reachable(state: tauri::State<'_, ConfigState>) -> Res
 #[tauri::command]
 pub fn open_in_browser(url: String) -> Result<(), String> {
     let parsed_url = Url::parse(&url).map_err(|_| "Invalid URL".to_string())?;
-    match parsed_url.scheme() {
-        "http" | "https" | "mailto" | "tel" => {}
-        _ => return Err("Unsupported URL scheme".to_string()),
+    if !is_externally_openable(&parsed_url) {
+        return Err("Unsupported URL scheme".to_string());
     }
 
     if open_in_default_browser(parsed_url.as_str()) {
@@ -76,7 +75,11 @@ pub fn get_bootstrap_state(state: tauri::State<ConfigState>) -> BootstrapState {
 
 /// Set a new server URL and save to config
 #[tauri::command]
-pub fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<String, String> {
+pub fn set_server_url(
+    app: tauri::AppHandle,
+    state: tauri::State<ConfigState>,
+    url: String,
+) -> Result<String, String> {
     // Validate URL
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return Err("URL must start with http:// or https://".to_string());
@@ -85,6 +88,7 @@ pub fn set_server_url(state: tauri::State<ConfigState>, url: String) -> Result<S
     let config =
         state.update_and_persist(|c| c.server_url = url.trim_end_matches('/').to_string())?;
     state.set_config_initialized(true);
+    crate::menu::refresh_about_item(&app);
 
     Ok(config.server_url)
 }
@@ -224,9 +228,10 @@ pub async fn new_window(app: tauri::AppHandle) -> Result<(), String> {
 
 /// Reset config to defaults
 #[tauri::command]
-pub fn reset_config(state: tauri::State<ConfigState>) -> Result<(), String> {
+pub fn reset_config(app: tauri::AppHandle, state: tauri::State<ConfigState>) -> Result<(), String> {
     state.update_and_persist(|c| *c = AppConfig::default())?;
     state.set_config_initialized(true);
+    crate::menu::refresh_about_item(&app);
     Ok(())
 }
 

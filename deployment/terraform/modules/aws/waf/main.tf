@@ -1,8 +1,9 @@
 locals {
-  name                  = var.name
-  tags                  = var.tags
-  ip_allowlist_enabled  = length(var.allowed_ip_cidrs) > 0
-  managed_rule_priority = local.ip_allowlist_enabled ? 1 : 0
+  name                      = var.name
+  tags                      = var.tags
+  ip_allowlist_enabled      = length(var.allowed_ip_cidrs) > 0
+  rate_limit_exempt_enabled = length(var.rate_limit_exempt_ip_cidrs) > 0
+  managed_rule_priority     = local.ip_allowlist_enabled ? 1 : 0
 }
 
 resource "aws_wafv2_ip_set" "allowed_ips" {
@@ -13,6 +14,18 @@ resource "aws_wafv2_ip_set" "allowed_ips" {
   scope              = "REGIONAL"
   ip_address_version = "IPV4"
   addresses          = var.allowed_ip_cidrs
+
+  tags = local.tags
+}
+
+resource "aws_wafv2_ip_set" "rate_limit_exempt_ips" {
+  count = local.rate_limit_exempt_enabled ? 1 : 0
+
+  name               = "${local.name}-rate-limit-exempt-ips"
+  description        = "IPs exempt from rate limiting for ${local.name}"
+  scope              = "REGIONAL"
+  ip_address_version = "IPV4"
+  addresses          = var.rate_limit_exempt_ip_cidrs
 
   tags = local.tags
 }
@@ -124,6 +137,19 @@ resource "aws_wafv2_web_acl" "main" {
       rate_based_statement {
         limit              = var.rate_limit_requests_per_5_minutes
         aggregate_key_type = "IP"
+
+        dynamic "scope_down_statement" {
+          for_each = local.rate_limit_exempt_enabled ? [1] : []
+          content {
+            not_statement {
+              statement {
+                ip_set_reference_statement {
+                  arn = aws_wafv2_ip_set.rate_limit_exempt_ips[0].arn
+                }
+              }
+            }
+          }
+        }
       }
     }
 
@@ -172,6 +198,19 @@ resource "aws_wafv2_web_acl" "main" {
       rate_based_statement {
         limit              = var.api_rate_limit_requests_per_5_minutes
         aggregate_key_type = "IP"
+
+        dynamic "scope_down_statement" {
+          for_each = local.rate_limit_exempt_enabled ? [1] : []
+          content {
+            not_statement {
+              statement {
+                ip_set_reference_statement {
+                  arn = aws_wafv2_ip_set.rate_limit_exempt_ips[0].arn
+                }
+              }
+            }
+          }
+        }
       }
     }
 
@@ -210,8 +249,18 @@ resource "aws_wafv2_web_acl" "main" {
     name     = "AWSManagedRulesAnonymousIpList"
     priority = 7 + local.managed_rule_priority
 
-    override_action {
-      none {}
+    dynamic "override_action" {
+      for_each = var.anonymous_ip_list_count_only ? [1] : []
+      content {
+        count {}
+      }
+    }
+
+    dynamic "override_action" {
+      for_each = var.anonymous_ip_list_count_only ? [] : [1]
+      content {
+        none {}
+      }
     }
 
     statement {

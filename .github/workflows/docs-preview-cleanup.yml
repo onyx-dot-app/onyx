@@ -1,0 +1,44 @@
+name: Docs Preview Cleanup
+
+# Deletes the docs-preview/pr-<number> branch that docs-preview-publish.yml pushes. It has
+# no path filter, so it also runs when a pull request reverted its docs changes before closing.
+# pull_request_target also runs for a pull request with merge conflicts, which pull_request
+# skips. The job checks out no code and runs nothing from the pull request.
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [closed]
+
+permissions:
+  contents: read
+
+jobs:
+  delete-preview-branch:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PREVIEW_BRANCH: docs-preview/pr-${{ github.event.pull_request.number }}
+    steps:
+      - name: Delete the preview branch
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          # A delayed run must not delete the preview of a pull request that was reopened.
+          state="$(gh pr view "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json state --jq .state)"
+          if [ "$state" = "OPEN" ]; then
+            echo "The pull request is open again; keeping the preview"
+            exit 0
+          fi
+          # GitHub answers a missing ref with "Reference does not exist". Other errors fail the job.
+          if ! out="$(gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$PREVIEW_BRANCH" 2>&1)"; then
+            if grep -q "Reference does not exist" <<<"$out"; then
+              echo "No preview branch"
+            else
+              echo "$out"
+              exit 1
+            fi
+          fi

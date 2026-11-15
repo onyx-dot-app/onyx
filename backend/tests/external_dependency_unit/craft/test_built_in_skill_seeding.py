@@ -128,7 +128,7 @@ class TestAvailabilityGate:
 
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", False)
         off = {
-            s.built_in_skill_id
+            s.skill.built_in_skill_id
             for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
@@ -138,7 +138,7 @@ class TestAvailabilityGate:
 
         monkeypatch.setattr("onyx.skills.built_in.ENABLE_BROWSER", True)
         on = {
-            s.built_in_skill_id
+            s.skill.built_in_skill_id
             for s in list_runtime_skills_for_user(
                 user=test_user,
                 db_session=db_session,
@@ -203,8 +203,11 @@ class TestBuiltInIsImmutable:
         db_session: Session,
         test_user: User,
     ) -> None:
-        custom = make_skill(db_session, name=f"custom-{uuid4().hex[:8]}")
-        custom.author_user_id = test_user.id
+        custom = make_skill(
+            db_session,
+            name=f"custom-{uuid4().hex[:8]}",
+            author_user_id=test_user.id,
+        )
         db_session.commit()
 
         skill = fetch_skill(

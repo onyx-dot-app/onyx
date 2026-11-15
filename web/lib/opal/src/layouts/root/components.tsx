@@ -17,8 +17,10 @@ import type { WithoutStyles } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Sidebar state — raw fold state + setter, owned here as the single source
-// of truth. SidebarRoot (in sidebar/components.tsx) derives contentFolded
-// and provides RootLayoutFoldedContext from this.
+// of truth. SidebarRoot (in sidebar/components.tsx) derives the effective
+// fold state from this and provides it via SidebarFoldedContext. Components
+// inside a sidebar should read that (`useSidebarFolded`) rather than the raw
+// state here, which is app-wide and true even outside a sidebar.
 // ---------------------------------------------------------------------------
 
 export interface SidebarStateContextType {
@@ -46,7 +48,9 @@ export function SidebarStateProvider({
   const [folded, setFoldedInternal] = useState(defaultFolded);
 
   const onFoldedChangeRef = useRef(onFoldedChange);
-  onFoldedChangeRef.current = onFoldedChange;
+  useEffect(() => {
+    onFoldedChangeRef.current = onFoldedChange;
+  }, [onFoldedChange]);
 
   const setFolded: Dispatch<SetStateAction<boolean>> = useCallback((value) => {
     setFoldedInternal((prev) =>
@@ -62,27 +66,6 @@ export function SidebarStateProvider({
     }
     onFoldedChangeRef.current?.(folded);
   }, [folded]);
-
-  useEffect(() => {
-    function handleKeyDown(event: KeyboardEvent) {
-      const target = event.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.tagName === "SELECT" ||
-        target.isContentEditable
-      ) {
-        return;
-      }
-      const isMac = navigator.userAgent.toLowerCase().includes("mac");
-      const isModifierPressed = isMac ? event.metaKey : event.ctrlKey;
-      if (!isModifierPressed || event.key !== "e") return;
-      event.preventDefault();
-      setFolded((prev) => !prev);
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [setFolded]);
 
   return (
     <SidebarStateContext.Provider value={{ folded, setFolded }}>

@@ -227,7 +227,7 @@ def cache_query_embeddings(
 
     successes = 0
     errors = 0
-    for query, embedding in zip(queries, embeddings):
+    for query, embedding in zip(queries, embeddings, strict=True):
         key = _build_key(query, search_settings_id)
         try:
             packed = _safe_pack_or_none(embedding)

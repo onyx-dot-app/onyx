@@ -1,4 +1,5 @@
 import { Page } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { expect } from "@playwright/test";
 import { verifyAgentIsChosen } from "./chatActions";
 
@@ -78,7 +79,7 @@ export async function pinAgentByName(
  */
 export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   // Navigate to the chat preferences page
-  await page.goto("/admin/configuration/chat-preferences");
+  await page.goto(ADMIN_ROUTES.CHAT_PREFERENCES.path);
   await page.waitForLoadState("networkidle");
 
   // The "Actions & Tools" collapsible is open by default.
@@ -95,13 +96,15 @@ export async function ensureImageGenerationEnabled(page: Page): Promise<void> {
   const currentState = await imageGenSwitch.getAttribute("aria-checked");
 
   if (currentState !== "true") {
-    // Toggle it on — auto-saves immediately via PATCH /api/admin/default-assistant
+    // Toggle it on; it auto-saves immediately via PATCH /api/admin/default-assistant/tools
+    const saved = page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname ===
+          "/api/admin/default-assistant/tools" &&
+        response.request().method() === "PATCH"
+    );
     await imageGenSwitch.click();
-
-    // Wait for the auto-save toast to confirm success
-    await expect(page.getByText("Tools updated").first()).toBeVisible({
-      timeout: 5000,
-    });
+    expect((await saved).ok()).toBeTruthy();
 
     // Verify it's now enabled
     const newState = await imageGenSwitch.getAttribute("aria-checked");

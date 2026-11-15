@@ -1,6 +1,7 @@
-"""The bundled ``gdrive_api.py`` sandbox helper: Drive ``q`` construction and the
-native-export-vs-raw-download branch in ``read``. The helper is a standalone
-script under the skills dir (not an importable package), so load it by path."""
+"""The bundled ``gdrive_api.py`` sandbox helper: Drive ``q`` construction, the
+native-export-vs-raw-download branch in ``read``, URL-tolerant id arguments,
+and the Docs tab flags. The helper is a standalone script under the skills dir
+(not an importable package), so load it by path."""
 
 from __future__ import annotations
 
@@ -9,6 +10,8 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 from typing import Any
+
+import pytest
 
 _HELPER = (
     Path(__file__).resolve().parents[3]
@@ -397,3 +400,103 @@ def test_create_doc_posts_title(monkeypatch: Any) -> None:
     assert captured["method"] == "POST"
     assert captured["body"] == {"title": "My Doc"}
     assert result["document"]["documentId"] == "NEW"
+
+
+# --- id arguments and get-doc flags ---
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        (
+            "https://docs.google.com/document/d/1TestDocId_-abc123/edit?tab=t.0",
+            "1TestDocId_-abc123",
+        ),
+        (
+            "https://drive.google.com/drive/folders/0ATestFolderId9Uk9PVA",
+            "0ATestFolderId9Uk9PVA",
+        ),
+        # Query-param share form and the multi-account path form.
+        ("https://drive.google.com/open?id=1TestDocId_-abc123", "1TestDocId_-abc123"),
+        (
+            "https://drive.google.com/uc?export=download&id=1TestDocId_-abc123",
+            "1TestDocId_-abc123",
+        ),
+        (
+            "https://docs.google.com/document/u/0/d/1TestDocId_-abc123/edit",
+            "1TestDocId_-abc123",
+        ),
+        ("1BareTestId_-xyz789", "1BareTestId_-xyz789"),
+        ("https://example.com/no-id-here", "https://example.com/no-id-here"),
+    ],
+)
+def test_id_arg_accepts_urls_and_bare_ids(value: str, expected: str) -> None:
+    assert gdrive._id_arg(value) == expected
+
+
+def test_get_doc_tabs_flag_requests_tab_content(monkeypatch: Any) -> None:
+    calls: list[tuple[str, dict[str, Any] | None]] = []
+    monkeypatch.setattr(
+        gdrive,
+        "_req_docs",
+        lambda path, params=None, **_kwargs: calls.append((path, params)) or {},
+    )
+
+    args = gdrive._build_parser().parse_args(
+        ["get-doc", "https://docs.google.com/document/d/D1/edit", "--tabs"]
+    )
+    gdrive._dispatch(args)
+
+    assert calls[0][0] == "documents/D1"  # id extracted from the pasted URL
+    assert calls[0][1] == {"includeTabsContent": "true"}
+
+
+_ID_DESTS = {
+    "file_id",
+    "document_id",
+    "folder_id",
+    "parent",
+    "add_parent",
+    "remove_parent",
+}
+
+
+def test_every_id_argument_normalizes_urls() -> None:
+    """Every id-shaped argument must opt into URL extraction — the `update`
+    parent flags shipped without it once, so sweep the whole parser instead of
+    pinning individual flags."""
+    parser = gdrive._build_parser()
+    subparsers = next(
+        a for a in parser._actions if isinstance(a, argparse._SubParsersAction)
+    )
+    missing = [
+        f"{command} --{action.dest}"
+        for command, sub in subparsers.choices.items()
+        for action in sub._actions
+        if action.dest in _ID_DESTS and action.type is not gdrive._id_arg
+    ]
+    assert missing == []
+
+
+@pytest.mark.parametrize(
+    "fields,expected",
+    [
+        # A mask without `tabs` would filter out the content includeTabsContent asks for.
+        ("documentId,title", "documentId,title,tabs"),
+        # A mask that already selects tabs must not grow a duplicate.
+        ("documentId,tabs", "documentId,tabs"),
+    ],
+)
+def test_get_doc_tabs_extends_a_caller_field_mask(
+    monkeypatch: Any, fields: str, expected: str
+) -> None:
+    calls: list[dict[str, Any] | None] = []
+    monkeypatch.setattr(
+        gdrive,
+        "_req_docs",
+        lambda _path, params=None, **_kwargs: calls.append(params) or {},
+    )
+
+    gdrive._get_doc("D1", fields=fields, include_tabs=True)
+
+    assert calls[0] == {"fields": expected, "includeTabsContent": "true"}

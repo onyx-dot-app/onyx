@@ -4,13 +4,14 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from unittest.mock import patch
 
 import pytest
 
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
 from onyx.llm.model_capabilities import find_model_obj, get_model_map
-from onyx.llm.models import ReasoningEffort, UserMessage
+from onyx.llm.model_catalog import find_model_cost
+from onyx.llm.model_request import UserMessage
+from onyx.llm.models import ReasoningEffort
 from onyx.llm.multi_llm import LitellmLLM
 from onyx.llm.well_known_providers.llm_provider_options import (
     _get_provider_to_models_map,
@@ -83,17 +84,17 @@ def _capture_api(suffix: str) -> Iterator[tuple[str, list[dict[str, Any]]]]:
 def test_minimax_registry_includes_both_target_models() -> None:
     assert LlmProviderNames.MINIMAX in WELL_KNOWN_PROVIDER_NAMES
     assert _get_provider_to_models_map()[LlmProviderNames.MINIMAX] == [
+        "MiniMax-M3.1-Flash",
         "MiniMax-M3",
-        "MiniMax-M2.7",
     ]
 
     recommendations = _load_bundled_recommendations()
     default_model = recommendations.get_default_model("minimax")
     assert default_model is not None
-    assert default_model.name == "MiniMax-M3"
+    assert default_model.name == "MiniMax-M3.1-Flash"
     assert [model.name for model in recommendations.get_visible_models("minimax")] == [
+        "MiniMax-M3.1-Flash",
         "MiniMax-M3",
-        "MiniMax-M2.7",
     ]
 
 
@@ -101,32 +102,38 @@ def test_minimax_model_metadata_matches_official_limits_and_pricing() -> None:
     get_model_map.cache_clear()
     try:
         model_map = get_model_map()
+        m31 = find_model_obj(model_map, LlmProviderNames.MINIMAX, "MiniMax-M3.1-Flash")
         m3 = find_model_obj(model_map, LlmProviderNames.MINIMAX, "MiniMax-M3")
-        m27 = find_model_obj(model_map, LlmProviderNames.MINIMAX, "MiniMax-M2.7")
+        m31_cost = find_model_cost("minimax", "MiniMax-M3.1-Flash")
+        m3_cost = find_model_cost("minimax", "MiniMax-M3")
+
+        assert m31 is not None
+        assert m31_cost is not None
+        assert m31["max_input_tokens"] == 1_000_000
+        assert m31["max_output_tokens"] == 524_288
+        assert m31_cost["input"] == 0.15
+        assert m31_cost["output"] == 0.6
+        assert m31_cost["cache_read"] == 0.015
+        assert m31["supports_reasoning"] is True
+        assert m31["supports_vision"] is True
 
         assert m3 is not None
+        assert m3_cost is not None
         assert m3["max_input_tokens"] == 1_000_000
         assert m3["max_output_tokens"] == 524_288
-        assert m3["input_cost_per_token"] == 0.6 / 1_000_000
-        assert m3["output_cost_per_token"] == 2.4 / 1_000_000
-        assert m3["cache_read_input_token_cost"] == 0.12 / 1_000_000
-        assert m3["cache_creation_input_token_cost"] is None
-        assert m3["output_cost_per_token_above_512k_tokens"] == 2.4 / 1_000_000
-        assert m3["input_cost_per_token_priority"] == 0.45 / 1_000_000
-        assert m3["output_cost_per_token_above_512k_tokens_priority"] == 3.6 / 1_000_000
+        assert m3_cost["input"] == 0.3
+        assert m3_cost["output"] == 1.2
+        assert m3_cost["cache_read"] == 0.06
+        assert m3_cost["tiers"] == [
+            {
+                "cache_read": 0.12,
+                "input": 0.6,
+                "output": 2.4,
+                "tier": {"size": 512_000, "type": "context"},
+            }
+        ]
         assert m3["supports_reasoning"] is True
-        assert m3["supports_none_reasoning_effort"] is True
         assert m3["supports_vision"] is True
-        assert m3["supports_video_input"] is True
-
-        assert m27 is not None
-        assert m27["max_input_tokens"] == 204_800
-        assert m27["max_output_tokens"] == 204_800
-        assert m27["cache_creation_input_token_cost"] == 0.375 / 1_000_000
-        assert m27["supports_reasoning"] is True
-        assert m27["supports_none_reasoning_effort"] is False
-        assert m27["supports_vision"] is False
-        assert m27["supports_video_input"] is False
     finally:
         get_model_map.cache_clear()
 
@@ -135,7 +142,6 @@ def test_minimax_anthropic_base_url_omits_v1() -> None:
     llm = LitellmLLM(
         api_key="test-key",
         api_base="https://api.minimax.io/anthropic/v1",
-        timeout=5,
         model_provider=LlmProviderNames.MINIMAX,
         model_name="MiniMax-M3",
         max_input_tokens=1_000_000,
@@ -152,6 +158,13 @@ def test_minimax_anthropic_base_url_omits_v1() -> None:
             "MiniMax-M3",
             ReasoningEffort.AUTO,
             "/anthropic/v1/messages",
+            {"type": "disabled"},
+        ),
+        (
+            "/anthropic",
+            "MiniMax-M3.1-Flash",
+            ReasoningEffort.AUTO,
+            "/anthropic/v1/messages",
             {"type": "adaptive"},
         ),
         (
@@ -163,10 +176,10 @@ def test_minimax_anthropic_base_url_omits_v1() -> None:
         ),
         (
             "/v1",
-            "MiniMax-M2.7",
+            "MiniMax-M3.1-Flash",
             ReasoningEffort.OFF,
             "/v1/chat/completions",
-            None,
+            {"type": "adaptive"},
         ),
     ],
 )
@@ -181,25 +194,20 @@ def test_minimax_client_request_capture(
         llm = LitellmLLM(
             api_key="test-key",
             api_base=api_base,
-            timeout=5,
             model_provider=LlmProviderNames.MINIMAX,
             model_name=model_name,
             max_input_tokens=1_000_000,
         )
 
-        with (
-            patch("onyx.llm.multi_llm.MOCK_LLM_RESPONSE", None),
-            patch("onyx.llm.multi_llm.get_llm_mock_response", return_value=None),
-        ):
-            llm._completion(
-                prompt=UserMessage(content="Hello"),
-                tools=None,
-                tool_choice=None,
-                stream=False,
-                parallel_tool_calls=False,
-                reasoning_effort=reasoning_effort,
-                max_tokens=8,
-            )
+        llm._completion(
+            prompt=[UserMessage(content="Hello")],
+            tools=None,
+            tool_choice=None,
+            stream=False,
+            parallel_tool_calls=False,
+            reasoning_effort=reasoning_effort,
+            max_tokens=8,
+        )
 
     assert len(captured) == 1
     request = captured[0]

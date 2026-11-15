@@ -43,6 +43,7 @@ def _mock_response(
     merged_headers = {"Content-Type": content_type, **(headers or {})}
     resp.headers = merged_headers
     resp.content = content
+    resp.raw.read1.side_effect = [content, b""]
     resp.apparent_encoding = None
     resp.encoding = None
     return resp

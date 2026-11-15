@@ -1,0 +1,753 @@
+# Chat Frontend
+
+> The web chat at `/app`: it sends a turn, reads the packet stream, keeps each
+> session's message tree in a client store, and renders timeline steps and the
+> answer. It also drives the actions that change the saved conversation, and
+> owns the development proxy that forwards `/api` to the backend.
+
+**Verified against:** `6bac4e012f` (2026-10-29)
+**Edition:** CE
+
+---
+
+## User experience
+
+- **A new user meets first-run onboarding** on the chat page. A user with no
+  name gives one. An admin also connects an LLM provider, then sees optional
+  setup cards and a final step. The chat input stays locked until the optional
+  setup step. An admin who leaves part way resumes at the saved step, or at the
+  optional setup step when the required steps are done. Finishing or hiding
+  the steps, or sending a message, ends onboarding in that browser.
+- **A user sends a message** and watches it work: reasoning, search and other
+  tool steps appear as a timeline, then the answer streams with citation chips.
+  The user can stop the answer until its stop packet arrives. The partial
+  answer stays, marked as stopped. After the stop packet, Stop goes away while
+  the answer finishes drawing. The input stays busy until the server confirms
+  that the turn is saved. Text sent before then becomes pending input, which
+  the server starts. If the
+  client cannot confirm the turn, the send button changes to a manual check,
+  and the typed text stays. A failed refresh of a server-started turn uses the
+  same recovery action.
+- **A user types while an answer streams.** Enter and the send arrow add text
+  at the next model step by default. The account's Send Behavior setting can
+  make them interrupt instead. Ctrl/Cmd+Enter always queues the next turn.
+  Each pending message has Send now, which interrupts current work first.
+  Arrow keys in the empty input highlight a pending message, and Enter sends
+  it now. Interrupting also stops speech playback. Queued text survives reload
+  and browser closure. A send that arrives
+  after the response ends becomes a queued turn. One pending request runs at a
+  time; text sent meanwhile stays in the input. Editing withdraws the pending
+  message before its text returns to the input; accepted messages cannot be
+  withdrawn. Stop and failed responses pause the queue; a step limit does not.
+  A pending message carries the skills picked in it with `@`
+  ([[skills]]): sent into the running response, they apply to that response.
+  Pending submission takes no attached files and is unavailable in incognito
+  and for anonymous users. Craft keeps its own queue; only the queue display and
+  keyboard navigation are shared.
+- **Subagents can continue after the answer ends.** A small activity indicator
+  stays visible while background work remains. It shares a row with the
+  pending-input hint. Its Stop subagents button stops every active
+  background agent on the selected branch; it sits outside the `role="status"`
+  text, so the live region announces only the status. The input stays usable. While
+  subagents run, status polling finds automatic follow-up responses in an idle
+  chat and loads them through the normal refresh and replay path. Internal
+  agent results do not become user message bubbles. A "Subagent results received" divider shows above each
+  automatic follow-up response. That response shows its model label but
+  cannot be regenerated.
+- **A tool call needs approval.** An approval card shows the tool's
+  arguments. Every card that waits for a decision shows in one region after
+  the last message (`sections/chat/ToolApprovalsRegion.tsx`, rendered by
+  `ChatUI`), oldest response first and in packet order, from the replies and
+  from their background subagents alike. A multi-model card names its model;
+  a subagent's card (`agent_name` set) names the subagent. The request has no
+  deadline. The user approves once, approves for the chat, or rejects; the
+  card then becomes a one-line record of the outcome, or of "No longer
+  waiting" when the server returns 409 or 404. The record shows in the region
+  until the resolution packet arrives; from then on the reply's timeline
+  shows it next to its tool call (`AgentMessage`, `orderApprovalsByTurn`), and
+  a reload replays it there. While the turn waits, its stream ends with
+  `stop(awaiting_approval)` and the chat goes idle. That stop pauses the
+  answer: `processPackets` does not count it. No stop changes a card: the
+  server sends `tool_approval_resolved` for every request that it ends, live
+  and in replay, with `cancelled` when there is no decision. A card's status
+  comes only from that outcome, or from this client's decision until the
+  outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). A
+  continuation sends a resolution again live after its replay sent it; the
+  read keeps one entry per `approval_id`. The decision response names the
+  resume stream of a suspended answer in `continuation` (`ToolApprovalCard`);
+  for an answer that still runs it is null and the current reader keeps
+  reading. The client does not decide which decision was the last: "Approve
+  for this chat" can also approve sibling requests on the server. When
+  `continuation` is set, `lib/chat/settleChatSession.ts:followChatStream`
+  follows that stream from cursor 0 into the rows that its `response_ids`
+  name, unless this browser already reads it (the send reader and every
+  replay reader claim their stream, `claimStreamReader`) or those rows are
+  not loaded. A claim also takes over the stream's answers: an older reader
+  of an answer skips it (`writesAnswer`), even after the newer reader ends,
+  and both the send reader and a
+  replay reader merge their answers into the current tree. Without a `continuation`, an incognito chat waits for the next
+  stream (`waitForChatResponseEnd`) and follows it. When none comes because
+  the continuation already ended, the card refreshes the chat. An incognito
+  chat has no server queue, but `useChatSessionQueue` still reads its status,
+  so a background agent's request also refreshes it. An incognito refresh
+  keeps local content: only answers whose saved copies hold approval
+  requests take those copies, since only a chat that saves content can ask
+  for approval. A loaded older answer outside the latest page that still
+  shows a waiting card was resolved elsewhere, so the refresh reads it again
+  from the page that ends at it (`fetchSettledChatSession` with
+  `beforeMessageId`). A stream that ends
+  with `stop(awaiting_approval)` settles like any other: the status reads
+  follow a new `current_stream` until the session is idle. After a 409 or
+  404 decision, the card reads the status once and follows `current_stream`
+  while the server processes it. A subagent's requests and resolutions
+  arrive in the root reply that started it, at its `spawn_agent` or
+  `send_message` card, through a load or a continuation's replay, never in a
+  live stream. Each load records its `approvals_version` in the session
+  store; in an idle chat `useChatSessionQueue` calls `refreshChatSession`
+  when the status's version differs from the loaded one. The version is
+  empty while the chat has no request, and a chat that this browser started
+  compares against that empty version: a clean send keeps its streamed
+  messages, and any request refreshes the chat. A decided agent
+  request sets `has_active_subagents` until the agent finishes or waits
+  again, so a decision on a subagent's card reads the status once; the
+  status then polls while background work runs, and each version change
+  refreshes the chat with the agent's later cards. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
+  open request of the reply, and the record reads "Not approved". A reload
+  replays the request and the stop the same way.
+  While a reply's own card waits, the timeline header reads "Waiting for your
+  approval", also after a preamble and for parallel tool calls. The server
+  refuses new input with a 409 `APPROVAL_PENDING`; the client does not check
+  first. On that 409 the composer keeps the draft, scrolls to the reply's
+  first waiting card in the region, shakes it and shows a toast
+  (`lib/chat/hooks.ts:useShowPendingApproval`). When the chat shows no such
+  card, for example for a turn that another tab started, the saved session
+  supplies it: a refused send's settlement loads it, and an idle chat
+  refreshes. A subagent's card blocks no send.
+  What each decision does is in [[mcp-and-custom-tools]].
+- **A user edits or regenerates** an earlier message. A switcher then moves
+  between the versions, and the rest of the chat follows the chosen one. A
+  reload shows the same version.
+- **A user sends one message to several models** and sees the answers side by
+  side. They can pick one. If they send a follow-up without a pick, the chat
+  continues from the answer they were looking at.
+- **A user attaches files** by drag and drop, paste or the input bar. If the
+  active model has no vision support, an upload that contains an image is
+  refused with a message, and none of its files attach.
+- **A user reloads during an answer.** The buffered part appears at once,
+  without animation, and the rest streams live. With several models, each
+  answer gets its own part. If the stream drops while the run continues, the
+  chat attaches again and later output, such as an approval card, still
+  appears.
+- **A user rates, copies or shares an answer.** Copy turns markdown tables into
+  tab-separated text so a spreadsheet keeps the columns. A share link opens a
+  read-only copy. The page needs a session, so a visitor with none goes to
+  sign-in.
+- **The incognito start button** appears only on the new chat page when
+  incognito is available and unlocked.
+- **A user in incognito** cannot turn incognito on or off once the session
+  exists, and answers show no rating buttons. Deep Research and the Coding
+  Agent are greyed out and never sent. Leaving the chat, reloading or
+  closing the tab ends it. If an explicit exit fails, an error shows and the user stays in
+  the chat to retry.
+- **When a send fails**, the partial answer stays and an error banner follows
+  it. In a multi-model turn, only the failed panel shows the error. In a
+  single-model send, a usage limit shows a banner with the reset time and no
+  retry ([[rate-and-usage-limits]]).
+- **After a failed answer**, the next message continues the conversation
+  after it. The model sees the question and the saved partial answer. While
+  the failed answer is the latest message, its banner offers **Regenerate**.
+  It sends a new copy of the question as a sibling branch, and the failed turn
+  moves to the hidden branch. After a later message, the banner has no
+  **Regenerate**.
+- **When the server rejects a send before it saves the question** (an HTTP
+  error, a usage limit or a setup error, with no message IDs), nothing of the
+  turn stays in the chat. The tree returns to its state before the send, the
+  text goes back to the input bar, and the error shows below the chat with no
+  **Regenerate**. A rejected regeneration keeps the earlier answer. A network
+  failure without IDs can still have reached the server, so its turn stays in
+  the tree. The next message follows the last saved message, so that turn
+  becomes a hidden branch until saved history replaces it.
+- **A developer who runs the web server in development** reaches the backend
+  at `/api` on the web origin, streams included. A production web server
+  answers that route with a 404 and a message that nginx must serve `/api`
+  ([[#dev-api-proxy-only]]).
+
+---
+
+## Scope
+
+This component owns:
+
+- the `/app` page and its routes;
+- the chat controllers: send, session load, feedback and multi-model;
+- the per-session client store and the message tree;
+- the client services that call the chat endpoints, and the stream reader;
+- packet grouping and the timeline and answer renderers;
+- the chat sections: input bar, sidebar, document sidebar and model selector;
+- the incognito controls in the app chrome;
+- first-run onboarding on the chat page, which uses the provider setup forms
+  of [[llm-providers]];
+- the development `/api` proxy route.
+
+It shares the file preview renderers with [[craft-frontend]].
+
+Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
+the enum mirrors, line framing and heartbeats. [[citations]] owns marker
+resolution and the partial-link hiding inside the answer. [[core-chat-loop]]
+owns the send, stop, resume and status endpoints, and [[chat-persistence]] the server
+tree and replay. [[agents-personas]] owns `/app/agents`. [[plugins]] owns the
+plugins page and the tools popover, and [[mcp-and-custom-tools]] the MCP
+connection prompt. [[desktop-widget-extensions]] owns the Chrome extension's
+new-tab and side-panel pages and framed sign-in.
+
+---
+
+## Architecture
+
+Component, styling, i18n and data fetching rules for this code are in
+`web/AGENTS.md`. This document does not repeat them.
+
+```
+AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatController.ts
+  implicit multi-model pick (if needed)             PUT set-preferred-response
+  optimistic user + assistant nodes in the tree
+  updateCurrentMessageFIFO                          app/app/services/currentMessageFIFO.ts
+    sendMessage -> handleSSEStream -> withoutHeartbeats   app/app/services/lib.tsx
+    FIFO.acknowledged resolves with the stream and its rows from the ID line
+  drain loop, one store update per animation frame
+    updateSessionMessageTree(frozenSessionId, ...)
+  settleChatSession                                 web/src/lib/chat/settleChatSession.ts
+    await ack and reader -> reattach a lost running stream, or
+    waitForChatResponseEnd -> follow next stream or release input
+AgentMessage -> usePacketProcessor -> processPackets   timeline/hooks/packetProcessor.ts
+  groups by (turn_index, tab_index); builds citationMap, documentMap, stop state
+  tool groups -> timeline steps;  display groups -> answer
+  RendererComponent -> findRenderer                 renderMessageComponent.tsx
+```
+
+**The store.** `web/src/app/app/stores/useChatSessionStore.ts` holds a `Map`
+of session data keyed by session id, plus `currentSessionId`. Each session has
+its own message tree, chat state, `AbortController`, `sendAcknowledged` and
+`readerFinished` promises, and display state. The server queue and session
+status live in SWR (see Pending input below); the store has no copy of either.
+The `AbortController` identifies
+the request that owns the session; late work from an older request checks it
+and stops. A stream keeps writing to the session that started it
+(`frozenSessionId`), so a user can switch chats while one streams. Chat states
+beyond `input`, `loading` and `streaming` include `cancelling` (Stop sent),
+`unconfirmed` (the client could not confirm execution status or load saved history) and
+`uploading` (attachments upload). `onSubmit` ignores a send unless the state
+is `input`. Pending messages use a separate endpoint. They name the target
+response when the client knows its ID; otherwise the server targets the running
+response. They allow no new attachments and need an explicit choice for a
+multi-model turn.
+Each `setCurrentSession` runs `cleanupOldSessions`, which keeps at most ten
+sessions in memory. It drops only idle ones: not current, in `input`, and
+known not to be incognito (or still empty). Pending messages live on the server. An incognito chat cannot be
+rebuilt from the server, so the tab holds its only copy. A dropped chat loads
+from the server again when the user opens it, so state kept only in the store
+does not survive it. Navigation goes through
+`web/lib/opal/src/navigation/hooks.ts:Navigation.go`: it writes the URL with the
+history API first, so the tabs follow the click, then asks Next to render a new
+route, with `PendingRoute` showing the URL's loader meanwhile. Within `/app`,
+`web/src/lib/navigation/hooks.ts:AppPosition` changes only the query, which
+`AppPage` renders itself, so writing the URL is the whole switch; in-app links
+use its `linkTo*` props. `AppChrome`'s `PendingRoute` loader is
+`web/src/layouts/chromes/AppChromeLoader.tsx:AppChromeLoader`, which picks the
+URL's page loader (the agents catalog, the agent editor, the page loader, or
+blank for a view of `/app`). `/app/loading.tsx` re-exports it, so the same
+loader shows while Next commits the route.
+
+**The message tree.** `app/app/services/messageTree.ts` mirrors the server tree:
+nodes keyed by `nodeId`, each with `latestChildNodeId`.
+`getLatestMessageChain` walks it to get what the page shows. On load,
+`app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
+session response and its replay packets ([[chat-persistence]]). Refreshing the
+latest page preserves loaded history that connects to that page, unless an
+older loaded reply still shows a waiting approval card: the latest page holds
+every such reply, so that history is stale and is dropped. Incognito
+recovery checks execution status and retains local content. A saved
+failure becomes an `error` node with `errorMessage`, `errorCode` and
+`isRetryable` from `error_info`; `message` holds only answer text.
+Unless it edits, regenerates or makes an implicit multi-model pick, `onSubmit`
+puts a new message after the last chain node that has a `messageId`, a saved
+failed response included, and sends that ID as `parent_message_id`. The local
+parent and the server parent are the same node. When the server answers
+without admitting the send (`CurrentMessageFIFO.acknowledged` resolves to
+`null`) or the send fails before dispatch, `restoreTreeBeforeSend` removes the
+send's nodes and restores the links of their parent. The error goes to the
+session's `uncaughtError`, a `SessionError` with the error code and details,
+after settlement.
+An automatic follow-up response has a hidden `agent_results` question node as
+its parent. `ChatUI` and the shared chat view render that node with
+`web/src/app/app/message/AgentResultsDivider.tsx`, with no message controls. Checks that
+look for the last `user` node skip it, and export omits it. A multi-model turn
+is unresolved only while the chain tip's parent is its user message
+(`web/src/app/app/message/multiModel.ts:getUnresolvedMultiModelTurn`), so a follow-up past it does not
+reopen response selection.
+
+**Packet processing.** `processPackets` is incremental. It processes only
+packets past `nextPacketIndex` and keeps its state in a ref. It decides each
+group's kind from the group's first tool or display packet, and keeps it: a
+tool packet (`isToolPacket`), including image generation, makes a timeline
+step. `MESSAGE_START` makes an answer group. Debug and control packets
+that arrive first do not decide the kind. `buildGroupsFromKeys` drops a group with no packet in
+`CONTENT_PACKET_TYPES_SET`. Citation and stop packets update state instead of
+making their own step. Generated images accumulate across tool steps, unique
+by file ID, and render once above the answer as soon as they arrive. Later tool
+calls do not hide them. An image call does not mark the
+answer as final; later search or image calls can continue the timeline.
+
+A group closes on its own parent-level `SECTION_END` or `ERROR`
+(`app/app/message/messageComponents/timeline/packetHelpers.ts:isGroupEndPacket`,
+shared by `isToolComplete` and the packet processor); a new `turn_index` or a
+stop packet adds a parent-level `SECTION_END` to each open group. A stop
+packet also ends each open nested call, because no packet follows it. Parallel
+tools share a `turn_index` and differ by `tab_index`. The child packets of a
+subagent, a coding agent (its bash calls and thinking) or a code mode program
+carry the parent's key plus `sub_turn_index`, so they join the parent group,
+and their `SECTION_END` or `ERROR` does not close it. A nested `MESSAGE_START`
+does not start the answer.
+The packet processor splits each group once
+(`app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:buildGroupsFromKeys`).
+`GroupedPacket.packets` holds only the group's own packets. The step-kind checks
+in `app/app/message/messageComponents/timeline/packetHelpers.ts`,
+`findRenderer`, the header, and `isToolComplete` read only these, so a research
+step with a nested search is a research step, not a search step.
+`GroupedPacket.nestedCalls` holds the nested calls, made with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+Each `NestedCall` holds one call's packets placed at parent level, so the tool's
+own renderer reads it as a direct call. The snapshot reuses the object of each
+unchanged call, so memoized renderers of finished calls do not redraw.
+`GroupedPacket.streamPackets` holds every packet in stream order. Every renderer
+receives all three as required props. `ResearchAgentRenderer` draws each entry
+of `nestedCalls` with the renderer of its tool. `CodingAgentRenderer` reads
+`streamPackets`, because its thinking and bash sections interleave in stream
+order.
+After the answer starts, a tool packet of a group whose tool has not started
+is a new tool call and sets `finalAnswerComing` back to false. The tool starts
+with its first tool packet other than a streamed argument, so a call whose
+arguments streamed before the answer also counts when it starts. A later
+packet of a started tool, such as a code mode closing record, joins its group,
+and the answer stays shown. The stop packet sets `finalAnswerComing` again
+when the latest display group is text, not a user message. Nothing follows the
+stop, so the text of a step that ends the response with a tool call, such as
+`wait_agents`, is the answer. A cancelled or failed turn shows its latest text
+the same way, as its saved answer does. Live,
+the closing record follows the answer. On replay, it follows its tab's section
+end, before the answer's `message_start`. Both orders give the same groups.
+The mobile app copies the group end and step-kind rules in
+`mobile/src/chat/timeline/packetHelpers.ts` and
+`mobile/src/chat/messageProcessor.ts` ([[mobile-app]]); change both. Its
+`GroupedPacket.packets` also holds only the group's own packets. Mobile has
+`nestedCalls` for code mode steps, but no `streamPackets`.
+
+**Code mode steps.** Code mode runs behind the scenes: the timeline shows the
+tool calls a program makes, not the program.
+`app/app/message/messageComponents/timeline/transformers.ts:expandCodeModeSteps`
+turns each nested call of an `execute_code` or `wait_code` group into its own
+step, drawn by that tool's renderer as a direct call would be. The packet
+processor adds each nested packet to its call as the packet arrives, and after
+each processed batch builds `GroupedPacket.nestedCalls` for each group with
+`app/app/message/messageComponents/timeline/packetHelpers.ts:nestedCallSnapshot`.
+It reuses the `NestedCall` object of each unchanged call, and
+`expandCodeModeSteps` reuses the step it made for that object, so memoized
+renderers of finished calls do not redraw. A call is its cell and
+`sub_turn_index`, as `CodeModeRenderer` (`backend/onyx/chat/renderer.py`)
+states, so the latest report replaces the earlier ones in place. Pacing
+compares the last packet of each step, because a new report can have as many
+packets as the old one. The program, its output, `wait_code`
+calls, yields and closing records have no step. A program without tool calls
+shows no step. `expandCodeModeSteps` returns the steps and `codeModeWorking`
+in one pass: a program runs from `code_mode_start` until a `code_mode_delta`
+reports a status, and a running program whose cell has no running call sets
+it. A yield (status `running`) ends the program's turn: the model acts next.
+`useTimelineUIState` takes `codeModeWorking`, so the header reads "Working"
+even when the last turn group is parallel.
+The header names a step's activity from its own first packet; nested packets
+do not decide it. `TransformedStep.groupKey` keeps the packet group of a step,
+so pacing still knows restored steps. The expanded timeline renders one list
+keyed by step (a parallel group by its first step), not by position, because a
+cell's new call can move later steps into another turn group. Concurrent calls of one program show as
+sequential steps, not parallel tabs: on replay the backend emits each call's
+packets one after another, and the saved calls have no start or end order, so
+the client cannot tell which calls overlapped. Mobile mirrors these transforms
+in its own module, `mobile/src/chat/timeline/transformers.ts`, so change both;
+its tests mirror the web cases. Mobile processes all packets again on each
+flush, so it does not reuse call or step objects.
+
+**Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
+When the response has `current_stream`, Stop can target that stream at
+once. `current_stream` is a `ChatStream`: the stream ID and the
+`response_ids` of the rows it writes, in model-index order. The stream ID is
+not a message ID; a continuation after approvals gets a new one. A send's
+acknowledgement gives the same shape. `lib/chat/settleChatSession.ts:prepareSavedChat`
+turns the saved page and the local tree into the tree to show and the stream
+to replay; load, `refreshChatSession` and `followChatStream` use it. Each row
+keeps its `replay` position with the stream ID it belongs to.
+`prepareSavedChat` keeps the local rows only when their `replay` belongs to
+the same stream; other rows reset, and the stream replays from cursor 0.
+`lib/chat/settleChatSession.ts:followChatSession` calls `resumeStream` with
+the stream ID and that cursor. In a multi-model turn it routes each packet to
+the row at `placement.model_index` in `response_ids`, and gives the overall
+stop to every answer. It publishes packets only at each `StreamCursor` line, so the cursor
+and the packets it covers are stored together
+([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
+`replay_complete`, and marks it with `restoredPacketCount` so that
+`AgentMessage` shows it without animation. `resumeStream` does not drop
+heartbeats, so `followChatSession` drops `chat_heartbeat` itself, and the
+`replay_end` marker of a continuation stream. A resumed
+error packet turns its answer into an `error` node. The backend decides whether
+queued input can run. When
+the reader ends, it settles the session.
+
+When the user opens a session, it is fetched again when its state is
+`input` or `unconfirmed`, or its `AbortController` is aborted. In the last two
+cases the load recovers: it
+merges the local tree into saved history (`preserveFailedMessages`, or
+`app/app/services/messageTree.ts:restoreIncognitoMessages` for incognito,
+which maps saved ids onto local nodes), resumes, and settles in `recovery`
+mode. An `onSubmit` path that returns without settling must leave the session
+in one of these states, or it stays busy.
+
+**Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
+the only path back to the `input` state after a send, a Stop or a resume
+([[#settle-before-input]]). It waits for the send acknowledgement and the
+reader. If the reader ended without a stop or marked its answers
+`streamLost`, settlement waits one poll interval and reads `/status`. When
+the same stream still runs, it attaches a new reader to it through
+`prepareSavedChat` and `followChatSession`: from the rows' `replay` cursor,
+or from cursor 0 into reset rows when the send stream had no cursor. The store keeps the received rows until the replay publishes its first
+batch, so an unavailable replay loses no output. Only a 404 from
+`resume-stream` passes `streamUnavailable`; settlement then does not reattach
+to that stream, because it has no buffer. A network error, a 5xx, a 429 or an
+end before the first cursor reattaches after the next status read; a 401 or
+403 surfaces through the failed status read. Otherwise
+`lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
+until that response releases ownership, and returns the current stream of
+the turn that owns the session next. A queued response can take ownership
+without making the session idle; `refreshChatSession` loads the latest page
+and `followChatSession` attaches to it. An incognito chat loads no history: it
+follows a next stream whose answers it has, such as an approved answer's
+continuation, with `followChatStream`, and waits through other turns. `refreshChatSession` runs only when no reader owns the session: when
+settlement finds a next stream, or when a status read shows an idle chat a
+running turn or a latest response it does not have. Readiness polls write each
+status into the SWR status cache, so `lib/chat/hooks.ts:useChatSessionQueue`
+sees every status read; a changed `latest_response_id` also reloads the
+pending list.
+Overlapping calls from one session owner share one in-flight refresh; a newer
+owner starts its own. A refresh drops its result if a new send replaced the
+session's `AbortController`, or a reader such as a continuation took the
+session (`readerFinished`). Refresh and
+settlement merge saved pages through one function that keeps local failed
+turns and remaps the selected response.
+After a resume, a Stop, an error or a failed save it also reloads saved
+history. `preserveFailedMessages` keeps a local error unless the saved row's
+`response_status` is `complete`, `limit`, `cancelled` or `suspended` (text
+or files when the field is absent), so a parked answer shows its saved
+waiting requests. It keeps the local `streamLost` mark only while the saved
+row is `running`. After a clean send, the streamed tree stays. Settlement
+never reloads the whole history of an incognito session, in either record
+mode. On a reload or recovery, each answer of the latest turn
+(`getLatestTurn`) that lost its stream, and each answer of a named stream
+that this browser could not read (it ended first, or its resume failed
+before its first batch with content), takes its saved copy if the
+server parked it or the saved copy asked for approval (`savedAnswers`; only a
+chat that saves content parks an answer or asks).
+Each other lost answer gets a stop packet if it has none, and loses its
+`streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
+A newly active stream during reload transfers to the same replay reader. Recovery comes
+from the input bar's manual check or from loading the session again (see
+Resume).
+
+**Pending input.** `lib/chat/hooks.ts:useChatSessionQueue` holds the pending
+list and session status in SWR. `useChatSessionController` mounts it once per
+chat page and passes it to `AppInputBar`, which only renders it. The hook
+subscribes to primitives and memoizes its result, so streamed frames do not
+re-render the memoized `AppInputBar`; submit reads its target response from
+the store when it runs. Incognito chats and anonymous users get a disabled
+queue. One pending-message request runs at a time, and its cache writes use
+the key of the chat that made it. Each request revalidates session status when
+it ends, so polling starts for input it made startable. Submit appends the
+accepted message, then revalidates, because a turn can take it at once. The list does not poll. A turn reloads it
+once, when the status shows a new `latest_response_id` for the same chat: the
+server takes a queued input in the transaction that starts its response.
+Input that joins a running response arrives as a `user_message` packet;
+`app/app/services/lib.tsx` removes that ID from the cached list on either
+reader, with no request. Saved replay emits the same packets from each step's
+human inputs, so both paths render user bubbles between response sections.
+Status polls every 2 seconds while `has_startable_input` or
+`has_active_subagents` is true. `stopSubagents` posts
+`/api/chat/chat-session/{id}/stop-subagents`, then revalidates status. An idle chat that sees a running or unknown
+response refreshes history and attaches to the stream.
+`app/app/stores/useChatSessionStore.ts:useCurrentResponseStopped` is true once
+the latest response's last packet is a turn-level stop. `AppInputBar` then
+hides Stop and treats the response as finished, since a Stop would reach the
+finished stream while the server starts the next queued turn. The keyboard
+highlight in `hooks/useQueuedMessageNavigation.ts` is keyed by message ID, so a
+message that leaves the queue drops the highlight. `sections/input/inputBarKeys.ts`
+ignores keys during IME composition.
+
+**First-run onboarding.** `AppPage` renders
+`web/src/lib/onboarding/components/OnboardingFlow.tsx`, and
+`web/src/lib/onboarding/hooks.ts:useShowOnboarding` decides whether it shows.
+The step order is in `web/src/lib/onboarding/constants.ts:STEP_CONFIG`.
+Dismissal and an admin's saved step live in `localStorage`, keyed by user id,
+so another browser starts again. The input lock is a comparison against
+`STEP_CONFIG[OnboardingStep.OptionalSetup].index` in the input bar's
+`disabled` prop in `AppPage`; a change to the step order must keep it.
+
+**Action preference.** At send time `onSubmit` filters the selected Action through
+`web/src/lib/plugins/chat.ts:effectiveChatPreferredToolId`. Sending a message
+preserves the selected preference for later messages in that chat. Each request
+sends the current eligible selection, except Deep Research requests send no
+preference. A preference does not restrict which available tools may run.
+[[plugins]] owns Action availability.
+
+**The development `/api` proxy.**
+`web/src/app/api/[...path]/route.ts` forwards every method under `/api` to
+`INTERNAL_URL` with the `/api` prefix removed. It passes the request body as a
+stream, forwards each `set-cookie` header, and returns redirects to the
+browser. For a streamed response it turns off caching and proxy buffering, so
+packets reach the client as they arrive. In development, `DEBUG_AUTH_COOKIE`
+adds an auth cookie so a local web server can call a remote backend. More
+specific routes under `web/src/app/api/` take precedence over this one.
+
+---
+
+**The sidebar.** `web/src/sections/sidebar/AppSidebar.tsx:AppSidebar` shows
+its header tabs and section titles at once. Each section (agents, projects,
+recents) shows Opal's `SidebarLoader` until its own data loads, so a fast
+section does not wait for a slow one; `usePinnedAgents` stays loading until the
+user's pins are in its list. Folded, the header keeps the unfolded button
+order. The header is
+`web/src/sections/sidebar/BrandedSidebarHeader.tsx:BrandedSidebarHeader`, which
+the admin and Craft sidebars share: the logo mark and the wordmark from
+[[whitelabelling-and-theme]], and the fold button, which moves with the
+column's edge as the sidebar folds. A sidebar renders it rather than setting
+up its own branding.
+
+## Contracts and traps
+
+1. `packet-list-append-only` **A message's packet list grows by appending,
+   or is replaced.**
+   `app/app/message/messageComponents/timeline/hooks/usePacketProcessor.ts:usePacketProcessor`
+   processes only the packets past `nextPacketIndex`. It starts again when the
+   `nodeId` changes, the list gets shorter, or the packet at the last processed
+   index is a different object, as after a replay or a reload. So append to the
+   same packet objects, and give a rebuilt list new ones.
+   `app/app/message/messageComponents/AgentMessage.tsx:AgentMessage` memoizes
+   on `packetCount` and the array, because a send mutates its array in place.
+2. `packet-type-web-sets` **A new packet type needs more than an enum entry.**
+   [[streaming-protocol]] lists the hand-mirrored places, including
+   `findRenderer`. The web client keeps more hand-written sets that switch on
+   `PacketType`, such as `app/app/services/packetUtils.ts:isToolPacket` and
+   `app/app/message/messageComponents/timeline/hooks/packetProcessor.ts:CONTENT_PACKET_TYPES_SET`.
+   To find all of them, run
+   `git grep -l 'PacketType.FILE_READER_START' web/src`. Run it again for a
+   type that behaves like the new one. Add the new type where a similar type
+   appears. If an entry is missing, the packet renders as
+   nothing, or as a generic step, and nothing logs an error
+   (`RendererComponent` returns an empty block).
+3. `background-keeps-current-session` **Only the active view may move
+   `currentSessionId`.** `updateSessionAndMessageTree` in
+   `web/src/app/app/stores/useChatSessionStore.ts` sets `currentSessionId`.
+   Code that runs in the background, such as a resume tail, must check that
+   its session is still current or use `updateSessionMessageTree`. Otherwise
+   it takes over the chat the user moved to, and their next send goes to the
+   wrong session.
+4. `stop-does-not-abort-fetch` **Stop does not abort a dispatched fetch.**
+   `web/src/lib/chat/stopChatSession.ts:stopChatSession` sets `cancelling`,
+   waits for `sendAcknowledged`, posts `stop-chat-session` with that stream ID
+   (the assistant message id, or the user message id for a multi-model turn),
+   and then settles. The reader stays open to receive the final packets. Only
+   a Stop before the send is dispatched aborts, with the reason
+   `STOP_BEFORE_DISPATCH`; `onSubmit` then removes the unsent turn and puts
+   the draft back. A failed stop request returns the session to `streaming`.
+   A rejected acknowledgement leaves it `unconfirmed`, and a `null` one sends
+   no stop request and only settles. A `pathname` change also aborts (the
+   cleanup effect in `web/src/hooks/useChatController.ts`); a chat switch
+   inside `/app` does not. That abort only detaches the reader: the server turn
+   continues, `onSubmit` returns without settling, and the next load of the
+   session recovers it.
+5. `fifo-abort-records-error` **The FIFO records an abort as an error.** In
+   `app/app/services/currentMessageFIFO.ts:updateCurrentMessageFIFO`, an
+   aborted send sets `stack.error` to `"AbortError"`. The catch block in
+   `onSubmit` returns on `controller.signal.aborted` or lost stream ownership
+   before it builds error nodes, so an abort renders no error node. Make the
+   same check in any new consumer of the FIFO before it turns `stack.error`
+   into UI.
+6. `server-owns-queue` **Only the backend starts queued turns.**
+   `sections/input/AppInputBar.tsx:AppInputBar` submits text through
+   `useChatSessionQueue`. It does not wait for rendering or call normal send
+   when a response ends. SWR owns the pending-list cache. Accepted between-step
+   inputs use the same ordered packets for live display and reload. A failed
+   POST returns the text to the composer, ahead of any text typed since, or to
+   that chat's draft when the chat is no longer open. Editing waits for DELETE to
+   return the withdrawn text and makes that chat's composer read-only
+   meanwhile, so typed text cannot collide with it. If the user switched chats
+   during the request, the returned text goes to the original chat's draft. A conflict refreshes the list without
+   restoring text that was already accepted.
+7. `branch-switch-reaches-server` **A branch switch must reach the server.**
+   `web/src/hooks/useChatSessionController.ts:onMessageSelection` updates the
+   local tree and calls `app/app/services/lib.tsx:patchMessageToBeLatest`. The
+   backend accepts a send only when its parent is on the server's active branch
+   ([[chat-persistence#send-parent-on-active-branch]]), and a reload shows the
+   server's branch. A UI path that changes `latestChildNodeId` without the PUT
+   breaks both. After selection succeeds, refresh session status: an idle
+   branch has no polling timer to discover another branch's active children.
+8. `implicit-pick-revertible` **An implicit model pick must be revertible.** A
+   follow-up to an unpicked multi-model turn picks the most visible answer,
+   applies it locally and PUTs it. `web/src/hooks/useChatController.ts:onSubmit`
+   waits for that PUT before dispatch. If it fails, the send fails: only the
+   preference is cleared, so a retry runs the PUT again; a newer explicit
+   pick is kept. The send's nodes go away and its text returns to the input
+   bar. A Stop while it waits is a before-dispatch abort.
+9. `usage-limit-is-packet` **A 429 usage limit is a packet, not a throw.**
+   `app/app/services/lib.tsx:sendMessage` turns it into a `StreamingError` with
+   `is_retryable: false` and no `model_index`, so in a single-model send the
+   banner renders through the normal error path. A multi-model send drops it
+   (see Known issues). The response shape is owned by
+   [[rate-and-usage-limits]].
+10. `incognito-toggle-locks` **The incognito toggle locks once a session id
+    exists.** The mode is pinned when the session is created, so an empty
+    session that is reused keeps its mode.
+    `app/app/services/lib.tsx:createChatSession` throws when an
+    incognito create comes back without `incognito: true`, because an old API
+    server pod in a rolling deploy does not pin the mode. Leaving an incognito session calls
+    `endIncognitoSession`; closing the tab sends a `sendBeacon` on `pagehide`.
+    When both fail, the server sweep cleans up ([[chat-persistence]]).
+11. `chat-url-drops-ids` **`app/app/services/lib.tsx:buildChatUrl` drops
+    `PARAMS_TO_SKIP`.** Chat, agent and project ids are never carried over
+    from the old URL. `views/AppPage.tsx:AppPage` removes
+    `projectId` when `agentId` is also present, because an agent pick replaces
+    project context.
+12. `dev-api-proxy-only` **The `/api` route handler serves development only.**
+    `handleRequest` in `web/src/app/api/[...path]/route.ts` returns 404 unless
+    `NODE_ENV` is `development` or `OVERRIDE_API_PRODUCTION` is `true` (for
+    preview environments). In production, nginx strips `/api` and forwards to
+    the API server (`deployment/data/nginx/app.conf.template`). A fix to
+    streaming, cookies or redirects in this file does not reach production;
+    behaviour that works through it in development must also hold behind
+    nginx.
+13. `settle-before-input` **Only settlement returns a session to `input`.**
+    A stream that ends does not mean the turn is saved
+    ([[streaming-protocol#stream-end-is-not-idle]]). Do not set `input` when
+    the reader ends; call `settleChatSession`. The server admits one turn per
+    session until execution and storage drain, so an early send gets a 409
+    ([[core-chat-loop#session-admission]]). Each step re-checks that the
+    session's `abortController` and `readerFinished` are still the ones it
+    started with, so a late settlement cannot overwrite a newer request;
+    session load makes the same check after each await. The send
+    acknowledgement decides what is safe. It resolves with the stream (its ID
+    and response rows) on the ID line, or with `null` when the request ends without one (a 4xx
+    other than 408, which `app/app/services/lib.tsx:sendMessage` throws as
+    `ChatSendRejectedError`, or the usage-limit packet). It rejects only for a
+    5xx, 408 or network failure before the ID line; after that only a
+    `recovery` settlement can return to `input`.
+14. `group-packets-false-lead` **False lead:
+    `app/app/services/packetUtils.ts:groupPacketsByTurnIndex` has no
+    production caller.** Grouping happens in `processPackets`
+    ([[#packet-list-append-only]]).
+
+15. `scroll-follow-intent` **Content growth must not cancel following.**
+    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
+    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
+    catch up if auto-scroll is enabled and the user has not scrolled away.
+    During the opening-follow window, content observers can also catch up with
+    auto-scroll disabled. Scrolling up ends that window. Content observers
+    update visual state without treating layout growth as a user scroll. When
+    the content shrinks, an upward scroll up to the shrinkage is layout, not
+    the user, so only movement beyond it stops following.
+    Every scroll baseline records the position and the content height
+    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
+    turn sent from the page, which passes through `loading`. A run the page
+    resumes starts at `streaming` and gets no space. The scroll element is
+    keyed by session, so a chat switch remounts the spacer. Its unmount clears
+    its state and the shared spacer height.
+
+---
+
+## Decisions
+
+- **Packets pass through a FIFO and flush once per animation frame.** The
+  network delivers many small chunks. A React update per chunk would stall the
+  page, so the drain loop in `onSubmit` batches them.
+- **Each session has its own store entry.** A stream keeps running while the
+  user reads another chat, and its result is there when they return.
+- **The page-level `Dropzone` sets `noClick` and `noPaste`.** The input bar
+  handles click and paste uploads. Without `noPaste`, one paste attaches the
+  file twice.
+
+---
+
+## Known issues
+
+- **A multi-model send that hits the usage limit shows no banner.** In a
+  multi-model turn `onSubmit` drops a `StreamingError` without
+  `details.model_index`, and the 429 packet has none. The panels also get no
+  stop packet.
+- **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
+  not awaited. A send that reaches the server first can fail with "not on the
+  latest mainline". This is inferred from the code, not seen in a test.
+- **Auto-naming can run twice.** `handleNewSessionNaming` names a new session
+  after its first answer, and the session controller names an untitled session
+  with two or more messages on load. A quick reload can trigger both.
+
+---
+
+## Dependencies
+
+- [[core-chat-loop]]: the send, stop, resume and status endpoints.
+- [[streaming-protocol]]: the packets this component parses and renders.
+- [[chat-persistence]]: session reads, replay packets, branch and pick
+  endpoints, feedback, sharing and incognito teardown.
+- [[citations]]: marker resolution inside the answer.
+- [[agents-personas]]: the active agent from `agentId`.
+- [[projects]]: `ProjectsProvider` and project context.
+- [[llm-providers]]: `useLlmManager` and model capabilities.
+- [[file-store-and-user-files]]: `beginUpload` and attached files.
+- [[voice]]: `VoiceModeProvider` wraps the layout.
+- [[plugins]]: the Action-preference rule and the member plugins sent with a turn.
+- [[rate-and-usage-limits]]: the 429 usage-limit response shape.
+
+---
+
+## Recipes
+
+- `packet-type-renderer` **A packet type.** Copy how `FILE_READER_START` is
+  handled; list the web sets with the `git grep` in
+  [[#packet-type-web-sets]]. Add a renderer to `findRenderer`. Cover it with a
+  mocked stream ([[#mock-stream-test]]).
+- `message-action` **A message action.** Copy regenerate, which routes through `onSubmit`
+  with `messageIdToResend`, if the action sends a turn. Otherwise copy
+  `patchMessageToBeLatest`; list the client calls in
+  `app/app/services/lib.tsx`. Update the tree in the store, and check that a
+  reload shows the same result.
+- `query-parameter` **A query parameter.** Copy `PROJECT_ID`; list the set in
+  `app/app/services/searchParams.ts:SEARCH_PARAM_NAMES`. Add it to
+  `PARAMS_TO_SKIP` if it must not survive navigation
+  ([[#chat-url-drops-ids]]).
+- `mock-stream-test` **Test a renderer with no LLM.** Copy a spec in `web/tests/e2e/chat/` that
+  calls `mockChatEndpoint`. `web/tests/e2e/utils/chatMock.ts` builds a stream
+  by hand (`buildMockStream`, `buildMockSearchStream`), and
+  `web/tests/e2e/utils/chatStream.ts` parses a captured stream for
+  assertions.
+- `remote-backend` **Run the web app against another backend.** In development, set
+  `INTERNAL_URL` to the backend origin. For a backend that needs a session,
+  copy the auth cookie value from that site into `DEBUG_AUTH_COOKIE`. The
+  proxy adds it to each request ([[#dev-api-proxy-only]]).
+
+---
+
+## Verification
+
+- Playwright: the specs in `web/tests/e2e/chat/`, with the stream mocks in
+  `web/tests/e2e/utils/`.
+- Jest: the `*.test.ts` and `*.test.tsx` files beside the code in
+  `web/src/app/app/`.
+- By hand: select an Action preference, edit, switch back, stop mid-answer, and reload.
+  Citations resolve, the branch holds, and the partial answer stays. Queue a
+  message with Ctrl/Cmd+Enter during an answer: the server starts it after completion.
+  Enter adds text at the next model step by default. Choose Send now on a
+  queued message to interrupt. Reload and verify pending and accepted text.

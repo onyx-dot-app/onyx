@@ -46,7 +46,9 @@ async def user_scoped_rate_limit_key(request: Request) -> str:
     """Key on the authenticated user id stashed on request.state by the
     user-scoped limiter dependency; falls back to IP + User-Agent when no
     user id was stashed (anonymous access)."""
-    user_id: str | None = getattr(request.state, _RATE_LIMIT_USER_ID_STATE_KEY, None)
+    user_id: str | None = getattr(  # ods: ignore[getattr]
+        request.state, _RATE_LIMIT_USER_ID_STATE_KEY, None
+    )
     if user_id is not None:
         return f"user-{user_id}"
     return await rate_limit_key(request)

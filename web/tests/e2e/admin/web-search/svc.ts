@@ -1,6 +1,7 @@
 import type { Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
-export const WEB_SEARCH_URL = "/admin/configuration/web-search";
+export const WEB_SEARCH_URL = ADMIN_ROUTES.WEB_SEARCH.path;
 
 export const FAKE_SEARCH_PROVIDERS = {
   exa: {
@@ -40,11 +41,17 @@ export const FAKE_CONTENT_PROVIDERS = {
   },
 };
 
-export function findProviderCard(page: Page, providerLabel: string): Locator {
-  return page
-    .locator("div.rounded-16")
-    .filter({ hasText: providerLabel })
-    .first();
+export type ProviderSection = "search" | "content";
+
+// Exa and Firecrawl have a card in both sections. Pass `section` to pick one;
+// without it the first match on the page (the search section) wins.
+export function findProviderCard(
+  page: Page,
+  providerLabel: string,
+  section?: ProviderSection
+): Locator {
+  const scope = section ? page.getByTestId(`${section}-provider-list`) : page;
+  return scope.getByLabel(providerLabel, { exact: true }).first();
 }
 
 export function mainContainer(page: Page): Locator {
@@ -53,19 +60,25 @@ export function mainContainer(page: Page): Locator {
 
 export async function openProviderModal(
   page: Page,
-  providerLabel: string
+  providerLabel: string,
+  section?: ProviderSection
 ): Promise<void> {
-  const card = findProviderCard(page, providerLabel);
+  const card = findProviderCard(page, providerLabel, section);
   await card.waitFor({ state: "visible", timeout: 10000 });
 
   // First try to find the Connect button
-  const connectButton = card.getByRole("button", { name: "Connect" });
+  const connectButton = card.getByRole("button", {
+    name: "Connect",
+    exact: true,
+  });
   if (await connectButton.isVisible({ timeout: 1000 }).catch(() => false)) {
     await connectButton.click();
     return;
   }
 
-  // If no Connect button, click the Edit icon button to update credentials
+  // If no Connect button, click the Edit icon button to update credentials.
+  // The icon buttons only render on hover.
+  await card.hover();
   const editButton = card.getByRole("button", { name: /^Edit / });
   await editButton.waitFor({ state: "visible", timeout: 5000 });
   await editButton.click();

@@ -1,10 +1,10 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Button } from "@opal/components";
 import { SvgX } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { Content } from "@opal/layouts";
-import IconButton from "@/refresh-components/buttons/IconButton";
 
 interface ResourceContentProps {
   /** SVG icon for connectors/doc sets. */
@@ -34,27 +34,32 @@ function ResourceContent({
             {leftContent}
             <div className="flex-1 min-w-0">
               <Content
+                font="main-ui-action"
                 title={title}
                 description={description}
-                sizePreset="main-ui"
-                variant="section"
               />
             </div>
           </>
         ) : (
           <div className="flex-1 min-w-0">
             <Content
+              font="main-ui-action"
               icon={icon}
               title={title}
               description={description}
-              sizePreset="main-ui"
-              variant="section"
             />
           </div>
         )}
       </div>
       {infoContent}
-      <IconButton small icon={SvgX} onClick={onRemove} className="shrink-0" />
+      <div className="shrink-0">
+        <Button
+          size="xs"
+          prominence="internal"
+          icon={SvgX}
+          onClick={onRemove}
+        />
+      </div>
     </div>
   );
 }

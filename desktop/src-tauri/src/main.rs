@@ -8,7 +8,10 @@ mod alt_menu;
 mod commands;
 mod config;
 mod debug_log;
+#[cfg(target_os = "macos")]
+mod macos_webview;
 mod menu;
+mod oauth_handoff;
 mod shortcuts;
 mod window;
 
@@ -36,6 +39,12 @@ struct Cli {
     /// Enable verbose logging, auto-open `DevTools`, and capture webview console output
     #[arg(long)]
     debug: bool,
+
+    // Linux and Windows launch the app with the onyx:// link as an argument;
+    // the deep-link plugin reads it from argv.
+    #[arg(hide = true)]
+    #[allow(dead_code)]
+    links: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -108,6 +117,14 @@ fn print_debug_startup_banner() {
 /// window's platform tweaks, and Alt-menu/devtools wiring. Every failure here
 /// is logged and non-fatal, so this never needs to return a `Result`.
 fn setup_app(app: &tauri::AppHandle) {
+    // The config declares the main window with `"create": false`, so build it
+    // here -- before anything below looks it up.
+    if let Err(e) = window::build_main_window(app) {
+        debug_log::log_backend_error(app, &format!("Failed to build main window: {e}"));
+    }
+
+    oauth_handoff::setup(app);
+
     // Before the tray, so its menu can reflect whether the shortcut registered.
     shortcuts::setup_global_shortcuts(app);
 
@@ -126,14 +143,6 @@ fn setup_app(app: &tauri::AppHandle) {
     #[cfg(target_os = "macos")]
     if let Err(e) = apply_vibrancy(&window, NSVisualEffectMaterial::Sidebar, None, None) {
         debug_log::log_backend_error(app, &format!("Failed to apply vibrancy effect: {e}"));
-    }
-
-    if let Ok(url) = window.url() {
-        let mut base_url = url;
-        base_url.set_query(None);
-        base_url.set_fragment(None);
-        base_url.set_path("/");
-        app.state::<ConfigState>().set_app_base_url(Some(base_url));
     }
 
     #[cfg(target_os = "macos")]
@@ -173,12 +182,18 @@ fn main() {
     // `tauri::generate_context!()` also expands to code that calls
     // `std::process::exit` internally on some platforms.
     #[allow(clippy::expect_used, clippy::exit)]
-    tauri::Builder::default()
+    oauth_handoff::with_plugins(tauri::Builder::default())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_shell::init())
         .plugin(
             tauri::plugin::Builder::<Wry>::new("chat-external-navigation-handler")
                 .on_navigation(|webview, destination_url| {
+                    // A popup's webview has no URL before its first load, and
+                    // `url()` panics in wry then; popups also must follow
+                    // cross-origin OAuth redirects.
+                    if window::is_popup_window(webview) {
+                        return true;
+                    }
                     let Ok(current_url) = webview.url() else {
                         return true;
                     };
@@ -188,7 +203,8 @@ fn main() {
                             debug_log::log_backend_error(
                                 webview.app_handle(),
                                 &format!(
-                                    "Failed to open external URL in default browser: {destination_url}"
+                                    "Failed to open external URL in default browser: {}",
+                                    window::redact_url(destination_url)
                                 ),
                             );
                         }
@@ -233,6 +249,8 @@ fn main() {
             menu::MENU_RELOAD_ID => menu::handle_reload(app),
             menu::MENU_GO_BACK_ID => menu::handle_go_back(app),
             menu::MENU_GO_FORWARD_ID => menu::handle_go_forward(app),
+            #[cfg(not(target_os = "macos"))]
+            menu::MENU_QUIT_ID => app.exit(0),
             menu::MENU_SHOW_MENU_BAR_ID => menu::handle_menu_bar_toggle(app),
             #[cfg(target_os = "linux")]
             menu::MENU_HIDE_DECORATIONS_ID => menu::handle_decorations_toggle(app),
@@ -245,8 +263,6 @@ fn main() {
             Ok(())
         })
         .on_page_load(|webview: &Webview, _payload: &PageLoadPayload| {
-            window::inject_chat_link_intercept(webview);
-
             if webview.app_handle().state::<ConfigState>().debug_mode {
                 debug_log::inject_console_capture(webview);
             }

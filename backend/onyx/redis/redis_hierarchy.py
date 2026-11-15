@@ -228,6 +228,22 @@ def evict_hierarchy_nodes_from_cache(
     redis_client.hdel(raw_id_key, *raw_node_ids)
 
 
+def invalidate_hierarchy_cache_for_source(
+    redis_client: TenantRedisClient,
+    source: DocumentSource,
+) -> None:
+    """Drop all cached ancestor mappings for a source.
+
+    Next ancestor lookup refreshes from Postgres. Use after source-wide
+    node deletes or reparents so stale parent chains cannot be served.
+    """
+    redis_client.delete(
+        _cache_key(source),
+        _raw_id_cache_key(source),
+        _source_node_key(source),
+    )
+
+
 def get_node_id_from_raw_id(
     redis_client: TenantRedisClient,
     source: DocumentSource,
@@ -357,20 +373,21 @@ def refresh_hierarchy_cache_from_db(
             logger.warning("Error releasing hierarchy cache lock: %s", e)
 
 
-def _walk_ancestor_chain(
+def get_ancestors_from_node_id(
     redis_client: TenantRedisClient,
     source: DocumentSource,
-    start_node_id: int,
+    node_id: int,
     db_session: Session,
 ) -> list[int]:
     """
     Walk up the hierarchy tree from a node, collecting all ancestor IDs.
 
-    Internal helper used by both get_ancestors_from_node_id and
-    get_ancestors_from_raw_id.
+    Preferred over `get_ancestors_from_raw_id` when the caller already holds
+    the database ID, since it skips the raw-to-node lookup and the cache miss
+    that lookup can take.
     """
     ancestors: list[int] = []
-    current_id: int | None = start_node_id
+    current_id: int | None = node_id
     visited: set[int] = set()
 
     while current_id is not None and len(ancestors) < MAX_DEPTH:
@@ -476,7 +493,7 @@ def get_ancestors_from_raw_id(
         return [source_node_id] if source_node_id else []
 
     # Walk up the ancestor chain
-    return _walk_ancestor_chain(redis_client, source, node_id, db_session)
+    return get_ancestors_from_node_id(redis_client, source, node_id, db_session)
 
 
 def get_source_node_id_from_cache(

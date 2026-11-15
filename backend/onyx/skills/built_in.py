@@ -24,14 +24,14 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 from typing import Final, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
+from pydantic import BaseModel, ConfigDict, computed_field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import SKILL_NAME_PATTERN
+from onyx.skills.models import SkillName
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
 # to sandboxes at session setup; not baked into the sandbox image.
@@ -55,7 +55,7 @@ class BuiltInSkillDefinition(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    built_in_skill_id: str = Field(pattern=SKILL_NAME_PATTERN, max_length=64)
+    built_in_skill_id: SkillName
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
@@ -77,7 +77,7 @@ class BuiltInProvider(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     kind: str
-    skill_id: str = Field(pattern=SKILL_NAME_PATTERN, max_length=64)
+    skill_id: SkillName
     is_available: Callable[[Session], bool] = _always_available
     unavailable_reason: str | None = None
 
@@ -179,6 +179,7 @@ _REGISTRY: Final = BuiltInSkillRegistry(
             ),
         ),
         SeededBuiltInProvider(skill_id="company-search"),
+        SeededBuiltInProvider(skill_id="craft-documentation"),
         SeededBuiltInProvider(
             skill_id="browser",
             is_available=lambda _: ENABLE_BROWSER,
@@ -198,6 +199,9 @@ _REGISTRY: Final = BuiltInSkillRegistry(
             skill_id="hubspot", app_type=ExternalAppType.HUBSPOT
         ),
         ExternalAppBuiltInProvider(skill_id="notion", app_type=ExternalAppType.NOTION),
+        ExternalAppBuiltInProvider(
+            skill_id="zendesk", app_type=ExternalAppType.ZENDESK
+        ),
     )
 )
 

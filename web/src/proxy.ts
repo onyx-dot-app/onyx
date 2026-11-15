@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
+import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import {
-  SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED,
-  SERVER_SIDE_ONLY__AUTH_COOKIE_NAME,
-} from "./lib/constants";
+  DESKTOP_HANDOFF_PATH,
+  isDesktopOAuthCallback,
+} from "@/lib/oauth/desktopCallback";
 
 // Route prefixes that never allow anonymous access, so we fast-fail at the edge
 // when no auth cookie is present. "/app" is intentionally excluded: it allows
@@ -106,11 +108,15 @@ export const config = {
 const EE_ROUTES = [
   "/admin/groups",
   "/admin/performance/usage",
+  "/admin/spending-limits",
+  "/admin/performance/analytics",
   "/admin/performance/query-history",
   "/admin/theme",
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/admin/export-logs",
+  "/admin/scim",
+  "/admin/service-accounts",
   "/agents/stats",
 ];
 
@@ -121,6 +127,22 @@ function withSecurityHeaders(response: NextResponse): NextResponse {
 
 export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
+  const pathWithQuery = pathname + request.nextUrl.search;
+
+  // Set, not merged, so a client cannot supply its own.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set(ORIGINAL_PATH_HEADER, pathWithQuery);
+
+  // A desktop-started OAuth callback goes back to the app, which holds the
+  // session. Serve the handoff page ahead of any auth gate; the URL stays the
+  // same, so the page builds the onyx:// link from it.
+  if (
+    isDesktopOAuthCallback(pathname, request.nextUrl.searchParams.get("state"))
+  ) {
+    return withSecurityHeaders(
+      NextResponse.rewrite(new URL(DESKTOP_HANDOFF_PATH, request.url))
+    );
+  }
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)
@@ -137,21 +159,21 @@ export async function proxy(request: NextRequest) {
     // Require a real auth cookie; the anonymous-user cookie must not satisfy the
     // edge gate for these routes (the server-side role checks reject it anyway).
     if (!authCookie) {
-      const loginUrl = new URL("/auth/login", request.url);
-      // Preserve full URL including query params and hash for deep linking
-      const fullPath = pathname + request.nextUrl.search + request.nextUrl.hash;
-      loginUrl.searchParams.set("next", fullPath);
+      const loginUrl = new URL(loginPath({ next: pathWithQuery }), request.url);
       return withSecurityHeaders(NextResponse.redirect(loginUrl));
     }
   }
 
-  // Enterprise Edition: Rewrite EE-specific routes to /ee prefix
-  if (SERVER_SIDE_ONLY__PAID_ENTERPRISE_FEATURES_ENABLED) {
-    if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
-      const newUrl = new URL(`/ee${pathname}`, request.url);
-      return withSecurityHeaders(NextResponse.rewrite(newUrl));
-    }
+  // Enterprise Edition: Rewrite EE-specific routes to /ee prefix. The /ee
+  // layout turns away a deployment whose license does not cover them.
+  if (EE_ROUTES.some((route) => pathname.startsWith(route))) {
+    const newUrl = new URL(`/ee${pathname}`, request.url);
+    return withSecurityHeaders(
+      NextResponse.rewrite(newUrl, { request: { headers: requestHeaders } })
+    );
   }
 
-  return withSecurityHeaders(NextResponse.next());
+  return withSecurityHeaders(
+    NextResponse.next({ request: { headers: requestHeaders } })
+  );
 }

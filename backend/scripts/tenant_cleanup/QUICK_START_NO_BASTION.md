@@ -7,30 +7,36 @@
 cd onyx/backend
 
 # Step 1: Generate CSV of tenants to clean (5-10 min)
-PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py
+# Cutoff defaults to 60 days of no chat and no Craft activity; --inactive-days changes it.
+PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_analyze_tenants.py \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context>
 
 # Step 2: Mark connectors for deletion (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_mark_connectors.py \
-  --csv gated_tenants_no_query_3mo_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force \
-  --concurrency 16
+  --concurrency 8
 
 # ⏰ WAIT 6+ hours for background deletion to complete
 
 # Step 3: Final cleanup (1-2 min)
 PYTHONPATH=. python scripts/tenant_cleanup/no_bastion_cleanup_tenants.py \
-  --csv gated_tenants_no_query_3mo_*.csv \
+  --csv gated_tenants_inactive_<N>d_*.csv \
+  --inactive-days <N> \
+  --data-plane-context <data_plane_context> \
+  --control-plane-context <control_plane_context> \
   --force
 ```
 
-## What Changed?
+## How It Connects
 
-Instead of the original scripts that require bastion access:
-- `analyze_current_tenants.py` → `no_bastion_analyze_tenants.py`
-- `mark_connectors_for_deletion.py` → `no_bastion_mark_connectors.py`
-- `cleanup_tenants.py` → `no_bastion_cleanup_tenants.py`
+Every query runs from a pod through `kubectl exec`. There is no bastion host any more, so the
+scripts that tunnelled through one have been removed.
 
-**No environment variables needed!** All queries run directly from pods.
+**No environment variables needed.** The pods already hold their own database credentials.
 
 ## What You Need
 
@@ -108,8 +114,8 @@ kubectl get po | grep celery-worker-user-file-processing | grep Running
 
 - `tenant_data_YYYYMMDD_HHMMSS.json` - Raw per-tenant data. **Contains real user chat message
   text** (`last_query_text`); keep it out of the repo and off shared storage.
-- `gated_tenants_no_query_3mo_YYYYMMDD_HHMMSS.csv` - List of tenants with no recent chat or
-  Craft activity to clean (the filename is retained for compatibility)
+- `gated_tenants_inactive_<N>d_YYYYMMDD_HHMMSS.csv` - List of tenants with no chat or Craft
+  activity for N days. N is the `--inactive-days` value, 60 by default.
 - `cleaned_tenants.csv` - Successfully cleaned tenants with timestamps. Appended across runs, and
   the only record of what was deleted - needed for any later search-index sweep.
 
@@ -123,8 +129,4 @@ The scripts include multiple safety checks:
 
 ## Need More Details?
 
-See [NO_BASTION_README.md](./NO_BASTION_README.md) for:
-- Detailed explanations of each step
-- Troubleshooting guide
-- How it works under the hood
-- Performance characteristics
+See [README.md](./README.md) for what each step does and how to verify the result.

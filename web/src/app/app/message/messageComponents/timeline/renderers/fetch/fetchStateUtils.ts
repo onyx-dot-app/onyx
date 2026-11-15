@@ -4,7 +4,7 @@ import {
   FetchToolUrls,
   FetchToolDocuments,
 } from "@/app/app/services/streamingModels";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
 
 export const INITIAL_URLS_TO_SHOW = 3;
 export const URLS_PER_EXPANSION = 5;

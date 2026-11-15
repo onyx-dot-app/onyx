@@ -1,29 +1,30 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useNavigation } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
+import { useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Table, Button, Divider } from "@opal/components";
-import { IllustrationContent, toast } from "@opal/layouts";
-import { SvgUsers, SvgSimpleLoader } from "@opal/icons";
+import { IllustrationContent, toast, Section } from "@opal/layouts";
+import { SvgUsers } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { SettingsLayouts } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import { InputTypeIn } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { InputTypeIn, Text } from "@opal/components";
 import useGroupMemberCandidates from "./useGroupMemberCandidates";
 import {
   createGroup,
   updateAgentGroupSharing,
   updateDocSetGroupSharing,
-  saveTokenLimits,
+  saveGroupPermissions,
 } from "./svc";
-import { memberTableColumns, PAGE_SIZE } from "./shared";
+import { makeMemberTableColumns, PAGE_SIZE } from "./shared";
 import SharedGroupResources from "@/views/admin/GroupsPage/SharedGroupResources";
-import TokenLimitSection from "./TokenLimitSection";
-import type { TokenLimit } from "./TokenLimitSection";
+import GroupPermissionsSection from "./GroupPermissionsSection";
+import { useUser } from "@/providers/UserProvider";
 
 function CreateGroupPage() {
-  const router = useRouter();
+  const t = useTranslations("admin.groups");
+  const navigation = useNavigation();
   const [groupName, setGroupName] = useState("");
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -31,22 +32,27 @@ function CreateGroupPage() {
   const [selectedCcPairIds, setSelectedCcPairIds] = useState<number[]>([]);
   const [selectedDocSetIds, setSelectedDocSetIds] = useState<number[]>([]);
   const [selectedAgentIds, setSelectedAgentIds] = useState<number[]>([]);
-  const [tokenLimits, setTokenLimits] = useState<TokenLimit[]>([
-    {
-      tokenId: null,
-      enabled: true,
-      tokenBudget: null,
-      periodDays: null,
-      costBudgetDollars: null,
-    },
-  ]);
+  const [enabledPermissions, setEnabledPermissions] = useState<Set<string>>(
+    new Set()
+  );
 
+  const { isAdmin } = useUser();
   const { rows: allRows, isLoading, error } = useGroupMemberCandidates();
+
+  const memberColumns = useMemo(
+    () =>
+      makeMemberTableColumns({
+        name: t("members.table.name.header"),
+        accountType: t("members.table.accountType.header"),
+        manager: t("members.managerTag.label"),
+      }),
+    [t]
+  );
 
   async function handleCreate() {
     const trimmed = groupName.trim();
     if (!trimmed) {
-      toast.error("Group name is required");
+      toast.error(t("form.toasts.nameRequired"));
       return;
     }
 
@@ -57,76 +63,74 @@ function CreateGroupPage() {
         selectedUserIds,
         selectedCcPairIds
       );
+      if (isAdmin) {
+        await saveGroupPermissions(groupId, enabledPermissions);
+      }
       await updateAgentGroupSharing(groupId, [], selectedAgentIds);
       await updateDocSetGroupSharing(groupId, [], selectedDocSetIds);
-      await saveTokenLimits(groupId, tokenLimits, []);
-      toast.success(`Group "${trimmed}" created`);
-      router.push("/admin/groups");
+      toast.success(t("create.toasts.created", { name: trimmed }));
+      navigation.go("/admin/groups");
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to create group");
+      toast.error(
+        e instanceof Error ? e.message : t("create.toasts.createFailed")
+      );
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  const headerActions = (
-    <Section flexDirection="row" gap={0.5} width="auto" height="auto">
-      <Button
-        prominence="secondary"
-        onClick={() => router.push("/admin/groups")}
-      >
-        Cancel
-      </Button>
-      <Button
-        onClick={handleCreate}
-        disabled={!groupName.trim() || isSubmitting}
-      >
-        Create
-      </Button>
-    </Section>
-  );
+  const headerActions = [
+    <Button
+      key="submit"
+      onClick={handleCreate}
+      disabled={!groupName.trim() || isSubmitting}
+    >
+      {t("create.submit.label")}
+    </Button>,
+  ];
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgUsers}
-        title="Create Group"
+        title={t("create.header.title")}
         divider
-        rightChildren={headerActions}
+        cancel={() => navigation.go("/admin/groups")}
+        actions={headerActions}
       />
 
       <SettingsLayouts.Body>
         {/* Group Name */}
         <Section
-          gap={0.5}
+          gap={2}
           height="auto"
           alignItems="stretch"
           justifyContent="start"
         >
-          <Text mainUiBody text04>
-            Group Name
+          <Text font="main-ui-body" color="text-04">
+            {t("form.name.label")}
           </Text>
           <InputTypeIn
-            placeholder="Name your group"
+            placeholder={t("form.name.placeholder")}
             value={groupName}
             onChange={(e) => setGroupName(e.target.value)}
           />
         </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
         {/* Members table */}
-        {isLoading && <SvgSimpleLoader />}
+        {isLoading && <IconLoader />}
 
         {error ? (
-          <Text as="p" secondaryBody text03>
-            Failed to load users.
+          <Text as="p" font="secondary-body" color="text-03">
+            {t("members.loadError.text")}
           </Text>
         ) : null}
 
         {!isLoading && !error && (
           <Section
-            gap={0.75}
+            gap={3}
             height="auto"
             alignItems="stretch"
             justifyContent="start"
@@ -134,28 +138,35 @@ function CreateGroupPage() {
             <InputTypeIn
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search users and accounts..."
-              searchIcon
+              placeholder={t("members.searchUsers.placeholder")}
+              icon="search"
             />
             <Table
-              data={allRows}
-              columns={memberTableColumns}
+              items={allRows}
+              columns={memberColumns}
               getRowId={(row) => row.id ?? row.email}
               pageSize={PAGE_SIZE}
-              searchTerm={searchTerm}
+              query={searchTerm}
               selectionBehavior="multi-select"
-              onSelectionChange={setSelectedUserIds}
+              onSelectionChange={(values) => setSelectedUserIds([...values])}
               footer={{}}
               emptyState={
                 <IllustrationContent
                   illustration={SvgNoResult}
-                  title="No users found"
-                  description="No users match your search."
+                  title={t("members.noUsers.title")}
+                  description={t("members.noUsers.description")}
                 />
               }
             />
           </Section>
         )}
+        {isAdmin && (
+          <GroupPermissionsSection
+            enabledPermissions={enabledPermissions}
+            onPermissionsChange={setEnabledPermissions}
+          />
+        )}
+
         <SharedGroupResources
           selectedCcPairIds={selectedCcPairIds}
           onCcPairIdsChange={setSelectedCcPairIds}
@@ -163,11 +174,6 @@ function CreateGroupPage() {
           onDocSetIdsChange={setSelectedDocSetIds}
           selectedAgentIds={selectedAgentIds}
           onAgentIdsChange={setSelectedAgentIds}
-        />
-
-        <TokenLimitSection
-          limits={tokenLimits}
-          onLimitsChange={setTokenLimits}
         />
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>

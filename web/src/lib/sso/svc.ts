@@ -1,31 +1,40 @@
 import { SWR_KEYS } from "@/lib/swr-keys";
+import type { SSOProviderOption, SSOProviderType } from "@/lib/auth/types";
+import { FetchError, parseErrorDetail } from "@/lib/fetcher";
 import {
   SSOProviderCreateRequest,
   SSOProviderResponse,
   SSOProviderUpdateRequest,
-} from "@/lib/sso/interfaces";
+} from "@/lib/sso/types";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-async function errorDetail(response: Response): Promise<string> {
-  try {
-    return (await response.json()).detail ?? "Request failed";
-  } catch {
-    return "Request failed";
-  }
-}
+/** Every JSON body the SSO endpoints below accept. */
+type SSORequestBody =
+  | SSOProviderCreateRequest
+  | SSOProviderUpdateRequest
+  | { email: string }
+  | { enabled: boolean }
+  | { domains: string[] }
+  | { domain: string };
 
+// FetchError carries the status the shared SWR guard reads to stop retrying and
+// send an expired session to the login page.
 async function ssoRequest<T>(
   url: string,
   method: string,
-  body: unknown
+  body?: SSORequestBody
 ): Promise<T> {
-  const response = await fetch(url, {
-    method,
-    headers: JSON_HEADERS,
-    body: JSON.stringify(body),
-  });
-  if (!response.ok) throw new Error(await errorDetail(response));
+  const response = await fetch(
+    url,
+    body === undefined
+      ? { method }
+      : { method, headers: JSON_HEADERS, body: JSON.stringify(body) }
+  );
+  if (!response.ok) {
+    const detail = await parseErrorDetail(response, "Request failed");
+    throw new FetchError(detail, response.status, { detail });
+  }
   return response.json();
 }
 
@@ -50,6 +59,31 @@ export function updateSSOProvider(
   );
 }
 
+// The backend serves snake_case, so the wire shape is spelled out separately
+// from the camelCase model rather than cast across the boundary.
+interface SSOProviderOptionWire {
+  name: string;
+  display_name: string;
+  provider_type: SSOProviderType;
+  authorize_url: string;
+}
+
+export async function discoverSSOProviders(
+  email: string
+): Promise<SSOProviderOption[]> {
+  const data = await ssoRequest<{ providers?: SSOProviderOptionWire[] }>(
+    "/api/auth/sso/discover",
+    "POST",
+    { email }
+  );
+  return (data.providers ?? []).map((provider) => ({
+    name: provider.name,
+    displayName: provider.display_name,
+    providerType: provider.provider_type,
+    authorizeUrl: provider.authorize_url,
+  }));
+}
+
 export function setSSOProviderEnabled(
   providerId: number,
   enabled: boolean
@@ -58,5 +92,45 @@ export function setSSOProviderEnabled(
     `${SWR_KEYS.adminSsoProviders}/${providerId}/enabled`,
     "POST",
     { enabled }
+  );
+}
+
+export async function deleteSSOProvider(providerId: number): Promise<void> {
+  await ssoRequest<null>(
+    `${SWR_KEYS.adminSsoProviders}/${providerId}`,
+    "DELETE"
+  );
+}
+
+export interface SSOLoginDomainStatus {
+  domain: string;
+  verified: boolean;
+  // Whether the provider holding this domain is saved. Verifying needs a saved
+  // claim, so the record shows first and verifying unlocks on save.
+  claimed: boolean;
+  // The TXT record to publish. Unset once the domain is verified.
+  record_host?: string | null;
+  record_value?: string | null;
+}
+
+export interface SSOLoginDomains {
+  domains: SSOLoginDomainStatus[];
+}
+
+export function fetchDomainRecords(
+  domains: string[]
+): Promise<SSOLoginDomains> {
+  return ssoRequest<SSOLoginDomains>(
+    `${SWR_KEYS.adminSsoDomains}/records`,
+    "POST",
+    { domains }
+  );
+}
+
+export function verifyDomainViaDns(domain: string): Promise<SSOLoginDomains> {
+  return ssoRequest<SSOLoginDomains>(
+    `${SWR_KEYS.adminSsoDomains}/verify-dns`,
+    "POST",
+    { domain }
   );
 }

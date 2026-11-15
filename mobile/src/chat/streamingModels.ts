@@ -15,6 +15,8 @@ export enum PacketType {
   STOP = "stop",
   SECTION_END = "section_end",
   TOP_LEVEL_BRANCHING = "top_level_branching",
+  // Ends the replayed prefix of a continuation stream.
+  REPLAY_END = "replay_end",
   ERROR = "error",
 
   SEARCH_TOOL_START = "search_tool_start",
@@ -65,11 +67,21 @@ export enum PacketType {
 
   BASH_TOOL_START = "bash_tool_start",
   BASH_TOOL_DELTA = "bash_tool_delta",
+
+  CODE_MODE_START = "code_mode_start",
+  CODE_MODE_DELTA = "code_mode_delta",
+
+  // A tool call waits for the user's decision; they never name a timeline step.
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
   PYTHON: "python",
 } as const;
+
+// tool_type of the argument deltas that stream a code mode program
+export const CODE_MODE_TOOL_TYPE = "execute_code";
 
 export interface MessageStart extends BaseObj {
   id: string;
@@ -91,6 +103,10 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  // The turn reached its execution deadline.
+  TIMED_OUT = "timed_out",
+  // The stream ends while the response waits for the user's approval decisions.
+  AWAITING_APPROVAL = "awaiting_approval",
 }
 
 export interface Stop extends BaseObj {
@@ -105,6 +121,10 @@ export interface SectionEnd extends BaseObj {
 export interface TopLevelBranching extends BaseObj {
   type: "top_level_branching";
   num_parallel_branches: number;
+}
+
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
 }
 
 export interface PacketError extends BaseObj {
@@ -189,13 +209,16 @@ export interface FetchToolDocuments extends BaseObj {
 
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  status_code: number | null;
   message: string;
 }
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // Qualified name that identifies the tool; not for display.
   tool_name: string;
+  // Absent from servers that predate it.
+  display_name?: string;
   tool_id?: number | null;
 }
 
@@ -331,6 +354,31 @@ export interface BashToolDelta extends BaseObj {
   timed_out: boolean;
 }
 
+export type CodeModeStatus =
+  "running" | "completed" | "failed" | "timed_out" | "terminated" | "cancelled";
+
+export interface CodeModeStart extends BaseObj {
+  type: "code_mode_start";
+  code: string;
+  cell_id?: number | null;
+  observation?: number;
+}
+
+export interface CodeModeDelta extends BaseObj {
+  type: "code_mode_delta";
+  stdout: string;
+  replace_stdout?: boolean;
+  result?: string | null;
+  error?: string | null;
+  status?: CodeModeStatus | null;
+  duration_seconds?: number | null;
+  tool_call_count?: number | null;
+  stored_keys?: string[] | null;
+  cell_id?: number | null;
+  observation?: number | null;
+  response_ended?: boolean;
+}
+
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
 
 export type SearchToolObj =
@@ -340,6 +388,28 @@ export type SearchToolObj =
   | SearchToolDocumentsDelta
   | SectionEnd
   | PacketError;
+
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // The subagent that asks; null or absent for the root agent's own request.
+  agent_name?: string | null;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
+  // "disabled": an approval found the tool disabled, so the call did not run.
+  outcome:
+    "approved" | "approved_for_chat" | "rejected" | "disabled" | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
 
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
@@ -362,17 +432,10 @@ export type FetchToolObj =
   | PacketError;
 
 export type CustomToolObj =
-  | CustomToolStart
-  | CustomToolArgs
-  | CustomToolDelta
-  | SectionEnd
-  | PacketError;
+  CustomToolStart | CustomToolArgs | CustomToolDelta | SectionEnd | PacketError;
 
 export type FileReaderToolObj =
-  | FileReaderStart
-  | FileReaderResult
-  | SectionEnd
-  | PacketError;
+  FileReaderStart | FileReaderResult | SectionEnd | PacketError;
 
 export type MemoryToolObj =
   | MemoryToolStart
@@ -391,22 +454,13 @@ export type NewToolObj =
   | MemoryToolObj;
 
 export type ReasoningObj =
-  | ReasoningStart
-  | ReasoningDelta
-  | ReasoningDone
-  | SectionEnd
-  | PacketError;
+  ReasoningStart | ReasoningDelta | ReasoningDone | SectionEnd | PacketError;
 
 export type CitationObj =
-  | CitationStart
-  | CitationInfo
-  | SectionEnd
-  | PacketError;
+  CitationStart | CitationInfo | SectionEnd | PacketError;
 
 export type DeepResearchPlanObj =
-  | DeepResearchPlanStart
-  | DeepResearchPlanDelta
-  | SectionEnd;
+  DeepResearchPlanStart | DeepResearchPlanDelta | SectionEnd;
 
 export type ResearchAgentObj =
   | ResearchAgentStart
@@ -432,10 +486,14 @@ export type ObjTypes =
   | ChatHeartbeat
   | SectionEnd
   | TopLevelBranching
+  | ReplayEnd
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
   | CodingAgentObj
+  | CodeModeStart
+  | CodeModeDelta
+  | ToolApprovalObj
   | PacketError;
 
 export interface Placement {

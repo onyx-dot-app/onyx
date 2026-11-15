@@ -56,7 +56,7 @@ export default defineConfig({
       workers: 1,
     },
     {
-      // runs against the Onyx Lite stack (DISABLE_VECTOR_DB=true, no Vespa/Redis)
+      // runs against the Onyx Lite stack (DISABLE_VECTOR_DB=true, no OpenSearch/Redis)
       name: "lite",
       use: {
         ...devices["Desktop Chrome"],
@@ -64,6 +64,17 @@ export default defineConfig({
         storageState: "admin_auth.json",
       },
       grep: /@lite/,
+    },
+    {
+      // Runs the @code-mode specs against a backend with CODE_MODE_ENABLED=true.
+      // The admin project runs them with code mode off.
+      name: "code-mode",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+      },
+      grep: /@code-mode/,
     },
   ],
 });

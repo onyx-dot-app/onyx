@@ -4,17 +4,18 @@ from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,
     ExternalAppUserCredential,
-    GatedActionPolicy,
     GatedApp,
+    Plugin,
     Skill,
     Skill__User,
     Skill__UserGroup,
+    WorkspaceActionPolicy,
 )
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
@@ -25,7 +26,7 @@ _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     GatedApp,
     Skill__User,
     Skill__UserGroup,
-    GatedActionPolicy,
+    WorkspaceActionPolicy,
     ExternalAppUserCredential,
 )
 
@@ -51,7 +52,7 @@ def snapshot_skill_tables(
     for model in _SKILL_ISOLATION_MODELS:
         keys = _column_keys(model)
         snapshot[model] = [
-            {key: getattr(row, key) for key in keys}
+            {key: getattr(row, key) for key in keys}  # ods: ignore[getattr]
             for row in session.execute(select(model)).scalars().all()
         ]
     return snapshot
@@ -65,7 +66,10 @@ def restore_skill_tables(
         pk_keys = _pk_keys(model)
         baseline_pks = {tuple(row[key] for key in pk_keys) for row in snapshot[model]}
         for row in session.execute(select(model)).scalars().all():
-            if tuple(getattr(row, key) for key in pk_keys) not in baseline_pks:
+            if (
+                tuple(getattr(row, key) for key in pk_keys)  # ods: ignore[getattr]
+                not in baseline_pks
+            ):
                 session.delete(row)
         session.flush()
 
@@ -77,4 +81,8 @@ def restore_skill_tables(
             session.merge(model(**row))
         session.flush()
 
+    # A plugin shares its skill's id. Drop the plugins of deleted skills.
+    session.execute(
+        delete(Plugin).where(~select(Skill.id).where(Skill.id == Plugin.id).exists())
+    )
     session.commit()

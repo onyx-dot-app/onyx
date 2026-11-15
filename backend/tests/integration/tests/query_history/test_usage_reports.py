@@ -23,7 +23,7 @@ def test_usage_reports(reset: None) -> None:  # noqa: ARG001
 
         count = 0
         for entry_batch in get_all_empty_chat_message_entries(db_session, period):
-            for entry in entry_batch:
+            for _entry in entry_batch:
                 count += 1
 
         assert count == EXPECTED_MESSAGES
@@ -37,7 +37,7 @@ def test_usage_reports(reset: None) -> None:  # noqa: ARG001
 
         count = 0
         for entry_batch in get_all_empty_chat_message_entries(db_session, period):
-            for entry in entry_batch:
+            for _entry in entry_batch:
                 count += 1
 
         lower = EXPECTED_MESSAGES // 3 - (EXPECTED_MESSAGES // (3 * 3))

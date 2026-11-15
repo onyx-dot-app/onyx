@@ -9,12 +9,6 @@ import uuid
 from celery import Task, shared_task
 from redis.lock import Lock as RedisLock
 
-from ee.onyx.server.tenants.provisioning import setup_tenant
-from ee.onyx.server.tenants.schema_management import (
-    create_schema_if_not_exists,
-    get_current_alembic_version,
-    run_alembic_migrations,
-)
 from onyx.background.celery.apps.app_base import task_logger
 from onyx.configs.app_configs import TARGET_AVAILABLE_TENANTS
 from onyx.configs.constants import (
@@ -135,6 +129,11 @@ def _migrate_stale_pool_tenants() -> None:
     tenants are always current so that signup doesn't hit schema mismatches
     (e.g. missing columns added after the tenant was pre-provisioned).
     """
+    from ee.onyx.server.tenants.schema_management import (
+        get_current_alembic_version,
+        run_alembic_migrations,
+    )
+
     with get_session_with_shared_schema() as db_session:
         pool_tenants = db_session.query(AvailableTenant).all()
         tenant_ids = [t.tenant_id for t in pool_tenants]
@@ -178,6 +177,13 @@ def pre_provision_tenant() -> bool:
     """
     # The MULTI_TENANT check is now done at the caller level (check_available_tenants)
     # rather than inside this function
+    # Imported here: provisioning reaches every tool implementation (~75 MB) and
+    # only multi-tenant deployments run this.
+    from ee.onyx.server.tenants.provisioning import setup_tenant
+    from ee.onyx.server.tenants.schema_management import (
+        create_schema_if_not_exists,
+        get_current_alembic_version,
+    )
 
     r = get_redis_client(tenant_id=ONYX_CLOUD_TENANT_ID)
     lock_provision: RedisLock = r.lock(

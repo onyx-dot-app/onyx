@@ -212,8 +212,7 @@ def _get_forums(
         pages_fetched += len(contents)
         logger.debug("Fetched %s forums", pages_fetched)
 
-        for page in contents:
-            pages_to_return.append(page)
+        pages_to_return.extend(contents)
 
         if pages_fetched >= total_records:
             break
@@ -314,7 +313,7 @@ class AxeroConnector(PollConnector):
         if self.include_wiki:
             entity_types.append(9)
 
-        iterable_space_ids = self.space_ids if self.space_ids else [None]
+        iterable_space_ids = self.space_ids or [None]
 
         for space_id in iterable_space_ids:
             for entity in entity_types:

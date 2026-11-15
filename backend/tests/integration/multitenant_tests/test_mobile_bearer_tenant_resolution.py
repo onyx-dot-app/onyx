@@ -14,7 +14,6 @@ middleware short-circuits to the default schema when ``MULTI_TENANT`` is off.
 
 from uuid import uuid4
 
-from onyx.db.models import UserRole
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
@@ -29,7 +28,7 @@ def test_mobile_bearer_resolves_tenant(reset_multitenant: None) -> None:  # noqa
     user: DATestUser = UserManager.create(
         name=f"mobile_{unique}", email=f"mobile_{unique}@example.com"
     )
-    assert UserManager.is_role(user, UserRole.ADMIN)
+    assert UserManager.is_admin(user)
 
     # Obtain a Bearer session token via the mobile login endpoint.
     resp = mobile_login(user.email, user.password)

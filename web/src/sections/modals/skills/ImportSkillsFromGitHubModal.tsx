@@ -1,22 +1,34 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import {
   Button,
   Card,
-  Checkbox,
+  InputCheckbox,
   InputTypeIn,
   MessageCard,
   Modal,
-  Tag,
+  Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import { SvgArrowRight } from "@opal/icons";
-import { SvgGithub } from "@opal/logos";
+import { Section } from "@opal/layouts";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
+import {
+  emptySkillSharingDraft,
+  serializeSkillSharing,
+  type SkillSharingDraft,
+} from "@/lib/skills/sharing";
+import { SvgGitHub } from "@opal/logos";
 import { cn } from "@opal/utils";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { importGitHubSkills, previewGitHubSkills } from "@/lib/skills/api";
 import type {
   GitHubSkillNotImported,
@@ -45,6 +57,8 @@ interface ImportSkillsFromGitHubModalViewProps {
   onRepositoryChange: (value: string) => void;
   onSelectedPathsChange: (paths: string[]) => void;
   onSubmit: () => void;
+  sharing: SkillSharingDraft;
+  onConfigureSharing: () => void;
 }
 
 export default function ImportSkillsFromGitHubModal({
@@ -52,13 +66,25 @@ export default function ImportSkillsFromGitHubModal({
   onClose,
   onImported,
 }: ImportSkillsFromGitHubModalProps) {
+  const t = useTranslations("skills.modals");
   const [repository, setRepository] = useState("");
   const [preview, setPreview] = useState<GitHubSkillsPreview | null>(null);
   const [selectedPaths, setSelectedPaths] = useState<string[]>([]);
   const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { isAdmin } = useUser();
+  const { isAdmin, user } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
+  const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
+  const sharingModal = useCreateModal();
+  const sharingDraft =
+    sharing ??
+    emptySkillSharingDraft(
+      t("importGithub.sharing.title"),
+      user ? { id: user.id, email: user.email } : null
+    );
   const { data: externalApps } = useUserExternalApps();
 
   useEffect(() => {
@@ -68,7 +94,9 @@ export default function ImportSkillsFromGitHubModal({
     setSelectedPaths([]);
     setResult(null);
     setError(null);
-  }, [open]);
+    setSharing(null);
+    sharingModal.toggle(false);
+  }, [open, sharingModal.toggle]);
 
   async function submit() {
     if (loading || !repository.trim()) return;
@@ -86,7 +114,13 @@ export default function ImportSkillsFromGitHubModal({
         return;
       }
       if (selectedPaths.length === 0) return;
-      const nextResult = await importGitHubSkills(preview, selectedPaths);
+      const nextResult = sharing
+        ? await importGitHubSkills(
+            preview,
+            selectedPaths,
+            serializeSkillSharing(sharing, isAdmin, isOrganizationManager)
+          )
+        : await importGitHubSkills(preview, selectedPaths);
       setResult(nextResult);
       if (nextResult.imported.length > 0) onImported();
     } catch (caught) {
@@ -95,8 +129,8 @@ export default function ImportSkillsFromGitHubModal({
         caught instanceof Error
           ? caught.message
           : preview
-            ? "Couldn't import skills."
-            : "Couldn't load repository."
+            ? t("importGithub.importError.message")
+            : t("importGithub.loadError.message")
       );
     } finally {
       setLoading(false);
@@ -104,27 +138,40 @@ export default function ImportSkillsFromGitHubModal({
   }
 
   return (
-    <ImportSkillsFromGitHubModalView
-      open={open}
-      repository={repository}
-      preview={preview}
-      selectedPaths={selectedPaths}
-      result={result}
-      loading={loading}
-      error={error}
-      isAdmin={isAdmin}
-      externalApps={externalApps}
-      onClose={onClose}
-      onRepositoryChange={(value) => {
-        setRepository(value);
-        setPreview(null);
-        setSelectedPaths([]);
-        setResult(null);
-        setError(null);
-      }}
-      onSelectedPathsChange={setSelectedPaths}
-      onSubmit={() => void submit()}
-    />
+    <>
+      <ImportSkillsFromGitHubModalView
+        open={open}
+        repository={repository}
+        preview={preview}
+        selectedPaths={selectedPaths}
+        result={result}
+        loading={loading}
+        error={error}
+        isAdmin={isAdmin}
+        externalApps={externalApps}
+        onClose={onClose}
+        onRepositoryChange={(value) => {
+          setRepository(value);
+          setPreview(null);
+          setSelectedPaths([]);
+          setResult(null);
+          setError(null);
+        }}
+        onSelectedPathsChange={setSelectedPaths}
+        onSubmit={() => void submit()}
+        sharing={sharingDraft}
+        onConfigureSharing={() => sharingModal.toggle(true)}
+      />
+      <sharingModal.Provider>
+        <ShareSkillModal
+          mode="create"
+          open
+          draft={sharingDraft}
+          onSaveDraft={setSharing}
+          onClose={() => sharingModal.toggle(false)}
+        />
+      </sharingModal.Provider>
+    </>
   );
 }
 
@@ -142,7 +189,10 @@ export function ImportSkillsFromGitHubModalView({
   onRepositoryChange,
   onSelectedPathsChange,
   onSubmit,
+  sharing,
+  onConfigureSharing,
 }: ImportSkillsFromGitHubModalViewProps) {
+  const t = useTranslations("skills.modals");
   const importablePaths = useMemo(
     () =>
       preview?.skills
@@ -158,29 +208,24 @@ export function ImportSkillsFromGitHubModalView({
     importablePaths.length > 0 &&
     importablePaths.every((path) => selectedPathSet.has(path));
   const githubApp = externalApps?.find((app) => app.app_type === "GITHUB");
-  let privateRepositoryMessage =
-    "Public repositories import directly. Private repositories require a GitHub connection.";
+  let privateRepositoryMessage = t("importGithub.privateRepos.needsConnection");
   let privateRepositoryAction: { label: string; href: Route } | null = null;
   if (githubApp?.authenticated) {
-    privateRepositoryMessage =
-      "Public repositories import directly. Private repositories use your GitHub connection.";
+    privateRepositoryMessage = t("importGithub.privateRepos.connected");
   } else if (githubApp) {
-    privateRepositoryMessage =
-      "Public repositories import directly. Connect GitHub to import private repositories.";
+    privateRepositoryMessage = t("importGithub.privateRepos.connect");
     privateRepositoryAction = {
-      label: "Connect GitHub",
+      label: t("importGithub.privateRepos.connectButton.label"),
       href: "/craft/v1/apps",
     };
   } else if (externalApps && isAdmin) {
-    privateRepositoryMessage =
-      "Public repositories import directly. Set up GitHub before importing private repositories.";
+    privateRepositoryMessage = t("importGithub.privateRepos.setUp");
     privateRepositoryAction = {
-      label: "Set up GitHub",
+      label: t("importGithub.privateRepos.setUpButton.label"),
       href: "/admin/craft/apps",
     };
   } else if (externalApps) {
-    privateRepositoryMessage =
-      "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.";
+    privateRepositoryMessage = t("importGithub.privateRepos.askAdmin");
   }
 
   const previewUnavailable =
@@ -189,7 +234,8 @@ export function ImportSkillsFromGitHubModalView({
       .map<GitHubSkillNotImported>((skill) => ({
         path: skill.path,
         name: skill.name,
-        reason: skill.unavailable_reason ?? "This skill cannot be imported.",
+        reason:
+          skill.unavailable_reason ?? t("importGithub.unavailableFallback"),
       })) ?? [];
   const previewUnavailablePaths = new Set(
     previewUnavailable.map((item) => item.path)
@@ -210,27 +256,38 @@ export function ImportSkillsFromGitHubModalView({
     : 0;
 
   return (
-    <Modal open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+    <Modal
+      open={open}
+      onOpenChange={(nextOpen) => !nextOpen && !loading && onClose()}
+    >
       <Modal.Content
         width={preview || result ? "md" : "sm"}
         height={preview || result ? "lg" : "fit"}
       >
         <Modal.Header
-          icon={SvgGithub}
-          title={result ? "GitHub import complete" : "Import from GitHub"}
+          icon={SvgGitHub}
+          title={
+            result
+              ? t("importGithub.header.completeTitle")
+              : t("importGithub.header.title")
+          }
           description={
             result
-              ? "Review what was added to your skills."
+              ? t("importGithub.header.completeDescription")
               : preview
-                ? `Choose skills from ${preview.repository}.`
-                : "Import one or more skills from a GitHub repository."
+                ? t("importGithub.header.chooseDescription", {
+                    repository: preview.repository,
+                  })
+                : t("importGithub.header.description")
           }
           onClose={loading ? undefined : onClose}
         />
         <Modal.Body>
           {result ? (
-            <div className="flex w-full flex-col gap-3">
+            <Section height="auto" alignItems="stretch" gap={3}>
               <MessageCard
+                outerPadding={1}
+                innerPadding={1}
                 variant={
                   result.imported.length === 0
                     ? "error"
@@ -240,21 +297,31 @@ export function ImportSkillsFromGitHubModalView({
                 }
                 title={
                   result.imported.length === 0
-                    ? "No skills were imported"
-                    : `${result.imported.length} ${result.imported.length === 1 ? "skill" : "skills"} imported`
+                    ? t("importGithub.result.noneTitle")
+                    : t("importGithub.result.importedTitle", {
+                        count: result.imported.length,
+                      })
                 }
                 description={[
                   enabledCount > 0
-                    ? `${enabledCount} enabled automatically.`
+                    ? t("importGithub.result.enabledCount", {
+                        count: enabledCount,
+                      })
                     : null,
                   disabledCount > 0
-                    ? `${disabledCount} imported disabled because another skill with the same name is enabled.`
+                    ? t("importGithub.result.disabledCount", {
+                        count: disabledCount,
+                      })
                     : null,
                   resultNotImported.length > 0
-                    ? `${resultNotImported.length} could not be imported.`
+                    ? t("importGithub.result.failedCount", {
+                        count: resultNotImported.length,
+                      })
                     : null,
                   notSelectedCount > 0
-                    ? `${notSelectedCount} not selected.`
+                    ? t("importGithub.result.notSelectedCount", {
+                        count: notSelectedCount,
+                      })
                     : null,
                 ]
                   .filter(Boolean)
@@ -262,14 +329,21 @@ export function ImportSkillsFromGitHubModalView({
               />
 
               {result.imported.length > 0 && (
-                <section className="flex flex-col gap-1.5">
-                  <Text font="main-ui-action">Imported</Text>
-                  <Card border="solid" rounding="sm" padding="fit">
+                <Section height="auto" alignItems="stretch" gap={1.5}>
+                  <Text font="main-ui-action">
+                    {t("importGithub.result.importedSection.title")}
+                  </Text>
+                  <Card border="solid" rounding={2} padding={0}>
                     <div className="divide-y divide-border-01">
                       {result.imported.map((item) => (
-                        <div
+                        <Section
                           key={item.skill.id}
-                          className="flex items-start gap-2 px-3 py-2"
+                          flexDirection="row"
+                          justifyContent="start"
+                          height="auto"
+                          alignItems="start"
+                          gap={2}
+                          padding={3}
                         >
                           <div className="min-w-0 flex-1">
                             <Text font="main-ui-action">{item.skill.name}</Text>
@@ -283,54 +357,70 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             )}
                           </div>
-                          <Tag
-                            color={item.skill.enabled ? "green" : "gray"}
-                            title={item.skill.enabled ? "Enabled" : "Disabled"}
+                          <Badge
+                            color={item.skill.enabled ? "success" : "default"}
+                            title={
+                              item.skill.enabled
+                                ? t("importGithub.skillTag.enabled")
+                                : t("importGithub.skillTag.disabled")
+                            }
                           />
-                        </div>
+                        </Section>
                       ))}
                     </div>
                   </Card>
-                </section>
+                </Section>
               )}
 
               {resultNotImported.length > 0 && (
-                <section className="flex flex-col gap-1.5">
-                  <Text font="main-ui-action">Not imported</Text>
-                  <Card border="solid" rounding="sm" padding="fit">
+                <Section height="auto" alignItems="stretch" gap={1.5}>
+                  <Text font="main-ui-action">
+                    {t("importGithub.result.notImportedSection.title")}
+                  </Text>
+                  <Card border="solid" rounding={2} padding={0}>
                     <div className="divide-y divide-border-01">
                       {resultNotImported.map((item) => (
-                        <div
+                        <Section
                           key={item.path}
-                          className="flex flex-col gap-0.5 px-3 py-2"
+                          height="auto"
+                          alignItems="stretch"
+                          gap={0.5}
+                          padding={3}
                         >
                           <Text font="main-ui-action">{item.name}</Text>
                           <Text as="p" font="secondary-body" color="text-03">
                             {item.reason}
                           </Text>
-                        </div>
+                        </Section>
                       ))}
                     </div>
                   </Card>
-                </section>
+                </Section>
               )}
-            </div>
+            </Section>
           ) : (
-            <div className="flex w-full flex-col gap-3">
-              <div className="flex flex-col gap-1">
-                <Text font="main-ui-action">Repository</Text>
+            <Section height="auto" alignItems="stretch" gap={3}>
+              <Section height="auto" alignItems="stretch" gap={1}>
+                <Text font="main-ui-action">
+                  {t("importGithub.repositoryInput.label")}
+                </Text>
                 <InputTypeIn
                   value={repository}
                   variant={loading ? "disabled" : "primary"}
-                  placeholder="owner/repository or https://github.com/owner/repository"
+                  placeholder={t("placeholders.githubRepository")}
                   onChange={(event) => onRepositoryChange(event.target.value)}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") onSubmit();
                   }}
                 />
-              </div>
+              </Section>
 
-              <div className="flex items-center justify-between gap-2">
+              <Section
+                height="auto"
+                flexDirection="row"
+                justifyContent="between"
+                gap={2}
+              >
                 <Text font="secondary-body" color="text-03">
                   {privateRepositoryMessage}
                 </Text>
@@ -344,55 +434,99 @@ export function ImportSkillsFromGitHubModalView({
                     {privateRepositoryAction.label}
                   </Button>
                 )}
-              </div>
+              </Section>
 
               {error && (
                 <MessageCard
+                  outerPadding={1}
+                  innerPadding={1}
                   variant="error"
                   title={
                     preview
-                      ? "Couldn't import skills"
-                      : "Couldn't load repository"
+                      ? t("importGithub.importError.title")
+                      : t("importGithub.loadError.title")
                   }
                   description={error}
                 />
               )}
 
               {preview && (
-                <div className="flex min-h-0 flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Checkbox
+                <SkillSharingSummary
+                  title={t("importGithub.sharing.title")}
+                  draft={sharing}
+                  count={selectedPaths.length}
+                  configureLabel={t("importGithub.sharing.configureButton")}
+                  disabled={loading}
+                  onConfigure={onConfigureSharing}
+                >
+                  {isAdmin && (
+                    <Text font="secondary-body" color="text-03">
+                      {t(
+                        `share.installation.${({ AVAILABLE: "available", DEFAULT: "default", REQUIRED: "required" } as const)[sharing.installation_policy]}`
+                      )}
+                    </Text>
+                  )}
+                  <Text font="secondary-body" color="text-03">
+                    {t("importGithub.sharing.description", {
+                      count: selectedPaths.length,
+                    })}
+                  </Text>
+                </SkillSharingSummary>
+              )}
+              {preview && (
+                <Section
+                  height="auto"
+                  alignItems="stretch"
+                  gap={2}
+                  className="min-h-0"
+                >
+                  <Section
+                    height="auto"
+                    flexDirection="row"
+                    justifyContent="start"
+                    gap={2}
+                  >
+                    <InputCheckbox
                       checked={allImportableSelected}
                       indeterminate={
                         selectedPaths.length > 0 && !allImportableSelected
                       }
                       disabled={loading || importablePaths.length === 0}
-                      aria-label="Select all importable skills"
+                      aria-label={t("importGithub.selectAll.ariaLabel")}
                       onCheckedChange={(checked) =>
                         onSelectedPathsChange(checked ? importablePaths : [])
                       }
                     />
                     <Text font="secondary-body" color="text-03">
-                      {`${selectedPaths.length} of ${importablePaths.length} importable ${importablePaths.length === 1 ? "skill" : "skills"} selected`}
+                      {t("importGithub.selection.label", {
+                        selected: selectedPaths.length,
+                        total: importablePaths.length,
+                      })}
                     </Text>
-                  </div>
-                  <Card border="solid" rounding="sm" padding="fit">
+                  </Section>
+                  <Card border="solid" rounding={2} padding={0}>
                     <div className="max-h-80 divide-y divide-border-01 overflow-y-auto overscroll-contain">
                       {preview.skills.map((skill) => {
                         const unavailable = skill.unavailable_reason !== null;
                         const checked = selectedPathSet.has(skill.path);
                         return (
-                          <div
+                          <Section
+                            flexDirection="row"
+                            justifyContent="start"
+                            height="auto"
+                            alignItems="start"
+                            gap={2}
+                            padding={3}
                             key={skill.path}
-                            className={cn(
-                              "flex items-start gap-2 px-3 py-2",
-                              unavailable && "opacity-50"
-                            )}
+                            className={cn(unavailable && "opacity-50")}
                           >
-                            <Checkbox
+                            <InputCheckbox
                               checked={checked}
                               disabled={loading || unavailable}
-                              aria-label={`Select ${skill.name}`}
+                              aria-label={t(
+                                "importGithub.skillCheckbox.ariaLabel",
+                                { name: skill.name }
+                              )}
                               onCheckedChange={(nextChecked) =>
                                 onSelectedPathsChange(
                                   nextChecked
@@ -418,21 +552,26 @@ export function ImportSkillsFromGitHubModalView({
                               </Text>
                             </div>
                             {unavailable && (
-                              <Tag color="amber" title="Can't import" />
+                              <Badge
+                                color="pending"
+                                title={t("importGithub.unavailableTag.label")}
+                              />
                             )}
-                          </div>
+                          </Section>
                         );
                       })}
                     </div>
                   </Card>
-                </div>
+                </Section>
               )}
-            </div>
+            </Section>
           )}
         </Modal.Body>
         <Modal.Footer>
           {result ? (
-            <Button onClick={onClose}>Done</Button>
+            <Button onClick={onClose}>
+              {t("importGithub.doneButton.label")}
+            </Button>
           ) : (
             <>
               <Button
@@ -440,7 +579,7 @@ export function ImportSkillsFromGitHubModalView({
                 disabled={loading}
                 onClick={onClose}
               >
-                Cancel
+                {t("importGithub.cancelButton.label")}
               </Button>
               <Button
                 disabled={
@@ -452,11 +591,13 @@ export function ImportSkillsFromGitHubModalView({
               >
                 {loading
                   ? preview
-                    ? "Importing…"
-                    : "Searching…"
+                    ? t("importGithub.submitButton.importingLabel")
+                    : t("importGithub.submitButton.searchingLabel")
                   : preview
-                    ? `Import ${selectedPaths.length === 1 ? "skill" : `${selectedPaths.length} skills`}`
-                    : "Search repository"}
+                    ? t("importGithub.submitButton.importLabel", {
+                        count: selectedPaths.length,
+                      })
+                    : t("importGithub.submitButton.searchLabel")}
               </Button>
             </>
           )}

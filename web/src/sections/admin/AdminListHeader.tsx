@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button, Card } from "@opal/components";
 import { Content } from "@opal/layouts";
 import { SvgPlusCircle } from "@opal/icons";
@@ -12,14 +13,18 @@ interface AdminListHeaderProps {
   searchQuery: string;
   /** Called when the search query changes. */
   onSearchQueryChange: (query: string) => void;
-  /** Search input placeholder. */
+  /** Search input placeholder. Defaults to the shared "Search..." copy. */
   placeholder?: string;
   /** Text shown in the empty-state card when no items exist. */
   emptyStateText: string;
-  /** Called when the action button is clicked. */
-  onAction: () => void;
-  /** Label for the action button. */
-  actionLabel: string;
+  /** Action button click handler. Omit (with actionLabel) to hide the button. */
+  onAction?: () => void;
+  /** Label for the action button. Omit (with onAction) to hide it. */
+  actionLabel?: string;
+  /** Ref to the search input, e.g. for a "/" hotkey that focuses it. */
+  inputRef?: React.Ref<HTMLInputElement>;
+  /** Key handler on the search input, e.g. to move into the list. */
+  onSearchKeyDown?: (event: React.KeyboardEvent<HTMLInputElement>) => void;
 }
 
 /**
@@ -54,30 +59,33 @@ export default function AdminListHeader({
   hasItems,
   searchQuery,
   onSearchQueryChange,
-  placeholder = "Search...",
+  placeholder,
   emptyStateText,
   onAction,
   actionLabel,
+  inputRef,
+  onSearchKeyDown,
 }: AdminListHeaderProps) {
+  const t = useTranslations("admin.shared");
   // Pin the button to its label width — the flexible sibling (search input /
   // empty-state text) absorbs the row shrink; otherwise the button clips its label.
-  const actionButton = (
-    <div className="shrink-0">
-      <Button rightIcon={SvgPlusCircle} onClick={onAction}>
-        {actionLabel}
-      </Button>
-    </div>
-  );
+  const actionButton =
+    onAction && actionLabel ? (
+      <div className="shrink-0">
+        <Button rightIcon={SvgPlusCircle} onClick={onAction}>
+          {actionLabel}
+        </Button>
+      </div>
+    ) : null;
 
   if (!hasItems) {
     return (
-      <Card rounding="lg" border="solid">
+      <Card rounding={4} border="solid">
         <div className="flex flex-row items-center justify-between gap-3">
           <Content
+            font="main-ui-body"
             title={emptyStateText}
-            sizePreset="main-ui"
-            variant="body"
-            color="muted"
+            titleColor="text-03"
             width="fit"
           />
           {actionButton}
@@ -90,10 +98,13 @@ export default function AdminListHeader({
     <div className="flex flex-row gap-3 items-center px-2 pb-3">
       <InputTypeIn
         variant="internal"
-        searchIcon
-        placeholder={placeholder}
+        icon="search"
+        clearButton
+        placeholder={placeholder ?? t("listHeader.search.placeholder")}
+        ref={inputRef}
         value={searchQuery}
         onChange={(e) => onSearchQueryChange(e.target.value)}
+        onKeyDown={onSearchKeyDown}
       />
       {actionButton}
     </div>

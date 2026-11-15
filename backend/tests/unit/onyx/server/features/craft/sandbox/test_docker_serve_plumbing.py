@@ -233,7 +233,7 @@ def test_load_serve_connection_info_handles_password_with_equals_sign() -> None:
 def llm_config() -> CraftLLMProviderConfig:
     return CraftLLMProviderConfig(
         provider="openai",
-        model_name="gpt-5-mini",
+        model_name="gpt-6-luna",
         api_key="sk-test",
         api_base=None,
     )
@@ -274,13 +274,13 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
     )
     gateway = CraftLLMProviderConfig(
         provider="onyx",
-        model_name="13/gpt-5-mini",
+        model_name="13/gpt-6-luna",
         api_key="proxy-placeholder",
         api_base="https://onyx.example.com/gateway/v1",
         models=[
             GatewayModelDescriptor(
-                id="13/gpt-5-mini",
-                display_name="GPT-5 Mini",
+                id="13/gpt-6-luna",
+                display_name="GPT-6 Luna",
                 provider="openai",
             )
         ],
@@ -294,7 +294,7 @@ def test_setup_writes_fresh_gateway_catalog_before_instance_start(
         connectable_apps_section="",
     )
 
-    assert '"13/gpt-5-mini"' in captured_script
+    assert '"13/gpt-6-luna"' in captured_script
     assert "/opencode.json" in captured_script
 
 

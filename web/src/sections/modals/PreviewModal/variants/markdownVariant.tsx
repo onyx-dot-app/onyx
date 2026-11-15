@@ -1,5 +1,5 @@
+import { Section } from "@opal/layouts";
 import { CopyButton } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
 import { isMarkdownFile } from "@/lib/languages";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
@@ -33,7 +33,7 @@ export const markdownVariant: PreviewVariant = {
     <Section flexDirection="row" width="fit">
       <CopyButton
         size="sm"
-        tooltip="Copy content"
+        tooltip={ctx.t("copyButton.tooltip")}
         getCopyText={() => ctx.fileContent}
       />
       <DownloadButton fileUrl={ctx.fileUrl} fileName={ctx.fileName} />

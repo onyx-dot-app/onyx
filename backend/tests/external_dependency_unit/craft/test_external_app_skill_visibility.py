@@ -13,7 +13,7 @@ from onyx.db.external_app import (
     get_external_app_by_skill_id,
     get_skills_for_external_app,
 )
-from onyx.db.models import ExternalApp__Skill, User, UserRole, UserSkillPreference
+from onyx.db.models import ExternalApp__Skill, User, UserSkillPreference
 from onyx.db.skill import (
     SkillManagementPolicy,
     fetch_skill,
@@ -55,7 +55,7 @@ def _management_skill_ids(
 
 def _runtime_skill_ids(user: User, db_session: Session) -> set[UUID]:
     return {
-        skill.id
+        skill.skill.id
         for skill in list_runtime_skills_for_user(
             user=user,
             db_session=db_session,
@@ -97,7 +97,7 @@ def test_admin_view_includes_associated_custom_but_hides_associated_builtin(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    admin = make_user(db_session, role=UserRole.ADMIN)
+    admin = make_user(db_session, is_admin=True)
     regular = make_skill(db_session, is_public=True, name="plain-admin-skill")
     custom = make_skill(db_session, is_public=True, name="ext-admin-custom")
     built_in = make_built_in_skill_row(
@@ -401,12 +401,20 @@ def test_associated_builtin_stays_hidden_and_uses_app_readiness_without_preferen
     "public_permission",
     [None, SkillSharePermission.EDITOR],
 )
+@pytest.mark.parametrize("built_in", [False, True])
 def test_associated_skill_cannot_change_required_org_viewer_visibility(
     db_session: Session,
     test_user: User,  # noqa: ARG001
     public_permission: SkillSharePermission | None,
+    built_in: bool,
 ) -> None:
-    skill = make_skill(db_session, is_public=True)
+    skill = (
+        make_built_in_skill_row(
+            db_session, built_in_skill_id="external-provider-system-skill"
+        )
+        if built_in
+        else make_skill(db_session, is_public=True)
+    )
     make_external_app(db_session, skill=skill, auth_template={})
 
     with pytest.raises(OnyxError) as exc_info:

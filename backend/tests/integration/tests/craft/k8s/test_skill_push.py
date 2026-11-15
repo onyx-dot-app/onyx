@@ -16,6 +16,7 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
+    ConnectorManageRole,
     ExternalAppType,
     SandboxStatus,
     SkillSharePermission,
@@ -32,6 +33,8 @@ from onyx.db.models import (
     UserGroup,
     UserGroup__ConnectorCredentialPair,
 )
+from onyx.db.plugin import lock_skill_plugin__no_commit
+from onyx.db.skill import set_skill_public_permission
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
 from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
@@ -39,12 +42,15 @@ from onyx.skills.push import (
     build_skills_fileset_for_user,
     push_skill_to_affected_sandboxes,
 )
+from onyx.utils.logger import setup_logger
 from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
 from tests.integration.common_utils.test_models import DATestUser, DATestUserGroup
 from tests.integration.tests.craft.k8s.k8s_fixtures import SandboxHandle, WorkspaceProxy
+
+logger = setup_logger()
 
 pytestmark = [
     pytest.mark.skipif(
@@ -155,6 +161,14 @@ def user_group_factory(
     finally:
         for group in reversed(groups):
             try:
+                UserGroupManager.wait_for_sync(k8s_admin_user, [group])
+            except (RuntimeError, TimeoutError) as e:
+                logger.warning(
+                    "Deleting user group %s without waiting for its sync: %s",
+                    group.id,
+                    e,
+                )
+            try:
                 UserGroupManager.delete(group, k8s_admin_user)
             except httpx.HTTPStatusError as e:
                 if e.response.status_code != 404:
@@ -202,7 +216,9 @@ def _make_private_cc_pair(
     db_session.flush()
     db_session.add(
         UserGroup__ConnectorCredentialPair(
-            user_group_id=group.id, cc_pair_id=cc_pair.id
+            user_group_id=group.id,
+            cc_pair_id=cc_pair.id,
+            role=ConnectorManageRole.EDITOR,
         )
     )
     db_session.flush()
@@ -267,6 +283,7 @@ def _seed_custom_skill(
     if group is not None:
         db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
         db_session.flush()
+    lock_skill_plugin__no_commit(skill, db_session)
     db_session.commit()
     db_session.refresh(skill)
     return skill
@@ -360,7 +377,11 @@ class TestSkillPush:
             db_session.expire_all()
             skill = db_session.get(Skill, skill_response.id)
             assert skill is not None
-            skill.public_permission = SkillSharePermission.VIEWER
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=SkillSharePermission.VIEWER,
+                db_session=db_session,
+            )
             db_session.add(
                 ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
             )
@@ -575,7 +596,9 @@ class TestSkillPush:
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
+        SkillManager.publish(skill.id, k8s_admin_user)
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version two\n")
 
     def test_owner_file_removal_propagates_to_shared_users_sandbox(

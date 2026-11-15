@@ -7,71 +7,115 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.users import current_user
-from onyx.configs.constants import PUBLIC_API_TAGS
+from onyx.auth.users import current_user, scope_exempt
+from onyx.configs.constants import PUBLIC_API_TAGS, TokenRateLimitScope
+from onyx.db.cost_override import (
+    create_cost_override,
+    delete_cost_override,
+    fetch_cost_override,
+    fetch_cost_overrides,
+    update_cost_override,
+)
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import Permission
+from onyx.db.enums import LLMModelFlowType, Permission, SystemUsageAttribution
 from onyx.db.llm import (
     fetch_all_llm_providers_accessible_in_any_context,
-    fetch_default_llm_model,
+    fetch_default_model,
+    fetch_model_configuration_by_id,
 )
 from onyx.db.models import TokenRateLimit, User
+from onyx.db.system_usage import (
+    OTHER_SYSTEM_USAGE_CATEGORY,
+    UNATTRIBUTED_SYSTEM_USAGE_CATEGORY,
+    get_system_usage_export,
+)
 from onyx.db.token_limit import (
-    fetch_all_global_token_rate_limits,
-    fetch_all_user_token_rate_limits,
-    fetch_user_group_token_rate_limits,
+    fetch_enforced_token_rate_limits,
+    fetch_pool_usage_baselines,
+    fetch_token_rate_limits_applying_to_user,
+    fetch_user_group_enforced_token_rate_limits,
+    usage_baseline,
 )
 from onyx.db.user_usage import (
-    get_cost_window_start,
+    cost_budget_limits,
     get_group_cost_cents_buckets_since,
+    get_period_window_reset,
     get_total_cost_cents_buckets_since,
     get_usage_export,
     get_usage_reset_window_start,
     get_user_cost_cents_buckets_since,
     get_user_cost_cents_since,
     get_user_usage_by_day_and_model,
+    period_fetch_cutoff,
     reset_user_usage,
+    sum_limit_usage,
 )
 from onyx.db.users import get_user_by_email
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
-from onyx.llm.cost_overrides import (
-    delete_override,
-    invalidate_override_cache,
-    list_overrides,
-    upsert_override,
-)
+from onyx.llm.cost_overrides import invalidate_override_cache
 from onyx.server.features.usage.models import (
     CostOverride,
-    CostOverrideUpsertRequest,
+    CostOverrideCreateRequest,
+    CostOverrideUpdateRequest,
     EffectiveCostBudget,
     ResetUsageRequest,
     ResetUsageResponse,
+    SystemUsageCategory,
+    SystemUsageRecord,
+    SystemUsageResponse,
     UsageExportRecord,
     UsageExportResponse,
     UsageExportTotals,
     UsageExportUser,
     UserUsageResponse,
 )
+from onyx.server.query_and_chat.token_limit import (
+    BudgetUnit,
+    fetch_member_allowance,
+)
 from onyx.utils.datetime import get_window_start
 from shared_configs.configs import USAGE_LIMIT_WINDOW_SECONDS
 
-# Default trailing range for the export when no start is given.
-_DEFAULT_EXPORT_DAYS = 30
+# Default trailing range when no start is given.
+_DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS = 30
 
 
-def _used_from_buckets(
-    buckets: list[tuple[datetime, float]], cutoff: datetime
-) -> float:
-    return sum(c for ws, c in buckets if ws >= cutoff)
+def _start_for_inclusive_range(end_date: date, inclusive_days: int) -> date:
+    try:
+        return end_date - timedelta(days=inclusive_days - 1)
+    except OverflowError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "date range exceeds supported bounds"
+        ) from error
+
+
+def _date_range_to_utc_bounds(
+    start_date: date, end_date: date
+) -> tuple[datetime, datetime]:
+    if start_date > end_date:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
+
+    start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
+    try:
+        end_dt = datetime.combine(
+            end_date + timedelta(days=1), time.min, tzinfo=timezone.utc
+        )
+    except OverflowError as error:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT, "date range exceeds supported bounds"
+        ) from error
+    return start_dt, end_dt
 
 
 def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget | None:
-    """Effective cost budget (most binding across user/global/group limits)."""
+    """Effective cost budget on all models: the most binding of the per-user
+    allowance, the workspace pool and the most permissive group pool."""
     now = datetime.now(tz=timezone.utc)
     candidates: list[EffectiveCostBudget] = []
 
@@ -79,34 +123,55 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
         limits: Sequence[TokenRateLimit],
         buckets: list[tuple[datetime, float]],
     ) -> None:
+        baselines = fetch_pool_usage_baselines(db_session, limits)
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_cost_window_start(now, rl.period_hours)
-            used = _used_from_buckets(buckets, cutoff)
+            used = sum_limit_usage(
+                buckets,
+                now,
+                rl.period,
+                rl.usage_reset_at,
+                usage_baseline(rl, baselines).cost_cents,
+            )
             candidates.append(
                 EffectiveCostBudget(
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=rl.cost_budget_cents - used,
-                    period_hours=rl.period_hours,
+                    period=rl.period,
+                    reset_at=get_period_window_reset(now, rl.period),
                 )
             )
 
-    user_rls = fetch_all_user_token_rate_limits(db_session, enabled_only=True)
-    user_cost_rls = [rl for rl in user_rls if rl.cost_budget_cents is not None]
-    if user_cost_rls:
-        broadest = max(rl.period_hours for rl in user_cost_rls)
-        fetch_cutoff = get_cost_window_start(now, broadest)
-        _add_from_limits(
-            user_cost_rls,
-            get_user_cost_cents_buckets_since(db_session, user_id, fetch_cutoff),
+    # The per-user allowance: the largest group value per period, else the
+    # workspace default, against the user's own usage.
+    allowance = [
+        window
+        for window in fetch_member_allowance(db_session, UUID(user_id), None)
+        if window.unit == BudgetUnit.COST
+    ]
+    if allowance:
+        user_buckets = get_user_cost_cents_buckets_since(
+            db_session,
+            user_id,
+            min(window.usage_start(now) for window in allowance),
+        )
+        candidates.extend(
+            EffectiveCostBudget(
+                budget_cents=window.budget,
+                remaining_cents=window.budget - window.used(user_buckets, now),
+                period=window.period,
+                reset_at=get_period_window_reset(now, window.period),
+            )
+            for window in allowance
         )
 
-    global_rls = fetch_all_global_token_rate_limits(db_session, enabled_only=True)
-    global_cost_rls = [rl for rl in global_rls if rl.cost_budget_cents is not None]
+    global_rls = fetch_enforced_token_rate_limits(
+        db_session, TokenRateLimitScope.GLOBAL
+    )
+    global_cost_rls = cost_budget_limits(global_rls)
     if global_cost_rls:
-        broadest = max(rl.period_hours for rl in global_cost_rls)
-        fetch_cutoff = get_cost_window_start(now, broadest)
+        fetch_cutoff = period_fetch_cutoff(now, global_cost_rls)
         _add_from_limits(
             global_cost_rls,
             get_total_cost_cents_buckets_since(db_session, fetch_cutoff),
@@ -122,7 +187,8 @@ def _user_cost_budget(db_session: Session, user_id: str) -> EffectiveCostBudget 
     return EffectiveCostBudget(
         budget_cents=best.budget_cents,
         remaining_cents=max(best.remaining_cents, 0.0),
-        period_hours=best.period_hours,
+        period=best.period,
+        reset_at=best.reset_at,
     )
 
 
@@ -131,41 +197,47 @@ def _group_cost_budget_candidate(
 ) -> EffectiveCostBudget | None:
     """Group cost headroom. Gate requires all groups over budget → pick most
     permissive; cost-exempt group exempts scope."""
-    group_limits = fetch_user_group_token_rate_limits(db_session, UUID(user_id))
+    group_limits = fetch_user_group_enforced_token_rate_limits(
+        db_session, UUID(user_id), TokenRateLimitScope.USER_GROUP
+    )
     if not group_limits:
         return None
 
-    cost_rls = [
-        rl
-        for rls in group_limits.values()
-        for rl in rls
-        if rl.cost_budget_cents is not None
-    ]
+    cost_limits_by_group = {
+        group_id: cost_budget_limits(rls) for group_id, rls in group_limits.items()
+    }
+    cost_rls = [rl for rls in cost_limits_by_group.values() for rl in rls]
     if not cost_rls:
         return None
 
     # One batched query for every group's cost buckets, then window in Python.
-    broadest = max(rl.period_hours for rl in cost_rls)
-    fetch_cutoff = get_cost_window_start(now, broadest)
+    fetch_cutoff = period_fetch_cutoff(now, cost_rls)
     buckets = get_group_cost_cents_buckets_since(
         db_session, list(group_limits.keys()), fetch_cutoff
     )
 
+    baselines = fetch_pool_usage_baselines(db_session, cost_rls)
     most_permissive: EffectiveCostBudget | None = None
-    for group_id, limits in group_limits.items():
+    for group_id, limits in cost_limits_by_group.items():
         group_buckets = buckets.get(group_id, [])
         group_binding: EffectiveCostBudget | None = None
         for rl in limits:
             if rl.cost_budget_cents is None:
                 continue
-            cutoff = get_cost_window_start(now, rl.period_hours)
-            used = _used_from_buckets(group_buckets, cutoff)
+            used = sum_limit_usage(
+                group_buckets,
+                now,
+                rl.period,
+                rl.usage_reset_at,
+                usage_baseline(rl, baselines).cost_cents,
+            )
             remaining = rl.cost_budget_cents - used
             if group_binding is None or remaining < group_binding.remaining_cents:
                 group_binding = EffectiveCostBudget(
                     budget_cents=rl.cost_budget_cents,
                     remaining_cents=remaining,
-                    period_hours=rl.period_hours,
+                    period=rl.period,
+                    reset_at=get_period_window_reset(now, rl.period),
                 )
         if group_binding is None:
             return None  # a cost-exempt group exempts the whole group scope
@@ -185,9 +257,13 @@ user_usage_router = APIRouter(prefix="/user/usage", tags=PUBLIC_API_TAGS)
 admin_usage_router = APIRouter(prefix="/admin/usage", tags=PUBLIC_API_TAGS)
 
 
-@user_usage_router.get("")
+# scope_exempt: returns only the caller's own usage, so a scoped PAT may read
+# it like /me. Without a marker the scoped-PAT route gate rejects it fail-closed.
+@user_usage_router.get("", dependencies=[Depends(scope_exempt)])
 def get_my_usage(
     days: Annotated[int | None, Query(ge=1, le=3_650)] = None,
+    start: date | None = None,
+    end: date | None = None,
     user: User = Depends(current_user),
     db_session: Session = Depends(get_session),
 ) -> UserUsageResponse:
@@ -195,45 +271,75 @@ def get_my_usage(
     now = datetime.now(timezone.utc)
     window_start = get_window_start(now, period_seconds=USAGE_LIMIT_WINDOW_SECONDS)
 
-    since = now - timedelta(days=days) if days else window_start
+    if start is not None or end is not None:
+        end_date = end or now.date()
+        inclusive_days = days or _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+        start_date = start or _start_for_inclusive_range(end_date, inclusive_days)
+        since, until = _date_range_to_utc_bounds(start_date, end_date)
+    elif days is not None:
+        since = now - timedelta(days=days)
+        until = now
+    else:
+        since = window_start
+        until = now
     user_id = str(user.id)
 
     per_day = get_user_usage_by_day_and_model(
-        db_session, user_id, since=since, until=now
+        db_session, user_id, since=since, until=until
     )
-    window_cost_cents = get_user_cost_cents_since(db_session, user_id, window_start)
+    window_cost_cents = (
+        sum(row.cost_cents for row in per_day)
+        if start is not None or end is not None
+        else get_user_cost_cents_since(db_session, user_id, window_start)
+    )
 
     accessible_providers = fetch_all_llm_providers_accessible_in_any_context(
         db_session, user
     )
     available_model_prices: list[ModelPrice] = []
     accessible_model_configuration_ids: set[int] = set()
-    seen: set[tuple[str, str]] = set()
+    # Providers of one type list the same model name; one entry per distinct
+    # price, since an admin override can price one provider's copy differently.
+    seen: set[tuple[str, str, float | None, float | None, float | None]] = set()
     for provider in accessible_providers:
         for model_configuration in provider.model_configurations:
             if not model_configuration.is_visible:
                 continue
             if model_configuration.id is not None:
                 accessible_model_configuration_ids.add(model_configuration.id)
-            key = (provider.provider, model_configuration.name)
+            price = get_model_price_per_million(
+                model_configuration.name,
+                provider.provider,
+                db_session,
+                model_configuration_id=model_configuration.id,
+            )
+            key = (
+                provider.provider,
+                model_configuration.name,
+                price.input_per_mtok,
+                price.output_per_mtok,
+                price.cache_per_mtok,
+            )
             if key in seen:
                 continue
             seen.add(key)
-            price = get_model_price_per_million(
-                model_configuration.name, provider.provider, db_session
-            )
             if price.input_per_mtok is not None and price.output_per_mtok is not None:
                 available_model_prices.append(price)
     available_model_prices.sort(key=lambda p: (p.input_per_mtok or 0.0, p.model))
 
-    default_model = fetch_default_llm_model(db_session)
+    default_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     selected_model_price: ModelPrice | None = None
     if (
         default_model is not None
         and default_model.id in accessible_model_configuration_ids
     ):
         provider = default_model.llm_provider.provider
-        price = get_model_price_per_million(default_model.name, provider, db_session)
+        price = get_model_price_per_million(
+            default_model.name,
+            provider,
+            db_session,
+            model_configuration_id=default_model.id,
+        )
         if price.input_per_mtok is not None and price.output_per_mtok is not None:
             selected_model_price = price
 
@@ -244,7 +350,8 @@ def get_my_usage(
         window_cost_cents=window_cost_cents,
         budget_cents=budget.budget_cents if budget is not None else None,
         budget_remaining_cents=(budget.remaining_cents if budget is not None else None),
-        budget_period_hours=budget.period_hours if budget is not None else None,
+        budget_period=budget.period if budget is not None else None,
+        budget_reset_at=budget.reset_at if budget is not None else None,
         selected_model_price=selected_model_price,
         available_model_prices=available_model_prices,
     )
@@ -260,15 +367,10 @@ def export_usage(
 ) -> UsageExportResponse:
     """Company-wide daily usage export by email."""
     end_date = end or datetime.now(timezone.utc).date()
-    start_date = start or (end_date - timedelta(days=_DEFAULT_EXPORT_DAYS))
-    if start_date > end_date:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "start must not be after end")
-
-    # Half-open over the full end day so windows starting on `end` are included.
-    start_dt = datetime.combine(start_date, time.min, tzinfo=timezone.utc)
-    end_dt = datetime.combine(end_date, time.min, tzinfo=timezone.utc) + timedelta(
-        days=1
+    start_date = start or _start_for_inclusive_range(
+        end_date, _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
     )
+    start_dt, end_dt = _date_range_to_utc_bounds(start_date, end_date)
 
     # TODO(evan-onyx): this might need to be done in a background task
     rows = get_usage_export(db_session, start=start_dt, end=end_dt, model=model)
@@ -286,6 +388,7 @@ def export_usage(
                 input_tokens=sum(r.input_tokens for r in records),
                 output_tokens=sum(r.output_tokens for r in records),
                 cache_read_tokens=sum(r.cache_read_tokens for r in records),
+                cache_creation_tokens=sum(r.cache_creation_tokens for r in records),
                 cost_cents=sum(r.cost_cents for r in records),
             ),
             records=records,
@@ -297,6 +400,54 @@ def export_usage(
         start=start_date.isoformat(),
         end=end_date.isoformat(),
         users=users,
+    )
+
+
+@admin_usage_router.get("/system")
+def get_system_usage(
+    start: date | None = None,
+    end: date | None = None,
+    model: str | None = None,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> SystemUsageResponse:
+    end_date = end or datetime.now(timezone.utc).date()
+    start_date = start or _start_for_inclusive_range(
+        end_date, _DEFAULT_USAGE_RANGE_INCLUSIVE_DAYS
+    )
+    start_dt, end_dt = _date_range_to_utc_bounds(start_date, end_date)
+
+    records_by_category: dict[str, list[SystemUsageRecord]] = defaultdict(list)
+    for row in get_system_usage_export(db_session, start_dt, end_dt, model):
+        category = (
+            UNATTRIBUTED_SYSTEM_USAGE_CATEGORY
+            if row.attribution == SystemUsageAttribution.UNATTRIBUTED
+            else row.flow or OTHER_SYSTEM_USAGE_CATEGORY
+        )
+        records_by_category[category].append(
+            SystemUsageRecord.model_validate(row.model_dump())
+        )
+
+    categories = [
+        SystemUsageCategory(
+            category=category,
+            totals=UsageExportTotals(
+                input_tokens=sum(record.input_tokens for record in records),
+                output_tokens=sum(record.output_tokens for record in records),
+                cache_read_tokens=sum(record.cache_read_tokens for record in records),
+                cache_creation_tokens=sum(
+                    record.cache_creation_tokens for record in records
+                ),
+                cost_cents=sum(record.cost_cents for record in records),
+            ),
+            records=records,
+        )
+        for category, records in sorted(records_by_category.items())
+    ]
+    return SystemUsageResponse(
+        start=start_date.isoformat(),
+        end=end_date.isoformat(),
+        categories=categories,
     )
 
 
@@ -312,13 +463,10 @@ def reset_usage(
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     user_id = str(user.id)
-    group_limits = fetch_user_group_token_rate_limits(db_session, user.id)
-    rate_limits = [
-        *fetch_all_user_token_rate_limits(db_session, enabled_only=True),
-        *fetch_all_global_token_rate_limits(db_session, enabled_only=True),
-        *(limit for limits in group_limits.values() for limit in limits),
-    ]
-    window_start = get_usage_reset_window_start(datetime.now(timezone.utc), rate_limits)
+    window_start = get_usage_reset_window_start(
+        datetime.now(timezone.utc),
+        fetch_token_rate_limits_applying_to_user(db_session, user.id),
+    )
     reset_rows = reset_user_usage(db_session, user_id, window_start)
     db_session.commit()
     return ResetUsageResponse(reset_rows=reset_rows)
@@ -326,41 +474,91 @@ def reset_usage(
 
 @router.get("")
 def list_cost_overrides(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> list[CostOverride]:
-    return [CostOverride.from_db(row) for row in list_overrides(db_session)]
+    return [CostOverride.from_db(row) for row in fetch_cost_overrides(db_session)]
 
 
-@router.put("")
-def upsert_cost_override(
-    payload: CostOverrideUpsertRequest,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+@router.post("")
+def create_cost_override_endpoint(
+    payload: CostOverrideCreateRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> CostOverride:
-    row = upsert_override(
-        db_session,
-        model=payload.model,
-        provider=payload.provider,
-        input_cost_per_mtok=payload.input_cost_per_mtok,
-        output_cost_per_mtok=payload.output_cost_per_mtok,
-        cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+    if (
+        fetch_model_configuration_by_id(db_session, payload.model_configuration_id)
+        is None
+    ):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "This model already has a cost override"
     )
-    db_session.commit()
+    if fetch_cost_override(db_session, payload.model_configuration_id) is not None:
+        raise conflict
+    try:
+        row = create_cost_override(
+            db_session,
+            model_configuration_id=payload.model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+        )
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create won the unique key after the check above.
+        db_session.rollback()
+        raise conflict
     invalidate_override_cache()
     return CostOverride.from_db(row)
 
 
-# {model:path} so slash-containing model ids (e.g. "bedrock/anthropic.claude")
-# match instead of 404-ing on the first path segment.
-@router.delete("/{model:path}")
-def delete_cost_override(
-    model: str,
-    provider: str = "",
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+@router.put("/{model_configuration_id}")
+def update_cost_override_endpoint(
+    model_configuration_id: int,
+    payload: CostOverrideUpdateRequest,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
+    db_session: Session = Depends(get_session),
+) -> CostOverride:
+    # Moving the override to another model: that model must exist and must not
+    # have an override of its own.
+    target = payload.model_configuration_id
+    moving = target is not None and target != model_configuration_id
+    conflict = OnyxError(
+        OnyxErrorCode.CONFLICT, "That model already has a cost override"
+    )
+    if moving:
+        if fetch_model_configuration_by_id(db_session, target) is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Model configuration not found")
+        if fetch_cost_override(db_session, target) is not None:
+            raise conflict
+    try:
+        row = update_cost_override(
+            db_session,
+            model_configuration_id=model_configuration_id,
+            input_cost_per_mtok=payload.input_cost_per_mtok,
+            output_cost_per_mtok=payload.output_cost_per_mtok,
+            cache_read_cost_per_mtok=payload.cache_read_cost_per_mtok,
+            new_model_configuration_id=target if moving else None,
+        )
+        if row is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
+        db_session.commit()
+    except IntegrityError:
+        # A concurrent create or move took the target after the check above.
+        db_session.rollback()
+        raise conflict
+    invalidate_override_cache()
+    return CostOverride.from_db(row)
+
+
+@router.delete("/{model_configuration_id}")
+def delete_cost_override_endpoint(
+    model_configuration_id: int,
+    _: User = Depends(require_permission(Permission.MANAGE_LLMS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    if not delete_override(db_session, model, provider):
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, f"No cost override for model {model}")
+    if not delete_cost_override(db_session, model_configuration_id):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "No cost override for this model")
     db_session.commit()
     invalidate_override_cache()

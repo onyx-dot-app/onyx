@@ -95,13 +95,13 @@ def _paginate(
 
 def _issue_filter(a: argparse.Namespace) -> dict[str, Any]:
     f: dict[str, Any] = {}
-    if getattr(a, "team", None):
+    if getattr(a, "team", None):  # ods: ignore[getattr]
         f["team"] = {"key": {"eq": a.team}}
-    if getattr(a, "assignee", None) == "me":
+    if getattr(a, "assignee", None) == "me":  # ods: ignore[getattr]
         f["assignee"] = {"isMe": {"eq": True}}
-    elif getattr(a, "assignee", None):
+    elif getattr(a, "assignee", None):  # ods: ignore[getattr]
         f["assignee"] = {"id": {"eq": a.assignee}}
-    if getattr(a, "state", None):
+    if getattr(a, "state", None):  # ods: ignore[getattr]
         f["state"] = {"name": {"eq": a.state}}
     return f
 
@@ -113,21 +113,21 @@ def _build_issue_create_input(a: argparse.Namespace) -> dict[str, Any]:
     ``a.state``.
     """
     inp: dict[str, Any] = {"teamId": a.team_id, "title": a.title}
-    if getattr(a, "description", None):
+    if getattr(a, "description", None):  # ods: ignore[getattr]
         inp["description"] = a.description
-    if getattr(a, "assignee", None):
+    if getattr(a, "assignee", None):  # ods: ignore[getattr]
         inp["assigneeId"] = a.assignee
-    if getattr(a, "project", None):
+    if getattr(a, "project", None):  # ods: ignore[getattr]
         inp["projectId"] = a.project
-    if getattr(a, "state", None):
+    if getattr(a, "state", None):  # ods: ignore[getattr]
         inp["stateId"] = a.state
-    if getattr(a, "priority", None) is not None:
+    if getattr(a, "priority", None) is not None:  # ods: ignore[getattr]
         inp["priority"] = a.priority
-    if getattr(a, "label", None):
+    if getattr(a, "label", None):  # ods: ignore[getattr]
         inp["labelIds"] = list(a.label)
-    if getattr(a, "estimate", None) is not None:
+    if getattr(a, "estimate", None) is not None:  # ods: ignore[getattr]
         inp["estimate"] = a.estimate
-    if getattr(a, "parent", None):
+    if getattr(a, "parent", None):  # ods: ignore[getattr]
         inp["parentId"] = a.parent
     return inp
 

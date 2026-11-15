@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from onyx.llm.interfaces import LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage
 from onyx.llm.prompt_cache.models import CacheMetadata
 
 
@@ -18,19 +18,27 @@ class PromptCacheProvider(ABC):
         """
         raise NotImplementedError
 
+    def caches_leading_system_messages_separately(self) -> bool:
+        """Whether a cache breakpoint can end between leading system messages.
+
+        Other providers get one merged system message, because some chat
+        templates (such as Qwen's) reject a second system message.
+        """
+        return False
+
     @abstractmethod
     def prepare_messages_for_caching(
         self,
-        cacheable_prefix: LanguageModelInput | None,
-        suffix: LanguageModelInput,
+        cacheable_prefix: list[ChatCompletionMessage] | None,
+        suffix: list[ChatCompletionMessage],
         continuation: bool,
         cache_metadata: CacheMetadata | None,
-    ) -> LanguageModelInput:
+    ) -> list[ChatCompletionMessage]:
         """Transform messages to enable caching.
 
         Args:
-            cacheable_prefix: Optional cacheable prefix (can be str or Sequence[ChatCompletionMessage])
-            suffix: Non-cacheable suffix (can be str or Sequence[ChatCompletionMessage])
+            cacheable_prefix: Optional cacheable prefix as a message list
+            suffix: Non-cacheable suffix as a message list
             continuation: If True, suffix should be appended to the last message
                 of cacheable_prefix rather than being separate messages.
                 Note: When cacheable_prefix is a string, it should remain in its own

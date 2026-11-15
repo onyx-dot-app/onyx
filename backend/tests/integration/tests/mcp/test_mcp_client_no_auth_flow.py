@@ -1,86 +1,29 @@
-import os
-import socket
-import subprocess
-import sys
-import time
-from collections.abc import Generator
-from pathlib import Path
-
-import pytest
+import json
+from uuid import uuid4
 
 from onyx.db.enums import (
+    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
+from tests.integration.common_utils.managers.chat import ChatSessionManager
+from tests.integration.common_utils.managers.mock_llm import MockLLMScript
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestLLMProvider, DATestUser
-
-# TODO: update mcp client tests to use constants in common_utils/constants.py
-# NOTE: the tests for client should be independent of the Onyx MCP server
-# This means the port should probably stay to be 8010/not 8090 the Onyx MCP server port
-# Use MOCK_MCP_SERVER_PORT to avoid conflicts with the real Onyx MCP server port (8090)
-MCP_SERVER_HOST = os.getenv("TEST_WEB_HOSTNAME", "127.0.0.1")
-MCP_SERVER_PORT = int(os.getenv("MOCK_MCP_SERVER_PORT", "8010"))
-MCP_SERVER_URL = f"http://{MCP_SERVER_HOST}:{MCP_SERVER_PORT}/mcp"
-MCP_HELLO_TOOL = "hello"
-
-MCP_SERVER_SCRIPT = (
-    Path(__file__).resolve().parents[2]
-    / "mock_services"
-    / "mcp_test_server"
-    / "run_mcp_server_no_auth.py"
+from tests.integration.mock_services.mock_llm_server.models import (
+    Reply,
+    RequestConditions,
+    ToolCall,
+)
+from tests.integration.tests.mcp.conftest import (
+    NO_AUTH_MCP_SERVER_URL,
+    ConnectedMCPServer,
 )
 
-
-def _wait_for_port(
-    host: str,
-    port: int,
-    process: subprocess.Popen[bytes],
-    timeout_seconds: float = 10.0,
-) -> None:
-    start = time.monotonic()
-    while time.monotonic() - start < timeout_seconds:
-        if process.poll() is not None:
-            raise RuntimeError("MCP server process exited unexpectedly during startup")
-
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            sock.settimeout(0.5)
-            try:
-                sock.connect((host, port))
-                return
-            except OSError:
-                time.sleep(0.1)
-
-    raise TimeoutError("Timed out waiting for MCP server to accept connections")
-
-
-@pytest.fixture(scope="module")
-def mcp_no_auth_server() -> Generator[None, None, None]:
-    process = subprocess.Popen(
-        [sys.executable, str(MCP_SERVER_SCRIPT), str(MCP_SERVER_PORT)],
-        cwd=MCP_SERVER_SCRIPT.parent,
-    )
-
-    try:
-        _wait_for_port(MCP_SERVER_HOST, MCP_SERVER_PORT, process)
-        yield
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            process.kill()
-
-
-@pytest.fixture(scope="module", autouse=True)
-def ensure_mcp_server_exists() -> None:
-    if not MCP_SERVER_SCRIPT.exists():
-        raise FileNotFoundError(
-            f"Expected MCP server script at {MCP_SERVER_SCRIPT}, but it was not found"
-        )
+MCP_HELLO_TOOL = "hello"
 
 
 def test_mcp_client_no_auth_flow(
@@ -93,9 +36,9 @@ def test_mcp_client_no_auth_flow(
     create_response = client.post(
         f"{API_SERVER_URL}/admin/mcp/servers/create",
         json={
-            "name": "integration-mcp-no-auth",
+            "name": f"integration-mcp-no-auth-{uuid4().hex[:8]}",
             "description": "Integration test MCP server",
-            "server_url": MCP_SERVER_URL,
+            "server_url": NO_AUTH_MCP_SERVER_URL,
             "transport": MCPTransport.STREAMABLE_HTTP.value,
             "auth_type": MCPAuthenticationType.NONE.value,
             "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
@@ -114,7 +57,7 @@ def test_mcp_client_no_auth_flow(
     )
     tools_response.raise_for_status()
     tool_entries = tools_response.json()["tools"]
-    assert len(tool_entries) == 101
+    assert len(tool_entries) == 104
 
     # Update server status to CONNECTED
     status_response = client.patch(
@@ -139,7 +82,7 @@ def test_mcp_client_no_auth_flow(
 
     # Step c) Create an assistant (persona) with the MCP tool attached
     persona = PersonaManager.create(
-        name="integration-mcp-persona",
+        name=f"integration-mcp-persona-{uuid4().hex[:8]}",
         description="Persona for MCP integration test",
         tool_ids=[tool_id],
         user_performing_action=admin_user,
@@ -156,3 +99,59 @@ def test_mcp_client_no_auth_flow(
     )
     persona_tool_ids = {tool["id"] for tool in persona_entry["tools"]}
     assert tool_id in persona_tool_ids
+
+
+def test_mcp_json_tool_result_reaches_llm_encoded_once(
+    connected_mcp_server: ConnectedMCPServer,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    """A tool result that the MCP server sends as JSON text reaches the LLM as
+    JSON inside `tool_result`, not as an escaped string."""
+    # The tool runs without asking, so the call does not wait for approval.
+    client.patch(
+        f"{API_SERVER_URL}/admin/mcp/server/{connected_mcp_server.id}",
+        json={"action_policies": {"get_ticket": ActionPolicy.ALWAYS.value}},
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    ).raise_for_status()
+    tool_id = connected_mcp_server.tool_ids["get_ticket"]
+
+    callable_name = connected_mcp_server.callable_name("get_ticket")
+    mock_llm.conversation(
+        "chat",
+        Reply(
+            tool_calls=[
+                ToolCall(
+                    id="call_ticket", name=callable_name, arguments={"ticket_id": 12}
+                )
+            ],
+            conditions=RequestConditions(offers=[callable_name]),
+        ),
+        Reply(
+            text="Ticket 12 is about the widget parser.",
+            conditions=RequestConditions(has_results_for=["call_ticket"]),
+        ),
+    )
+    persona = PersonaManager.create(
+        tool_ids=[tool_id], user_performing_action=admin_user
+    )
+    chat_session = ChatSessionManager.create(
+        persona_id=persona.id, user_performing_action=admin_user
+    )
+    ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What is ticket 12 about?",
+        user_performing_action=admin_user,
+        preferred_tool_id=tool_id,
+    )
+
+    tool_result = mock_llm.requests_in("chat")[-1].tool_result("call_ticket")
+    assert tool_result is not None
+    assert json.loads(tool_result) == {
+        "tool_result": {
+            "id": 12,
+            "title": 'Fix the "widget" parser',
+            "labels": ["bug"],
+        }
+    }

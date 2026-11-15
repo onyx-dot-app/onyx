@@ -1,19 +1,21 @@
-"""Connect-app request plumbing — two Redis records, no DB, no turn-side waiting.
+"""Cache-backed connect-app requests, no DB or turn-side waiting.
 
 The agent's no-op ``connect_app`` tool makes opencode pause the turn. The turn
 consumer ``announces`` the request (so the live stream can emit a
 ``ConnectAppRequestPacket`` card) and ``stashes`` the context to answer it, then
 keeps streaming. The decision endpoint loads that context and answers opencode
 directly on the sandbox — allow (connected) / reject (declined) — and opencode
-resumes. Both records are keyed so the producing, live-stream, and decision
-workers can be different processes.
+resumes. A session index lets new attachments restore pending cards. The pending
+record expires with the permission wait, so old cards cannot be restored.
 """
 
+import math
+import time
 from enum import Enum
 
 from pydantic import BaseModel, ValidationError
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.interface import CacheBackend, CacheLockAcquisitionError
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -44,6 +46,36 @@ class ConnectAppPending(BaseModel):
     opencode_session_id: str
     perm_id: str
     directory: str
+    request: ConnectAppRequest | None = None
+    expires_at: float | None = None
+
+
+class _SessionRequests(BaseModel):
+    request_ids: list[str]
+
+
+def _session_key(session_id: str) -> str:
+    return f"craft:connect_app:session:{session_id}"
+
+
+def list_pending_requests(
+    session_id: str, cache: CacheBackend
+) -> list[ConnectAppRequest]:
+    """Read still-actionable cards without consuming their announcements."""
+    raw = cache.get(_session_key(session_id))
+    if raw is None:
+        return []
+    try:
+        index = _SessionRequests.model_validate_json(raw)
+    except ValidationError:
+        logger.warning("connect_app: unparseable session index for %s", session_id)
+        return []
+    requests: list[ConnectAppRequest] = []
+    for request_id in index.request_ids:
+        pending = load_pending(request_id, cache)
+        if pending and pending.build_session_id == session_id and pending.request:
+            requests.append(pending.request)
+    return requests
 
 
 def _announce_key(session_id: str) -> str:
@@ -84,7 +116,35 @@ def stash_pending(
     request_id: str, pending: ConnectAppPending, cache: CacheBackend
 ) -> None:
     """Record how to answer this request's permission, for the decision endpoint."""
-    cache.set(_pending_key(request_id), pending.model_dump_json(), ex=_PENDING_TTL_S)
+    ttl = (
+        max(1, math.ceil(pending.expires_at - time.time()))
+        if pending.expires_at is not None
+        else _PENDING_TTL_S
+    )
+    cache.set(_pending_key(request_id), pending.model_dump_json(), ex=ttl)
+    if pending.request is None:
+        return
+    key = _session_key(pending.build_session_id)
+    lock = cache.lock(f"{key}:lock", timeout=10)
+    if not lock.acquire(blocking=True, blocking_timeout=5):
+        raise CacheLockAcquisitionError("Could not index the pending connect request")
+    try:
+        requests = list_pending_requests(pending.build_session_id, cache)
+        request_ids = {request.request_id for request in requests}
+        request_ids.add(request_id)
+        index_ttl = max(
+            [
+                ttl,
+                *(cache.ttl(_pending_key(request.request_id)) for request in requests),
+            ]
+        )
+        cache.set(
+            key,
+            _SessionRequests(request_ids=sorted(request_ids)).model_dump_json(),
+            ex=index_ttl,
+        )
+    finally:
+        lock.release()
 
 
 def load_pending(request_id: str, cache: CacheBackend) -> ConnectAppPending | None:
@@ -95,10 +155,13 @@ def load_pending(request_id: str, cache: CacheBackend) -> ConnectAppPending | No
     if isinstance(raw, bytes):
         raw = raw.decode()
     try:
-        return ConnectAppPending.model_validate_json(raw)
+        pending = ConnectAppPending.model_validate_json(raw)
     except ValidationError:
         logger.warning("connect_app: unparseable pending for %s", request_id)
         return None
+    if pending.expires_at is not None and pending.expires_at <= time.time():
+        return None
+    return pending
 
 
 def clear_pending(request_id: str, cache: CacheBackend) -> None:

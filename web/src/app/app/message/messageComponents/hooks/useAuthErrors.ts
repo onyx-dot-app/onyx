@@ -1,53 +1,75 @@
-import { useRef } from "react";
+import { useMemo } from "react";
 import {
   CustomToolDelta,
+  CustomToolStart,
   Packet,
   PacketType,
+  Placement,
 } from "@/app/app/services/streamingModels";
 
-interface AuthError {
+export interface AuthError {
+  turnIndex: number;
   toolName: string;
   toolId: number | null;
 }
 
 export function useAuthErrors(rawPackets: Packet[]): AuthError[] {
-  const stateRef = useRef<{ processedCount: number; errors: AuthError[] }>({
-    processedCount: 0,
-    errors: [],
-  });
+  // Streams append to the same array, so its length keys the result too.
+  const packetCount = rawPackets.length;
+  return useMemo(
+    () => computeAuthErrors(rawPackets.slice(0, packetCount)),
+    [rawPackets, packetCount]
+  );
+}
 
-  // Reset if packets shrunk (e.g. new message)
-  if (rawPackets.length < stateRef.current.processedCount) {
-    stateRef.current = { processedCount: 0, errors: [] };
-  }
+// A tool call's start and delta packets share one placement.
+function callKey(placement: Placement): string {
+  return `${placement.turn_index}-${placement.tab_index ?? 0}-${
+    placement.sub_turn_index ?? ""
+  }`;
+}
 
-  // Process only new packets (incremental, like usePacketProcessor)
-  if (rawPackets.length > stateRef.current.processedCount) {
-    let newErrors = stateRef.current.errors;
-    for (let i = stateRef.current.processedCount; i < rawPackets.length; i++) {
-      const packet = rawPackets[i]!;
-      if (packet.obj.type === PacketType.CUSTOM_TOOL_DELTA) {
-        const delta = packet.obj as CustomToolDelta;
-        if (delta.error?.is_auth_error) {
-          const alreadyPresent = newErrors.some(
-            (e) =>
-              (delta.tool_id != null && e.toolId === delta.tool_id) ||
-              (delta.tool_id == null && e.toolName === delta.tool_name)
-          );
-          if (!alreadyPresent) {
-            newErrors = [
-              ...newErrors,
-              { toolName: delta.tool_name, toolId: delta.tool_id ?? null },
-            ];
-          }
-        }
-      }
+function computeAuthErrors(rawPackets: Packet[]): AuthError[] {
+  const labels = new Map<string, string>();
+  const errors: AuthError[] = [];
+  // Labels can repeat across tools, so deduplicate on the tool ID or the
+  // qualified tool name within each section.
+  const seen = new Set<string>();
+
+  for (const packet of rawPackets) {
+    if (packet.obj.type === PacketType.CUSTOM_TOOL_START) {
+      labels.set(
+        callKey(packet.placement),
+        (packet.obj as CustomToolStart).display_name
+      );
+      continue;
     }
-    stateRef.current = {
-      processedCount: rawPackets.length,
-      errors: newErrors,
-    };
+    // Each accepted user message starts a section with its own auth cards.
+    if (packet.obj.type === PacketType.USER_MESSAGE) {
+      seen.clear();
+      continue;
+    }
+    if (packet.obj.type !== PacketType.CUSTOM_TOOL_DELTA) {
+      continue;
+    }
+
+    const delta = packet.obj as CustomToolDelta;
+    if (!delta.error?.is_auth_error) {
+      continue;
+    }
+
+    const key =
+      delta.tool_id != null ? `id:${delta.tool_id}` : `name:${delta.tool_name}`;
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    errors.push({
+      turnIndex: packet.placement.turn_index,
+      toolName: labels.get(callKey(packet.placement)) ?? delta.tool_name,
+      toolId: delta.tool_id ?? null,
+    });
   }
 
-  return stateRef.current.errors;
+  return errors;
 }

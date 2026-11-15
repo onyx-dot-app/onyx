@@ -1,14 +1,14 @@
 "use client";
 
+import { useNavigation, NavLink } from "@opal/navigation";
 import { useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
+import { useTranslations } from "next-intl";
 import { useSessionWatcher } from "@/lib/auth/hooks";
 import { getExtensionContext } from "@/lib/extension/utils";
 import { Modal } from "@opal/components";
 import { Button, Text } from "@opal/components";
 import { SvgLogOut, SvgCheckCircle, SvgXCircle } from "@opal/icons";
-import { SessionEndReason } from "@/lib/auth/types";
+import { SessionEndReason, type FastApiUsersErrorBody } from "@/lib/auth/types";
 import { SvgGoogle } from "@opal/logos";
 import { useCaptcha } from "@/lib/hooks/useCaptcha";
 import { verifyCaptchaForOAuth } from "@/lib/auth/svc";
@@ -16,8 +16,8 @@ import { basicLogin, basicSignup } from "@/lib/users/svc";
 import { Formik } from "formik";
 import * as Yup from "yup";
 import { requestEmailVerification } from "@/lib/auth/svc";
-import Link from "next/link";
 import { useUser } from "@/providers/UserProvider";
+import { LOGIN_PATH, loginPath } from "@/lib/auth/paths";
 import {
   validateInternalRedirect,
   passwordHasUppercase,
@@ -26,13 +26,7 @@ import {
   passwordHasSpecialChar,
   passwordMeetsLengthRequirements,
 } from "@/lib/auth/utils";
-import {
-  AuthLayouts,
-  Content,
-  InputVertical,
-  type AuthSubmitLabel,
-  toast,
-} from "@opal/layouts";
+import { AuthLayouts, Content, InputVertical, toast } from "@opal/layouts";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
 import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { markdown } from "@opal/utils";
@@ -42,27 +36,22 @@ interface AuthenticationShellProps {
   children: React.ReactNode;
 }
 
-const SESSION_END_GENERIC_COPY =
-  "Your session has expired. Please log in again to continue.";
-
-const SESSION_END_COPY: Record<SessionEndReason, string> = {
-  [SessionEndReason.EXPIRED]: SESSION_END_GENERIC_COPY,
-  [SessionEndReason.TERMINATED]:
-    "This session was signed out. Please log in again to continue.",
-  [SessionEndReason.UNRECOGNIZED]:
-    "You were signed out unexpectedly. Please log in again to continue. " +
-    "If this keeps happening, contact your administrator.",
-};
+const SESSION_END_MESSAGE_KEYS = {
+  [SessionEndReason.EXPIRED]: "sessionEnd.expired.message",
+  [SessionEndReason.TERMINATED]: "sessionEnd.terminated.message",
+  [SessionEndReason.UNRECOGNIZED]: "sessionEnd.unrecognized.message",
+} as const;
 
 export function AuthenticationShell({ children }: AuthenticationShellProps) {
-  const router = useRouter();
+  const t = useTranslations("auth");
+  const navigation = useNavigation();
   const { sessionEnded, sessionEndReason } = useSessionWatcher();
 
   function handleLogin() {
     const { isExtension } = getExtensionContext();
     if (isExtension) {
       window.open(
-        window.location.origin + "/auth/login",
+        window.location.origin + LOGIN_PATH,
         "_blank",
         "noopener,noreferrer"
       );
@@ -70,13 +59,13 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
     }
     // Round-trip the current location through login (OAuth `next` / SAML
     // RelayState) so the post-login redirect lands back here.
-    const returnTo = validateInternalRedirect(
-      window.location.pathname + window.location.search + window.location.hash
-    );
-    router.push(
-      returnTo
-        ? (`/auth/login?next=${encodeURIComponent(returnTo)}` as Route)
-        : "/auth/login"
+    navigation.go(
+      loginPath({
+        next:
+          window.location.pathname +
+          window.location.search +
+          window.location.hash,
+      })
     );
   }
 
@@ -90,16 +79,23 @@ export function AuthenticationShell({ children }: AuthenticationShellProps) {
       {sessionEnded && (
         <Modal open>
           <Modal.Content width="sm" height="sm">
-            <Modal.Header icon={SvgLogOut} title="You Have Been Logged Out" />
+            <Modal.Header
+              icon={SvgLogOut}
+              title={t("sessionEnd.modal.title")}
+            />
             <Modal.Body>
               <Text font="main-ui-body" color="text-03">
-                {sessionEndReason
-                  ? SESSION_END_COPY[sessionEndReason]
-                  : SESSION_END_GENERIC_COPY}
+                {t(
+                  sessionEndReason
+                    ? SESSION_END_MESSAGE_KEYS[sessionEndReason]
+                    : SESSION_END_MESSAGE_KEYS[SessionEndReason.EXPIRED]
+                )}
               </Text>
             </Modal.Body>
             <Modal.Footer>
-              <Button onClick={handleLogin}>Log In</Button>
+              <Button onClick={handleLogin}>
+                {t("sessionEnd.loginButton.label")}
+              </Button>
             </Modal.Footer>
           </Modal.Content>
         </Modal>
@@ -141,6 +137,8 @@ interface SignInButtonProps {
 }
 
 export function SignInButton({ authorizeUrl }: SignInButtonProps) {
+  const t = useTranslations("auth");
+  const navigation = useNavigation();
   const { getCaptchaToken, isCaptchaEnabled } = useCaptcha();
   const [isVerifying, setIsVerifying] = useState(false);
 
@@ -150,17 +148,17 @@ export function SignInButton({ authorizeUrl }: SignInButtonProps) {
     setIsVerifying(true);
     // Stays true on the success branch so the button remains disabled until
     // the browser actually begins unloading for the OAuth redirect — prevents
-    // a double-click window between `window.location.href = ...` and unload.
+    // a double-click window between `navigation.load(...)` and unload.
     let navigating = false;
     try {
       const token = await getCaptchaToken("oauth");
       if (!token) {
-        toast.error("grecaptcha.execute returned no token");
+        toast.error(t("signIn.captchaTokenError.toast"));
         return;
       }
       await verifyCaptchaForOAuth(token);
       navigating = true;
-      window.location.href = authorizeUrl;
+      navigation.load(authorizeUrl);
     } catch (exc) {
       toast.error(exc instanceof Error ? exc.message : String(exc));
     } finally {
@@ -181,7 +179,7 @@ export function SignInButton({ authorizeUrl }: SignInButtonProps) {
       onClick={intercepted ? handleClick : undefined}
       disabled={isVerifying}
     >
-      Continue with Google
+      {t("signIn.google.label")}
     </Button>
   );
 }
@@ -195,6 +193,7 @@ interface PasswordRequirementsProps {
 }
 
 export function PasswordRequirements({ password }: PasswordRequirementsProps) {
+  const t = useTranslations("auth");
   const { authTypeMetadata } = useUser();
 
   if (!authTypeMetadata) return null;
@@ -211,7 +210,10 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
   const rules = (
     [
       {
-        label: `${passwordMinLength}–${passwordMaxLength} characters`,
+        label: t("passwordRequirements.length.label", {
+          min: passwordMinLength,
+          max: passwordMaxLength,
+        }),
         met: passwordMeetsLengthRequirements(
           password,
           passwordMinLength,
@@ -219,19 +221,19 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
         ),
       },
       passwordRequireUppercase && {
-        label: "Contains uppercase letter.",
+        label: t("passwordRequirements.uppercase.label"),
         met: passwordHasUppercase(password),
       },
       passwordRequireLowercase && {
-        label: "Contains lowercase letter.",
+        label: t("passwordRequirements.lowercase.label"),
         met: passwordHasLowercase(password),
       },
       passwordRequireDigit && {
-        label: "Contains number.",
+        label: t("passwordRequirements.digit.label"),
         met: passwordHasDigit(password),
       },
       passwordRequireSpecialChar && {
-        label: "Contains special character.",
+        label: t("passwordRequirements.specialChar.label"),
         met: passwordHasSpecialChar(password),
       },
     ] as const
@@ -241,11 +243,11 @@ export function PasswordRequirements({ password }: PasswordRequirementsProps) {
     <div className="flex flex-col gap-1">
       {rules.map((rule) => (
         <Content
+          font="secondary-body"
           key={rule.label}
-          sizePreset="secondary"
-          variant="body"
           icon={rule.met ? SvgCheckCircle : SvgXCircle}
-          color={rule.met ? "success" : "muted"}
+          color={rule.met ? "success" : "default"}
+          titleColor="text-03"
           title={rule.label}
         />
       ))}
@@ -262,12 +264,20 @@ interface FormValues {
   password: string;
 }
 
+const SUBMIT_LABEL_KEYS = {
+  submit: "emailPasswordForm.signInButton.label",
+  create: "emailPasswordForm.createAccountButton.label",
+  join: "emailPasswordForm.joinButton.label",
+} as const;
+
+export type EmailPasswordFormLabel = keyof typeof SUBMIT_LABEL_KEYS;
+
 export interface EmailPasswordFormProps {
   shouldVerify?: boolean;
   referralSource?: string;
   nextUrl?: string | null;
   defaultEmail?: string | null;
-  label: AuthSubmitLabel;
+  label: EmailPasswordFormLabel;
 }
 
 export function EmailPasswordForm({
@@ -277,11 +287,14 @@ export function EmailPasswordForm({
   defaultEmail,
   label,
 }: EmailPasswordFormProps) {
+  const t = useTranslations("auth");
+  const tCommon = useTranslations("common");
   const isSignup = label !== "submit";
   const isJoin = label === "join";
 
   const { user, authTypeMetadata } = useUser();
   const { getCaptchaToken } = useCaptcha();
+  const navigation = useNavigation();
 
   const validationSchema = useMemo(() => {
     let passwordSchema = Yup.string();
@@ -292,32 +305,35 @@ export function EmailPasswordForm({
 
       passwordSchema = passwordSchema.test(
         "length",
-        `Password must be between ${minLength}–${maxLength} characters`,
+        t("emailPasswordForm.passwordLength.error", {
+          min: minLength,
+          max: maxLength,
+        }),
         (v) => passwordMeetsLengthRequirements(v ?? "", minLength, maxLength)
       );
 
       if (authTypeMetadata?.passwordRequireUppercase)
         passwordSchema = passwordSchema.test(
           "uppercase",
-          "Password must contain at least one uppercase letter",
+          t("emailPasswordForm.passwordUppercase.error"),
           (v) => passwordHasUppercase(v ?? "")
         );
       if (authTypeMetadata?.passwordRequireLowercase)
         passwordSchema = passwordSchema.test(
           "lowercase",
-          "Password must contain at least one lowercase letter",
+          t("emailPasswordForm.passwordLowercase.error"),
           (v) => passwordHasLowercase(v ?? "")
         );
       if (authTypeMetadata?.passwordRequireDigit)
         passwordSchema = passwordSchema.test(
           "digit",
-          "Password must contain at least one number",
+          t("emailPasswordForm.passwordDigit.error"),
           (v) => passwordHasDigit(v ?? "")
         );
       if (authTypeMetadata?.passwordRequireSpecialChar)
         passwordSchema = passwordSchema.test(
           "special-char",
-          "Password must contain at least one special character",
+          t("emailPasswordForm.passwordSpecialChar.error"),
           (v) => passwordHasSpecialChar(v ?? "")
         );
     }
@@ -329,7 +345,7 @@ export function EmailPasswordForm({
         .transform((value: string) => value.toLowerCase()),
       password: passwordSchema.required(),
     });
-  }, [isSignup, authTypeMetadata]);
+  }, [isSignup, authTypeMetadata, t]);
 
   const initialValues: FormValues = {
     email: defaultEmail?.toLowerCase() ?? "",
@@ -349,13 +365,15 @@ export function EmailPasswordForm({
       );
 
       if (!response.ok) {
-        const errorBody: any = await response.json().catch(() => ({}));
+        const errorBody: FastApiUsersErrorBody = await response
+          .json()
+          .catch(() => ({}));
         const errorDetail = errorBody.detail;
-        let errorMsg = "Unknown error";
+        let errorMsg = tCommon("errors.unknown.message");
         if (response.status === 429) {
-          errorMsg = "Too many requests. Please try again later.";
+          errorMsg = t("emailPasswordForm.tooManyRequests.error");
         } else if (errorDetail === "REGISTER_USER_ALREADY_EXISTS") {
-          errorMsg = "An account already exists with the specified email.";
+          errorMsg = t("emailPasswordForm.accountExists.error");
         } else if (typeof errorDetail === "string" && errorDetail) {
           errorMsg = errorDetail;
         }
@@ -373,7 +391,7 @@ export function EmailPasswordForm({
           // Best-effort: the account already exists, so redirect regardless.
           console.warn("requestEmailVerification failed:", e);
         }
-        window.location.href = "/auth/waiting-on-verification";
+        navigation.load("/auth/waiting-on-verification");
         return;
       }
     }
@@ -387,22 +405,23 @@ export function EmailPasswordForm({
 
     if (loginResponse.ok) {
       const validatedNextUrl = validateInternalRedirect(nextUrl);
-      window.location.href =
-        validatedNextUrl ??
-        `/app${isSignup && !isJoin ? "?new_team=true" : ""}`;
+      navigation.load(
+        validatedNextUrl ?? `/app${isSignup && !isJoin ? "?new_team=true" : ""}`
+      );
     } else {
-      const errorBody: any = await loginResponse.json().catch(() => ({}));
+      const errorBody: FastApiUsersErrorBody = await loginResponse
+        .json()
+        .catch(() => ({}));
       const errorDetail = errorBody.detail;
-      let errorMsg = "Unknown error";
+      let errorMsg = tCommon("errors.unknown.message");
       if (loginResponse.status === 429) {
-        errorMsg = "Too many requests. Please try again later.";
+        errorMsg = t("emailPasswordForm.tooManyRequests.error");
       } else if (errorDetail === "LOGIN_BAD_CREDENTIALS") {
-        errorMsg = "Invalid email or password";
+        errorMsg = t("emailPasswordForm.invalidCredentials.error");
       } else if (errorDetail === "NO_WEB_LOGIN_AND_HAS_NO_PASSWORD") {
-        errorMsg = "Create an account to set a password";
+        errorMsg = t("emailPasswordForm.noPassword.error");
       } else if (errorDetail === "PASSWORD_LOGIN_DISABLED") {
-        errorMsg =
-          "Password login is turned off. Sign in with your identity provider.";
+        errorMsg = t("emailPasswordForm.passwordLoginDisabled.error");
       } else if (typeof errorDetail === "string") {
         errorMsg = errorDetail;
       }
@@ -423,10 +442,13 @@ export function EmailPasswordForm({
         return (
           <AuthLayouts.FormBody>
             <AuthLayouts.Fields>
-              <InputVertical title="Email Address" withLabel="email">
+              <InputVertical
+                title={t("emailPasswordForm.email.label")}
+                withLabel="email"
+              >
                 <InputTypeInField
                   name="email"
-                  placeholder="email@yourcompany.com"
+                  placeholder={t("emailPasswordForm.email.placeholder")}
                   data-testid="email"
                   autoComplete="username"
                 />
@@ -434,26 +456,29 @@ export function EmailPasswordForm({
 
               <div className="flex flex-col gap-1">
                 <InputVertical
-                  title="Password"
+                  title={t("emailPasswordForm.password.label")}
                   withLabel="password"
-                  topRight={
+                  rightChildren={
                     NEXT_PUBLIC_FORGOT_PASSWORD_ENABLED &&
                     !isSignup &&
                     !errors.email &&
                     !!values.email
                       ? markdown(
-                          `[Forgot password?](/auth/forgot-password?email=${encodeURIComponent(values.email)})`
+                          t("emailPasswordForm.forgotPassword.link", {
+                            url: `/auth/forgot-password?email=${encodeURIComponent(values.email)}`,
+                          })
                         )
                       : undefined
                   }
                   subDescription={
-                    isSignup ? "Password requirements:" : undefined
+                    isSignup
+                      ? t("emailPasswordForm.passwordRequirements.label")
+                      : undefined
                   }
                 >
                   <PasswordInputTypeInField
                     name="password"
-                    placeholder="Password"
-                    mask="native"
+                    placeholder={t("emailPasswordForm.password.placeholder")}
                     data-testid="password"
                     autoComplete={
                       isSignup ? "new-password" : "current-password"
@@ -467,21 +492,22 @@ export function EmailPasswordForm({
             </AuthLayouts.Fields>
 
             <AuthLayouts.Submit
-              label={label}
               isSubmitting={isSubmitting}
               isValid={isValid && (!isSignup || Boolean(authTypeMetadata))}
               dirty={dirty}
-            />
+            >
+              {t(SUBMIT_LABEL_KEYS[label])}
+            </AuthLayouts.Submit>
 
             {user?.is_anonymous_user && (
-              <Link
+              <NavLink
                 href="/app"
                 className="text-xs text-action-selection-05 cursor-pointer text-center w-full font-medium mx-auto"
               >
                 <span className="hover:border-b hover:border-dotted hover:border-action-selection-05">
-                  or continue as guest
+                  {t("emailPasswordForm.continueAsGuest.label")}
                 </span>
-              </Link>
+              </NavLink>
             )}
           </AuthLayouts.FormBody>
         );

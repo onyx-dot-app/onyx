@@ -16,7 +16,7 @@ output "oidc_provider" {
 }
 
 output "workload_irsa_role_arn" {
-  description = "ARN of the IAM role for workloads (S3 + optional RDS)"
+  description = "ARN of the IAM role for workloads (S3 + RDS)"
   value       = module.eks.workload_irsa_role_arn
 }
 
@@ -26,8 +26,13 @@ output "workload_irsa_service_account_subjects" {
 }
 
 output "postgres_endpoint" {
-  description = "RDS endpoint hostname"
+  description = "RDS endpoint in host:port form, as returned by AWS"
   value       = module.postgres.endpoint
+}
+
+output "postgres_address" {
+  description = "RDS hostname without the port, for callers building their own connection string"
+  value       = module.postgres.address
 }
 
 output "postgres_port" {
@@ -64,4 +69,14 @@ output "opensearch_dashboard_endpoint" {
 output "opensearch_domain_arn" {
   description = "OpenSearch domain ARN"
   value       = var.enable_opensearch ? module.opensearch[0].domain_arn : null
+}
+
+output "sandbox_archive_bucket_name" {
+  description = "Name of the Craft sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.s3_sandbox_archive[0].bucket_name : null
+}
+
+output "sandbox_archive_kms_key_arn" {
+  description = "ARN of the KMS key that encrypts the sandbox archive bucket. Null unless enable_sandbox_archive_bucket is true."
+  value       = var.enable_sandbox_archive_bucket ? module.s3_sandbox_archive[0].kms_key_arn : null
 }

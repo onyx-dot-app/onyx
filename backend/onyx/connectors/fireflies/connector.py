@@ -108,10 +108,11 @@ def _create_doc_from_transcript(transcript: dict) -> Document | None:
     meeting_organizer_email = transcript["organizer_email"]
     organizer_email_user_info = [BasicExpertInfo(email=meeting_organizer_email)]
 
-    meeting_participants_email_list = []
-    for participant in transcript.get("participants", []):
-        if participant != meeting_organizer_email and participant:
-            meeting_participants_email_list.append(BasicExpertInfo(email=participant))
+    meeting_participants_email_list = [
+        BasicExpertInfo(email=participant)
+        for participant in transcript.get("participants", [])
+        if participant != meeting_organizer_email and participant
+    ]
 
     return Document(
         id=fireflies_id,

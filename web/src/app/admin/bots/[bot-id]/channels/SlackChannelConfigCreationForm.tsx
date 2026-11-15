@@ -1,6 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
@@ -15,10 +17,9 @@ import {
   updateSlackChannelConfig,
 } from "../lib";
 import CardSection from "@/components/admin/CardSection";
-import { useRouter } from "next/navigation";
 import { MinimalAgent } from "@/lib/agents/types";
 import { StandardAnswerCategoryResponse } from "@/components/standardAnswers/getStandardAnswerCategoriesIfEE";
-import { SEARCH_TOOL_ID } from "@/app/app/components/tools/constants";
+import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import { SlackChannelConfigFormFields } from "./SlackChannelConfigFormFields";
 
 export const SlackChannelConfigCreationForm = ({
@@ -34,7 +35,8 @@ export const SlackChannelConfigCreationForm = ({
   standardAnswerCategoryResponse: StandardAnswerCategoryResponse;
   existingSlackChannelConfig?: SlackChannelConfig;
 }) => {
-  const router = useRouter();
+  const t = useTranslations("admin.slackBots");
+  const navigation = useNavigation();
   const isUpdate = Boolean(existingSlackChannelConfig);
   const isDefault = existingSlackChannelConfig?.is_default || false;
   const existingSlackBotUsesPersona = existingSlackChannelConfig?.persona
@@ -47,7 +49,7 @@ export const SlackChannelConfigCreationForm = ({
     : false;
 
   const [searchEnabledAgents, nonSearchAgents] = useMemo(() => {
-    return personas.reduce(
+    return personas.reduce<[MinimalAgent[], MinimalAgent[]]>(
       (acc, persona) => {
         if (
           persona.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
@@ -58,7 +60,7 @@ export const SlackChannelConfigCreationForm = ({
         }
         return acc;
       },
-      [[], []] as [MinimalAgent[], MinimalAgent[]]
+      [[], []]
     );
   }, [personas]);
 
@@ -126,7 +128,9 @@ export const SlackChannelConfigCreationForm = ({
           slack_bot_id: Yup.number().required(),
           channel_name: isDefault
             ? Yup.string()
-            : Yup.string().required("Channel Name is required"),
+            : Yup.string().required(
+                t("validation.channelNameRequired.message")
+              ),
           response_type: Yup.mixed<SlackBotResponseType>()
             .oneOf(["quotes", "citations"])
             .required(),
@@ -145,19 +149,14 @@ export const SlackChannelConfigCreationForm = ({
             .when("knowledge_source", {
               is: "document_sets",
               then: (schema) =>
-                schema.min(
-                  1,
-                  "At least one Document Set is required when using the 'Document Sets' knowledge source"
-                ),
+                schema.min(1, t("validation.documentSetRequired.message")),
             }),
           persona_id: Yup.number()
             .nullable()
             .when("knowledge_source", {
               is: "assistant",
               then: (schema) =>
-                schema.required(
-                  "An agent is required when using the 'Agent' knowledge source"
-                ),
+                schema.required(t("validation.agentRequired.message")),
             }),
           standard_answer_categories: Yup.array(),
           knowledge_source: Yup.string()
@@ -214,14 +213,14 @@ export const SlackChannelConfigCreationForm = ({
 
           formikHelpers.setSubmitting(false);
           if (response.ok) {
-            router.push(`/admin/bots/${slack_bot_id}`);
+            navigation.go(`/admin/bots/${slack_bot_id}`);
           } else {
             const responseJson = await response.json();
             const errorMsg = responseJson.detail || responseJson.message;
             toast.error(
-              `Error ${
-                isUpdate ? "updating" : "creating"
-              } OnyxBot config - ${errorMsg}`
+              isUpdate
+                ? t("channelConfig.updateError.toast", { error: errorMsg })
+                : t("channelConfig.createError.toast", { error: errorMsg })
             );
           }
         }}

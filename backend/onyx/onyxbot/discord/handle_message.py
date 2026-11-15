@@ -307,7 +307,7 @@ async def _build_reply_chain_context(
         logger.debug(
             "Built reply chain context: %s messages in #%s",
             len(messages),
-            getattr(message.channel, "name", "unknown"),
+            getattr(message.channel, "name", "unknown"),  # ods: ignore[getattr]
         )
 
         return _format_messages_as_context(messages, bot_user)
@@ -327,12 +327,15 @@ async def _build_thread_context(
 
     try:
         thread = message.channel
-        messages: list[discord.Message] = []
 
         # Fetch recent messages (excluding current)
-        async for msg in thread.history(limit=MAX_CONTEXT_MESSAGES, oldest_first=False):
-            if msg.id != message.id:
-                messages.append(msg)
+        messages: list[discord.Message] = [
+            msg
+            async for msg in thread.history(
+                limit=MAX_CONTEXT_MESSAGES, oldest_first=False
+            )
+            if msg.id != message.id
+        ]
 
         # Include thread starter message and its reply chain if not already present
         if thread.parent and not isinstance(thread.parent, discord.ForumChannel):

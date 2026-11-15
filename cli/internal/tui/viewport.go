@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/markdown"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 )
 
 // entryKind is the type of chat entry.
@@ -20,13 +21,16 @@ const (
 	entryInfo
 	entryError
 	entryCitation
+	entryApproval
 )
 
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
-	kind     entryKind
-	content  string // raw content (for agent: the markdown source)
-	rendered string // pre-rendered output
+	kind       entryKind
+	content    string // raw content (for agent: the markdown source)
+	rendered   string // pre-rendered output
+	approvalID string // for entryApproval: the request the entry shows
+	responseID int    // the agent message whose response the entry shows; 0 for none
 }
 
 // pickerKind distinguishes what the picker is selecting.
@@ -35,12 +39,15 @@ type pickerKind int
 const (
 	pickerSession pickerKind = iota
 	pickerAgent
+	pickerModel
 )
 
-// pickerItem is a selectable item in the picker.
+// pickerItem is a selectable item in the picker. detail, when set, is
+// right-aligned on the row (like a tabwriter column).
 type pickerItem struct {
-	id    string
-	label string
+	id     string
+	label  string
+	detail string
 }
 
 // streamRenderInterval is the minimum time between markdown re-renders during streaming.
@@ -49,22 +56,28 @@ const streamRenderInterval = 100 * time.Millisecond
 // viewport manages the chat display.
 type viewport struct {
 	entries      []chatEntry
-	width        int
-	streaming    bool
 	streamBuf    string
-	showSources  bool
 	renderer     *markdown.Renderer
 	pickerItems  []pickerItem
-	pickerActive bool
+	width        int
 	pickerIndex  int
 	pickerType   pickerKind
 	scrollOffset int // lines scrolled up from bottom (0 = pinned to bottom)
 
 	// Progressive markdown rendering during streaming
-	streamMarkdown bool   // feature flag: render markdown while streaming
 	streamRendered string // cached rendered output during streaming
 	lastRenderTime time.Time
 	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
+
+	// The entries of the streaming response start at streamStart. responseID
+	// is its agent message ID, 0 until the stream reports it.
+	streamStart int
+	responseID  int
+
+	streaming      bool
+	showSources    bool
+	pickerActive   bool
+	streamMarkdown bool // feature flag: render markdown while streaming
 }
 
 // newMarkdownRenderer creates a markdown renderer wrapping at width-4 to
@@ -100,6 +113,7 @@ func (v *viewport) setWidth(w int) {
 }
 
 func (v *viewport) addUserMessage(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := "\n" + userPrefixStyle.Render("❯ ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryUser,
@@ -109,6 +123,8 @@ func (v *viewport) addUserMessage(msg string) {
 }
 
 func (v *viewport) startAgent() {
+	v.streamStart = len(v.entries)
+	v.responseID = 0
 	v.streaming = true
 	v.streamBuf = ""
 	v.streamRendered = ""
@@ -119,7 +135,7 @@ func (v *viewport) startAgent() {
 }
 
 func (v *viewport) appendToken(token string) {
-	v.streamBuf += token
+	v.streamBuf += sanitize.Terminal(token)
 
 	if !v.streamMarkdown {
 		return
@@ -157,6 +173,40 @@ func (v *viewport) finishAgent() {
 	v.lastRenderLen = 0
 }
 
+// showResponse records the agent message ID of the streaming response. A
+// replay of a response that this view already shows replaces its entries.
+func (v *viewport) showResponse(id int) {
+	kept := make([]chatEntry, 0, len(v.entries))
+	for i, entry := range v.entries {
+		if i < v.streamStart && entry.responseID == id {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	v.streamStart -= len(v.entries) - len(kept)
+	v.entries = kept
+	v.responseID = id
+}
+
+// endResponse ties the entries of the finished response to its message ID.
+func (v *viewport) endResponse() {
+	for i := v.streamStart; i < len(v.entries); i++ {
+		v.entries[i].responseID = v.responseID
+	}
+	v.responseID = 0
+}
+
+// withdrawUserMessage removes the last user message and the entries after it,
+// for a message that the server did not accept.
+func (v *viewport) withdrawUserMessage() {
+	for i := len(v.entries) - 1; i >= 0; i-- {
+		if v.entries[i].kind == entryUser {
+			v.entries = v.entries[:i]
+			return
+		}
+	}
+}
+
 func (v *viewport) renderAgentContent(content string) string {
 	rendered := v.renderMarkdown(content)
 	rendered = strings.TrimLeft(rendered, "\n")
@@ -179,6 +229,7 @@ func (v *viewport) renderMarkdown(md string) string {
 }
 
 func (v *viewport) addInfo(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := infoStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryInfo,
@@ -188,6 +239,7 @@ func (v *viewport) addInfo(msg string) {
 }
 
 func (v *viewport) addWarning(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := warnStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
@@ -197,12 +249,30 @@ func (v *viewport) addWarning(msg string) {
 }
 
 func (v *viewport) addError(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := errorStyle.Render("● Error: ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
 		content:  msg,
 		rendered: rendered,
 	})
+}
+
+// setApproval replaces the entry for an approval request, or appends one.
+// A new entry follows the text streamed before it. rendered must already be
+// sanitized.
+func (v *viewport) setApproval(approvalID, rendered string) {
+	for i := range v.entries {
+		if v.entries[i].kind == entryApproval && v.entries[i].approvalID == approvalID {
+			v.entries[i].rendered = rendered
+			return
+		}
+	}
+	if v.streaming && v.streamBuf != "" {
+		v.finishAgent()
+		v.streaming = true
+	}
+	v.entries = append(v.entries, chatEntry{kind: entryApproval, rendered: rendered, approvalID: approvalID})
 }
 
 func (v *viewport) addCitations(citations map[int]string) {
@@ -218,7 +288,7 @@ func (v *viewport) addCitations(citations map[int]string) {
 	for _, num := range keys {
 		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
-	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
+	text := sanitize.Terminal(fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  ")))
 
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryCitation,
@@ -228,6 +298,10 @@ func (v *viewport) addCitations(citations map[int]string) {
 }
 
 func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
+	for i := range items {
+		items[i].label = sanitize.Line(items[i].label)
+		items[i].detail = sanitize.Line(items[i].detail)
+	}
 	v.pickerItems = items
 	v.pickerType = kind
 	v.pickerActive = true
@@ -254,6 +328,8 @@ func (v *viewport) scrollDown(n int) {
 
 func (v *viewport) clearAll() {
 	v.entries = nil
+	v.streamStart = 0
+	v.responseID = 0
 	v.streaming = false
 	v.streamBuf = ""
 	v.pickerItems = nil
@@ -263,6 +339,8 @@ func (v *viewport) clearAll() {
 
 func (v *viewport) clearDisplay() {
 	v.entries = nil
+	v.streamStart = 0
+	v.responseID = 0
 	v.scrollOffset = 0
 	v.streaming = false
 	v.streamBuf = ""
@@ -275,6 +353,8 @@ func (v *viewport) pickerTitle() string {
 		return "Select Agent"
 	case pickerSession:
 		return "Resume Session"
+	case pickerModel:
+		return "Select Model"
 	default:
 		return "Select"
 	}
@@ -318,14 +398,14 @@ func (v *viewport) renderPicker(width, height int) string {
 		}
 	}
 
+	// Computed over all items (not just the visible window) so the column
+	// stays put while scrolling.
+	detailCol := pickerDetailCol(v.pickerItems, innerWidth-4)
+
 	var itemLines []string
 	for i := startIdx; i < endIdx; i++ {
 		item := v.pickerItems[i]
-		label := item.label
-		labelRunes := []rune(label)
-		if len(labelRunes) > innerWidth-4 {
-			label = string(labelRunes[:innerWidth-7]) + "..."
-		}
+		label := formatPickerLabel(item, innerWidth-4, detailCol)
 		if i == v.pickerIndex {
 			line := lipgloss.NewStyle().Foreground(accentColor).Bold(true).Render("> " + label)
 			itemLines = append(itemLines, line)
@@ -350,18 +430,20 @@ func (v *viewport) renderPicker(width, height int) string {
 		Bold(true).
 		Render(" " + title + " ")
 
-	// Build top border manually to avoid ANSI-corrupted rune slicing.
-	// panelWidth+2 accounts for the left and right border characters.
+	// Build top border manually to avoid ANSI-corrupted rune slicing. Measure
+	// the rendered panel instead of assuming its width — lipgloss box sizing
+	// would put the replacement line off by one.
+	panelLines := strings.Split(panel, "\n")
+	panelTotalWidth := lipgloss.Width(panelLines[len(panelLines)-1])
 	borderColor := lipgloss.NewStyle().Foreground(accentColor)
 	titleWidth := lipgloss.Width(titleRendered)
-	rightDashes := panelWidth + 2 - 3 - titleWidth // total - "╭─" - "╮" - title
+	rightDashes := panelTotalWidth - 3 - titleWidth // total - "╭─" - "╮" - title
 	if rightDashes < 0 {
 		rightDashes = 0
 	}
 	topBorder := borderColor.Render("╭─") + titleRendered +
 		borderColor.Render(strings.Repeat("─", rightDashes)+"╮")
 
-	panelLines := strings.Split(panel, "\n")
 	if len(panelLines) > 0 {
 		panelLines[0] = topBorder
 	}
@@ -369,6 +451,57 @@ func (v *viewport) renderPicker(width, height int) string {
 
 	// Center the panel in the viewport
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, panel)
+}
+
+// pickerDetailCol returns the column where the detail column starts, so
+// details left-align across rows: two past the widest label, pulled back so
+// the widest detail still fits in avail. Zero when no item has a detail.
+func pickerDetailCol(items []pickerItem, avail int) int {
+	maxLabel, maxDetail := 0, 0
+	for _, it := range items {
+		if it.detail == "" {
+			continue
+		}
+		if w := len([]rune(it.label)); w > maxLabel {
+			maxLabel = w
+		}
+		if w := len([]rune(it.detail)); w > maxDetail {
+			maxDetail = w
+		}
+	}
+	if maxDetail == 0 {
+		return 0
+	}
+	col := maxLabel + 2
+	if col > avail-maxDetail {
+		col = avail - maxDetail
+	}
+	if col < 10 {
+		col = 10
+	}
+	return col
+}
+
+// formatPickerLabel fits an item into avail columns. When the item has a
+// detail, the label is truncated to end before detailCol and the detail is
+// left-aligned at detailCol.
+func formatPickerLabel(item pickerItem, avail int, detailCol int) string {
+	label := []rune(item.label)
+	if item.detail == "" || detailCol <= 0 {
+		if len(label) > avail {
+			return string(label[:avail-3]) + "..."
+		}
+		return string(label)
+	}
+
+	if len(label) > detailCol-2 {
+		label = []rune(string(label[:detailCol-5]) + "...")
+	}
+	out := []rune(string(label) + strings.Repeat(" ", detailCol-len(label)) + item.detail)
+	if len(out) > avail {
+		return string(out[:avail-3]) + "..."
+	}
+	return string(out)
 }
 
 // streamingContent returns the display content for the in-progress stream.

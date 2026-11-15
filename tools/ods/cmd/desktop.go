@@ -34,7 +34,9 @@ func NewDesktopCommand() *cobra.Command {
 			return desktopScriptNames(), cobra.ShellCompDirectiveNoFileComp
 		},
 		Run: func(cmd *cobra.Command, args []string) {
-			runDesktopScript(args)
+			if err := runDesktopScript(args); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 	cmd.Flags().SetInterspersed(false)
@@ -42,10 +44,10 @@ func NewDesktopCommand() *cobra.Command {
 	return cmd
 }
 
-func runDesktopScript(args []string) {
+func runDesktopScript(args []string) error {
 	desktopDir, err := desktopDir()
 	if err != nil {
-		log.Fatalf("Failed to find desktop directory: %v", err)
+		return fatalErrorf("Failed to find desktop directory: %v", err)
 	}
 
 	// desktop is a member of the root bun workspace (see the root package.json
@@ -53,7 +55,7 @@ func runDesktopScript(args []string) {
 	// the repo root rather than desktop/node_modules.
 	root, err := paths.GitRoot()
 	if err != nil {
-		log.Fatalf("Failed to find repo root: %v", err)
+		return fatalErrorf("Failed to find repo root: %v", err)
 	}
 	rootNodeModules := filepath.Join(root, "node_modules")
 	if needsInstall, reason := nodeModulesNeedsInstall(rootNodeModules); needsInstall {
@@ -64,7 +66,7 @@ func runDesktopScript(args []string) {
 		installCmd.Stderr = os.Stderr
 		installCmd.Stdin = os.Stdin
 		if err := installCmd.Run(); err != nil {
-			log.Fatalf("Failed to run bun install: %v", err)
+			return fatalErrorf("Failed to run bun install: %v", err)
 		}
 	}
 
@@ -97,8 +99,9 @@ func runDesktopScript(args []string) {
 				os.Exit(code)
 			}
 		}
-		log.Fatalf("Failed to run npm: %v", err)
+		return fatalErrorf("Failed to run npm: %v", err)
 	}
+	return nil
 }
 
 func desktopScriptNames() []string {

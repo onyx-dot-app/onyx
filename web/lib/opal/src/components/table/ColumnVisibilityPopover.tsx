@@ -7,10 +7,11 @@ import {
   type RowData,
   type VisibilityState,
 } from "@tanstack/react-table";
-import { Button, Divider, LineItemButton, Tag } from "@opal/components";
+import { Button, Divider, LineItemButton, Badge } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgColumn, SvgCheck } from "@opal/icons";
 import { Popover } from "@opal/components/popover/components";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -26,6 +27,7 @@ function ColumnVisibilityPopover<TData extends RowData>({
   columnVisibility,
 }: ColumnVisibilityPopoverProps<TData>) {
   const size = useTableSize();
+  const strings = useOpalStrings();
   const [open, setOpen] = useState(false);
 
   // User-defined columns only (exclude internal qualifier/actions)
@@ -45,14 +47,14 @@ function ColumnVisibilityPopover<TData extends RowData>({
         <Button
           icon={SvgColumn}
           interaction={open ? "hover" : "rest"}
-          size={size === "md" ? "sm" : "md"}
+          size={size === 2.25 ? "sm" : "md"}
           prominence="tertiary"
-          tooltip="Columns"
+          tooltip={strings.columns}
         />
       </Popover.Trigger>
 
-      <Popover.Content width="lg" align="end" side="bottom">
-        <Divider title="Shown Columns" />
+      <Popover.Content width={60} align="end" side="bottom">
+        <Divider title={strings.shownColumns} />
         <Popover.Menu>
           {dataColumns.map((column) => {
             const canHide = column.getCanHide();
@@ -64,15 +66,15 @@ function ColumnVisibilityPopover<TData extends RowData>({
 
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={column.id}
                 selectVariant="select-heavy"
                 state={isVisible ? "selected" : "empty"}
                 title={label}
-                sizePreset="main-ui"
                 rightChildren={
                   !canHide ? (
                     <div className="flex items-center">
-                      <Tag title="Always Shown" color="blue" />
+                      <Badge title={strings.alwaysShown} color="info" />
                     </div>
                   ) : isVisible ? (
                     <SvgCheck size={16} className="text-action-selection-05" />

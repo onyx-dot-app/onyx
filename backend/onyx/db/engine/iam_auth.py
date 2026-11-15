@@ -3,8 +3,6 @@ import os
 import ssl
 from typing import Any
 
-import boto3
-
 from onyx.configs.app_configs import (
     POSTGRES_HOST,
     POSTGRES_PORT,
@@ -20,6 +18,8 @@ def get_iam_auth_token(
     """
     Generate an IAM authentication token using boto3.
     """
+    import boto3
+
     client = boto3.client("rds", region_name=region)
     token = client.generate_db_auth_token(
         DBHostname=host, Port=int(port), DBUsername=user

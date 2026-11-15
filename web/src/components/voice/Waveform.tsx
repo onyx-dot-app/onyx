@@ -47,7 +47,10 @@ function Waveform({
   const animationRef = useRef<number | null>(null);
   const lastPushTimeRef = useRef(0);
   const audioLevelRef = useRef(audioLevel);
-  audioLevelRef.current = audioLevel;
+
+  useEffect(() => {
+    audioLevelRef.current = audioLevel;
+  }, [audioLevel]);
 
   // ─── Speaking variant bars ─────────────────────────────────────────────────
   const speakingBars = useMemo(() => {

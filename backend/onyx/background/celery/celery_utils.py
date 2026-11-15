@@ -2,15 +2,11 @@ import time
 from collections.abc import Generator, Iterator, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import Any, TypeVar
 
-import httpx
 from pydantic import BaseModel
 
-from onyx.configs.app_configs import (
-    MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE,
-    VESPA_REQUEST_TIMEOUT,
-)
+from onyx.configs.app_configs import MAX_PRUNING_DOCUMENT_RETRIEVAL_PER_MINUTE
 from onyx.connectors.connector_runner import CheckpointOutputWrapper
 from onyx.connectors.cross_connector_utils.rate_limit_wrapper import rate_limit_builder
 from onyx.connectors.interfaces import (
@@ -19,8 +15,10 @@ from onyx.connectors.interfaces import (
     ConnectorCheckpoint,
     LoadConnector,
     PollConnector,
+    SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    prune_listing_honors_indexing_start,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -32,7 +30,6 @@ from onyx.file_store.staging import (
     build_tracking_raw_file_callback,
     delete_files_best_effort,
 )
-from onyx.httpx.httpx_pool import HttpxPool
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.server.metrics.pruning_metrics import (
     inc_pruning_rate_limit_error,
@@ -43,6 +40,8 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 CT = TypeVar("CT", bound=ConnectorCheckpoint)
+
+_EPOCH_SECONDS: SecondsSinceUnixEpoch = 0.0
 
 
 class SlimConnectorExtractionResult(BaseModel):
@@ -55,6 +54,9 @@ class SlimConnectorExtractionResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
     id_to_created_at: dict[str, datetime]
+    # The start the listing applied, None if it listed all documents. A listing
+    # from a start can omit hierarchy nodes that are still live.
+    listed_from: SecondsSinceUnixEpoch | None = None
 
 
 def _checkpointed_batched_items(
@@ -147,6 +149,7 @@ def extract_ids_from_runnable_connector(
     runnable_connector: BaseConnector,
     callback: IndexingHeartbeatInterface | None = None,
     connector_type: str = "unknown",
+    start: SecondsSinceUnixEpoch | None = None,
 ) -> SlimConnectorExtractionResult:
     """
     Extract document IDs and hierarchy nodes from a runnable connector.
@@ -156,7 +159,17 @@ def extract_ids_from_runnable_connector(
     so that failed-to-retrieve documents are not accidentally pruned.
 
     Optionally, a callback can be passed to handle the length of each document batch.
+
+    ``start`` (the pair's indexing start) limits the listing to documents from
+    that time on, but only where ``prune_listing_honors_indexing_start`` says
+    the listing filters by the same date as indexing. Otherwise all documents
+    are listed.
     """
+    if start is not None and not prune_listing_honors_indexing_start(
+        type(runnable_connector)
+    ):
+        start = None
+
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
     all_id_to_created_at: dict[str, datetime] = {}
@@ -179,21 +192,24 @@ def extract_ids_from_runnable_connector(
     ) = None
 
     if isinstance(runnable_connector, SlimConnector):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs(start=start)
     elif isinstance(runnable_connector, SlimConnectorWithPermSync):
-        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync()
+        raw_batch_generator = runnable_connector.retrieve_all_slim_docs_perm_sync(
+            start=start
+        )
     # If the connector isn't slim, fall back to running it normally to get ids
     elif isinstance(runnable_connector, LoadConnector):
         raw_batch_generator = runnable_connector.load_from_state()
     elif isinstance(runnable_connector, PollConnector):
-        start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
-        end = datetime.now(timezone.utc).timestamp()
-        raw_batch_generator = runnable_connector.poll_source(start=start, end=end)
+        raw_batch_generator = runnable_connector.poll_source(
+            start=start if start is not None else _EPOCH_SECONDS,
+            end=datetime.now(timezone.utc).timestamp(),
+        )
     elif isinstance(runnable_connector, CheckpointedConnector):
-        start = datetime(1970, 1, 1, tzinfo=timezone.utc).timestamp()
-        end = datetime.now(timezone.utc).timestamp()
         raw_batch_generator = _checkpointed_batched_items(
-            runnable_connector, start, end
+            runnable_connector,
+            start if start is not None else _EPOCH_SECONDS,
+            datetime.now(timezone.utc).timestamp(),
         )
     else:
         raise RuntimeError("Pruning job could not find a valid runnable_connector.")
@@ -250,6 +266,7 @@ def extract_ids_from_runnable_connector(
         raw_id_to_parent=all_raw_id_to_parent,
         hierarchy_nodes=all_hierarchy_nodes,
         id_to_created_at=all_id_to_created_at,
+        listed_from=start,
     )
 
 
@@ -276,28 +293,6 @@ def celery_is_worker_primary(worker: Any) -> bool:
         return True
 
     return False
-
-
-def httpx_init_vespa_pool(
-    max_keepalive_connections: int,
-    timeout: int = VESPA_REQUEST_TIMEOUT,
-    ssl_cert: str | None = None,
-    ssl_key: str | None = None,
-) -> None:
-    httpx_cert = None
-    httpx_verify = False
-    if ssl_cert and ssl_key:
-        httpx_cert = cast(tuple[str, str], (ssl_cert, ssl_key))
-        httpx_verify = True
-
-    HttpxPool.init_client(
-        name="vespa",
-        cert=httpx_cert,
-        verify=httpx_verify,
-        timeout=timeout,
-        http2=False,
-        limits=httpx.Limits(max_keepalive_connections=max_keepalive_connections),
-    )
 
 
 def make_probe_path(probe: str, hostname: str) -> Path:

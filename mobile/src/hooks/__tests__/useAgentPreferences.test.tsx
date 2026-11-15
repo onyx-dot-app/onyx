@@ -10,8 +10,10 @@ import type { AgentPreferences } from "@/api/chat/agentPreferences";
 import { useAgentPreferences } from "@/hooks/useAgentPreferences";
 
 jest.mock("@/api/client");
-// The hook reads the live session identity when a queued write finally runs, so the mock needs a
-// `getState` a test can move underneath it.
+/*
+ * The hook reads the live session identity when a queued write finally runs, so the mock needs a
+ * `getState` a test can move underneath it.
+ */
 let mockServerUrl: string | null = "https://example.test";
 jest.mock("@/state/session", () => {
   const useSession = (selector: (s: { serverUrl: string | null }) => unknown) =>
@@ -27,8 +29,10 @@ const apiFetchMock = apiFetch as unknown as Mock<
 
 const SERVER_URL = "https://example.test";
 
-// The PATCH invalidates and refetches, so a static mock would answer that refetch with stale data
-// and mask the very races these tests exist to catch.
+/*
+ * The PATCH invalidates and refetches, so a static mock would answer that refetch with stale data
+ * and mask the very races these tests exist to catch.
+ */
 function fakeServer(
   initial: AgentPreferences,
   {
@@ -44,9 +48,10 @@ function fakeServer(
       const { disabled_tool_ids } = init.body as {
         disabled_tool_ids: number[];
       };
-      // Committing a tick late lets a second toggle start before the first lands — the only way
-      // to observe the concurrent path the UI actually takes. `patchDelaysMs` additionally lets a
-      // test make an earlier request finish last.
+      /*
+       * Committing a tick late lets a second toggle start before the first lands — the only way
+       * to observe the concurrent path the UI actually takes.
+       */
       const delay = patchDelaysMs[patchCount++];
       if (delay !== undefined) {
         await new Promise((resolve) => setTimeout(resolve, delay));
@@ -116,7 +121,7 @@ describe("useAgentPreferences", () => {
     );
 
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, true);
     });
     await settle();
 
@@ -134,7 +139,7 @@ describe("useAgentPreferences", () => {
     ).toEqual({ "5": { disabled_tool_ids: [2, 7] } });
   });
 
-  it("removes an already-disabled tool instead of re-adding it", async () => {
+  it("removes the tool when asked to switch it back on", async () => {
     const server = fakeServer({ "5": { disabled_tool_ids: [2, 7] } });
 
     const { result, settle } = renderPreferences();
@@ -143,11 +148,39 @@ describe("useAgentPreferences", () => {
     );
 
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, false);
     });
     await settle();
 
     expect(server.disabledFor(5)).toEqual([2]);
+  });
+
+  it("writes nothing when the tool is already in the state asked for", async () => {
+    /*
+     * The coupling effect re-asks whenever the source count moves, so asking twice has to be the
+     * same as asking once — a flip would invert the record it just wrote.
+     */
+    fakeServer({ "5": { disabled_tool_ids: [7] } });
+
+    const { result, settle } = renderPreferences();
+    await waitFor(() =>
+      expect(result.current.disabledToolIdsFor(5)).toEqual([7]),
+    );
+
+    await act(async () => {
+      await result.current.setToolDisabled(5, 7, true);
+    });
+    await settle();
+
+    expect(patchCalls()).toEqual([]);
+  });
+
+  it("reports the record as unloaded until the GET lands", async () => {
+    fakeServer({ "5": { disabled_tool_ids: [7] } });
+
+    const { result } = renderPreferences();
+    expect(result.current.isLoaded).toBe(false);
+    await waitFor(() => expect(result.current.isLoaded).toBe(true));
   });
 
   it("leaves other agents' preferences untouched", async () => {
@@ -162,7 +195,7 @@ describe("useAgentPreferences", () => {
     );
 
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, true);
     });
     await settle();
 
@@ -179,7 +212,7 @@ describe("useAgentPreferences", () => {
 
     apiFetchMock.mockRejectedValue(new Error("nope"));
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, true);
     });
     await settle();
 
@@ -196,11 +229,10 @@ describe("useAgentPreferences", () => {
     // No waitFor: the tap lands while the initial GET is still in flight, so the cache is empty.
     const { result, settle } = renderPreferences();
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, true);
     });
     await settle();
 
-    // A blind [] baseline would have PATCHed [7] and re-enabled tools 2 and 4 for every client.
     expect(server.disabledFor(5)).toEqual([2, 4, 7]);
   });
 
@@ -209,14 +241,13 @@ describe("useAgentPreferences", () => {
 
     const { result } = renderPreferences();
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 7);
+      await result.current.setToolDisabled(5, 7, true);
     });
 
     expect(patchCalls()).toEqual([]);
   });
 
-  it("composes two in-flight toggles rather than dropping one", async () => {
-    // Fired unawaited, as the UI does, with the first PATCH still in flight.
+  it("composes two in-flight writes rather than dropping one", async () => {
     const server = fakeServer(
       { "5": { disabled_tool_ids: [] } },
       { patchInFlight: true },
@@ -227,8 +258,8 @@ describe("useAgentPreferences", () => {
 
     await act(async () => {
       await Promise.all([
-        result.current.toggleDisabledTool(5, 1),
-        result.current.toggleDisabledTool(5, 2),
+        result.current.setToolDisabled(5, 1, true),
+        result.current.setToolDisabled(5, 2, true),
       ]);
     });
     await settle();
@@ -236,9 +267,7 @@ describe("useAgentPreferences", () => {
     expect(server.disabledFor(5)).toEqual([1, 2]);
   });
 
-  it("keeps both toggles when the first PATCH lands after the second", async () => {
-    // Whole-record writes are last-write-wins on the server, so an out-of-order completion would
-    // silently undo the second toggle unless the writes are serialized.
+  it("keeps both writes when the first PATCH lands after the second", async () => {
     const server = fakeServer(
       { "5": { disabled_tool_ids: [] } },
       { patchDelaysMs: [40, 0] },
@@ -249,8 +278,8 @@ describe("useAgentPreferences", () => {
 
     await act(async () => {
       await Promise.all([
-        result.current.toggleDisabledTool(5, 1),
-        result.current.toggleDisabledTool(5, 2),
+        result.current.setToolDisabled(5, 1, true),
+        result.current.setToolDisabled(5, 2, true),
       ]);
     });
     await settle();
@@ -259,8 +288,6 @@ describe("useAgentPreferences", () => {
   });
 
   it("drops a write when the session it was made under is gone", async () => {
-    // apiFetch resolves the base URL and bearer token when the write finally runs, so a write
-    // still pending across a logout would otherwise land on whoever signs in next.
     const server = fakeServer(
       { "5": { disabled_tool_ids: [] } },
       { patchInFlight: true },
@@ -270,13 +297,13 @@ describe("useAgentPreferences", () => {
     await waitFor(() => expect(apiFetchMock).toHaveBeenCalled());
 
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 1);
+      await result.current.setToolDisabled(5, 1, true);
     });
     await settle();
     expect(server.disabledFor(5)).toEqual([1]);
 
     await act(async () => {
-      const pending = result.current.toggleDisabledTool(5, 2);
+      const pending = result.current.setToolDisabled(5, 2, true);
       mockServerUrl = "https://other.test";
       await pending;
     });
@@ -284,15 +311,15 @@ describe("useAgentPreferences", () => {
     expect(server.disabledFor(5)).toEqual([1]);
   });
 
-  it("composes consecutive toggles instead of racing on a stale array", async () => {
+  it("composes consecutive writes instead of racing on a stale array", async () => {
     const server = fakeServer({ "5": { disabled_tool_ids: [] } });
 
     const { result, settle } = renderPreferences();
     await waitFor(() => expect(apiFetchMock).toHaveBeenCalled());
 
     await act(async () => {
-      await result.current.toggleDisabledTool(5, 1);
-      await result.current.toggleDisabledTool(5, 2);
+      await result.current.setToolDisabled(5, 1, true);
+      await result.current.setToolDisabled(5, 2, true);
     });
     await settle();
 

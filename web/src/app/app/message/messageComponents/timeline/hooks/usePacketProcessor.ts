@@ -1,18 +1,24 @@
+/* oxlint-disable react-doctor/no-ref-current-in-render -- render-phase
+   incremental processing is the core design: the packet cursor makes
+   replays idempotent and consumers need the state in the same commit. */
 import { useRef, useState, useMemo, useCallback } from "react";
 import {
   Packet,
+  PacketType,
   StreamingCitation,
   StopReason,
 } from "@/app/app/services/streamingModels";
-import { CitationMap } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { CitationMap } from "@/app/app/types";
+import { OnyxDocument } from "@/lib/search/types";
 import {
   ProcessorState,
+  PlacedImage,
   GroupedPacket,
   createInitialState,
   processPackets,
 } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 import {
+  expandCodeModeSteps,
   transformPacketGroups,
   groupStepsByTurn,
   TurnGroup,
@@ -23,6 +29,8 @@ export interface UsePacketProcessorResult {
   toolGroups: GroupedPacket[];
   displayGroups: GroupedPacket[];
   toolTurnGroups: TurnGroup[];
+  /** A code mode program works between tool calls; it has no step. */
+  codeModeWorking: boolean;
   citations: StreamingCitation[];
   citationMap: CitationMap;
   documentMap: Map<string, OnyxDocument>;
@@ -30,16 +38,15 @@ export interface UsePacketProcessorResult {
   // Status (derived from packets)
   stopPacketSeen: boolean;
   stopReason: StopReason | undefined;
-  hasSteps: boolean;
-  expectedBranchesPerTurn: Map<number, number>;
-  isGeneratingImage: boolean;
-  generatedImageCount: number;
+  /** Packets through the latest accepted user message. */
+  acceptedPacketCount: number;
+  generatedImages: PlacedImage[];
   // Whether final answer is coming (MESSAGE_START seen)
   finalAnswerComing: boolean;
   // Tool processing duration from backend (via MESSAGE_START packet)
   toolProcessingDuration: number | undefined;
 
-  // Completion: stopPacketSeen && renderComplete
+  // Completion: stopped, and the answer (if any) finished rendering
   isComplete: boolean;
 
   // Callbacks
@@ -71,6 +78,10 @@ export function usePacketProcessor(
   // Optional override to force showing answer
   const [forceShowAnswer, setForceShowAnswer] = useState(false);
 
+  // The last processed packet. Streams append to the array; a replay or a
+  // reload replaces it, so the packet at that index changes.
+  const lastProcessedRef = useRef<Packet | undefined>(undefined);
+
   // Reset on nodeId change
   if (stateRef.current.nodeId !== nodeId) {
     stateRef.current = createInitialState(nodeId);
@@ -81,21 +92,33 @@ export function usePacketProcessor(
   // Track for transition detection
   const prevNextPacketIndex = stateRef.current.nextPacketIndex;
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
+  const previousDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);
 
-  // Detect stream reset (packets shrunk)
-  if (prevNextPacketIndex > rawPackets.length) {
+  // Detect stream reset (packets shrunk or replaced)
+  if (
+    prevNextPacketIndex > rawPackets.length ||
+    (prevNextPacketIndex > 0 &&
+      rawPackets[prevNextPacketIndex - 1] !== lastProcessedRef.current)
+  ) {
     stateRef.current = createInitialState(nodeId);
-    setRenderComplete(false);
-    setForceShowAnswer(false);
+    // A render-phase update always renders again, so skip unchanged state.
+    if (renderComplete) setRenderComplete(false);
+    if (forceShowAnswer) setForceShowAnswer(false);
   }
 
   // Process packets synchronously (incremental) - only if new packets arrived
   if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
+  lastProcessedRef.current = rawPackets[stateRef.current.nextPacketIndex - 1];
 
-  // Reset renderComplete on tool-after-message transition
-  if (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) {
+  // Each new answer must finish rendering before the response toolbar appears.
+  const latestDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);
+  if (
+    (prevFinalAnswerComing && !stateRef.current.finalAnswerComing) ||
+    previousDisplayGroup?.turn_index !== latestDisplayGroup?.turn_index ||
+    previousDisplayGroup?.tab_index !== latestDisplayGroup?.tab_index
+  ) {
     setRenderComplete(false);
   }
 
@@ -108,7 +131,13 @@ export function usePacketProcessor(
     if (effectiveFinalAnswerComing || state.toolGroups.length === 0) {
       return state.potentialDisplayGroups;
     }
-    return [];
+    const acceptedThroughTurn =
+      state.potentialDisplayGroups.findLast(
+        (group) => group.packets[0]?.obj.type === PacketType.USER_MESSAGE
+      )?.turn_index ?? -1;
+    return state.potentialDisplayGroups.filter(
+      (group) => group.turn_index <= acceptedThroughTurn
+    );
   }, [
     effectiveFinalAnswerComing,
     state.toolGroups.length,
@@ -116,9 +145,11 @@ export function usePacketProcessor(
   ]);
 
   // Transform toolGroups to timeline format
-  const toolTurnGroups = useMemo(() => {
-    const allSteps = transformPacketGroups(state.toolGroups);
-    return groupStepsByTurn(allSteps);
+  const { toolTurnGroups, codeModeWorking } = useMemo(() => {
+    const { steps, codeModeWorking } = expandCodeModeSteps(
+      transformPacketGroups(state.toolGroups)
+    );
+    return { toolTurnGroups: groupStepsByTurn(steps), codeModeWorking };
   }, [state.toolGroups]);
 
   // Callback reads from ref: always current value, no ref needed in component
@@ -137,6 +168,7 @@ export function usePacketProcessor(
     toolGroups: state.toolGroups,
     displayGroups,
     toolTurnGroups,
+    codeModeWorking,
     citations: state.citations,
     citationMap: state.citationMap,
     documentMap: state.documentMap,
@@ -144,15 +176,18 @@ export function usePacketProcessor(
     // Status (derived from packets)
     stopPacketSeen: state.stopPacketSeen,
     stopReason: state.stopReason,
-    hasSteps: toolTurnGroups.length > 0,
-    expectedBranchesPerTurn: state.expectedBranches,
-    isGeneratingImage: state.isGeneratingImage,
-    generatedImageCount: state.generatedImageCount,
+    acceptedPacketCount: state.acceptedPacketCount,
+    generatedImages: state.generatedImages,
     finalAnswerComing: state.finalAnswerComing,
     toolProcessingDuration: state.toolProcessingDuration,
 
-    // Completion: stopPacketSeen && renderComplete
-    isComplete: state.stopPacketSeen && renderComplete,
+    // Completion: the stream stopped, and the answer finished rendering or
+    // there is no answer to render
+    isComplete:
+      state.stopPacketSeen &&
+      (renderComplete ||
+        displayGroups.length === 0 ||
+        displayGroups.at(-1)?.packets[0]?.obj.type === PacketType.USER_MESSAGE),
 
     // Callbacks
     onRenderComplete,

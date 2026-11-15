@@ -2,13 +2,13 @@
 
 import { useField } from "formik";
 import {
-  PasswordInputTypeIn,
-  type PasswordInputTypeInProps,
+  InputPasswordTypeIn,
+  type InputPasswordTypeInProps,
 } from "@opal/components";
 import { useOnChangeEvent, useOnBlurEvent } from "@/hooks/formHooks";
 
 export interface PasswordInputTypeInFieldProps extends Omit<
-  PasswordInputTypeInProps,
+  InputPasswordTypeInProps,
   "value"
 > {
   name: string;
@@ -27,7 +27,7 @@ export default function PasswordInputTypeInField({
   const showError = hasError && !inputProps.disabled;
 
   return (
-    <PasswordInputTypeIn
+    <InputPasswordTypeIn
       {...inputProps}
       id={name}
       name={name}

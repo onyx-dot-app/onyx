@@ -6,7 +6,8 @@ SOURCES_KEY = "sources"
 # Used in source_filter.py: decide which connected source(s) an internal search
 # cycle should cover, given the conversation, the prior cycles this turn, and the
 # queries being run this cycle. Filled with: {conversation_history},
-# {current_cycle_queries}, {previous_cycles}, {valid_sources}, {last_user_query}.
+# {current_cycle_queries}, {previous_cycles}, {valid_sources}, {last_user_query},
+# {searched_sources}.
 # Output is a bracketed comma-separated list of sources.
 SOURCE_SCOPE_DECISION_PROMPT = """
 You scope an internal search to its relevant sources. When the conversation EXPLICITLY \
@@ -17,25 +18,44 @@ context.
 
 ## Guidance
 
-Scope to a source when it is EXPLICITLY named — in this cycle's queries, or in an earlier \
-turn that this cycle continues. NEVER infer a source from the query's topic (e.g. an HR or \
-billing query is not a source). If no source is named, return [].
+Scope to a source ONLY when it is named as WHERE to look for the answer ("search X", \
+"check X", "look in X", "find it in X", "pull it from X", "only use X", "in my X") — in \
+this cycle's queries, or in an earlier turn that this cycle continues. A source that is the \
+SUBJECT of the question is not a directive, even when the queries repeat its name: the tool \
+itself, its connector or integration, who uses or maintains it, or how it is used ("which \
+teams use the Salesforce connector", "how much storage our Google Drive plan includes"). \
+NEVER infer a source from the topic either (e.g. an HR or billing query is not a source). \
+If no source is named as WHERE to look, return []. In the rest of this prompt, "named" \
+means named as WHERE to look.
 
 A source named in an earlier turn still applies to a same-topic follow-up that names no new \
-source — keep scoping to it.
+source — keep scoping to it. A standing \
+directive ("for anything I ask", "always", "from now on") applies to every later turn, on \
+any topic, until the user replaces it.
 
 When source(s) ARE named, the phrasing decides the mode:
 
-- COMBINED — one or more named sources with NO fallback order ("in Google Drive"; "search \
-A and B"; "check both A and B"): scope to all of them every cycle, regardless of previous \
-cycles. A single named source is COMBINED — scope to it.
+- COMBINED — one or more sources named as WHERE to look, with NO fallback order ("in \
+Google Drive"; "search A and B"; "check both A and B"): scope to all of them every cycle, \
+regardless of previous cycles. A single named source is COMBINED — scope to it.
 
-- BACKOFF ("check A first, then B", "try A; if nothing, then B" — an order): scope to ONE \
-source per cycle. By DEFAULT ADVANCE — scope to the first named source NOT in any previous \
-cycle's searched_sources; a reworded retry of the same search keeps advancing. BUT if this \
-cycle's queries are about a clearly DIFFERENT topic than the previous cycle's, re-search the \
-source the previous cycle used — it has not been searched for this new topic. Once all named \
-sources have been tried, scope to all of them.
+- BACKOFF ("check A first, then B", "try A; if nothing, then B" — an order): scope to \
+exactly ONE source per cycle. Previous cycles' searched_sources record what was already \
+tried; follow these steps in order:
+  1. No previous cycles: scope to the first named source.
+  2. This cycle's queries are about the SAME subject as the most recent previous cycle's \
+queries: ADVANCE. Judge by subject, not wording — a reworded, narrower, broader or \
+different-angle query on the same subject is the same. When in doubt, ADVANCE. Scope \
+to the first named source not yet searched for this subject; those sources already \
+returned nothing useful, so do not repeat them. If every named source is already \
+in searched_sources, scope to all named sources.
+  3. Only when this cycle's queries are about an UNRELATED subject: re-search the source the most \
+recent previous cycle used. Sources searched for the old subject do not count as \
+searched for the new one.
+  Example: order [A, B, C]. Cycle 1 searched [A] for "Q3 roadmap"; cycle 2 searched [B] for \
+"third quarter roadmap". This cycle's query "Q3 product priorities" is on the same \
+subject → [C]. If cycle 3 had already searched [C] → [A, B, C]. If this cycle's query \
+were "office parking policy" instead → [B].
 
 Only scope to sources listed in the Valid sources section below. If a named source is not \
 listed there, ignore it and scope to the named sources that ARE listed; return [] only when \
@@ -59,12 +79,15 @@ none of the named sources are listed.
 
 ## Guidance reminder
 
+WHERE vs SUBJECT: scope only to a source named as WHERE to look ("search X", "in X"). A \
+source that is the question's subject ("the Salesforce connector", "our Google Drive plan") \
+is not a directive.
 COMBINED ("A and B"): scope to all named sources, every cycle.
-BACKOFF ("A first, then B"): by DEFAULT ADVANCE to the first named source not in previous \
-cycles' searched_sources (a reworded retry keeps advancing). If this cycle's queries are \
-about a clearly DIFFERENT topic than the previous cycle's, re-search the source the previous \
-cycle used.
-If no source is named anywhere in the conversation, return [].
+BACKOFF ("A first, then B"): ONE source per cycle. Same subject as the most recent \
+previous cycle's subject (when in doubt, assume same) → the first named source in no \
+previous cycle's searched_sources; all tried → all named sources. Unrelated subject → the \
+source the most recent cycle used.
+If no source is named as WHERE to look, return [].
 
 ## Output format
 
@@ -78,6 +101,9 @@ empty list [] if no source should be scoped this cycle.
 
 The user's query is:
 {last_user_query}
+
+Sources already searched this turn: {searched_sources} (in BACKOFF these count only while \
+the subject stays the same)
 
 CRITICAL: output only the comma separated list of sources.
 """.strip()

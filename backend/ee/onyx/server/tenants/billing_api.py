@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.billing.api import update_seats as _admin_update_seats
+from ee.onyx.server.billing.billing_cache import invalidate_billing_cache
 from ee.onyx.server.billing.models import SeatUpdateRequest, SeatUpdateResponse
 from ee.onyx.server.tenants.access import control_plane_dep
 from ee.onyx.server.tenants.billing import (
@@ -125,10 +126,21 @@ def update_tier(
             tier_update_request.customer_tier,
             tier_update_request.trial_end,
         )
-        return TierUpdateResponse(updated=True, error=None)
+        # Drop the billing snapshot so usage-limit gating (trial API access,
+        # indexing caps) sees the change now, not after the TTL backstop.
+        invalidated = invalidate_billing_cache(tier_update_request.tenant_id)
     except Exception as e:
-        logger.exception("Failed to update tenant tier")
+        logger.exception("Failed to apply tier update")
         return TierUpdateResponse(updated=False, error=str(e))
+
+    if invalidated:
+        return TierUpdateResponse(updated=True, error=None)
+    # Reported as failed so the CP retries. The tier write is an idempotent
+    # Redis SET, so a retry only re-attempts the drop.
+    return TierUpdateResponse(
+        updated=False,
+        error="tier updated but billing cache invalidation failed",
+    )
 
 
 @router.get("/billing-information")

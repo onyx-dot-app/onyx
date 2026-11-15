@@ -6,9 +6,6 @@ concurrency:
 on:
   merge_group:
   pull_request:
-    branches:
-      - main
-      - "release/**"
   push:
     tags:
       - "v*.*.*"
@@ -28,7 +25,7 @@ jobs:
       db: ${{ steps.filter.outputs.db || 'true' }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
         with:
           persist-credentials: false
@@ -59,7 +56,7 @@ jobs:
       - uses: runs-on/action@4e5f72399b6b17f2e79c511c1b38a315a64d22dc
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -69,15 +66,6 @@ jobs:
           requirements: |
             backend/requirements/default.txt
             backend/requirements/dev.txt
-
-      - name: Generate OpenAPI schema and Python client
-        shell: bash
-        # OpenAPI client codegen does not handle some EE-only schema shapes;
-        # disable enforcement so the MIT route set is exported.
-        env:
-          LICENSE_ENFORCEMENT_ENABLED: "false"
-        run: |
-          ods openapi all
 
       - name: Log in to ECR pull-through cache
         uses: ./.github/actions/login-ecr-pullthrough-cache
@@ -93,3 +81,17 @@ jobs:
       - name: Run Database Tests
         working-directory: ./backend
         run: pytest tests/integration/tests/migrations/
+
+  # Keeps the pull request in the merge queue while RunsOn reruns database-tests
+  # after an EC2 Spot interruption. The gate fails when database-tests fails for
+  # any other reason. Require "database-tests-gate / pass" in the main ruleset,
+  # not "database-tests".
+  database-tests-gate:
+    if: ${{ always() && needs.changes.outputs.db == 'true' }}
+    needs: [changes, database-tests]
+    permissions:
+      actions: read
+      checks: read
+    uses: runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@451eea7c3d2c58d14a1f80f0bbb99eaa347b9471 # ratchet:runs-on/spot-retry-gate/.github/workflows/merge-queue.yml@v1.0.0
+    with:
+      job_results: ${{ toJSON(needs) }}

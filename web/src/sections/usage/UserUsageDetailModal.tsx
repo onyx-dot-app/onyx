@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Modal, ProgressBar, Text, Tooltip } from "@opal/components";
 import { Section } from "@opal/layouts";
+import type { IconFunctionComponent } from "@opal/types";
 import { formatCalendarDay } from "@/lib/dateUtils";
+import { getModelIcon } from "@/lib/languageModels/utils";
 import type { UsageExportUser } from "@/lib/usage/userUsage";
 import { formatCost, formatTokens } from "@/lib/utils";
 
@@ -64,12 +67,12 @@ function dailySpend(user: UsageExportUser): DailySpend[] {
 
 function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex min-w-0 flex-col gap-0.5 px-3 first:pl-0 last:pr-0">
-      <Text font="secondary-body" color="text-03" nowrap>
+    <div className="flex min-w-0 flex-col gap-0.5 px-3 first:ps-0 last:pe-0">
+      <Text font="secondary-body" color="text-03" wordWrap="whitespace-nowrap">
         {label}
       </Text>
       <span className="tabular-nums">
-        <Text font="main-content-emphasis" nowrap>
+        <Text font="main-content-emphasis" wordWrap="whitespace-nowrap">
           {value}
         </Text>
       </span>
@@ -81,16 +84,24 @@ interface BreakdownListProps {
   title: string;
   slices: BreakdownSlice[];
   totalCostCents: number;
+  getIcon?: (slice: BreakdownSlice) => IconFunctionComponent;
 }
 
-function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
+function BreakdownList({
+  title,
+  slices,
+  totalCostCents,
+  getIcon,
+}: BreakdownListProps) {
+  const t = useTranslations("admin.usage");
+
   if (slices.length === 0) return null;
   return (
     <Section
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.5}
+      gap={2}
       width="full"
       height="fit"
     >
@@ -101,43 +112,56 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
         flexDirection="column"
         justifyContent="start"
         alignItems="stretch"
-        gap={0.625}
+        gap={2.5}
         width="full"
         height="fit"
       >
         {slices.map((slice) => {
           const share =
             totalCostCents > 0 ? slice.cost_cents / totalCostCents : 0;
+          const Icon = getIcon?.(slice);
           return (
             <Section
               key={slice.label}
               flexDirection="column"
               justifyContent="start"
               alignItems="stretch"
-              gap={0.25}
+              gap={1}
               width="full"
               height="fit"
             >
               {/* items-baseline has no Section equivalent, kept as a raw div */}
               <div className="flex items-baseline justify-between gap-3">
-                <span className="min-w-0 truncate">
-                  <Text font="main-ui-body" color="text-05" nowrap>
-                    {slice.label}
-                  </Text>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  {Icon && <Icon size={16} className="shrink-0" />}
+                  <span className="min-w-0 truncate">
+                    <Text
+                      font="main-ui-body"
+                      color="text-05"
+                      wordWrap="whitespace-nowrap"
+                    >
+                      {slice.label}
+                    </Text>
+                  </span>
                 </span>
                 <span className="shrink-0 tabular-nums">
                   <Text font="main-ui-body" color="text-05">
                     {formatCost(slice.cost_cents)}
                   </Text>
                   <Text font="secondary-body" color="text-03">
-                    {` · ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}% · ${formatTokens(slice.tokens)} tokens`}
+                    {t("detail.breakdown.slice.summary", {
+                      percent: (share * 100).toFixed(share >= 0.1 ? 0 : 1),
+                      tokens: formatTokens(slice.tokens),
+                    })}
                   </Text>
                 </span>
               </div>
               <ProgressBar
                 value={slice.cost_cents}
                 max={totalCostCents}
-                aria-label={`${slice.label} share of spend`}
+                aria-label={t("detail.breakdown.slice.ariaLabel", {
+                  label: slice.label,
+                })}
               />
             </Section>
           );
@@ -148,6 +172,8 @@ function BreakdownList({ title, slices, totalCostCents }: BreakdownListProps) {
 }
 
 function DailySpendStrip({ days }: { days: DailySpend[] }) {
+  const t = useTranslations("admin.usage");
+  const locale = useLocale();
   const max = Math.max(...days.map((day) => day.cost_cents));
   if (days.length < 2 || max <= 0 || days.length > MAX_DAILY_COLUMNS) {
     return null;
@@ -157,32 +183,39 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
       flexDirection="column"
       justifyContent="start"
       alignItems="stretch"
-      gap={0.25}
+      gap={1}
       width="full"
       height="fit"
     >
       <Text font="main-ui-action" color="text-04">
-        Daily spend
+        {t("detail.dailySpend.title")}
       </Text>
       <Section
         role="img"
-        aria-label={`Daily spend for the selected period: ${days
-          .map(
-            (day) =>
-              `${formatCalendarDay(day.day)}, ${formatCost(day.cost_cents)}`
-          )
-          .join("; ")}`}
+        aria-label={t("detail.dailySpend.chart.ariaLabel", {
+          days: days
+            .map((day) =>
+              t("detail.dailySpend.day.ariaLabel", {
+                day: formatCalendarDay(day.day, locale),
+                cost: formatCost(day.cost_cents),
+              })
+            )
+            .join("; "),
+        })}
         flexDirection="row"
         justifyContent="start"
         alignItems="end"
-        gap={0.125}
+        gap={0.5}
         width="full"
         height={3.5}
       >
         {days.map((day) => (
           <Tooltip
             key={day.day}
-            tooltip={`${formatCalendarDay(day.day)} · ${formatCost(day.cost_cents)}`}
+            tooltip={t("detail.dailySpend.day.tooltip", {
+              day: formatCalendarDay(day.day, locale),
+              cost: formatCost(day.cost_cents),
+            })}
             side="top"
             delayDuration={0}
           >
@@ -211,10 +244,10 @@ function DailySpendStrip({ days }: { days: DailySpend[] }) {
         height="fit"
       >
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[0]!.day)}
+          {formatCalendarDay(days[0]!.day, locale)}
         </Text>
         <Text font="secondary-body" color="text-03">
-          {formatCalendarDay(days[days.length - 1]!.day)}
+          {formatCalendarDay(days[days.length - 1]!.day, locale)}
         </Text>
       </Section>
     </Section>
@@ -232,6 +265,7 @@ export default function UserUsageDetailModal({
   periodLabel,
   onOpenChange,
 }: UserUsageDetailModalProps) {
+  const t = useTranslations("admin.usage");
   const byModel = useMemo(
     () => (user ? sliceBy(user, (record) => record.model) : []),
     [user]
@@ -260,58 +294,69 @@ export default function UserUsageDetailModal({
           onClose={() => onOpenChange(false)}
         />
         <Modal.Body>
-          <Section alignItems="stretch" height="auto" gap={1.5}>
+          <Section alignItems="stretch" height="auto" gap={6}>
             <div className="flex flex-wrap gap-2">
               <div className="basis-1/2 sm:basis-1/4">
-                <StatCell label="Spend" value={formatCost(totals.cost_cents)} />
+                <StatCell
+                  label={t("detail.stats.spend.label")}
+                  value={formatCost(totals.cost_cents)}
+                />
               </div>
               <div className="basis-1/2 sm:basis-1/4">
                 <StatCell
-                  label="Input tokens"
+                  label={t("detail.stats.inputTokens.label")}
                   value={formatTokens(totals.input_tokens)}
                 />
               </div>
               <div className="basis-1/2 sm:basis-1/4">
                 <StatCell
-                  label="Output tokens"
+                  label={t("detail.stats.outputTokens.label")}
                   value={formatTokens(totals.output_tokens)}
                 />
               </div>
               <div className="basis-1/2 sm:basis-1/4">
                 <StatCell
-                  label="Cache reads"
+                  label={t("detail.stats.cacheReads.label")}
                   value={formatTokens(totals.cache_read_tokens)}
+                />
+              </div>
+              <div className="basis-1/2 sm:basis-1/4">
+                <StatCell
+                  label={t("detail.stats.cacheWrites.label")}
+                  value={formatTokens(totals.cache_creation_tokens)}
                 />
               </div>
             </div>
 
             <DailySpendStrip days={days} />
             <BreakdownList
-              title="By model"
+              title={t("detail.breakdown.byModel.title")}
               slices={byModel}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon("", slice.label)}
             />
             <BreakdownList
-              title="By flow"
+              title={t("detail.breakdown.byFlow.title")}
               slices={byFlow}
               totalCostCents={totals.cost_cents}
             />
             <BreakdownList
-              title="By provider"
+              title={t("detail.breakdown.byProvider.title")}
               slices={byProvider}
               totalCostCents={totals.cost_cents}
+              getIcon={(slice) => getModelIcon(slice.label)}
             />
 
             {byModel.length === 0 && (
               <Text font="main-ui-body" color="text-03">
-                No per-model records for this period.
+                {t("detail.empty.description")}
               </Text>
             )}
           </Section>
         </Modal.Body>
         <Modal.Footer>
           <Button prominence="secondary" onClick={() => onOpenChange(false)}>
-            Done
+            {t("detail.done.label")}
           </Button>
         </Modal.Footer>
       </Modal.Content>

@@ -55,6 +55,7 @@ html.onyx-desktop > body {
 */
 html.onyx-desktop .h-screen,
 html.onyx-desktop .max-h-screen,
+html.onyx-desktop .opal-root-layout,
 html.onyx-desktop .opal-sidebar-root__column,
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="mobile"],
 html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"] {
@@ -76,4 +77,16 @@ html.onyx-desktop .opal-sidebar-root__overlay[data-variant="small"],
 html.onyx-desktop .opal-sidebar-root__backdrop {
   top: var(--onyx-titlebar-height) !important;
   bottom: 0 !important;
+}
+
+/* Toasts and modals are fixed to the viewport; keep them below the title bar. */
+html.onyx-desktop .opal-toast-viewport {
+  top: calc(var(--onyx-titlebar-height) + 0.5rem) !important;
+}
+
+/* Offset the modal's top below the title bar; the height limit follows. */
+html.onyx-desktop .opal-modal-positioner {
+  --opal-modal-top: calc(
+    var(--onyx-titlebar-height) + var(--opal-modal-gap)
+  ) !important;
 }

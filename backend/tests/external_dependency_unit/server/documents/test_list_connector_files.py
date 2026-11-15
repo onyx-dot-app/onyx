@@ -19,13 +19,16 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import InputType
 from onyx.db.enums import AccessType, ConnectorCredentialPairStatus
-from onyx.db.file_record import delete_filerecord_by_file_id, upsert_filerecord
+from onyx.db.file_record import (
+    delete_filerecord_by_file_id,
+    get_filerecords_by_file_ids,
+    upsert_filerecord,
+)
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
     FileRecord,
-    UserRole,
 )
 from onyx.file_store.file_store import FILE_SIZE_MISSING_SENTINEL
 from onyx.server.documents.connector import list_connector_files
@@ -33,7 +36,7 @@ from tests.external_dependency_unit.conftest import create_test_user
 
 
 def test_list_connector_files_batched_lookup(db_session: Session) -> None:
-    admin_user = create_test_user(db_session, "files_admin", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin", is_admin=True)
 
     suffix = uuid4().hex[:8]
     sized_id_a = f"test-files-{suffix}-a"
@@ -134,7 +137,7 @@ def test_list_connector_files_degrades_to_basic_info_on_lookup_failure(
 ) -> None:
     """A record-lookup failure must not fail the listing — entries degrade to
     id + name with no size/date, matching the old per-file fallback."""
-    admin_user = create_test_user(db_session, "files_admin_fb", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_fb", is_admin=True)
 
     suffix = uuid4().hex[:8]
     file_id = f"test-files-{suffix}-fb"
@@ -206,7 +209,7 @@ def test_list_connector_files_backfills_legacy_sizes(
     """Records written before file_size existed get their size looked up from
     the object store once and persisted, so subsequent listings skip the
     lookup entirely."""
-    admin_user = create_test_user(db_session, "files_admin_bf", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_bf", is_admin=True)
 
     suffix = uuid4().hex[:8]
     legacy_id = f"test-files-{suffix}-bf"
@@ -296,7 +299,7 @@ def test_list_connector_files_marks_missing_blobs_terminally(
 ) -> None:
     """A confirmed-missing object is persisted as the sentinel, rendered as
     unknown, and never probed again on subsequent listings."""
-    admin_user = create_test_user(db_session, "files_admin_ms", role=UserRole.ADMIN)
+    admin_user = create_test_user(db_session, "files_admin_ms", is_admin=True)
 
     suffix = uuid4().hex[:8]
     legacy_id = f"test-files-{suffix}-ms"
@@ -389,4 +392,139 @@ def test_list_connector_files_marks_missing_blobs_terminally(
         db_session.delete(credential)
         db_session.delete(connector)
         delete_filerecord_by_file_id(file_id=legacy_id, db_session=db_session)
+        db_session.commit()
+
+
+def test_list_connector_files_paginates(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A page holds only its own slice, ``total_items`` counts every file,
+    and the batched record lookup is scoped to the page — a zip of thousands
+    of files must not cost a lookup per file on every listing."""
+    admin_user = create_test_user(db_session, "files_admin_pg", is_admin=True)
+
+    suffix = uuid4().hex[:8]
+    file_ids = [f"test-files-{suffix}-{index}" for index in range(5)]
+    file_names = [f"{index}.txt" for index in range(5)]
+
+    for index, file_id in enumerate(file_ids):
+        upsert_filerecord(
+            file_id=file_id,
+            display_name=file_id,
+            file_origin=FileOrigin.CONNECTOR,
+            file_type="text/plain",
+            bucket_name="test-bucket",
+            object_key=f"test/{file_id}",
+            db_session=db_session,
+            file_size=index + 1,
+        )
+
+    connector = Connector(
+        name=f"test-file-connector-{suffix}",
+        source=DocumentSource.FILE,
+        input_type=InputType.LOAD_STATE,
+        connector_specific_config={
+            "file_locations": file_ids,
+            "file_names": file_names,
+        },
+        refresh_freq=None,
+        prune_freq=None,
+        indexing_start=None,
+    )
+    db_session.add(connector)
+    db_session.flush()
+
+    credential = Credential(
+        source=DocumentSource.FILE,
+        credential_json={},
+        user_id=admin_user.id,
+        admin_public=True,
+    )
+    db_session.add(credential)
+    db_session.flush()
+
+    cc_pair = ConnectorCredentialPair(
+        connector_id=connector.id,
+        credential_id=credential.id,
+        name=f"test-file-cc-pair-{suffix}",
+        status=ConnectorCredentialPairStatus.ACTIVE,
+        access_type=AccessType.PUBLIC,
+        auto_sync_options=None,
+    )
+    db_session.add(cc_pair)
+    db_session.commit()
+
+    looked_up: list[list[str]] = []
+    real_lookup = get_filerecords_by_file_ids
+
+    def _recording_lookup(
+        lookup_ids: list[str], lookup_session: Session
+    ) -> list[FileRecord]:
+        looked_up.append(list(lookup_ids))
+        return real_lookup(lookup_ids, lookup_session)
+
+    monkeypatch.setattr(
+        "onyx.server.documents.connector.get_filerecords_by_file_ids",
+        _recording_lookup,
+    )
+
+    try:
+        first = list_connector_files(
+            connector_id=connector.id,
+            page_num=0,
+            page_size=2,
+            user=admin_user,
+            db_session=db_session,
+        )
+        assert [f.file_id for f in first.files] == file_ids[:2]
+        assert [f.file_name for f in first.files] == file_names[:2]
+        assert [f.file_size for f in first.files] == [1, 2]
+        assert first.total_items == 5
+        # Only the page's files were resolved.
+        assert looked_up == [file_ids[:2]]
+
+        middle = list_connector_files(
+            connector_id=connector.id,
+            page_num=1,
+            page_size=2,
+            user=admin_user,
+            db_session=db_session,
+        )
+        assert [f.file_id for f in middle.files] == file_ids[2:4]
+        assert [f.file_name for f in middle.files] == file_names[2:4]
+        assert middle.total_items == 5
+
+        # The last page is short, and a page past the end is empty.
+        last = list_connector_files(
+            connector_id=connector.id,
+            page_num=2,
+            page_size=2,
+            user=admin_user,
+            db_session=db_session,
+        )
+        assert [f.file_id for f in last.files] == file_ids[4:]
+        past_end = list_connector_files(
+            connector_id=connector.id,
+            page_num=3,
+            page_size=2,
+            user=admin_user,
+            db_session=db_session,
+        )
+        assert past_end.files == []
+        assert past_end.total_items == 5
+
+        # No page_size: the whole list, as unpaginated callers expect.
+        every = list_connector_files(
+            connector_id=connector.id,
+            user=admin_user,
+            db_session=db_session,
+        )
+        assert [f.file_id for f in every.files] == file_ids
+        assert every.total_items == 5
+    finally:
+        db_session.delete(cc_pair)
+        db_session.delete(credential)
+        db_session.delete(connector)
+        for file_id in file_ids:
+            delete_filerecord_by_file_id(file_id=file_id, db_session=db_session)
         db_session.commit()

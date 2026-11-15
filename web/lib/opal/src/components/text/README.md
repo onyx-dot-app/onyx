@@ -7,18 +7,21 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 
 ## Props
 
-| Prop       | Type                                            | Default          | Description                                                                                    |
-| ---------- | ----------------------------------------------- | ---------------- | ---------------------------------------------------------------------------------------------- |
-| `font`     | `TextFont`                                      | `"main-ui-body"` | Font preset (size, weight, line-height)                                                        |
-| `color`    | `TextColor`                                     | `"text-04"`      | Text color                                                                                     |
-| `as`       | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"` | `"span"`         | HTML tag to render                                                                             |
-| `nowrap`   | `boolean`                                       | `false`          | Prevent text wrapping                                                                          |
-| `maxLines` | `number`                                        | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`) |
-| `children` | `string \| RichStr`                             | —                | Plain string or `markdown()` for inline markdown                                               |
+| Prop           | Type                                                                                                          | Default          | Description                                                                                                           |
+| -------------- | ------------------------------------------------------------------------------------------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `font`         | `TextFont`                                                                                                    | `"main-ui-body"` | Font preset (size, weight, line-height)                                                                               |
+| `color`        | `TextColor`                                                                                                   | `"text-04"`      | Text color                                                                                                            |
+| `as`           | `"p" \| "span" \| "li" \| "h1" \| "h2" \| "h3"`                                                               | `"span"`         | HTML tag to render                                                                                                    |
+| `wordWrap`     | `"whitespace-nowrap" \| "wrap-normal" \| "wrap-break-word" \| "wrap-anywhere" \| "break-all" \| "break-keep"` | —                | How a run of characters with nowhere to wrap behaves; unset leaves normal CSS wrapping                                |
+| `textPosition` | `"text-start" \| "text-center" \| "text-end" \| "text-justify"`                                               | —                | How the text sits within its own box; logical, so it follows reading direction. Only offered when `as` is a block tag |
+| `maxLines`     | `number`                                                                                                      | —                | Truncate to N lines with an ellipsis (`1` = single-line truncate; `2+` = `-webkit-line-clamp`). It only clamps        |
+| `overflowTooltip` | `boolean` | `false` | With `maxLines`: on hover, show the full text in a tooltip while the clamp cuts it. Needs string or `RichStr` children |
+| `tooltip` | `string \| RichStr` | — | A tooltip on every hover. It replaces the overflow tooltip, so a cut text shows only this |
+| `children`     | `string \| RichStr \| RichNodes`                                                                              | —                | Plain string, `markdown()` for inline markdown, or `richNodes()` for inline React nodes                               |
 
 > **No `className` or `style`.** `Text` strips both (its props extend `WithoutStyles`); every
-> aspect of its appearance is driven by `font`, `color`, `nowrap`, and `maxLines`. For layout
-> concerns (margin, flex, width, alignment) wrap `Text` in a container or move the utility class
+> aspect of its appearance is driven by `font`, `color`, `wordWrap`, `textPosition`, and `maxLines`. For layout
+> concerns (margin, flex, width, and where the element itself sits) wrap `Text` in a container or move the utility class
 > to the parent — don't reach for `className`. All other HTML attributes (`id`, `onClick`,
 > `title`, `aria-*`, `data-*`) pass straight through to the rendered element.
 
@@ -26,24 +29,24 @@ inline markdown rendering via `RichStr` — pass `markdown("*bold* text")` as ch
 
 | Value                     | Size | Weight | Line-height |
 | ------------------------- | ---- | ------ | ----------- |
-| `"heading-h1"`            | 48px | 600    | 64px        |
-| `"heading-h2"`            | 24px | 600    | 36px        |
-| `"heading-h3"`            | 18px | 600    | 28px        |
-| `"heading-h3-muted"`      | 18px | 500    | 28px        |
+| `"heading-hero"`          | 32px | 500    | 48px        |
+| `"heading-headline"`      | 24px | 600    | 36px        |
+| `"heading-section"`       | 18px | 600    | 28px        |
+| `"heading-section-muted"` | 18px | 500    | 28px        |
 | `"main-content-body"`     | 16px | 450    | 24px        |
-| `"main-content-muted"`    | 16px | 400    | 24px        |
 | `"main-content-emphasis"` | 16px | 700    | 24px        |
-| `"main-content-mono"`     | 16px | 400    | 23px        |
+| `"main-content-muted"`    | 16px | 400    | 24px        |
+| `"main-content-mono"`     | 16px | 400    | 24px        |
 | `"main-ui-body"`          | 14px | 500    | 20px        |
 | `"main-ui-muted"`         | 14px | 400    | 20px        |
 | `"main-ui-action"`        | 14px | 600    | 20px        |
 | `"main-ui-mono"`          | 14px | 400    | 20px        |
-| `"secondary-body"`        | 12px | 400    | 18px        |
-| `"secondary-action"`      | 12px | 600    | 18px        |
-| `"secondary-mono"`        | 12px | 400    | 18px        |
-| `"figure-small-label"`    | 10px | 600    | 14px        |
-| `"figure-small-value"`    | 10px | 400    | 14px        |
-| `"figure-keystroke"`      | 11px | 400    | 16px        |
+| `"secondary-body"`        | 12px | 400    | 16px        |
+| `"secondary-action"`      | 12px | 600    | 16px        |
+| `"secondary-mono"`        | 12px | 400    | 16px        |
+| `"figure-small-label"`    | 10px | 700    | 12px        |
+| `"figure-small-value"`    | 10px | 400    | 12px        |
+| `"figure-keystroke"`      | 12px | 400    | 16px        |
 
 ### `TextColor`
 
@@ -57,7 +60,31 @@ numbers are progressively fainter.
 | Fixed light / dark | `text-light-03`, `text-light-05`, `text-dark-03`, `text-dark-05` | A fixed light or dark text color that does **not** flip with the theme                            |
 | Status — error     | `status-error-01`, `status-error-02`, `status-error-05`          | Error / destructive messaging (e.g. validation errors)                                            |
 | Status — success   | `status-success-01`, `status-success-02`, `status-success-05`    | Success / confirmation messaging                                                                  |
+| Status — warning   | `status-warning-05`                                              | Warnings that need attention without reading as an error                                          |
+| Theme — amber      | `theme-amber-05`                                                 | The paused state, plus legacy warnings not yet moved to `status-warning-05`                       |
 | Special            | `inherit`                                                        | Inherit the surrounding text color (no color class applied) — useful when a parent sets the color |
+
+## Tooltips
+
+`Text` owns at most one tooltip. Do not wrap it in `Tooltip` while it has one: the two triggers
+nest, and the outer tooltip can fail to open.
+
+- `maxLines` only clamps. Add `overflowTooltip` to show the full text on hover while it is cut.
+  Text that fits gets no tooltip.
+- `tooltip` shows on every hover. It replaces the overflow tooltip.
+- Overflow is measured with `useOverflow`, so it updates when the text's box resizes or a webfont
+  loads. A one-line clamp needs a block box: render the text as a flex item or with a block `as`.
+- Plain text, without either prop, renders no tooltip and runs no hooks.
+
+```tsx
+<Text font="main-ui-body" as="p" maxLines={1} overflowTooltip>
+  {message}
+</Text>
+
+<Text font="secondary-body" tooltip="Your organization admin requires this">
+  Required
+</Text>
+```
 
 ## Usage Examples
 
@@ -70,7 +97,7 @@ import { Text } from "@opal/components";
 </Text>
 
 // Heading
-<Text font="heading-h2" color="text-05" as="h2">
+<Text font="heading-headline" color="text-05" as="h2">
   Page Title
 </Text>
 
@@ -90,7 +117,7 @@ import { Text } from "@opal/components";
 Inline markdown is opt-in via the `markdown()` function, which returns a `RichStr`. When `Text`
 receives a `RichStr` as children, it parses the inner string as inline markdown. Plain strings
 are rendered as-is — no parsing, no surprises. `Text` does not accept arbitrary JSX as children;
-use `string | RichStr` only.
+every non-string child must be branded via `markdown()` or `richNodes()`.
 
 ```tsx
 import { Text } from "@opal/components";
@@ -134,8 +161,39 @@ interface MyComponentProps {
 This avoids API coloring — no `markdown` boolean needs to be threaded through intermediate
 components. The decision to use markdown lives at the call site.
 
-## Compatibility
+## Inline React nodes via `RichNodes`
 
-`@/refresh-components/texts/Text` is an independent legacy component that implements the same
-font/color presets via a boolean-flag API. It is **not** a wrapper around this component. New
-code should import directly from `@opal/components`.
+Some sentences must embed an inline _component_ — most often i18n rich text, where a translated
+sentence wraps part of itself in a link or button (next-intl `t.rich`). Markdown cannot express
+an element with an event handler, so for this case `richNodes()` brands a `ReactNode` as
+deliberate `Text` children:
+
+```tsx
+import { Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
+
+<Text font="main-ui-body" color="text-04">
+  {richNodes(
+    t.rich("waitingOnVerification.helpPrompt.text", {
+      link: (chunks) => (
+        <RequestNewVerificationEmail email={email}>
+          {chunks}
+        </RequestNewVerificationEmail>
+      ),
+    })
+  )}
+</Text>;
+```
+
+The nodes render verbatim and inherit the `font` and `color` presets. The brand keeps the same
+discipline as `RichStr`: naked JSX children stay a type error, and the opt-in is visible and
+greppable at the call site.
+
+Rules of thumb:
+
+- Prefer a plain string; use `markdown()` when the formatting is static (bold, code, plain
+  links); use `richNodes()` only when a real component must sit mid-sentence.
+- Keep the content inline (spans, links, buttons) — never layout JSX.
+- `RichNodes` is accepted **only** by `Text` children. Props typed `string | RichStr`
+  (`title`, `description`, `tooltip`, …) must stay plain-string-derivable for truncation and
+  aria labels, so do not widen them.

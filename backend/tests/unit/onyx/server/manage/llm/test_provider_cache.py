@@ -45,11 +45,14 @@ def _make_response() -> LLMProviderResponse[LLMProviderDescriptor]:
         provider="openai",
         provider_display_name="OpenAI",
         model_configurations=[],
+        next_model_configuration_offset=None,
     )
     return LLMProviderResponse[LLMProviderDescriptor].from_models(
         providers=[descriptor],
-        default_text=DefaultModel(provider_id=1, model_name="gpt-5-mini"),
+        default_text=DefaultModel(provider_id=1, model_name="gpt-6-luna"),
         default_vision=None,
+        default_chat_naming=DefaultModel(provider_id=1, model_name="gpt-6-sol"),
+        default_search_selection=DefaultModel(provider_id=1, model_name="gpt-6-luna"),
     )
 
 

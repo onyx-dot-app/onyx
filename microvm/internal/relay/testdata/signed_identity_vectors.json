@@ -1,0 +1,94 @@
+{
+  "now": 1800000000,
+  "node": "node-a",
+  "kid": "node-a-1",
+  "node_seed_hex": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+  "other_seed_hex": "202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+  "hs256_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  "cases": [
+    {
+      "name": "valid",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": null
+    },
+    {
+      "name": "wrong_signing_key",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "other",
+      "rejection": "bad_signature"
+    },
+    {
+      "name": "unknown_kid",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-z-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "unknown_signing_key"
+    },
+    {
+      "name": "expired",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1799999880,\"exp\":1799999940,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "expired"
+    },
+    {
+      "name": "lifetime_too_long",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800003600,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "lifetime_too_long"
+    },
+    {
+      "name": "node_mismatch",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-b\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "node_mismatch"
+    },
+    {
+      "name": "hs256_alg",
+      "header_json": "{\"alg\":\"HS256\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "hs256",
+      "rejection": "malformed"
+    },
+    {
+      "name": "bad_subject",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/sandbox/x\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "malformed"
+    },
+    {
+      "name": "missing_jti",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "malformed"
+    },
+    {
+      "name": "exp_before_iat",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1799999999,\"jti\":\"jti-0001\",\"aud\":\"sandbox-proxy\"}",
+      "signer": "node",
+      "rejection": "malformed"
+    },
+    {
+      "name": "wrong_audience",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\",\"aud\":\"onyx-api\"}",
+      "signer": "node",
+      "rejection": "malformed"
+    },
+    {
+      "name": "missing_aud",
+      "header_json": "{\"alg\":\"EdDSA\",\"typ\":\"JWT\",\"kid\":\"node-a-1\"}",
+      "claims_json": "{\"sub\":\"spiffe://onyx/tenant/public/sandbox/0b5f8a52-6a4e-4f63-9a8f-3f1d2c4b5a69\",\"gen\":3,\"node\":\"node-a\",\"iat\":1800000000,\"exp\":1800000060,\"jti\":\"jti-0001\"}",
+      "signer": "node",
+      "rejection": "malformed"
+    }
+  ]
+}

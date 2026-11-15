@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-web-server
+  name: {{ include "onyx.resourceName" (list . "web-server") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.webserver.deploymentLabels }}
@@ -39,6 +39,9 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       serviceAccountName: {{ include "onyx.serviceAccountName" . }}
+      {{- with .Values.webserver.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ . }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.webserver.podSecurityContext | nindent 8 }}
       {{- with .Values.webserver.nodeSelector }}
@@ -49,6 +52,10 @@ spec:
       affinity:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      {{- with .Values.webserver.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       {{- with .Values.webserver.tolerations }}
       tolerations:
         {{- toYaml . | nindent 8 }}
@@ -56,7 +63,7 @@ spec:
       containers:
         - name: web-server
           securityContext:
-            {{- toYaml .Values.webserver.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.webserver.securityContext | nindent 12 }}
           image: "{{ .Values.webserver.image.repository }}:{{ .Values.webserver.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           ports:
@@ -69,9 +76,11 @@ spec:
           startupProbe:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- with .Values.webserver.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
+          {{- with include "onyx.preStopSleep" (dict "ctx" . "values" .Values.webserver) | trim }}
+          {{- . | nindent 10 }}
+          {{- end }}
+          {{- with include "onyx.readinessProbe" (dict "values" .Values.webserver "handler" (dict "tcpSocket" (dict "port" "http"))) | trim }}
+          {{- . | nindent 10 }}
           {{- end }}
           {{- with .Values.webserver.livenessProbe }}
           livenessProbe:

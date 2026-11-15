@@ -21,29 +21,36 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
+from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    ActionPolicy,
     ConnectorCredentialPairStatus,
-    EndpointPolicy,
+    ConnectorManageRole,
     ExternalAppType,
     GatedAppKind,
+    PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
 )
-from onyx.db.gated_app import get_or_create_gated_app_id
 from onyx.db.models import (
     ActionApproval,
+    ActionReceipt,
     Connector,
     ConnectorCredentialPair,
     Credential,
     ExternalApp,
     ExternalAppUserCredential,
-    GatedActionPolicy,
+    Plugin,
+    Plugin__User,
+    Plugin__UserGroup,
+    PluginVersion,
     Sandbox,
     Skill,
     Skill__User,
@@ -52,8 +59,14 @@ from onyx.db.models import (
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
-    UserRole,
+    WorkspaceActionPolicy,
 )
+from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import (
+    create_skill_plugin__no_commit,
+    legacy_skill_version_content,
+)
+from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
 def force_approval_created_at(
@@ -70,19 +83,37 @@ def force_approval_created_at(
     db_session.commit()
 
 
+def force_receipt_created_at(
+    db_session: Session,
+    receipt_id: UUID,
+    when: datetime,
+) -> None:
+    """Force an ``ActionReceipt`` row's ``created_at`` timestamp."""
+    db_session.execute(
+        update(ActionReceipt)
+        .where(ActionReceipt.id == receipt_id)
+        .values(created_at=when)
+    )
+    db_session.commit()
+
+
 def make_user(
     db_session: Session,
     *,
-    role: UserRole = UserRole.EXT_PERM_USER,
+    standard_account: bool = False,
+    is_admin: bool = False,
+    is_group_manager: bool = False,
     email_prefix: str = "craft_helper",
 ) -> User:
-    """Create a single ``User`` row with random email + UUID."""
+    """Create a ``User`` row whose authority is derived the way production derives it.
+
+    Permissions come from the seeded default groups rather than a list written
+    here, because a list written here drifts the first time a group's grants
+    change. The no-flag default is a group-less placeholder, matching the users
+    that external permission sync creates.
+    """
     helper = PasswordHelper()
-    account_type = (
-        AccountType.EXT_PERM_USER
-        if role == UserRole.EXT_PERM_USER
-        else AccountType.STANDARD
-    )
+    joins_a_group = standard_account or is_admin or is_group_manager
     user = User(
         id=uuid4(),
         email=f"{email_prefix}_{uuid4().hex[:8]}@example.com",
@@ -90,12 +121,37 @@ def make_user(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=role,
-        account_type=account_type,
+        account_type=(
+            AccountType.STANDARD if joins_a_group else AccountType.EXT_PERM_USER
+        ),
     )
     db_session.add(user)
     db_session.flush()
+
+    if joins_a_group:
+        assign_user_to_default_groups__no_commit(db_session, user, is_admin=is_admin)
+    if is_group_manager:
+        _grant_manager_edge(db_session, user)
+
+    # The recompute updates the row in SQL, so re-read it or the caller gets stale permissions.
+    db_session.refresh(user)
     return user
+
+
+def _grant_manager_edge(db_session: Session, user: User) -> None:
+    """Give *user* a real manager edge so ``is_group_manager`` is derived, not asserted.
+
+    The group they manage is deliberately not the group a test shares resources
+    with. The route gate only reads the cached flag, while scope checks look for
+    a manager edge on that specific group, so tests that care about scope add
+    that edge themselves.
+    """
+    group = make_group(db_session, name=f"craft-managed-{uuid4().hex[:8]}")
+    db_session.add(
+        User__UserGroup(user_id=user.id, user_group_id=group.id, is_manager=True)
+    )
+    db_session.flush()
+    recompute_user_permissions__no_commit(user.id, db_session)
 
 
 def make_group(db_session: Session, name: str | None = None) -> UserGroup:
@@ -135,13 +191,17 @@ def make_skill(
     is_public: bool = False,
     public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
+    with_plugin: bool = True,
 ) -> Skill:
-    """Create a single custom ``Skill`` row.
+    """Create a single custom ``Skill`` row and its plugin. Without
+    ``with_plugin``, the skill has no plugin, as if an older server made it.
 
     Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
     placeholder values; tests that need a real bundle should use the
     ``seeded_skill`` fixture from ``conftest.py`` instead.
     """
+    if author_user_id is None and not is_public:
+        author_user_id = make_user(db_session, standard_account=True).id
     skill = Skill(
         id=uuid4(),
         name=name or f"helper-skill-{uuid4().hex[:8]}",
@@ -153,7 +213,29 @@ def make_skill(
     )
     db_session.add(skill)
     db_session.flush()
+    if with_plugin:
+        create_skill_plugin__no_commit(
+            skill, legacy_skill_version_content(skill), None, db_session
+        )
     return skill
+
+
+def set_current_version_validity(
+    db_session: Session, skill_id: UUID, is_valid: bool | None
+) -> None:
+    """Set the lazy validity of the skill plugin's current version, which the
+    readers use."""
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id
+            == select(Plugin.current_version_id)
+            .where(Plugin.id == skill_id)
+            .scalar_subquery()
+        )
+        .values(is_valid=is_valid)
+    )
+    db_session.flush()
 
 
 def make_built_in_skill_row(
@@ -217,7 +299,7 @@ def make_external_app(
     organization_credentials: dict[str, Any] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
@@ -239,7 +321,7 @@ def make_external_app(
         )
         for action_id, policy in action_policies.items():
             db_session.add(
-                GatedActionPolicy(
+                WorkspaceActionPolicy(
                     gated_app_id=gated_app_id,
                     action_id=action_id,
                     policy=policy,
@@ -273,7 +355,8 @@ def share_skill_with_user(
     user: User,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
 ) -> Skill__User:
-    """Insert a ``Skill__User`` share row."""
+    """Insert a ``Skill__User`` share row, and the plugin share of a custom
+    skill."""
     share = Skill__User(
         skill_id=skill.id,
         user_id=user.id,
@@ -281,6 +364,8 @@ def share_skill_with_user(
     )
     db_session.add(share)
     db_session.flush()
+    if skill.is_custom:
+        share_plugin_with_user(db_session, skill.id, user.id, permission)
     return share
 
 
@@ -290,7 +375,8 @@ def share_skill_with_group(
     group: UserGroup,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
 ) -> Skill__UserGroup:
-    """Insert a ``Skill__UserGroup`` share row."""
+    """Insert a ``Skill__UserGroup`` share row, and the plugin share of a
+    custom skill."""
     share = Skill__UserGroup(
         skill_id=skill.id,
         user_group_id=group.id,
@@ -298,7 +384,58 @@ def share_skill_with_group(
     )
     db_session.add(share)
     db_session.flush()
+    if skill.is_custom:
+        share_plugin_with_group(db_session, skill.id, group.id, permission)
     return share
+
+
+def share_plugin_with_user(
+    db_session: Session,
+    plugin_id: UUID,
+    user_id: UUID,
+    permission: SkillSharePermission,
+) -> None:
+    """Upsert a ``Plugin__User`` row."""
+    stmt = pg_insert(Plugin__User).values(
+        plugin_id=plugin_id, user_id=user_id, permission=permission
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[Plugin__User.plugin_id, Plugin__User.user_id],
+            set_={"permission": stmt.excluded.permission},
+        )
+    )
+    db_session.flush()
+
+
+def share_plugin_with_group(
+    db_session: Session,
+    plugin_id: UUID,
+    group_id: int,
+    permission: SkillSharePermission | None,
+    installation_policy: PluginInstallationPolicy | None = None,
+) -> None:
+    """Upsert a ``Plugin__UserGroup`` row. A row with no permission holds only
+    a group install setting."""
+    stmt = pg_insert(Plugin__UserGroup).values(
+        plugin_id=plugin_id,
+        user_group_id=group_id,
+        permission=permission,
+        installation_policy=installation_policy,
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                Plugin__UserGroup.plugin_id,
+                Plugin__UserGroup.user_group_id,
+            ],
+            set_={
+                "permission": stmt.excluded.permission,
+                "installation_policy": stmt.excluded.installation_policy,
+            },
+        )
+    )
+    db_session.flush()
 
 
 def make_cc_pair(
@@ -360,6 +497,7 @@ def make_cc_pair(
             UserGroup__ConnectorCredentialPair(
                 user_group_id=group.id,
                 cc_pair_id=cc_pair.id,
+                role=ConnectorManageRole.EDITOR,
             )
         )
         db_session.flush()

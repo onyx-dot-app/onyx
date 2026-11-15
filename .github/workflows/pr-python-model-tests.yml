@@ -37,7 +37,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -49,6 +49,7 @@ jobs:
             backend/requirements/dev.txt
 
       - name: Build model server image
+        id: build
         uses: ./.github/actions/build-model-server-image
         with:
           runs-on-ecr-cache: ${{ env.RUNS_ON_ECR_CACHE }}
@@ -64,7 +65,7 @@ jobs:
       - name: Start Docker containers
         id: start_docker
         env:
-          ONYX_MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}:model-server-${{ github.run_id }}
+          ONYX_MODEL_SERVER_IMAGE: ${{ env.RUNS_ON_ECR_CACHE }}@${{ steps.build.outputs.digest }}
         run: |
           cd deployment/docker_compose
           docker compose \

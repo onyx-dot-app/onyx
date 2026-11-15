@@ -48,16 +48,15 @@ def test_upsert_parents_handles_deep_chain(
     """A 1500-deep parent chain must upsert without RecursionError."""
     tag = uuid4().hex[:8]
     # Build chain: root -> n1 -> n2 -> ... -> n{DEPTH-1}
-    nodes: list[PydanticHierarchyNode] = []
-    for i in range(DEEP_CHAIN_DEPTH):
-        nodes.append(
-            PydanticHierarchyNode(
-                raw_node_id=f"deep_{tag}_{i}",
-                raw_parent_id=f"deep_{tag}_{i - 1}" if i > 0 else None,
-                display_name=f"Deep {i}",
-                node_type=HierarchyNodeType.PAGE,
-            )
+    nodes: list[PydanticHierarchyNode] = [
+        PydanticHierarchyNode(
+            raw_node_id=f"deep_{tag}_{i}",
+            raw_parent_id=f"deep_{tag}_{i - 1}" if i > 0 else None,
+            display_name=f"Deep {i}",
+            node_type=HierarchyNodeType.PAGE,
         )
+        for i in range(DEEP_CHAIN_DEPTH)
+    ]
 
     # Pass the deepest child first so upsert_parents has to walk the entire
     # chain in one call (this is the worst-case shape that originally blew the

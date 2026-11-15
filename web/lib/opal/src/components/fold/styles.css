@@ -1,0 +1,58 @@
+@reference "#reference.css";
+
+/* ============================================================================
+   Fold — content that opens and closes by animating its height.
+
+     .opal-fold            root: open state, inert while closed
+       (frame)             optional, e.g. a border; its height follows
+         .opal-fold-grid   grid 0fr ↔ 1fr
+           .opal-fold-inner  min-height: 0, clips the grid child
+             .opal-fold-content  the fade
+
+   Pure CSS. Paints nothing, so the content stays part of its surroundings.
+============================================================================ */
+
+/* The height and the fade run one after the other, so content is never
+   half-faded while the edge sweeps over it. A transition takes the timings of
+   the state it moves to, so each rule times the move into its own state.
+   Keep the total close time in sync with FOLD_CLOSE_MS in components.tsx. */
+
+/* Closing: the content fades out first, then the height collapses. */
+.opal-fold-grid {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 150ms ease-out 100ms;
+}
+
+.opal-fold-content {
+  opacity: 0;
+  transition: opacity 100ms ease-in;
+}
+
+/* Opening: the height expands fully first, then the content fades in. A
+   frame around the content (see `frame`) is not faded, so it is seen
+   growing with the height. */
+.opal-fold-grid[data-open="true"] {
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 150ms ease-out;
+}
+
+.opal-fold-content[data-open="true"] {
+  opacity: 1;
+  transition: opacity 100ms ease-out 150ms;
+}
+
+/* Clips the grid child so it collapses to zero cleanly. */
+.opal-fold-inner {
+  @apply overflow-hidden;
+  min-height: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opal-fold-grid,
+  .opal-fold-grid[data-open="true"],
+  .opal-fold-content,
+  .opal-fold-content[data-open="true"] {
+    transition: none;
+  }
+}

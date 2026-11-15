@@ -1,6 +1,6 @@
 """Guard the SSO admin API contract: secrets never persist masked, config
-merges stay partial, conflicting or missing providers are reported, and the
-routes are single-tenant only.
+merges stay partial, conflicting or missing providers are reported, and only
+provider types the deployment can actually route are configurable.
 
 The API must never persist masked secrets as real config values.
 """
@@ -26,6 +26,14 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError, register_onyx_exception_handlers
 from onyx.server.manage.sso.api import admin_router
 from onyx.utils.encryption import is_masked_credential
+
+
+@pytest.fixture(autouse=True)
+def _stub_idp_url_guard() -> Generator[None, None, None]:
+    # Provider CRUD here uses placeholder IdP URLs and must not hit the network.
+    # The URL guard itself is covered in test_sso_url_guard.
+    with patch("onyx.server.manage.sso.api.validate_idp_url", return_value=None):
+        yield
 
 
 @pytest.fixture()
@@ -100,6 +108,21 @@ def _build_oidc_request(name: str, client_secret: str) -> dict[str, Any]:
             "client_id": "client-id",
             "client_secret": client_secret,
             "openid_config_url": "https://idp.example.com/.well-known/openid-configuration",
+        },
+        "allowed_email_domains": ["companya.com"],
+    }
+
+
+def _build_saml_request(name: str) -> dict[str, Any]:
+    return {
+        "name": name,
+        "display_name": "Company SAML",
+        "provider_type": SSOProviderType.SAML.value,
+        "config": {
+            "idp_entity_id": "https://idp.example.com/entity",
+            "idp_sso_url": "https://idp.example.com/sso",
+            "idp_x509_cert": "cert",
+            "sp_entity_id": "onyx",
         },
         "allowed_email_domains": ["companya.com"],
     }
@@ -447,6 +470,106 @@ def test_can_disable_provider_when_another_remains_and_auth_off(
     assert response.json()["enabled"] is False
 
 
+def test_delete_provider_removes_the_row(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is None
+    listed_ids = [p["id"] for p in client.get("/admin/sso/provider").json()]
+    assert provider_id not in listed_ids
+
+
+def test_handoff_counts_linked_users(
+    client: TestClient,
+    provider_names: list[str],
+) -> None:
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    response = client.get(f"/admin/sso/provider/{provider_id}/handoff")
+
+    assert response.status_code == 200
+    assert response.json() == {"linked_users": 0, "renamed_users": 0}
+
+
+def test_cannot_delete_last_provider_when_password_auth_off(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """Deleting the only enabled provider with password auth off would leave no
+    way in, so it is refused and the row survives."""
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch(
+            "onyx.server.manage.sso.api.fetch_sso_providers",
+            return_value=[SimpleNamespace(id=provider_id)],
+        ),
+    ):
+        response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+    assert response.json()["error_code"] == OnyxErrorCode.INVALID_INPUT.code
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is not None
+
+
+def test_can_delete_disabled_provider_when_password_auth_off(
+    client: TestClient,
+    db_session: Session,
+    provider_names: list[str],
+) -> None:
+    """A disabled provider signs no one in, so deleting it never trips the
+    lockout guard, even when no enabled provider remains."""
+    name = _new_provider_name()
+    provider_id = client.post(
+        "/admin/sso/provider", json=_build_oidc_request(name, "secret-a")
+    ).json()["id"]
+    provider_names.append(name)
+    assert (
+        client.post(
+            f"/admin/sso/provider/{provider_id}/enabled", json={"enabled": False}
+        ).status_code
+        == 200
+    )
+
+    with (
+        patch(
+            "onyx.server.manage.sso.api.load_effective_uncached",
+            _auth_disabled_settings,
+        ),
+        patch("onyx.server.manage.sso.api.fetch_sso_providers", return_value=[]),
+    ):
+        response = client.delete(f"/admin/sso/provider/{provider_id}")
+
+    assert response.status_code == 200
+    db_session.expire_all()
+    assert db_session.get(SSOProvider, provider_id) is None
+
+
 def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
     missing_provider_id = 987654321
 
@@ -463,6 +586,10 @@ def test_missing_provider_routes_return_not_found(client: TestClient) -> None:
     )
     assert enabled_response.status_code == OnyxErrorCode.NOT_FOUND.status_code
     assert enabled_response.json()["error_code"] == OnyxErrorCode.NOT_FOUND.code
+
+    delete_response = client.delete(f"/admin/sso/provider/{missing_provider_id}")
+    assert delete_response.status_code == OnyxErrorCode.NOT_FOUND.status_code
+    assert delete_response.json()["error_code"] == OnyxErrorCode.NOT_FOUND.code
 
 
 def _gated_bridge(*_args: Any, **_kwargs: Any) -> Any:
@@ -546,17 +673,77 @@ def test_second_enabled_provider_requires_business_tier(
         )
 
 
+@patch("onyx.db.sso_provider.MULTI_TENANT", True)
+def test_multi_tenant_rejects_saml_and_admits_oauth(
+    client: TestClient, provider_names: list[str]
+) -> None:
+    """Cloud cannot route a SAML assertion to a workspace, so SAML alone is
+    refused. OAuth-shaped providers configure normally."""
+    saml_response = client.post(
+        "/admin/sso/provider",
+        json=_build_saml_request(_new_provider_name("saml-test")),
+    )
+    assert saml_response.status_code == OnyxErrorCode.SINGLE_TENANT_ONLY.status_code
+    assert saml_response.json()["error_code"] == OnyxErrorCode.SINGLE_TENANT_ONLY.code
+
+    oidc_name = _new_provider_name()
+    provider_names.append(oidc_name)
+    oidc_response = client.post(
+        "/admin/sso/provider",
+        json=_build_oidc_request(oidc_name, "secret"),
+    )
+    assert oidc_response.status_code == 200
+
+    types_response = client.get("/admin/sso/provider-type")
+    assert types_response.status_code == 200
+    assert types_response.json() == [
+        SSOProviderType.GOOGLE_OAUTH.value,
+        SSOProviderType.OIDC.value,
+    ]
+
+
+@pytest.mark.parametrize("domains", [[], [" "], ["", "  "]])
 @patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
-def test_multi_tenant_deployments_are_rejected(client: TestClient) -> None:
-    """The gate sits on the router, so no handler below it is reachable."""
-    for response in (
-        client.get("/admin/sso/provider"),
-        client.post(
-            "/admin/sso/provider",
-            json=_build_oidc_request(_new_provider_name(), "secret"),
-        ),
-        client.patch("/admin/sso/provider/1", json={"display_name": "Blocked"}),
-        client.post("/admin/sso/provider/1/enabled", json={"enabled": True}),
-    ):
-        assert response.status_code == OnyxErrorCode.SINGLE_TENANT_ONLY.status_code
-        assert response.json()["error_code"] == OnyxErrorCode.SINGLE_TENANT_ONLY.code
+def test_multi_tenant_requires_bounded_email_domains(
+    client: TestClient, domains: list[str]
+) -> None:
+    """A list that stores empty turns the domain check off entirely. Blank
+    entries are dropped on write, so they have to be judged normalized."""
+    request = _build_oidc_request(_new_provider_name(), "secret")
+    request["allowed_email_domains"] = domains
+
+    response = client.post("/admin/sso/provider", json=request)
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+
+
+@pytest.mark.parametrize(
+    "domain", ["company a.com", "notadomain", "-bad.com", "bad_.com"]
+)
+@patch("onyx.server.manage.sso.api.MULTI_TENANT", True)
+def test_multi_tenant_rejects_malformed_email_domains(
+    client: TestClient, domain: str
+) -> None:
+    """A syntactically invalid domain would persist and route nowhere, then fail
+    only later when verification tries to email it, so it is rejected at save."""
+    request = _build_oidc_request(_new_provider_name(), "secret")
+    request["allowed_email_domains"] = [domain]
+
+    response = client.post("/admin/sso/provider", json=request)
+    assert response.status_code == OnyxErrorCode.INVALID_INPUT.status_code
+
+
+def test_single_tenant_allows_unbounded_email_domains(
+    client: TestClient, provider_names: list[str]
+) -> None:
+    name = _new_provider_name()
+    provider_names.append(name)
+    request = _build_oidc_request(name, "secret")
+    request["allowed_email_domains"] = []
+
+    assert client.post("/admin/sso/provider", json=request).status_code == 200
+
+
+def test_single_tenant_offers_every_provider_type(client: TestClient) -> None:
+    types_response = client.get("/admin/sso/provider-type")
+    assert types_response.status_code == 200
+    assert SSOProviderType.SAML.value in types_response.json()

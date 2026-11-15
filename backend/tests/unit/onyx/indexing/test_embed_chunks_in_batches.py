@@ -77,7 +77,6 @@ def _make_index_chunk(doc_id: str, chunk_id: int) -> IndexChunk:
             full_embedding=[0.1] * 10,
             mini_chunk_embeddings=[],
         ),
-        title_embedding=None,
     )
 
 
@@ -262,8 +261,7 @@ class TestEmbedChunksInBatches:
         def _embed(
             chunks: list[DocAwareChunk], **_kwargs: object
         ) -> tuple[list[IndexChunk], list[ConnectorFailure]]:
-            for c in chunks:
-                embedded_doc_ids.append(c.source_document.id)
+            embedded_doc_ids.extend(c.source_document.id for c in chunks)
             return _mock_embed_fail_doc("docA")(chunks)
 
         mock_embed.side_effect = _embed

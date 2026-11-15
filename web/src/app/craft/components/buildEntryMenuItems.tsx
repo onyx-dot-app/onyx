@@ -1,3 +1,4 @@
+import type { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import {
   SvgFileText,
@@ -16,6 +17,10 @@ import type {
   PlusMenuFlyoutItem,
   PlusMenuItem,
 } from "@/sections/input/PlusMenuButton";
+
+export type EntryMenuTranslate = ReturnType<
+  typeof useTranslations<"craft.entryMenu">
+>;
 
 interface LibraryFile {
   id: string;
@@ -43,21 +48,22 @@ export function buildEntryMenuItems(
     onBrowseApps,
     libraryFiles = [],
     onManageLibrary,
-  }: EntryMenuHandlers
+  }: EntryMenuHandlers,
+  t: EntryMenuTranslate
 ): Array<PlusMenuItem | null> {
   // Skills and Apps always show; when empty they prompt the user to browse/connect.
   const items: Array<PlusMenuItem | null> = [
     {
       key: "files",
       icon: SvgPaperclip,
-      label: "Add files or photos",
+      label: t("addFiles.label"),
       onSelect: onAttachFiles,
     },
     null,
     {
       key: "skills",
       icon: SvgSparkle,
-      label: "Skills",
+      label: t("skills.label"),
       flyoutItems:
         sections.skills.length > 0
           ? sections.skills.map((skill) => ({
@@ -71,7 +77,7 @@ export function buildEntryMenuItems(
               {
                 key: "skills-empty",
                 icon: SvgSparkle,
-                label: "Browse skills",
+                label: t("browseSkills.label"),
                 onSelect: onBrowseSkills,
               },
             ],
@@ -79,11 +85,15 @@ export function buildEntryMenuItems(
     {
       key: "apps",
       icon: SvgPlug,
-      label: "Apps",
-      flyoutItems: buildAppFlyoutItems(sections, {
-        onSelectEntry,
-        onBrowseApps,
-      }),
+      label: t("apps.label"),
+      flyoutItems: buildAppFlyoutItems(
+        sections,
+        {
+          onSelectEntry,
+          onBrowseApps,
+        },
+        t
+      ),
     },
   ];
 
@@ -91,7 +101,7 @@ export function buildEntryMenuItems(
     items.push({
       key: "library",
       icon: SvgFolder,
-      label: "Library",
+      label: t("library.label"),
       flyoutItems: [
         // TODO(craft-library): file rows open the manage modal until per-file attach is wired.
         ...libraryFiles.map((file) => ({
@@ -103,7 +113,7 @@ export function buildEntryMenuItems(
         {
           key: "manage",
           icon: SvgFolder,
-          label: "Manage library…",
+          label: t("manageLibrary.label"),
           onSelect: onManageLibrary,
         },
       ],
@@ -123,12 +133,13 @@ interface AppFlyoutHandlers {
  * two never read as one kind of thing. */
 function buildAppFlyoutItems(
   sections: PickerSections,
-  { onSelectEntry, onBrowseApps }: AppFlyoutHandlers
+  { onSelectEntry, onBrowseApps }: AppFlyoutHandlers,
+  t: EntryMenuTranslate
 ): PlusMenuFlyoutItem[] {
   const connectHint = (authenticated: boolean) =>
     authenticated ? undefined : (
       <Text font="secondary-body" color="text-03">
-        Connect
+        {t("connect.hint")}
       </Text>
     );
 
@@ -140,7 +151,7 @@ function buildAppFlyoutItems(
     icon: pickerEntryIcon(entry),
     label: entry.name,
     // Only MCP rows are labelled; apps are the default kind on this page.
-    description: entry.kind === "mcp" ? "MCP server" : undefined,
+    description: entry.kind === "mcp" ? t("mcpServer.description") : undefined,
     rightContent: connectHint(entry.authenticated),
     onSelect: () => onSelectEntry(entry),
   }));
@@ -151,7 +162,7 @@ function buildAppFlyoutItems(
         {
           key: "apps-empty",
           icon: SvgPlug,
-          label: "Connect an app",
+          label: t("connectApp.label"),
           onSelect: onBrowseApps,
         },
       ];

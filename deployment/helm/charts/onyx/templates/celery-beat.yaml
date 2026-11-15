@@ -15,7 +15,7 @@ their own /tmp volume. */}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-beat
+  name: {{ include "onyx.resourceName" (list . "celery-beat") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_beat.deploymentLabels }}
@@ -67,7 +67,7 @@ spec:
       containers:
         - name: celery-beat
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:

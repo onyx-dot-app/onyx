@@ -1,8 +1,9 @@
 "use client";
 
+import { InputSingleSelectField } from "@opal/form";
+import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
+import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import InputSelectField from "@/refresh-components/form/InputSelectField";
-import InputSelect from "@/refresh-components/inputs/InputSelect";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -21,25 +22,19 @@ import {
   ModelAccessField,
   ModelSelectionField,
 } from "@/sections/modals/languageModels/shared";
-import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 
 export const MINIMAX_ENDPOINT_OPTIONS = [
   {
-    name: "Global - Anthropic",
     value: "https://api.minimax.io/anthropic",
-    description: "Recommended",
   },
   {
-    name: "Global - OpenAI",
     value: "https://api.minimax.io/v1",
   },
   {
-    name: "China - Anthropic",
     value: "https://api.minimaxi.com/anthropic",
   },
   {
-    name: "China - OpenAI",
     value: "https://api.minimaxi.com/v1",
   },
 ] as const;
@@ -50,25 +45,20 @@ interface MiniMaxModalValues extends BaseLLMFormValues {
 }
 
 function MiniMaxEndpointField() {
+  const t = useTranslations("admin.languageModels.modals");
+  const tInputSelect = useTranslations("common.inputSelect");
+
   return (
     <InputPadder>
-      <InputVertical withLabel="api_base" title="API Endpoint">
-        <InputSelectField name="api_base">
-          <InputSelect.Trigger placeholder="Select an endpoint" />
-          <InputSelect.Content>
-            {MINIMAX_ENDPOINT_OPTIONS.map((option) => (
-              <InputSelect.Item
-                key={option.value}
-                value={option.value}
-                description={
-                  "description" in option ? option.description : undefined
-                }
-              >
-                {option.name}
-              </InputSelect.Item>
-            ))}
-          </InputSelect.Content>
-        </InputSelectField>
+      <InputVertical withLabel="api_base" title={t("setup.apiBaseField.title")}>
+        <InputSingleSelectField
+          name="api_base"
+          placeholder={tInputSelect("placeholder.fallback")}
+          options={MINIMAX_ENDPOINT_OPTIONS.map(({ value }) => ({
+            value,
+            title: value,
+          }))}
+        />
       </InputVertical>
     </InputPadder>
   );
@@ -82,6 +72,7 @@ export default function MiniMaxModal({
   onSuccess,
   analyticsSource,
 }: LLMProviderFormProps) {
+  const t = useTranslations("admin.languageModels.modals");
   const isOnboarding = variant === "onboarding";
   const { mutate } = useSWRConfig();
   const onClose = () => onOpenChange?.(false);
@@ -97,7 +88,7 @@ export default function MiniMaxModal({
     api_base: baseInitialValues.api_base ?? MINIMAX_ENDPOINT_OPTIONS[0].value,
   };
 
-  const validationSchema = buildValidationSchema(isOnboarding, {
+  const validationSchema = buildValidationSchema(t, isOnboarding, {
     apiKey: true,
     apiBase: true,
   });
@@ -108,10 +99,10 @@ export default function MiniMaxModal({
       llmProvider={existingLlmProvider}
       onClose={onClose}
       initialValues={initialValues}
-      description="Connect to MiniMax through an official API endpoint."
       validationSchema={validationSchema}
       onSubmit={async (values, { setSubmitting, setStatus }) => {
         await submitProvider({
+          t,
           analyticsSource:
             analyticsSource ??
             (isOnboarding
@@ -132,8 +123,8 @@ export default function MiniMaxModal({
               await refreshLlmProviderCaches(mutate);
               toast.success(
                 existingLlmProvider
-                  ? "Provider updated successfully!"
-                  : "Provider enabled successfully!"
+                  ? t("toasts.providerUpdated")
+                  : t("toasts.providerEnabled")
               );
             }
           },

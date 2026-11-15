@@ -12,7 +12,6 @@ admin-authored header template values.
 from typing import Any
 from unittest.mock import MagicMock, patch
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import (
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
@@ -60,10 +59,9 @@ def _make_db_server(
     return server
 
 
-def _make_user(*, email: str, role: UserRole) -> MagicMock:
+def _make_user(*, email: str) -> MagicMock:
     user = MagicMock()
     user.email = email
-    user.role = role
     return user
 
 
@@ -115,7 +113,7 @@ class TestPerUserAuthTemplateInvariants:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             admin_config=_oauth_admin_config_with_runtime_headers(),
         )
-        basic_user = _make_user(email="user@example.com", role=UserRole.BASIC)
+        basic_user = _make_user(email="user@example.com")
 
         with patch(
             "onyx.server.features.mcp.api.get_user_connection_config",
@@ -133,15 +131,13 @@ class TestPerUserAuthTemplateInvariants:
         assert api_server.user_credentials is None
 
     def test_admin_user_oauth_server_listing_returns_no_auth_template(self) -> None:
-        """Admins on the listing endpoint share the same code path as
-        basic users; the OAuth invariant must apply regardless of role.
-        """
+        """The listing endpoint must never return OAuth auth templates."""
         db_server = _make_db_server(
             auth_type=MCPAuthenticationType.OAUTH,
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             admin_config=_oauth_admin_config_with_runtime_headers(),
         )
-        admin = _make_user(email="admin@example.com", role=UserRole.ADMIN)
+        admin = _make_user(email="admin@example.com")
 
         with patch(
             "onyx.server.features.mcp.api.get_user_connection_config",
@@ -169,7 +165,7 @@ class TestPerUserAuthTemplateInvariants:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             admin_config=_oauth_admin_config_with_runtime_headers(),
         )
-        owner = _make_user(email="owner@example.com", role=UserRole.ADMIN)
+        owner = _make_user(email="owner@example.com")
 
         with patch(
             "onyx.server.features.mcp.api.get_user_connection_config",
@@ -196,7 +192,7 @@ class TestPerUserAuthTemplateInvariants:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             admin_config=_api_token_template_admin_config(),
         )
-        user = _make_user(email="user@example.com", role=UserRole.BASIC)
+        user = _make_user(email="user@example.com")
 
         with patch(
             "onyx.server.features.mcp.api.get_user_connection_config",
@@ -221,7 +217,7 @@ class TestPerUserAuthTemplateInvariants:
             auth_performer=MCPAuthenticationPerformer.PER_USER,
             admin_config=_api_token_template_admin_config(),
         )
-        owner = _make_user(email="owner@example.com", role=UserRole.ADMIN)
+        owner = _make_user(email="owner@example.com")
 
         with patch(
             "onyx.server.features.mcp.api.get_user_connection_config",

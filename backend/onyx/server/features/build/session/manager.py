@@ -10,6 +10,7 @@ import io
 import json
 import mimetypes
 import threading
+import time
 import uuid
 import zipfile
 from collections.abc import Callable, Generator
@@ -25,9 +26,17 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
-from onyx.db.enums import BuildSessionStatus, SandboxStatus, SessionOrigin
+from onyx.db.enums import (
+    BuildSessionStatus,
+    LLMModelFlowType,
+    SandboxStatus,
+    SessionOrigin,
+)
 from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.llm import fetch_all_accessible_llm_providers
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_default_model,
+)
 from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -36,7 +45,6 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     MAX_TOTAL_UPLOAD_SIZE_BYTES,
     MAX_UPLOAD_FILES_PER_SESSION,
-    OPENCODE_DISABLED_TOOLS,
 )
 from onyx.server.features.build.db.build_session import (
     create_build_session__no_commit,
@@ -57,11 +65,19 @@ from onyx.server.features.build.db.sandbox import (
     get_snapshots_for_session,
     update_sandbox_heartbeat,
 )
+from onyx.server.features.build.interactive_turns.state import (
+    acquire_active_turn_lock,
+    get_active_turn,
+)
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+    OutputsManifestResponse,
+    is_hidden_workspace_name,
+)
 from onyx.server.features.build.sandbox.models import (
     CraftLLMProviderConfig,
     DirectoryListing,
-    FilesystemEntry,
     PromptAttachment,
 )
 from onyx.server.features.build.sandbox.nextjs_dev import (
@@ -80,16 +96,22 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
+    OpencodeConfigReloadError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
 from onyx.server.features.build.session.interrupt_signal import request_interrupt
 from onyx.server.features.build.session.llm_config import (
     AgentSelection,
+    GatewaySelection,
     build_onyx_gateway_config,
     parse_agent_selection,
 )
 from onyx.server.features.build.session.md_to_docx import markdown_to_docx_bytes
+from onyx.server.features.build.session.models import (
+    OutputFileResponse,
+    OutputInventoryResponse,
+)
 from onyx.server.features.build.session.naming import generate_session_name
 from onyx.server.features.build.session.sandbox_lifecycle import (
     ProvisioningPolicy,
@@ -102,6 +124,7 @@ from onyx.server.features.build.timeouts import (
     PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS,
     PROVISION_WAIT_SECONDS,
 )
+from onyx.server.features.build.utils import get_opencode_disabled_tools
 from onyx.server.metrics.craft_sandbox import SandboxReadyOutcome
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import start_thread_with_context
@@ -110,10 +133,38 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+# After this many failed dispose attempts, turns fail fast (no dispose call)
+# until the backoff passes, then one more attempt is made.
+_DISPOSE_MAX_FAILED_ATTEMPTS = 3
+_DISPOSE_FAILURE_BACKOFF_SECONDS = 300
+
+_DISPOSE_RELOAD_FAILED_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings, so this "
+    "turn did not run."
+)
+_DISPOSE_BACKOFF_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings after "
+    "several attempts, so this turn did not run. Wait a few minutes, then try "
+    "again."
+)
 
 
 def _dispose_pending_key(session_id: UUID) -> str:
     return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def _encode_dispose_pending(failed_attempts: int, last_failure_at: float) -> str:
+    return f"{failed_attempts}:{last_failure_at}"
+
+
+def _decode_dispose_pending(raw: bytes) -> tuple[int, float]:
+    """(failed attempts, epoch of last failure). Unknown values, such as the
+    legacy ``"1"``, decode as no failures."""
+    try:
+        attempts, last_failure_at = raw.decode().split(":", 1)
+        return int(attempts), float(last_failure_at)
+    except ValueError:
+        return 0, 0.0
 
 
 def mark_opencode_dispose_pending(session_id: UUID) -> None:
@@ -121,31 +172,19 @@ def mark_opencode_dispose_pending(session_id: UUID) -> None:
 
     ``reconcile_session_llm_config`` performs it on the next turn, and needs the
     marker because it short-circuits when the file already matches what it would
-    write — which it does after a workspace rebuild.
+    write — which it does after a workspace rebuild. The value also counts
+    failed dispose attempts; a new claim resets the count.
     """
     get_cache_backend().set(
-        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+        _dispose_pending_key(session_id),
+        _encode_dispose_pending(0, 0.0),
+        ex=_DISPOSE_PENDING_TTL_SECONDS,
     )
 
 
 # Webapp-ready probe on the UI-poll hot path; any response (even 404) counts.
 _WEBAPP_PROBE_TIMEOUT_SECONDS = 2.0
 
-
-# Hidden directories/files to filter from listings
-HIDDEN_PATTERNS = {
-    ".venv",
-    ".git",
-    ".next",
-    "__pycache__",
-    "node_modules",
-    ".DS_Store",
-    "opencode.json",
-    ".env",
-    ".gitignore",
-    "nextjs.log",
-    "nextjs.pid",
-}
 
 _WEBAPP_DIRECTORY = str(Path(WEBAPP_PACKAGE_JSON_PATH).parent)
 _WEBAPP_PACKAGE_FILENAME = Path(WEBAPP_PACKAGE_JSON_PATH).name
@@ -156,10 +195,6 @@ def _sanitize_zip_basename(name: str, *, allow_dots: bool) -> str:
     keeps version-suffixed directory names like ``my.lib`` intact."""
     safe = {"-", "_", "."} if allow_dots else {"-", "_"}
     return "".join(c if c.isalnum() or c in safe else "_" for c in name)
-
-
-def _is_hidden_workspace_entry(entry: FilesystemEntry) -> bool:
-    return entry.name in HIDDEN_PATTERNS or entry.name.startswith(".")
 
 
 class SessionManager:
@@ -194,9 +229,21 @@ class SessionManager:
         user: User,
         selection: AgentSelection | None = None,
     ) -> CraftLLMProviderConfig:
+        # Craft outranks chat: an admin can point Craft at a coding model while
+        # chat stays on something else.
+        configured_default_models = [
+            fetch_default_model(self._db_session, LLMModelFlowType.CRAFT),
+            fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
+        ]
+        configured_defaults = [
+            GatewaySelection(model.llm_provider_id, model.name)
+            for model in configured_default_models
+            if model is not None
+        ]
         gateway_config = build_onyx_gateway_config(
             fetch_all_accessible_llm_providers(self._db_session, user),
             selection,
+            configured_defaults,
         )
         if gateway_config is None:
             raise OnyxError(
@@ -271,7 +318,7 @@ class SessionManager:
         expected = json.dumps(
             build_provider_opencode_config(
                 llm_config,
-                disabled_tools=OPENCODE_DISABLED_TOOLS,
+                disabled_tools=get_opencode_disabled_tools(),
                 mcp_servers=mcp_servers,
                 session_id=str(session.id),
             )
@@ -299,11 +346,14 @@ class SessionManager:
             # picked it up: a prior reconcile may have written the file and
             # then failed the dispose. Retry the dispose while the marker is
             # set, else the instance stays on the old config until pod death.
-            if (
-                session.opencode_session_id is not None
-                and cache.get(dispose_pending_key) is not None
-            ):
-                self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            pending = cache.get(dispose_pending_key)
+            if session.opencode_session_id is not None and pending is not None:
+                self._dispose_for_config(
+                    sandbox.id,
+                    session.id,
+                    pending=_decode_dispose_pending(pending),
+                    status="pending_dispose_retry",
+                )
             cache.delete(dispose_pending_key)
             if (
                 session.agent_provider != llm_config.provider
@@ -334,11 +384,72 @@ class SessionManager:
             mcp_servers=mcp_servers,
         )
         if session.opencode_session_id is not None:
-            self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            self._dispose_for_config(
+                sandbox.id, session.id, pending=(0, 0.0), status="config_rewrite"
+            )
         cache.delete(dispose_pending_key)
         session.agent_provider = llm_config.provider
         session.agent_model = llm_config.model_name
         self._db_session.flush()
+
+    def _dispose_for_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        pending: tuple[int, float],
+        status: str,
+    ) -> None:
+        """Dispose the instance so it reloads its config. On failure, keep the
+        marker with a higher failure count and raise
+        ``OpencodeConfigReloadError``; the turn must not run on the old config.
+
+        Logs carry only a status category, the attempt number and the duration.
+        """
+        failed_attempts, last_failure_at = pending
+        if (
+            failed_attempts >= _DISPOSE_MAX_FAILED_ATTEMPTS
+            and time.time() - last_failure_at < _DISPOSE_FAILURE_BACKOFF_SECONDS
+        ):
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=dispose_backoff "
+                "failed_attempts=%d",
+                failed_attempts,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_BACKOFF_MESSAGE)
+
+        attempt = failed_attempts + 1
+        started = time.monotonic()
+        try:
+            self._sandbox_manager.dispose_opencode_instance(sandbox_id, session_id)
+        except httpx.HTTPError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+                "duration_ms=%d error=%s",
+                (
+                    "dispose_timeout"
+                    if isinstance(exc, httpx.TimeoutException)
+                    else "dispose_failed"
+                ),
+                attempt,
+                duration_ms,
+                type(exc).__name__,
+            )
+            get_cache_backend().set(
+                _dispose_pending_key(session_id),
+                _encode_dispose_pending(attempt, time.time()),
+                ex=_DISPOSE_PENDING_TTL_SECONDS,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_RELOAD_FAILED_MESSAGE) from exc
+
+        logger.info(
+            "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+            "duration_ms=%d",
+            "dispose_recovered" if failed_attempts > 0 else status,
+            attempt,
+            int((time.monotonic() - started) * 1000),
+        )
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
         """Reload one runtime and report whether its skills remain stale."""
@@ -799,8 +910,8 @@ class SessionManager:
         """
         Update the name of a build session.
 
-        If name is None, auto-generates a name using LLM based on the first
-        user message in the session.
+        If name is None, names an unnamed session from its first user message.
+        An automatic name never replaces an existing or concurrent manual name.
 
         Args:
             session_id: The session UUID
@@ -818,8 +929,18 @@ class SessionManager:
             # Manual rename
             session.name = name
         else:
-            # Auto-generate name from first user message using LLM
-            session.name = generate_session_name(self._db_session, session_id)
+            if session.name is not None:
+                return session
+            generated_name = generate_session_name(self._db_session, session_id)
+            # Lock only for the save, after the slow model call. Reread the row
+            # so another request's manual or automatic name takes precedence.
+            session = get_build_session(
+                session_id, user_id, self._db_session, for_update=True
+            )
+            if session is None:
+                return None
+            if session.name is None:
+                session.name = generated_name
 
         update_session_activity(session_id, self._db_session)
         self._db_session.commit()
@@ -999,32 +1120,50 @@ class SessionManager:
             user_id,
         )
 
-    def interrupt_message(self, session_id: UUID, user_id: UUID) -> bool:
-        """Interrupt the in-flight agent turn for a session.
-
-        Two complementary signals: the interrupt fence covers the whole turn
-        lifecycle (a turn that hasn't POSTed its prompt yet cancels at the
-        fence check; the runner's consume loop polls it ~1/s and records the
-        turn CANCELLED), and a direct best-effort abort to opencode stops the
-        sandbox-side work even when no live runner is polling the fence
-        (dead/blocked runner, other replica).
-        """
+    def interrupt_message(
+        self, session_id: UUID, user_id: UUID, turn_id: UUID | None = None
+    ) -> bool:
+        """Cancel the selected turn without leaving a fence for a successor."""
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Session not found")
+        sandbox = get_sandbox_by_user_id(self._db_session, user_id)
+        cache = get_cache_backend()
+        lock = acquire_active_turn_lock(cache, session_id)
+        try:
+            active = get_active_turn(
+                cache=cache, session_id=session_id, user_id=user_id
+            )
+            if turn_id is not None and (active is None or active.turn_id != turn_id):
+                return False
+            selected_turn_id = active.turn_id if active is not None else None
+            if active is not None:
+                request_interrupt(active.turn_id, cache)
+        finally:
+            lock.release()
 
-        request_interrupt(session_id, get_cache_backend())
-
-        if session.opencode_session_id:
-            sandbox = get_sandbox_by_user_id(self._db_session, user_id)
-            if sandbox is not None and sandbox.status.is_active():
-                start_thread_with_context(
-                    target=self._sandbox_manager.abort_opencode_session,
-                    name=f"interrupt-abort-{session_id}",
-                    daemon=True,
-                    args=(sandbox.id, session_id, session.opencode_session_id),
+        if (
+            not session.opencode_session_id
+            or sandbox is None
+            or not sandbox.status.is_active()
+        ):
+            return selected_turn_id is not None
+        with self._sandbox_manager.prepare_opencode_abort(
+            sandbox.id, session_id, session.opencode_session_id
+        ) as abort:
+            if abort is None:
+                return selected_turn_id is not None
+            lock = acquire_active_turn_lock(cache, session_id)
+            try:
+                active = get_active_turn(
+                    cache=cache, session_id=session_id, user_id=user_id
                 )
-        return True
+                if (active.turn_id if active is not None else None) != selected_turn_id:
+                    return selected_turn_id is not None
+                abort()
+                return True
+            finally:
+                lock.release()
 
     def subscribe_to_existing_session_events(
         self,
@@ -1072,8 +1211,9 @@ class SessionManager:
                 tenant_id=get_current_tenant_id(),
             )
 
-        for acp_event in raw_events:
-            yield _streaming.event_to_sse(acp_event)
+        with contextlib.closing(raw_events):
+            for acp_event in raw_events:
+                yield _streaming.event_to_sse(acp_event)
 
     # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
     #
@@ -1194,6 +1334,9 @@ class SessionManager:
     def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
         self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
 
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.close_session_event_bus(sandbox_id, session_id)
+
     # =========================================================================
     # Artifact Operations
     # =========================================================================
@@ -1243,7 +1386,7 @@ class SessionManager:
             except ValueError:
                 return
             for entry in entries:
-                if _is_hidden_workspace_entry(entry):
+                if is_hidden_workspace_name(entry.name):
                     continue
                 if entry.is_directory:
                     _walk(entry.path)
@@ -1457,13 +1600,13 @@ class SessionManager:
             raise ValueError("Only .ppt and .pptx files are supported for preview")
 
         # Compute cache directory from path hash
-        path_hash = hashlib.sha256(path.encode()).hexdigest()[:12]
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
         cache_dir = f"outputs/.pptx-preview/{path_hash}"
 
-        slide_paths, cached = self._sandbox_manager.generate_pptx_preview(
+        slide_paths, cached = self._sandbox_manager.generate_document_preview(
             sandbox_id=sandbox.id,
             session_id=session_id,
-            pptx_path=path,
+            document_path=path,
             cache_dir=cache_dir,
         )
 
@@ -1472,6 +1615,33 @@ class SessionManager:
             "slide_paths": slide_paths,
             "cached": cached,
         }
+
+    def get_output_thumbnail(
+        self, session_id: UUID, user_id: UUID, path: str
+    ) -> bytes | None:
+        """Render a cached first page using the sandbox document converter."""
+        resolved = self._resolve_owned_session_and_sandbox(session_id, user_id)
+        if resolved is None:
+            return None
+        _, sandbox = resolved
+        source: Path = Path(path)
+        if source.is_absolute() or ".." in source.parts:
+            raise ValueError("Path traversal is not allowed")
+        if source.suffix.lower() not in {".pdf", ".ppt", ".pptx"}:
+            raise ValueError("Only PDF and PowerPoint files support thumbnails")
+        path_hash: str = hashlib.sha256(path.encode()).hexdigest()[:12]
+        pages, _ = self._sandbox_manager.generate_document_preview(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+            document_path=path,
+            cache_dir=f"outputs/.document-thumbnails/{path_hash}",
+            first_page_only=True,
+        )
+        if not pages:
+            raise ValueError("Document produced no thumbnail")
+        return self._sandbox_manager.read_file(
+            sandbox_id=sandbox.id, session_id=session_id, path=pages[0]
+        )
 
     def get_webapp_info(
         self,
@@ -1668,6 +1838,31 @@ class SessionManager:
     # File System Operations
     # =========================================================================
 
+    def get_output_inventory(
+        self, session_id: UUID, user_id: UUID
+    ) -> OutputInventoryResponse:
+        resolved: tuple[BuildSession, Sandbox] | None = (
+            self._resolve_owned_session_and_sandbox(session_id, user_id)
+        )
+        if resolved is None:
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
+        _, sandbox = resolved
+        manifest: OutputsManifestResponse = self._sandbox_manager.get_outputs_manifest(
+            sandbox_id=sandbox.id,
+            session_id=session_id,
+        )
+        return OutputInventoryResponse(
+            files=[
+                OutputFileResponse(
+                    path=f"outputs/{entry.path}",
+                    revision=f"{entry.mtime_ns}:{entry.ctime_ns}:{entry.size}",
+                    size=entry.size,
+                )
+                for entry in manifest.entries
+            ],
+            complete=manifest.complete,
+        )
+
     def list_directory(
         self,
         session_id: UUID,
@@ -1709,7 +1904,7 @@ class SessionManager:
 
         # Filter hidden files and directories
         entries: list[FilesystemEntry] = [
-            entry for entry in raw_entries if not _is_hidden_workspace_entry(entry)
+            entry for entry in raw_entries if not is_hidden_workspace_name(entry.name)
         ]
 
         # Sort: directories first, then files, both alphabetically
@@ -1770,6 +1965,15 @@ class SessionManager:
             ValueError: If session not found or upload limits exceeded
         """
         _, sandbox = self._require_session_and_sandbox(session_id, user_id)
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
+
+        # The session row owns stored-file quota across concurrent API requests.
+        session = get_build_session(
+            session_id, user_id, self._db_session, for_update=True
+        )
+        if session is None:
+            raise ValueError("Session not found")
 
         # Check upload limits
         file_count, total_size = self.get_upload_stats(session_id, user_id)
@@ -1822,6 +2026,9 @@ class SessionManager:
             ValueError: If session not found or path traversal attempted
         """
         _, sandbox = self._require_session_and_sandbox(session_id, user_id)
+
+        update_sandbox_heartbeat(self._db_session, sandbox.id)
+        self._db_session.commit()
 
         # Delegate to sandbox manager (handles both local and K8s)
         deleted = self._sandbox_manager.delete_file(

@@ -2,7 +2,10 @@
 
 import React, { useCallback } from "react";
 import { StopReason } from "@/app/app/services/streamingModels";
-import { FullChatState, RenderType } from "../interfaces";
+import {
+  FullChatState,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { TransformedStep } from "./transformers";
 import {
   TimelineRendererComponent,
@@ -42,6 +45,8 @@ export const CollapsedStreamingContent = React.memo(
           <TimelineRendererComponent
             key={`${step.key}-compact`}
             packets={step.packets}
+            nestedCalls={step.nestedCalls}
+            streamPackets={step.streamPackets}
             chatState={chatState}
             animate={true}
             stopPacketSeen={false}

@@ -153,14 +153,26 @@ class DocumentSetSummary(BaseModel):
     is_public: bool
     users: list[UUID]
     groups: list[int]
+    # per-action affordance map for the requesting user (mirrors the write-side gate).
+    # Defaults empty (fail-closed); the list endpoint stamps the real map.
+    permissions: dict[str, bool] = Field(default_factory=dict)
     federated_connector_summaries: list[FederatedConnectorSummary] = Field(
         default_factory=list
     )
 
     @classmethod
-    def from_model(cls, document_set: DocumentSetDBModel) -> "DocumentSetSummary":
-        """Create a summary from a DocumentSet database model"""
+    def from_model(
+        cls,
+        document_set: DocumentSetDBModel,
+        *,
+        permissions: dict[str, bool] | None = None,
+    ) -> "DocumentSetSummary":
+        """Create a summary from a DocumentSet database model. ``permissions`` defaults to
+        an empty (fail-closed) map — the document-set list endpoint stamps the real one;
+        summaries embedded in other snapshots (e.g. a persona's attached sets) carry no
+        affordances since there is no per-user edit surface there."""
         return cls(
+            permissions=permissions or {},
             id=document_set.id,
             name=document_set.name,
             description=document_set.description,

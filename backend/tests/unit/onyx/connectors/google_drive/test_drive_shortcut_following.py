@@ -1,28 +1,32 @@
 from collections.abc import Iterator
-from typing import Any, cast
+from contextlib import contextmanager
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
-from googleapiclient.discovery import Resource
 
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.google_drive.constants import (
     DRIVE_FOLDER_TYPE,
+    DRIVE_RESOURCE_KEY_FIELD,
+    DRIVE_RESOURCE_KEY_HEADER,
     DRIVE_SHORTCUT_TYPE,
 )
 from onyx.connectors.google_drive.doc_conversion import (
     convert_drive_item_to_document,
-    download_request,
 )
 from onyx.connectors.google_drive.file_retrieval import (
-    DRIVE_RESOURCE_KEY_FIELD,
-    DRIVE_RESOURCE_KEY_HEADER,
     DriveFileFieldType,
     _get_files_in_parent,
     crawl_folders_for_files,
 )
 from onyx.connectors.google_drive.models import DriveRetrievalStage
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveSourceOperations,
+)
 
-_FILE_RETRIEVAL_MODULE = "onyx.connectors.google_drive.file_retrieval"
+_GATEWAY_MODULE = "onyx.connectors.google_drive.source_operations"
+_USER = "user@example.com"
 _PDF_MIME_TYPE = "application/pdf"
 
 
@@ -67,6 +71,16 @@ class _FakeDriveService:
 
     def files(self) -> _FakeFilesResource:
         return self.files_resource
+
+
+@contextmanager
+def _gateway(service: "_FakeDriveService") -> Iterator[GoogleDriveSourceOperations]:
+    """A real gateway whose Drive service is the fake."""
+    ops = GoogleDriveSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(None, "google_drive", {})
+    )
+    with patch.object(GoogleDriveSourceOperations, "_drive", return_value=service):
+        yield ops
 
 
 def _shortcut(
@@ -131,13 +145,17 @@ def test_shortcut_to_file_yields_target_with_true_parent() -> None:
     def _fake_paginated_retrieval(**_kwargs: object) -> Iterator[dict[str, Any]]:
         yield _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
 
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             _get_files_in_parent(
-                service=cast(Resource, service),
+                ops=ops,
+                user_email=_USER,
                 parent_id="shortcut_parent",
                 field_type=DriveFileFieldType.STANDARD,
             )
@@ -163,13 +181,17 @@ def test_shortcut_resolution_uses_shortcut_modified_time() -> None:
         shortcut["modifiedTime"] = "2026-06-02T00:00:00Z"
         yield shortcut
 
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             _get_files_in_parent(
-                service=cast(Resource, service),
+                ops=ops,
+                user_email=_USER,
                 parent_id="shortcut_parent",
                 field_type=DriveFileFieldType.STANDARD,
             )
@@ -204,13 +226,17 @@ def test_shortcut_to_resource_key_file_uses_header() -> None:
             target_resource_key="resource_key",
         )
 
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             _get_files_in_parent(
-                service=cast(Resource, service),
+                ops=ops,
+                user_email=_USER,
                 parent_id="shortcut_parent",
                 field_type=DriveFileFieldType.STANDARD,
             )
@@ -228,12 +254,12 @@ def test_shortcut_to_resource_key_file_uses_header() -> None:
 def test_resource_key_download_uses_header() -> None:
     service = _FakeDriveService({})
 
-    with patch(
-        "onyx.connectors.google_drive.doc_conversion._download_request",
-        return_value=b"content",
-    ) as mock_download:
-        content = download_request(
-            cast(Any, service),
+    with (
+        _gateway(service) as ops,
+        patch(f"{_GATEWAY_MODULE}._download", return_value=b"content") as mock_download,
+    ):
+        content = ops.download_file(
+            user_email=_USER,
             file_id="target_file",
             size_threshold=1_000,
             resource_key="resource_key",
@@ -271,16 +297,19 @@ def test_shortcut_to_folder_crawls_target_folder() -> None:
             yield _shortcut("shortcut_folder", "target_folder", DRIVE_FOLDER_TYPE)
 
     traversed: set[str] = set()
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             crawl_folders_for_files(
-                service=cast(Resource, service),
+                ops=ops,
                 parent_id="root_folder",
                 field_type=DriveFileFieldType.STANDARD,
-                user_email="user@example.com",
+                user_email=_USER,
                 traversed_parent_ids=traversed,
                 update_traversed_ids_func=traversed.add,
             )
@@ -330,16 +359,19 @@ def test_folder_shortcut_cycle_stops_without_completed_folders() -> None:
             }
 
     traversed: set[str] = set()
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             crawl_folders_for_files(
-                service=cast(Resource, service),
+                ops=ops,
                 parent_id="folder_a",
                 field_type=DriveFileFieldType.STANDARD,
-                user_email="user@example.com",
+                user_email=_USER,
                 traversed_parent_ids=traversed,
                 update_traversed_ids_func=traversed.add,
             )
@@ -373,16 +405,19 @@ def test_traversed_parent_still_crawls_untraversed_child_folder() -> None:
             }
 
     traversed = {"root_folder"}
-    with patch(
-        f"{_FILE_RETRIEVAL_MODULE}.execute_paginated_retrieval",
-        side_effect=_fake_paginated_retrieval,
+    with (
+        _gateway(service) as ops,
+        patch(
+            f"{_GATEWAY_MODULE}.execute_paginated_retrieval",
+            side_effect=_fake_paginated_retrieval,
+        ),
     ):
         files = list(
             crawl_folders_for_files(
-                service=cast(Resource, service),
+                ops=ops,
                 parent_id="root_folder",
                 field_type=DriveFileFieldType.STANDARD,
-                user_email="user@example.com",
+                user_email=_USER,
                 traversed_parent_ids=traversed,
                 update_traversed_ids_func=traversed.add,
             )
@@ -401,11 +436,11 @@ def test_raw_shortcut_conversion_logs_bug_guard(
     shortcut = _shortcut("shortcut_file", "target_file", _PDF_MIME_TYPE)
 
     result = convert_drive_item_to_document(
-        creds=MagicMock(),
+        ops=MagicMock(spec=GoogleDriveSourceOperations),
         allow_images=False,
         size_threshold=10_000,
         permission_sync_context=None,
-        retriever_emails=["user@example.com"],
+        retriever_emails=[_USER],
         file=shortcut,
     )
 

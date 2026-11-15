@@ -1,16 +1,24 @@
-import type { HTMLAttributes } from "react";
+import type { HTMLAttributes, RefCallback } from "react";
 // Canonical TextFont/TextColor unions, shared with mobile via the neutral
 // @onyx-ai/shared/contracts (not the RN-only /native).
 import type { TextColor, TextFont } from "@onyx-ai/shared/contracts";
-import type { RichStr, WithoutStyles } from "@opal/types";
-import { cn } from "@opal/utils";
+import type { RichNodes, RichStr, WithoutStyles } from "@opal/types";
+import { cn, isRichNodes } from "@opal/utils";
 import { resolveStr } from "@opal/components/text/InlineMarkdown";
+import { TooltipText } from "@opal/components/text/TooltipText";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface TextProps extends WithoutStyles<
+/**
+ * Tags that establish a block box, so `text-align` has something to align
+ * within. `span` is deliberately absent: it is inline, and aligning an inline
+ * element is the parent's job, not its own.
+ */
+type BlockTag = "p" | "li" | "h1" | "h2" | "h3";
+
+interface TextBaseProps extends WithoutStyles<
   Omit<HTMLAttributes<HTMLElement>, "color" | "children">
 > {
   /** Font preset. Default: `"main-ui-body"`. */
@@ -19,28 +27,111 @@ interface TextProps extends WithoutStyles<
   /** Color variant. Default: `"text-04"`. */
   color?: TextColor;
 
-  /** HTML tag to render. Default: `"span"`. */
-  as?: "p" | "span" | "li" | "h1" | "h2" | "h3";
+  /**
+   * How this text wraps. Ordinary wrapping only breaks at whitespace, so a
+   * URL, an identifier or any single long token overflows its container
+   * instead of wrapping.
+   *
+   * - `"whitespace-nowrap"` — do not wrap at all; the text stays on one line.
+   * - `"wrap-normal"` — the CSS default: break at whitespace only, and let a
+   *   long run overflow. Spell it out to override an inherited value, since
+   *   `overflow-wrap` inherits and omitting this prop cannot undo an
+   *   ancestor's.
+   * - `"wrap-break-word"` — break only when the run would otherwise overflow.
+   * - `"wrap-anywhere"` — as above, and count the break when min-content is
+   *   measured, so the element can shrink as a flex item.
+   * - `"break-all"` — break between any two characters.
+   * - `"break-keep"` — never break within a word (CJK).
+   */
+  wordWrap?:
+    | "whitespace-nowrap"
+    | "wrap-normal"
+    | "wrap-break-word"
+    | "wrap-anywhere"
+    | "break-all"
+    | "break-keep";
 
-  /** Prevent text wrapping. */
-  nowrap?: boolean;
-
-  /** Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+` uses `-webkit-line-clamp`. */
+  /**
+   * Truncate text to N lines with ellipsis. `1` uses simple truncation; `2+`
+   * uses `-webkit-line-clamp`. It only clamps: add `overflowTooltip` to show
+   * the cut text on hover.
+   */
   maxLines?: number;
 
-  /** Plain string or `markdown()` for inline markdown. */
-  children?: string | RichStr;
+  /**
+   * A tooltip on every hover. It replaces the `overflowTooltip`, so a cut text
+   * shows only this.
+   */
+  tooltip?: string | RichStr;
+
+  /**
+   * Strike the text through. This is a presentational state (e.g. an option
+   * that is switched off), so it stays a prop rather than `~~` in the content:
+   * the caller keeps passing the plain string, and no escaping is needed.
+   */
+  strikethrough?: boolean;
+
+  /**
+   * Plain string, `markdown()` for inline markdown, or `richNodes()` for
+   * sentences that embed inline components (e.g. next-intl `t.rich` output).
+   */
+  children?: string | RichStr | RichNodes;
+
+  /**
+   * Receives the rendered element, e.g. to measure whether the text
+   * overflows. A callback, since the element's type depends on `as`.
+   */
+  ref?: RefCallback<HTMLElement>;
 }
+
+/**
+ * With `maxLines`, the full text shows in a tooltip on hover while the clamp
+ * cuts it; text that fits gets none. The text fills the tooltip, so it must be
+ * string-derivable.
+ */
+type TextOverflowTooltipProps =
+  | { overflowTooltip?: false }
+  | { overflowTooltip: boolean; children?: string | RichStr };
+
+/**
+ * `textPosition` is only offered on a tag that makes a block box. On an inline
+ * `span` the property has nothing to align against — `text-align` positions a
+ * block's inline content, not the element itself — so allowing it there would
+ * be a prop that silently does nothing.
+ */
+type TextProps = TextOverflowTooltipProps &
+  (
+    | (TextBaseProps & {
+        /** HTML tag to render. Default: `"span"`. */
+        as?: "span";
+        textPosition?: never;
+      })
+    | (TextBaseProps & {
+        /** HTML tag to render. */
+        as: BlockTag;
+
+        /**
+         * How the text sits within this element's box. Logical values, so they
+         * follow the reading direction rather than the screen: `"text-start"` is
+         * left in an LTR locale and right in an RTL one.
+         */
+        textPosition?:
+          | "text-start"
+          | "text-center"
+          | "text-end"
+          | "text-justify";
+      })
+  );
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 const FONT_CONFIG: Record<TextFont, string> = {
-  "heading-h1": "font-heading-h1",
-  "heading-h2": "font-heading-h2",
-  "heading-h3": "font-heading-h3",
-  "heading-h3-muted": "font-heading-h3-muted",
+  "heading-hero": "font-heading-hero",
+  "heading-headline": "font-heading-headline",
+  "heading-section": "font-heading-section",
+  "heading-section-muted": "font-heading-section-muted",
   "main-content-body": "font-main-content-body",
   "main-content-muted": "font-main-content-muted",
   "main-content-emphasis": "font-main-content-emphasis",
@@ -52,7 +143,6 @@ const FONT_CONFIG: Record<TextFont, string> = {
   "secondary-body": "font-secondary-body",
   "secondary-action": "font-secondary-action",
   "secondary-mono": "font-secondary-mono",
-  "secondary-mono-label": "font-secondary-mono-label",
   "figure-small-label": "font-figure-small-label",
   "figure-small-value": "font-figure-small-value",
   "figure-keystroke": "font-figure-keystroke",
@@ -74,34 +164,58 @@ const COLOR_CONFIG: Record<TextColor, string | null> = {
   "text-light-05": "text-text-light-05",
   "text-dark-03": "text-text-dark-03",
   "text-dark-05": "text-text-dark-05",
+  "action-selection-05": "text-action-selection-05",
   "status-error-01": "text-status-error-01",
   "status-error-02": "text-status-error-02",
   "status-error-05": "text-status-error-05",
   "status-success-01": "text-status-success-01",
   "status-success-02": "text-status-success-02",
   "status-success-05": "text-status-success-05",
+  "status-warning-05": "text-status-warning-05",
+  "theme-amber-05": "text-theme-amber-05",
 };
 
 // ---------------------------------------------------------------------------
 // Text
 // ---------------------------------------------------------------------------
 
-function Text({
+/**
+ * Text in a font and colour. With `tooltip` or `overflowTooltip` it renders
+ * through `TooltipText`, which measures and owns the one tooltip; plain text
+ * stays hook-free.
+ */
+function Text(props: TextProps) {
+  if (props.tooltip !== undefined || props.overflowTooltip) {
+    return <TooltipText {...props} />;
+  }
+  return <TextElement {...props} />;
+}
+
+/** The text element alone: no tooltip, no hooks. */
+function TextElement({
   font = "main-ui-body",
   color = "text-04",
   as: Tag = "span",
-  nowrap,
+  wordWrap,
+  textPosition,
   maxLines,
+  strikethrough,
   children,
+  tooltip: _tooltip,
+  overflowTooltip: _overflowTooltip,
   ...rest
 }: TextProps) {
   const resolvedClassName = cn(
     "px-[2px]",
     FONT_CONFIG[font],
     COLOR_CONFIG[color],
-    nowrap && "whitespace-nowrap",
+    wordWrap,
+    textPosition,
     maxLines === 1 && "truncate",
-    maxLines && maxLines > 1 && "overflow-hidden"
+    maxLines && maxLines > 1 && "overflow-hidden",
+    // A thickness relative to the font size: the font's default line is
+    // about 1px at every size and looks weak on heavier titles.
+    strikethrough && "line-through decoration-[0.125em]"
   );
 
   const style =
@@ -115,11 +229,17 @@ function Text({
 
   return (
     <Tag {...rest} className={resolvedClassName} style={style}>
-      {children && resolveStr(children)}
+      {children &&
+        (isRichNodes(children) ? children.nodes : resolveStr(children))}
     </Tag>
   );
 }
 
-export { Text, type TextProps };
+export {
+  Text,
+  TextElement,
+  COLOR_CONFIG as TEXT_COLOR_CLASSES,
+  type TextProps,
+};
 // Re-export the shared unions so existing `@opal/components` consumers are unchanged.
 export type { TextFont, TextColor };

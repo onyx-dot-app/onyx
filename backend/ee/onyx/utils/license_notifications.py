@@ -12,7 +12,7 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from ee.onyx.db.license import get_license
+from ee.onyx.db.license import acquire_license_store_lock, get_license
 from ee.onyx.utils.license import verify_license_signature
 from ee.onyx.utils.license_expiry import (
     ExpiryWarningStage,
@@ -20,9 +20,10 @@ from ee.onyx.utils.license_expiry import (
     get_grace_days_remaining,
 )
 from onyx.auth.email_utils import build_html_email, send_email
-from onyx.auth.schemas import UserRole
+from onyx.auth.permissions import has_global_permission
 from onyx.configs.app_configs import EMAIL_CONFIGURED
 from onyx.configs.constants import ONYX_DEFAULT_APPLICATION_NAME, NotificationType
+from onyx.db.enums import NotificationSeverity, Permission
 from onyx.db.models import User
 from onyx.db.notification import batch_create_notifications
 from onyx.db.users import get_active_admin_users
@@ -158,6 +159,46 @@ def _build_additional_data(
     return data
 
 
+def _severity_for_stage(
+    stage: ExpiryWarningStage, renewal_error: str | None = None
+) -> NotificationSeverity:
+    """t_1d, grace, and failed renewals are errors; earlier stages warn.
+    Migration f8048443da9e backfills historical rows with the same mapping."""
+    if renewal_error or stage in (ExpiryWarningStage.T_1D, ExpiryWarningStage.GRACE):
+        return NotificationSeverity.ERROR
+    return NotificationSeverity.WARNING
+
+
+def _stored_license_expires_at(db_session: Session) -> datetime | None:
+    """Expiry of the stored license, or None when none is stored or it does
+    not verify."""
+    license_record = get_license(db_session)
+    if not license_record:
+        return None
+    try:
+        return verify_license_signature(license_record.license_data).expires_at
+    except ValueError:
+        return None
+
+
+def _lock_warning_to_stored_license(db_session: Session, expires_at: datetime) -> bool:
+    """Take the license store lock and confirm a warning for expires_at still
+    applies.
+
+    A store dismisses warnings for other expiries under this lock, so a warning
+    written by a reader that saw the replaced license would outlive the
+    renewal. On True the lock is held until the caller's next commit; on False
+    it is released.
+    """
+    acquire_license_store_lock(db_session)
+    db_session.expire_all()
+    stored_expires_at = _stored_license_expires_at(db_session)
+    if stored_expires_at is None or stored_expires_at == expires_at:
+        return True
+    db_session.commit()
+    return False
+
+
 def notify_admins_for_stage(
     db_session: Session,
     stage: ExpiryWarningStage,
@@ -191,6 +232,8 @@ def notify_admins_for_stage(
         stage, expires_at, grace_days, renewal_error, is_trial
     )
 
+    if not _lock_warning_to_stored_license(db_session, expires_at):
+        return
     inserted_admin_ids = batch_create_notifications(
         user_ids=[a.id for a in admins],
         notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
@@ -198,6 +241,7 @@ def notify_admins_for_stage(
         title=title,
         description=description,
         additional_data=additional_data,
+        severity=_severity_for_stage(stage, renewal_error),
     )
     if not inserted_admin_ids:
         return
@@ -229,7 +273,9 @@ def ensure_license_expiry_notification_for_user(
     for the current expiry stage so the banner appears immediately instead of
     waiting for the once-daily task. Idempotent via the notification unique
     index; never emails (the daily task owns email + all-admin fan-out)."""
-    if MULTI_TENANT or user.role != UserRole.ADMIN:
+    if MULTI_TENANT or not has_global_permission(
+        user, Permission.FULL_ADMIN_PANEL_ACCESS
+    ):
         return
 
     license_record = get_license(db_session)
@@ -254,6 +300,8 @@ def ensure_license_expiry_notification_for_user(
         stage, payload.expires_at, grace_days, is_trial=payload.ends_with_trial
     )
 
+    if not _lock_warning_to_stored_license(db_session, payload.expires_at):
+        return
     batch_create_notifications(
         user_ids=[user.id],
         notif_type=NotificationType.LICENSE_EXPIRY_WARNING,
@@ -261,4 +309,5 @@ def ensure_license_expiry_notification_for_user(
         title=title,
         description=description,
         additional_data=additional_data,
+        severity=_severity_for_stage(stage),
     )

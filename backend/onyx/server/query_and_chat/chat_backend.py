@@ -1,77 +1,163 @@
 import datetime
-import json
 import time
 from collections.abc import Generator
+from concurrent.futures import Future
 from datetime import timedelta
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
 from onyx.auth.users import current_chat_accessible_user
+from onyx.background.task_utils import enqueue_user_file_deletes
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_processing_checker import (
-    get_processing_run_id,
+    ADMISSION_CACHE_TIMEOUT_S,
+    current_turn_owner,
+    get_processing_stream,
     is_chat_session_processing,
+    stop_current_turn,
 )
-from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.chat_utils import (
     convert_chat_history_basic,
-    create_chat_history_chain,
     create_chat_session_from_request,
-    extract_headers,
 )
-from onyx.chat.models import ChatFullResponse, CreateChatSessionID
+from onyx.chat.errors import unhandled_stream_error
+from onyx.chat.incognito import (
+    delete_incognito_generated_files,
+    incognito_allowed_for_user,
+)
+from onyx.chat.incognito_context import teardown_incognito_session
+from onyx.chat.models import (
+    ChatFullResponse,
+    ChatResponseOutcome,
+    CreateChatSessionID,
+    PendingChatMessage,
+)
 from onyx.chat.process_message import (
-    gather_stream_full,
+    dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
+    process_chat_query,
+    run_chat_turn,
 )
 from onyx.chat.prompt_utils import get_default_base_system_prompt
-from onyx.chat.stop_signal_checker import set_fence
-from onyx.chat.stream_buffer import has_stream_buffer, read_stream_chunks
+from onyx.chat.run_store import (
+    ownerless_response_ids,
+    request_response_stop,
+    stop_response,
+)
+from onyx.chat.stop_signal_checker import request_stop
+from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.chat_configs import (
     CHAT_HEARTBEAT_INTERVAL_S,
     CHAT_RESUME_POLL_INTERVAL_S,
     HARD_DELETE_CHATS,
 )
-from onyx.configs.constants import PUBLIC_API_TAGS, MessageType, MilestoneRecordType
+from onyx.configs.constants import (
+    PUBLIC_API_TAGS,
+    MessageType,
+    MilestoneRecordType,
+)
 from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
+from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
+from onyx.db.action_policy import current_action_policy
+from onyx.db.approval_request import (
+    approvals_version,
+    close_pending_approval_requests__no_commit,
+    get_approval_request_for_user,
+    record_approval_decision__no_commit,
+)
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
+    create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
     get_chat_message,
+    get_chat_message_page_ids,
     get_chat_messages_by_session,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
+    get_incognito_session_ids_for_user,
+    get_owned_chat_session,
+    get_selected_branch,
     set_as_latest_chat_message,
+    set_chat_session_tool_selection__no_commit,
     set_preferred_response,
     translate_db_message_to_chat_message_detail,
     update_chat_session,
 )
+from onyx.db.chat_checkpoint import parked_response_ids
+from onyx.db.chat_inputs import (
+    active_agent_response_ids,
+    drop_agent_work__no_commit,
+    get_human_input_session,
+    interrupt_human_message__no_commit,
+    list_human_messages,
+    lock_agent,
+    pause_chat_queue__no_commit,
+    read_chat_inbox,
+    submit_human_message__no_commit,
+    withdraw_human_message__no_commit,
+)
+from onyx.db.chat_response import load_chat_approvals, waiting_approval_reply_ids
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import Permission
+from onyx.db.enums import (
+    ActionPolicy,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    LLMModelFlowType,
+    Permission,
+    record_mode_persists_content,
+)
 from onyx.db.feedback import create_chat_message_feedback, remove_chat_message_feedback
-from onyx.db.llm import fetch_default_chat_naming_model
-from onyx.db.models import ChatMessage, ChatSessionSharedStatus, Persona, User
+from onyx.db.incognito import (
+    is_incognito_teardown_target,
+    mark_incognito_user_files_deleting,
+)
+from onyx.db.models import (
+    ChatMessage,
+    ChatSessionSharedStatus,
+    Persona,
+    User,
+)
 from onyx.db.persona import get_persona_by_id
 from onyx.db.usage import UsageType, increment_usage
 from onyx.db.user_file import get_file_id_by_user_file_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    ATTACHMENT_SAFE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    ensure_filename_extension,
+    resolve_inline_disposition,
+)
 from onyx.llm.constants import LlmProviderNames
-from onyx.llm.factory import get_llm_for_persona, get_llm_token_counter
+from onyx.llm.factory import (
+    get_default_utility_llm,
+    get_llm_for_persona,
+    get_llm_token_counter,
+)
 from onyx.llm.models import (
     USER_SELECTABLE_REASONING_EFFORTS,
     ReasoningEffort,
@@ -79,16 +165,20 @@ from onyx.llm.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import (
+    DEFAULT_CHAT_SESSION_NAME,
     generate_chat_session_name,
     get_fallback_chat_session_name,
 )
 from onyx.server.api_key_usage import check_api_key_usage
+from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
 )
 from onyx.server.query_and_chat.models import (
+    ApprovalDecisionResponse,
+    ChatApprovalDecisionRequest,
     ChatFeedbackRequest,
     ChatMessageIdentifier,
     ChatRenameRequest,
@@ -97,36 +187,53 @@ from onyx.server.query_and_chat.models import (
     ChatSessionDetailResponse,
     ChatSessionDetails,
     ChatSessionGroup,
+    ChatSessionProcessingStatus,
     ChatSessionsResponse,
     ChatSessionSummary,
     ChatSessionUpdateRequest,
-    CurrentRunInfo,
+    CurrentStreamInfo,
     MessageOrigin,
+    PendingChatMessageRequest,
     RenameChatSessionResponse,
     SendMessageRequest,
     SetPreferredResponseRequest,
+    StopChatResponse,
+    StopSubagentsResponse,
     UpdateChatSessionReasoningRequest,
     UpdateChatSessionTemperatureRequest,
     UpdateChatSessionThreadRequest,
 )
 from onyx.server.query_and_chat.session_loading import (
+    load_session_tools,
     translate_assistant_message_to_packets,
 )
-from onyx.server.query_and_chat.streaming_models import Packet, heartbeat_packet
-from onyx.server.query_and_chat.token_limit import check_token_rate_limits
+from onyx.server.query_and_chat.streaming_models import (
+    Packet,
+    StreamCursor,
+    UserMessagePacket,
+    heartbeat_packet,
+)
+from onyx.server.query_and_chat.token_limit import (
+    check_model_spend_limits,
+    check_token_rate_limits,
+)
 from onyx.server.usage_limits import (
     check_llm_cost_limit_for_provider,
     check_usage_and_raise,
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
+from onyx.tools.models import ChatToolSelection
 from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
-from onyx.utils.headers import get_custom_tool_additional_request_headers
+from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+# Largest page a client can ask of `get-chat-session`.
+MAX_CHAT_SESSION_PAGE_SIZE = 200
 
 router = APIRouter(prefix="/chat")
 
@@ -199,6 +306,8 @@ def get_user_chat_sessions(
             project_id=project_id,
             only_non_project_chats=only_non_project_chats,
             include_failed_chats=include_failed_chats,
+            # The owner's own history is the one surface incognito hides from.
+            exclude_incognito=True,
             limit=page_size + 1,
             before=before_dt,
         )
@@ -325,6 +434,29 @@ def get_chat_session(
     session_id: UUID,
     is_shared: bool = False,
     include_deleted: bool = False,
+    # In `Annotated`, so a direct call (as in tests) gets the plain default.
+    limit: Annotated[
+        int | None,
+        Query(
+            ge=1,
+            le=MAX_CHAT_SESSION_PAGE_SIZE,
+            description=(
+                "Return one page of the current branch: its last `limit` "
+                "messages and their children. `has_older_messages` tells "
+                "whether the branch has messages before the page. Without it, "
+                "every message on every branch is returned."
+            ),
+        ),
+    ] = None,
+    before_message_id: Annotated[
+        int | None,
+        Query(
+            description=(
+                "With `limit`, return the page that ends before this message. "
+                "Pass the oldest loaded message to load the next older page."
+            ),
+        ),
+    ] = None,
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
@@ -377,16 +509,34 @@ def get_chat_session(
         chat_session.user_id = user_id
         db_session.commit()
 
+    page_message_ids: set[int] | None = None
+    has_older_messages = False
+    if limit is not None:
+        # The latest page reaches back to every waiting card's reply, so a
+        # client that loads only that page shows every waiting card.
+        page_message_ids, has_older_messages = get_chat_message_page_ids(
+            chat_session_id=session_id,
+            db_session=db_session,
+            limit=limit,
+            before_message_id=before_message_id,
+            waiting_reply_ids=waiting_approval_reply_ids(db_session, session_id)
+            if before_message_id is None
+            else (),
+        )
+
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
         db_session=db_session,
+        message_ids=page_message_ids,
         # we already did a permission check above with the call to
         # `get_chat_session_by_id`, so we can skip it here
         skip_permission_check=True,
         # we need the tool call objs anyways, so just fetch them in a single call
         prefetch_top_two_level_tool_calls=True,
         prefetch_message_details=True,
+        # the replay builds search and fetch packets from these
+        prefetch_tool_call_search_docs=True,
     )
 
     # Convert messages to ChatMessageDetail format
@@ -394,27 +544,60 @@ def get_chat_session(
         translate_db_message_to_chat_message_detail(msg) for msg in session_messages
     ]
 
-    current_run: CurrentRunInfo | None = None
+    current_stream: CurrentStreamInfo | None = None
+    is_processing = True
     try:
-        run_id = get_processing_run_id(session_id, get_cache_backend())
-        if run_id is not None:
-            current_run = CurrentRunInfo(run_id=run_id)
+        cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+        is_processing = is_chat_session_processing(session_id, cache)
+        stream = get_processing_stream(session_id, cache)
+        if stream is not None:
+            current_stream = CurrentStreamInfo(
+                stream_id=stream.stream_id, response_ids=stream.response_ids
+            )
     except Exception:
+        is_processing = True
         logger.exception(
             "An error occurred while checking if the chat session is processing"
         )
 
+    # Before the replay: a request that opens meanwhile changes the version.
+    version = approvals_version(db_session, session_id)
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
-    replay_packet_lists: list[list[Packet]] = []
-    for msg in session_messages:
-        if msg.message_type == MessageType.ASSISTANT:
-            replay_packet_lists.append(
-                translate_assistant_message_to_packets(
-                    chat_message=msg, db_session=db_session
+    tools_by_id = load_session_tools(session_messages, db_session)
+    responses = [
+        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
+    ]
+    chat_approvals = load_chat_approvals(
+        db_session, session_id, [msg.id for msg in responses]
+    )
+    replay_packet_lists: list[list[Packet]] = [
+        translate_assistant_message_to_packets(
+            chat_message=msg,
+            tools_by_id=tools_by_id,
+            chat_approvals=chat_approvals,
+            db_session=db_session,
+        )
+        for msg in responses
+    ]
+    if is_shared:
+        # A shared view shows no skills the owner picked: not on questions and
+        # not on messages accepted during a response.
+        chat_message_details = [
+            detail.model_copy(update={"mentions": []})
+            for detail in chat_message_details
+        ]
+        replay_packet_lists = [
+            [
+                packet.model_copy(
+                    update={"obj": packet.obj.model_copy(update={"mentions": []})}
                 )
-            )
-            # msg_packet_list.append(Packet(ind=end_step_nr, obj=OverallStop()))
+                if isinstance(packet.obj, UserMessagePacket)
+                else packet
+                for packet in packets
+            ]
+            for packets in replay_packet_lists
+        ]
 
     return ChatSessionDetailResponse(
         chat_session_id=session_id,
@@ -432,7 +615,15 @@ def get_chat_session(
         owner_name=chat_session.user.personal_name if chat_session.user else None,
         # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
-        current_run=current_run,
+        current_stream=current_stream,
+        approvals_version=version,
+        is_processing=is_processing,
+        incognito=chat_session.incognito_record_mode is not None,
+        has_older_messages=has_older_messages,
+        # Only the owner's composer reads the selection; a shared view shows none.
+        tool_selection=chat_session.tool_selection
+        if user_id is not None and chat_session.user_id == user_id
+        else None,
     )
 
 
@@ -450,6 +641,9 @@ def create_new_chat_session(
             user=user,
             db_session=db_session,
         )
+    except OnyxError:
+        # Carries its own status and detail (e.g. incognito refused).
+        raise
     except ValueError as e:
         # Project or persona access denied
         raise HTTPException(status_code=403, detail=str(e))
@@ -457,7 +651,10 @@ def create_new_chat_session(
         logger.exception(e)
         raise HTTPException(status_code=400, detail="Invalid Persona provided.")
 
-    return CreateChatSessionID(chat_session_id=new_chat_session.id)
+    return CreateChatSessionID(
+        chat_session_id=new_chat_session.id,
+        incognito=new_chat_session.incognito_record_mode is not None,
+    )
 
 
 def _generate_or_fallback_chat_session_name(
@@ -474,20 +671,27 @@ def _generate_or_fallback_chat_session_name(
 
     try:
         check_token_rate_limits(user)
-        llm = get_llm_for_persona(
-            persona=persona,
-            user=user,
-            llm_override=llm_override,
-            additional_headers=extract_headers(
-                request.headers, LITELLM_PASS_THROUGH_HEADERS
-            ),
+        additional_headers = get_relevant_headers(
+            request.headers, LITELLM_PASS_THROUGH_HEADERS
         )
-        with get_session_with_current_tenant() as db_session:
-            check_llm_cost_limit_for_provider(
-                db_session=db_session,
-                tenant_id=get_current_tenant_id(),
-                llm_provider_api_key=llm.config.api_key,
+        llm = get_default_utility_llm(
+            additional_headers=additional_headers,
+            flow_type=LLMModelFlowType.CHAT_NAMING,
+        )
+        if llm is None:
+            llm = get_llm_for_persona(
+                persona=persona,
+                user=user,
+                llm_override=llm_override,
+                additional_headers=additional_headers,
             )
+            with get_session_with_current_tenant() as db_session:
+                check_llm_cost_limit_for_provider(
+                    db_session=db_session,
+                    tenant_id=get_current_tenant_id(),
+                    llm_provider_api_key=llm.config.api_key,
+                )
+            check_model_spend_limits(user, llm.config.model_configuration_id)
 
         token_counter = get_llm_token_counter(llm)
         simple_chat_history = convert_chat_history_basic(
@@ -525,13 +729,15 @@ def rename_chat_session(
 
     if name:
         with get_session_with_current_tenant() as db_session:
-            update_chat_session(
+            chat_session = update_chat_session(
                 db_session=db_session,
                 user_id=user_id,
                 chat_session_id=chat_session_id,
                 description=name,
             )
-        return RenameChatSessionResponse(new_name=name)
+        # Echo what was stored: a content-free session drops the title, and
+        # reporting the requested one would show a rename that did not happen.
+        return RenameChatSessionResponse(new_name=chat_session.description or "")
 
     # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
@@ -541,29 +747,23 @@ def rename_chat_session(
             db_session=db_session,
             eager_load_persona=True,
         )
+        # Auto-naming derives a title from the conversation and writes it to the
+        # session row. A non-persisting incognito mode keeps no content in
+        # Postgres, so it keeps the fallback name and skips the LLM call.
+        if not record_mode_persists_content(chat_session.incognito_record_mode):
+            return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
         full_history = create_chat_history_chain(
             chat_session_id=chat_session_id,
             db_session=db_session,
         )
-        # Admin-designated dedicated naming model (so a single-stream local
-        # session model isn't blocked by naming calls) takes priority over the
-        # session's model.
-        naming_model = fetch_default_chat_naming_model(db_session)
-        naming_override = (
-            LLMOverride(
-                model_provider=naming_model.llm_provider.name,
-                model_version=naming_model.name,
-            )
-            if naming_model is not None
-            else chat_session.llm_override
-        )
+        session_override = chat_session.llm_override
     new_name = _generate_or_fallback_chat_session_name(
         chat_history=full_history,
         request=request,
         user=user,
         chat_session_id=chat_session_id,
         persona=chat_session.persona,
-        llm_override=naming_override,
+        llm_override=session_override,
     )
 
     with get_session_with_current_tenant() as db_session:
@@ -594,15 +794,65 @@ def patch_chat_session(
     return None
 
 
+def _teardown_incognito_after_delete(
+    chat_session_id: UUID, user_id: UUID, db_session: Session
+) -> None:
+    """The rows are already gone, so a failed teardown is logged rather than
+    failing a delete the caller cannot retry. The context TTL is the backstop.
+
+    Uploads are queued here too, so deleting a chat cleans up the same things
+    the dedicated teardown endpoint does."""
+    try:
+        mark_incognito_user_files_deleting(db_session, chat_session_id, user_id)
+        db_session.commit()
+    except Exception:
+        logger.exception("Incognito file cleanup failed for %s", chat_session_id)
+    try:
+        teardown_incognito_session(chat_session_id)
+    except Exception:
+        logger.exception("Incognito teardown failed for session %s", chat_session_id)
+
+
 @router.delete("/delete-all-chat-sessions", tags=PUBLIC_API_TAGS)
 def delete_all_chat_sessions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
+    incognito_session_ids = get_incognito_session_ids_for_user(user.id, db_session)
+    # Blobs first, and nothing is deleted while any remain: their ids live on
+    # the rows this is about to drop, so the other order strands them.
+    if not all(
+        delete_incognito_generated_files(incognito_id, db_session)
+        for incognito_id in incognito_session_ids
+    ):
+        raise OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            "Some generated files could not be deleted yet. Try again shortly.",
+        )
     try:
         delete_all_chat_sessions_for_user(user=user, db_session=db_session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # Read after the delete commits: a park either commits first or refuses.
+    if not HARD_DELETE_CHATS:
+        _end_parked_responses(parked_response_ids(db_session, user.id))
+    for incognito_id in incognito_session_ids:
+        _teardown_incognito_after_delete(incognito_id, user.id, db_session)
+
+
+def _end_parked_responses(response_ids: list[int]) -> None:
+    """End the parked responses of soft-deleted chats, which nothing can
+    decide anymore: their requests, checkpoints and program dumps go. A hard
+    delete removes them with the chat."""
+    if not response_ids:
+        return
+    cache = get_cache_backend()
+    tenant_id = get_current_tenant_id()
+    for response_id in response_ids:
+        try:
+            stop_response(cache, tenant_id, response_id, "user")
+        except Exception:
+            logger.exception("Could not end parked response %s", response_id)
 
 
 @router.delete("/delete-chat-session/{session_id}", tags=PUBLIC_API_TAGS)
@@ -614,6 +864,17 @@ def delete_chat_session_by_id(
 ) -> None:
     user_id = user.id
     try:
+        session = get_chat_session_by_id(
+            chat_session_id=session_id, user_id=user_id, db_session=db_session
+        )
+        is_incognito = session.incognito_record_mode is not None
+        if is_incognito and not delete_incognito_generated_files(
+            session_id, db_session
+        ):
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Some generated files could not be deleted yet. Try again shortly.",
+            )
         # Use the provided hard_delete parameter if specified, otherwise use the default config
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
@@ -623,6 +884,83 @@ def delete_chat_session_by_id(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    # Read after the delete commits: a park either commits first or refuses.
+    if not actual_hard_delete:
+        _end_parked_responses(parked_response_ids(db_session, user.id, session_id))
+    if is_incognito:
+        _teardown_incognito_after_delete(session_id, user.id, db_session)
+
+
+class IncognitoAvailabilityResponse(BaseModel):
+    available: bool
+
+
+@router.get("/incognito-availability")
+def get_incognito_availability(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> IncognitoAvailabilityResponse:
+    """Whether the acting user may start an incognito chat, so the client can
+    hide the toggle. The create endpoint enforces the same rule regardless."""
+    return IncognitoAvailabilityResponse(
+        available=incognito_allowed_for_user(user, db_session)
+    )
+
+
+@router.post("/end-incognito-session/{session_id}", tags=PUBLIC_API_TAGS)
+def end_incognito_session(
+    session_id: UUID,
+    bg_tasks: BackgroundTasks,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    """Drop an incognito session's live context the moment the chat closes.
+
+    The context TTL is only the backstop for when this never arrives, such as
+    a hard tab close. Uploads are found by session id, so one still in flight
+    when the user leaves, or one attached before any message created the
+    session, is queued for deletion just the same.
+    """
+    if not is_incognito_teardown_target(db_session, session_id, user.id):
+        return
+    # Durable file marking runs before the Redis teardown: the beacon is
+    # one-shot, so a failure after this point still leaves the files queued
+    # for deletion rather than stored but hidden.
+    deletable_ids = mark_incognito_user_files_deleting(db_session, session_id, user.id)
+    db_session.commit()
+
+    # Nothing past the commit may raise. This is a one-shot beacon, so an error
+    # reaches nobody who can act on it, and raising would discard the response
+    # carrying the in-process drain that a Celery-less deployment relies on.
+    enqueue_user_file_deletes(
+        deletable_ids, tenant_id=get_current_tenant_id(), bg_tasks=bg_tasks
+    )
+    for what, step in (
+        (
+            "delete generated files",
+            lambda: delete_incognito_generated_files(session_id, db_session),
+        ),
+        ("end the context", lambda: teardown_incognito_session(session_id)),
+    ):
+        try:
+            if step() is False:
+                logger.warning(
+                    "Incognito teardown could not %s for %s", what, session_id
+                )
+        except Exception:
+            logger.exception("Incognito teardown could not %s for %s", what, session_id)
+
+
+def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> None:
+    """The user may draft but not send while the selected response is parked:
+    its waits, its own requests or a foreground subtree's, are on the user. A
+    background agent waits independently and does not block."""
+    selected, _ = get_selected_branch(db_session, chat_session_id)
+    if selected is not None and selected.response_status == RunStatus.SUSPENDED:
+        raise OnyxError(
+            OnyxErrorCode.APPROVAL_PENDING,
+            "Approve or reject the pending requests before you send a message",
+        )
 
 
 # NOTE: This endpoint is extremely central to the application, any changes to it should be reviewed and approved by an experienced
@@ -635,7 +973,10 @@ def delete_chat_session_by_id(
         200: {
             "description": (
                 "If `stream=true`, returns `text/event-stream`.\n"
-                "If `stream=false`, returns `application/json` (ChatFullResponse)."
+                "If `stream=false`, returns `application/json` (ChatFullResponse). "
+                "When tool calls wait for the user's approval, the response "
+                "stops and lists them in `pending_tool_approvals`; after the "
+                "decisions it continues in the chat session."
             ),
             "content": {
                 "text/event-stream": {
@@ -666,7 +1007,9 @@ def handle_send_chat_message(
     Args:
         chat_message_req (SendMessageRequest): Details about the new chat message.
             - When stream=True (default): Returns StreamingResponse with SSE
-            - When stream=False: Returns ChatFullResponse with complete data
+            - When stream=False: Returns ChatFullResponse with complete data, or
+              with `pending_tool_approvals` when the response stops because tool
+              calls wait for the user's approval
         request (Request): The current HTTP request context.
         user (User): The current user, obtained via dependency injection.
         _ (None): Rate limit check is run if user/group/global rate limits are enabled.
@@ -674,7 +1017,30 @@ def handle_send_chat_message(
     Returns:
         StreamingResponse | ChatFullResponse: Either streams or returns complete response.
     """
-    logger.debug("Received new chat message: %s", chat_message_req.message)
+    # Session id only: the session's incognito mode isn't loaded yet, and a
+    # verbatim prompt in the debug log would be exactly the durable message
+    # log incognito must never leave behind.
+    logger.debug(
+        "Received new chat message for session %s", chat_message_req.chat_session_id
+    )
+
+    # Check before streaming starts, so the client gets a status, not a packet.
+    # Only the session's owner learns that it waits; the turn reports any
+    # other caller's access error.
+    if chat_message_req.chat_session_id is not None:
+        with get_session_with_current_tenant() as db_session:
+            try:
+                get_chat_session_by_id(
+                    chat_session_id=chat_message_req.chat_session_id,
+                    user_id=user.id,
+                    db_session=db_session,
+                )
+            except ValueError:
+                pass
+            else:
+                _reject_while_approval_waits(
+                    db_session, chat_message_req.chat_session_id
+                )
 
     tenant_id = get_current_tenant_id()
     mt_cloud_telemetry(
@@ -687,6 +1053,13 @@ def handle_send_chat_message(
     # to prevent clients from polluting telemetry data
     if get_hashed_api_key_from_request(request) or get_hashed_pat_from_request(request):
         chat_message_req.origin = MessageOrigin.API
+
+    # TODO(wenxi-onyx): Discord cannot show approval requests
+    # yet, so turns of the Discord bot's service API key run the tools that
+    # would ask. Authentication identifies the key, not a request field.
+    ask_for_approval = not getattr(  # ods: ignore[getattr]
+        request.state, "discord_bot_api_key", False
+    )
 
     # Multi-model streaming path: 2-3 LLMs in parallel (streaming only)
     is_multi_model = (
@@ -703,18 +1076,19 @@ def handle_send_chat_message(
                     new_msg_req=chat_message_req,
                     user=user,
                     llm_overrides=llm_overrides,
-                    litellm_additional_headers=extract_headers(
+                    litellm_additional_headers=get_relevant_headers(
                         request.headers, LITELLM_PASS_THROUGH_HEADERS
                     ),
-                    custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                        request.headers
+                    custom_tool_additional_headers=get_relevant_headers(
+                        request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
                     ),
                     mcp_headers=chat_message_req.mcp_headers,
+                    ask_for_approval=ask_for_approval,
                 ):
                     yield get_json_line(obj.model_dump())
             except Exception as e:
                 logger.exception("Error in multi-model streaming")
-                yield json.dumps({"error": str(e)})
+                yield get_json_line(unhandled_stream_error(e).model_dump())
 
         return StreamingResponse(
             multi_model_stream_generator(), media_type="text/event-stream"
@@ -743,21 +1117,19 @@ def handle_send_chat_message(
                 )
                 usage_db_session.commit()
 
-        state_container = ChatStateContainer()
-        packets = handle_stream_message_objects(
+        result = run_chat_turn(
             new_msg_req=chat_message_req,
             user=user,
-            litellm_additional_headers=extract_headers(
+            litellm_additional_headers=get_relevant_headers(
                 request.headers, LITELLM_PASS_THROUGH_HEADERS
             ),
-            custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                request.headers
+            custom_tool_additional_headers=get_relevant_headers(
+                request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
             ),
             mcp_headers=chat_message_req.mcp_headers,
             additional_context=chat_message_req.additional_context,
-            external_state_container=state_container,
+            ask_for_approval=ask_for_approval,
         )
-        result = gather_stream_full(packets, state_container)
         # CreateChatSessionID is only yielded for newly-created sessions, so for
         # follow-up messages on an existing session the aggregated response would
         # otherwise omit chat_session_id. Backfill it from the request so the
@@ -771,26 +1143,27 @@ def handle_send_chat_message(
 
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
-        state_container = ChatStateContainer()
+        response_future = Future[ChatResponseOutcome]()
         try:
             for obj in handle_stream_message_objects(
                 new_msg_req=chat_message_req,
                 user=user,
-                litellm_additional_headers=extract_headers(
+                litellm_additional_headers=get_relevant_headers(
                     request.headers, LITELLM_PASS_THROUGH_HEADERS
                 ),
-                custom_tool_additional_headers=get_custom_tool_additional_request_headers(
-                    request.headers
+                custom_tool_additional_headers=get_relevant_headers(
+                    request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
                 ),
                 mcp_headers=chat_message_req.mcp_headers,
                 additional_context=chat_message_req.additional_context,
-                external_state_container=state_container,
+                response_future=response_future,
+                ask_for_approval=ask_for_approval,
             ):
                 yield get_json_line(obj.model_dump())
 
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            yield json.dumps({"error": str(e)})
+            yield get_json_line(unhandled_stream_error(e).model_dump())
 
         finally:
             logger.debug("Stream generator finished")
@@ -1016,18 +1389,29 @@ def fetch_chat_file(
     if not file_record:
         raise HTTPException(status_code=404, detail="File not found")
 
-    media_type = file_record.file_type
     # `parsed` only changes behavior for spreadsheet files (xlsx is a binary zip
     # the frontend cannot render); everything else is served raw as usual.
-    parse_spreadsheet = parsed and is_spreadsheet_mime_type(media_type)
+    parse_spreadsheet = parsed and is_spreadsheet_mime_type(file_record.file_type)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type,
+        filename=ensure_filename_extension(
+            file_record.display_name or file_id, file_record.file_type
+        ),
+        attachment_types=ATTACHMENT_SAFE_MIME_TYPES,
+        # A parsed spreadsheet is served as a JSON preview, not as the stored bytes.
+        fallback_disposition=None if parse_spreadsheet else "attachment",
+    )
 
     # Files served here are immutable (content-addressed by file_id), so allow long-lived caching.
     # Use `private` because this is behind auth / tenant scoping.
-    etag = f'"{file_id}-parsed"' if parse_spreadsheet else f'"{file_id}"'
-    cache_headers = {
+    etag_variant: str = "-parsed" if parse_spreadsheet else ""
+    etag: str = f'"{file_id}{etag_variant}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers: dict[str, str] = {
         "Cache-Control": "private, max-age=31536000, immutable",
         "ETag": etag,
         "Vary": "Cookie",
+        **security_headers,
     }
 
     if request.headers.get("if-none-match") == etag:
@@ -1131,18 +1515,93 @@ def search_chats(
 _RESUME_MAX_CHUNKS_PER_READ = 32
 
 
-@router.get("/chat-session/{session_id}/resume-stream")
+@router.get("/chat-session/{session_id}/status", tags=PUBLIC_API_TAGS)
+def get_chat_session_processing_status(
+    session_id: UUID,
+    background_tasks: BackgroundTasks,
+    request: Request,
+    user: User = Depends(
+        require_permission(Permission.READ_CHAT, allow_anonymous=True)
+    ),
+) -> ChatSessionProcessingStatus:
+    with get_session_with_current_tenant() as db_session:
+        try:
+            chat_session = get_chat_session_by_id(
+                chat_session_id=session_id,
+                user_id=user.id,
+                db_session=db_session,
+            )
+        except ValueError as error:
+            raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
+        inbox = read_chat_inbox(db_session, session_id)
+        version = approvals_version(db_session, session_id)
+    # Read admission after input: a turn claims admission before it consumes
+    # input, so a starting turn shows as startable input or as processing.
+    cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
+    stream = get_processing_stream(session_id, cache)
+    resumes_root = any(run.is_root for run in inbox.resumable_runs)
+    # Decided agents wait to resume; a parked agent that still waits for the
+    # user does not count.
+    resumes_agents = any(not run.is_root for run in inbox.resumable_runs)
+    busy = stream is not None or is_chat_session_processing(session_id, cache)
+    status = ChatSessionProcessingStatus(
+        latest_response_id=inbox.selected_response_id,
+        has_active_subagents=any(result.is_running for result in inbox.results)
+        or bool(inbox.child_work)
+        or resumes_agents,
+        has_startable_input=inbox.next_turn is not None,
+        # A decided root that waits to resume, such as after a failed start
+        # that retries, keeps the chat processing.
+        is_processing=busy or resumes_root,
+        current_stream=CurrentStreamInfo(
+            stream_id=stream.stream_id, response_ids=stream.response_ids
+        )
+        if stream is not None
+        else None,
+        approvals_version=version,
+    )
+
+    if (
+        not busy
+        and chat_session.user_id == user.id
+        and user.id is not None
+        and (
+            inbox.next_turn is not None
+            # A parked root response whose waits all ended continues.
+            or resumes_root
+            # Dispatch saves a response whose owner is gone as interrupted.
+            or ownerless_response_ids(cache, inbox.unfinished_response_ids)
+            # Agent work needs a host when no running child's store scans.
+            or ((inbox.child_work or resumes_agents) and not inbox.running_response_ids)
+        )
+    ):
+        # Queued work can outlive the process that completed its previous response.
+        background_tasks.add_task(
+            dispatch_pending_chat_messages,
+            session_id,
+            user.id,
+            get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+            get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+        )
+    return status
+
+
+@router.get("/chat-session/{session_id}/resume-stream", tags=PUBLIC_API_TAGS)
 def resume_chat_stream(
     session_id: UUID,
     cursor: int = Query(0, ge=0),
+    expected_stream_id: int | None = Query(None, alias="stream_id", gt=0),
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
 ) -> StreamingResponse:
-    """Replay an in-flight run's buffered stream from ``cursor`` and tail it
-    live until the run completes. Serves any pod: the buffer lives in the
-    shared cache. 404 when the session has no resumable run — the client
-    falls back to refetching the session."""
+    """Replay buffered output from ``cursor`` and tail it while its worker is live.
+    Serves any pod: the buffer lives in the shared cache. 404 when nothing can
+    be served at ``cursor``: no running stream, a different ``stream_id``, or
+    a buffer that is missing or has a gap there. The client then refetches
+    the session. A 200 stream starts with a cursor packet; a stream that ends
+    without a stop packet lost its tail, and a resume from its last cursor gets
+    output or 404."""
     # Short-lived session: a Depends(get_session) would stay checked out (idle
     # in transaction) for the lifetime of the SSE response.
     with get_session_with_current_tenant() as db_session:
@@ -1156,70 +1615,360 @@ def resume_chat_stream(
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND)
 
     cache = get_cache_backend()
-    run_id = get_processing_run_id(session_id, cache)
-    if run_id is None or not has_stream_buffer(cache, session_id, run_id):
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND, "No resumable run for this chat session"
+    stream = get_processing_stream(session_id, cache)
+    stream_id = stream.stream_id if stream is not None else None
+    first_read = (
+        None
+        if stream_id is None
+        or (expected_stream_id is not None and expected_stream_id != stream_id)
+        else read_stream_chunks(
+            cache,
+            session_id,
+            stream_id,
+            cursor,
+            max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
         )
+    )
+    if (
+        stream_id is None
+        or first_read is None
+        or first_read.gap
+        or cursor > first_read.chunk_count
+    ):
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, "No resumable stream for this chat session"
+        )
+    # Freeze the restore boundary so new writes cannot prolong replay.
+    replay_through = first_read.chunk_count
 
-    def stream_buffered_run() -> Generator[str, None, None]:
+    def stream_buffered_run(read: StreamChunkRead) -> Generator[str, None, None]:
         chunk_cursor = cursor
+        writer_stopped = False
         last_emit = time.monotonic()
+        yield get_json_line(
+            StreamCursor(
+                stream_id=stream_id,
+                next_cursor=chunk_cursor,
+                replay_complete=chunk_cursor >= replay_through,
+            ).model_dump()
+        )
         while True:
-            read = read_stream_chunks(
-                cache,
-                session_id,
-                run_id,
-                chunk_cursor,
-                max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-            )
-            # Buffer expired/evicted or sequence broken: end the stream — the
-            # client refetches the session and renders the persisted message.
-            if read is None or read.gap:
-                return
             if read.blocks:
                 yield "".join(read.blocks)
                 chunk_cursor = read.next_cursor
-                last_emit = time.monotonic()
+                yield get_json_line(
+                    StreamCursor(
+                        stream_id=stream_id,
+                        next_cursor=chunk_cursor,
+                        replay_complete=chunk_cursor >= replay_through,
+                    ).model_dump()
+                )
                 # Drain the backlog before sleeping; done is only trusted once
                 # a read comes back empty (a capped read can precede the tail).
-                continue
-            if read.done:
+                last_emit = time.monotonic()
+            elif read.done or writer_stopped:
                 return
-            # A dead writer never marks done; its fence lapsing is the signal.
-            # A final drain catches anything written between the read above
-            # and this check (including the done marker's last chunks).
-            if not is_chat_session_processing(session_id, cache):
-                while True:
-                    read = read_stream_chunks(
-                        cache,
-                        session_id,
-                        run_id,
-                        chunk_cursor,
-                        max_chunks=_RESUME_MAX_CHUNKS_PER_READ,
-                    )
-                    if read is None or read.gap or not read.blocks:
-                        return
-                    yield "".join(read.blocks)
-                    chunk_cursor = read.next_cursor
-            now = time.monotonic()
-            if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
-                yield get_json_line(heartbeat_packet().model_dump())
-                last_emit = now
-            time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
+            elif not is_chat_session_processing(session_id, cache):
+                # Drain once more after ownership ends to catch the writer's
+                # last flush.
+                writer_stopped = True
+            else:
+                now = time.monotonic()
+                if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
+                    yield get_json_line(heartbeat_packet().model_dump())
+                    last_emit = now
+                time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
+            next_read = read_stream_chunks(
+                cache,
+                session_id,
+                stream_id,
+                chunk_cursor,
+                max_chunks=(
+                    min(_RESUME_MAX_CHUNKS_PER_READ, replay_through - chunk_cursor)
+                    if chunk_cursor < replay_through
+                    else _RESUME_MAX_CHUNKS_PER_READ
+                ),
+            )
+            # The buffer expired or broke: end the stream. A resume from the
+            # last cursor gets 404, and the client refetches the session.
+            if (
+                next_read is None
+                or next_read.gap
+                or chunk_cursor > next_read.chunk_count
+            ):
+                return
+            read = next_read
 
-    return StreamingResponse(stream_buffered_run(), media_type="text/event-stream")
+    return StreamingResponse(
+        stream_buffered_run(first_read), media_type="text/event-stream"
+    )
+
+
+@router.post("/chat-session/{session_id}/pending-messages")
+def submit_pending_chat_message(
+    session_id: UUID,
+    body: PendingChatMessageRequest,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Submit text for the next step, normal completion, or interruption."""
+    chat_session = get_human_input_session(db_session, session_id, user)
+    _reject_while_approval_waits(db_session, session_id)
+    cache = get_cache_backend()
+    pending = submit_human_message__no_commit(
+        db_session,
+        session_id,
+        message=process_chat_query(body.message, chat_session, user, db_session),
+        delivery=body.delivery,
+        target_response_id=body.target_response_id,
+        # A turn that holds admission without a stream has no response yet.
+        turn_preparing=is_chat_session_processing(session_id, cache)
+        and get_processing_stream(session_id, cache) is None,
+        deep_research=body.deep_research,
+        llm_override=body.llm_override,
+        mentions=body.mentions,
+    )
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
+    db_session.commit()
+    if pending.delivery == MessageDelivery.INTERRUPT and interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.get("/chat-session/{session_id}/pending-messages")
+def list_pending_chat_messages(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.READ_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> list[PendingChatMessage]:
+    get_human_input_session(db_session, session_id, user)
+    return list_human_messages(db_session, session_id)
+
+
+@router.delete("/chat-session/{session_id}/pending-messages/{message_id}")
+def withdraw_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> PendingChatMessage:
+    """Remove pending input and return its text for local editing or discarding."""
+    get_human_input_session(db_session, session_id, user)
+    pending = withdraw_human_message__no_commit(db_session, session_id, message_id)
+    db_session.commit()
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.post("/chat-session/{session_id}/pending-messages/{message_id}/interrupt")
+def interrupt_with_pending_chat_message(
+    session_id: UUID,
+    message_id: str,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+    _rate_limit_check: None = Depends(check_token_rate_limits),
+    _api_key_usage_check: None = Depends(check_api_key_usage),
+) -> PendingChatMessage:
+    """Stop current work; the message starts the next turn."""
+    get_human_input_session(db_session, session_id, user)
+    _reject_while_approval_waits(db_session, session_id)
+    pending = interrupt_human_message__no_commit(db_session, session_id, message_id)
+    cache = get_cache_backend()
+    # The interrupt stops the turn running at commit, never the turn it starts.
+    interrupted = current_turn_owner(session_id, cache)
+    db_session.commit()
+    if interrupted is not None:
+        stop_current_turn(session_id, cache, owner=interrupted)
+    dispatch_pending_chat_messages(
+        session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+    )
+    return pending
+
+
+@router.patch("/chat-session/{session_id}/tool-selection")
+def update_chat_tool_selection(
+    session_id: UUID,
+    body: ChatToolSelection,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> ChatToolSelection | None:
+    """Save the fields of the chat's tool selection that the body sets.
+
+    Returns the stored selection, or None for a chat that stores none.
+    """
+    if user.is_anonymous or user.id is None:
+        raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Sign in to save a tool selection")
+    chat_session = get_owned_chat_session(session_id, user.id, db_session)
+    if chat_session is None or chat_session.deleted:
+        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
+    stored = set_chat_session_tool_selection__no_commit(
+        db_session, session_id, body, user
+    )
+    if db_session.dirty:
+        db_session.commit()
+    return stored
+
+
+@router.post("/chat-session/{session_id}/stop-subagents")
+def stop_chat_subagents(
+    session_id: UUID,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> StopSubagentsResponse:
+    """Stop every active background agent on the selected branch, parked
+    ones included.
+
+    The root turn and its foreground workers keep running. Pending work for
+    agents below the root is dropped. The requests that the agents wait on end
+    as the user's rejection. A stopped agent's result wakes no agent; the root
+    reads it as a notice at its next step.
+    """
+    get_human_input_session(db_session, session_id, user)
+    cache = get_cache_backend()
+    lock_agent(db_session, str(session_id))
+    _, branch = get_selected_branch(db_session, session_id)
+    stopped = active_agent_response_ids(db_session, branch.message_ids)
+    drop_agent_work__no_commit(db_session, branch)
+    close_pending_approval_requests__no_commit(
+        db_session,
+        ApprovalDecision.REJECTED,
+        ApprovalDecidedVia.USER,
+        chat_message_ids=stopped,
+    )
+    # Spawns check their parent's Stop after the chat lock, so the keys go first.
+    for response_id in stopped:
+        request_response_stop(cache, response_id, "user")
+    db_session.commit()
+    for response_id in stopped:
+        stop_response(cache, get_current_tenant_id(), response_id, "user")
+    return StopSubagentsResponse(stopped_count=len(stopped))
+
+
+@router.post("/approvals/{approval_id}/decision", tags=PUBLIC_API_TAGS)
+def decide_approval(
+    approval_id: UUID,
+    body: ChatApprovalDecisionRequest,
+    request: Request,
+    user: User = Depends(require_permission(Permission.WRITE_CHAT)),
+    db_session: Session = Depends(get_session),
+) -> ApprovalDecisionResponse:
+    """Approve or reject an action in a chat that waits for the user.
+
+    The decision is saved. Once no request of its response waits, the response
+    continues under a new stream ID. `continuation` names that stream when this
+    decision started it or found it running; the chat session's status names
+    it too. Only the decision's `mcp_headers` reach the MCP servers of a
+    continuation that this route starts; a continuation that another request
+    starts, such as a status read, has none. Repeating a saved decision returns it, also after the
+    response ends or the action policies change; a different one, or a
+    request that is no longer waiting, is a conflict. Approving an action that
+    the current action policies block saves a rejection by the policy
+    (`decided_via` POLICY). The headers are not saved.
+    """
+    approval = get_approval_request_for_user(db_session, approval_id, user.id)
+    if approval is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Approval request not found")
+    rejected = body.decision == ApprovalChoice.REJECT
+    upgrades_to_grant = (
+        body.decision == ApprovalChoice.APPROVE_SESSION
+        and approval.decision == ApprovalDecision.APPROVED
+        and approval.decided_via == ApprovalDecidedVia.USER
+    )
+    if approval.decision is None or upgrades_to_grant:
+        blocked = (
+            current_action_policy(
+                db_session,
+                user_id=user.id,
+                gated_app_id=approval.gated_app_id,
+                action_id=approval.action_id,
+            )
+            == ActionPolicy.DENY
+        )
+        record_approval_decision__no_commit(
+            db_session,
+            approval,
+            ApprovalDecision.REJECTED
+            if rejected or blocked
+            else ApprovalDecision.APPROVED,
+            ApprovalDecidedVia.POLICY
+            if blocked and not rejected
+            else ApprovalDecidedVia.SESSION_GRANT
+            if body.decision == ApprovalChoice.APPROVE_SESSION
+            else ApprovalDecidedVia.USER,
+        )
+    db_session.refresh(approval)
+    decided_via = approval.decided_via
+    # The answer to this body: an approval that a policy blocked was saved as
+    # a rejection. A saved answer also comes from an earlier attempt, a session
+    # grant from another request, or a concurrent decision.
+    decision = (
+        ApprovalDecision.REJECTED
+        if rejected or decided_via == ApprovalDecidedVia.POLICY
+        else ApprovalDecision.APPROVED
+    )
+    if decided_via is None or approval.decision != decision:
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "This request was already decided or is no longer waiting",
+        )
+    response_id = approval.chat_message_id
+    chat_session_id = approval.chat_session_id
+    db_session.commit()
+    dispatch_pending_chat_messages(
+        chat_session_id,
+        user.id,
+        get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
+        get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
+        mcp_headers=body.mcp_headers,
+        decided_response_id=response_id,
+    )
+    stream = get_processing_stream(
+        chat_session_id,
+        get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S),
+    )
+    return ApprovalDecisionResponse(
+        approval_id=approval_id,
+        decision=decision,
+        decided_via=decided_via,
+        continuation=CurrentStreamInfo(
+            stream_id=stream.stream_id, response_ids=stream.response_ids
+        )
+        if stream is not None and stream.resumed and response_id in stream.response_ids
+        else None,
+    )
 
 
 @router.post("/stop-chat-session/{chat_session_id}", tags=PUBLIC_API_TAGS)
 def stop_chat_session(
     chat_session_id: UUID,
+    stream_id: int | None = Query(default=None, gt=0),
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
-) -> dict[str, str]:
-    """
-    Stop a chat session by setting a stop signal.
-    This endpoint is called by the frontend when the user clicks the stop button.
+) -> StopChatResponse:
+    """Stop one stream, or without `stream_id` the chat's current turn.
+
+    Without `stream_id`, Stop also pauses the queue, whether or not a turn is
+    running; saved responses keep their status.
     """
     try:
         get_chat_session_by_id(
@@ -1227,8 +1976,18 @@ def stop_chat_session(
             user_id=user.id,
             db_session=db_session,
         )
-    except ValueError:
-        raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found")
+    except ValueError as error:
+        raise OnyxError(
+            OnyxErrorCode.SESSION_NOT_FOUND, "Chat session not found"
+        ) from error
 
-    set_fence(chat_session_id, get_cache_backend(), True)
-    return {"message": "Chat session stopped"}
+    if stream_id is None:
+
+        def pause_queue() -> None:
+            pause_chat_queue__no_commit(db_session, chat_session_id)
+            db_session.commit()
+
+        stop_current_turn(chat_session_id, get_cache_backend(), pause_queue=pause_queue)
+    else:
+        request_stop(chat_session_id, get_cache_backend(), stream_id=stream_id)
+    return StopChatResponse(message="Chat session stopped")

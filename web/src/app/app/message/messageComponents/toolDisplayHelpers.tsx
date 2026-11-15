@@ -1,11 +1,16 @@
-import { FiCircle, FiList, FiTool } from "react-icons/fi";
+import type { useTranslations } from "next-intl";
+import type { IconFunctionComponent } from "@opal/types";
 import {
+  CustomToolStart,
   Packet,
   PacketType,
   SearchToolPacket,
 } from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "./timeline/renderers/search/searchStateUtils";
+import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
+import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
 import {
+  SvgListCheck,
   SvgGlobe,
   SvgSearchMenu,
   SvgTerminal,
@@ -17,6 +22,7 @@ import {
   SvgSlowTime,
   SvgXCircle,
   SvgCode,
+  SvgWrench,
 } from "@opal/icons";
 
 /**
@@ -27,42 +33,11 @@ export function hasToolError(packets: Packet[]): boolean {
 }
 
 /**
- * Check if a tool group is complete.
- * For research agents, we only look at parent-level SECTION_END packets (sub_turn_index is undefined/null),
- * not the SECTION_END packets from nested tools (which have sub_turn_index as a number).
+ * Check if a tool group is complete: a parent-level SECTION_END or ERROR
+ * arrived. Nested calls end with their own SECTION_END and do not count.
  */
 export function isToolComplete(packets: Packet[]): boolean {
-  const firstPacket = packets[0];
-  if (!firstPacket) return false;
-
-  // For research agents, only parent-level SECTION_END indicates completion
-  // Nested tools (search, fetch, etc.) within the research agent have sub_turn_index set
-  if (firstPacket.obj.type === PacketType.RESEARCH_AGENT_START) {
-    return packets.some(
-      (p) =>
-        (p.obj.type === PacketType.SECTION_END ||
-          p.obj.type === PacketType.ERROR) &&
-        (p.placement.sub_turn_index === undefined ||
-          p.placement.sub_turn_index === null)
-    );
-  }
-
-  // For coding agents, the CodingAgentFinal packet (or an error) marks completion.
-  // Nested BashTool packets are part of the same group and don't indicate the
-  // agent is done.
-  if (firstPacket.obj.type === PacketType.CODING_AGENT_START) {
-    return packets.some(
-      (p) =>
-        p.obj.type === PacketType.CODING_AGENT_FINAL ||
-        p.obj.type === PacketType.ERROR
-    );
-  }
-
-  // For other tools, any SECTION_END or ERROR indicates completion
-  return packets.some(
-    (p) =>
-      p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
-  );
+  return packets.some(isGroupEndPacket);
 }
 
 /**
@@ -72,7 +47,7 @@ export function getToolErrorIcon(): React.ReactNode {
   return <SvgXCircle className="w-3.5 h-3.5 text-error" />;
 }
 
-export function getToolKey(turn_index: number, tab_index: number): string {
+export function getToolKey(turn_index: number, tab_index: number = 0): string {
   return `${turn_index}-${tab_index}`;
 }
 
@@ -87,78 +62,92 @@ export function parseToolKey(key: string): {
   };
 }
 
-export function getToolName(packets: Packet[]): string {
-  const firstPacket = packets[0];
-  if (!firstPacket) return "Tool";
+/**
+ * The packet that names a step's activity. Debug and approval packets share
+ * the step's placement but never name it.
+ */
+export function firstActivityPacket(packets: Packet[]): Packet | undefined {
+  return packets.find(
+    (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
+  );
+}
+
+export type TimelineTranslate = ReturnType<
+  typeof useTranslations<"chat.messages.timeline">
+>;
+
+export function getToolName(packets: Packet[], t: TimelineTranslate): string {
+  const firstPacket = firstActivityPacket(packets);
+  if (!firstPacket) return t("toolNames.tool");
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
-      return searchState.isInternetSearch ? "Web Search" : "Internal Search";
+      return searchState.isInternetSearch
+        ? t("toolNames.webSearch")
+        : t("toolNames.internalSearch");
     }
     case PacketType.PYTHON_TOOL_START:
-      return "Code Interpreter";
+      return t("toolNames.codeInterpreter");
     case PacketType.FETCH_TOOL_START:
-      return "Open URLs";
-    case PacketType.CUSTOM_TOOL_START:
+      return t("toolNames.openUrls");
+    case PacketType.CUSTOM_TOOL_START: {
       return (
-        (firstPacket.obj as { tool_name?: string }).tool_name || "Custom Tool"
+        (firstPacket.obj as CustomToolStart).display_name ||
+        t("toolNames.customTool")
       );
+    }
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return "Generate Image";
+      return t("toolNames.generateImage");
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return "Generate plan";
+      return t("toolNames.generatePlan");
     case PacketType.RESEARCH_AGENT_START:
-      return "Research agent";
+      return t("toolNames.researchAgent");
     case PacketType.CODING_AGENT_START:
-      return "Coding agent";
+      return t("toolNames.codingAgent");
     case PacketType.REASONING_START:
-      return "Thinking";
+      return t("toolNames.thinking");
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return "Memory";
+      return t("toolNames.memory");
     default:
-      return "Tool";
+      return t("toolNames.tool");
   }
 }
 
-export function getToolIcon(packets: Packet[]): React.ReactNode {
-  const firstPacket = packets[0];
-  if (!firstPacket) return <FiCircle className="w-3.5 h-3.5" />;
+export function getToolIcon(packets: Packet[]): IconFunctionComponent {
+  const firstPacket = firstActivityPacket(packets);
+  if (!firstPacket) return SvgCircle;
 
   switch (firstPacket.obj.type) {
     case PacketType.SEARCH_TOOL_START: {
       const searchState = constructCurrentSearchState(
         packets as SearchToolPacket[]
       );
-      return searchState.isInternetSearch ? (
-        <SvgGlobe className="w-3.5 h-3.5" />
-      ) : (
-        <SvgSearchMenu className="w-3.5 h-3.5" />
-      );
+      return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
     }
     case PacketType.PYTHON_TOOL_START:
-      return <SvgTerminal className="w-3.5 h-3.5" />;
+      return SvgTerminal;
     case PacketType.FETCH_TOOL_START:
-      return <SvgLink className="w-3.5 h-3.5" />;
+      return SvgLink;
     case PacketType.CUSTOM_TOOL_START:
-      return <FiTool className="w-3.5 h-3.5" />;
+      return SvgWrench;
     case PacketType.IMAGE_GENERATION_TOOL_START:
-      return <SvgImage className="w-3.5 h-3.5" />;
+      return SvgImage;
     case PacketType.DEEP_RESEARCH_PLAN_START:
-      return <FiList className="w-3.5 h-3.5" />;
+      return SvgListCheck;
     case PacketType.RESEARCH_AGENT_START:
-      return <SvgUser className="w-3.5 h-3.5" />;
+      return SvgUser;
     case PacketType.CODING_AGENT_START:
-      return <SvgCode className="w-3.5 h-3.5" />;
+      return SvgCode;
     case PacketType.REASONING_START:
-      return <SvgSlowTime className="w-3.5 h-3.5" />;
+      return SvgSlowTime;
     case PacketType.MEMORY_TOOL_START:
     case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return <SvgBookOpen className="w-3.5 h-3.5" />;
+      return SvgBookOpen;
     default:
-      return <SvgCircle className="w-3.5 h-3.5" />;
+      return SvgCircle;
   }
 }

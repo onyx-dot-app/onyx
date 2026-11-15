@@ -20,7 +20,10 @@ def test_mobile_routes_registered_with_env_google_oauth(
     monkeypatch.setattr(onyx_main, "OAUTH_CLIENT_ID", "test-client-id")
     monkeypatch.setattr(onyx_main, "OAUTH_CLIENT_SECRET", "test-client-secret")
 
-    paths = {getattr(route, "path", "") for route in onyx_main.get_application().routes}
+    paths = {
+        getattr(route, "path", "")  # ods: ignore[getattr]
+        for route in onyx_main.get_application().routes
+    }
 
     # Dedicated OAuth router (callback routes to the api_server, not the web app)
     # plus the gateway's exchange that swaps the one-time code for the token.

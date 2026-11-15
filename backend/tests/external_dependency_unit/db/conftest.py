@@ -15,14 +15,46 @@ import pytest
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.scim import ScimDAL
-from onyx.db.models import ScimToken, UserGroup
+from onyx.db.models import ScimToken, ScimUserMapping, User, UserGroup
+from tests.external_dependency_unit.conftest import create_test_user
 from tests.external_dependency_unit.db.shard_test_utils import temporary_database
+
+ScimUserFactory = Callable[[str | None], tuple[User, ScimUserMapping]]
 
 
 @pytest.fixture
 def scim_dal(db_session: Session) -> ScimDAL:
     """A ScimDAL backed by the real test database session."""
     return ScimDAL(db_session)
+
+
+@pytest.fixture
+def scim_user_factory(
+    db_session: Session,
+) -> Generator[ScimUserFactory, None, None]:
+    """Factory for (user, mapping) pairs, cleaned up after the test."""
+    created: list[tuple[User, ScimUserMapping]] = []
+
+    def _create(scim_username: str | None) -> tuple[User, ScimUserMapping]:
+        user = create_test_user(
+            db_session, f"scim_user_{uuid4().hex[:8]}", assign_default_group=False
+        )
+        mapping = ScimUserMapping(
+            external_id=f"ext-{uuid4().hex[:12]}",
+            user_id=user.id,
+            scim_username=scim_username,
+        )
+        db_session.add(mapping)
+        db_session.flush()
+        created.append((user, mapping))
+        return user, mapping
+
+    yield _create
+
+    for user, mapping in created:
+        db_session.delete(mapping)
+        db_session.delete(user)
+    db_session.commit()
 
 
 @pytest.fixture

@@ -1,6 +1,49 @@
+# Installing the chart
+
+## Helm repository (default)
+
+```bash
+helm repo add onyx https://onyx-dot-app.github.io/onyx
+helm repo update
+helm install onyx onyx/onyx -n onyx --create-namespace
+```
+
+Chart tarballs are attached to GitHub releases named `helm/onyx-<version>`, and
+`index.yaml` on the `gh-pages` branch points at them. This is an implementation
+detail: the repository URL above does not change and `helm repo add`,
+`helm search repo` and `helm upgrade` all work as before.
+
+## OCI registry (alternative)
+
+The same chart is published to GHCR:
+
+```bash
+helm install onyx oci://ghcr.io/onyx-dot-app/charts/onyx \
+  --version 0.8.16 -n onyx --create-namespace
+```
+
+`helm repo add` does not accept `oci://` URLs, so an OCI install needs an
+explicit `--version`. There is no `helm repo update` or `helm search repo` for
+OCI and no helm command that lists the available versions. Read them from the
+`helm/onyx-<version>` [releases](https://github.com/onyx-dot-app/onyx/releases)
+or from the Helm repository index:
+
+```bash
+helm search repo onyx/onyx --versions   # needs `helm repo add` from above
+```
+
+To inspect one version before installing it:
+
+```bash
+helm show chart oci://ghcr.io/onyx-dot-app/charts/onyx --version 0.8.16
+```
+
+Both channels ship identical bytes from the same build. Use the Helm repository
+unless you specifically need OCI.
+
 # Recent chart changes (0.5.0)
 
-If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart; chart 0.5.6 ships a guard that fails `helm upgrade` if the legacy `da-vespa` StatefulSet is still in the namespace so you don't lose the indexed data silently.
+If you are upgrading from an earlier 0.4.x release, **read [MIGRATION.md](./MIGRATION.md) first.** The 0.5.0 release dropped the bundled Vespa subchart. Onyx no longer uses Vespa.
 
 Other 0.5.0 changes:
 
@@ -21,9 +64,13 @@ Other 0.5.0 changes:
   (`postgresql.crds.create: false`). Run `scripts/check-cnpg-crds.sh` after
   bumping the CNPG subchart version to verify the copy is in sync.
 * **Pre-delete hook** — a cleanup Job (`templates/pre-delete-cleanup.yaml`)
-  deletes operator-managed CRs before `helm uninstall` tears down the
-  operators, ensuring finalizers are processed and namespace cleanup
-  completes promptly.
+  deletes this release's CNPG Cluster and Redis CRs, by name, before
+  `helm uninstall` tears down the operators. This makes sure finalizers are
+  processed and namespace cleanup completes promptly. Set
+  `postgresql.cluster.retainOnUninstall: true` to keep the CNPG Cluster and
+  its PVCs instead. The operator is still removed, so the kept Cluster has no
+  controller: reinstall with the same release name to adopt it, or delete it
+  and clear its finalizers (see the comment in `values.yaml`).
 
 # Dependency updates (when subchart versions are bumped)
 * If updating subcharts, you need to run this before committing!
@@ -62,6 +109,281 @@ The chart fails during render/install on older clusters so the incompatibility
 is caught before sandbox provisioning. This guard does not apply to non-Craft
 installs.
 
+### Sandbox runtime and network enforcement
+
+The default sandbox uses the cluster's default runtime and installs iptables
+rules before any workload starts. You can select a cluster-provided RuntimeClass:
+
+```yaml
+sandboxPod:
+  runtimeClassName: your-runtime
+  netAdminLockdown: true
+```
+
+The cluster administrator must configure the runtime and compatible nodes.
+Runtime selection does not replace network restrictions. Test the chosen runtime
+with Craft. The current sandbox image uses nft-based iptables. With gVisor
+release-20261005.0 in its default configuration, firewall bootstrap fails with
+`Protocol not supported`. That tested configuration needs external network
+enforcement with lockdown disabled. Other firewall backends or runtime settings
+need separate validation.
+These settings apply to newly created sandbox pods after a Helm upgrade.
+The image prepuller uses the same RuntimeClass to follow its scheduling constraints.
+
+For clusters that prohibit `NET_ADMIN`, set `sandboxPod.netAdminLockdown: false`
+only when the cluster enforces equivalent network restrictions from pod creation.
+This removes `NET_ADMIN` from `sandbox-init` and skips firewall commands and
+verification. CA installation still runs as root. This setting alone does not
+make the pod compatible with policies that prohibit root init containers.
+Use a sandbox image built with this option; older images still run iptables.
+
+In this mode, the chart's policies allow only the proxy endpoint. A separate DNS
+policy excludes pods created with lockdown disabled, including after Helm upgrades.
+This also applies to `craft.dnsExtraCIDRs`. The backend supplies the proxy address
+through pod `hostAliases`. Proxy environment variables, CA
+trust, destination checks, and approval handling remain active.
+
+The operator must use a CNI that enforces NetworkPolicy before workload startup.
+Other policies must not grant broader access. Verify IPv4 and IPv6 restrictions,
+including internal services, node addresses, and cloud metadata. Standard
+NetworkPolicy has node-traffic exceptions; additional cluster controls may be
+needed. A rendered policy cannot prove enforcement. Test direct connections with
+proxy variables removed, and confirm approved requests still work through the
+proxy. Do not disable lockdown solely because a sandboxed runtime is selected.
+
+The proxy also needs cluster access to the Kubernetes API, DNS, and Onyx services.
+Some CNIs exclude cluster destinations from IP-range rules; see
+[Cilium CIDR policies](https://docs.cilium.io/en/latest/security/policy/layer3/#cidr-based).
+Configure explicit proxy access for these destinations when required by the CNI.
+Keep those rules scoped to the proxy pods.
+
+Docker deployments retain mandatory iptables enforcement. The bootstrap rejects
+disabling lockdown in Docker entrypoint mode.
+
+### Check your nodes for Craft Firecracker
+
+Craft will run sandboxes as Firecracker microVMs on sandbox nodes. Before you
+use that runtime, run the preflight check. It does not need `ENABLE_CRAFT`.
+
+```yaml
+craft:
+  firecrackerPreflight:
+    enabled: true
+```
+
+The chart then adds a DaemonSet, `<release>-craft-fc-preflight`, in the
+release namespace. It puts one pod on each node that matches
+`sandboxPod.nodeSelector` and `sandboxPod.tolerations`. It does not use
+`sandboxPod.runtimeClassName`, because gVisor and Kata hide `/dev/kvm`.
+
+Each pod runs the checks once at start, then stays idle. Read the results:
+
+```bash
+kubectl logs -n <release-namespace> --prefix --tail=-1 \
+  -l app.kubernetes.io/component=craft-fc-preflight,app.kubernetes.io/instance=<release>
+```
+
+The first line names the node. Each check line starts with `PASS`, `WARN` or
+`FAIL`. The last line of each pod is `RESULT: PASS (<N> warnings)` or
+`RESULT: FAIL (<N> failed, <M> warnings)`. A failed check does not make the
+pod unready, so `helm upgrade --wait` does not stop.
+
+| Check | Pass condition | Fix if it fails |
+|---|---|---|
+| `kvm` | `/dev/kvm` exists and opens read-write | Use a metal instance, or enable nested virtualization on the node pool |
+| `cpu-vendor` | `GenuineIntel` | Use an Intel instance type |
+| `cpu-vmx` | The `vmx` CPU flag is present | Enable nested virtualization |
+| `cgroup` | cgroup v2 | Use a node image with the unified cgroup hierarchy |
+| `kernel` | 5.10, 6.1 or 6.18 (WARN only) | Use AL2023 with kernel 6.18 |
+| `max-map-count` | `vm.max_map_count` >= 1048576 | Set the sysctl on the node pool |
+| `filesystem` | `scratchHostPath` is writable and has reflink (WARN without reflink) | Free space or fix permissions. Without reflink (for example ext4), the host agent makes a sparse XFS loop store, which needs the loop driver and XFS in the node kernel. An XFS disk with reflink is faster |
+| `free-disk` | At least `minFreeDiskGi` free (WARN only) | Use a larger root disk |
+
+The filesystem and disk checks run in `scratchHostPath`
+(default: `craft.hostAgent.dataDir`, `/var/lib/craft-fc`). The chart creates
+this directory on the node.
+
+The pod is privileged by default. A non-privileged container cannot open
+`/dev/kvm`, because the container device cgroup blocks it. If the cluster runs
+a KVM device plugin, set its resource name to run the pod without privilege:
+
+```yaml
+craft:
+  firecrackerPreflight:
+    enabled: true
+    kvmDeviceResource: devices.kubevirt.io/kvm
+```
+
+The pod uses the sandbox image by default. Set `craft.firecrackerPreflight.image`
+to use a different image. The image must have a POSIX shell, awk, grep and GNU coreutils (`cp --reflink`,
+`stat -f`, `mktemp`).
+Remove the DaemonSet after the check: set `enabled: false` and upgrade.
+
+### Craft Firecracker runtime
+
+`craft.sandboxRuntime` selects how Craft sandboxes run: `pod` (default) or
+`firecracker`. It mirrors the Terraform `craft_sandbox_runtime` of the sandbox
+node pool.
+
+With `firecracker`, the chart:
+
+- sets `SANDBOX_RUNTIME=firecracker` for the backend and sandbox-proxy;
+- deploys the host agent (`onyxdotapp/craft-fc-host-agent`), a privileged
+  DaemonSet with `hostPID` and `/dev/kvm`, on the sandbox nodes that have the
+  label `onyx.app/kvm=true`. The agent and the preflight tolerate the taint
+  `onyx.app/kvm=true:NoSchedule` that Terraform puts on these nodes. Pod
+  sandboxes and the image prepuller do not, so they need a sandbox node pool
+  without that taint. The chart refuses `sandboxPod.tolerations` that tolerate
+  it;
+- puts the agent in its own namespace (`craft.hostAgent.namespace`) with Pod
+  Security `privileged`;
+- adds a headless Service for the agent port (7443);
+- lets only the agent clients (api_server, heavy and scheduled-tasks workers)
+  reach the agent port, and lets the agent pods reach the sandbox-proxy port;
+- gives the agent `POD_IP`, so the agent registers `<pod IP>:7443` with its
+  node key (`craft.hostAgent.advertiseAddress` overrides it);
+- lets the agent move session saves over plain HTTP (`--transfer-allow-http`)
+  only when the file store is the bundled in-cluster object store
+  (`objectStore` or `minio` enabled, `FILE_STORE_BACKEND` `s3`). That traffic
+  stays inside the cluster. With an external store, the agent accepts only
+  HTTPS presigned URLs;
+- sets the bundled store's `S3_ENDPOINT_URL` to its FQDN
+  (`<service>.<namespace>.svc.<global.clusterDomain>`), because the agent
+  resolves the presigned URL host from its own namespace.
+
+#### Versions
+
+The agent image and the root drive follow the Onyx release tag:
+`global.version`, without a `-dev` suffix. Set `global.version` to a release
+tag, for example `v5.2.0`. The chart refuses `latest`, `edge` and `beta`,
+because no root drive is published for a floating tag.
+
+| Value | Default |
+|---|---|
+| `craft.hostAgent.image.tag` | the release tag |
+| `craft.hostAgent.rootfs.version` | the release tag |
+| `craft.hostAgent.rootfs.image.tag` | `rootfs-<rootfs.version>` |
+| `configMap.SANDBOX_FC_TEMPLATE` | `<rootfs.version>` |
+
+`rootfs.version` is the tag of the `craft-runtime` image that the root drive
+was built from. Harness sessions use the node template of that tag
+(`SANDBOX_FC_TEMPLATE`). Change `rootfs.version` to move the drive and the
+template together. If you set `rootfs.image.tag`, also set
+`configMap.SANDBOX_FC_TEMPLATE` to the source image tag of that drive.
+
+#### mTLS certificates
+
+The agents and their clients use mutual TLS. By default the chart makes one
+CA, an agent certificate and a client certificate (valid 10 years):
+
+- `<release>-craft-fc-host-agent-tls` in the agent namespace: the agent
+  certificate (`tls.crt`, `tls.key`) and the CA (`ca.crt`).
+- `<release>-craft-fc-host-agent-client-tls` in the release namespace: the
+  client certificate and the CA.
+
+The agent certificate has the DNS names
+`<release>-craft-fc-host-agent.<agent namespace>.svc` (and `.svc.cluster.local`),
+and the clients verify the first one
+(`SANDBOX_FC_AGENT_TLS_SERVER_NAME`). If you set
+`craft.hostAgent.client.tlsServerName`, the chart adds it to the certificate.
+
+On `helm upgrade`, the chart reads the two Secrets (Helm `lookup`) and keeps
+the certificates. It makes a new set when a Secret is gone, the two CAs differ,
+the DNS names change, or the set is in its last 30 days. To rotate, delete both
+Secrets and run `helm upgrade`. The agent loads new files without a restart.
+The api_server and the heavy and scheduled-tasks workers load the client
+certificate once, so a new set also restarts them (pod annotation
+`onyx.app/craft-fc-cert-revision`). `helm template` and Argo CD render without
+cluster access, so `lookup` finds nothing and each render makes a new set. Use
+your own Secrets there.
+
+To use your own PKI (for example cert-manager), set both Secrets:
+
+- `craft.hostAgent.tls.existingSecret`, in the agent namespace: the agent
+  certificate (`tls.crt`, `tls.key`) and the CA of the client certificates
+  (`ca.crt`). Until the Secret exists, the agent pods stay in
+  `ContainerCreating`.
+- `craft.hostAgent.client.existingSecret`, in the release namespace: the
+  client certificate (`tls.crt`, `tls.key`) and the CA of the agent
+  certificates (`ca.crt`).
+
+The chart mounts the client Secret in the api_server, heavy and scheduled-tasks
+pods and sets `SANDBOX_FC_AGENT_CLIENT_CERT_PATH`,
+`SANDBOX_FC_AGENT_CLIENT_KEY_PATH` and `SANDBOX_FC_AGENT_CA_PATH`. The clients
+dial agent pod IPs. If your agent certificates do not carry the pod IPs, set
+`craft.hostAgent.client.tlsServerName` to a DNS name in the agent certificate.
+To accept only some client certificates, set `craft.hostAgent.clientAllowedSans`.
+
+```yaml
+global:
+  version: "v5.2.0"
+craft:
+  sandboxRuntime: firecracker
+auth:
+  sandboxNodeRegistration:
+    enabled: true
+    values:
+      sandbox_node_registration_secret: "<random value>"
+```
+
+The chart copies `sandbox_node_registration_secret` into the agent namespace.
+If you change `auth.sandboxNodeRegistration.secretKeys`, the copy uses the same
+key. If `auth.sandboxNodeRegistration` uses `existingSecret`, create the same
+Secret (with the same key) in the agent namespace too and set
+`craft.hostAgent.registrationExistingSecret`.
+
+For a private agent image, create the pull Secret in the agent namespace and
+set `craft.hostAgent.imagePullSecrets`. The release `imagePullSecrets` are not
+used there, because Secrets are namespaced.
+To manage the agent namespace yourself, set `craft.hostAgent.createNamespace:
+false` and give the namespace the label
+`pod-security.kubernetes.io/enforce: privileged`.
+The agent data dir (`craft.hostAgent.dataDir`, default `/var/lib/craft-fc`)
+needs reflink. On XFS with reflink (for example the AL2023 root on EKS, or an
+XFS data disk, `mkfs.xfs -m reflink=1`) the agent uses it directly; this is
+the fastest. On other file systems (the ext4 roots of GKE COS and AKS Ubuntu)
+the agent makes a sparse XFS image `<dataDir>/.craft-fc-store.img` and mounts
+it at the data dir on a loop device. The node kernel needs the loop driver and
+XFS. A new image takes the free disk space less 1/5 of the disk (20 GiB to
+4 TiB); set `craft.hostAgent.loopStore.sizeGiB` to choose the size. An existing
+image keeps its size. To refuse a data dir without reflink, add
+`--loop-store=off` to `craft.hostAgent.extraArgs`. The preflight checks the
+data dir by default.
+
+To scrape the agent metrics, set `craft.hostAgent.metrics.enabled: true`
+(port `craft.hostAgent.metrics.port`, default 9464). With
+`monitoring.serviceMonitors.enabled: true`, the chart also makes a
+ServiceMonitor in the agent namespace. Auth follows the API server `/metrics`:
+with `auth.metricsAuth.enabled`, the agent requires the same bearer token and
+the ServiceMonitor sends it. The chart copies `auth.metricsAuth.values` into
+the agent namespace, because Secrets are namespaced. If `auth.metricsAuth`
+uses `existingSecret`, create a Secret with the same key in the agent
+namespace and set `craft.hostAgent.metrics.authExistingSecret`. With
+`configMap.DISABLE_METRICS_AUTH: "true"` the agent has no auth. With neither,
+every scrape gets 401. The NetworkPolicy lets only Prometheus Operator pods
+(`app.kubernetes.io/name: prometheus`) in the release namespace reach the
+port. If Prometheus runs in another namespace, set
+`craft.hostAgent.metrics.networkPolicyFrom`. The agent writes each VM's serial console and Firecracker log to its
+stdout as JSON lines (`kind=guest_log`), and an audit line for every API call
+to stderr (`kind=audit`), so the cluster log pipeline collects both.
+
+With the agent metrics on, `monitoring.grafana.dashboards.enabled: true` also
+deploys the "Onyx Craft Firecracker Host Agent" dashboard, and
+`monitoring.prometheusRules.enabled: true` deploys its alert rules (a
+PrometheusRule in the release namespace; set `monitoring.prometheusRules.labels`
+to match your Prometheus `ruleSelector`). The thresholds in
+`craft.hostAgent.alerts` are proposed defaults. `CraftFcHostAgentPodsMissing`
+needs kube-state-metrics. The dashboard and the rules need the agent series:
+set `monitoring.serviceMonitors.enabled: true` (with
+`monitoring.serviceMonitors.labels` that match your Prometheus
+`serviceMonitorSelector`), unless another scrape configuration collects the
+agent metrics. For another scrape configuration, set `craft.hostAgent.metrics.job`
+to its `job` label. Each alert links to
+`craft.hostAgent.alerts.runbookUrl#<alert name in lower case>`; the default is
+the Craft Firecracker operations page on docs.onyx.app (source:
+`microvm/RUNBOOKS.md`). Set `runbookUrl` to your own copy if your on-call
+team cannot reach docs.onyx.app.
+
 ## Using an external Redis
 
 To point Onyx at an externally-managed Redis (e.g. AWS ElastiCache) and skip
@@ -77,7 +399,13 @@ configMap:
   # labels and look identical to a hung service.
   REDIS_HOST: "<elasticache-primary-endpoint>"
   REDIS_PORT: "6379"
-  REDIS_SSL: "true"   # set to "true" if in-transit encryption is enabled
+
+# Enables verified TLS and mounts the Redis server CA into all Redis clients,
+# including the Craft sandbox proxy.
+redisTls:
+  enabled: true
+  caConfigMapName: "elasticache-ca"
+  caKey: ca.crt
 
 auth:
   redis:
@@ -196,7 +524,7 @@ Other docker-compose-style values you should set deliberately:
 
 # Local testing
 
-> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [docs/craft/dev/local-kubernetes.md](/docs/craft/dev/local-kubernetes.md).
+> This section covers chart-maintainer testing; for the Onyx Craft local-kind developer workflow, see [dev/README.md](dev/README.md).
 
 ## One time setup
 * brew install kind
@@ -224,14 +552,10 @@ Other docker-compose-style values you should set deliberately:
 * helm install onyx . -n onyx --set postgresql.primary.persistence.enabled=false --set auth.opensearch.values.opensearch_admin_password='StrongPassword123!'
   * the postgres flag is to keep the storage ephemeral for testing. You probably don't want to set that in prod.
   * the OpenSearch admin password must be set on first install unless you are supplying `auth.opensearch.existingSecret`.
-  * no flag for ephemeral vespa storage yet, might be good for testing
 * kubectl -n onyx port-forward service/onyx-nginx 8080:80
   * this will forward the local port 8080 to the installed chart for you to run tests, etc.
 * When you are finished
   * helm uninstall onyx -n onyx
-  * Vespa leaves behind a PVC. Delete it if you are completely done.
-    * k -n onyx get pvc
-    * k -n onyx delete pvc vespa-storage-da-vespa-0
   * If you didn't disable Postgres persistence earlier, you may want to delete that PVC too.
 
 ## Run as non-root user
@@ -241,14 +565,6 @@ By default, some onyx containers run as root. If you'd like to explicitly run th
     securityContext:
       runAsNonRoot: true
       runAsUser: 1001
-    ```
-  * `vespa`
-    ```yaml
-    podSecurityContext:
-      fsGroup: 1000
-    securityContext:
-      privileged: false
-      runAsUser: 1000
     ```
 
 ## Resourcing

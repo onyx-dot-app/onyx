@@ -1,4 +1,4 @@
-import { Section } from "@/layouts/general-layouts";
+import { Section } from "@opal/layouts";
 import { PreviewVariant } from "@/sections/modals/PreviewModal/interfaces";
 import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
 
@@ -14,7 +14,7 @@ export const pdfVariant: PreviewVariant = {
     <iframe
       src={`${ctx.fileUrl}#toolbar=0`}
       className="w-full h-full flex-1 min-h-0 border-none"
-      title="PDF Viewer"
+      title={ctx.t("pdf.iframeTitle")}
     />
   ),
 

@@ -5,12 +5,16 @@ ARG BASE_IMAGE_REGISTRY=docker.io
 
 # bun + node binary sources. Pinned via the registry prefix in their own stages because buildx
 # rejects variable expansion directly in `COPY --from=` -- the ARG is only expandable in a FROM.
-FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS bun_source
-FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:05c08ce4291e9a58f59456a7985176defb12cdd42271f35ff81a3e167ea61d4c AS node_source
+FROM ${BASE_IMAGE_REGISTRY}/oven/bun:1@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS bun_source
+FROM ${BASE_IMAGE_REGISTRY}/library/node:24.16.0-trixie-slim@sha256:45fbb3ca3b6c7e6646cd2889d0ac7bf314bb180036da792221fc2f48fe4d43fb AS node_source
 
-FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:cc925e589b7543b910fea57a240468940003fbfc0515245a495dd0ad8fe7cef1
+FROM ${BASE_IMAGE_REGISTRY}/library/ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# Ubuntu 26.04 moved ARM64 packages from ports to the main archive.
+RUN if [ "$(dpkg --print-architecture)" = arm64 ]; then \
+    sed -i 's|ports.ubuntu.com/ubuntu-ports|archive.ubuntu.com/ubuntu|g' /etc/apt/sources.list.d/ubuntu.sources; \
+  fi \
+  && apt-get update && apt-get install -y --no-install-recommends \
   build-essential \
   ca-certificates \
   cargo \
@@ -37,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   libxmlsec1-dev \
   make \
   neovim \
+  nginx \
   openssh-client \
   pkg-config \
   postgresql-client \
@@ -98,7 +103,7 @@ RUN ln -s /usr/local/bin/bun /usr/local/bin/bunx
 # under bun alone hangs the runner. Daily JS tooling (Claude Code, opencode)
 # still runs under bun; Node is here only as the runtime for the test runner.
 # The test runner's chromium binary is installed at test time, not baked here,
-# so its version tracks web/package.json's floating @playwright/test (the
+# so its version tracks web/package.json's pinned @playwright/test (the
 # chromium baked further down serves only the pinned Playwright MCP server).
 #
 # Copied from the official node image (digest-pinned in the node_source stage at the
@@ -146,10 +151,9 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
   && ln -s python3.13 /usr/local/bin/python \
   && python --version
 
-# Install the Go toolchain. `cli` pins `go 1.26.5` in its go.mod, while the older
-# `tools/ods` requirement remains compatible. The golangci-lint pre-commit hook builds
-# both modules against this version — keep it in sync with the hook and with GO_VERSION
-# in .github/workflows/pr-golang-tests.yml.
+# Install the Go toolchain. Every Go module in the repo pins `go 1.27.4` in its go.mod.
+# The golangci-lint pre-commit hook builds them against this version — keep it in
+# sync with the hook and with GO_VERSION in .github/workflows/pr-golang-tests.yml.
 #
 # Fetched from go.dev with a pinned per-arch checksum (same shape as the prek install
 # above) rather than copied out of the official golang image: base images here route
@@ -160,13 +164,13 @@ RUN UV_PYTHON_BIN_DIR=/usr/local/bin uv python install 3.13 \
 #
 # Module and build caches are not baked in; they live in the dev user's home
 # (see .devcontainer/zshrc).
-ARG GO_VERSION=1.26.5
+ARG GO_VERSION=1.27.4
 RUN set -eux; \
   case "$(dpkg --print-architecture)" in \
     amd64) GO_ARCH=amd64; \
-           GO_SHA256=5c2c3b16caefa1d968a94c1daca04a7ca301a496d9b086e17ad77bb81393f053 ;; \
+           GO_SHA256=7226736c2339719cda28fbf3a54d71aa63bcefe376e98cef00034268dab24840 ;; \
     arm64) GO_ARCH=arm64; \
-           GO_SHA256=fe4789e92b1f33358680864bbe8704289e7bb5fc207d80623c308935bd696d49 ;; \
+           GO_SHA256=3392582988a273a87ab5043ee1b2c9c17a2c3c00580bf9326c47a2e0aaaeac92 ;; \
     *) echo "unsupported arch for go: $(dpkg --print-architecture)" >&2; exit 1 ;; \
   esac; \
   curl -fsSL -o /tmp/go.tar.gz \

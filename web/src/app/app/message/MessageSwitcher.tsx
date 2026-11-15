@@ -1,7 +1,6 @@
-import { Button } from "@opal/components";
-import Text from "@/refresh-components/texts/Text";
+import { Button, Text } from "@opal/components";
 import { SvgChevronLeft, SvgChevronRight } from "@opal/icons";
-const DISABLED_MESSAGE = "Wait for agent message to complete";
+import { useTranslations } from "next-intl";
 
 interface MessageSwitcherProps {
   currentPage: number;
@@ -18,6 +17,8 @@ export default function MessageSwitcher({
   handleNext,
   disableForStreaming,
 }: MessageSwitcherProps) {
+  const t = useTranslations("chat.messages");
+  const disabledTooltip = t("messageSwitcher.disabledWhileStreaming.tooltip");
   const handle = (num: number, callback: () => void) =>
     disableForStreaming
       ? undefined
@@ -37,18 +38,22 @@ export default function MessageSwitcher({
         icon={SvgChevronLeft}
         onClick={previous}
         prominence="tertiary"
-        tooltip={disableForStreaming ? DISABLED_MESSAGE : "Previous"}
+        tooltip={
+          disableForStreaming
+            ? disabledTooltip
+            : t("messageSwitcher.previousButton.tooltip")
+        }
       />
 
       <div className="flex flex-row items-center justify-center">
-        <Text as="p" text03 mainUiAction>
-          {currentPage}
+        <Text as="p" font="main-ui-action" color="text-03">
+          {String(currentPage)}
         </Text>
-        <Text as="p" text03 mainUiAction>
+        <Text as="p" font="main-ui-action" color="text-03">
           /
         </Text>
-        <Text as="p" text03 mainUiAction>
-          {totalPages}
+        <Text as="p" font="main-ui-action" color="text-03">
+          {String(totalPages)}
         </Text>
       </div>
 
@@ -57,7 +62,11 @@ export default function MessageSwitcher({
         icon={SvgChevronRight}
         onClick={next}
         prominence="tertiary"
-        tooltip={disableForStreaming ? DISABLED_MESSAGE : "Next"}
+        tooltip={
+          disableForStreaming
+            ? disabledTooltip
+            : t("messageSwitcher.nextButton.tooltip")
+        }
       />
     </div>
   );

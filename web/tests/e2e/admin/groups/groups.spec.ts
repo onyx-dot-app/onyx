@@ -8,6 +8,7 @@
  */
 
 import { test, expect } from "./fixtures";
+import { Permission } from "@/lib/types";
 import type { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import type { Browser } from "@playwright/test";
 
@@ -47,8 +48,7 @@ async function withApiContext(
 // List page
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — layout", () => {
-  let adminGroupId: number;
+test.describe("Groups page: layout", () => {
   let basicGroupId: number;
   let layoutGroupId: number;
   const layoutGroupName = uniqueGroupName("layout");
@@ -61,11 +61,8 @@ test.describe("Groups page — layout", () => {
       if (!adminGroup || !basicGroup) {
         throw new Error("Default Admin/Basic groups not found");
       }
-      adminGroupId = adminGroup.id;
       basicGroupId = basicGroup.id;
 
-      // Create a custom group so the list is non-empty (default groups are
-      // excluded from the API response by default).
       layoutGroupId = await api.createUserGroup(layoutGroupName);
       await api.waitForGroupSync(layoutGroupId);
     });
@@ -87,12 +84,44 @@ test.describe("Groups page — layout", () => {
     await expect(groupsPage.newGroupButton).toBeVisible();
   });
 
-  test.skip("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
-    // TODO: Enable once default groups are shown via include_default=true
+  test("shows built-in groups (Admin, Basic)", async ({ groupsPage }) => {
     await groupsPage.goto();
 
     await groupsPage.expectGroupVisible("Admin");
     await groupsPage.expectGroupVisible("Basic");
+  });
+
+  test("built-in groups open read-only, with membership still editable", async ({
+    groupsPage,
+  }) => {
+    await groupsPage.gotoEdit(basicGroupId);
+
+    await expect(groupsPage.groupNameInput).toHaveValue("Basic");
+    await expect(groupsPage.groupNameInput).toHaveAttribute("readonly", "");
+    await expect(groupsPage.systemGroupNotice).toBeVisible();
+
+    await expect(groupsPage.addMembersButton).toBeVisible();
+    await expect(groupsPage.saveButton).toBeEnabled();
+
+    await expect(groupsPage.deleteGroupButton).toHaveCount(0);
+    // Basic offers its allowlisted toggles and nothing else. The switch state is
+    // left alone because the gating spec flips it from another worker.
+    await expect(groupsPage.permissionsSectionHeader).toBeVisible();
+    await expect(
+      groupsPage.permissionRow("Create User Access Token")
+    ).toBeVisible();
+    await expect(groupsPage.permissionRow("Create Agents")).toBeVisible();
+    await expect(groupsPage.permissionSwitches).toHaveCount(2);
+    await expect(groupsPage.sharedResourcesSectionHeader).toHaveCount(0);
+  });
+
+  test("custom groups keep the full edit surface", async ({ groupsPage }) => {
+    await groupsPage.gotoEdit(layoutGroupId);
+
+    await expect(groupsPage.groupNameInput).not.toHaveAttribute("readonly", "");
+    await expect(groupsPage.systemGroupNotice).toHaveCount(0);
+    await expect(groupsPage.deleteGroupButton).toBeVisible();
+    await expect(groupsPage.sharedResourcesSectionHeader).toBeVisible();
   });
 
   test("search filters groups by name", async ({ groupsPage, api }) => {
@@ -119,7 +148,7 @@ test.describe("Groups page — layout", () => {
 // Create flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — create", () => {
+test.describe("Groups page: create", () => {
   test("navigates to create page via New Group button", async ({
     groupsPage,
   }) => {
@@ -171,7 +200,7 @@ test.describe("Groups page — create", () => {
 // Edit flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — edit @exclusive", () => {
+test.describe("Groups page: edit @exclusive", () => {
   let groupId: number;
   const groupName = uniqueGroupName("edit");
 
@@ -225,10 +254,67 @@ test.describe("Groups page — edit @exclusive", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Permissions
+// ---------------------------------------------------------------------------
+
+test.describe("Groups page: permissions", () => {
+  test("connectors and document sets toggle separately", async ({
+    groupsPage,
+    api,
+  }) => {
+    const groupId = await api.createUserGroup(uniqueGroupName("permissions"));
+    await api.waitForGroupSync(groupId);
+
+    try {
+      await groupsPage.gotoEdit(groupId);
+      const connectorsSwitch = groupsPage.permissionSwitch("Manage Connectors");
+      const documentSetsSwitch = groupsPage.permissionSwitch(
+        "Manage Document Sets"
+      );
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
+
+      await groupsPage.togglePermission("Manage Document Sets");
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "true");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
+
+      await groupsPage.submitEdit();
+      await groupsPage.expectOnListPage();
+      expect(await api.getUserGroupPermissions(groupId)).toEqual([
+        Permission.MANAGE_DOCUMENT_SETS,
+      ]);
+
+      // A group with only one of the two grants shows only that row on.
+      await groupsPage.gotoEdit(groupId);
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "true");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "false");
+
+      // The same holds the other way: Manage Connectors alone.
+      await groupsPage.togglePermission("Manage Document Sets");
+      await groupsPage.togglePermission("Manage Connectors");
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "true");
+
+      await groupsPage.submitEdit();
+      await groupsPage.expectOnListPage();
+      expect(await api.getUserGroupPermissions(groupId)).toEqual([
+        Permission.MANAGE_CONNECTORS,
+      ]);
+
+      await groupsPage.gotoEdit(groupId);
+      await expect(documentSetsSwitch).toHaveAttribute("aria-checked", "false");
+      await expect(connectorsSwitch).toHaveAttribute("aria-checked", "true");
+    } finally {
+      await softCleanup(() => api.deleteUserGroup(groupId));
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Delete flow
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — delete", () => {
+test.describe("Groups page: delete", () => {
   test("delete group via edit page", async ({ groupsPage, api }) => {
     const name = uniqueGroupName("delete");
     const groupId = await api.createUserGroup(name);
@@ -251,7 +337,7 @@ test.describe("Groups page — delete", () => {
 // Sync status (No Vector DB)
 // ---------------------------------------------------------------------------
 
-test.describe("Groups page — sync @lite", () => {
+test.describe("Groups page: sync @lite", () => {
   test.beforeAll(async ({ browser }) => {
     const context = await browser.newContext({
       storageState: "admin_auth.json",

@@ -4,7 +4,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GMAIL_CLIENT_ID,
     EXT_APP_GMAIL_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.presentation.payload_decoders import (
     GmailRawMimeDecoder,
     PayloadDecoder,
@@ -16,6 +16,7 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Gmail API v1 (https://gmail.googleapis.com/gmail/v1/users/{userId}/...); the
@@ -55,21 +56,26 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_MESSAGES),
             RestRoute(method="GET", path=_MESSAGE_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.LABELS_READ,
         normalised_name="List labels",
         description="List the labels in the mailbox.",
         matches=(RestRoute(method="GET", path=f"{_USER}/labels"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        # `gmail.labels` isn't restricted, but labels are only useful alongside
+        # the message reads that are.
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.PROFILE_READ,
         normalised_name="Read profile",
         description="Read the connected account's Gmail profile.",
         matches=(RestRoute(method="GET", path=f"{_USER}/profile"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_SEND,
@@ -82,12 +88,14 @@ _ENDPOINTS: list[EndpointSpec] = [
         normalised_name="Modify message labels",
         description="Add or remove labels on a message (mark read, archive, …).",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/modify"),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.MESSAGES_TRASH,
         normalised_name="Trash a message",
         description="Move a message to the trash.",
         matches=(RestRoute(method="POST", path=f"{_MESSAGE_ITEM}/trash"),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.THREADS_READ,
@@ -97,7 +105,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_THREADS),
             RestRoute(method="GET", path=_THREAD_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.ATTACHMENTS_READ,
@@ -108,7 +117,8 @@ _ENDPOINTS: list[EndpointSpec] = [
                 method="GET", path=f"{_MESSAGE_ITEM}/attachments/{{attachmentId}}"
             ),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_READ,
@@ -118,7 +128,8 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_DRAFTS),
             RestRoute(method="GET", path=_DRAFT_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_CREATE,
@@ -127,38 +138,51 @@ _ENDPOINTS: list[EndpointSpec] = [
         # prepare an email for the user to review and send from Gmail.
         description="Save a new draft email (not sent).",
         matches=(RestRoute(method="POST", path=_DRAFTS),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_UPDATE,
         normalised_name="Update a draft",
         description="Replace the contents of an existing draft (not sent).",
         matches=(RestRoute(method="PUT", path=_DRAFT_ITEM),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_DELETE,
         normalised_name="Delete a draft",
         description="Permanently delete a draft.",
         matches=(RestRoute(method="DELETE", path=_DRAFT_ITEM),),
+        requires_self_hosted_scope=True,
     ),
     EndpointSpec(
         id=GmailAction.DRAFTS_SEND,
         normalised_name="Send a draft",
         description="Send an existing draft as an email.",
         matches=(RestRoute(method="POST", path=f"{_DRAFTS}/send"),),
+        requires_self_hosted_scope=True,
     ),
 ]
+
+
+# gmail.modify covers read, send, label, trash, threads, attachments, and the
+# full draft lifecycle — but not permanent message delete, which keeps the
+# integration safer by default.
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+# Every classic Gmail scope that can read mail or touch drafts is restricted.
+# The granular `gmail.drafts.create` scope is not, so cloud is send plus draft
+# creation. That scope is live in Google's OAuth registry; public docs lag.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/gmail.send "
+    "https://www.googleapis.com/auth/gmail.drafts.create"
+)
 
 
 class GmailProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GMAIL,
         app_name="Gmail",
-        # gmail.modify covers read, send, label, trash, threads, attachments, and
-        # the full draft lifecycle — but not permanent message delete, which keeps
-        # the integration safer by default.
-        scope="https://www.googleapis.com/auth/gmail.modify",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=["https://gmail\\.googleapis\\.com/gmail/.*"],
         google_api_name="Gmail API",
         endpoint_catalog=_ENDPOINTS,

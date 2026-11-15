@@ -1,0 +1,291 @@
+---
+title: "Website Widget"
+description: "Deploy the Onyx chat widget on your website"
+icon: "window"
+---
+
+The Onyx Website Widget embeds AI-powered chat on any website. It is available in all editions, including Onyx Cloud.
+
+Features include:
+
+- Lightweight ~100-150kb gzipped bundle
+- Responsive design (desktop popup, mobile fullscreen)
+- Two display modes: floating launcher or inline embed
+- Session persistence across page reloads
+
+## Deployment Options
+
+### Cloud Deployment (Recommended)
+
+For Onyx Cloud users, the widget is served from Onyx's CDN. Add the following to your website:
+
+```html
+<!-- Load the widget -->
+<script type="module" src="https://cdn.onyx.app/widget/1.1/dist/onyx-widget.js"></script>
+
+<!-- Configure and display -->
+<onyx-chat-widget
+  backend-url="https://cloud.onyx.app/api"
+  api-key="your_api_key_here"
+  mode="launcher"
+>
+</onyx-chat-widget>
+```
+
+### Self-Hosted Deployment
+
+For self-hosted Onyx instances, build and host the widget yourself.
+The widget lives in the `widget/` directory of the Onyx repository and uses the repository's [Bun](https://bun.sh)
+workspace.
+
+<Steps>
+  <Step title="Install dependencies">
+    Clone the [Onyx repository](https://github.com/onyx-dot-app/onyx) and run this once at the repository root:
+
+    ```bash
+    bun install
+    ```
+  </Step>
+
+  <Step title="Obtain a widget API key">
+    In the Onyx admin panel, open **Settings > Service Accounts** (`/admin/service-accounts`)
+    and create a service account for the widget. Copy its API key.
+
+    <img className="rounded-image" src="/assets/deployment/widget_api_key.webp" alt="Creating a widget service account API key in the Onyx admin panel"/>
+
+    <Warning>
+      Create a **limited-scope API key** with only chat permissions.
+      Never use admin or full-access keys since the API key will be visible in client-side code.
+    </Warning>
+  </Step>
+
+  <Step title="Configure environment (optional)">
+    For builds with baked-in configuration, create a `.env` file in `widget/` and set your backend URL and API key:
+
+    ```
+    VITE_WIDGET_BACKEND_URL=https://your-backend.com
+    VITE_WIDGET_API_KEY=your_api_key
+    ```
+  </Step>
+
+  <Step title="Build the widget">
+    Run the build from `widget/`.
+
+    For **cloud-style deployment** (config via HTML attributes):
+
+    ```bash
+    bun run build:cloud
+    ```
+
+    For **self-hosted deployment** (config baked into bundle):
+
+    ```bash
+    bun run build:self-hosted
+    ```
+  </Step>
+
+  <Step title="Deploy the bundle">
+    Upload `dist/onyx-widget.js` to your CDN or web server.
+  </Step>
+</Steps>
+
+### Customer Embed Code
+
+After deployment, provide customers with the embed code:
+
+**Cloud-style (attributes required):**
+
+```html
+<script type="module" src="https://your-cdn.com/onyx-widget.js"></script>
+<onyx-chat-widget
+  backend-url="https://your-backend.com"
+  api-key="customer_api_key"
+  agent-name="Support"
+  logo="https://path-to-your-logo.com/"
+>
+</onyx-chat-widget>
+```
+
+**Self-hosted (config baked in):**
+
+```html
+<script type="module" src="https://your-cdn.com/onyx-widget.js"></script>
+<onyx-chat-widget
+  agent-name="Support"
+  logo="https://path-to-your-logo.com/"
+>
+</onyx-chat-widget>
+```
+
+## Configuration Reference
+
+### Required Attributes
+
+| Attribute     | Type   | Description                                                              |
+| ------------- | ------ | ------------------------------------------------------------------------ |
+| `backend-url` | string | Your Onyx backend API URL                                                |
+| `api-key`     | string | API key for authentication. Omit it when you use a `tokenProvider`.      |
+
+HTML attributes take priority over values baked into a self-hosted build.
+
+#### `backend-url`
+
+- **Onyx Cloud**: Use `https://cloud.onyx.app/api`
+- **Self-hosted**: Use your Onyx instance URL (e.g., `https://onyx.yourcompany.com/api`)
+
+### Optional Attributes
+
+| Attribute           | Type    | Default       | Description                                                                 |
+| ------------------- | ------- | ------------- | --------------------------------------------------------------------------- |
+| `agent-id`          | number  | `undefined`   | ID of the Agent the widget chats with                                       |
+| `agent-name`        | string  | `"Assistant"` | Display name in header                                                      |
+| `logo`              | string  | Onyx logo     | URL to custom logo image                                                    |
+| `primary-color`     | string  | `#1c1c1c`     | Primary brand color (buttons, accents)                                      |
+| `background-color`  | string  | `#e9e9e9`     | Widget background color                                                     |
+| `text-color`        | string  | `#000000bf`   | Text color (75% opacity black)                                              |
+| `mode`              | string  | `"launcher"`  | Display mode: `"launcher"` or `"inline"`                                    |
+| `include-citations` | boolean | `false`       | Show citation badges linking to source documents                            |
+| `start-expanded`    | boolean | `false`       | Inline mode only: show the full chat panel before the first message         |
+
+#### `include-citations`
+
+`include-citations` is a boolean flag. Its presence turns citations on,
+so `include-citations="false"` also turns them on. Omit the attribute to turn citations off.
+
+```html
+<onyx-chat-widget
+  backend-url="https://cloud.onyx.app/api"
+  api-key="on_abc123"
+  include-citations
+>
+</onyx-chat-widget>
+```
+
+<Warning>
+  **Be mindful of document access when enabling citations.** The widget will cite any documents accessible to the
+  configured agent or API key. If the agent has access to private or internal documents,
+  citation links may point to resources that end users do not have permission to view.
+
+  To avoid exposing private document links, either scope the agent's document access to only public-facing sources,
+  or disable citations for public-facing widget deployments.
+</Warning>
+
+## Authentication
+
+The widget runs in the browser, so the visitor can read any credential in the page. Pick one of two modes.
+
+### API key
+
+All visitors share one service account. Use a limited-scope API key (see below).
+This mode works on Onyx Cloud and on self-hosted Onyx.
+
+### JWT passthrough (self-hosted only)
+
+The host page supplies the visitor's own identity-provider (IdP) token. Each visitor acts as their own Onyx user,
+with their own document permissions and usage attribution. No shared secret goes in the page.
+Use this when the host page already signs the visitor in with the same IdP as Onyx.
+
+JWT passthrough works on self-hosted Onyx only. It does not work on Onyx Cloud.
+
+<Steps>
+  <Step title="Configure Onyx to trust the IdP">
+    Set these environment variables on the API server:
+
+    ```bash
+    JWT_PUBLIC_KEY_URL=https://login.microsoftonline.com/<tenant-id>/discovery/v2.0/keys
+    JWT_EXPECTED_AUDIENCE=<the client id you registered for Onyx>
+    JWT_EXPECTED_ISSUER=https://login.microsoftonline.com/<tenant-id>/v2.0
+    CORS_ALLOWED_ORIGIN=https://portal.yourcompany.com
+    ```
+
+    Onyx accepts RS256 tokens only. Set `JWT_EXPECTED_AUDIENCE`;
+    without it Onyx accepts any token the IdP signed for any application.
+    Onyx creates an Onyx user on the first request from a new email,
+    so limit sign-ups with the invite list or `VALID_EMAIL_DOMAINS`.
+  </Step>
+
+  <Step title="Set tokenProvider on the widget">
+    `tokenProvider` is a JavaScript property, not an HTML attribute. Drop the `api-key` attribute.
+
+    ```html
+    <onyx-chat-widget
+      id="onyx-widget"
+      backend-url="https://onyx.yourcompany.com/api"
+      agent-id="42"
+      mode="launcher"
+    ></onyx-chat-widget>
+
+    <script type="module">
+      const widget = document.getElementById("onyx-widget");
+      widget.tokenProvider = () => fetchAccessTokenForOnyx();
+    </script>
+    ```
+
+    The widget calls `tokenProvider` before every request. Return a string, or a promise that resolves to one.
+    Return a token that is valid now; your function owns expiry. When both are set,
+    `tokenProvider` takes precedence over `api-key`.
+  </Step>
+</Steps>
+
+The widget calls `tokenProvider` again for each retry, so a token that expires during a retry is replaced.
+The widget does not retry a `401` response.
+
+The widget stores the conversation in the browser tab and links it to the token subject (the `sub` claim).
+If the token has no `sub` claim, the widget uses the `email` claim. Put a unique `sub` in each token.
+If a token has neither claim, all users of that tab share one stored conversation.
+
+The widget checks the user only when it loads a stored conversation, for example after a page reload.
+If a different person signs in without a page reload, the previous conversation stays visible.
+Call `widget.resetConversation()` when a user signs out or changes accounts.
+
+<Warning>
+  Each visitor who opens the widget becomes an Onyx user and can use a seat.
+  Monitor your seat count after you turn on the widget.
+</Warning>
+
+For the full list of token checks and server log messages, see [JWT Header Auth](/deployment/authentication/jwt).
+
+#### Verify JWT passthrough
+
+<Steps>
+  <Step title="Send a message as a signed-in visitor">
+    Add the `include-citations` attribute to the widget. Without it, the widget shows no citations.
+    Open the host page as a signed-in user. Ask about a document that this user can read,
+    and about one that this user cannot read. The answers cite only documents that this user can read.
+  </Step>
+
+  <Step title="Check the user list">
+    In the Admin Panel, open the user list. The visitor's email is in the list.
+  </Step>
+
+  <Step title="Test rejected tokens">
+    Send a request with an expired token, and a request with a token for a different audience. Onyx rejects both.
+  </Step>
+</Steps>
+
+#### Troubleshoot JWT passthrough
+
+| Symptom                                       | Cause                                                                                        |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Every request is unauthorized                 | `JWT_PUBLIC_KEY_URL` is not set, so Onyx does not read the `Authorization` header.           |
+| The browser blocks the request                | The host page origin is not in `CORS_ALLOWED_ORIGIN`.                                        |
+| The widget shows `No Onyx credential available` | The element has no `api-key` attribute and no `tokenProvider` function.                     |
+| `no email claim found` in the API server log  | The token has no `email`, `preferred_username`, or `upn` claim. Add the claim in your IdP.   |
+
+## API Key Security
+
+<Warning>
+  The widget's API key is exposed in client-side code. Always create a dedicated API key with:
+
+  - **Limited permissions** - Only chat access, no admin features
+  - **Rate limiting** - Prevent abuse from malicious actors
+  - **Monitoring** - Track usage and detect anomalies
+</Warning>
+
+## Browser Support
+
+- Chrome/Edge 90+ (Chromium)
+- Firefox 90+
+- Safari 15+
+- Mobile Safari (iOS 15+)
+- Mobile Chrome (Android)

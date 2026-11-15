@@ -1,11 +1,11 @@
 "use client";
 
-import React from "react";
-import { PasswordInputTypeIn } from "@opal/components";
+import React, { useMemo } from "react";
+import { useTranslations } from "next-intl";
+import { InputPasswordTypeIn } from "@opal/components";
 import * as Yup from "yup";
 import { FormikField } from "@/refresh-components/form/FormikField";
 import { FormField } from "@/refresh-components/form/FormField";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox";
 import { ImageGenFormWrapper } from "@/views/admin/ImageGenerationPage/forms/ImageGenFormWrapper";
 import {
   ImageGenFormBaseProps,
@@ -24,18 +24,14 @@ const initialValues: OpenAIFormValues = {
   api_key: "",
 };
 
-const validationSchema = Yup.object().shape({
-  api_key: Yup.string().required("API Key is required"),
-});
-
 function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
+  const t = useTranslations("admin.imageGeneration");
   const {
     apiStatus,
     showApiMessage,
     errorMessage,
     disabled,
     isLoadingCredentials,
-    apiKeyOptions,
     resetApiState,
     imageProvider,
   } = props;
@@ -43,63 +39,46 @@ function OpenAIFormFields(props: ImageGenFormChildProps<OpenAIFormValues>) {
   return (
     <FormikField<string>
       name="api_key"
-      render={(field, helper, meta, state) => (
+      render={(field, _helper, meta, state) => (
         <FormField
           name="api_key"
           state={apiStatus === "error" ? "error" : state}
           className="w-full"
         >
-          <FormField.Label>API Key</FormField.Label>
+          <FormField.Label>{t("form.apiKey.label")}</FormField.Label>
           <FormField.Control>
-            {apiKeyOptions.length > 0 ? (
-              <InputComboBox
-                value={field.value}
-                onChange={(e) => {
-                  helper.setValue(e.target.value);
-                  resetApiState();
-                }}
-                onValueChange={(value) => {
-                  helper.setValue(value);
-                  resetApiState();
-                }}
-                onBlur={field.onBlur}
-                options={apiKeyOptions}
-                placeholder={
-                  isLoadingCredentials
-                    ? "Loading..."
-                    : "Enter new API key or select existing provider"
-                }
-                disabled={disabled}
-                isError={apiStatus === "error"}
-              />
-            ) : (
-              <PasswordInputTypeIn
-                {...field}
-                onChange={(e) => {
-                  field.onChange(e);
-                  resetApiState();
-                }}
-                placeholder={
-                  isLoadingCredentials ? "Loading..." : "Enter your API key"
-                }
-                disabled={disabled}
-                error={apiStatus === "error"}
-              />
-            )}
+            <InputPasswordTypeIn
+              {...field}
+              onChange={(e) => {
+                field.onChange(e);
+                resetApiState();
+              }}
+              // Fetched credentials become the initial value on edit.
+              existingValue={meta.initialValue}
+              placeholder={
+                isLoadingCredentials
+                  ? t("form.loading.placeholder")
+                  : t("form.apiKey.placeholder")
+              }
+              disabled={disabled}
+              error={apiStatus === "error"}
+            />
           </FormField.Control>
           {showApiMessage ? (
             <FormField.APIMessage
               state={apiStatus}
               messages={{
-                loading: `Testing API key with ${imageProvider.title}...`,
-                success: "API key is valid. Configuration saved.",
-                error: errorMessage || "Invalid API key",
+                loading: t("form.apiKeyTest.loading", {
+                  title: imageProvider.title,
+                }),
+                success: t("form.apiKeyTest.success"),
+                error: errorMessage || t("form.apiKeyTest.error"),
               }}
             />
           ) : (
             <FormField.Message
               messages={{
-                idle: "Enter a new API key or select an existing provider.",
+                idle: t("form.apiKey.idle"),
                 error: meta.error,
               }}
             />
@@ -125,24 +104,32 @@ function transformValues(
 ): ImageGenSubmitPayload {
   return {
     modelName: imageProvider.model_name,
-    imageProviderId: imageProvider.image_provider_id,
     provider: "openai",
     apiKey: values.api_key,
   };
 }
 
 export function OpenAIImageGenForm(props: ImageGenFormBaseProps) {
+  const t = useTranslations("admin.imageGeneration");
   const { imageProvider, existingConfig } = props;
+
+  const validationSchema = useMemo(
+    () =>
+      Yup.object().shape({
+        api_key: Yup.string().required(t("form.apiKey.required")),
+      }),
+    [t]
+  );
 
   return (
     <ImageGenFormWrapper<OpenAIFormValues>
       {...props}
       title={
         existingConfig
-          ? `Edit ${imageProvider.title}`
-          : `Connect ${imageProvider.title}`
+          ? t("form.editHeader.title", { title: imageProvider.title })
+          : t("form.connectHeader.title", { title: imageProvider.title })
       }
-      description={imageProvider.description}
+      description={t(imageProvider.descriptionKey)}
       initialValues={initialValues}
       validationSchema={validationSchema}
       getInitialValuesFromCredentials={getInitialValuesFromCredentials}

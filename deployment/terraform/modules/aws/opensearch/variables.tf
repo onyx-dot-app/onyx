@@ -19,9 +19,9 @@ variable "ingress_cidrs" {
 }
 
 variable "engine_version" {
-  description = "OpenSearch engine version (e.g., 2.17, 3.3)"
+  description = "OpenSearch engine version (e.g., 2.17, 3.7). 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7. A domain on 1.3 or 2.x must upgrade to 2.19 before 3.x."
   type        = string
-  default     = "3.3"
+  default     = "3.7"
 }
 
 variable "instance_type" {
@@ -239,4 +239,32 @@ variable "tags" {
   description = "Tags to apply to OpenSearch resources"
   type        = map(string)
   default     = {}
+}
+
+variable "alarm_actions" {
+  description = "SNS topic ARNs to notify on CloudWatch alarm/ok. Empty = alarms exist but notify nothing."
+  type        = list(string)
+  default     = []
+}
+
+variable "jvm_memory_pressure_threshold_percent" {
+  description = "JVMMemoryPressure alarm threshold (percent)."
+  type        = number
+  default     = 90
+
+  validation {
+    condition     = var.jvm_memory_pressure_threshold_percent >= 0 && var.jvm_memory_pressure_threshold_percent <= 100
+    error_message = "jvm_memory_pressure_threshold_percent must be between 0 and 100."
+  }
+}
+
+variable "free_storage_threshold_mb" {
+  description = "FreeStorageSpace alarm floor in MB (OpenSearch reports this metric in MB). Null = 15% of ebs_volume_size."
+  type        = number
+  default     = null
+
+  validation {
+    condition     = var.free_storage_threshold_mb == null || var.free_storage_threshold_mb > 0
+    error_message = "free_storage_threshold_mb must be null or greater than 0."
+  }
 }

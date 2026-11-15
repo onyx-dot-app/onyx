@@ -3,6 +3,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.db.models import MCPServer__User, MCPServer__UserGroup
+from onyx.db.user_group import assert_not_shared_with_default_group
 
 
 def make_mcp_server_private(
@@ -20,6 +21,7 @@ def make_mcp_server_private(
             db_session.add(MCPServer__User(mcp_server_id=server_id, user_id=user_id))
 
     if group_ids is not None:
+        assert_not_shared_with_default_group(db_session, group_ids)
         db_session.query(MCPServer__UserGroup).filter(
             MCPServer__UserGroup.mcp_server_id == server_id
         ).delete(synchronize_session="fetch")

@@ -53,6 +53,40 @@ class TestKVParity:
         assert cache.exists(k)
 
 
+class TestCompareAndSetParity:
+    def test_replace_if_value(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert not cache.replace_if_value(k, b"old", b"new")
+        cache.set(k, b"old", ex=60)
+        assert not cache.replace_if_value(k, b"other", b"new")
+        assert cache.get(k) == b"old"
+        # ex=None stores the new value without a TTL.
+        assert cache.replace_if_value(k, b"old", b"new")
+        assert cache.get(k) == b"new"
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+        assert cache.replace_if_value(k, b"new", "newer", ex=60)
+        assert 0 < cache.ttl(k) <= 60
+        cache.delete(k)
+
+    def test_replace_if_value_ignores_an_expired_value(
+        self, cache: CacheBackend
+    ) -> None:
+        k = _key()
+        cache.set(k, b"old", ex=1)
+        time.sleep(1.5)
+        assert not cache.replace_if_value(k, b"old", b"new")
+        assert cache.get(k) is None
+
+    def test_delete_if_value(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert not cache.delete_if_value(k, b"v")
+        cache.set(k, b"v")
+        assert not cache.delete_if_value(k, b"other")
+        assert cache.get(k) == b"v"
+        assert cache.delete_if_value(k, b"v")
+        assert cache.get(k) is None
+
+
 class TestTTLParity:
     def test_ttl_missing(self, cache: CacheBackend) -> None:
         assert cache.ttl(_key()) == TTL_KEY_NOT_FOUND
@@ -96,3 +130,20 @@ class TestListParity:
     def test_blpop_timeout(self, cache: CacheBackend) -> None:
         result = cache.blpop([f"parity_empty_{uuid4().hex[:8]}"], timeout=1)
         assert result is None
+
+
+def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None:
+    key = f"conditional-expiry:{uuid4()}"
+    try:
+        assert not cache.renew_if_value(key, b"first", 60)
+        cache.set(key, b"first", ex=10)
+        assert not cache.renew_if_value(key, b"other", 60)
+        assert cache.renew_if_value(key, b"first", 60)
+        assert cache.ttl(key) > 10
+        cache.set(key, b"replacement", ex=10)
+        assert not cache.renew_if_value(key, b"first", 60)
+        assert cache.get(key) == b"replacement"
+        cache.expire(key, 0)
+        assert not cache.renew_if_value(key, b"replacement", 60)
+    finally:
+        cache.delete(key)

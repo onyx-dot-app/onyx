@@ -3,10 +3,7 @@ import useSWR from "swr";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import {
-  BillingInformation,
-  SubscriptionStatus,
-} from "@/lib/billing/interfaces";
+import { BillingInformation, SubscriptionStatus } from "@/lib/billing/types";
 
 /**
  * Hook to fetch billing information from Stripe.

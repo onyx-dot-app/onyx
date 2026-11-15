@@ -4,6 +4,7 @@ import pytest
 
 from onyx.server.documents.models import DocumentSource
 from tests.integration.common_utils.constants import NUM_DOCS
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.document import DocumentManager
@@ -14,23 +15,26 @@ from tests.integration.common_utils.test_models import (
     DATestUser,
     DATestUserGroup,
 )
-from tests.integration.common_utils.vespa import vespa_fixture
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group tests are enterprise only",
 )
 def test_removing_connector(
     reset: None,  # noqa: ARG001
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
 ) -> None:
     # Creating an admin user (first user created is automatically an admin)
     admin_user: DATestUser = UserManager.create(name="admin_user")
 
-    # create api key
+    # create api key with admin scope so it can hit the ingestion API
+    admin_group = UserGroupManager.get_default(
+        user_performing_action=admin_user, name="Admin"
+    )
     api_key: DATestAPIKey = APIKeyManager.create(
         user_performing_action=admin_user,
+        group_ids=[admin_group.id],
     )
 
     # create connectors
@@ -73,7 +77,7 @@ def test_removing_connector(
 
     # make sure cc_pair_1 docs are user_group_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_1,
         group_names=[user_group_1.name],
         doc_creating_user=admin_user,
@@ -81,7 +85,7 @@ def test_removing_connector(
 
     # make sure cc_pair_2 docs are user_group_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_2,
         group_names=[user_group_1.name],
         doc_creating_user=admin_user,
@@ -100,7 +104,7 @@ def test_removing_connector(
 
     # make sure cc_pair_1 docs are user_group_1 only
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_1,
         group_names=[user_group_1.name],
         doc_creating_user=admin_user,
@@ -108,7 +112,7 @@ def test_removing_connector(
 
     # make sure cc_pair_2 docs have no user group
     DocumentManager.verify(
-        vespa_client=vespa_client,
+        document_index_client=document_index_client,
         cc_pair=cc_pair_2,
         group_names=[],
         doc_creating_user=admin_user,

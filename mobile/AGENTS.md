@@ -63,8 +63,8 @@ Web is different: web uses **Tailwind's default step scale**, where `p-6` = step
 
 - HTTP: `@/api/client` `apiFetch<T>` (injects bearer, normalizes errors to `ApiError`).
   `getBaseUrl()` **already appends the `/api` prefix**, so paths are bare: `apiFetch("/chat/...")`,
-  `apiFetch("/me")`. The streaming chat call is the one exception (uses `expo/fetch` for a readable
-  body) — see `docs/mobile-chat`.
+  `apiFetch("/me")`. The streaming chat call is the one exception: `api/chat/stream.ts` uses
+  `expo/fetch`, because only its response exposes a readable `body` on React Native.
 - Server state: TanStack Query, **keyed by `serverUrl`** (`@/api/query-keys`) so switching instances
   never serves a prior backend's data. The cache persists to **unencrypted MMKV** — any PII key
   (chat content, identity) **must** be excluded via `NON_PERSISTED_KEY_PREFIXES` in `@/query/client.ts`.
@@ -93,7 +93,12 @@ Web is different: web uses **Tailwind's default step scale**, where `p-6` = step
 - Holds cross-platform **design tokens** + neutral **contracts/types/utils**. `@onyx-ai/shared/native`
   is **RN-only** (NativeWind theme/vars/typography); cross-platform types go in `/contracts`, never `/native`.
 - Grow it **extract-on-proven-reuse**, not upfront. The mobile **chat** layer is written natively in
-  `mobile/src/chat/` (NOT shared) by decision — see `docs/mobile-chat/05-pr-roadmap.md` (PR 2 Decision).
+  `mobile/src/chat/` (NOT shared) by decision. The NDJSON parser, message tree,
+  `processRawChatHistory`, and the chat/streaming/file contracts exist in both web and mobile, and
+  nothing chat-related goes into `@onyx-ai/shared`. Reason: sharing even the small parser needs a shared
+  util, a web re-point, a jest module mapper, and `dist` build coupling, which costs more than the
+  duplicated code. The backend NDJSON framing and message threading are stable, so drift risk is low;
+  extract again if drift occurs. Keep `@onyx-ai/shared` for design tokens and neutral contracts.
 - Editing the shared package requires rebuilding its `dist` (`bun run build` in `web/lib/shared`); the
   mobile `file:` dep consumes `dist`. Web jest resolves it from `src` via a `moduleNameMapper`.
 - Mobile's `preinstall` hook builds `web/lib/shared`'s `dist` (a git-ignored artifact) **before** bun

@@ -1,5 +1,6 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import React, {
   createContext,
   useCallback,
@@ -9,13 +10,16 @@ import React, {
   useEffect,
   useRef,
 } from "react";
+import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import {
   User,
   UserPersonalization,
-  UserRole,
   ThemePreference,
+  Permission,
 } from "@/lib/types";
+import { hasAnyAdminPermission } from "@/lib/permissions/utils";
 import { usePostHog } from "posthog-js/react";
+import { isAuthStatusError } from "@/lib/fetcher";
 import { useSettings } from "@/lib/settings/hooks";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { useAuthTypeMetadata, useTokenRefresh } from "@/lib/auth/hooks";
@@ -25,29 +29,55 @@ import {
   setUserDefaultModel,
 } from "@/lib/users/svc";
 import { useTheme } from "next-themes";
+import { isSupportedLocale, type Locale } from "@/i18n/config";
 
-interface UserContextType {
+const EMPTY_PERMISSIONS: string[] = [];
+
+// Auth failures skip SWR's retry but are usually transient refresh races. SWR's backoff owns the rest.
+const ME_RETRY_DELAYS_MS = [2_000, 5_000, 15_000];
+
+// Ceiling on reporting loading for a failing /api/me, so the account menu always comes back.
+const ME_LOADING_DEADLINE_MS = 30_000;
+
+/** Only "resolved" lets a null user mean signed out. "unavailable" means /api/me keeps failing for a possibly valid session. */
+export type UserResolution = "loading" | "unavailable" | "resolved";
+
+export interface UserContextType {
   user: User | null;
+  userResolution: UserResolution;
   isAdmin: boolean;
-  isCurator: boolean;
+  hasAdminAccess: boolean;
+  permissions: string[];
+  // Coarse admin-reach set: effective tokens plus the scoped manager bundle. Feeds
+  // nav/page gates so a group manager is included; org-wide checks still use isAdmin.
+  adminCapabilities: string[];
+  // True only while /api/me is in flight. `user === null` won't do: it also means signed out.
+  isUserLoading: boolean;
   refreshUser: () => Promise<void>;
   isCloudSuperuser: boolean;
   authTypeMetadata: AuthTypeMetadata | undefined;
   updateUserAutoScroll: (autoScroll: boolean) => Promise<void>;
   updateUserShortcuts: (enabled: boolean) => Promise<void>;
   updateUserPasteAsTile: (enabled: boolean) => Promise<void>;
+  updateUserInterruptOnSend: (enabled: boolean) => Promise<void>;
   toggleAgentPinnedStatus: (
     currentPinnedAgentIDs: number[],
     agentId: number,
     isPinned: boolean
   ) => Promise<boolean>;
   updateUserTemperatureOverrideEnabled: (enabled: boolean) => Promise<void>;
+  updateUserTemperatureDefault: (value: number | null) => Promise<void>;
+  updateUserReasoningEffortDefault: (
+    value: ReasoningEffortOverride | null
+  ) => Promise<void>;
   updateUserPersonalization: (
     personalization: UserPersonalization
   ) => Promise<void>;
   updateUserThemePreference: (
     themePreference: ThemePreference
   ) => Promise<void>;
+  // null clears the preference so the user follows the workspace default.
+  updateUserLanguage: (language: Locale | null) => Promise<void>;
   updateUserChatBackground: (chatBackground: string | null) => Promise<void>;
   updateUserDefaultModel: (defaultModel: string | null) => Promise<void>;
   updateUserDefaultAppMode: (mode: "CHAT" | "SEARCH") => Promise<void>;
@@ -61,7 +91,12 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
-  const { user: fetchedUser, mutateUser } = useCurrentUser();
+  const { user: fetchedUser, mutateUser, userError } = useCurrentUser();
+  // undefined = in flight. An error counts as resolved, so a failed load fails closed.
+  const isUserLoading = fetchedUser === undefined && userError === undefined;
+  // Permissions read the fetch result, not `upToDateUser`: that copy lands one render late,
+  // so a page gate could see empty permissions after `isUserLoading` went false and redirect.
+  const authUser = fetchedUser ?? null;
   const { authTypeMetadata, isLoading: authTypeMetadataLoading } =
     useAuthTypeMetadata();
   const updatedSettingsData = useSettings();
@@ -98,6 +133,55 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     setUpToDateUser(mergeUserPreferences(fetchedUser ?? null));
   }, [fetchedUser, mergeUserPreferences]);
+
+  const [meRetriesExhausted, setMeRetriesExhausted] = useState(false);
+
+  const meRetryCountRef = useRef(0);
+  const meFirstErrorAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!userError) {
+      meRetryCountRef.current = 0;
+      meFirstErrorAtRef.current = null;
+      setMeRetriesExhausted(false);
+      return;
+    }
+    meFirstErrorAtRef.current ??= Date.now();
+    if (!isAuthStatusError(userError)) {
+      // SWR's backoff owns non-auth retries. Bound only how long we report loading.
+      const remaining =
+        ME_LOADING_DEADLINE_MS - (Date.now() - meFirstErrorAtRef.current);
+      if (remaining <= 0) {
+        setMeRetriesExhausted(true);
+        return;
+      }
+      const deadlineId = setTimeout(
+        () => setMeRetriesExhausted(true),
+        remaining
+      );
+      return () => clearTimeout(deadlineId);
+    }
+    // Fresh error identity per failure advances the schedule. The count moves in the timer, so StrictMode is safe.
+    const attempt = meRetryCountRef.current;
+    const delay = ME_RETRY_DELAYS_MS[attempt];
+    if (delay === undefined) {
+      setMeRetriesExhausted(true);
+      return;
+    }
+    const timeoutId = setTimeout(() => {
+      meRetryCountRef.current = attempt + 1;
+      void mutateUser();
+    }, delay);
+    return () => clearTimeout(timeoutId);
+  }, [userError, mutateUser]);
+
+  const awaitingMe = fetchedUser === undefined && !meRetriesExhausted;
+  const mergePending = fetchedUser != null && upToDateUser === null;
+  const userResolution: UserResolution =
+    awaitingMe || mergePending
+      ? "loading"
+      : fetchedUser === undefined
+        ? "unavailable"
+        : "resolved";
 
   useEffect(() => {
     if (!posthog) return;
@@ -150,6 +234,31 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     setTheme,
   ]);
 
+  // The backend owns NEXT_LOCALE (set on PATCH /user/language, reconciled on
+  // GET /me). This effect is the one place the UI catches up: whenever
+  // <html lang> lags the effective language, re-fetch /me so the cookie and
+  // the cached user are current, then re-render the server layout.
+  const navigation = useNavigation();
+
+  // A user without a stored language follows the workspace default, which is
+  // unknown until settings load.
+  const workspaceLanguage: Locale | undefined = updatedSettingsData.isLoading
+    ? undefined
+    : updatedSettingsData.default_language;
+  const effectiveLanguage: Locale | undefined =
+    upToDateUser?.preferences?.language ?? workspaceLanguage;
+
+  useEffect(() => {
+    if (!isSupportedLocale(effectiveLanguage)) return;
+    if (document.documentElement.lang === effectiveLanguage) return;
+    mutateUser()
+      .then(() => navigation.refresh())
+      .catch((error: unknown) => {
+        // The next successful /me resolves the drift.
+        console.error("Error reconciling the UI language:", error);
+      });
+  }, [upToDateUser?.id, effectiveLanguage, navigation, mutateUser]);
+
   const updateUserTemperatureOverrideEnabled = async (enabled: boolean) => {
     try {
       setUpToDateUser((prevUser) => {
@@ -181,6 +290,70 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating user temperature override setting:", error);
+      throw error;
+    }
+  };
+
+  const updateUserTemperatureDefault = async (value: number | null) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              temperature_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/temperature-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ temperature_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user temperature default");
+      }
+    } catch (error) {
+      console.error("Error updating user temperature default:", error);
+      throw error;
+    }
+  };
+
+  const updateUserReasoningEffortDefault = async (
+    value: ReasoningEffortOverride | null
+  ) => {
+    try {
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              reasoning_effort_default: value,
+            },
+          };
+        }
+        return prevUser;
+      });
+
+      const response = await fetch(`/api/reasoning-effort-default`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reasoning_effort_default: value }),
+      });
+
+      if (!response.ok) {
+        await refreshUser();
+        throw new Error("Failed to update user reasoning default");
+      }
+    } catch (error) {
+      console.error("Error updating user reasoning default:", error);
       throw error;
     }
   };
@@ -253,6 +426,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       console.error("Error updating paste tile setting:", error);
       throw error;
     }
+  };
+
+  const updateUserInterruptOnSend = async (enabled: boolean) => {
+    const response = await fetch(
+      `/api/interrupt-on-send?interrupt_on_send=${enabled}`,
+      { method: "PATCH" }
+    );
+    if (!response.ok) throw new Error("Failed to update send behavior");
+    await refreshUser();
   };
 
   const updateUserAutoScroll = async (autoScroll: boolean) => {
@@ -390,6 +572,51 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error("Error updating theme preference:", error);
+      throw error;
+    }
+  };
+
+  const updateUserLanguage = async (language: Locale | null) => {
+    try {
+      const response = await fetch(`/api/user/language`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ language }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to update language preference");
+      }
+
+      // Applied after the PATCH so the reconcile effect never sees a value the
+      // server does not hold yet. The effect then re-renders the layout.
+      setUpToDateUser((prevUser) => {
+        if (prevUser) {
+          return {
+            ...prevUser,
+            preferences: {
+              ...prevUser.preferences,
+              language,
+            },
+          };
+        }
+        return prevUser;
+      });
+    } catch (error) {
+      // Restore server truth on any failure path (bad status or network
+      // error); the stored preference is unchanged server-side.
+      try {
+        await refreshUser();
+      } catch (refreshError) {
+        // Best effort: the next successful /me resolves any drift.
+        console.error(
+          "Error restoring user state after failed language update:",
+          refreshError
+        );
+      }
+      console.error("Error updating language preference:", error);
       throw error;
     }
   };
@@ -539,25 +766,34 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     <UserContext.Provider
       value={{
         user: upToDateUser,
+        userResolution,
         refreshUser,
         authTypeMetadata,
         updateUserAutoScroll,
         updateUserShortcuts,
         updateUserPasteAsTile,
+        updateUserInterruptOnSend,
         updateUserTemperatureOverrideEnabled,
+        updateUserTemperatureDefault,
+        updateUserReasoningEffortDefault,
         updateUserPersonalization,
         updateUserThemePreference,
+        updateUserLanguage,
         updateUserChatBackground,
         updateUserDefaultModel,
         updateUserDefaultAppMode,
         updateUserVoiceSettings,
         toggleAgentPinnedStatus,
-        isAdmin: upToDateUser?.role === UserRole.ADMIN,
-        // Curator status applies for either global or basic curator
-        isCurator:
-          upToDateUser?.role === UserRole.CURATOR ||
-          upToDateUser?.role === UserRole.GLOBAL_CURATOR,
-        isCloudSuperuser: upToDateUser?.is_cloud_superuser ?? false,
+        isAdmin: (
+          authUser?.effective_permissions ?? EMPTY_PERMISSIONS
+        ).includes(Permission.FULL_ADMIN_PANEL_ACCESS),
+        hasAdminAccess: hasAnyAdminPermission(
+          authUser?.admin_capabilities ?? EMPTY_PERMISSIONS
+        ),
+        permissions: authUser?.effective_permissions ?? EMPTY_PERMISSIONS,
+        adminCapabilities: authUser?.admin_capabilities ?? EMPTY_PERMISSIONS,
+        isUserLoading,
+        isCloudSuperuser: authUser?.is_cloud_superuser ?? false,
       }}
     >
       {children}

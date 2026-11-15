@@ -1,20 +1,15 @@
 """Push skill bundles to running sandboxes."""
 
 import hashlib
-import io
-import zipfile
 from collections.abc import Iterable
-from pathlib import Path
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.external_app import (
-    get_connectable_apps_for_user,
-    get_external_app_by_skill_id,
-)
+from onyx.db.external_app import get_connectable_apps_for_user
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
+    RuntimeSkill,
     SkillValidityUpdate,
     affected_user_ids_for_skill,
     list_runtime_skills_for_user,
@@ -29,6 +24,10 @@ from onyx.server.features.build.db.sandbox import (
     set_sandbox_skills_hashes__no_commit,
 )
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
+    MAX_BUNDLE_BYTES,
+    MAX_FILE_BYTES,
+)
 from onyx.server.features.build.sandbox.models import FileSet
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -39,7 +38,19 @@ from onyx.skills.built_in import (
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
 )
-from onyx.skills.rendering import render_company_search_skill, render_external_app_skill
+from onyx.skills.bundle import (
+    DEFAULT_PER_FILE_MAX_BYTES,
+    SKILL_MD_NAME,
+    TEMPLATE_SUFFIX,
+    open_bundle_zip,
+)
+from onyx.skills.content import iter_builtin_skill_files
+from onyx.skills.rendering import (
+    CLAUDE_SKILL_DIR_PLACEHOLDER,
+    render_company_search_skill,
+    render_external_app_files,
+    resolve_skill_dir_placeholder,
+)
 from onyx.skills.validation import (
     load_stored_custom_skill_bundle,
     validate_stored_custom_skill,
@@ -49,8 +60,6 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 SKILLS_MOUNT_PATH = "/workspace/managed/skills"
-
-_EXCLUDED_DIR_NAMES: frozenset[str] = frozenset({"__pycache__"})
 
 
 def compute_skill_runtime_hash(
@@ -74,23 +83,13 @@ def compute_skill_runtime_hash(
     return digest.hexdigest()
 
 
-def _is_excluded(path: Path, source_dir: Path) -> bool:
-    rel = path.relative_to(source_dir)
-    for part in rel.parts:
-        if part in _EXCLUDED_DIR_NAMES or part.startswith("."):
-            return True
-    # Template sources are rendered separately; never ship them raw.
-    if path.suffix == ".template":
-        return True
-    return False
-
-
 def _add_static_builtin(
     files: FileSet, skill: Skill, definition: BuiltInSkillDefinition
 ) -> None:
     source_dir = definition.source_dir
-    for path in source_dir.rglob("*"):
-        if not path.is_file() or _is_excluded(path, source_dir):
+    for path in iter_builtin_skill_files(source_dir):
+        # Template sources are rendered separately; never ship them raw.
+        if path.suffix == TEMPLATE_SUFFIX:
             continue
         rel = path.relative_to(source_dir)
         files[f"{skill.name}/{rel.as_posix()}"] = path.read_bytes()
@@ -115,14 +114,11 @@ def _render_template(
 
     app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
     if app_type is not None:
-        external_app = get_external_app_by_skill_id(db_session, skill.id)
-        rendered = render_external_app_skill(
-            db_session,
-            app_type,
-            external_app,
-            definition.source_dir,
+        rendered = render_external_app_files(
+            db_session, skill, app_type, definition.source_dir
         )
-        files[f"{skill.name}/SKILL.md"] = rendered.encode("utf-8")
+        for name, content in rendered.items():
+            files[f"{skill.name}/{name}"] = content.encode("utf-8")
         return
 
     logger.warning(
@@ -130,61 +126,129 @@ def _render_template(
     )
 
 
-def _add_bundle_bytes(files: FileSet, skill: Skill, bundle_bytes: bytes) -> None:
+def _resolved_size(name: str, skill_md: bytes) -> int:
+    """Size of a root ``SKILL.md`` after ``${CLAUDE_SKILL_DIR}`` resolution."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    return len(skill_md) + skill_md.count(placeholder) * (
+        len(f"{SKILLS_MOUNT_PATH}/{name}".encode()) - len(placeholder)
+    )
+
+
+def _add_bundle_bytes(
+    files: FileSet, name: str, bundle_file_id: str | None, bundle_bytes: bytes
+) -> None:
     try:
         bundle_files: FileSet = {}
-        with zipfile.ZipFile(io.BytesIO(bundle_bytes)) as zf:
-            for info in zf.infolist():
-                if info.is_dir():
-                    continue
-                bundle_files[f"{skill.name}/{info.filename}"] = zf.read(info)
+        with open_bundle_zip(bundle_bytes) as zf:
+            infos = [info for info in zf.infolist() if not info.is_dir()]
+            # A member never reads past its declared size, so this bounds memory
+            # before the receiver would refuse the whole push.
+            total = sum(len(content) for content in files.values()) + sum(
+                info.file_size for info in infos
+            )
+            if total > MAX_BUNDLE_BYTES:
+                logger.warning(
+                    "Skipping skill %s: the skills exceed the sandbox size limit",
+                    name,
+                )
+                return
+            for info in infos:
+                bundle_files[f"{name}/{info.filename}"] = zf.read(info)
+        skill_md = bundle_files.get(f"{name}/{SKILL_MD_NAME}", b"")
+        resolved = _resolved_size(name, skill_md)
+        # Count the resolved instructions now, so a Skill that resolution would
+        # drop does not push later Skills over the total.
+        if (
+            resolved > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
+            or total - len(skill_md) + resolved > MAX_BUNDLE_BYTES
+        ):
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                name,
+            )
+            return
         files.update(bundle_files)
     except Exception:
         logger.warning(
             "Failed to unpack bundle for skill %s (%s), skipping",
-            skill.name,
-            skill.bundle_file_id,
+            name,
+            bundle_file_id,
             exc_info=True,
         )
 
 
+def _resolve_skill_dirs(files: FileSet, skill_names: Iterable[str]) -> None:
+    """Point ``${CLAUDE_SKILL_DIR}`` in each root ``SKILL.md`` at the skill's
+    sandbox folder. Only the sent copy changes, not the stored bundle."""
+    placeholder = CLAUDE_SKILL_DIR_PLACEHOLDER.encode()
+    total = sum(len(content) for content in files.values())
+    file_limit = min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES)
+    for name in skill_names:
+        path = f"{name}/{SKILL_MD_NAME}"
+        content = files.get(path)
+        if content is None or placeholder not in content:
+            continue
+        skill_dir = f"{SKILLS_MOUNT_PATH}/{name}"
+        resolved_size = _resolved_size(name, content)
+        resolved_total = total - len(content) + resolved_size
+        if resolved_size > file_limit or resolved_total > MAX_BUNDLE_BYTES:
+            logger.warning(
+                "Skipping skill %s: resolved instructions exceed a sandbox size limit",
+                name,
+            )
+            prefix = f"{name}/"
+            for skill_path in [key for key in files if key.startswith(prefix)]:
+                total -= len(files.pop(skill_path))
+            continue
+        total = resolved_total
+        files[path] = resolve_skill_dir_placeholder(
+            content.decode("utf-8"), skill_dir
+        ).encode("utf-8")
+
+
 def _assemble_fileset(
-    skills: Iterable[Skill],
+    skills: Iterable[RuntimeSkill],
     user: User,
     db_session: Session,
 ) -> FileSet:
     """Return the hydrated skills as a flat ``{path: bytes}`` map.
 
-    Built-ins render from disk. Custom rows must already be valid or pass lazy
-    validation before their FileStore bundle is unpacked. Invalid,
-    indeterminate, and unknown built-in rows are skipped.
+    Built-ins render from disk. A custom skill sends the bundle of the plugin
+    version the user runs, in a folder named by that version's frontmatter.
+    The version must already be valid or pass lazy validation before its
+    FileStore bundle is unpacked. Invalid, indeterminate, and unknown built-in
+    rows are skipped.
     """
     skills = list(skills)
     seen_names: set[str] = set()
-    for skill in skills:
-        if skill.name in seen_names:
+    for runtime_skill in skills:
+        if runtime_skill.name in seen_names:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
-                f"Multiple enabled skills are named '{skill.name}'.",
+                f"Multiple enabled skills are named '{runtime_skill.name}'.",
             )
-        seen_names.add(skill.name)
+        seen_names.add(runtime_skill.name)
 
     files: FileSet = {}
     validity_updates: list[SkillValidityUpdate] = []
     file_store = get_default_file_store()
 
-    for skill in skills:
+    for runtime_skill in skills:
+        skill = runtime_skill.skill
         if skill.built_in_skill_id is None:
-            if skill.is_valid is False:
+            version = runtime_skill.version
+            if version is None or version.is_valid is False:
                 continue
 
-            if skill.is_valid is None:
-                validation = validate_stored_custom_skill(skill, file_store)
+            if version.is_valid is None:
+                validation = validate_stored_custom_skill(
+                    runtime_skill.name, version.bundle_file_id, file_store
+                )
                 if validation.is_valid is not None:
                     validity_updates.append(
                         SkillValidityUpdate(
                             skill_id=skill.id,
-                            bundle_file_id=skill.bundle_file_id,
+                            bundle_file_id=version.bundle_file_id,
                             is_valid=validation.is_valid,
                         )
                     )
@@ -198,10 +262,10 @@ def _assemble_fileset(
                 bundle_bytes = validation.normalized_bundle
             else:
                 try:
-                    if skill.bundle_file_id is None:
+                    if version.bundle_file_id is None:
                         continue
                     bundle_bytes = load_stored_custom_skill_bundle(
-                        skill.bundle_file_id,
+                        version.bundle_file_id,
                         file_store,
                     ).content
                 except Exception as exc:
@@ -212,7 +276,9 @@ def _assemble_fileset(
                     )
                     continue
 
-            _add_bundle_bytes(files, skill, bundle_bytes)
+            _add_bundle_bytes(
+                files, runtime_skill.name, version.bundle_file_id, bundle_bytes
+            )
             continue
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id)
         if definition is None:
@@ -225,6 +291,8 @@ def _assemble_fileset(
         _add_static_builtin(files, skill, definition)
         if definition.has_template:
             _render_template(files, skill, definition, db_session, user)
+
+    _resolve_skill_dirs(files, sorted(seen_names))
 
     try:
         persist_skill_validity(validity_updates)

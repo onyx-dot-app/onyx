@@ -2,7 +2,7 @@ from onyx.configs.app_configs import (
     EXT_APP_GOOGLE_CALENDAR_CLIENT_ID,
     EXT_APP_GOOGLE_CALENDAR_CLIENT_SECRET,
 )
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ActionPolicy, ExternalAppType
 from onyx.external_apps.providers.actions import (
     EndpointSpec,
     ExternalAppAction,
@@ -10,6 +10,7 @@ from onyx.external_apps.providers.actions import (
 )
 from onyx.external_apps.providers.base import OnyxManagedExtApp
 from onyx.external_apps.providers.google_base import GoogleOAuthProvider
+from shared_configs.configs import MULTI_TENANT
 
 
 # Google Calendar REST v3 (https://www.googleapis.com/calendar/v3/...); the
@@ -36,7 +37,7 @@ _ENDPOINTS: list[EndpointSpec] = [
         matches=(
             RestRoute(method="GET", path="/calendar/v3/users/{userId}/calendarList"),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_READ,
@@ -46,14 +47,14 @@ _ENDPOINTS: list[EndpointSpec] = [
             RestRoute(method="GET", path=_EVENTS_COLLECTION),
             RestRoute(method="GET", path=_EVENT_ITEM),
         ),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.FREEBUSY_READ,
         normalised_name="Query free/busy",
         description="Query busy intervals across calendars.",
         matches=(RestRoute(method="POST", path="/calendar/v3/freeBusy"),),
-        default_policy=EndpointPolicy.ALWAYS,
+        default_policy=ActionPolicy.ALWAYS,
     ),
     EndpointSpec(
         id=GoogleCalendarAction.EVENTS_CREATE,
@@ -79,11 +80,21 @@ _ENDPOINTS: list[EndpointSpec] = [
 ]
 
 
+_SELF_HOSTED_SCOPE = "https://www.googleapis.com/auth/calendar"
+# No Calendar scope is restricted, so this is just the least-privilege spelling
+# of the above — the whole catalog survives.
+_CLOUD_SCOPE = (
+    "https://www.googleapis.com/auth/calendar.events "
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly "
+    "https://www.googleapis.com/auth/calendar.freebusy"
+)
+
+
 class GoogleCalendarProvider(GoogleOAuthProvider, OnyxManagedExtApp):
     spec = GoogleOAuthProvider.build_spec(
         app_type=ExternalAppType.GOOGLE_CALENDAR,
         app_name="Google Calendar",
-        scope="https://www.googleapis.com/auth/calendar",
+        scope=_CLOUD_SCOPE if MULTI_TENANT else _SELF_HOSTED_SCOPE,
         upstream_url_patterns=["https://www\\.googleapis\\.com/calendar/.*"],
         google_api_name="Google Calendar API",
         endpoint_catalog=_ENDPOINTS,

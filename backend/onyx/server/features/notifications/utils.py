@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 
 from onyx.configs.constants import NotificationType
 from onyx.db.admin_banner import get_admin_banner
+from onyx.db.enums import NotificationSeverity
 from onyx.db.models import User
 from onyx.db.notification import create_notification
 
@@ -40,4 +41,6 @@ def ensure_system_announcement_notification(user: User, db_session: Session) -> 
         # The stable empty object is this announcement's deduplication key.
         additional_data={},
         refresh_existing=False,
+        # An admin-authored announcement exists to be a banner.
+        severity=NotificationSeverity.WARNING,
     )

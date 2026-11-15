@@ -1,4 +1,8 @@
-"""Integration tests for assigning scopes when minting a PAT via the user API."""
+"""Integration tests for assigning scopes when minting a PAT via the user API.
+
+Minting needs CREATE_USER_API_KEYS, which the seeded Basic group grants, so every
+test runs as the basic user.
+"""
 
 from onyx.db.enums import Permission
 from tests.integration.common_utils.managers.pat import PATManager
@@ -30,6 +34,7 @@ def test_scope_implications(permission_basic_user: DATestUser) -> None:
     assert by_scope[Permission.READ_CHAT.value]["implies"] == []
     assert by_scope[Permission.READ_SEARCH.value]["implies"] == []
     assert by_scope[Permission.USE_LLM_GATEWAY.value]["implies"] == []
+    assert by_scope[Permission.USE_LLM_GATEWAY.value]["min_tier"] == "business"
 
 
 def test_scopes_round_trip(permission_basic_user: DATestUser) -> None:

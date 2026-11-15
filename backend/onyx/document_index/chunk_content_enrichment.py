@@ -50,9 +50,8 @@ def cleanup_content_for_chunks(
     """
 
     def _remove_title(chunk: InferenceChunkUncleaned) -> str:
-        # TODO(andrei): This was ported over from
-        # backend/onyx/document_index/vespa/vespa_document_index.py but I don't
-        # think this logic is correct. In Vespa at least we set the title field
+        # TODO(andrei): This was ported over from the former Vespa document
+        # index but I don't think this logic is correct. We set the title field
         # from the output of get_title_for_document_index, which is not
         # necessarily the same data that is prepended to the content; that comes
         # from title_prefix.

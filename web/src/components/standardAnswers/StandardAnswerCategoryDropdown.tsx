@@ -1,8 +1,8 @@
 import { FC } from "react";
+import { useTranslations } from "next-intl";
 import { StandardAnswerCategoryResponse } from "./getStandardAnswerCategoriesIfEE";
 import { Label } from "@/components/Field";
-import InputComboBox from "@/refresh-components/inputs/InputComboBox/InputComboBox";
-import Chip from "@/refresh-components/Chip";
+import { Tag, InputSingleComboBox } from "@opal/components";
 import { StandardAnswerCategory } from "@/lib/types";
 import { ErrorCallout } from "../ErrorCallout";
 import { LoadingAnimation } from "../Loading";
@@ -16,6 +16,8 @@ interface StandardAnswerCategoryDropdownFieldProps {
 export const StandardAnswerCategoryDropdownField: FC<
   StandardAnswerCategoryDropdownFieldProps
 > = ({ standardAnswerCategoryResponse, categories, setCategories }) => {
+  const t = useTranslations("admin.standardAnswers.categoryDropdown");
+
   if (!standardAnswerCategoryResponse.paidEnterpriseFeaturesEnabled) {
     return null;
   }
@@ -23,8 +25,10 @@ export const StandardAnswerCategoryDropdownField: FC<
   if (standardAnswerCategoryResponse.error != null) {
     return (
       <ErrorCallout
-        errorTitle="Something went wrong :("
-        errorMsg={`Failed to fetch standard answer categories - ${standardAnswerCategoryResponse.error.message}`}
+        errorTitle={t("fetchError.title")}
+        errorMsg={t("fetchError.message", {
+          message: standardAnswerCategoryResponse.error.message,
+        })}
       />
     );
   }
@@ -38,10 +42,10 @@ export const StandardAnswerCategoryDropdownField: FC<
 
   return (
     <div>
-      <Label>Standard Answer Categories</Label>
+      <Label>{t("categories.label")}</Label>
       <div className="w-64 flex flex-col gap-2">
-        <InputComboBox
-          placeholder="Search categories..."
+        <InputSingleComboBox
+          placeholder={t("search.placeholder")}
           value=""
           onChange={() => {}}
           onValueChange={(value) => {
@@ -55,24 +59,22 @@ export const StandardAnswerCategoryDropdownField: FC<
           options={allCategories
             .filter((category) => !selectedIds.has(category.id))
             .map((category) => ({
-              label: category.name,
+              title: category.name,
               value: category.id.toString(),
             }))}
-          strict
           searchIcon
         />
 
         {categories.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             {categories.map((category) => (
-              <Chip
+              <Tag
                 key={category.id}
+                title={category.name}
                 onRemove={() =>
                   setCategories(categories.filter((c) => c.id !== category.id))
                 }
-              >
-                {category.name}
-              </Chip>
+              />
             ))}
           </div>
         )}

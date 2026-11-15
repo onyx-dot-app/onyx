@@ -4,11 +4,12 @@ import type {
 } from "@/app/craft/v1/apps/registry";
 import type { BuiltinSkill, CustomSkill } from "@/lib/skills/types";
 import {
+  MCPConnectionStatus,
   MCPAuthenticationPerformer,
   MCPAuthenticationType,
   MCPServerStatus,
   type MCPServer,
-} from "@/lib/tools/interfaces";
+} from "@/lib/mcp/types";
 
 export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
   return {
@@ -22,6 +23,7 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     is_personal: false,
     enabled: true,
     can_toggle: false,
+    installation_policy: "AVAILABLE",
     author_user_id: null,
     author_email: null,
     owner: null,
@@ -33,6 +35,10 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     public_permission: null,
     user_permission: "VIEWER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...over,
   };
 }
@@ -49,6 +55,7 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     is_personal: false,
     enabled: true,
     can_toggle: true,
+    installation_policy: "AVAILABLE",
     author_user_id: null,
     author_email: null,
     owner: null,
@@ -60,6 +67,10 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     public_permission: "VIEWER",
     user_permission: "VIEWER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...over,
   };
 }
@@ -90,7 +101,7 @@ export function mcpServerFixture(
     owner: "admin@example.com",
     auth_type: MCPAuthenticationType.API_TOKEN,
     auth_performer: MCPAuthenticationPerformer.PER_USER,
-    is_authenticated: true,
+    connection_status: MCPConnectionStatus.CONNECTED,
     craft_connected: true,
     status: MCPServerStatus.CONNECTED,
     is_public: true,

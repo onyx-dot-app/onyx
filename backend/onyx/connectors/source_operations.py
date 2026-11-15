@@ -161,6 +161,18 @@ class SourceOperations(ABC):
       registered gateway uniformly. Build clients lazily inside operations or
       private helpers.
 
+    Thread safety: a gateway instance must be safe to call from several
+    threads at once. The capability check runner calls one instance from
+    parallel checks. The implementer makes this hold:
+    - Guard a lazy build of a shared client, rate limiter or token with a lock
+      (double-checked), so threads share one.
+    - Keep one client per thread (``threading.local``) when the SDK is not
+      thread safe: PyGithub, googleapiclient (httplib2), office365 contexts.
+    - Refresh a token under a lock, so only one thread redeems it. The
+      credentials provider's rotation lock does nothing for a static
+      provider.
+    A duplicate build of a stateless client is harmless and needs no lock.
+
     The gateway owns client construction from the credential plus optional
     connector config; operations return plain data, never live SDK objects.
     Credentials arrive as a provider (built via
@@ -176,6 +188,11 @@ class SourceOperations(ABC):
     # gateway must declare this explicitly; an empty tuple marks a genuinely
     # SDK-less connector.
     sdk_modules: ClassVar[tuple[str, ...]]
+
+    # The connector config keys the gateway reads. A draft run keys the cached
+    # result of a check that reads no config on these values. None: the gateway
+    # can read any key.
+    config_keys: ClassVar[frozenset[str] | None] = None
 
     _operation_specs: ClassVar[Mapping[str, SourceOperationSpec]] = MappingProxyType({})
 
@@ -267,7 +284,7 @@ class SourceOperations(ABC):
                 )
             if not callable(member):
                 continue
-            spec = getattr(member, _SPEC_ATTR, None)
+            spec = getattr(member, _SPEC_ATTR, None)  # ods: ignore[getattr]
             if spec is None:
                 unstamped.append(name)
             elif spec.name != name:

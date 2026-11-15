@@ -19,17 +19,17 @@ import (
 
 // Status is the machine-readable `deploy status --json` payload.
 type Status struct {
-	Installed    bool      `json:"installed"`
+	Services     []Service `json:"services"`
 	Dir          string    `json:"dir"`
 	Source       string    `json:"source"`
 	ManifestTag  string    `json:"manifest_tag,omitempty"`
 	EnvTag       string    `json:"env_tag,omitempty"`
 	RunningTag   string    `json:"running_tag,omitempty"`
 	Mode         string    `json:"mode,omitempty"`
+	AccessURL    string    `json:"access_url,omitempty"`
+	Installed    bool      `json:"installed"`
 	IncludeCraft bool      `json:"include_craft"`
 	Dev          bool      `json:"dev"`
-	AccessURL    string    `json:"access_url,omitempty"`
-	Services     []Service `json:"services"`
 	Healthy      bool      `json:"healthy"`
 }
 
@@ -67,7 +67,11 @@ func RunStatus(ctx context.Context, deps Deps, opts Options, jsonOut bool) error
 }
 
 func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	st := Status{Dir: in.root.Dir, Source: string(in.root.Source)}
 
 	if !paths.IsInstall(in.root.Dir) {

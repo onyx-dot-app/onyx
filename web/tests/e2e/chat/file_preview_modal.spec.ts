@@ -134,7 +134,7 @@ test.describe("File preview modal from chat file links", () => {
 
     // Find the link in the AI message and click it
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.locator("a").filter({ hasText: "notes.txt" });
+    const fileLink = aiMessage.getByRole("button", { name: "notes.txt" });
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
@@ -171,7 +171,7 @@ test.describe("File preview modal from chat file links", () => {
 
     // Find the link in the AI message and click it
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.locator("a").filter({ hasText: "app.py" });
+    const fileLink = aiMessage.getByRole("button", { name: "app.py" });
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
@@ -224,7 +224,7 @@ test.describe("File preview modal from chat file links", () => {
     await sendMessageWithMockResponse(page, "Give me the csv", mockContent);
 
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.locator("a").filter({ hasText: "data.csv" });
+    const fileLink = aiMessage.getByRole("button", { name: "data.csv" });
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
@@ -265,7 +265,7 @@ test.describe("File preview modal from chat file links", () => {
     );
 
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.locator("a").filter({ hasText: "report.docx" });
+    const fileLink = aiMessage.getByRole("button", { name: "report.docx" });
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 
@@ -310,9 +310,9 @@ test.describe("File preview modal from chat file links", () => {
     );
 
     const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage
-      .locator("a")
-      .filter({ hasText: "old_report.doc" });
+    const fileLink = aiMessage.getByRole("button", {
+      name: "old_report.doc",
+    });
     await expect(fileLink).toBeVisible({ timeout: 5000 });
     await fileLink.click();
 

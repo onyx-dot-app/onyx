@@ -9,7 +9,7 @@ import type {
   SearchFullResponse,
   SearchHistoryResponse,
   SendSearchQueryRequest,
-} from "@/lib/search/interfaces";
+} from "@/lib/search/types";
 
 /**
  * Classify a query as search or chat flow
@@ -23,7 +23,7 @@ export async function classifyQuery(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       user_query: query,
-    } as SearchFlowClassificationRequest),
+    } satisfies SearchFlowClassificationRequest),
     signal,
   });
 

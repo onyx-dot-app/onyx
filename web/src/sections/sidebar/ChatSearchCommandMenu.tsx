@@ -1,19 +1,17 @@
 "use client";
 
 import React, { useState, useMemo, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useLocale, useTranslations } from "next-intl";
 import type { Route } from "next";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import CommandMenu, {
   useCommandMenuContext,
 } from "@/refresh-components/commandmenu/CommandMenu";
 import { useProjects } from "@/lib/projects/hooks";
-import { useCreateModal } from "@opal/components";
-import CreateProjectModal from "@/sections/modals/CreateProjectModal";
+import { Text, useCreateModal } from "@opal/components";
+import { CreateProjectModal } from "@/lib/projects/components";
 import { timeAgo } from "@opal/time";
 import { highlightMatch } from "@/lib/sidebar/utils";
-import { useSettings } from "@/lib/settings/hooks";
-import { useCurrentAgent } from "@/lib/agents/hooks";
-import Text from "@/refresh-components/texts/Text";
 import useChatSearchOptimistic from "@/lib/sidebar/hooks";
 import {
   SvgEditBig,
@@ -29,16 +27,23 @@ import TextSeparator from "@/refresh-components/TextSeparator";
  * Dynamic footer that shows contextual action labels based on highlighted item type
  */
 function DynamicFooter() {
+  const t = useTranslations("sidebar");
   const { highlightedItemType } = useCommandMenuContext();
 
   // "Show all" for filters, "Open" for everything else (items, actions, or no highlight)
-  const actionLabel = highlightedItemType === "filter" ? "Show all" : "Open";
+  const actionLabel =
+    highlightedItemType === "filter"
+      ? t("chatSearch.footer.showAllAction.label")
+      : t("chatSearch.footer.openAction.label");
 
   return (
     <CommandMenu.Footer
       leftActions={
         <>
-          <CommandMenu.FooterAction icon={SvgArrowUpDown} label="Select" />
+          <CommandMenu.FooterAction
+            icon={SvgArrowUpDown}
+            label={t("chatSearch.footer.selectAction.label")}
+          />
           <CommandMenu.FooterAction icon={SvgKeystroke} label={actionLabel} />
         </>
       }
@@ -47,7 +52,8 @@ function DynamicFooter() {
 }
 
 interface ChatSearchCommandMenuProps {
-  trigger: React.ReactNode;
+  /** Renders the control that opens the menu. `isOpen` lets it show a selected state. */
+  trigger: (open: () => void, isOpen: boolean) => React.ReactNode;
 }
 
 interface FilterableProject {
@@ -60,6 +66,8 @@ interface FilterableProject {
 export default function ChatSearchCommandMenu({
   trigger,
 }: ChatSearchCommandMenuProps) {
+  const t = useTranslations("sidebar");
+  const locale = useLocale();
   const [open, setOpen] = useState(false);
   const [searchValue, setSearchValue] = useState("");
   const [activeFilter, setActiveFilter] = useState<
@@ -68,12 +76,10 @@ export default function ChatSearchCommandMenu({
   const [initialProjectName, setInitialProjectName] = useState<
     string | undefined
   >();
-  const router = useRouter();
+  const appPosition = useAppPosition();
 
   // Data hooks
   const { projects } = useProjects();
-  const settings = useSettings();
-  const currentAgent = useCurrentAgent();
   const createProjectModal = useCreateModal();
 
   // Constants for preview limits
@@ -135,13 +141,13 @@ export default function ChatSearchCommandMenu({
   // Header filters for showing active filter as a chip
   const headerFilters = useMemo(() => {
     if (activeFilter === "chats") {
-      return [{ id: "chats", label: "Sessions" }];
+      return [{ id: "chats", label: t("chatSearch.sessionsFilter.label") }];
     }
     if (activeFilter === "projects") {
-      return [{ id: "projects", label: "Projects" }];
+      return [{ id: "projects", label: t("chatSearch.projectsFilter.label") }];
     }
     return [];
-  }, [activeFilter]);
+  }, [activeFilter, t]);
 
   const handleFilterRemove = useCallback(() => {
     setActiveFilter("all");
@@ -149,28 +155,24 @@ export default function ChatSearchCommandMenu({
 
   // Navigation handlers
   const handleNewSession = useCallback(() => {
-    const href =
-      settings?.disable_default_assistant && currentAgent
-        ? `/app?agentId=${currentAgent.id}`
-        : "/app";
-    router.push(href as Route);
+    appPosition.openNewSession();
     setOpen(false);
-  }, [router, settings, currentAgent]);
+  }, [appPosition]);
 
   const handleChatSelect = useCallback(
     (chatId: string) => {
-      router.push(`/chat?chatId=${chatId}` as Route);
+      appPosition.openChat(chatId);
       setOpen(false);
     },
-    [router]
+    [appPosition]
   );
 
   const handleProjectSelect = useCallback(
     (projectId: number) => {
-      router.push(`/chat?projectId=${projectId}` as Route);
+      appPosition.openProject(projectId);
       setOpen(false);
     },
-    [router]
+    [appPosition]
   );
 
   const handleNewProject = useCallback(
@@ -181,6 +183,8 @@ export default function ChatSearchCommandMenu({
     },
     [createProjectModal]
   );
+
+  const handleOpen = useCallback(() => setOpen(true), []);
 
   const handleOpenChange = useCallback((newOpen: boolean) => {
     setOpen(newOpen);
@@ -204,14 +208,12 @@ export default function ChatSearchCommandMenu({
 
   return (
     <>
-      <div aria-label="Open chat search" onClick={() => setOpen(true)}>
-        {trigger}
-      </div>
+      {trigger(handleOpen, open)}
 
       <CommandMenu open={open} onOpenChange={handleOpenChange}>
         <CommandMenu.Content>
           <CommandMenu.Header
-            placeholder="Search chat sessions, projects..."
+            placeholder={t("chatSearch.searchInput.placeholder")}
             value={searchValue}
             onValueChange={setSearchValue}
             filters={headerFilters}
@@ -222,7 +224,9 @@ export default function ChatSearchCommandMenu({
 
           <CommandMenu.List
             emptyMessage={
-              hasSearchValue ? "No results found" : "No chats or projects yet"
+              hasSearchValue
+                ? t("chatSearch.list.noResults.text")
+                : t("chatSearch.list.empty.text")
             }
           >
             {/* New Session action - always visible in "all" filter, even during search */}
@@ -233,7 +237,7 @@ export default function ChatSearchCommandMenu({
                 onSelect={handleNewSession}
                 defaultHighlight={!hasSearchValue}
               >
-                New Session
+                {t("chatSearch.newSession.label")}
               </CommandMenu.Action>
             )}
 
@@ -250,7 +254,9 @@ export default function ChatSearchCommandMenu({
                         filteredChats.length <= PREVIEW_CHATS_LIMIT
                       }
                     >
-                      {activeFilter === "chats" ? "Recent" : "Recent Sessions"}
+                      {activeFilter === "chats"
+                        ? t("chatSearch.recentFilter.label")
+                        : t("chatSearch.recentSessionsFilter.label")}
                     </CommandMenu.Filter>
                   )}
                   {displayedChats.map((chat) => (
@@ -260,16 +266,16 @@ export default function ChatSearchCommandMenu({
                       icon={SvgBubbleText}
                       rightContent={({ isHighlighted }) =>
                         isHighlighted ? (
-                          <Text figureKeystroke text02>
+                          <Text font="figure-keystroke" color="text-02">
                             ↵
                           </Text>
                         ) : (
                           <Text
-                            secondaryBody
-                            text03
+                            font="secondary-body"
+                            color="text-03"
                             data-testid="command-menu-timestamp"
                           >
-                            {timeAgo(chat.time)}
+                            {timeAgo(chat.time, locale) ?? ""}
                           </Text>
                         )
                       }
@@ -302,7 +308,7 @@ export default function ChatSearchCommandMenu({
                     filteredProjects.length <= PREVIEW_PROJECTS_LIMIT
                   }
                 >
-                  Projects
+                  {t("chatSearch.projectsFilter.label")}
                 </CommandMenu.Filter>
                 {/* New Project action - shown after Projects filter when no search term */}
                 {!hasSearchValue && activeFilter === "all" && (
@@ -311,7 +317,7 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolderPlus}
                     onSelect={() => handleNewProject()}
                   >
-                    New Project
+                    {t("chatSearch.newProject.label")}
                   </CommandMenu.Action>
                 )}
                 {displayedProjects.map((project) => (
@@ -321,16 +327,16 @@ export default function ChatSearchCommandMenu({
                     icon={SvgFolder}
                     rightContent={({ isHighlighted }) =>
                       isHighlighted ? (
-                        <Text figureKeystroke text02>
+                        <Text font="figure-keystroke" color="text-02">
                           ↵
                         </Text>
                       ) : (
                         <Text
-                          secondaryBody
-                          text03
+                          font="secondary-body"
+                          color="text-03"
                           data-testid="command-menu-timestamp"
                         >
-                          {timeAgo(project.time)}
+                          {timeAgo(project.time, locale) ?? ""}
                         </Text>
                       )
                     }
@@ -350,10 +356,12 @@ export default function ChatSearchCommandMenu({
                   icon={SvgFolderPlus}
                   onSelect={() => handleNewProject(searchValue.trim())}
                 >
-                  <>
-                    Create New Project "
-                    <span className="text-text-05">{searchValue.trim()}</span>"
-                  </>
+                  {t.rich("chatSearch.createNamedProject.label", {
+                    projectName: searchValue.trim(),
+                    name: (chunks) => (
+                      <span className="text-text-05">{chunks}</span>
+                    ),
+                  })}
                 </CommandMenu.Action>
               )}
 
@@ -363,7 +371,10 @@ export default function ChatSearchCommandMenu({
               (activeFilter === "all" &&
                 displayedChats.length === 0 &&
                 displayedProjects.length === 0)) && (
-              <TextSeparator text="No more results" className="mt-auto mb-2" />
+              <TextSeparator
+                text={t("chatSearch.noMoreResults.text")}
+                className="mt-auto mb-2"
+              />
             )}
           </CommandMenu.List>
 

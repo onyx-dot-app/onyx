@@ -8,9 +8,11 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
 
-from ee.onyx.server.log_export.collection import (
-    build_log_zip,
-    get_default_log_directories,
+from ee.onyx.configs.app_configs import LOG_EXPORT_KUBERNETES_ENABLED
+from ee.onyx.server.log_export.collection import get_default_log_directories
+from ee.onyx.server.log_export.kubernetes_collection import (
+    KUBERNETES_WORKER_NAME,
+    collect_kubernetes_logs_into_file_store,
 )
 from ee.onyx.server.log_export.models import (
     LogExportManifest,
@@ -29,6 +31,8 @@ from ee.onyx.server.log_export.storage import (
 from onyx import __version__
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
+from onyx.cache.interface import CacheBackendType
+from onyx.configs.app_configs import CACHE_BACKEND
 from onyx.configs.constants import (
     OnyxCeleryPriority,
     OnyxCeleryQueues,
@@ -40,30 +44,26 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import STANDARD_CHUNK_SIZE
 from onyx.utils.logger import setup_logger
+from onyx.utils.platform_utils import is_running_in_kubernetes
+from onyx.utils.threadpool_concurrency import start_thread_with_context
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
 router = APIRouter()
 
-API_SERVER_SCOPE_NOTE = (
-    "Scope: this export contains log files from the api_server container only. "
-    "Logs from background workers and other services are not included; use "
-    "'docker logs <container>' or 'kubectl logs <pod>' to retrieve those."
-)
-
 
 class _ExpiringLock:
     """Non-blocking lock whose hold expires after a TTL.
 
-    Guards against leaked holds: release hooks tied to the response lifecycle
-    are skipped by Starlette on some exit paths (a body iterator raising, or
-    client disconnects under ASGI >= 2.4), so a plain ``threading.Lock`` could
-    stay held until process restart. Expiry bounds any such leak.
+    Guards against leaked holds: when no code path releases (nobody polls the
+    status endpoint, or the poll lands on another replica), a plain
+    ``threading.Lock`` would stay held until process restart. Expiry bounds any
+    such leak.
 
     ``try_acquire`` returns a token; ``release`` is a no-op unless the token
-    belongs to the current hold, so a stale holder (or a duplicate call from a
-    second cleanup hook) can never release a successor's hold.
+    belongs to the current hold, so a stale holder (or a duplicate release) can
+    never free a successor's hold.
     """
 
     def __init__(
@@ -97,79 +97,6 @@ class _ExpiringLock:
             return self._held_until is not None and self._clock() < self._held_until
 
 
-# Serializes exports process-wide: each one burns seconds of CPU on compression
-# and holds a temp file until streaming ends, and concurrent exports of the same
-# logs are pure waste. The TTL comfortably exceeds build time plus a slow
-# streaming session (nginx's ``proxy_read_timeout`` defaults to 300s of idle).
-_EXPORT_LOCK_TTL_SECONDS = 15 * 60
-_EXPORT_LOCK = _ExpiringLock(ttl_seconds=_EXPORT_LOCK_TTL_SECONDS)
-
-
-@router.get("/admin/log-export/download")
-def download_api_server_logs(
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-) -> StreamingResponse:
-    if MULTI_TENANT:
-        raise OnyxError(
-            OnyxErrorCode.SINGLE_TENANT_ONLY,
-            "Log export is only available on self-hosted deployments.",
-        )
-
-    token = _EXPORT_LOCK.try_acquire()
-    if token is None:
-        raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED,
-            "A log export is already in progress. Try again once it completes.",
-        )
-
-    handed_off = False
-    try:
-        # The archive is fully materialized before streaming, so its exact size
-        # is known and an explicit Content-Length can be sent.
-        built = build_log_zip(get_default_log_directories(), API_SERVER_SCOPE_NOTE)
-        zip_buffer = built.zip_buffer
-
-        def cleanup() -> None:
-            # Wired to both the generator's ``finally`` and the response
-            # background task because neither alone covers every exit path:
-            # Starlette skips background tasks when the body iterator raises
-            # (and on client disconnects under ASGI >= 2.4), while a generator
-            # ``finally`` never runs if the generator is closed before its first
-            # iteration. Double invocation is safe: ``close`` tolerates repeats
-            # and ``release`` ignores stale or duplicate tokens.
-            try:
-                zip_buffer.close()
-            finally:
-                _EXPORT_LOCK.release(token)
-
-        def iter_zip() -> Generator[bytes, None, None]:
-            try:
-                while chunk := zip_buffer.read(STANDARD_CHUNK_SIZE):
-                    yield chunk
-            finally:
-                cleanup()
-
-        timestamp = datetime.now(tz=timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
-        response = StreamingResponse(
-            content=iter_zip(),
-            media_type="application/zip",
-            headers={
-                "Content-Disposition": (
-                    f"attachment; filename=onyx_api_server_logs_{timestamp}.zip"
-                ),
-                "Content-Length": str(built.size_bytes),
-            },
-            background=BackgroundTask(cleanup),
-        )
-        handed_off = True
-        return response
-    finally:
-        # Once the response exists, its cleanup hooks own the release; until
-        # then, any exit (including BaseException) releases here.
-        if not handed_off:
-            _EXPORT_LOCK.release(token)
-
-
 API_SERVER_WORKER_NAME = "api_server"
 
 # One collector task per worker type, each routed to a queue that worker
@@ -184,6 +111,12 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "scheduled_tasks": OnyxCeleryQueues.SCHEDULED_TASKS,
     "monitoring": OnyxCeleryQueues.MONITORING,
 }
+
+# Covers every replica, stdout, and crashed containers, which file collection
+# on one replica per worker type cannot.
+KUBERNETES_COLLECTION_ENABLED = (
+    LOG_EXPORT_KUBERNETES_ENABLED and is_running_in_kubernetes()
+)
 
 # Serializes export starts. A successful start holds it until the status
 # endpoint first observes that export ready, or failing that (nobody polls, or
@@ -211,17 +144,27 @@ def _release_export_slot_if_active(export_id: str) -> None:
     _ASYNC_EXPORT_LOCK.release(active[1])
 
 
+def _run_kubernetes_collection(export_id: str, deadline: datetime) -> None:
+    try:
+        collect_kubernetes_logs_into_file_store(export_id=export_id, deadline=deadline)
+    except Exception:
+        # Only the receipt write can raise here; without a receipt the export
+        # still reports ready at its deadline.
+        logger.exception("Log export Kubernetes receipt failed: %s", export_id)
+
+
 @router.post("/admin/log-export")
 def start_log_export(
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> LogExportStartResponse:
     """
     Starts an export: fans out one collector task per worker type, collects the
-    api_server's logs inline, and returns the export ID to poll.
+    api_server's logs inline, starts the Kubernetes API collection in the
+    background when running in Kubernetes, and returns the export ID to poll.
 
-    Fan-out failures (e.g. deployments with no broker or workers, like the
-    onyx-lite overlay) degrade the export to just the api_server's logs instead
-    of failing.
+    The fan-out is skipped on deployments that have no celery broker (the
+    onyx-lite overlay); a failing broker degrades the export to the workers
+    already enqueued instead of failing it.
     """
     if MULTI_TENANT:
         raise OnyxError(
@@ -247,33 +190,44 @@ def start_log_export(
 
         # Fan out before the inline collection below so workers get the full
         # window before ``expires=`` discards their tasks, and their collection
-        # overlaps the api_server's.
+        # overlaps the api_server's. When redis is absent by design (the
+        # onyx-lite overlay), there is no broker behind ``send_task`` and no
+        # workers to collect from, so the fan-out is skipped outright
+        # (``maybe_schedule_license_reclaim`` applies the same rule); a broker
+        # that exists but is down degrades per-send below instead.
         enqueued_worker_names: list[str] = []
-        for worker_name, queue in WORKER_COLLECT_QUEUES.items():
-            try:
-                client_app.send_task(
-                    OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
-                    priority=OnyxCeleryPriority.HIGHEST,
-                    queue=queue,
-                    expires=deadline,
-                    kwargs={
-                        "export_id": export_id,
-                        "worker_name": worker_name,
-                    },
-                )
-            except Exception as e:
-                # All sends share one broker, so the first failure means the
-                # rest would fail too. Only the workers already enqueued are
-                # awaited.
-                logger.warning(
-                    "Log export fan-out failed while enqueueing %s; continuing "
-                    "with %s: %s",
-                    worker_name,
-                    enqueued_worker_names,
-                    e,
-                )
-                break
-            enqueued_worker_names.append(worker_name)
+        if CACHE_BACKEND != CacheBackendType.REDIS:
+            logger.info(
+                "Log export fan-out skipped: this deployment has no celery "
+                "broker (CACHE_BACKEND=%s).",
+                CACHE_BACKEND.value,
+            )
+        else:
+            for worker_name, queue in WORKER_COLLECT_QUEUES.items():
+                try:
+                    client_app.send_task(
+                        OnyxCeleryTask.EXPORT_LOGS_COLLECT_TASK,
+                        priority=OnyxCeleryPriority.HIGHEST,
+                        queue=queue,
+                        expires=deadline,
+                        kwargs={
+                            "export_id": export_id,
+                            "worker_name": worker_name,
+                        },
+                    )
+                except Exception as e:
+                    # All sends share one broker, so the first failure means the
+                    # rest would fail too. Only the workers already enqueued are
+                    # awaited.
+                    logger.warning(
+                        "Log export fan-out failed while enqueueing %s; "
+                        "continuing with %s: %s",
+                        worker_name,
+                        enqueued_worker_names,
+                        e,
+                    )
+                    break
+                enqueued_worker_names.append(worker_name)
 
         manifest = LogExportManifest(
             export_id=export_id,
@@ -281,9 +235,23 @@ def start_log_export(
             deadline=deadline,
             requester_email=user.email,
             onyx_version=__version__,
-            worker_names=[API_SERVER_WORKER_NAME, *enqueued_worker_names],
+            worker_names=[
+                API_SERVER_WORKER_NAME,
+                *enqueued_worker_names,
+                *([KUBERNETES_WORKER_NAME] if KUBERNETES_COLLECTION_ENABLED else []),
+            ],
         )
         save_manifest(manifest)
+
+        # Reading every pod's logs can take most of the collection window, so it
+        # runs off the request path.
+        if KUBERNETES_COLLECTION_ENABLED:
+            start_thread_with_context(
+                _run_kubernetes_collection,
+                name=f"log-export-kubernetes-{export_id}",
+                daemon=True,
+                kwargs={"export_id": export_id, "deadline": deadline},
+            )
 
         # No celery worker runs in the api_server container, so its logs are
         # collected inline.
@@ -302,8 +270,6 @@ def start_log_export(
             _ASYNC_EXPORT_LOCK.release(token)
 
 
-# Declared after the sync ``/admin/log-export/download`` route above so that
-# literal path keeps matching before ``{export_id}``.
 @router.get("/admin/log-export/{export_id}")
 def get_log_export_status(
     export_id: str,
@@ -352,8 +318,11 @@ def download_log_export(
 
     def cleanup() -> None:
         # Wired to both the generator's ``finally`` and the response background
-        # task, matching ``download_api_server_logs``; ``close`` tolerates
-        # repeats. No lock is involved here.
+        # task because neither alone covers every exit path: Starlette skips
+        # background tasks when the body iterator raises (and on client
+        # disconnects under ASGI >= 2.4), while a generator ``finally`` never
+        # runs if the generator is closed before its first iteration. Double
+        # invocation is safe: ``close`` tolerates repeats.
         zip_buffer.close()
 
     def iter_zip() -> Generator[bytes, None, None]:

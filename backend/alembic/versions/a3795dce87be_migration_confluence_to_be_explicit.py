@@ -103,9 +103,9 @@ def upgrade() -> None:
             "is_cloud": is_cloud,
         }
 
-        for key, value in config.items():
-            if key not in ["wiki_page_url"]:
-                new_config[key] = value
+        new_config.update(
+            {key: value for key, value in config.items() if key != "wiki_page_url"}
+        )
 
         op.execute(
             connector.update()

@@ -1,5 +1,6 @@
 import importlib
 import os
+from pathlib import Path
 from unittest.mock import patch
 
 import certifi
@@ -8,6 +9,7 @@ import pytest
 from onyx.document_index.opensearch.client import OpenSearchClient
 
 _OS_TLS_ENV = (
+    "SSL_CERT_FILE",
     "OPENSEARCH_VERIFY_CERTS",
     "OPENSEARCH_CA_CERTS",
     "OPENSEARCH_CLIENT_CERT",
@@ -75,3 +77,56 @@ def test_nonexistent_ca_raises() -> None:
         with pytest.raises(ValueError, match="does not exist"):
             importlib.reload(app_configs)
     importlib.reload(app_configs)
+
+
+def test_ca_certs_falls_back_to_ssl_cert_file(tmp_path: Path) -> None:
+    """customCACerts sets SSL_CERT_FILE, which opensearch-py ignores; the
+    config must pass it through so internal-CA clusters verify."""
+    bundle = tmp_path / "ca-certificates.crt"
+    bundle.write_text("")
+    import onyx.configs.app_configs as app_configs
+
+    with patch.dict(os.environ, {}, clear=False):
+        _clear_os_tls_env()
+        os.environ["SSL_CERT_FILE"] = str(bundle)
+        importlib.reload(app_configs)
+        assert app_configs.OPENSEARCH_CA_CERTS == str(bundle)
+
+        os.environ["OPENSEARCH_CA_CERTS"] = __file__
+        importlib.reload(app_configs)
+        assert app_configs.OPENSEARCH_CA_CERTS == __file__
+
+        del os.environ["OPENSEARCH_CA_CERTS"]
+        os.environ["SSL_CERT_FILE"] = "/no/such/bundle.crt"
+        importlib.reload(app_configs)
+        assert app_configs.OPENSEARCH_CA_CERTS is None
+    importlib.reload(app_configs)
+
+
+# --- readiness ping -------------------------------------------------------
+
+
+def test_ping_logs_tls_failure() -> None:
+    """A failed ping must log why it failed; opensearch-py's own ping() hides
+    errors such as an untrusted server certificate."""
+    from opensearchpy import SSLError
+
+    with (
+        patch("onyx.document_index.opensearch.client.OpenSearch") as mock_os,
+        patch("onyx.document_index.opensearch.client.logger") as mock_logger,
+    ):
+        mock_os.return_value.transport.perform_request.side_effect = SSLError(
+            "N/A", "CERTIFICATE_VERIFY_FAILED", None
+        )
+        assert OpenSearchClient().ping() is False
+        logged: str = str(mock_logger.warning.call_args)
+        assert "CERTIFICATE_VERIFY_FAILED" in logged
+
+
+def test_ping_succeeds() -> None:
+    with patch("onyx.document_index.opensearch.client.OpenSearch") as mock_os:
+        mock_os.return_value.transport.perform_request.return_value = True
+        assert OpenSearchClient().ping() is True
+        mock_os.return_value.transport.perform_request.assert_called_once_with(
+            "HEAD", "/"
+        )

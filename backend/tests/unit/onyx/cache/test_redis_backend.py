@@ -31,13 +31,13 @@ class _RedisLikeLock:
         return True
 
     def release(self) -> None:
-        token = getattr(self.local, "token", None)
+        token = getattr(self.local, "token", None)  # ods: ignore[getattr]
         if token is None:
             raise RuntimeError("Cannot release an unlocked lock")
         self.local.token = None
 
     def owned(self) -> bool:
-        return getattr(self.local, "token", None) is not None
+        return getattr(self.local, "token", None) is not None  # ods: ignore[getattr]
 
 
 class _RecordingRedisClient:
@@ -94,3 +94,21 @@ def test_redis_cache_lock_extend_translates_lock_not_owned_error() -> None:
 
     with pytest.raises(CacheLockLostError):
         lock.extend(30.0)
+
+
+def test_redis_cache_getdel_delegates_atomic_consume() -> None:
+    redis_client = MagicMock(spec=TenantRedisClient)
+    redis_client.getdel.return_value = b"value"
+    backend = RedisCacheBackend(redis_client)
+
+    assert backend.getdel("attempt") == b"value"
+    redis_client.getdel.assert_called_once_with("attempt")
+
+
+def test_redis_cache_set_if_absent_uses_atomic_set() -> None:
+    redis_client = MagicMock(spec=TenantRedisClient)
+    redis_client.set.return_value = True
+    backend = RedisCacheBackend(redis_client)
+
+    assert backend.set_if_absent("attempt", b"value", ex=300)
+    redis_client.set.assert_called_once_with("attempt", b"value", ex=300, nx=True)

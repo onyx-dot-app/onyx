@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import type { IconProps } from "@opal/types";
 import { Modal } from "@opal/components";
@@ -34,9 +35,11 @@ export default function ProviderModal({
   onSubmit,
   submitDisabled = false,
   isSubmitting = false,
-  submitLabel = "Connect",
-  cancelLabel = "Cancel",
+  submitLabel,
+  cancelLabel,
 }: ProviderModalProps) {
+  const t = useTranslations("admin.modals.provider");
+
   const SpinningLoader: React.FunctionComponent<IconProps> = (props) => (
     <SvgLoader
       {...props}
@@ -81,7 +84,7 @@ export default function ProviderModal({
               type="button"
               onClick={() => onOpenChange(false)}
             >
-              {cancelLabel}
+              {cancelLabel ?? t("cancelButton.label")}
             </Button>
             <Button
               disabled={submitDisabled || isSubmitting}
@@ -89,7 +92,7 @@ export default function ProviderModal({
               onClick={onSubmit}
               icon={isSubmitting ? SpinningLoader : undefined}
             >
-              {submitLabel}
+              {submitLabel ?? t("submitButton.label")}
             </Button>
           </Modal.Footer>
         )}

@@ -10,16 +10,21 @@ These tests pin the contract that MCPTool.tool_definition() always returns
 a JSON-Schema-valid `parameters` dict with a `properties` key.
 """
 
-from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
+from mcp.types import CallToolResult, TextContent
 
-from onyx.db.enums import MCPAuthenticationType
-from onyx.server.query_and_chat.placement import Placement
+from onyx.agents.tools import ToolInvocation
+from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
+from onyx.db.models import MCPServer
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolResponse
-from onyx.tools.tool_constructor import _disambiguate_mcp_tool_names
+from onyx.tools.models import CodeModeExposure, ToolContext
+from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
+from onyx.tools.tool_implementations.custom.custom_tool import CustomTool
+from onyx.tools.tool_implementations.custom.openapi_parsing import MethodSpec
 from onyx.tools.tool_implementations.mcp.mcp_tool import (
     MCPTool,
     _normalize_parameters_schema,
@@ -75,9 +80,8 @@ class TestNormalizeParametersSchema:
         assert _normalize_parameters_schema(schema) == schema
 
 
-class _StaticTool(Tool[None]):
+class _StaticTool(Tool):
     def __init__(self, name: str) -> None:
-        super().__init__(emitter=MagicMock())
         self._name = name
 
     @property
@@ -96,25 +100,21 @@ class _StaticTool(Tool[None]):
     def display_name(self) -> str:
         return self._name
 
-    def tool_definition(self) -> dict[str, Any]:
-        return {
-            "type": "function",
-            "function": {
-                "name": self._name,
-                "description": self.description,
-                "parameters": {"type": "object", "properties": {}},
-            },
-        }
+    @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
 
-    def emit_start(self, placement: Placement) -> None:
+    def tool_definition(self) -> ToolDefinition:
+        return ToolDefinition(
+            name=self._name,
+            description=self.description,
+            parameters={"type": "object", "properties": {}},
+        )
+
+    def emit_start(self, invocation: ToolInvocation) -> None:
         pass
 
-    def run(
-        self,
-        placement: Placement,
-        override_kwargs: None = None,
-        **llm_kwargs: Any,
-    ) -> ToolResponse:
+    def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
         raise NotImplementedError
 
 
@@ -122,20 +122,33 @@ def _make_tool(
     input_schema: dict,
     tool_name: str = "aws___list_regions",
     server_name: str = "aws-knowledge",
+    server_id: int = 1,
+    auth_type: MCPAuthenticationType | None = MCPAuthenticationType.NONE,
 ) -> MCPTool:
-    mcp_server = MagicMock()
-    mcp_server.name = server_name
-    mcp_server.server_url = "http://mcp.example"
-    mcp_server.auth_type = MCPAuthenticationType.NONE
-    mcp_server.transport = None
+    mcp_server = MCPServer(
+        id=server_id,
+        name=server_name,
+        server_url="http://mcp.example",
+        auth_type=auth_type,
+        transport=None,
+        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
+        oauth_cimd_enabled=True,
+        oauth_authorization_endpoint=None,
+        oauth_token_endpoint=None,
+    )
     return MCPTool(
         tool_id=1,
-        emitter=MagicMock(),
         mcp_server=mcp_server,
         tool_name=tool_name,
         tool_description="List AWS regions",
         tool_definition=input_schema,
     )
+
+
+def test_server_without_auth_type_builds_tool() -> None:
+    tool = _make_tool({"type": "object"}, auth_type=None)
+
+    assert tool.mcp_server.auth_type is None
 
 
 class TestMCPToolDefinition:
@@ -145,14 +158,14 @@ class TestMCPToolDefinition:
         # rejected. The parameters field must always include `properties`.
         tool = _make_tool({"type": "object"})
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == {"type": "object", "properties": {}}
 
     def test_empty_input_schema_emits_valid_openai_schema(self) -> None:
         tool = _make_tool({})
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == {"type": "object", "properties": {}}
 
@@ -164,7 +177,7 @@ class TestMCPToolDefinition:
         }
         tool = _make_tool(input_schema)
 
-        params = tool.tool_definition()["function"]["parameters"]
+        params = tool.tool_definition().parameters
 
         assert params == input_schema
 
@@ -180,54 +193,89 @@ class TestMCPToolDefinition:
 
 
 class TestMCPToolLLMNames:
-    def test_mcp_tool_keeps_original_name_without_conflicts(self) -> None:
-        tool = _make_tool({"type": "object"})
-
-        _disambiguate_mcp_tool_names([tool])
-
-        assert tool.name == "aws___list_regions"
-        assert tool.tool_definition()["function"]["name"] == "aws___list_regions"
-
-    def test_mcp_tool_disambiguates_at_construction_when_names_conflict(self) -> None:
-        mcp_tool = _make_tool(
-            {"type": "object"}, tool_name="shared", server_name="server name"
+    def test_external_names_are_stable_and_distinct(self) -> None:
+        method = MethodSpec(
+            name="shared",
+            raw_name="shared",
+            summary="Shared operation",
+            path="/shared",
+            method="get",
+            spec={},
         )
-        static_tool = _StaticTool("shared")
-
-        _disambiguate_mcp_tool_names([mcp_tool, static_tool])
-
-        assert mcp_tool.name == "mcp_server_name_shared"
-        assert (
-            mcp_tool.tool_definition()["function"]["name"] == "mcp_server_name_shared"
-        )
-        assert static_tool.name == "shared"
-
-    def test_second_order_disambiguated_name_conflicts_are_allowed(self) -> None:
-        mcp_tool = _make_tool(
-            {"type": "object"}, tool_name="shared", server_name="server"
-        )
-        conflicting_tool = _StaticTool("shared")
-        second_order_conflicting_tool = _StaticTool("mcp_server_shared")
-
-        tools: list[Tool] = [mcp_tool, conflicting_tool, second_order_conflicting_tool]
-        _disambiguate_mcp_tool_names(tools)
-
-        assert [tool.name for tool in tools] == [
-            "mcp_server_shared",
-            "shared",
-            "mcp_server_shared",
+        custom_tools = [
+            CustomTool(id=id, method_spec=method, base_url="https://example.com")
+            for id in (1, 2)
         ]
+        mcp_tools = [
+            _make_tool({}, tool_name="shared", server_name="same name", server_id=id)
+            for id in (1, 2)
+        ]
+        tools: list[Tool] = [_StaticTool("shared"), *custom_tools, *mcp_tools]
+        names = [tool.name for tool in tools]
+        assert names == [
+            "shared",
+            "custom__1__shared",
+            "custom__2__shared",
+            "mcp__1__same_name__shared",
+            "mcp__2__same_name__shared",
+        ]
+        assert [tool.tool_definition().name for tool in tools] == names
+        assert all(tool.display_name == "shared" for tool in tools)
+        assert method.name == "shared"
+        assert method.raw_name == "shared"
+        stubs = build_tool_stubs(tools)
+        assert set(stubs.functions) == set(names)
+        assert all(
+            function.tool.name == name for name, function in stubs.functions.items()
+        )
+
+    @pytest.mark.parametrize("names", [("a" * 58, "a" * 57 + "b"), ("a.b", "a_b")])
+    def test_qualified_names_fit_provider_limits_without_collisions(
+        self, names: tuple[str, str]
+    ) -> None:
+        tools: list[Tool] = []
+        for name in names:
+            method = MethodSpec(
+                name=name.replace(".", "_"),
+                raw_name=name,
+                summary="Operation",
+                path="/shared",
+                method="get",
+                spec={},
+            )
+            tools.extend(
+                [
+                    CustomTool(
+                        id=1, method_spec=method, base_url="https://example.com"
+                    ),
+                    _make_tool({}, tool_name=name, server_name="server" * 20),
+                ]
+            )
+        assert len({tool.name for tool in tools}) == len(tools)
+        for tool in tools:
+            assert len(tool.name) <= 64
+            assert tool.tool_definition().name == tool.name
+            assert tool.name.isascii()
+            assert all(char.isalnum() or char in "_-" for char in tool.name)
 
     def test_disambiguated_mcp_tool_calls_server_with_original_name(self) -> None:
         mcp_tool = _make_tool({"type": "object"}, tool_name="shared")
-        conflicting_tool = _StaticTool("shared")
-        _disambiguate_mcp_tool_names([mcp_tool, conflicting_tool])
 
         with patch(
             "onyx.tools.tool_implementations.mcp.mcp_tool.call_mcp_tool",
-            return_value={"ok": True},
+            return_value=CallToolResult(
+                content=[TextContent(type="text", text='{"ok": true}')]
+            ),
         ) as mock_call_mcp_tool:
-            mcp_tool.run(Placement(turn_index=0))
+            mcp_tool.run(
+                ToolInvocation(
+                    call_id="test",
+                    arguments={},
+                    cancellation=CancellationSignal(),
+                    update=lambda _progress: None,
+                ),
+                ToolContext(),
+            )
 
         mock_call_mcp_tool.assert_called_once()
         assert mock_call_mcp_tool.call_args.args[1] == "shared"
@@ -235,3 +283,13 @@ class TestMCPToolLLMNames:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-xv"])
+
+
+def test_external_schema_keeps_open_objects_and_non_strict_default() -> None:
+    schema = {
+        "type": "object",
+        "properties": {"metadata": {"type": "object", "properties": {}}},
+    }
+    definition = _make_tool(schema).tool_definition()
+    assert not definition.strict
+    assert definition.parameters == schema

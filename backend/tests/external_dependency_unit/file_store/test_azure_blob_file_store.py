@@ -12,19 +12,29 @@ speaks a service API version newer than the published Azurite image.)
 Skips cleanly when no Azurite endpoint is reachable.
 """
 
+import hashlib
 import os
 import socket
+import time
 import uuid
 from collections.abc import Generator
+from datetime import timedelta
 from io import BytesIO
 from unittest.mock import patch
 from urllib.parse import urlparse
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import FileOrigin
 from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
+from onyx.file_store.file_store import (
+    PresignableFileStore,
+    PresignedUploadNotFoundError,
+    PresignedUploadVerificationError,
+)
+from onyx.file_store.models import PresignedRequest, PresignedUpload
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -437,3 +447,106 @@ class TestAzureBlobBackedFileStore:
         )
         assert store.read_file(file_id).read() == content
         store.delete_file(file_id)
+
+
+PRESIGN_CONTENT = b"a craft session snapshot"
+
+
+def _presign(
+    store: AzureBlobBackedFileStore, ttl: timedelta | None = None
+) -> PresignedUpload:
+    return store.presign_upload(
+        display_name="snapshot.tar",
+        file_origin=FileOrigin.OTHER,
+        file_type="application/x-tar",
+        size=len(PRESIGN_CONTENT),
+        sha256=hashlib.sha256(PRESIGN_CONTENT).hexdigest(),
+        ttl=ttl,
+    )
+
+
+def _send(request: PresignedRequest, content: bytes | None = None) -> httpx.Response:
+    return httpx.request(
+        request.method, request.url, headers=request.headers, content=content
+    )
+
+
+class TestAzurePresignedUrls:
+    """Account-key service SAS URLs against Azurite."""
+
+    def test_an_upload_is_finalized_and_read_back(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        assert isinstance(file_store, PresignableFileStore)
+        upload = _presign(file_store)
+
+        assert _send(upload.request, PRESIGN_CONTENT).status_code == 201
+        file_id = file_store.finalize_presigned_upload(upload.pending_upload_id)
+
+        assert file_id == upload.file_id
+        assert file_store.read_file(file_id).read() == PRESIGN_CONTENT
+        assert file_store.read_file_record(file_id).file_size == len(PRESIGN_CONTENT)
+        with pytest.raises(PresignedUploadNotFoundError):
+            file_store.finalize_presigned_upload(upload.pending_upload_id)
+        file_store.delete_file(file_id)
+
+    def test_the_upload_url_cannot_overwrite_the_blob(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        upload = _presign(file_store)
+        assert _send(upload.request, PRESIGN_CONTENT).status_code == 201
+        file_id = file_store.finalize_presigned_upload(upload.pending_upload_id)
+
+        replaced = _send(upload.request, PRESIGN_CONTENT[:-1] + b"!")
+
+        assert replaced.status_code >= 400
+        assert file_store.read_file(file_id).read() == PRESIGN_CONTENT
+        file_store.delete_file(file_id)
+
+    @pytest.mark.parametrize(
+        "landed",
+        [PRESIGN_CONTENT + b"!", PRESIGN_CONTENT[:-1] + b"!"],
+        ids=["size", "checksum"],
+    )
+    def test_finalize_deletes_a_blob_that_does_not_match(
+        self, file_store: AzureBlobBackedFileStore, landed: bytes
+    ) -> None:
+        upload = _presign(file_store)
+        # A SAS cannot pin the content, so the wrong bytes land.
+        assert _send(upload.request, landed).status_code == 201
+
+        with pytest.raises(PresignedUploadVerificationError):
+            file_store.finalize_presigned_upload(upload.pending_upload_id)
+
+        blob = file_store._get_blob_service_client().get_blob_client(
+            container=TEST_CONTAINER_NAME,
+            blob=file_store._get_object_key(upload.file_id),
+        )
+        assert not blob.exists()
+        assert not file_store.has_file(
+            upload.file_id, FileOrigin.OTHER, "application/x-tar"
+        )
+
+    def test_a_download_url_reads_the_file(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        file_id = file_store.save_file(
+            content=BytesIO(PRESIGN_CONTENT),
+            display_name="snapshot.tar",
+            file_origin=FileOrigin.OTHER,
+            file_type="application/x-tar",
+        )
+
+        response = _send(file_store.presign_download(file_id))
+
+        assert response.status_code == 200
+        assert response.content == PRESIGN_CONTENT
+        file_store.delete_file(file_id)
+
+    def test_expired_urls_are_refused(
+        self, file_store: AzureBlobBackedFileStore
+    ) -> None:
+        upload = _presign(file_store, ttl=timedelta(seconds=1))
+        time.sleep(2)
+
+        assert _send(upload.request, PRESIGN_CONTENT).status_code == 403

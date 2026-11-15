@@ -8,10 +8,10 @@ from fastapi import Request
 from fastapi_users import exceptions
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserCreate, UserRole
+from onyx.auth.schemas import UserCreate
 from onyx.auth.users import get_user_manager
 from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.db.auth import get_user_count, get_user_db
+from onyx.db.auth import get_user_db
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.models import User
 from onyx.utils.logger import setup_logger
@@ -36,9 +36,9 @@ async def upsert_saml_user(email: str) -> User:
     """
     Creates or updates a user account for SAML authentication.
 
-    For new users or users with non-web-login roles:
+    For new users or users with non-web-login account types:
     1. Generates a secure random password that meets validation criteria
-    2. Creates the user with appropriate role and verified status
+    2. Creates the user with verified status
 
     SAML users never use this password directly as they authenticate via their
     Identity Provider, but we need a valid password to satisfy system requirements.
@@ -52,15 +52,12 @@ async def upsert_saml_user(email: str) -> User:
             async with get_user_manager_context(user_db) as user_manager:
                 try:
                     user = await user_manager.get_by_email(email)
-                    # If user has a non-authenticated role, treat as non-existent
+                    # If user has a non-authenticated account type, treat as non-existent
                     if not user.account_type.is_web_login():
                         raise exceptions.UserNotExists()
                     return user
                 except exceptions.UserNotExists:
                     logger.info("Creating user from SAML login")
-
-                user_count = await get_user_count()
-                role = UserRole.ADMIN if user_count == 0 else UserRole.BASIC
 
                 # Generate a secure random password meeting validation requirements
                 # We use a secure random password since we never need to know what it is
@@ -90,12 +87,16 @@ async def upsert_saml_user(email: str) -> User:
                     ]
                 )
 
-                # Create the user with SAML-appropriate settings
+                # Create the user with SAML-appropriate settings.
+                # UserManager.create triggers fastapi-users' on_after_register,
+                # which places the user in the Admin default group if they are
+                # the first user in the tenant (or their email is in
+                # get_default_admin_user_emails()) and the Basic default group
+                # otherwise — this replaces the old explicit role assignment.
                 user = await user_manager.create(
                     UserCreate(
                         email=email,
                         password=secure_random_password,  # Pass raw password, not hash
-                        role=role,
                         is_verified=True,  # SAML users are pre-verified by their IdP
                     ),
                 )
@@ -107,7 +108,7 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
-    # Derive http_host and server_port from WEB_DOMAIN (a trusted env var)
+    # Derive http_host, server_port and https from WEB_DOMAIN (a trusted env var)
     # instead of X-Forwarded-* headers, which can be spoofed by an attacker
     # to poison SAML redirect URLs (host header poisoning).
     parsed_domain = urlparse(WEB_DOMAIN)
@@ -118,6 +119,9 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         "http_host": http_host,
         "server_port": server_port,
         "script_name": request.url.path,
+        # OneLogin assumes HTTPS only on port 443, so without this an HTTPS
+        # WEB_DOMAIN on another port fails the Destination check.
+        "https": "on" if parsed_domain.scheme == "https" else "off",
         "post_data": {},
         "get_data": {},
     }
@@ -126,7 +130,8 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.query_params:
         rv["get_data"] = dict(request.query_params)
 
-    # Handle form data (for POST requests)
+    # A SAMLResponse is only read from a POST body: the redirect binding is not
+    # permitted for responses, and a query string lands in access logs.
     if request.method == "POST":
         form_data = await request.form()
         if "SAMLResponse" in form_data:
@@ -135,12 +140,6 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         if "RelayState" in form_data:
             RelayState = form_data["RelayState"]
             rv["post_data"]["RelayState"] = RelayState
-    else:
-        # For GET requests, check if SAMLResponse is in query params
-        if "SAMLResponse" in request.query_params:
-            rv["get_data"]["SAMLResponse"] = request.query_params["SAMLResponse"]
-        if "RelayState" in request.query_params:
-            rv["get_data"]["RelayState"] = request.query_params["RelayState"]
 
     return rv
 

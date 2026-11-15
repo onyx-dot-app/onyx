@@ -1,14 +1,17 @@
 import { test, expect, Page, Locator } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs } from "@tests/e2e/utils/auth";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
-const IMAGE_GENERATION_URL = "/admin/configuration/image-generation";
+const IMAGE_GENERATION_URL = ADMIN_ROUTES.IMAGE_GENERATION.path;
 
 const FAKE_CONNECTED_CONFIG = {
   image_provider_id: "openai_gpt_image_1_5",
   model_configuration_id: 100,
   model_name: "gpt-image-1.5",
   llm_provider_id: 100,
+  llm_provider_type: "openai",
+  llm_provider_owned: true,
   llm_provider_name: "openai-gpt-image-1-5",
   is_default: false,
 };
@@ -18,6 +21,8 @@ const FAKE_DEFAULT_CONFIG = {
   model_configuration_id: 101,
   model_name: "gpt-image-1",
   llm_provider_id: 101,
+  llm_provider_type: "openai",
+  llm_provider_owned: true,
   llm_provider_name: "openai-gpt-image-1",
   is_default: true,
 };
@@ -45,11 +50,28 @@ async function mockImageGenApis(
       await route.continue();
     }
   });
-
   await page.route(
-    "**/api/admin/llm/provider?include_image_gen=true",
+    "**/api/admin/image-generation/llm-providers",
     async (route) => {
-      await route.fulfill({ status: 200, json: { providers: [] } });
+      await route.fulfill({
+        status: 200,
+        json: [
+          {
+            llm_provider_id: 5,
+            llm_provider_name: "Team OpenAI",
+            provider: "openai",
+            is_public: true,
+            models: [
+              {
+                name: "gpt-image-2",
+                display_name: null,
+                is_recommended: true,
+                image_provider_id: null,
+              },
+            ],
+          },
+        ],
+      });
     }
   );
 }
@@ -78,7 +100,7 @@ test.describe("Image Generation Provider Disconnect", () => {
       name: "image-gen-disconnect-non-default-before",
     });
 
-    // Hover to reveal disconnect button, then verify
+    // Disconnect button is always visible
     await card.hover();
     const disconnectButton = card.getByRole("button", {
       name: "Disconnect GPT Image 1.5",
@@ -131,10 +153,8 @@ test.describe("Image Generation Provider Disconnect", () => {
     });
     await confirmButton.click();
 
-    // Verify the card reverts to disconnected state (shows "Connect" button)
-    await expect(card.getByRole("button", { name: "Connect" })).toBeVisible({
-      timeout: 10000,
-    });
+    // Legacy cards show only while connected
+    await expect(card).toHaveCount(0, { timeout: 10000 });
 
     await expectElementScreenshot(mainContainer(page), {
       name: "image-gen-disconnect-non-default-after",
@@ -155,7 +175,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     const defaultCard = getProviderCard(page, "openai_gpt_image_1");
     await defaultCard.waitFor({ state: "visible", timeout: 10000 });
 
-    // Hover to reveal disconnect button
+    // Disconnect button is always visible
     await defaultCard.hover();
     const disconnectButton = defaultCard.getByRole("button", {
       name: "Disconnect GPT Image 1",
@@ -233,12 +253,14 @@ test.describe("Image Generation Provider Disconnect", () => {
       timeout: 20000,
     });
 
-    // GPT Image 1.5 is not configured — should not have a disconnect button
-    const card = getProviderCard(page, "openai_gpt_image_1_5");
+    // gpt-image-2 on the LLM provider is not connected — no disconnect button
+    const card = page.getByLabel("image-gen-model-5-gpt-image-2", {
+      exact: true,
+    });
     await card.waitFor({ state: "visible", timeout: 10000 });
 
     const disconnectButton = card.getByRole("button", {
-      name: "Disconnect GPT Image 1.5",
+      name: "Disconnect gpt-image-2",
     });
     await expect(disconnectButton).not.toBeVisible();
 

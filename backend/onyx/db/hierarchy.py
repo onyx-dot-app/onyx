@@ -1,26 +1,44 @@
 """CRUD operations for HierarchyNode."""
 
 from collections import defaultdict
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from pydantic import BaseModel
+from sqlalchemy import (
+    ColumnElement,
+    Integer,
+    and_,
+    case,
+    delete,
+    exists,
+    func,
+    literal,
+    select,
+    true,
+    union_all,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.models import (
     Document,
+    DocumentByConnectorCredentialPair,
     HierarchyNode,
     HierarchyNodeByConnectorCredentialPair,
 )
+from onyx.utils.batching import batch_generator
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
 logger = setup_logger()
+
+_ANCESTOR_SEED_BATCH_SIZE = 1000
 
 # Sources where hierarchy nodes can also be documents.
 # For these sources, pages/items can be both a hierarchy node (with children)
@@ -537,6 +555,9 @@ def get_all_hierarchy_nodes_for_source(
     return list(db_session.execute(stmt).scalars().all())
 
 
+# MIT hierarchy queries intentionally omit permission filters.
+# Supported Community connectors are public; private/group and permission-sync
+# connector access are Business features handled by the EE implementation.
 def _get_accessible_hierarchy_nodes_for_source(
     db_session: Session,
     source: DocumentSource,
@@ -689,7 +710,7 @@ def get_document_parent_hierarchy_node_ids(
     )
     results = db_session.execute(stmt).all()
 
-    return {doc_id: parent_id for doc_id, parent_id in results}
+    return {doc_id: parent_id for doc_id, parent_id in results}  # noqa: C416  # unpacking types the SQLAlchemy Row
 
 
 def update_document_parent_hierarchy_nodes(
@@ -823,6 +844,43 @@ def upsert_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
 
+def persist_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    nodes: list[PydanticHierarchyNode],
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+    is_connector_public: bool = False,
+    commit: bool = True,
+) -> list[HierarchyNode]:
+    """Upsert nodes and their cc_pair ownership links in one transaction.
+
+    Orphan cleanup deletes nodes with no join-table row. The node insert and
+    ownership insert must commit together so a concurrent cleanup cannot
+    remove a node before its link exists.
+    """
+    if not nodes:
+        return []
+
+    upserted = upsert_hierarchy_nodes_batch(
+        db_session=db_session,
+        nodes=nodes,
+        source=source,
+        commit=False,
+        is_connector_public=is_connector_public,
+    )
+    upsert_hierarchy_node_cc_pair_entries(
+        db_session=db_session,
+        hierarchy_node_ids=[n.id for n in upserted],
+        connector_id=connector_id,
+        credential_id=credential_id,
+        commit=False,
+    )
+    if commit:
+        db_session.commit()
+    return upserted
+
+
 def remove_stale_hierarchy_node_cc_pair_entries(
     db_session: Session,
     connector_id: int,
@@ -858,6 +916,83 @@ def remove_stale_hierarchy_node_cc_pair_entries(
         db_session.flush()
 
     return deleted
+
+
+def _get_ids_with_ancestors(db_session: Session, seed: ColumnElement[bool]) -> set[int]:
+    """Ids of the nodes that match ``seed`` and of all their ancestors, in one
+    recursive query over the stored parent links."""
+    walk = (
+        select(HierarchyNode.id, HierarchyNode.parent_id)
+        .where(seed)
+        .cte("hierarchy_ancestors", recursive=True)
+    )
+    parent = aliased(HierarchyNode)
+    # UNION (not UNION ALL) drops repeated rows, so shared ancestors are
+    # walked once and a parent cycle ends the walk.
+    walk = walk.union(
+        select(parent.id, parent.parent_id).join(walk, parent.id == walk.c.parent_id)
+    )
+    return set(db_session.execute(select(walk.c.id)).scalars().all())
+
+
+def source_has_document_hierarchy_nodes(
+    db_session: Session, source: DocumentSource
+) -> bool:
+    """True when a hierarchy node of ``source`` is also a document (e.g. a
+    Confluence page). Without one, a document-id seed matches no node."""
+    return bool(
+        db_session.scalar(
+            select(
+                select(HierarchyNode.id)
+                .where(
+                    HierarchyNode.source == source,
+                    HierarchyNode.document_id.is_not(None),
+                )
+                .exists()
+            )
+        )
+    )
+
+
+def get_hierarchy_node_ids_with_ancestors(
+    db_session: Session,
+    source: DocumentSource,
+    raw_node_ids: set[str],
+    node_ids: set[int],
+    document_ids: set[str] | None = None,
+) -> set[int]:
+    """Ids of the given nodes and of all their ancestors up to the root.
+
+    ``raw_node_ids`` resolve within ``source``. ``document_ids`` select the
+    nodes that are also those documents (e.g. Confluence pages). A seed with
+    no node is skipped. Seeds go in batches, and each batch is one recursive
+    query.
+    """
+    result: set[int] = set()
+    for doc_batch in batch_generator(
+        sorted(document_ids or set()), _ANCESTOR_SEED_BATCH_SIZE
+    ):
+        result |= _get_ids_with_ancestors(
+            db_session,
+            and_(
+                HierarchyNode.source == source,
+                HierarchyNode.document_id.in_(doc_batch),
+            ),
+        )
+    for raw_batch in batch_generator(sorted(raw_node_ids), _ANCESTOR_SEED_BATCH_SIZE):
+        result |= _get_ids_with_ancestors(
+            db_session,
+            and_(
+                HierarchyNode.source == source,
+                HierarchyNode.raw_node_id.in_(raw_batch),
+            ),
+        )
+    # A node already found has its ancestors in the result too.
+    for id_batch in batch_generator(
+        sorted(node_ids - result), _ANCESTOR_SEED_BATCH_SIZE
+    ):
+        result |= _get_ids_with_ancestors(db_session, HierarchyNode.id.in_(id_batch))
+    return result
 
 
 def delete_orphaned_hierarchy_nodes(
@@ -909,8 +1044,8 @@ def reparent_orphaned_hierarchy_nodes(
 ) -> list[HierarchyNode]:
     """Re-parent hierarchy nodes whose parent_id is NULL to the SOURCE node.
 
-    After pruning deletes stale nodes, their former children get parent_id=NULL
-    via the SET NULL cascade. This function points them back to the SOURCE root.
+    After parent nodes are deleted, former children get parent_id=NULL via
+    SET NULL. This points them back to the SOURCE root.
 
     Returns the reparented HierarchyNode objects (with updated parent_id)
     so callers can refresh downstream caches.
@@ -937,3 +1072,182 @@ def reparent_orphaned_hierarchy_nodes(
         db_session.flush()
 
     return orphans
+
+
+def cleanup_unowned_hierarchy_nodes(
+    db_session: Session,
+    source: DocumentSource,
+    commit: bool = True,
+) -> tuple[list[str], list[HierarchyNode]]:
+    """Delete nodes with no remaining cc_pair links; reparent leftover children.
+
+    SOURCE roots are kept. Call after join-table rows for a cc_pair are gone
+    (cc_pair delete CASCADE, or prune's stale-entry removal).
+
+    Returns (deleted raw_node_ids, reparented nodes) for cache updates.
+    """
+    deleted_raw_ids = delete_orphaned_hierarchy_nodes(db_session, source, commit=False)
+    reparented_nodes = reparent_orphaned_hierarchy_nodes(
+        db_session, source, commit=False
+    )
+    if commit:
+        db_session.commit()
+    return deleted_raw_ids, reparented_nodes
+
+
+def get_hierarchy_nodes_for_cc_pair(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    *,
+    parent_id: int | None = None,
+    node_types: Collection[HierarchyNodeType] | None = None,
+) -> list[HierarchyNode]:
+    """The cc-pair's hierarchy nodes, optionally only the children of
+    ``parent_id`` or only the given types. SOURCE roots and STUB placeholders
+    are never returned."""
+    stmt = (
+        select(HierarchyNode)
+        .join(
+            HierarchyNodeByConnectorCredentialPair,
+            HierarchyNodeByConnectorCredentialPair.hierarchy_node_id
+            == HierarchyNode.id,
+        )
+        .where(
+            HierarchyNodeByConnectorCredentialPair.connector_id == connector_id,
+            HierarchyNodeByConnectorCredentialPair.credential_id == credential_id,
+            HierarchyNode.node_type.not_in(
+                [HierarchyNodeType.SOURCE, HierarchyNodeType.STUB]
+            ),
+        )
+    )
+    if parent_id is not None:
+        stmt = stmt.where(HierarchyNode.parent_id == parent_id)
+    if node_types is not None:
+        stmt = stmt.where(HierarchyNode.node_type.in_(node_types))
+    return list(db_session.execute(stmt).scalars().all())
+
+
+class SubtreeDocumentCounts(BaseModel):
+    # Root node id -> the cc-pair's indexed documents in its subtree. A root
+    # with no such document is left out.
+    by_root: dict[int, int]
+    # The cc-pair's indexed documents in no root's subtree, and not one of the
+    # standalone documents.
+    other: int
+
+
+def get_subtree_document_counts_for_cc_pair(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    root_node_ids: Collection[int],
+    standalone_document_ids: Collection[str] = (),
+) -> SubtreeDocumentCounts:
+    """The cc-pair's indexed documents in the subtree of each root node, and
+    the documents outside of all of them.
+
+    A recursive CTE walks down ``parent_id`` from every root and keeps the root
+    on each row. A document is in a root's subtree when its parent node is in
+    the subtree, or when it is the root itself (e.g. a Confluence page root).
+    No document needs a dedup: a document has one parent, and the root's own
+    document has its parent above the root. Lower nodes that are documents
+    (pages) count through their parent. The walk does not filter nodes by
+    cc-pair: the document filter is enough, and a node shared with another
+    cc-pair must not cut the walk.
+
+    ``standalone_document_ids`` are documents that the caller shows as rows of
+    their own (e.g. a configured page without a node). They are not "other".
+    One statement reads all counts, so they come from one snapshot.
+    """
+    pair_document = aliased(DocumentByConnectorCredentialPair)
+    indexed_for_pair = and_(
+        pair_document.connector_id == connector_id,
+        pair_document.credential_id == credential_id,
+        pair_document.has_been_indexed.is_(True),
+    )
+
+    subtree = (
+        select(
+            HierarchyNode.id.label("root_id"),
+            HierarchyNode.id.label("node_id"),
+        )
+        .where(HierarchyNode.id.in_(root_node_ids))
+        .cte("breakdown_subtree", recursive=True)
+    )
+    child = aliased(HierarchyNode)
+    # OFFSET 0 keeps the lateral subquery from being flattened into a join, so
+    # each step reads the children by the parent_id index. As a plain join, the
+    # planner over-estimates the step size and scans the whole index on each
+    # level of a deep tree.
+    children = (
+        select(child.id)
+        .where(child.parent_id == subtree.c.node_id)
+        .offset(0)
+        .lateral("breakdown_children")
+    )
+    # UNION (not UNION ALL) ends the walk at a parent cycle.
+    subtree = subtree.union(
+        select(subtree.c.root_id, children.c.id).select_from(
+            subtree.join(children, true())
+        )
+    )
+
+    child_documents = (
+        select(subtree.c.root_id)
+        .join(Document, Document.parent_hierarchy_node_id == subtree.c.node_id)
+        .join(pair_document, and_(pair_document.id == Document.id, indexed_for_pair))
+    )
+    # The indexing links a node to its document only when both are in one
+    # batch. A page that gains its node later (its first child) keeps
+    # document_id NULL, so the raw id, which equals the document id for these
+    # sources, finds the document too.
+    root_own_document_id = func.coalesce(
+        HierarchyNode.document_id,
+        case(
+            (
+                HierarchyNode.source.in_(SOURCES_WITH_HIERARCHY_NODE_DOCUMENTS),
+                HierarchyNode.raw_node_id,
+            ),
+        ),
+    )
+    root_documents = (
+        select(HierarchyNode.id.label("root_id"))
+        .join(
+            pair_document,
+            and_(pair_document.id == root_own_document_id, indexed_for_pair),
+        )
+        .where(HierarchyNode.id.in_(root_node_ids))
+    )
+    subtree_documents = union_all(child_documents, root_documents).subquery()
+    per_root = select(
+        subtree_documents.c.root_id, func.count().label("document_count")
+    ).group_by(subtree_documents.c.root_id)
+
+    covered_document_ids = select(root_own_document_id).where(
+        HierarchyNode.id.in_(root_node_ids),
+        root_own_document_id.is_not(None),
+    )
+    other_conditions = [
+        ~exists().where(subtree.c.node_id == Document.parent_hierarchy_node_id),
+        Document.id.not_in(covered_document_ids),
+    ]
+    if standalone_document_ids:
+        other_conditions.append(Document.id.not_in(standalone_document_ids))
+    other = (
+        select(literal(None, Integer).label("root_id"), func.count())
+        .select_from(Document)
+        .join(pair_document, and_(pair_document.id == Document.id, indexed_for_pair))
+        .where(*other_conditions)
+    )
+
+    by_root: dict[int, int] = {}
+    other_count = 0
+    for root_id, document_count in db_session.execute(
+        union_all(per_root, other)
+    ).tuples():
+        if root_id is None:
+            other_count = document_count
+        else:
+            by_root[root_id] = document_count
+    return SubtreeDocumentCounts(by_root=by_root, other=other_count)

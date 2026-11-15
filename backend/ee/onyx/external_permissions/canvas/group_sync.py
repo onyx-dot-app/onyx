@@ -10,6 +10,7 @@ from onyx.connectors.canvas.connector import (
     canvas_group_group_id,
     canvas_section_group_id,
 )
+from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.interfaces import SecondsSinceUnixEpoch
 from onyx.db.models import ConnectorCredentialPair
 from onyx.error_handling.exceptions import OnyxError
@@ -74,7 +75,11 @@ def canvas_group_sync(
     tenant_id: str,  # noqa: ARG001
     cc_pair: ConnectorCredentialPair,
 ) -> Generator[ExternalUserGroup, None, None]:
-    connector = CanvasConnector(**cc_pair.connector.connector_specific_config)
+    connector = CanvasConnector(
+        **build_connector_kwargs(
+            cc_pair.connector.source, cc_pair.connector.connector_specific_config
+        )
+    )
     connector.load_credentials(credential_json(cc_pair))
     indexing_start = (
         datetime_to_utc(cc_pair.connector.indexing_start).timestamp()

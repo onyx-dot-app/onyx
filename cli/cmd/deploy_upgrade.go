@@ -21,7 +21,8 @@ func newDeployUpgradeCmdWithDeps(ios *iostreams.IOStreams, deps *install.Deps) *
 Only the IMAGE_TAG line (plus SANDBOX_BACKEND when Craft is enabled) is
 rewritten in .env — every other setting, including your edits, is preserved.
 Managed files (compose, overlays, nginx config) are refreshed to match the
-target version; files you hand-edited are kept unless you confirm the
+target version; a -dev image tag (v4.4.6-dev) takes them from the release it
+was built from (v4.4.6). Files you hand-edited are kept unless you confirm the
 overwrite (or pass --force), and a backup is made first. The running
 services keep serving while images download and are then recreated on the
 new version.
@@ -32,6 +33,7 @@ asserts it for the first adoption of an unmanaged deployment. --project
 targets a stack that runs under a compose project name other than "onyx".`,
 		Example: `  onyx-cli deploy upgrade
   onyx-cli deploy upgrade --tag v4.4.6
+  onyx-cli deploy upgrade --tag v4.4.6-dev
   onyx-cli deploy upgrade --tag v4.4.6 --no-prompt --force
   onyx-cli deploy upgrade --prod --project danswer-stack --dir /opt/onyx --no-prompt`,
 		Args: cobra.NoArgs,

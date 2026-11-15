@@ -9,7 +9,6 @@ concurrency:
 # triggered ONLY when the prompt (or the flow/suite around it) changes.
 on:
   pull_request:
-    branches: [main]
     paths:
       - "backend/onyx/prompts/filter_extration.py"
       - "backend/onyx/secondary_llm_flows/source_filter.py"
@@ -23,7 +22,7 @@ permissions:
 env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
-  # MinIO
+  # Object store (dev overlay publishes it on 9004)
   S3_ENDPOINT_URL: "http://localhost:9004"
   S3_AWS_ACCESS_KEY_ID: "minioadmin"
   S3_AWS_SECRET_ACCESS_KEY: "minioadmin"
@@ -31,8 +30,7 @@ env:
 jobs:
   connector-filter-eval:
     # Informative, not a merge gate: a single failing eval case fails the run,
-    # but some cases document behaviors the prompt does not handle yet, so a
-    # red eval must never block the PR.
+    # and the backoff advance-vs-re-search cases can flake with cheap models.
     continue-on-error: true
     runs-on:
       - runs-on
@@ -51,7 +49,7 @@ jobs:
       - uses: runs-on/action@d141ef83eb66d096ce8afc767e09115a65c63b60
 
       - name: Checkout code
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # ratchet:actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
 
@@ -82,7 +80,7 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.dev.yml \
             up -d \
-            minio \
+            object-store \
             relational_db \
             cache \
             opensearch

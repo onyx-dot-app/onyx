@@ -5,7 +5,9 @@ import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
-import { BackendChatSession } from "@/chat/interfaces";
+import { BackendChatSession, ChatStream } from "@/chat/interfaces";
+
+const SESSION_CONTROL_TIMEOUT_MS = 10_000;
 
 // Pre-creates a session so the first message sends with a real chat_session_id.
 export async function createChatSession(
@@ -23,16 +25,61 @@ export async function createChatSession(
 }
 
 // Session snapshot for hydration.
+// Older servers name a running stream without `response_ids`.
+function withResponseIds(stream: ChatStream | null | undefined) {
+  return stream
+    ? { ...stream, response_ids: stream.response_ids ?? [] }
+    : stream;
+}
+
 export async function getChatSession(
   sessionId: string,
 ): Promise<BackendChatSession> {
-  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`);
+  const session = await apiFetch<BackendChatSession>(
+    `/chat/get-chat-session/${sessionId}`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
+  );
+  return {
+    ...session,
+    current_stream: withResponseIds(session.current_stream),
+  };
+}
+
+export interface ChatSessionStatus {
+  is_processing: boolean;
+  // The running response's stream, once it has one.
+  current_stream?: ChatStream | null;
+  // Background agents run, or their queued work waits. A parked agent waits for the user, so it
+  // does not count.
+  has_active_subagents?: boolean;
+  // Queued input or unread agent results can start a turn now; the server schedules it.
+  has_startable_input?: boolean;
+  // Changes when a tool approval request of the session opens, is decided or is removed.
+  approvals_version?: string;
+  // The newest response on the selected branch.
+  latest_response_id?: number | null;
+}
+
+export async function getChatSessionStatus(
+  sessionId: string,
+): Promise<ChatSessionStatus> {
+  const status = await apiFetch<ChatSessionStatus>(
+    `/chat/chat-session/${sessionId}/status`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
+  );
+  return { ...status, current_stream: withResponseIds(status.current_stream) };
 }
 
 // client abort alone leaves the backend generating
-export async function stopChatSession(sessionId: string): Promise<void> {
-  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}`, {
+// streamId scopes Stop to one response; omitted, the backend stops whichever is in flight.
+export async function stopChatSession(
+  sessionId: string,
+  streamId?: number,
+): Promise<void> {
+  const query = streamId === undefined ? "" : `?stream_id=${streamId}`;
+  await apiFetch<void>(`/chat/stop-chat-session/${sessionId}${query}`, {
     method: "POST",
+    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
   });
 }
 
@@ -95,6 +142,7 @@ export function useChatSessions() {
       // Matches web; the compound-cursor fix stays out of scope to keep the port backend-free.
       return lastPage.sessions[lastPage.sessions.length - 1]!.time_updated;
     },
+    refetchInterval: 60_000,
   });
 
   const sessions = useMemo(

@@ -1,15 +1,16 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useMemo, useState } from "react";
-import { Table, createTableColumns } from "@opal/components";
+import { useLocale, useTranslations } from "next-intl";
+import { Table, type TableColumn } from "@opal/components";
 import { Content, toast } from "@opal/layouts";
-import { Button } from "@opal/components";
-import { SvgDownload, SvgSimpleLoader } from "@opal/icons";
+import { Button, Text } from "@opal/components";
+import { SvgDownload } from "@opal/icons";
 import SvgNoResult from "@opal/illustrations/no-result";
 import { IllustrationContent } from "@opal/layouts";
-import { UserRole, UserStatus, USER_STATUS_LABELS } from "@/lib/types";
+import { AccountType, UserStatus } from "@/lib/types";
 import { timeAgo } from "@opal/time";
-import Text from "@/refresh-components/texts/Text";
 import { InputTypeIn } from "@opal/components";
 import useAdminUsers from "@/hooks/useAdminUsers";
 import useGroups from "@/hooks/useGroups";
@@ -17,13 +18,13 @@ import { downloadUsersCsv } from "./svc";
 import UserFilters from "./UserFilters";
 import GroupsCell from "./GroupsCell";
 import UserRowActions from "./UserRowActions";
-import UserRoleCell from "./UserRoleCell";
+import AccountTypeCell from "./AccountTypeCell";
 import type {
   UserRow,
   GroupOption,
   StatusFilter,
   StatusCountMap,
-} from "./interfaces";
+} from "./types";
 import UserAvatar from "@/refresh-components/avatars/UserAvatar";
 import type { User } from "@/lib/types";
 
@@ -34,33 +35,36 @@ import type { User } from "@/lib/types";
 function renderNameColumn(email: string, row: UserRow) {
   return (
     <Content
-      sizePreset="main-ui"
-      variant="section"
+      font="main-ui-action"
       title={row.personal_name ?? email}
       description={row.personal_name ? email : undefined}
     />
   );
 }
 
-function renderStatusColumn(value: UserStatus, row: UserRow) {
+function renderStatusColumn(
+  value: UserStatus,
+  row: UserRow,
+  labels: ColumnLabels
+) {
   return (
     <div className="flex flex-col">
-      <Text as="span" mainUiBody text03>
-        {USER_STATUS_LABELS[value] ?? value}
+      <Text as="span" font="main-ui-body" color="text-03">
+        {labels.status[value] ?? value}
       </Text>
       {row.is_scim_synced && (
-        <Text as="span" secondaryBody text03>
-          SCIM synced
+        <Text as="span" font="secondary-body" color="text-03">
+          {labels.scimSynced}
         </Text>
       )}
     </div>
   );
 }
 
-function renderLastUpdatedColumn(value: string | null) {
+function renderLastActiveColumn(value: string | null, locale: string) {
   return (
-    <Text as="span" secondaryBody text03>
-      {value ? (timeAgo(value) ?? "\u2014") : "\u2014"}
+    <Text as="span" font="secondary-body" color="text-03">
+      {value ? (timeAgo(value, locale) ?? "\u2014") : "\u2014"}
     </Text>
   );
 }
@@ -69,14 +73,27 @@ function renderLastUpdatedColumn(value: string | null) {
 // Columns
 // ---------------------------------------------------------------------------
 
-const tc = createTableColumns<UserRow>();
+interface ColumnLabels {
+  name: string;
+  groups: string;
+  accountType: string;
+  lastActive: string;
+  statusHeader: string;
+  status: Record<UserStatus, string>;
+  scimSynced: string;
+}
 
-function buildColumns(onMutate: () => void) {
+function buildColumns(
+  onMutate: () => void,
+  labels: ColumnLabels,
+  locale: string
+): TableColumn<UserRow>[] {
   return [
-    tc.qualifier({
+    {
+      kind: "qualifier",
       content: "icon",
-      iconSize: "lg",
-      getContent: (row) => {
+      avatar: true,
+      icon: (row) => {
         const user = {
           email: row.email,
           personalization: row.personal_name
@@ -85,38 +102,49 @@ function buildColumns(onMutate: () => void) {
         } as User;
         return (props) => <UserAvatar user={user} size={props.size} />;
       },
-    }),
-    tc.column("email", {
-      header: "Name",
+    },
+    {
+      kind: "data",
+      field: "email",
+      title: labels.name,
       weight: 22,
       cell: renderNameColumn,
-    }),
-    tc.column("groups", {
-      header: "Groups",
+    },
+    {
+      kind: "data",
+      field: "groups",
+      title: labels.groups,
       weight: 24,
-      enableSorting: false,
+      sortable: false,
       cell: (value, row) => (
         <GroupsCell groups={value} user={row} onMutate={onMutate} />
       ),
-    }),
-    tc.column("role", {
-      header: "Account Type",
+    },
+    {
+      kind: "data",
+      field: "account_type",
+      title: labels.accountType,
       weight: 16,
-      cell: (_value, row) => <UserRoleCell user={row} onMutate={onMutate} />,
-    }),
-    tc.column("status", {
-      header: "Status",
+      cell: (_value, row) => <AccountTypeCell user={row} onMutate={onMutate} />,
+    },
+    {
+      kind: "data",
+      field: "status",
+      title: labels.statusHeader,
       weight: 14,
-      cell: renderStatusColumn,
-    }),
-    tc.column("updated_at", {
-      header: "Last Updated",
+      cell: (value, row) => renderStatusColumn(value, row, labels),
+    },
+    {
+      kind: "data",
+      field: "last_active",
+      title: labels.lastActive,
       weight: 14,
-      cell: renderLastUpdatedColumn,
-    }),
-    tc.actions({
+      cell: (value) => renderLastActiveColumn(value, locale),
+    },
+    {
+      kind: "actions",
       cell: (row) => <UserRowActions user={row} onMutate={onMutate} />,
-    }),
+    },
   ];
 }
 
@@ -129,43 +157,70 @@ const PAGE_SIZE = 8;
 interface UsersTableProps {
   selectedStatuses: StatusFilter;
   onStatusesChange: (statuses: StatusFilter) => void;
-  roleCounts: Record<string, number>;
+  accountTypeCounts: Record<string, number>;
   statusCounts: StatusCountMap;
 }
 
 export default function UsersTable({
   selectedStatuses,
   onStatusesChange,
-  roleCounts,
+  accountTypeCounts,
   statusCounts,
 }: UsersTableProps) {
+  const t = useTranslations("admin.users");
+  const locale = useLocale();
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedRoles, setSelectedRoles] = useState<UserRole[]>([]);
+  const [selectedAccountTypes, setSelectedAccountTypes] = useState<
+    AccountType[]
+  >([]);
   const [selectedGroups, setSelectedGroups] = useState<number[]>([]);
 
-  const { data: allGroups } = useGroups();
+  const { data: allGroups } = useGroups(true, false);
 
   const groupOptions: GroupOption[] = useMemo(
     () =>
       (allGroups ?? []).map((g) => ({
         id: g.id,
         name: g.name,
-        memberCount: g.users.length,
+        memberCount: g.member_count,
       })),
     [allGroups]
   );
 
   const { users, isLoading, error, refresh } = useAdminUsers();
 
-  const columns = useMemo(() => buildColumns(refresh), [refresh]);
+  const columns = useMemo(
+    () =>
+      buildColumns(
+        refresh,
+        {
+          name: t("table.columns.name.header"),
+          groups: t("table.columns.groups.header"),
+          accountType: t("table.columns.accountType.header"),
+          lastActive: t("table.columns.lastActive.header"),
+          statusHeader: t("table.columns.status.header"),
+          status: {
+            [UserStatus.ACTIVE]: t("status.active.label"),
+            [UserStatus.INACTIVE]: t("status.inactive.label"),
+            [UserStatus.INVITED]: t("status.invited.label"),
+            [UserStatus.REQUESTED]: t("status.requested.label"),
+          },
+          scimSynced: t("table.status.scimSynced.label"),
+        },
+        locale
+      ),
+    [refresh, t, locale]
+  );
 
   // Client-side filtering
   const filteredUsers = useMemo(() => {
     let result = users;
 
-    if (selectedRoles.length > 0) {
+    if (selectedAccountTypes.length > 0) {
       result = result.filter(
-        (u) => u.role !== null && selectedRoles.includes(u.role)
+        (u) =>
+          u.account_type !== null &&
+          selectedAccountTypes.includes(u.account_type)
       );
     }
 
@@ -180,20 +235,20 @@ export default function UsersTable({
     }
 
     return result;
-  }, [users, selectedRoles, selectedStatuses, selectedGroups]);
+  }, [users, selectedAccountTypes, selectedStatuses, selectedGroups]);
 
   if (isLoading) {
     return (
       <div className="flex justify-center py-12">
-        <SvgSimpleLoader className="h-6 w-6" />
+        <IconLoader className="h-6 w-6" />
       </div>
     );
   }
 
   if (error) {
     return (
-      <Text as="p" secondaryBody text03>
-        Failed to load users. Please try refreshing the page.
+      <Text as="p" font="secondary-body" color="text-03">
+        {t("table.error.description")}
       </Text>
     );
   }
@@ -203,31 +258,31 @@ export default function UsersTable({
       <InputTypeIn
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
-        placeholder="Search users..."
-        searchIcon
+        placeholder={t("table.search.placeholder")}
+        icon="search"
       />
       <UserFilters
-        selectedRoles={selectedRoles}
-        onRolesChange={setSelectedRoles}
+        selectedAccountTypes={selectedAccountTypes}
+        onAccountTypesChange={setSelectedAccountTypes}
         selectedGroups={selectedGroups}
         onGroupsChange={setSelectedGroups}
         groups={groupOptions}
         selectedStatuses={selectedStatuses}
         onStatusesChange={onStatusesChange}
-        roleCounts={roleCounts}
+        accountTypeCounts={accountTypeCounts}
         statusCounts={statusCounts}
       />
       <Table
-        data={filteredUsers}
+        items={filteredUsers}
         columns={columns}
         getRowId={(row) => row.id ?? row.email}
         pageSize={PAGE_SIZE}
-        searchTerm={searchTerm}
+        query={searchTerm}
         emptyState={
           <IllustrationContent
             illustration={SvgNoResult}
-            title="No users found"
-            description="No users match the current filters."
+            title={t("table.empty.title")}
+            description={t("table.empty.description")}
           />
         }
         footer={{
@@ -236,14 +291,14 @@ export default function UsersTable({
               icon={SvgDownload}
               prominence="tertiary"
               size="sm"
-              tooltip="Download CSV"
-              aria-label="Download CSV"
+              tooltip={t("table.downloadCsvButton.tooltip")}
+              aria-label={t("table.downloadCsvButton.ariaLabel")}
               onClick={() => {
                 downloadUsersCsv().catch((err) => {
                   toast.error(
                     err instanceof Error
                       ? err.message
-                      : "Failed to download CSV"
+                      : t("table.toasts.downloadFailed")
                   );
                 });
               }}

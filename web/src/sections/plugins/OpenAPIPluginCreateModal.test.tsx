@@ -1,0 +1,565 @@
+import {
+  act,
+  deferred,
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
+import OpenAPIPluginCreateModal from "@/sections/plugins/OpenAPIPluginCreateModal";
+import type { ToolSnapshot } from "@/lib/tools/types";
+
+let mockFullAdmin = false;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({ isGlobalHolder: mockFullAdmin }),
+}));
+beforeEach(() => {
+  mockFullAdmin = false;
+});
+
+const definition = {
+  openapi: "3.0.0",
+  info: { title: "Release API", version: "1.0" },
+  servers: [{ url: "https://releases.example.com" }],
+  paths: {
+    "/releases": {
+      get: {
+        operationId: "listReleases",
+        summary: "List releases",
+        responses: { "200": { description: "Releases" } },
+      },
+    },
+  },
+};
+
+afterEach(() => jest.restoreAllMocks());
+
+test.each([
+  { customHeaders: [], enabled: true },
+  { customHeaders: null, enabled: true },
+  { customHeaders: [], enabled: false },
+])(
+  "creates a full admin's action with enabled=$enabled and $customHeaders headers",
+  async ({ customHeaders, enabled }) => {
+    mockFullAdmin = true;
+    const user = setupUser();
+    const onCreated = jest.fn();
+    const writes: { path: string; body: unknown }[] = [];
+    let created = false;
+    jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (init?.body)
+        writes.push({ path, body: JSON.parse(String(init.body)) });
+      if (path === "/api/admin/default-assistant/configuration")
+        return new Response(JSON.stringify({ tool_ids: [99] }));
+      if (path === "/api/admin/default-assistant/tools")
+        return new Response(
+          JSON.stringify({ tool_ids: enabled ? [99, 42] : [99] })
+        );
+      if (path === "/api/tool/openapi")
+        return new Response(
+          JSON.stringify(
+            created
+              ? [
+                  {
+                    id: 42,
+                    enabled,
+                    name: "Release API",
+                    custom_headers: customHeaders,
+                  },
+                ]
+              : []
+          )
+        );
+      if (path === "/api/admin/tool/custom/validate")
+        return new Response(JSON.stringify({ methods: [] }));
+      if (path === "/api/admin/tool/custom") {
+        created = true;
+        return new Response(JSON.stringify({ id: 42 }));
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    render(
+      <OpenAPIPluginCreateModal
+        open
+        onClose={jest.fn()}
+        onCreated={onCreated}
+      />
+    );
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: /OpenAPI Schema Definition/ }),
+      {
+        target: { value: JSON.stringify(definition) },
+      }
+    );
+    const availability = await screen.findByRole("switch", {
+      name: "Enable in default Chat",
+    });
+    expect(availability).toBeChecked();
+    if (!enabled) await user.click(availability);
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      screen.queryByRole("switch", { name: "Enable in default Chat" })
+    ).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
+    await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    expect(writes).toContainEqual({
+      path: "/api/admin/tool/custom",
+      body: expect.objectContaining({ enabled: true }),
+    });
+    expect(writes).toContainEqual({
+      path: "/api/admin/default-assistant/tools",
+      body: { tool_ids: [42], enabled },
+    });
+    expect(
+      writes.findIndex((write) => write.path === "/api/admin/tool/custom")
+    ).toBeLessThan(
+      writes.findIndex(
+        (write) => write.path === "/api/admin/default-assistant/tools"
+      )
+    );
+  }
+);
+
+test.each(["mounted", "disposed"])(
+  "creates a no-auth action for a scoped creator and reports completion only while %s",
+  async (session) => {
+    const user = setupUser();
+    const onCreated = jest.fn();
+    const onClose = jest.fn();
+    const reload = deferred<Response>();
+    let created = false;
+    let createBody: unknown;
+    jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+      const path = String(input);
+      if (path === "/api/tool/openapi")
+        return created ? reload.promise : new Response("[]");
+      if (path === "/api/admin/tool/custom/validate")
+        return new Response(JSON.stringify({ methods: [] }));
+      if (path === "/api/admin/tool/custom") {
+        createBody = JSON.parse(String(init?.body));
+        created = true;
+        return new Response(
+          JSON.stringify({ id: 42, enabled: true, name: "Release API" })
+        );
+      }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const { unmount } = render(
+      <OpenAPIPluginCreateModal open onClose={onClose} onCreated={onCreated} />
+    );
+    const dialog = await screen.findByRole("dialog");
+    const backdrop = document.querySelector(".opal-modal-overlay");
+    expect(backdrop).not.toBeNull();
+    fireEvent.change(
+      await screen.findByRole("textbox", { name: /OpenAPI Schema Definition/ }),
+      {
+        target: { value: JSON.stringify(definition) },
+      }
+    );
+    fireEvent.change(
+      screen.getByRole("textbox", { name: /Description for Humans/ }),
+      { target: { value: "Release dashboard" } }
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
+    expect(createBody).toBeUndefined();
+    expect(
+      screen.getByRole("dialog", { name: "Connect to Release API" })
+    ).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("dialog")).toBe(dialog);
+    expect(document.querySelector(".opal-modal-overlay")).toBe(backdrop);
+    expect(
+      screen.getByRole("textbox", { name: /Description for Humans/ })
+    ).toHaveValue("Release dashboard");
+    expect(
+      screen.getByRole("textbox", { name: /OpenAPI Schema Definition/ })
+    ).toHaveValue(JSON.stringify(definition, null, 2));
+    expect(createBody).toBeUndefined();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(
+      screen.getByRole("dialog", { name: "Connect to Release API" })
+    ).toBeVisible();
+    expect(createBody).toBeUndefined();
+    await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
+    await waitFor(() =>
+      expect(createBody).toEqual({
+        description: "Release dashboard",
+        enabled: true,
+        name: "Release API",
+        definition,
+        custom_headers: [],
+        passthrough_auth: false,
+      })
+    );
+    expect(onCreated).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await user.keyboard("{Escape}");
+    expect(onClose).not.toHaveBeenCalled();
+    if (session === "disposed") unmount();
+    await act(async () => {
+      reload.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: 42,
+              enabled: true,
+              name: "Release API",
+              custom_headers: [],
+              passthrough_auth: false,
+              oauth_config_id: null,
+              permissions: { authenticate: false },
+            },
+          ])
+        )
+      );
+    });
+    if (session === "mounted")
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+    else {
+      expect(onCreated).not.toHaveBeenCalled();
+      expect(onClose).not.toHaveBeenCalled();
+    }
+  }
+);
+
+test("shows creation failures without completing or closing the form", async () => {
+  const user = setupUser();
+  const onCreated = jest.fn();
+  const onClose = jest.fn();
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    const path = String(input);
+    if (path === "/api/tool/openapi") return new Response("[]");
+    if (path === "/api/admin/tool/custom/validate")
+      return new Response(JSON.stringify({ methods: [] }));
+    return new Response(
+      JSON.stringify({ detail: "Schema name already exists" }),
+      { status: 400 }
+    );
+  });
+  render(
+    <OpenAPIPluginCreateModal open onClose={onClose} onCreated={onCreated} />
+  );
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: /OpenAPI Schema Definition/ }),
+    {
+      target: { value: JSON.stringify(definition) },
+    }
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(await screen.findByRole("button", { name: "Add Plugin" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
+  );
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(onCreated).not.toHaveBeenCalled();
+  expect(onClose).not.toHaveBeenCalled();
+});
+
+test("keeps OAuth settings through Back and saves them only on final creation", async () => {
+  const onCreated = jest.fn();
+  let created = false;
+  const writes: { path: string; body: unknown }[] = [];
+  jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+    const path = String(input);
+    if (path === "/api/tool/openapi")
+      return new Response(
+        JSON.stringify(
+          created
+            ? [
+                {
+                  id: 42,
+                  enabled: true,
+                  name: "Release API",
+                  permissions: { authenticate: true },
+                },
+              ]
+            : []
+        )
+      );
+    if (path === "/api/admin/tool/custom/validate")
+      return new Response(JSON.stringify({ methods: [] }));
+    if (path === "/api/admin/oauth-config/pkce-support")
+      return new Response(JSON.stringify({ status: "supported" }));
+    writes.push({ path, body: JSON.parse(String(init?.body)) });
+    if (path === "/api/admin/tool/custom") {
+      created = true;
+      return new Response(
+        JSON.stringify({ id: 42, enabled: true, name: "Release API" })
+      );
+    }
+    if (path === "/api/admin/oauth-config/create")
+      return new Response(JSON.stringify({ id: 99 }));
+    if (path === "/api/admin/tool/custom/42")
+      return new Response(JSON.stringify({ id: 42 }));
+    throw new Error(`Unexpected request ${path}`);
+  });
+  render(
+    <OpenAPIPluginCreateModal open onClose={jest.fn()} onCreated={onCreated} />
+  );
+  const user = setupUser();
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: /OpenAPI Schema Definition/ }),
+    {
+      target: { value: JSON.stringify(definition) },
+    }
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(await screen.findByRole("combobox"));
+  await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: "Authorization URL" }),
+    { target: { value: "https://identity.example.com/authorize" } }
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: "Token URL" }), {
+    target: { value: "https://identity.example.com/token" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: "OAuth Client ID" }), {
+    target: { value: "release-client" },
+  });
+  fireEvent.change(screen.getByLabelText("OAuth Client Secret"), {
+    target: { value: "release-secret" },
+  });
+  await user.click(screen.getByRole("button", { name: "Back" }));
+  await screen.findByRole("dialog", { name: "Add an OpenAPI plugin" });
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(
+    await screen.findByRole("textbox", { name: "OAuth Client ID" })
+  ).toHaveValue("release-client");
+  expect(writes).toEqual([]);
+  const submit = screen.getByRole("button", { name: "Add Plugin" });
+  await waitFor(() => expect(submit).toBeEnabled());
+  await user.click(submit);
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+  expect(writes).toContainEqual({
+    path: "/api/admin/oauth-config/create",
+    body: expect.objectContaining({
+      client_id: "release-client",
+      client_secret: "release-secret",
+    }),
+  });
+  expect(writes).toContainEqual({
+    path: "/api/admin/tool/custom/42",
+    body: { custom_headers: [], passthrough_auth: false, oauth_config_id: 99 },
+  });
+});
+
+describe("authentication save retries", () => {
+  test.each(["oauth", "none", "schema edit", "failed refresh"])(
+    "retains acknowledged OAuth after final refresh failure and retries with %s",
+    async (retry) => {
+      const user = setupUser();
+      const onCreated = jest.fn();
+      let tool: ToolSnapshot | null = null;
+      let toolCreates = 0;
+      let configCreates = 0;
+      const configs = new Set<number>();
+      const updates: Partial<ToolSnapshot>[] = [];
+      let failRefresh = false;
+      jest.spyOn(global, "fetch").mockImplementation(async (input, init) => {
+        const path = String(input);
+        if (path === "/api/settings" || path === "/api/enterprise-settings")
+          return new Response("{}");
+        if (path === "/api/auth/type")
+          return new Response(JSON.stringify({ oauth_enabled: true }));
+        if (path === "/api/tool/openapi") {
+          if (failRefresh) {
+            failRefresh = false;
+            return new Response(
+              JSON.stringify({ detail: "List refresh failed" }),
+              {
+                status: 503,
+              }
+            );
+          }
+          return new Response(JSON.stringify(tool ? [tool] : []));
+        }
+        if (path === "/api/admin/tool/custom/validate")
+          return new Response(JSON.stringify({ methods: [] }));
+        if (path === "/api/admin/tool/custom") {
+          toolCreates += 1;
+          tool = {
+            id: 42,
+            name: "Release API",
+            display_name: "Release API",
+            description: "",
+            definition,
+            custom_headers: [],
+            passthrough_auth: false,
+            oauth_config_id: null,
+            in_code_tool_id: null,
+            enabled: true,
+            chat_selectable: true,
+            agent_creation_selectable: true,
+            default_enabled: false,
+            permissions: { authenticate: true },
+          };
+          return new Response(JSON.stringify(tool));
+        }
+        if (path === "/api/admin/oauth-config/create") {
+          configCreates += 1;
+          configs.add(99);
+          return new Response(JSON.stringify({ id: 99 }));
+        }
+        if (path === "/api/admin/oauth-config/99")
+          return new Response(
+            JSON.stringify(
+              configs.has(99) ? { id: 99 } : { detail: "Config deleted" }
+            ),
+            { status: configs.has(99) ? 200 : 404 }
+          );
+        if (path === "/api/admin/tool/custom/42" && tool) {
+          const body: Partial<ToolSnapshot> = JSON.parse(String(init?.body));
+          updates.push(body);
+          const oauthConfigId = body.oauth_config_id ?? null;
+          if (oauthConfigId && !configs.has(oauthConfigId))
+            return new Response(JSON.stringify({ detail: "Config deleted" }), {
+              status: 404,
+            });
+          if (tool.oauth_config_id && tool.oauth_config_id !== oauthConfigId)
+            configs.delete(tool.oauth_config_id);
+          tool = { ...tool, ...body, oauth_config_id: oauthConfigId };
+          if (updates.length === 1) failRefresh = true;
+          return new Response(JSON.stringify(tool));
+        }
+        throw new Error(`Unexpected request ${path}`);
+      });
+      render(
+        <OpenAPIPluginCreateModal
+          open
+          onClose={jest.fn()}
+          onCreated={onCreated}
+        />
+      );
+      fireEvent.change(
+        await screen.findByRole("textbox", {
+          name: /OpenAPI Schema Definition/,
+        }),
+        {
+          target: { value: JSON.stringify(definition) },
+        }
+      );
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+      await user.click(await screen.findByRole("combobox"));
+      await user.keyboard("{ArrowDown}{ArrowDown}{Enter}");
+      fireEvent.change(
+        await screen.findByRole("textbox", { name: "Authorization URL" }),
+        {
+          target: { value: "https://identity.example.com/authorize" },
+        }
+      );
+      fireEvent.change(screen.getByRole("textbox", { name: "Token URL" }), {
+        target: { value: "https://identity.example.com/token" },
+      });
+      fireEvent.change(
+        screen.getByRole("textbox", { name: "OAuth Client ID" }),
+        {
+          target: { value: "release-client" },
+        }
+      );
+      fireEvent.change(screen.getByLabelText("OAuth Client Secret"), {
+        target: { value: "release-secret" },
+      });
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Add Plugin" })).toBeEnabled()
+      );
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
+      await waitFor(() => expect(failRefresh).toBe(false));
+      expect(onCreated).not.toHaveBeenCalled();
+      expect(
+        await screen.findByText("An error occurred while fetching the data.")
+      ).toBeVisible();
+      expect(configs.has(99)).toBe(true);
+      if (retry === "failed refresh") {
+        failRefresh = true;
+        const updateCount = updates.length;
+        await user.click(screen.getByRole("button", { name: "Add Plugin" }));
+        await waitFor(() => expect(failRefresh).toBe(false));
+        expect(updates).toHaveLength(updateCount);
+        expect(onCreated).not.toHaveBeenCalled();
+      }
+      if (retry === "none") {
+        await user.click(screen.getByRole("combobox"));
+        await user.keyboard("{ArrowDown}{Enter}");
+      } else if (retry === "schema edit") {
+        await user.click(screen.getByRole("button", { name: "Back" }));
+        fireEvent.change(
+          await screen.findByRole("textbox", {
+            name: /OpenAPI Schema Definition/,
+          }),
+          {
+            target: {
+              value: JSON.stringify({
+                ...definition,
+                info: {
+                  ...definition.info,
+                  description: "Updated release schema",
+                },
+              }),
+            },
+          }
+        );
+        await user.click(screen.getByRole("button", { name: "Continue" }));
+      }
+      await user.click(screen.getByRole("button", { name: "Add Plugin" }));
+      await waitFor(() => expect(onCreated).toHaveBeenCalledWith(42));
+      expect(toolCreates).toBe(1);
+      expect(configCreates).toBe(1);
+      expect(configs.has(99)).toBe(retry !== "none");
+      expect(tool).toEqual(
+        expect.objectContaining({
+          oauth_config_id: retry === "none" ? null : 99,
+          custom_headers: [],
+          passthrough_auth: false,
+        })
+      );
+      if (retry === "none")
+        expect(updates).toContainEqual({
+          custom_headers: [],
+          passthrough_auth: false,
+          oauth_config_id: null,
+        });
+      else
+        expect(updates[1]).toEqual(
+          expect.objectContaining({ oauth_config_id: 99 })
+        );
+    }
+  );
+});
+
+test("shows a schema validation error once before and after blur", async () => {
+  const error = "Server URL is not allowed.";
+  jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+    if (String(input) === "/api/admin/tool/custom/validate")
+      return new Response(JSON.stringify({ detail: error }), { status: 400 });
+    return new Response(JSON.stringify([]));
+  });
+  render(
+    <OpenAPIPluginCreateModal open onClose={jest.fn()} onCreated={jest.fn()} />
+  );
+  const schema = await screen.findByRole("textbox", {
+    name: /OpenAPI Schema Definition/,
+  });
+  fireEvent.change(schema, { target: { value: JSON.stringify(definition) } });
+  expect(await screen.findByText(error)).toBeInTheDocument();
+  expect(screen.getAllByText(error)).toHaveLength(1);
+  fireEvent.blur(schema);
+  fireEvent.change(
+    screen.getByRole("textbox", { name: /Description for Humans/ }),
+    { target: { value: "Release notes" } }
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+  expect(screen.getAllByText(error)).toHaveLength(1);
+
+  fireEvent.change(schema, { target: { value: "" } });
+  fireEvent.blur(schema);
+  expect(
+    await screen.findAllByText("OpenAPI schema definition is required")
+  ).toHaveLength(1);
+  expect(screen.queryByText(error)).not.toBeInTheDocument();
+});

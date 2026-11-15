@@ -44,8 +44,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 )
 
 _PROCESSOR_PATH = (
-    "onyx.background.celery.tasks.docprocessing."
-    "targeted_reindex_task.process_targets_for_cc_pair"
+    "onyx.background.indexing.run_targeted_reindex.process_targets_for_cc_pair"
 )
 
 
@@ -136,6 +135,7 @@ def test_task_transitions_synthetic_attempts_to_success(
     # run with PRESENT+FUTURE active. Assert all of them transitioned.
     assert len(attempts) >= 1
     assert all(a.status == IndexingStatus.SUCCESS for a in attempts)
+    assert all(a.time_finished is not None for a in attempts)
 
 
 def test_task_marks_failure_derived_errors_resolved(
@@ -447,3 +447,4 @@ def test_task_marks_job_failed_on_mid_task_exception(
         .all()
     )
     assert all(a.status == IndexingStatus.FAILED for a in attempts)
+    assert all(a.time_finished is not None for a in attempts)

@@ -1,6 +1,34 @@
+import { type Navigation } from "@opal/navigation";
+import type { Route } from "next";
 import { SvgAlertCircle, SvgAlertTriangle, SvgBullhorn } from "@opal/icons";
 import type { IconProps } from "@opal/types";
 import { NotificationType } from "@/lib/notifications/interfaces";
+
+export function isExternalLink(link: string): boolean {
+  return link.startsWith("http://") || link.startsWith("https://");
+}
+
+// Internal links must be absolute paths. Rejects other schemes (mailto:,
+// tel:) and protocol-relative //host values, which navigation.go would
+// otherwise navigate to unvalidated.
+function isInternalPath(link: string): boolean {
+  return link.startsWith("/") && !link.startsWith("//");
+}
+
+export function openNotificationLink(
+  link: string,
+  navigation: Navigation
+): void {
+  if (isExternalLink(link)) {
+    window.open(link, "_blank", "noopener,noreferrer");
+    return;
+  }
+  if (!isInternalPath(link)) {
+    console.error("Ignoring notification link with unsupported format:", link);
+    return;
+  }
+  navigation.go(link as Route);
+}
 
 export function getNotificationIcon(
   notifType: string
@@ -10,6 +38,7 @@ export function getNotificationIcon(
     case NotificationType.REINDEX:
     case NotificationType.ASSISTANT_FILES_READY:
     case NotificationType.CONNECTOR_REPEATED_ERRORS:
+    case NotificationType.CONNECTOR_INVALID:
     case NotificationType.SCHEDULED_TASK_PRE_APPROVED_ACTION:
     case NotificationType.APPROVAL_REQUESTED:
       return SvgAlertCircle;

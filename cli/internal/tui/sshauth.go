@@ -14,6 +14,11 @@ const (
 	MaxAPIKeyRetries = 5
 )
 
+// RemoteMode marks this process as serving the TUI to remote clients.
+// Commands that touch the host filesystem are refused while it is set,
+// because those paths resolve on the operator's machine, not the client's.
+var RemoteMode bool
+
 // --- auth prompt (bubbletea model) ---
 
 type authState int

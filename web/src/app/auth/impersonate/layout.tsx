@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import type { Route } from "next";
 import { unstable_noStore as noStore } from "next/cache";
 import { requireAuth } from "@/lib/auth/svcSS";
@@ -20,7 +20,7 @@ export default async function Layout({ children }: LayoutProps) {
   }
 
   if (!authResult.user?.is_cloud_superuser) {
-    redirect("/app" as Route);
+    redirect("/app");
   }
 
   return <>{children}</>;

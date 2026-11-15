@@ -1,83 +1,106 @@
+import { useNavigation } from "@opal/navigation";
 import * as Yup from "yup";
-
-import { Button } from "@opal/components";
-import { ValidSources } from "@/lib/types";
-import { TextFormField } from "@/components/Field";
+import { InputTypeIn, MessageCard } from "@opal/components";
+import { getSourceDisplayName } from "@/lib/connectors/utils";
+import { InputVertical, Section } from "@opal/layouts";
 import { Form, Formik, FormikHelpers } from "formik";
-import CardSection from "@/components/admin/CardSection";
-import { getConnectorOauthRedirectUrl } from "@/lib/connectors/oauth";
-import { OAuthAdditionalKwargDescription } from "@/lib/connectors/credentials";
+import { useState } from "react";
+import { useTranslations } from "next-intl";
+import type { OAuthAdditionalKwargDescription } from "@/lib/credentials/types";
+import { getConnectorOauthRedirectUrl } from "@/lib/connectors/svc";
+import { ValidSources } from "@/lib/connectors/types/source";
+import { FormikField } from "@/refresh-components/form/FormikField";
+import { OAuthSignInRow } from "@/lib/credentials/components/OAuthSignInRow";
 
-type formType = {
-  [key: string]: any; // For additional credential fields
-};
+type OAuthFormValues = Record<string, string>;
+
+interface CreateStdOAuthCredentialProps {
+  sourceType: ValidSources;
+  additionalFields: OAuthAdditionalKwargDescription[];
+}
 
 export function CreateStdOAuthCredential({
   sourceType,
   additionalFields,
-}: {
-  // Source information
-  sourceType: ValidSources;
+}: CreateStdOAuthCredentialProps) {
+  const t = useTranslations("admin");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const navigation = useNavigation();
 
-  additionalFields: OAuthAdditionalKwargDescription[];
-}) {
-  const handleSubmit = async (
-    values: formType,
-    formikHelpers: FormikHelpers<formType>
-  ) => {
-    const { setSubmitting, validateForm } = formikHelpers;
-
-    const errors = await validateForm(values);
+  async function handleSubmit(
+    values: OAuthFormValues,
+    formikHelpers: FormikHelpers<OAuthFormValues>
+  ) {
+    const errors = await formikHelpers.validateForm(values);
     if (Object.keys(errors).length > 0) {
       formikHelpers.setErrors(errors);
       return;
     }
 
-    setSubmitting(true);
+    setErrorMessage(null);
     formikHelpers.setSubmitting(true);
-
-    const redirectUrl = await getConnectorOauthRedirectUrl(sourceType, values);
-
-    if (!redirectUrl) {
-      throw new Error("No redirect URL found for OAuth connector");
+    try {
+      const redirectUrl = await getConnectorOauthRedirectUrl(
+        sourceType,
+        values
+      );
+      navigation.load(redirectUrl);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : t("credentials.oauth.startError.message")
+      );
+      formikHelpers.setSubmitting(false);
     }
-
-    window.location.href = redirectUrl;
-  };
+  }
 
   return (
     <Formik
-      initialValues={
-        Object.fromEntries(
-          additionalFields.map((field) => [field, ""])
-        ) as formType
-      }
+      initialValues={Object.fromEntries(
+        additionalFields.map((field) => [field.name, ""])
+      )}
       validationSchema={Yup.object().shape(
         Object.fromEntries(
           additionalFields.map((field) => [field.name, Yup.string().required()])
         )
       )}
-      onSubmit={(values, formikHelpers) => {
-        handleSubmit(values, formikHelpers);
-      }}
+      onSubmit={handleSubmit}
     >
-      {() => (
-        <Form className="w-full flex items-stretch">
-          <CardSection className="w-full border-0! mt-4 flex flex-col gap-y-6">
+      {({ isSubmitting }) => (
+        <Form className="w-full">
+          <Section alignItems="stretch" gap={6}>
             {additionalFields.map((field) => (
-              <TextFormField
+              <InputVertical
                 key={field.name}
-                name={field.name}
-                label={field.display_name}
-                subtext={field.description}
-                type="text"
-              />
+                withLabel={field.name}
+                title={field.display_name}
+                description={field.description}
+              >
+                <FormikField<string>
+                  name={field.name}
+                  render={(formikField, _helper, _meta, status) => (
+                    <InputTypeIn
+                      {...formikField}
+                      id={field.name}
+                      variant={status === "error" ? "error" : "primary"}
+                    />
+                  )}
+                />
+              </InputVertical>
             ))}
-
-            <div className="flex w-full">
-              <Button type="submit">Create</Button>
-            </div>
-          </CardSection>
+            {errorMessage && (
+              <MessageCard
+                variant="error"
+                title={t("credentials.oauth.connectError.title")}
+                description={errorMessage}
+              />
+            )}
+            <OAuthSignInRow
+              source={getSourceDisplayName(sourceType) || sourceType}
+              disabled={isSubmitting}
+            />
+          </Section>
         </Form>
       )}
     </Formik>

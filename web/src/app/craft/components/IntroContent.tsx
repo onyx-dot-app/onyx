@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { motion } from "motion/react";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { OnyxLogoTypeIcon } from "@/components/icons/icons";
-import RefreshText from "@/refresh-components/texts/Text";
 import BigButton from "@/app/craft/components/BigButton";
+import { LifecycleBadge } from "@/lib/badges/components";
 
 interface BuildModeIntroContentProps {
   onClose: () => void;
@@ -16,6 +17,7 @@ export default function BuildModeIntroContent({
   onClose,
   onTryBuildMode,
 }: BuildModeIntroContentProps) {
+  const t = useTranslations("craft.intro");
   // Track when user sees the craft intro
   useEffect(() => {
     track(AnalyticsEvent.SAW_CRAFT_INTRO);
@@ -41,22 +43,18 @@ export default function BuildModeIntroContent({
                 style={{ transform: "translateX(-0.6em)" }}
               >
                 <span className="relative inline-block leading-[3.5]">
-                  <RefreshText
-                    headingH1
-                    className="text-9xl! text-white! relative inline-block"
+                  <span
+                    className="font-heading-hero text-9xl! text-white! relative inline-block"
                     style={{
                       fontFamily: "var(--font-kh-teka)",
                       fontWeight: 500,
                     }}
                   >
-                    Craft
-                  </RefreshText>
+                    {t("wordmark.label")}
+                  </span>
                 </span>
-                <span
-                  className="pointer-events-none absolute top-3 -right-14 text-[1em] uppercase tracking-[0.2em] text-white!"
-                  style={{ fontFamily: "var(--font-kh-teka)", fontWeight: 500 }}
-                >
-                  BETA
+                <span className="pointer-events-none absolute top-3 -end-14">
+                  <LifecycleBadge lifecycle="beta" />
                 </span>
               </div>
             </div>
@@ -77,7 +75,7 @@ export default function BuildModeIntroContent({
               onClose();
             }}
           >
-            Return Home
+            {t("returnHome.button")}
           </BigButton>
           <BigButton
             primary
@@ -88,7 +86,7 @@ export default function BuildModeIntroContent({
               onTryBuildMode();
             }}
           >
-            Start Crafting
+            {t("startCrafting.button")}
           </BigButton>
         </motion.div>
       </div>

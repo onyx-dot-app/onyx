@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import {
   useCallback,
   useEffect,
@@ -15,7 +16,7 @@ import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { useTheme } from "next-themes";
 import useBrowserInfo from "@/hooks/useBrowserInfo";
 import ShareChatSessionModal from "@/sections/modals/ShareChatSessionModal";
-import { useProjectsContext } from "@/providers/ProjectsContext";
+import { useProjectsContext } from "@/lib/projects/providers";
 import useChatSessions from "@/hooks/useChatSessions";
 import {
   shouldShowMoveModal,
@@ -23,32 +24,31 @@ import {
 } from "@/lib/sidebar/utils";
 import { handleMoveOperation } from "@/lib/sidebar/svc";
 import { LOCAL_STORAGE_KEYS } from "@/lib/sidebar/constants";
-import { deleteChatSession } from "@/app/app/services/lib";
+import { deleteChatSession, endIncognitoSession } from "@/app/app/services/lib";
 import {
   exportChatSession,
   ChatExportFormat,
 } from "@/lib/chat/exportChatSession";
 import { UNNAMED_CHAT } from "@/lib/constants";
-import { useRouter } from "next/navigation";
-import MoveCustomAgentChatModal from "@/sections/modals/MoveCustomAgentChatModal";
+import { MoveCustomAgentChatModal } from "@/lib/agents/components";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import FrostedDiv from "@/refresh-components/FrostedDiv";
 import {
   Button,
-  LineItemButton,
-  OpenButton,
-  Popover,
-  PopoverMenu,
+  Dropdown,
+  SelectButton,
   Text,
+  useCreateModal,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
-import { PopoverSearchInput } from "@/sections/sidebar/ChatButton";
-import SimplePopover from "@/refresh-components/SimplePopover";
 import { useSidebarState } from "@opal/layouts";
 import useScreenSize from "@/hooks/useScreenSize";
 import {
   SvgBubbleText,
   SvgChevronLeft,
   SvgDownload,
+  SvgEyeOff,
   SvgFileText,
   SvgFitWidth,
   SvgFolderIn,
@@ -59,22 +59,28 @@ import {
   SvgShare,
   SvgSidebar,
   SvgTrash,
+  SvgX,
 } from "@opal/icons";
 import { useIsSearchModeAvailable, useSettings } from "@/lib/settings/hooks";
 import type { AppMode } from "@/providers/QueryControllerProvider";
-import useAppFocus from "@/hooks/useAppFocus";
-import { useQueryController } from "@/providers/QueryControllerProvider";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
 import { useAppDocumentTitle, useCustomFooterContent } from "@/lib/app/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
+import { PendingRoute, useNavigation } from "@opal/navigation";
+import { AppChromeLoader } from "@/layouts/chromes/AppChromeLoader";
+import { useQueryController } from "@/providers/QueryControllerProvider";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { useIncognito } from "@/providers/IncognitoProvider";
 
 // ---------------------------------------------------------------------------
 // Header
 // ---------------------------------------------------------------------------
 
 function Header() {
-  const appFocus = useAppFocus();
+  const t = useTranslations("chat.appChrome");
+  const tSidebar = useTranslations("sidebar");
+  const appPosition = useAppPosition();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const { state, setAppMode } = useQueryController();
   const isSearchModeAvailable = useIsSearchModeAvailable();
@@ -82,55 +88,54 @@ function Header() {
   const { isMobile } = useScreenSize();
   const { setFolded } = useSidebarState();
   const { fullWidthChat, toggleFullWidthChat } = useFullWidthChat();
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const {
+    incognitoAvailable,
+    incognitoEnabled,
+    incognitoLocked,
+    toggleIncognito,
+    setIncognitoEnabled,
+  } = useIncognito();
+  const shareModal = useCreateModal();
+  const deleteModal = useCreateModal();
+  const moveCustomAgentModal = useCreateModal();
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveOptions, setShowMoveOptions] = useState(false);
-  const [showExportOptions, setShowExportOptions] = useState(false);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [popoverItems, setPopoverItems] = useState<React.ReactNode[]>([]);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [modePopoverOpen, setModePopoverOpen] = useState(false);
   const {
     projects,
     fetchProjects,
     refreshCurrentProjectDetails,
     currentProjectId,
+    setCurrentMessageFiles,
   } = useProjectsContext();
-  const { currentChatSession, refreshChatSessions, removeSession } =
-    useChatSessions();
-  const router = useRouter();
+  const {
+    currentChatSession,
+    currentChatSessionId,
+    refreshChatSessions,
+    removeSession,
+  } = useChatSessions();
+  const navigation = useNavigation();
 
   const customHeaderContent = settings.enterprise?.custom_header_content;
   const pageWithHeaderContent =
-    appFocus.isChat() || appFocus.isNewSession() || appFocus.isAgent();
+    appPosition.isChat() || appPosition.isNewSession() || appPosition.isAgent();
 
   const effectiveMode: AppMode =
-    appFocus.isNewSession() && state.phase === "idle" ? state.appMode : "chat";
+    appPosition.isNewSession() && state.phase === "idle"
+      ? state.appMode
+      : "chat";
 
   const availableProjects = useMemo(() => {
     if (!projects) return [];
     return projects.filter((project) => project.id !== currentProjectId);
   }, [projects, currentProjectId]);
 
-  const filteredProjects = useMemo(() => {
-    if (!searchTerm) return availableProjects;
-    const term = searchTerm.toLowerCase();
-    return availableProjects.filter((project) =>
-      project.name.toLowerCase().includes(term)
-    );
-  }, [availableProjects, searchTerm]);
-
   const resetMoveState = useCallback(() => {
-    setShowMoveOptions(false);
-    setSearchTerm("");
     setPendingMoveProjectId(null);
-    setShowMoveCustomAgentModal(false);
-  }, []);
+    moveCustomAgentModal.toggle(false);
+  }, [moveCustomAgentModal.toggle]);
 
   const performMove = useCallback(
     async (targetProjectId: number) => {
@@ -145,7 +150,7 @@ function Header() {
           currentProjectId,
         });
         resetMoveState();
-        setPopoverOpen(false);
+        setMenuOpen(false);
       } catch (error) {
         console.error("Failed to move chat session:", error);
       }
@@ -165,12 +170,12 @@ function Header() {
       if (!currentChatSession) return;
       if (shouldShowMoveModal(currentChatSession)) {
         setPendingMoveProjectId(projectId);
-        setShowMoveCustomAgentModal(true);
+        moveCustomAgentModal.toggle(true);
         return;
       }
       void performMove(projectId);
     },
-    [currentChatSession, performMove]
+    [currentChatSession, moveCustomAgentModal.toggle, performMove]
   );
 
   const handleDeleteChat = useCallback(async () => {
@@ -182,8 +187,8 @@ function Header() {
       }
       removeSession(currentChatSession.id);
       await Promise.all([refreshChatSessions(), fetchProjects()]);
-      router.replace("/app");
-      setDeleteModalOpen(false);
+      navigation.go("/app", { replace: true });
+      deleteModal.toggle(false);
     } catch (error) {
       console.error("Failed to delete chat:", error);
       showErrorNotification("Failed to delete chat. Please try again.");
@@ -193,15 +198,52 @@ function Header() {
     refreshChatSessions,
     removeSession,
     fetchProjects,
-    router,
+    navigation,
+    deleteModal.toggle,
   ]);
 
-  const setDeleteConfirmationModalOpen = useCallback((open: boolean) => {
-    setDeleteModalOpen(open);
-    if (open) {
-      setPopoverOpen(false);
+  const setDeleteConfirmationModalOpen = useCallback(
+    (open: boolean) => {
+      deleteModal.toggle(open);
+      if (open) {
+        setMenuOpen(false);
+      }
+    },
+    [deleteModal.toggle]
+  );
+
+  // Incognito stays on until teardown returns, so the composer cannot submit
+  // into a session being torn down. The server deletes that session's uploads
+  // itself, including any that landed late.
+  const handleExitIncognito = useCallback(async () => {
+    const sessionId = currentChatSessionId;
+    if (sessionId) {
+      let tornDown = false;
+      try {
+        tornDown = await endIncognitoSession(sessionId);
+      } catch (error) {
+        console.error("Failed to end incognito session:", error);
+      }
+      // Stay put on failure. Dropping the id is what would strand the context
+      // and uploads, and the user can retry from here.
+      if (!tornDown) {
+        showErrorNotification("Could not end the incognito chat. Try again.");
+        return;
+      }
+      removeSession(sessionId);
     }
-  }, []);
+    setIncognitoEnabled(false);
+    setCurrentMessageFiles([]);
+    if (sessionId) {
+      navigation.go("/app", { replace: true });
+    }
+  }, [
+    currentChatSessionId,
+    setIncognitoEnabled,
+    setCurrentMessageFiles,
+    removeSession,
+    navigation,
+  ]);
 
   const handleExport = useCallback(
     async (format: ChatExportFormat) => {
@@ -214,113 +256,104 @@ function Header() {
         );
       } catch (error) {
         console.error("Failed to export chat:", error);
-        showErrorNotification("Failed to export chat. Please try again.");
+        showErrorNotification(t("exportFailed.message"));
       }
     },
-    [currentChatSession]
+    [currentChatSession, t]
   );
 
-  useEffect(() => {
-    let items: ReactNode[];
-    if (showMoveOptions) {
-      items = [
-        <PopoverSearchInput
-          key="search"
-          setShowMoveOptions={setShowMoveOptions}
-          onSearch={setSearchTerm}
-        />,
-        ...filteredProjects.map((project) => (
-          <LineItemButton
-            key={project.id}
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgFolderIn}
-            title={project.name}
-            onClick={noProp(() => handleMoveClick(project.id))}
-          />
-        )),
-      ];
-    } else if (showExportOptions) {
-      items = [
-        <LineItemButton
-          key="export-back"
-          sizePreset="main-ui"
-          rounding="sm"
-          icon={SvgChevronLeft}
-          title="Export As…"
-          onClick={noProp(() => setShowExportOptions(false))}
-        />,
-        <Popover.Close asChild key="export-plaintext">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgFileText}
-            title="Plaintext"
-            onClick={noProp(() => handleExport("text"))}
-          />
-        </Popover.Close>,
-        <Popover.Close asChild key="export-markdown">
-          <LineItemButton
-            sizePreset="main-ui"
-            rounding="sm"
-            icon={SvgHash}
-            title="Markdown"
-            onClick={noProp(() => handleExport("markdown"))}
-          />
-        </Popover.Close>,
-      ];
-    } else {
-      items = [
-        <LineItemButton
-          key="move"
-          sizePreset="main-ui"
-          rounding="sm"
-          icon={SvgFolderIn}
-          title="Move to Project"
-          onClick={noProp(() => setShowMoveOptions(true))}
-        />,
-        <LineItemButton
-          key="export"
-          sizePreset="main-ui"
-          rounding="sm"
-          icon={SvgDownload}
-          title="Export As…"
-          onClick={noProp(() => setShowExportOptions(true))}
-        />,
-        null,
-        <LineItemButton
-          key="delete"
-          sizePreset="main-ui"
-          rounding="sm"
-          color="danger"
-          icon={SvgTrash}
-          title="Delete"
-          onClick={noProp(() => setDeleteConfirmationModalOpen(true))}
-        />,
-      ];
-    }
-
-    setPopoverItems(items);
-  }, [
-    showMoveOptions,
-    showExportOptions,
-    filteredProjects,
-    currentChatSession,
-    setDeleteConfirmationModalOpen,
-    handleMoveClick,
-    handleExport,
-  ]);
+  // The chat options menu: move and export are pages of their own.
+  const moveView: DropdownView = {
+    search: {
+      placeholder: tSidebar("chatButton.projectSearchInput.placeholder"),
+    },
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        pinned: true,
+        icon: SvgChevronLeft,
+        title: t("moveToProject.label"),
+        onSelect: (views) => views.pop(),
+      },
+      ...availableProjects.map(
+        (project): DropdownMenuItem => ({
+          kind: "action",
+          id: `project-${project.id}`,
+          icon: SvgFolderIn,
+          title: project.name,
+          onSelect: () => handleMoveClick(project.id),
+        })
+      ),
+    ],
+  };
+  const exportView: DropdownView = {
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        icon: SvgChevronLeft,
+        title: t("exportAs.label"),
+        onSelect: (views) => views.pop(),
+      },
+      {
+        kind: "action",
+        id: "export-plaintext",
+        icon: SvgFileText,
+        title: t("exportPlaintext.label"),
+        onSelect: () => handleExport("text"),
+      },
+      {
+        kind: "action",
+        id: "export-markdown",
+        icon: SvgHash,
+        title: t("exportMarkdown.label"),
+        onSelect: () => handleExport("markdown"),
+      },
+    ],
+  };
+  const menuItems: DropdownMenuItem[] = [
+    {
+      kind: "action",
+      id: "move",
+      icon: SvgFolderIn,
+      title: t("moveToProject.label"),
+      onSelect: (views) => views.push("move"),
+    },
+    {
+      kind: "action",
+      id: "export",
+      icon: SvgDownload,
+      title: t("exportAs.label"),
+      onSelect: (views) => views.push("export"),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "delete",
+          icon: SvgTrash,
+          danger: true,
+          title: t("delete.label"),
+          onSelect: () => setDeleteConfirmationModalOpen(true),
+        },
+      ],
+    },
+  ];
 
   return (
     <>
-      {showShareModal && currentChatSession && (
-        <ShareChatSessionModal
-          chatSession={currentChatSession}
-          onClose={() => setShowShareModal(false)}
-        />
-      )}
+      <shareModal.Provider>
+        {currentChatSession && (
+          <ShareChatSessionModal
+            chatSession={currentChatSession}
+            onClose={() => shareModal.toggle(false)}
+          />
+        )}
+      </shareModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={resetMoveState}
           onConfirm={async (doNotShowAgain: boolean) => {
@@ -335,30 +368,29 @@ function Header() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
-      {deleteModalOpen && (
+      <deleteModal.Provider>
         <ConfirmationModalLayout
-          title="Delete Chat"
+          title={t("deleteModal.title")}
           icon={SvgTrash}
-          onClose={() => setDeleteModalOpen(false)}
+          onClose={() => deleteModal.toggle(false)}
           submit={
             <Button variant="danger" onClick={handleDeleteChat}>
-              Delete
+              {t("deleteModal.submitButton.label")}
             </Button>
           }
         >
-          Are you sure you want to delete this chat? This action cannot be
-          undone.
+          {t("deleteModal.description")}
         </ConfirmationModalLayout>
-      )}
+      </deleteModal.Provider>
 
-      {(appFocus.isChat() ||
-        appFocus.isNewSession() ||
-        appFocus.isAgent() ||
-        appFocus.isProject() ||
+      {(appPosition.isChat() ||
+        appPosition.isNewSession() ||
+        appPosition.isAgent() ||
+        appPosition.isProject() ||
         isMobile) &&
-        !appFocus.isSharedChat() && (
+        !appPosition.isSharedChat() && (
           <RootLayout.Header>
             <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
               {/*
@@ -371,63 +403,73 @@ function Header() {
                   <Button
                     prominence="internal"
                     icon={SvgSidebar}
-                    aria-label="Open Sidebar"
+                    aria-label={t("openSidebar.ariaLabel")}
                     onClick={() => setFolded(false)}
                   />
                 )}
+                {incognitoEnabled &&
+                  (appPosition.isChat() || appPosition.isNewSession()) && (
+                    <SelectButton
+                      chevron
+                      disabled
+                      icon={SvgEyeOff}
+                      aria-label={t("incognitoPill.ariaLabel")}
+                      data-testid="incognito-chat-pill"
+                    >
+                      {t("incognitoPill.label")}
+                    </SelectButton>
+                  )}
                 {businessTier &&
                   isSearchModeAvailable &&
-                  appFocus.isNewSession() &&
+                  !incognitoEnabled &&
+                  appPosition.isNewSession() &&
                   state.phase === "idle" && (
-                    <Popover
+                    <Dropdown
                       open={modePopoverOpen}
                       onOpenChange={setModePopoverOpen}
                     >
-                      <Popover.Trigger asChild>
-                        <OpenButton
-                          aria-label="Change app mode"
+                      <Dropdown.Trigger asChild>
+                        <SelectButton
+                          chevron
+                          aria-label={t("modeButton.ariaLabel")}
                           icon={
                             effectiveMode === "search"
                               ? SvgSearchMenu
                               : SvgBubbleText
                           }
+                          interaction={modePopoverOpen ? "hover" : "rest"}
                         >
-                          {effectiveMode === "search" ? "Search" : "Chat"}
-                        </OpenButton>
-                      </Popover.Trigger>
-                      <Popover.Content align="start" width="lg">
-                        <Popover.Menu>
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding="sm"
-                            icon={SvgSearchMenu}
-                            state={
-                              effectiveMode === "search" ? "selected" : "empty"
-                            }
-                            title="Search"
-                            description="Quick search for documents"
-                            onClick={noProp(() => {
-                              setAppMode("search");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                          <LineItemButton
-                            sizePreset="main-ui"
-                            rounding="sm"
-                            icon={SvgBubbleText}
-                            state={
-                              effectiveMode === "chat" ? "selected" : "empty"
-                            }
-                            title="Chat"
-                            description="Conversation and research"
-                            onClick={noProp(() => {
-                              setAppMode("chat");
-                              setModePopoverOpen(false);
-                            })}
-                          />
-                        </Popover.Menu>
-                      </Popover.Content>
-                    </Popover>
+                          {effectiveMode === "search"
+                            ? t("mode.search.label")
+                            : t("mode.chat.label")}
+                        </SelectButton>
+                      </Dropdown.Trigger>
+                      <Dropdown.Data
+                        label={t("modeButton.ariaLabel")}
+                        value={effectiveMode}
+                        onSelect={(option) =>
+                          setAppMode(
+                            option.value === "search" ? "search" : "chat"
+                          )
+                        }
+                        items={[
+                          {
+                            kind: "option",
+                            value: "search",
+                            icon: SvgSearchMenu,
+                            title: t("mode.search.label"),
+                            description: t("mode.search.description"),
+                          },
+                          {
+                            kind: "option",
+                            value: "chat",
+                            icon: SvgBubbleText,
+                            title: t("mode.chat.label"),
+                            description: t("mode.chat.description"),
+                          },
+                        ]}
+                      />
+                    </Dropdown>
                   )}
               </div>
 
@@ -457,53 +499,85 @@ function Header() {
           - more-options buttons
         */}
               <div className="flex flex-1 justify-end items-center">
-                {appFocus.isChat() && currentChatSession && (
+                {(appPosition.isChat() || appPosition.isNewSession()) && (
                   <FrostedDiv className="flex shrink flex-row items-center">
-                    <Button
-                      icon={SvgShare}
-                      prominence="tertiary"
-                      interaction={showShareModal ? "hover" : "rest"}
-                      responsiveHideText
-                      onClick={() => setShowShareModal(true)}
-                      aria-label="share-chat-button"
-                    >
-                      Share
-                    </Button>
-                    {/* Below md the reading-width cap never applies (chat is
-                        always full width), so the toggle has nothing to do. */}
-                    <span className="hidden md:flex">
+                    {appPosition.isNewSession() &&
+                      incognitoAvailable &&
+                      !incognitoEnabled &&
+                      !incognitoLocked && (
+                        <Button
+                          icon={SvgEyeOff}
+                          prominence="tertiary"
+                          onClick={toggleIncognito}
+                          aria-label={t("incognitoStart.ariaLabel")}
+                          tooltip={t("incognitoStart.tooltip")}
+                        />
+                      )}
+                    {/* On mobile widths the reading-width cap never applies
+                        (chat is always full width), so the toggle is hidden. */}
+                    {!isMobile && (
                       <Button
                         icon={fullWidthChat ? SvgFitWidth : SvgFullWidth}
                         prominence="tertiary"
                         onClick={toggleFullWidthChat}
-                        tooltip={fullWidthChat ? "Fit width" : "Full width"}
-                        aria-label="Toggle full width chat"
+                        tooltip={
+                          fullWidthChat
+                            ? t("fullWidth.fitTooltip")
+                            : t("fullWidth.fullTooltip")
+                        }
+                        aria-label={t("fullWidth.ariaLabel")}
                         aria-pressed={fullWidthChat}
                       />
-                    </span>
-                    <SimplePopover
-                      trigger={
-                        <Button
-                          icon={SvgMoreHorizontal}
-                          prominence="tertiary"
-                          interaction={popoverOpen ? "hover" : "rest"}
-                        />
-                      }
-                      onOpenChange={(state) => {
-                        setPopoverOpen(state);
-                        if (!state) {
-                          setShowMoveOptions(false);
-                          setShowExportOptions(false);
-                          setSearchTerm("");
-                        }
-                      }}
-                      side="bottom"
-                      align="end"
-                    >
-                      <PopoverMenu>{popoverItems}</PopoverMenu>
-                    </SimplePopover>
+                    )}
+                    {incognitoEnabled && (
+                      <Button
+                        icon={SvgX}
+                        prominence="tertiary"
+                        onClick={() => void handleExitIncognito()}
+                        aria-label={t("incognitoExit.ariaLabel")}
+                        tooltip={t("incognitoExit.tooltip")}
+                      />
+                    )}
                   </FrostedDiv>
                 )}
+                {/* Only for the chat on screen: during a navigation to another
+                    chat, the URL's session is still the one these act on. */}
+                {appPosition.isChat() &&
+                  currentChatSession &&
+                  currentChatSession.id === appPosition.chat() &&
+                  !incognitoEnabled && (
+                    <FrostedDiv className="flex shrink flex-row items-center">
+                      <Button
+                        icon={SvgShare}
+                        prominence="tertiary"
+                        interaction={shareModal.isOpen ? "hover" : "rest"}
+                        responsiveHideText
+                        onClick={() => shareModal.toggle(true)}
+                        aria-label="share-chat-button"
+                      >
+                        {t("share.label")}
+                      </Button>
+                      <Dropdown
+                        width={60}
+                        open={menuOpen}
+                        onOpenChange={setMenuOpen}
+                      >
+                        <Dropdown.Trigger asChild>
+                          <Button
+                            icon={SvgMoreHorizontal}
+                            prominence="tertiary"
+                            interaction={menuOpen ? "hover" : "rest"}
+                            aria-label={tSidebar("chatButton.options.label")}
+                          />
+                        </Dropdown.Trigger>
+                        <Dropdown.Data
+                          label={tSidebar("chatButton.options.label")}
+                          items={menuItems}
+                          views={{ move: moveView, export: exportView }}
+                        />
+                      </Dropdown>
+                    </FrostedDiv>
+                  )}
               </div>
             </div>
           </RootLayout.Header>
@@ -517,14 +591,20 @@ function Header() {
 // ---------------------------------------------------------------------------
 
 function Footer() {
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   const customFooterContent = useCustomFooterContent();
 
   return (
     <RootLayout.Footer>
       <div
         className={cn(
-          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto",
+          // Wrapping a long disclaimer needs both halves. `[&>*]:min-w-0`
+          // lets the text shrink, since a flex item's min-width is `auto`
+          // and otherwise holds it at its min-content width. `wordWrap` on
+          // the Text below then lets an unbroken run split, which ordinary
+          // wrapping will not do — it only breaks at whitespace, so a
+          // pasted URL or one long token would still overflow.
+          "relative w-full flex flex-row justify-center items-center gap-2 px-2 sm:px-4 mt-auto [&>*]:min-w-0",
           // # Note (from @raunakab):
           //
           // The conditional rendering of vertical padding based on the current page is intentional.
@@ -535,14 +615,20 @@ function Footer() {
           // To fix this, `AppPage.tsx` uses animated spacer divs around `AppInputBar` to
           // give the shadow breathing room. However, that extra space adds visible gap
           // between the input and the Footer. To compensate, we remove the Footer's top
-          // padding when `appFocus.isChat()`.
+          // padding when `appPosition.isChat()`.
           //
           // There is a corresponding note inside `AppInputBar.tsx` and `AppPage.tsx`
           // explaining this. Please refer to those notes as well.
-          appFocus.isChat() ? "pb-2" : "py-2"
+          appPosition.isChat() ? "pb-2" : "py-2"
         )}
       >
-        <Text font="secondary-action" color="text-03">
+        <Text
+          font="secondary-action"
+          color="text-03"
+          as="p"
+          wordWrap="wrap-anywhere"
+          textPosition="text-center"
+        >
           {markdown(customFooterContent)}
         </Text>
       </div>
@@ -554,14 +640,14 @@ function Footer() {
 // AppChrome
 // ---------------------------------------------------------------------------
 
-interface AppChromeProps {
+export interface AppChromeProps {
   children: React.ReactNode;
 }
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
 
-  const appFocus = useAppFocus();
+  const appPosition = useAppPosition();
   useAppDocumentTitle();
 
   const { hasBackground, appBackgroundUrl } = useAppBackground();
@@ -569,7 +655,7 @@ export default function AppChrome({ children }: AppChromeProps) {
   const { isSafari } = useBrowserInfo();
   const isLightMode = resolvedTheme === "light";
   const showBackground =
-    hasBackground && (appFocus.isChat() || appFocus.isNewSession());
+    hasBackground && (appPosition.isChat() || appPosition.isNewSession());
 
   const horizontalBlurMask = `linear-gradient(
     to right,
@@ -642,7 +728,7 @@ export default function AppChrome({ children }: AppChromeProps) {
               />
             )}
             {/* Effect 2 — Semi-transparent overlay for readability when background is set */}
-            {showBackground && appFocus.isChat() && (
+            {showBackground && appPosition.isChat() && (
               <>
                 <div className="absolute z-[-1] inset-0 backdrop-blur-[1px] pointer-events-none" />
                 {isSafari ? (
@@ -669,7 +755,11 @@ export default function AppChrome({ children }: AppChromeProps) {
 
             {/* Header */}
             <Header />
-            <RootLayout.MainContent>{children}</RootLayout.MainContent>
+            <RootLayout.MainContent>
+              <PendingRoute base="/app" loader={<AppChromeLoader />}>
+                {children}
+              </PendingRoute>
+            </RootLayout.MainContent>
             <Footer />
           </div>
           {rightPanel}

@@ -1,5 +1,6 @@
 import { describe, expect, it, jest } from "@jest/globals";
 import {
+  act,
   fireEvent,
   render,
   renderHook,
@@ -113,7 +114,11 @@ describe("TextInputField", () => {
     fireEvent.press(screen.getByLabelText("submit"));
     await waitFor(() => expect(screen.getByRole("alert")).toBeTruthy());
 
-    fireEvent.changeText(screen.getByPlaceholderText("email"), "a@b.com");
+    // react-hook-form revalidates asynchronously; flush it so the assertion doesn't
+    // race waitFor's 1s default.
+    await act(async () => {
+      fireEvent.changeText(screen.getByPlaceholderText("email"), "a@b.com");
+    });
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
   });
 

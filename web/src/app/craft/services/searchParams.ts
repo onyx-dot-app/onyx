@@ -1,4 +1,4 @@
-import { ReadonlyURLSearchParams } from "next/navigation";
+import { type ReadonlyURLSearchParams } from "@opal/navigation";
 
 // search params for build pages
 export const CRAFT_SEARCH_PARAM_NAMES = {

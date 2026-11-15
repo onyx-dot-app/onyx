@@ -23,6 +23,7 @@ from ee.onyx.server.log_export.storage import (
     derive_export_state,
     read_export_snapshot,
 )
+from onyx.cache.interface import CacheBackendType
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 
@@ -62,9 +63,9 @@ def _admin_user() -> MagicMock:
 
 def test_fanout_failure_degrades_to_api_server_only() -> None:
     # Precondition.
-    # No broker is reachable, as in the onyx-lite overlay.
+    # A broker is configured but unreachable.
     with patch(f"{_API_MODULE}.client_app") as celery_client:
-        celery_client.send_task.side_effect = OSError("no broker")
+        celery_client.send_task.side_effect = OSError("broker down")
 
         # Under test.
         response = start_log_export(user=_admin_user())
@@ -72,6 +73,26 @@ def test_fanout_failure_degrades_to_api_server_only() -> None:
     # Postcondition.
     # The manifest awaits only the api_server, whose inline receipt already
     # exists, so the export is ready without any deadline wait.
+    snapshot = read_export_snapshot(response.export_id)
+    assert snapshot is not None
+    assert snapshot.manifest.worker_names == [API_SERVER_WORKER_NAME]
+    now = datetime.now(tz=timezone.utc)
+    assert derive_export_state(snapshot, now=now) is LogExportState.READY
+
+
+def test_lite_deployment_skips_fanout(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Precondition.
+    # Redis is absent by design (the onyx-lite overlay), so there is no celery
+    # broker and there are no workers.
+    monkeypatch.setattr(log_export_api, "CACHE_BACKEND", CacheBackendType.POSTGRES)
+    with patch(f"{_API_MODULE}.client_app") as celery_client:
+        # Under test.
+        response = start_log_export(user=_admin_user())
+
+    # Postcondition.
+    # The broker is never touched, and the manifest awaits only the api_server,
+    # whose inline receipt already exists.
+    celery_client.send_task.assert_not_called()
     snapshot = read_export_snapshot(response.export_id)
     assert snapshot is not None
     assert snapshot.manifest.worker_names == [API_SERVER_WORKER_NAME]

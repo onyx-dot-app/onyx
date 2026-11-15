@@ -32,11 +32,17 @@ Empty states and placeholder screens share a recurring pattern: a large illustra
 
 ## Props
 
-| Prop | Type | Default | Description |
-|---|---|---|---|
-| `illustration` | `IconFunctionComponent` | — | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. |
-| `title` | `string` | **(required)** | Main title text, center-aligned. |
-| `description` | `string` | — | Optional description below the title, center-aligned. |
+| Prop           | Type                    | Default        | Description                                                                                                      |
+| -------------- | ----------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `illustration` | `IconFunctionComponent` | —              | Optional illustration component rendered at 7.5rem × 7.5rem, centered. Works with any `@opal/illustrations` SVG. It receives `size={120}` to match, since the line weight follows `size`, not the CSS size. |
+| `title`        | `string`                | **(required)** | Main title text, center-aligned.                                                                                 |
+| `description`  | `string`                | —              | Optional description below the title, center-aligned.                                                            |
+| `size`         | `"sm" \| "md" \| "lg"`  | `"md"`         | Illustration and text scale. See below.                                                                          |
+
+The optional `size="lg"` uses an 18px heading and 16px description with more space between them.
+The default `size="md"` preserves the compact typography. Both draw the illustration at 7.5rem.
+`size="sm"` fits a narrow side panel: the illustration draws at 4rem (64px) with its 64px line weight,
+and the title uses `font-main-ui-muted text-text-03`.
 
 ## Usage Examples
 
@@ -50,7 +56,20 @@ import SvgNoResult from "@opal/illustrations/no-result";
   illustration={SvgNoResult}
   title="No results found"
   description="Try adjusting your search or filters."
-/>
+/>;
+```
+
+### Narrow panel
+
+```tsx
+import { IllustrationContent } from "@opal/layouts";
+import SvgLongWait from "@opal/illustrations/long-wait";
+
+<IllustrationContent
+  size="sm"
+  illustration={SvgLongWait}
+  title="No recent activity"
+/>;
 ```
 
 ### Not found page
@@ -63,7 +82,7 @@ import SvgNotFound from "@opal/illustrations/not-found";
   illustration={SvgNotFound}
   title="Page not found"
   description="The page you're looking for doesn't exist or has been moved."
-/>
+/>;
 ```
 
 ### Title only (no illustration, no description)
@@ -71,7 +90,7 @@ import SvgNotFound from "@opal/illustrations/not-found";
 ```tsx
 import { IllustrationContent } from "@opal/layouts";
 
-<IllustrationContent title="Nothing here yet" />
+<IllustrationContent title="Nothing here yet" />;
 ```
 
 ### Empty state with illustration and title (no description)
@@ -80,8 +99,5 @@ import { IllustrationContent } from "@opal/layouts";
 import { IllustrationContent } from "@opal/layouts";
 import SvgEmpty from "@opal/illustrations/empty";
 
-<IllustrationContent
-  illustration={SvgEmpty}
-  title="No items"
-/>
+<IllustrationContent illustration={SvgEmpty} title="No items" />;
 ```

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo } from "react";
+import { useTranslations } from "next-intl";
 import {
   PacketType,
   CustomToolPacket,
@@ -8,14 +9,16 @@ import {
   CustomToolErrorInfo,
   SectionEnd,
 } from "../../../services/streamingModels";
-import { MessageRenderer, RenderType } from "../interfaces";
+import {
+  MessageRenderer,
+  RenderType,
+} from "@/app/app/message/messageComponents/types";
 import { buildImgUrl } from "../../../components/files/images/utils";
-import Text from "@/refresh-components/texts/Text";
+import { ShadowDiv, Text } from "@opal/components";
 import { SvgActions, SvgDownload, SvgExternalLink } from "@opal/icons";
 import { CodeBlock } from "@/app/app/message/CodeBlock";
 import hljs from "highlight.js/lib/core";
 import json from "highlight.js/lib/languages/json";
-import FadingEdgeContainer from "@/refresh-components/FadingEdgeContainer";
 import { IoBlockLabel } from "@/app/app/message/messageComponents/IoBlockLabel";
 
 // Lazy registration for hljs JSON language
@@ -50,7 +53,10 @@ function HighlightedJsonCode({ code }: HighlightedJsonCodeProps) {
   );
 }
 
-function constructCustomToolState(packets: CustomToolPacket[]) {
+function constructCustomToolState(
+  packets: CustomToolPacket[],
+  fallbackToolName: string
+) {
   const toolStart = packets.find(
     (p) => p.obj.type === PacketType.CUSTOM_TOOL_START
   )?.obj as CustomToolStart | null;
@@ -62,7 +68,7 @@ function constructCustomToolState(packets: CustomToolPacket[]) {
       p.obj.type === PacketType.SECTION_END || p.obj.type === PacketType.ERROR
   )?.obj as SectionEnd | null;
 
-  const toolName = toolStart?.tool_name || toolDeltas[0]?.tool_name || "Tool";
+  const toolName = toolStart?.display_name || fallbackToolName;
   const toolArgsPacket = packets.find(
     (p) => p.obj.type === PacketType.CUSTOM_TOOL_ARGS
   )?.obj as CustomToolArgs | null;
@@ -94,6 +100,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages");
   const {
     toolName,
     toolArgs,
@@ -103,7 +110,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
     error,
     isRunning,
     isComplete,
-  } = constructCustomToolState(packets);
+  } = constructCustomToolState(packets, t("customTool.fallbackName.label"));
 
   useEffect(() => {
     if (isComplete) {
@@ -114,17 +121,29 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
   const status = useMemo(() => {
     if (isComplete) {
       if (error) {
+        if (error.is_unreachable)
+          return t("customTool.unreachableStatus.text", { toolName });
+        if (error.status_code === null)
+          return t("customTool.blockedStatus.text", { toolName });
         return error.is_auth_error
-          ? `${toolName} authentication failed (HTTP ${error.status_code})`
-          : `${toolName} failed (HTTP ${error.status_code})`;
+          ? t("customTool.authFailedStatus.text", {
+              toolName,
+              statusCode: error.status_code,
+            })
+          : t("customTool.failedStatus.text", {
+              toolName,
+              statusCode: error.status_code,
+            });
       }
-      if (responseType === "image") return `${toolName} returned images`;
-      if (responseType === "csv") return `${toolName} returned a file`;
-      return `${toolName} completed`;
+      if (responseType === "image")
+        return t("customTool.imagesStatus.text", { toolName });
+      if (responseType === "csv")
+        return t("customTool.fileStatus.text", { toolName });
+      return t("customTool.completedStatus.text", { toolName });
     }
-    if (isRunning) return `${toolName} running...`;
+    if (isRunning) return t("customTool.runningStatus.text", { toolName });
     return null;
-  }, [toolName, responseType, error, isComplete, isRunning]);
+  }, [toolName, responseType, error, isComplete, isRunning, t]);
 
   const icon = SvgActions;
 
@@ -160,8 +179,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   style={{ animationDelay: "0.2s" }}
                 ></div>
               </div>
-              <Text text03 secondaryBody>
-                Waiting for response...
+              <Text font="secondary-body" color="text-03">
+                {t("customTool.waitingIndicator.text")}
               </Text>
             </div>
           )}
@@ -169,7 +188,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* Tool arguments */}
         {toolArgsJson && (
           <div>
-            <IoBlockLabel label="Request" />
+            <IoBlockLabel label={t("customTool.requestBlock.label")} />
             <div className="prose max-w-full">
               <CodeBlock
                 className="font-secondary-mono"
@@ -184,8 +203,8 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
 
         {/* Error display */}
         {error && (
-          <div className="pl-(--timeline-common-text-padding)">
-            <Text text03 mainUiMuted>
+          <div className="ps-(--timeline-common-text-padding)">
+            <Text font="main-ui-muted" color="text-03">
               {error.message}
             </Text>
           </div>
@@ -196,8 +215,12 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
           <div className="text-sm text-text-03 flex flex-col gap-2">
             {fileIds.map((fid, idx) => (
               <div key={fid} className="flex items-center gap-2 flex-wrap">
-                <Text text03 secondaryBody className="whitespace-nowrap">
-                  File {idx + 1}
+                <Text
+                  font="secondary-body"
+                  color="text-03"
+                  wordWrap="whitespace-nowrap"
+                >
+                  {t("customTool.fileItem.label", { index: idx + 1 })}
                 </Text>
                 <a
                   href={buildImgUrl(fid)}
@@ -205,14 +228,16 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
                 >
-                  <SvgExternalLink className="w-3 h-3" /> Open
+                  <SvgExternalLink className="w-3 h-3" />{" "}
+                  {t("customTool.openFileLink.label")}
                 </a>
                 <a
                   href={buildImgUrl(fid)}
                   download
                   className="inline-flex items-center gap-1 text-xs text-action-selection-01 hover:underline whitespace-nowrap"
                 >
-                  <SvgDownload className="w-3 h-3" /> Download
+                  <SvgDownload className="w-3 h-3" />{" "}
+                  {t("customTool.downloadFileLink.label")}
                 </a>
               </div>
             ))}
@@ -222,7 +247,7 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         {/* JSON/Text responses */}
         {!error && data !== undefined && data !== null && (
           <div>
-            <IoBlockLabel label="Response" />
+            <IoBlockLabel label={t("customTool.responseBlock.label")} />
             <div className="prose max-w-full">
               {dataJson ? (
                 <CodeBlock
@@ -246,11 +271,11 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
         )}
       </div>
     ),
-    [toolArgsJson, dataJson, data, fileIds, error, isRunning]
+    [toolArgsJson, dataJson, data, fileIds, error, isRunning, t]
   );
 
-  // Auth error: always render FULL with error surface
-  if (error?.is_auth_error) {
+  // Blocked, unreachable, or auth error: always render FULL with error surface
+  if (error && (error.status_code === null || error.is_auth_error)) {
     return children([
       {
         icon,
@@ -283,12 +308,14 @@ export const CustomToolRenderer: MessageRenderer<CustomToolPacket, {}> = ({
       status,
       supportsCollapsible: true,
       content: (
-        <FadingEdgeContainer
-          direction="bottom"
+        <ShadowDiv
+          shadowDirection="bottom-only"
+          variant="mask"
+          shadowHeight={8}
           className="max-h-24 overflow-hidden"
         >
           {content}
-        </FadingEdgeContainer>
+        </ShadowDiv>
       ),
     },
   ]);

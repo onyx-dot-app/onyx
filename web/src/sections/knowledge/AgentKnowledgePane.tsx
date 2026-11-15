@@ -7,9 +7,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { useTranslations } from "next-intl";
 import * as TableLayouts from "@/layouts/table-layouts";
-import { Card } from "@/refresh-components/cards";
 import useCCPairs from "@/hooks/useCCPairs";
 import { fetchHierarchyNodeSearch } from "@/lib/hierarchy/svc";
 import type {
@@ -19,13 +18,14 @@ import type {
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
+} from "@/lib/hierarchy/types";
 import type { ProjectFile } from "@/lib/projects/types";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import { searchDocuments } from "@/ee/lib/search/svc";
 import { Disabled } from "@opal/core";
-import { Switch } from "@opal/components";
-import { Content, InputHorizontal } from "@opal/layouts";
+import { Card, InputSwitch } from "@opal/components";
+import { Content, InputHorizontal, Section } from "@opal/layouts";
 
 import { KnowledgeAddView } from "@/sections/knowledge/agent-knowledge/KnowledgeAddView";
 import { KnowledgeMainContent } from "@/sections/knowledge/agent-knowledge/KnowledgeMainContent";
@@ -39,7 +39,7 @@ import type {
   KnowledgeNavState,
   KnowledgeSearchResults,
   KnowledgeView,
-} from "@/sections/knowledge/agent-knowledge/interfaces";
+} from "@/sections/knowledge/agent-knowledge/types";
 
 interface AgentKnowledgePaneProps {
   enableKnowledge: boolean;
@@ -84,6 +84,7 @@ export default function AgentKnowledgePane({
   initialHierarchyNodes,
   vectorDbEnabled = true,
 }: AgentKnowledgePaneProps) {
+  const t = useTranslations("knowledge");
   const [view, setView] = useState<KnowledgeView>("main");
   const [activeSource, setActiveSource] = useState<ValidSources | undefined>();
 
@@ -361,7 +362,7 @@ export default function AgentKnowledgePane({
 
       case "add":
         return (
-          <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+          <Section gap={2} alignItems="stretch" height="auto">
             {vectorDbEnabled && (
               <KnowledgeSearchBar
                 query={searchQuery}
@@ -411,7 +412,7 @@ export default function AgentKnowledgePane({
                 vectorDbEnabled={vectorDbEnabled}
               />
             )}
-          </GeneralLayouts.Section>
+          </Section>
         );
 
       case "document-sets":
@@ -516,35 +517,36 @@ export default function AgentKnowledgePane({
   ]);
 
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+    <Section gap={2} alignItems="stretch" height="auto">
       <Content
-        title="Knowledge"
-        description="Add specific connectors and documents for this agent to use to inform its responses."
-        sizePreset="main-content"
-        variant="section"
+        font="main-content-emphasis"
+        title={t("pane.header.title")}
+        description={t("pane.header.description")}
       />
 
-      <Card>
-        <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
-          <InputHorizontal
-            title="Use Knowledge"
-            description="Let this agent reference these documents to inform its responses."
-            withLabel
-          >
-            <Switch
-              name="enable_knowledge"
-              checked={enableKnowledge}
-              onCheckedChange={onEnableKnowledgeChange}
-            />
-          </InputHorizontal>
+      <Card border="solid" rounding={4}>
+        <Section alignItems="start" height="fit">
+          <Section gap={2} alignItems="stretch" height="auto">
+            <InputHorizontal
+              title={t("pane.useKnowledge.title")}
+              description={t("pane.useKnowledge.description")}
+              withLabel
+            >
+              <InputSwitch
+                name="enable_knowledge"
+                checked={enableKnowledge}
+                onCheckedChange={onEnableKnowledgeChange}
+              />
+            </InputHorizontal>
 
-          <Disabled disabled={!enableKnowledge}>
-            <GeneralLayouts.Section alignItems="stretch" height="auto">
-              {renderedContent}
-            </GeneralLayouts.Section>
-          </Disabled>
-        </GeneralLayouts.Section>
+            <Disabled disabled={!enableKnowledge}>
+              <Section alignItems="stretch" height="auto">
+                {renderedContent}
+              </Section>
+            </Disabled>
+          </Section>
+        </Section>
       </Card>
-    </GeneralLayouts.Section>
+    </Section>
   );
 }

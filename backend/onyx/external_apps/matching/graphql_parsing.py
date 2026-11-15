@@ -67,8 +67,10 @@ def _operation_invocations(query: str) -> list[tuple[str, str]]:
         if not isinstance(definition, OperationDefinitionNode):
             continue
         operation_type = definition.operation.value  # "query" | "mutation" | ...
-        for field in _root_field_names(definition.selection_set, fragments, set()):
-            invocations.append((operation_type, field))
+        invocations.extend(
+            (operation_type, field)
+            for field in _root_field_names(definition.selection_set, fragments, set())
+        )
     return invocations
 
 

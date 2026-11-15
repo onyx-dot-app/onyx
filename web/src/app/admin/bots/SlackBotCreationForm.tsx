@@ -1,13 +1,14 @@
 "use client";
 
 import CardSection from "@/components/admin/CardSection";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { SlackTokensForm } from "./SlackTokensForm";
 import { SettingsLayouts } from "@opal/layouts";
 import { SvgSlack } from "@opal/logos";
 
 export function NewSlackBotForm() {
+  const t = useTranslations("admin.slackBots");
   const [formValues] = useState({
     name: "",
     enabled: true,
@@ -15,24 +16,19 @@ export function NewSlackBotForm() {
     app_token: "",
     user_token: "",
   });
-  const router = useRouter();
 
   return (
     <SettingsLayouts.Root>
       <SettingsLayouts.Header
         icon={SvgSlack}
-        title="New Slack Bot"
+        title={t("newBot.header.title")}
         divider
-        backButton
+        cancel
       />
       <SettingsLayouts.Body>
         <CardSection>
           <div className="p-4">
-            <SlackTokensForm
-              isUpdate={false}
-              initialValues={formValues}
-              router={router}
-            />
+            <SlackTokensForm isUpdate={false} initialValues={formValues} />
           </div>
         </CardSection>
       </SettingsLayouts.Body>

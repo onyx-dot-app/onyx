@@ -43,10 +43,16 @@ class OnyxErrorCode(Enum):
     EE_REQUIRED = ("EE_REQUIRED", 403)
     SINGLE_TENANT_ONLY = ("SINGLE_TENANT_ONLY", 403)
     ENV_VAR_GATED = ("ENV_VAR_GATED", 403)
+    # The deployment cannot support the feature at all, so no grant helps.
+    DEPLOYMENT_UNSUPPORTED = ("DEPLOYMENT_UNSUPPORTED", 403)
+    # An admin turned the feature off for this workspace; no credential
+    # change re-enables it.
+    FEATURE_DISABLED = ("FEATURE_DISABLED", 403)
 
     # --------------------------------------------------------------------------
     # Validation / Bad Request (400)
     # --------------------------------------------------------------------------
+    BAD_REQUEST = ("BAD_REQUEST", 400)
     VALIDATION_ERROR = ("VALIDATION_ERROR", 400)
     INVALID_INPUT = ("INVALID_INPUT", 400)
     MISSING_REQUIRED_FIELD = ("MISSING_REQUIRED_FIELD", 400)
@@ -62,6 +68,7 @@ class OnyxErrorCode(Enum):
     DOCUMENT_NOT_FOUND = ("DOCUMENT_NOT_FOUND", 404)
     SESSION_NOT_FOUND = ("SESSION_NOT_FOUND", 404)
     USER_NOT_FOUND = ("USER_NOT_FOUND", 404)
+    DOCUMENT_SET_NOT_FOUND = ("DOCUMENT_SET_NOT_FOUND", 404)
 
     # --------------------------------------------------------------------------
     # Conflict (409)
@@ -69,6 +76,24 @@ class OnyxErrorCode(Enum):
     CONFLICT = ("CONFLICT", 409)
     DUPLICATE_RESOURCE = ("DUPLICATE_RESOURCE", 409)
     SKILL_NAME_CONFLICT = ("SKILL_NAME_CONFLICT", 409)
+    # A delete refused because something still points at the resource. Distinct
+    # from a plain 400 so a client can tell "repoint it first" from "bad input".
+    RESOURCE_IN_USE = ("RESOURCE_IN_USE", 409)
+    # A write refused because a background sync is still applying the last one.
+    # Retryable, unlike NOT_FOUND, which these routes used to report instead.
+    RESOURCE_SYNCING = ("RESOURCE_SYNCING", 409)
+    # A re-index refused because an earlier generation still holds the index name it
+    # wants. Reclamation is draining that index now, so the same request works shortly.
+    INDEX_NAME_RECLAIMING = ("INDEX_NAME_RECLAIMING", 409)
+    # A connector edit plan whose pair changed after it was computed. The client
+    # computes a new plan.
+    EDIT_PLAN_STALE = ("EDIT_PLAN_STALE", 409)
+    # An edit that started from a plugin version older than the newest one.
+    # The client loads the newest version and makes the change again.
+    PLUGIN_VERSION_STALE = ("PLUGIN_VERSION_STALE", 409)
+    # A message sent to a chat that waits for the user's approval. The client
+    # keeps the draft until the user decides the pending requests.
+    APPROVAL_PENDING = ("APPROVAL_PENDING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)
@@ -97,6 +122,8 @@ class OnyxErrorCode(Enum):
     INTERNAL_ERROR = ("INTERNAL_ERROR", 500)
     NOT_IMPLEMENTED = ("NOT_IMPLEMENTED", 501)
     SERVICE_UNAVAILABLE = ("SERVICE_UNAVAILABLE", 503)
+    # No Firecracker node can start a sandbox VM now; `extra.reason` says why.
+    SANDBOX_CAPACITY_UNAVAILABLE = ("SANDBOX_CAPACITY_UNAVAILABLE", 503)
     BAD_GATEWAY = ("BAD_GATEWAY", 502)
     LLM_PROVIDER_ERROR = ("LLM_PROVIDER_ERROR", 502)
     HOOK_EXECUTION_FAILED = ("HOOK_EXECUTION_FAILED", 502)
@@ -105,6 +132,28 @@ class OnyxErrorCode(Enum):
     def __init__(self, code: str, status_code: int) -> None:
         self.code = code
         self.status_code = status_code
+
+    @classmethod
+    def for_status(cls, status_code: int) -> "OnyxErrorCode":
+        """The code to report for an error raised without one.
+
+        A bare ``HTTPException`` or ``ValueError`` carries a status and a
+        sentence, so a machine client has nothing stable to match on. This
+        gives those responses the same code vocabulary as ``OnyxError``.
+        """
+        canonical = _CANONICAL_CODE_FOR_STATUS.get(status_code)
+        if canonical is not None:
+            return canonical
+        return cls.INTERNAL_ERROR if status_code >= 500 else cls.BAD_REQUEST
+
+    @classmethod
+    def for_code(cls, code: str | None) -> "OnyxErrorCode":
+        """The member whose string code is ``code``; INTERNAL_ERROR when none
+        matches, such as a chat-only code like AGENT_EXECUTION_FAILED."""
+        for member in cls:
+            if member.code == code:
+                return member
+        return cls.INTERNAL_ERROR
 
     def detail(self, message: str | None = None) -> dict[str, str]:
         """Build a structured error detail dict.
@@ -118,3 +167,22 @@ class OnyxErrorCode(Enum):
             "error_code": self.code,
             "detail": message or self.code,
         }
+
+
+# The code a status maps to when the raise site named none. Only statuses with
+# an unambiguous meaning are listed; anything else falls back by class.
+_CANONICAL_CODE_FOR_STATUS: dict[int, OnyxErrorCode] = {
+    400: OnyxErrorCode.BAD_REQUEST,
+    401: OnyxErrorCode.UNAUTHENTICATED,
+    403: OnyxErrorCode.UNAUTHORIZED,
+    404: OnyxErrorCode.NOT_FOUND,
+    409: OnyxErrorCode.CONFLICT,
+    413: OnyxErrorCode.PAYLOAD_TOO_LARGE,
+    422: OnyxErrorCode.VALIDATION_ERROR,
+    429: OnyxErrorCode.RATE_LIMITED,
+    500: OnyxErrorCode.INTERNAL_ERROR,
+    501: OnyxErrorCode.NOT_IMPLEMENTED,
+    502: OnyxErrorCode.BAD_GATEWAY,
+    503: OnyxErrorCode.SERVICE_UNAVAILABLE,
+    504: OnyxErrorCode.GATEWAY_TIMEOUT,
+}

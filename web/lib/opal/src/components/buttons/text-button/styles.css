@@ -14,6 +14,6 @@
    plain `Text` node with hover/active color animation.
 ============================================================================ */
 
-.opal-text-button {
+.opal-text-label {
   @apply bg-transparent;
 }

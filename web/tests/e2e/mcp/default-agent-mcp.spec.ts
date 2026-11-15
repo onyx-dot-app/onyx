@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { loginAs, apiLogin } from "@tests/e2e/utils/auth";
+import {
+  grantAddAgents,
+  deleteGrantGroups,
+} from "@tests/e2e/utils/grantPermissions";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
@@ -8,11 +13,12 @@ import {
 } from "@tests/e2e/utils/mcpServer";
 import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
 import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
-import { ActionsPopover } from "@tests/e2e/pages/ActionsPopover";
+import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
 import { AgentEditorPage } from "@tests/e2e/pages/AgentEditorPage";
 import {
   expectMcpToolInvoked,
   expectMcpToolNotInvoked,
+  qualifiedMcpToolName,
 } from "@tests/e2e/mcp/mcpToolInvocation";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
@@ -35,6 +41,7 @@ test.describe("Default Agent MCP Integration", () => {
   let serverName: string;
   let serverUrl: string;
   let basicUserEmail: string;
+  const grantGroupIds: number[] = [];
   let basicUserPassword: string;
   let createdProviderId: number | null = null;
   let assertedToolId: number;
@@ -87,15 +94,25 @@ test.describe("Default Agent MCP Integration", () => {
       serverId,
       MCP_ASSERTED_TOOL_NAME
     );
+    // These tests cover invocation, not approval (mcp_tool_approval.spec.ts).
+    await adminClient.setMcpActionPolicies(serverId, {
+      [MCP_ASSERTED_TOOL_NAME]: "ALWAYS",
+    });
 
     basicUserEmail = `pw-basic-user-${Date.now()}@example.com`;
     basicUserPassword = "BasicUserPass123!";
     await adminClient.registerUser(basicUserEmail, basicUserPassword);
 
     await adminContext.close();
+
+    // this user creates an agent through the UI, which EE gates on ADD_AGENTS
+    grantGroupIds.push(await grantAddAgents(browser, basicUserEmail));
   });
 
   test.afterAll(async ({ browser }) => {
+    await deleteGrantGroups(browser, grantGroupIds);
+    grantGroupIds.length = 0;
+
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
@@ -128,38 +145,33 @@ test.describe("Default Agent MCP Integration", () => {
 
     const uiServerName = `${serverName} (UI)`;
     await adminMcp.openAddServerModal();
+    await adminMcp.enterServerUrlAndContinue(serverUrl);
+    await adminMcp.selectAuthMethod("API Key");
+    await adminMcp.selectApiKeyCredentials("admin");
+    await adminMcp.fillApiToken(API_KEY);
     await adminMcp.fillServerDetails({
       name: uiServerName,
-      description: "API key MCP server created via UI",
-      url: serverUrl,
     });
-    uiServerId = await adminMcp.submitAddServer();
+    uiServerId = await adminMcp.connectAndWaitForCreation();
 
-    await adminMcp.selectAuthMethod("API Key");
-    await adminMcp.selectApiKeyTab("admin");
-    await adminMcp.fillApiToken(API_KEY);
-    await adminMcp.clickConnect();
-
-    await adminMcp.expectServerCard(uiServerName);
+    await adminMcp.expectServerDetail(uiServerName);
     await adminMcp.refreshTools();
 
-    // Exercise the card-level tool toggle: disable then re-enable a tool.
-    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
-    await adminMcp.setCardToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
+    // Exercise global tool availability: disable then re-enable a tool.
+    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, false);
+    await adminMcp.setToolEnabled(MCP_ASSERTED_TOOL_NAME, true);
   });
 
-  test("Admin adds MCP tools to the default agent via chat preferences", async ({
-    page,
-  }) => {
+  test("Admin enables an MCP plugin in default Chat", async ({ page }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.goto();
-    await chatPrefs.enableServerTools(serverName);
+    const adminMcp = new AdminMcpServersPage(page);
+    await adminMcp.openConfiguration(serverName);
+    await adminMcp.setDefaultChatEnabled(true);
   });
 
-  test("Basic user can see and toggle MCP tools in the default agent", async ({
+  test("Basic user can toggle an MCP plugin in the default agent", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -169,23 +181,13 @@ test.describe("Default Agent MCP Integration", () => {
     await page.waitForURL("**/app**");
     await ensureOnboardingComplete(page);
 
-    const actions = new ActionsPopover(page);
-    await actions.expectServerVisible(serverName);
-    await actions.openServer(serverName);
-
-    // Toggle a tool off and back on.
-    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.enableTool(MCP_ASSERTED_TOOL_NAME);
-
-    // Disable All then Enable All affect the whole server.
-    await actions.disableAll();
-    await expect(
-      actions.popover.locator('[role="switch"][aria-checked="false"]')
-    ).not.toHaveCount(0);
-    await actions.enableAll();
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.expectPluginEnabled(serverName, true);
+    await plugins.setPluginEnabled(serverName, false);
+    await plugins.setPluginEnabled(serverName, true);
   });
 
-  test("Basic user can create an assistant with MCP actions attached", async ({
+  test("Basic user can create an assistant with MCP actions attached @code-mode", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -213,43 +215,37 @@ test.describe("Default Agent MCP Integration", () => {
       assistant.tools.some((tool) => tool.mcp_server_id === serverId)
     ).toBeTruthy();
 
-    // The tool is enabled, so a forced call should actually invoke it.
-    await expectMcpToolInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
+    const qualifiedToolName = qualifiedMcpToolName(
+      serverId,
+      serverName,
+      MCP_ASSERTED_TOOL_NAME
+    );
+    await expectMcpToolInvoked(page, qualifiedToolName);
 
-    // Disable the tool from the actions popover and confirm it no longer runs.
-    const actions = new ActionsPopover(page);
-    await actions.openServer(serverName);
-    await actions.searchTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.disableTool(MCP_ASSERTED_TOOL_NAME);
-    await actions.close();
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.setPluginEnabled(serverName, false);
+    await plugins.close();
 
-    await expectMcpToolNotInvoked(page, MCP_ASSERTED_TOOL_NAME, assertedToolId);
+    await expectMcpToolNotInvoked(page, qualifiedToolName, assertedToolId);
   });
 
-  test("Admin can modify MCP tools in the default agent and changes persist", async ({
+  test("Admin default Chat availability persists in plugin Configuration", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
 
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.goto();
-    await chatPrefs.expandServerCard(serverName);
+    const adminMcp = new AdminMcpServersPage(page);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).toBeChecked();
+    await adminMcp.setDefaultChatEnabled(false);
 
-    const toolSwitch = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
-    await expect(toolSwitch).toBeVisible();
-    const initialChecked = await toolSwitch.getAttribute("aria-checked");
-    await chatPrefs.toggleTool(MCP_ASSERTED_TOOL_NAME);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).not.toBeChecked();
+    await adminMcp.setDefaultChatEnabled(true);
 
-    // Reload and confirm the new state persisted.
-    await page.reload();
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
-    await chatPrefs.expandServerCard(serverName);
-
-    const toolSwitchAfter = chatPrefs.toolSwitch(MCP_ASSERTED_TOOL_NAME);
-    await expect(toolSwitchAfter).toBeVisible();
-    const expected = initialChecked === "true" ? "false" : "true";
-    await expect(toolSwitchAfter).toHaveAttribute("aria-checked", expected);
+    await adminMcp.openConfiguration(serverName);
+    await expect(adminMcp.defaultChatToggle).toBeChecked();
   });
 
   test("Default agent instructions persist when saved via chat preferences", async ({
@@ -269,23 +265,24 @@ test.describe("Default Agent MCP Integration", () => {
     // Reload and confirm the value persisted.
     await page.reload();
     await page.waitForLoadState("networkidle");
-    await page.waitForURL("**/admin/configuration/chat-preferences**");
+    await page.waitForURL(`**${ADMIN_ROUTES.CHAT_PREFERENCES.path}**`);
 
     await chatPrefs.openModifyPrompt();
     await chatPrefs.expectSystemPromptValue(testInstructions);
     await chatPrefs.cancelModifyPrompt();
   });
 
-  test("MCP tools appear in a basic user's chat actions", async ({ page }) => {
+  test("MCP plugin selection appears in a basic user's composer", async ({
+    page,
+  }) => {
     await page.context().clearCookies();
     await apiLogin(page, basicUserEmail, basicUserPassword);
 
     await page.goto("/app");
     await page.waitForURL("**/app**");
 
-    const actions = new ActionsPopover(page);
-    await actions.expectServerVisible(serverName);
-    await actions.openServer(serverName);
-    await expect(actions.toolSwitches).not.toHaveCount(0);
+    const plugins = new ChatPluginsPopover(page);
+    await plugins.expectPluginVisible(serverName);
+    await expect(plugins.pluginSwitch(serverName)).toBeEnabled();
   });
 });

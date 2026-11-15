@@ -4,7 +4,6 @@ The emit is guarded on an actual membership delta, so a pure cc_pair update
 must emit nothing while an add/remove of users must emit exactly one event.
 """
 
-import json
 import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -14,21 +13,16 @@ import pytest
 
 from ee.onyx.db.user_group import update_user_group
 from ee.onyx.server.user_group.models import UserGroupUpdate
-from onyx.db.models import UserRole
-
-
-def _audit_events(caplog: pytest.LogCaptureFixture) -> list[dict[str, Any]]:
-    return [
-        json.loads(r.getMessage())
-        for r in caplog.records
-        if r.name.startswith("onyx.audit")
-    ]
+from onyx.db.enums import AccountType, Permission
+from tests.utils.audit import audit_events
 
 
 def _make_db_session(
     existing_user_ids: list[Any], existing_cc_pair_ids: list[int]
 ) -> MagicMock:
     group = MagicMock()
+    group.name = "Engineering"
+    group.is_default = False
     group.users = [MagicMock(id=uid) for uid in existing_user_ids]
     group.cc_pairs = [MagicMock(id=cid) for cid in existing_cc_pair_ids]
     db_session = MagicMock()
@@ -40,7 +34,17 @@ def _make_db_session(
 
 @patch("ee.onyx.db.user_group.recompute_user_permissions__no_commit")
 @patch("ee.onyx.db.user_group._add_user__user_group_relationships__no_commit")
-@patch("ee.onyx.db.user_group.fetch_user_by_id", return_value=MagicMock())
+@patch(
+    "ee.onyx.db.user_group.fetch_users_by_ids",
+    side_effect=lambda _db_session, user_ids: [
+        MagicMock(
+            id=user_id,
+            email=f"{user_id}@example.com",
+            account_type=AccountType.STANDARD,
+        )
+        for user_id in user_ids
+    ],
+)
 @patch("ee.onyx.db.user_group._check_user_group_is_modifiable")
 def test_update_user_group_emits_on_membership_change(
     _modifiable: MagicMock,
@@ -52,7 +56,14 @@ def test_update_user_group_emits_on_membership_change(
     existing = uuid4()
     added = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    admin = MagicMock(
+        id="admin-1",
+        email="admin@example.com",
+        # A MagicMock attribute would never equal a real permission value.
+        effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        account_type=AccountType.STANDARD,
+        is_group_manager=False,
+    )
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(
@@ -64,7 +75,7 @@ def test_update_user_group_emits_on_membership_change(
             ),
         )
 
-    events = _audit_events(caplog)
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "user.group_change"
     assert events[0]["outcome"] == "success"
@@ -72,6 +83,8 @@ def test_update_user_group_emits_on_membership_change(
     assert events[0]["actor"]["email"] == "admin@example.com"
     assert events[0]["extra"]["added_user_ids"] == [str(added)]
     assert events[0]["extra"]["removed_user_ids"] == []
+    assert events[0]["extra"]["group_name"] == "Engineering"
+    assert events[0]["extra"]["is_default"] is False
 
 
 @patch("ee.onyx.db.user_group.recompute_user_permissions__no_commit")
@@ -89,7 +102,14 @@ def test_update_user_group_cc_pair_only_emits_nothing(
 ) -> None:
     existing = uuid4()
     db_session = _make_db_session([existing], [10])
-    admin = MagicMock(id="admin-1", email="admin@example.com", role=UserRole.ADMIN)
+    admin = MagicMock(
+        id="admin-1",
+        email="admin@example.com",
+        # A MagicMock attribute would never equal a real permission value.
+        effective_permissions=[Permission.FULL_ADMIN_PANEL_ACCESS.value],
+        account_type=AccountType.STANDARD,
+        is_group_manager=False,
+    )
 
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         update_user_group(
@@ -102,4 +122,4 @@ def test_update_user_group_cc_pair_only_emits_nothing(
             ),
         )
 
-    assert _audit_events(caplog) == []
+    assert audit_events(caplog) == []

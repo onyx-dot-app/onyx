@@ -1,14 +1,28 @@
 # pyright: reportMissingTypeStubs=false
 """Utility functions for prompt caching."""
 
-import json
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from onyx.llm.models import ChatCompletionMessage, LanguageModelInput
+from onyx.llm.model_request import ChatCompletionMessage, UserMessage
+from onyx.llm.models import ContentPart, TextContentPart
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+def _user_content_with_cache_marker(message: UserMessage) -> list[ContentPart]:
+    """Keep a message marker at its original boundary when merging content."""
+    content: list[ContentPart] = (
+        [TextContentPart(text=message.content)]
+        if isinstance(message.content, str)
+        else list(message.content)
+    )
+    if content and message.cache_control is not None:
+        content[-1] = content[-1].model_copy(
+            update={"cache_control": message.cache_control}
+        )
+    return content
 
 
 def combine_messages_with_continuation(
@@ -22,13 +36,31 @@ def combine_messages_with_continuation(
         prefix_msgs: Normalized cacheable prefix messages
         suffix_msgs: Normalized suffix messages
         continuation: If True, append suffix content to the last message of prefix
-        was_prefix_string: Deprecated, no longer used
 
     Returns:
         Combined messages
     """
     if not continuation or not prefix_msgs:
         return list(prefix_msgs) + list(suffix_msgs)
+    if (
+        suffix_msgs
+        and isinstance(prefix_msgs[-1], UserMessage)
+        and isinstance(suffix_msgs[0], UserMessage)
+        and (
+            prefix_msgs[-1].cache_control is not None
+            or suffix_msgs[0].cache_control is not None
+        )
+    ):
+        # Separate blocks preserve both cache boundaries and their lifetimes.
+        merged = prefix_msgs[-1].model_copy(
+            update={
+                "content": _user_content_with_cache_marker(prefix_msgs[-1])
+                + _user_content_with_cache_marker(suffix_msgs[0]),
+                "cache_control": None,
+            }
+        )
+        return [*prefix_msgs[:-1], merged, *suffix_msgs[1:]]
+
     # Append suffix content to last message of prefix
     result = list(prefix_msgs)
     last_msg = dict(result[-1])
@@ -69,28 +101,23 @@ def revalidate_message_from_original(
     the original message's Pydantic class so union discrimination (by role) stays
     intact.
     """
-    cls = original.__class__
-    try:
-        return cls.model_validate_json(json.dumps(mutated))
-    except Exception:
-        return cls.model_validate(mutated)
+    return type(original).model_validate(mutated)
 
 
 def prepare_messages_with_cacheable_transform(
-    cacheable_prefix: LanguageModelInput | None,
-    suffix: LanguageModelInput,
+    cacheable_prefix: list[ChatCompletionMessage] | None,
+    suffix: list[ChatCompletionMessage],
     continuation: bool,
     transform_cacheable: (
         Callable[[Sequence[ChatCompletionMessage]], Sequence[ChatCompletionMessage]]
         | None
     ) = None,
-) -> LanguageModelInput:
+) -> list[ChatCompletionMessage]:
     """Prepare messages for caching with optional transformation of cacheable prefix.
 
     This is a shared utility that handles the common flow:
-    1. Normalize inputs
-    2. Optionally transform cacheable messages
-    3. Combine with continuation handling
+    1. Optionally transform cacheable messages
+    2. Combine with continuation handling
 
     Args:
         cacheable_prefix: Optional cacheable prefix
@@ -105,15 +132,12 @@ def prepare_messages_with_cacheable_transform(
     if cacheable_prefix is None:
         return suffix
 
-    prefix_msgs = (
-        cacheable_prefix if isinstance(cacheable_prefix, list) else [cacheable_prefix]
-    )
-    suffix_msgs = suffix if isinstance(suffix, list) else [suffix]
+    prefix_msgs = cacheable_prefix
 
     # Apply transformation to cacheable messages if provided
     if transform_cacheable is not None:
         prefix_msgs = list(transform_cacheable(prefix_msgs))
 
     return combine_messages_with_continuation(
-        prefix_msgs=prefix_msgs, suffix_msgs=suffix_msgs, continuation=continuation
+        prefix_msgs=prefix_msgs, suffix_msgs=suffix, continuation=continuation
     )

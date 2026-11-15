@@ -1,12 +1,13 @@
+import { useLocale, useTranslations } from "next-intl";
 import { SvgSearch, SvgSearchMenu } from "@opal/icons";
 import { SearchToolPacket } from "@/app/app/services/streamingModels";
 import {
   MessageRenderer,
   RenderType,
-} from "@/app/app/message/messageComponents/interfaces";
+} from "@/app/app/message/messageComponents/types";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
-import { OnyxDocument } from "@/lib/search/interfaces";
-import { ValidSources } from "@/lib/types";
+import { OnyxDocument } from "@/lib/search/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { SearchChipList, SourceInfo } from "./SearchChipList";
 import {
   formatSearchHeader,
@@ -17,7 +18,7 @@ import {
   RESULTS_PER_EXPANSION,
   getMetadataTags,
 } from "./searchStateUtils";
-import Text from "@/refresh-components/texts/Text";
+import { Text } from "@opal/components";
 
 const queryToSourceInfo = (query: string, index: number): SourceInfo => ({
   id: `query-${index}`,
@@ -61,6 +62,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
   renderType,
   children,
 }) => {
+  const t = useTranslations("chat.messages.timeline");
+  const locale = useLocale();
   const searchState = constructCurrentSearchState(packets);
   const { queries, results, sourceFilters, timeFilter, isComplete } =
     searchState;
@@ -71,7 +74,12 @@ export const InternalSearchToolRenderer: MessageRenderer<
 
   const hasResults = results.length > 0;
 
-  const queriesHeader = formatSearchHeader(sourceFilters, timeFilter);
+  const queriesHeader = formatSearchHeader(
+    sourceFilters,
+    timeFilter,
+    t,
+    locale
+  );
 
   if (queries.length === 0) {
     return children([
@@ -95,9 +103,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
         timelineLayout: "content",
         content: (
           <div className="flex flex-col">
-            <Text as="p" text04 mainUiMuted className="mb-1">
-              {queriesHeader}
-            </Text>
+            <div className="mb-1">
+              <Text as="p" font="main-ui-muted" color="text-04">
+                {queriesHeader}
+              </Text>
+            </div>
             <SearchChipList
               items={results}
               initialCount={INITIAL_RESULTS_TO_SHOW}
@@ -115,8 +125,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 !isComplete ? (
                   <BlinkingBar />
                 ) : (
-                  <Text as="p" text04 mainUiMuted>
-                    No results found
+                  <Text as="p" font="main-ui-muted" color="text-04">
+                    {t("internalSearch.noResults.text")}
                   </Text>
                 )
               }
@@ -157,7 +167,7 @@ export const InternalSearchToolRenderer: MessageRenderer<
     return children([
       {
         icon: null,
-        status: "Reading",
+        status: t("internalSearch.reading.status"),
         supportsCollapsible: true,
         timelineLayout: "content",
         content: (
@@ -178,8 +188,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
               !isComplete ? (
                 <BlinkingBar />
               ) : (
-                <Text as="p" text04 mainUiMuted>
-                  No results found
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("internalSearch.noResults.text")}
                 </Text>
               )
             }
@@ -214,8 +224,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
           {(results.length > 0 || queries.length > 0) && (
             <>
               {!isCompact && (
-                <Text as="p" mainUiMuted text04>
-                  Reading
+                <Text as="p" font="main-ui-muted" color="text-04">
+                  {t("internalSearch.reading.status")}
                 </Text>
               )}
               <SearchChipList
@@ -235,8 +245,8 @@ export const InternalSearchToolRenderer: MessageRenderer<
                   !isComplete ? (
                     <BlinkingBar />
                   ) : (
-                    <Text as="p" text03 mainUiMuted>
-                      No results found
+                    <Text as="p" font="main-ui-muted" color="text-03">
+                      {t("internalSearch.noResults.text")}
                     </Text>
                   )
                 }

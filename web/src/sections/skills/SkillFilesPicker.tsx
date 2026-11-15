@@ -1,13 +1,15 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { cn } from "@opal/utils";
-import { useDropzone, type FileWithPath } from "react-dropzone";
+import { useDropzone } from "react-dropzone";
 import {
   prepareSkillFilesUpload,
   type PreparedSkillFilesUpload,
+  type SkillUploadFile,
 } from "@/lib/skills/bundleUpload";
 
 interface SkillFilesPickerProps {
@@ -26,17 +28,18 @@ export default function SkillFilesPicker({
   value,
   disabled = false,
   busyLabel,
-  buttonLabel = "Add files",
-  inputLabel = "Add skill files",
-  prompt = "Choose files or a ZIP, or drop a folder here.",
+  buttonLabel,
+  inputLabel,
+  prompt,
   onChange,
   onError,
   onPreparingChange,
 }: SkillFilesPickerProps) {
+  const t = useTranslations("skills.sections");
   const [preparing, setPreparing] = useState(false);
 
   const handleDrop = useCallback(
-    async (files: FileWithPath[]) => {
+    async (files: SkillUploadFile[]) => {
       if (files.length === 0) return;
       setPreparing(true);
       onPreparingChange?.(true);
@@ -45,14 +48,14 @@ export default function SkillFilesPicker({
       } catch (error) {
         console.error("Failed to prepare skill files", error);
         onError(
-          error instanceof Error ? error.message : "Could not read the upload."
+          error instanceof Error ? error.message : t("upload.error.readFailed")
         );
       } finally {
         setPreparing(false);
         onPreparingChange?.(false);
       }
     },
-    [onChange, onError, onPreparingChange]
+    [onChange, onError, onPreparingChange, t]
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
@@ -73,7 +76,11 @@ export default function SkillFilesPicker({
           : "border-border-01"
       )}
     >
-      <input {...getInputProps({ "aria-label": inputLabel })} />
+      <input
+        {...getInputProps({
+          "aria-label": inputLabel ?? t("filesPicker.input.ariaLabel"),
+        })}
+      />
       <Button
         type="button"
         icon={SvgUploadCloud}
@@ -81,10 +88,12 @@ export default function SkillFilesPicker({
         disabled={disabled || preparing}
         onClick={open}
       >
-        {preparing ? "Preparing..." : (busyLabel ?? buttonLabel)}
+        {preparing
+          ? t("filesPicker.preparing.label")
+          : (busyLabel ?? buttonLabel ?? t("filesPicker.addFiles.label"))}
       </Button>
       <Text font="secondary-body" color="text-03">
-        {value?.displayName ?? prompt}
+        {value?.displayName ?? prompt ?? t("filesPicker.prompt.description")}
       </Text>
     </div>
   );

@@ -1,8 +1,9 @@
 import uuid
+from collections.abc import Sequence
 from typing import NamedTuple
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session, contains_eager, joinedload
 
@@ -12,17 +13,26 @@ from onyx.auth.api_key import (
     generate_api_key,
     hash_api_key,
 )
-from onyx.auth.schemas import UserRole
 from onyx.configs.constants import (
     DANSWER_API_KEY_DUMMY_EMAIL_DOMAIN,
     DANSWER_API_KEY_PREFIX,
+    DISCORD_SERVICE_API_KEY_NAME,
     UNNAMED_KEY_PLACEHOLDER,
 )
 from onyx.db.enums import AccountType
-from onyx.db.models import ApiKey, User, User__UserGroup, UserGroup
+from onyx.db.models import ApiKey, User
 from onyx.db.permissions import recompute_user_permissions__no_commit
-from onyx.db.users import assign_user_to_default_groups__no_commit, delete_user_from_db
+from onyx.db.users import (
+    batch_get_user_groups,
+    delete_user_from_db,
+    delete_user_from_db__no_commit,
+    get_user_groups,
+    set_user_groups__no_commit,
+)
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.api_key.models import APIKeyArgs
+from onyx.server.models import UserGroupInfo
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -34,6 +44,9 @@ class ApiKeyAuthResult(NamedTuple):
     api_key_id: int
     api_key_name: str | None
     api_key_display: str
+    # The Discord bot's service key: only the bot creates an ownerless key
+    # with its name, and no key can be renamed to it.
+    is_discord_bot: bool
 
 
 def get_api_key_email_pattern() -> str:
@@ -50,16 +63,46 @@ def fetch_api_keys(db_session: Session) -> list[ApiKeyDescriptor]:
         .unique()
         .all()
     )
+    groups_by_user = batch_get_user_groups(
+        db_session,
+        [api_key.user_id for api_key in api_keys],
+        include_default=True,
+    )
     return [
         ApiKeyDescriptor(
             api_key_id=api_key.id,
-            api_key_role=api_key.user.role,
             api_key_display=api_key.api_key_display,
             api_key_name=api_key.name,
             user_id=api_key.user_id,
+            groups=[
+                UserGroupInfo(id=gid, name=gname)
+                for gid, gname in groups_by_user.get(api_key.user_id, [])
+            ],
         )
         for api_key in api_keys
     ]
+
+
+def fetch_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor | None:
+    api_key = db_session.scalar(
+        select(ApiKey).options(joinedload(ApiKey.user)).where(ApiKey.id == api_key_id)
+    )
+    if api_key is None:
+        return None
+
+    groups_by_user = batch_get_user_groups(
+        db_session, [api_key.user_id], include_default=True
+    )
+    return ApiKeyDescriptor(
+        api_key_id=api_key.id,
+        api_key_display=api_key.api_key_display,
+        api_key_name=api_key.name,
+        user_id=api_key.user_id,
+        groups=[
+            UserGroupInfo(id=gid, name=gname)
+            for gid, gname in groups_by_user.get(api_key.user_id, [])
+        ],
+    )
 
 
 async def fetch_user_for_api_key(
@@ -98,6 +141,8 @@ async def fetch_api_key_auth_result(
         api_key_id=row.id,
         api_key_name=row.name,
         api_key_display=row.api_key_display,
+        is_discord_bot=row.owner_id is None
+        and row.name == DISCORD_SERVICE_API_KEY_NAME,
     )
 
 
@@ -128,7 +173,6 @@ def insert_api_key(
         is_active=True,
         is_superuser=False,
         is_verified=True,
-        role=api_key_args.role,
         account_type=AccountType.SERVICE_ACCOUNT,
     )
     db_session.add(api_key_user_row)
@@ -142,27 +186,18 @@ def insert_api_key(
     )
     db_session.add(api_key_row)
 
-    # Assign the API key virtual user to the appropriate default group
-    # before commit so everything is atomic.
-    # Only ADMIN and BASIC roles get default group membership.
-    if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
-        assign_user_to_default_groups__no_commit(
-            db_session,
-            api_key_user_row,
-            is_admin=(api_key_args.role == UserRole.ADMIN),
-        )
-    else:
-        recompute_user_permissions__no_commit(api_key_user_id, db_session)
+    # Assign the service account to the specified groups
+    set_user_groups__no_commit(db_session, api_key_user_id, api_key_args.group_ids)
 
     db_session.commit()
 
     return ApiKeyDescriptor(
         api_key_id=api_key_row.id,
-        api_key_role=api_key_user_row.role,
         api_key_display=api_key_row.api_key_display,
         api_key=api_key,
         api_key_name=api_key_args.name,
         user_id=api_key_user_id,
+        groups=get_user_groups(db_session, api_key_user_id, include_default=True),
     )
 
 
@@ -171,7 +206,12 @@ def update_api_key(
 ) -> ApiKeyDescriptor:
     existing_api_key = db_session.scalar(select(ApiKey).where(ApiKey.id == api_key_id))
     if existing_api_key is None:
-        raise ValueError(f"API key with id {api_key_id} does not exist")
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND, f"API key with id {api_key_id} does not exist"
+        )
+    # The name identifies the Discord bot's key; see ApiKeyAuthResult.
+    if api_key_args.name == DISCORD_SERVICE_API_KEY_NAME != existing_api_key.name:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "This API key name is reserved")
 
     existing_api_key.name = api_key_args.name
     api_key_user = db_session.scalar(
@@ -185,31 +225,9 @@ def update_api_key(
     email_name = api_key_args.name or UNNAMED_KEY_PLACEHOLDER
     api_key_user.email = get_api_key_fake_email(email_name, str(api_key_user.id))
 
-    old_role = api_key_user.role
-    api_key_user.role = api_key_args.role
-
-    # Reconcile default-group membership when the role changes.
-    if old_role != api_key_args.role:
-        # Remove from all default groups first.
-        delete_stmt = delete(User__UserGroup).where(
-            User__UserGroup.user_id == api_key_user.id,
-            User__UserGroup.user_group_id.in_(
-                select(UserGroup.id).where(UserGroup.is_default.is_(True))
-            ),
-        )
-        db_session.execute(delete_stmt)
-
-        # Re-assign to the correct default group (only for ADMIN/BASIC).
-        if api_key_args.role in (UserRole.ADMIN, UserRole.BASIC):
-            assign_user_to_default_groups__no_commit(
-                db_session,
-                api_key_user,
-                is_admin=(api_key_args.role == UserRole.ADMIN),
-            )
-
-    # Converge on every update, not just role changes, so edits repair
-    # keys with stale permissions.
-    recompute_user_permissions__no_commit(api_key_user.id, db_session)
+    # Replace all group memberships with the specified groups
+    # (set_user_groups__no_commit recomputes permissions, so edits repair stale keys)
+    set_user_groups__no_commit(db_session, api_key_user.id, api_key_args.group_ids)
 
     db_session.commit()
 
@@ -217,8 +235,10 @@ def update_api_key(
         api_key_id=existing_api_key.id,
         api_key_display=existing_api_key.api_key_display,
         api_key_name=api_key_args.name,
-        api_key_role=api_key_user.role,
         user_id=existing_api_key.user_id,
+        groups=get_user_groups(
+            db_session, existing_api_key.user_id, include_default=True
+        ),
     )
 
 
@@ -253,8 +273,10 @@ def regenerate_api_key(db_session: Session, api_key_id: int) -> ApiKeyDescriptor
         api_key_display=existing_api_key.api_key_display,
         api_key=new_api_key,
         api_key_name=existing_api_key.name,
-        api_key_role=api_key_user.role,
         user_id=existing_api_key.user_id,
+        groups=get_user_groups(
+            db_session, existing_api_key.user_id, include_default=True
+        ),
     )
 
 
@@ -278,3 +300,30 @@ def remove_api_key(db_session: Session, api_key_id: int) -> None:
     # other FK-bearing associations); route through the canonical user-delete
     # helper so all of them are cleaned up before the user row is removed.
     delete_user_from_db(user_associated_with_key, db_session)
+
+
+def remove_all_api_keys__no_commit(db_session: Session) -> None:
+    """Removes every API key an admin manages, with the synthetic user behind
+    it. The Discord bot's service key stays: the bot holds it in memory and
+    would keep sending a dead key."""
+    api_keys: Sequence[ApiKey] = (
+        db_session.scalars(
+            select(ApiKey)
+            .options(joinedload(ApiKey.user))
+            # The bot's key has no owner. An admin's key with the same name has one.
+            .where(
+                or_(
+                    ApiKey.name.is_distinct_from(DISCORD_SERVICE_API_KEY_NAME),
+                    ApiKey.owner_id.is_not(None),
+                )
+            )
+        )
+        .unique()
+        .all()
+    )
+    key_users: list[User] = [api_key.user for api_key in api_keys]
+    # Keys before users: a key made through another key is owned by that key's user.
+    for api_key in api_keys:
+        db_session.delete(api_key)
+    for key_user in key_users:
+        delete_user_from_db__no_commit(key_user, db_session)

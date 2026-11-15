@@ -16,7 +16,7 @@ export async function getCurrentUserSS(): Promise<User | null> {
 
     if (!response.ok) return null;
 
-    const user = await response.json();
+    const user: User = await response.json();
     return user;
   } catch (e) {
     console.log(`Error fetching user: ${e}`);

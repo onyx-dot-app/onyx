@@ -6,6 +6,13 @@ export enum SessionEndReason {
   UNRECOGNIZED = "SESSION_UNRECOGNIZED",
 }
 
+// Error body of the fastapi-users routes (`fastapi_users.router.common.ErrorModel`).
+// The register and reset-password routes send an object when the password is
+// invalid.
+export interface FastApiUsersErrorBody {
+  detail?: string | { code: string; reason: string };
+}
+
 export type SSOProviderType = "GOOGLE_OAUTH" | "OIDC" | "SAML";
 
 export interface SSOProviderOption {
@@ -32,4 +39,6 @@ export interface AuthTypeMetadata {
   // Enabled DB-backed SSO providers, one login button each. Empty on cloud
   // and when no provider rows exist.
   ssoProviders?: SSOProviderOption[];
+  // Workspace UI language for pages before sign-in. Absent on cloud.
+  defaultLanguage?: string;
 }

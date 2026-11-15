@@ -13,9 +13,18 @@ def shallow_model_dump(model_instance: BaseModel) -> dict[str, Any]:
     deep copies. Use with model_construct() to avoid unnecessary memory
     duplication when building subclass instances."""
     return {
-        field_name: getattr(model_instance, field_name)
+        field_name: getattr(model_instance, field_name)  # ods: ignore[getattr]
         for field_name in model_instance.__class__.model_fields
     }
+
+
+def as_base[B: BaseModel](model: B, base: type[B]) -> B:
+    """`model` as an instance of `base`, one of its classes; subclass fields are
+    dropped. Returns `model` when it already is exactly a `base`."""
+    if type(model) is base:
+        return model
+    fields = shallow_model_dump(model)
+    return base(**{name: fields[name] for name in base.model_fields})
 
 
 def parse_json_form_field(raw: str, adapter: TypeAdapter[T], field_name: str) -> T:

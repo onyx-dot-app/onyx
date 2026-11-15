@@ -4,7 +4,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-monitoring
+  name: {{ include "onyx.resourceName" (list . "celery-worker-monitoring") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -29,7 +29,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-docfetching
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docfetching") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -54,7 +54,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-docprocessing
+  name: {{ include "onyx.resourceName" (list . "celery-worker-docprocessing") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -79,7 +79,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-heavy
+  name: {{ include "onyx.resourceName" (list . "celery-worker-heavy") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -104,7 +104,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-light
+  name: {{ include "onyx.resourceName" (list . "celery-worker-light") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -129,7 +129,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-primary
+  name: {{ include "onyx.resourceName" (list . "celery-worker-primary") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}
@@ -154,7 +154,7 @@ spec:
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-scheduled-tasks
+  name: {{ include "onyx.resourceName" (list . "celery-worker-scheduled-tasks") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}

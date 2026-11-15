@@ -28,10 +28,41 @@ export function clearDraft(key: string) {
   }
 }
 
-function defaultIsEmpty(value: unknown): boolean {
+function defaultIsEmpty<T>(value: T): boolean {
   if (value == null) return true;
   if (typeof value === "string") return value.trim().length === 0;
   return false;
+}
+
+/** Reads a draft now, also for a page that is not open. */
+export function readDraft<T>(key: string): T | null {
+  const storage = getStorage();
+  if (!storage) return null;
+  try {
+    const raw = storage.getItem(key);
+    return raw === null ? null : (JSON.parse(raw) as T);
+  } catch {
+    return null;
+  }
+}
+
+/** Writes a draft now, also for a page that is not open. Empty values remove the key. */
+export function writeDraft<T>(
+  key: string,
+  value: T,
+  isEmpty: (value: T) => boolean = defaultIsEmpty
+) {
+  const storage = getStorage();
+  if (!storage) return;
+  try {
+    if (isEmpty(value)) {
+      storage.removeItem(key);
+    } else {
+      storage.setItem(key, JSON.stringify(value));
+    }
+  } catch {
+    // ignore
+  }
 }
 
 export interface UseDraftOptions<T> {
@@ -45,7 +76,7 @@ export interface UseDraftReturn<T> {
   // Distinguishes "not read yet" from "read, nothing there".
   loaded: boolean;
   hasDraft: boolean;
-  // Debounced; empty values remove the key.
+  // Debounced unless debounceMs is zero; empty values remove the key.
   save: (value: T) => void;
   // Removes immediately and cancels any pending write.
   clear: () => void;
@@ -62,21 +93,15 @@ export function useDraft<T>({
     null
   );
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const writeRef = useRef<(() => void) | null>(null);
   const isEmptyRef = useRef(isEmpty);
-  isEmptyRef.current = isEmpty;
 
   useEffect(() => {
-    const storage = getStorage();
-    if (!storage) {
-      setEntry({ key, draft: null });
-      return;
-    }
-    try {
-      const raw = storage.getItem(key);
-      setEntry({ key, draft: raw === null ? null : (JSON.parse(raw) as T) });
-    } catch {
-      setEntry({ key, draft: null });
-    }
+    isEmptyRef.current = isEmpty;
+  }, [isEmpty]);
+
+  useEffect(() => {
+    setEntry({ key, draft: readDraft<T>(key) });
   }, [key]);
 
   // Cancel a pending write on key change/unmount so it can't land under the old
@@ -90,23 +115,30 @@ export function useDraft<T>({
     };
   }, [key]);
 
+  // A page unload skips React cleanup, so write the pending value before the
+  // timer is lost.
+  useEffect(() => {
+    const flush = () => {
+      if (timerRef.current === null) return;
+      clearTimeout(timerRef.current);
+      writeRef.current?.();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
+
   const save = useCallback(
     (value: T) => {
       if (timerRef.current !== null) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => {
+      const write = () => {
         timerRef.current = null;
-        const storage = getStorage();
-        if (!storage) return;
-        try {
-          if (isEmptyRef.current(value)) {
-            storage.removeItem(key);
-          } else {
-            storage.setItem(key, JSON.stringify(value));
-          }
-        } catch {
-          // ignore
-        }
-      }, debounceMs);
+        writeDraft(key, value, isEmptyRef.current);
+      };
+      if (debounceMs === 0) write();
+      else {
+        writeRef.current = write;
+        timerRef.current = setTimeout(write, debounceMs);
+      }
     },
     [key, debounceMs]
   );
@@ -122,7 +154,7 @@ export function useDraft<T>({
 
   const loaded = entry !== null && entry.key === key;
   const draft = loaded ? entry.draft : null;
-  const hasDraft = draft !== null && !isEmptyRef.current(draft);
+  const hasDraft = draft !== null && !isEmpty(draft);
 
   return { draft, loaded, hasDraft, save, clear };
 }

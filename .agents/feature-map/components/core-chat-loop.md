@@ -1,0 +1,542 @@
+# Core Chat Loop
+
+> The turn engine. It takes one user message, claims the session, runs one
+> shared-runtime agent per selected model in its own thread, delivers packets
+> through one turn-level delivery path, and reports one final save outcome per
+> model.
+
+**Verified against:** `6bac4e012f` (2026-10-29)
+**Edition:** CE
+
+---
+
+## User experience
+
+- **An end user** sends a message. The assistant can think, run tools (search,
+  web, code, images, custom tools) for several steps, and then streams an answer
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
+  `MAX_LLM_CYCLES` when higher) the model must answer without tools.
+- **One message at a time.** While a turn runs, the session is busy. The client
+  waits until the session is idle before it sends again. The backend refuses a
+  second streaming send on the same session with a `StreamingError` packet whose
+  `error_code` is `CONFLICT`, not with an HTTP status. A `stream=false` send
+  fails with "Message ID is required" ([[#session-admission]]).
+  The separate pending-message API accepts text during a turn. `send` targets
+  the current response's next model step; without a target it goes to the
+  selected response. A `send` that arrives while a turn prepares has no
+  response to target yet; it stays an untargeted `send`, and the turn's
+  response reservation (`db/chat.py:reserve_chat_response_ids`) takes it. Any
+  other `send` that its response no longer reads, including one to an idle
+  session, is stored as `queue` and never refused. `queue` starts a
+  new turn after normal completion or the step limit. `interrupt` requests Stop,
+  then starts a new turn after execution and saves drain. Stop and failure
+  leave ordinary queued text pending. The main-chat frontend uses this API; Craft has a
+  separate backend.
+- **Stop.** The user presses stop. The input shows that the turn is stopping
+  until active model, tool and save work drains. The partial answer stays, with
+  "Generation was stopped by the user." after it. A reload shows the same saved
+  text. Multi-model Stop also marks the individual response IDs, so automatic
+  child-result delivery can check the same stop request. Anonymous users cannot
+  stop ([[#anonymous-send]]).
+- **A tool call waits for approval.** When nothing but approval requests
+  remains, the turn stops with `awaiting_approval` and the session is idle;
+  the user can draft but not send. Once the user decides every request, the
+  response continues in a new stream, on any server
+  ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A Stop of a live turn
+  rejects its waiting requests.
+- **Leaving is not stopping.** If the user closes the tab, navigates away or loses
+  the network, the run continues on the server and is saved. When the user returns
+  while the run is live, the client resumes the stream ([[streaming-protocol]]).
+  After the run ends, the user sees the saved message.
+- **Compare models.** A user can send one message to two or three models. The
+  answers stream side by side, and the user marks one as preferred. A model
+  error shows for that model only, and the others finish. A response worker that
+  crashes or ends without an outcome cancels all models
+  ([[#persist-once-per-model]]).
+- **Deep research** runs with one model only, not in a project chat, and only
+  with a model that accepts at least 50,000 input tokens. The backend refuses a
+  multi-model deep research request. The other cases end the turn with an error.
+- **When the turn fails** in setup (no access to a document set, a bad model
+  setting, a Query Processing hook that rejects the message), the user sees one
+  error, and no response row is reserved. A saved question always has its
+  answer reserved in the same transaction: queued input right after admission,
+  a send when its question is saved. A later failure, including a rate or spend
+  limit or attachment loading, therefore saves an error answer that pauses the
+  queue instead of leaving the question without an answer. A failure after
+  reservation is saved
+  per model: a launch failure adds one `CHAT_STARTUP_ERROR` packet, then each
+  model streams and saves its own error. Agent construction errors (preferred tool
+  missing, deep research in a project or with a small model) and failures during
+  the run are also saved on that model's reserved row. An incognito session
+  that does not keep content stores a generic error text instead, because
+  provider errors can echo the prompt. When a save fails or takes longer than
+  its wait bound, the stream shows a separate `RESPONSE_SAVE_ERROR`.
+- **After a failed turn**, a send whose parent is the error answer continues
+  the conversation. Model history keeps the question and the saved partial
+  steps; `chat/chat_utils.py:capture_chat_history` reads an error answer like
+  any other answer and adds no failure note. The first step of the next turn
+  reads agent results that the failed turn left unread on the branch.
+- **An API caller** gets NDJSON when `stream=true` and one `ChatFullResponse`
+  when `stream=false`. A multi-model request without streaming is rejected.
+  Without streaming, a response whose tool calls wait for approval stops: the
+  call returns with `pending_tool_approvals`, the response waits saved, and it
+  continues in the chat session after the decisions
+  ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
+- **Bots.** The Slack bot runs the same turn in-process
+  (`onyxbot/slack/handlers/handle_regular_answer.py`). The Discord bot calls the
+  HTTP endpoint (`onyxbot/discord/api_client.py`). A change here reaches both.
+  Both run Ask tools without approval for now (`ChatTurnSetup.ask_for_approval`).
+
+---
+
+## Scope
+
+This component owns the turn: request validation and setup, session admission,
+row reservation, the control and response threads, the chat agent's step
+policy, Stop, the turn endpoints, and the hand-off of each finished run to
+persistence. It shares the emitter and the stream buffer with
+[[streaming-protocol]].
+
+Neighbours own the rest:
+- [[agent-runtime]]: the step loop, tool scheduling, child agents, compaction
+  and the coordination interfaces that this component's adapters implement.
+- [[context-assembly]]: what goes into each prompt, in what order, and the token
+  budget. This component's agent calls the prompt builders on each step.
+- [[streaming-protocol]]: the packet types, `Placement`, the wire format and the
+  resume buffer.
+- [[chat-persistence]]: the tables, the history stores, the response writer and
+  how saved history is rebuilt.
+- [[tools-framework]]: tool construction and the chat `Tool` interface.
+- [[citations]]: the citation processor that each chat agent owns.
+
+---
+
+## Architecture
+
+```
+request thread                  control thread (one per turn)        response thread (one per model)
+_stream_chat_turn               ChatTurnExecution.run                ChatTurnExecution._run_response
+  prepare_chat_turn (DB, files)   starts one response thread           create_chat_agent: construct_tools,
+  -> ChatTurnSetup                  per model                            ChatAgent or DeepResearchAgent
+  start_chat_turn                 wake >= every 250 ms: Stop;          load_chat_branch (session check)
+    clear_stop, buffer open,        admission every 5 s; owner         ChatRunStore (content kept) or
+    admission.publish, ID lines     leases every 10 s (content kept)     persistence view; register saved agents
+    start control thread          _poll_responses: outcomes, idle      Agent.start(background=False)
+  yield from ChatStream (reader)  all drained: OverallStop (user Stop or deadline)   ResponsePresenter -> Emitter -> ChatDelivery
+                                    admission.release, delivery.finish RunStore.save -> ChatResponsePersistence
+```
+
+**Layers.** `chat/process_message.py` validates the request, loads history and
+files, saves the user message and reserves the response rows. It never calls an
+LLM. `chat/execution.py` launches and controls the turn. `chat/agent.py:ChatAgent`
+is the chat feature on the shared runtime: it picks the tools and tool choice
+for each step, builds the prompt, and folds tool results into its citation and
+search state. `agents/runtime.py` runs the model and tool steps
+([[agent-runtime]]). `chat/README.md` gives the design reasons.
+
+**Setup.** `chat/process_message.py:prepare_chat_turn` claims the session
+([[#session-admission]]) before it changes the message tree. It runs the Query
+Processing hook before it saves the user message, only for a new, non-blank
+message, and only when the incognito mode allows hooks
+(`IncognitoRecordMode.fires_hooks`), because the hook sends the query out
+([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
+user message. A send never changes the chat's saved tools and search filters:
+`chat_session.tool_selection` (`allowed_tool_ids`, `preferred_tool_id`,
+`internal_search_filters`; NULL means the agent's tools) has one writer, the
+`PATCH /chat/chat-session/{session_id}/tool-selection` route
+(`db/chat.py:set_chat_session_tool_selection__no_commit`). It checks
+document-set access, saves only the fields the body sets, and stores nothing
+for a chat whose record mode keeps no content. The chat-session detail returns
+the selection to its owner. The chat's model is `current_alternate_model`,
+which the web writes through `PUT /chat/update-chat-session-model` on each
+send. A turn that resumes a suspended response, and an agent host that
+resumes parked agent runs, use the model, tools and search filters that the
+parked run's checkpoint saved instead (`db/chat_checkpoint.py:parked_response_settings`). Pending human submissions run the same hook before queue storage;
+setup reuses that processed text without rewriting it again. Then setup resolves the custom agent prompt, memories, the
+reserved tokens, the tool configuration and the branch summary, and copies the
+history out of the ORM rows. It closes the DB session before slow file loading,
+renews the admission between stages, and reserves one assistant row per model.
+The stream ID is the reserved assistant message ID, or the user message ID for a
+multi-model turn.
+
+**Launch.** `chat/execution.py:start_chat_turn` clears any stop key for this
+stream ID, then publishes the stream ID to the processing fence before the
+client receives any ID, so Stop can target the turn. If either step fails, the
+error becomes the startup error. Then it queues `CreateChatSessionID` (new
+session only) and the message-ID packet on `ChatDelivery` and starts the
+non-daemon control thread. The reader only tails `ChatDelivery.reader`. When the
+HTTP client disconnects, the reader closes and the turn continues.
+
+**Response threads.** Each response thread builds its tools and agent through
+`chat/execution.py:create_chat_agent` and checks that the reserved row belongs
+to this session's branch. When the session keeps content, it binds a
+`chat/run_store.py:ChatRunStore` for run ownership, checkpoints and restoration.
+A content-free session uses a coordinator view over `ChatResponsePersistence`
+only, so it has no owner leases, and its run IDs are random. The thread
+registers each saved child agent and the root, then runs
+`Agent.start(background=False)` until the root completes or suspends. A
+suspended root resumes later on a runtime thread, so the control loop waits for
+a terminal, idle run, not for the response thread. Child agents and
+parallel tools use more threads ([[agent-runtime]]). Deep research
+(`deep_research/agent.py:DeepResearchAgent`) replaces `ChatAgent` for a
+single-model deep research request. The research step and the coding agent tool
+start child agents (`deep_research/research_agent.py:ResearchAgent`,
+`coding_agent/agent.py:CodingAgent`) through the runtime's child API.
+
+**Delivery.** All responses share one `chat/stream_buffer.py:ChatDelivery`. One
+event-dispatch thread renders runtime events into packets
+(`chat/presentation.py:ResponsePresenter`), and each response's `Emitter`
+stamps its `model_index`. `ChatDelivery.publish` writes each packet to the live
+reader and the replay buffer in the same order.
+
+**Persistence.** When a run ends, the coordinator calls `RunStore.save`
+([[agent-runtime]] lists the adapters). `chat/persistence.py:ChatResponsePersistence`
+projects the root run snapshot into a response and saves it through the history
+store ([[chat-persistence]]). Its `outcome` future resolves once: with a
+`ChatResponseOutcome` whose status is `SAVED`, `FAILED` or `UNCONFIRMED`, or
+with an exception for a worker or projection failure. For model 0 it is the
+caller's `response_future`; `gather_stream_full` waits at most
+`CHAT_RESPONSE_WAIT_TIMEOUT_S` and raises on an exception. That wait does not
+cancel the turn. A normal end sends one `OverallStop(finished)` per model from
+`ResponsePresenter`.
+
+**Control.** `ChatTurnExecution.run` wakes on worker, save, idle and delivery
+events, and at least every 250 ms. It checks Stop at most every 250 ms while the turn is
+not cancelled, refreshes the admission lease every 5 s, and lets each
+`ChatRunStore` renew its owner leases every 10 s. After
+`CHAT_EXECUTION_TIMEOUT_S` each response run cancels itself with a saved
+`DEADLINE` failure. The turn cancels remaining work 30 seconds later, including
+preparation that has not started a run. When no response worker remains, it
+releases the admission and then finishes delivery, so a client that sees the
+stream end can send again at once. Background child runs keep the control loop
+running after the release, but they do not hold the admission.
+Before release it reads Stop one last time. A Stop of the turn, even one that
+arrived after its answer finished, pauses the queue
+(`chat_session.queue_paused_at`, `db/chat_inputs.py:pause_chat_queue__no_commit`);
+saved answers keep their status. Stop without a stream ID pauses the queue under
+the admission lock whether or not a turn runs, so a Stop that finds no turn, or
+a turn without a stream, is not lost. The next turn that reserves a response
+clears the pause (`db/chat.py:reserve_chat_response_ids`).
+After release, every turn, `run_chat_turn` included, calls
+`chat/process_message.py:dispatch_pending_chat_messages`. It continues a
+parked root response whose waits ended first, on any branch, then gives
+queued user text priority over unread child results.
+`db/chat_inputs.py:read_chat_inbox` reads the parked runs that can continue on
+every branch (`ChatInbox.resumable_runs`) and the selected branch; it reads the
+queued turn and child work only when the conversation has an inbox row. With
+admission free, dispatch saves a selected root response or a branch child that
+is `RUNNING`, or `SUSPENDED` without a checkpoint, and has no owner as
+interrupted (`chat/run_store.py:interrupt_ownerless_responses`). It starts a response with
+current session settings and fresh authorization checks. A queued turn whose
+owner lost `WRITE_CHAT`, or access to a saved document set, saves an error
+response, which pauses the queue. A turn the server starts uses the chat's
+saved `chat_session.tool_selection` (NULL means the agent's tools). A saved
+preferred tool that this turn cannot build is dropped, and the turn runs
+without it. Deep Research and the model are choices of each message: a queued
+or interrupting message stores `chat_input.deep_research` and
+`chat_input.llm_override`, the model the picker showed. A message without a
+model uses `current_alternate_model`, the model the web last sent with. The
+composer does not queue during a multi-model comparison.
+Child agents keep their own tool configuration. If the queue head changes before acceptance, preparation ends with a
+conflict, and the next trigger dispatches again. Child results start a response under a
+hidden `AGENT_RESULTS` question after the completed assistant row; the stream
+reports no user message ID for it. `chat/chat_utils.py:convert_chat_history`
+starts the run input after that question, and the first step accepts the
+results. They enter model history and remain hidden from user messages.
+Consuming the inbox row prevents delivery twice. If automatic preparation
+fails, a saved error response prevents repeated startup attempts. Withdrawal removes pending
+text atomically; editing resubmits a new entry. No browser reader is needed.
+Background children keep running; the same control thread renews their owner
+leases until they finish. After admission is released, it does not check the
+turn's Stop key, admission lease or deadline. When a child releases ownership, the turn
+dispatches queued input and root results again; that dispatch also ends a root's
+`wait_agents` wait. `ChatRunStore` scans child
+inboxes after a notification and while children run on the branch. It starts
+child work only while its response is on the selected branch, and resumes the
+parked agent runs of its own branch whether or not it is selected. A dispatch
+failure never cancels the turn. Only the approval decision route prepares a
+turn on the calling thread; the dispatch after a release, after a child's
+release and after a status read start work on a thread. Any turn or agent
+host that ends while a parked root of the chat can continue hands its
+admission to that resume instead of releasing it
+(`chat/chat_processing_checker.py:ChatTurnAdmission.release`,
+`chat/execution.py:root_response_resumes`), so the chat shows processing
+throughout. When child work or a parked agent run can
+start but no running child keeps a store scanning, dispatch starts an agent
+host (`chat/execution.py:host_agent_work`): the setup of the selected
+response, or of a parked run's root response, without a root run, which starts
+the work and keeps the leases. A store's control poll parks the runs it owns
+that wait only on people ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
+A single-model turn offers agent tools for a client that shows follow-ups
+(`SendMessageRequest.accepts_follow_ups`, which the web chat and
+server-started turns set); `run_chat_turn` clears that flag, since its callers
+read one response. An agent host that cannot start, other than for a
+transient error or a conflict, saves its child work as failed runs, so it
+does not retry on every poll. It ends the decided agents that it would resume,
+except after a rate limit, which keeps them parked for a later dispatch. Foreground children still drain with their parent. API shutdown
+waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
+then closes database and tracing services; it does not cancel turns. The pod's
+termination grace period is much shorter, so it ends running turns first
+([[#crashed-turn]]).
+
+---
+
+## Contracts and traps
+
+1. `only-chat-persistence-saves` **Only the chat persistence adapters write
+   response rows.** `chat/persistence.py:ChatResponsePersistence` saves the root
+   response through the history store. `chat/run_store.py:ChatRunStore` checks
+   checkpoint ownership before that root save. It writes child-run rows and
+   checkpoints directly through `db/chat_response.py` and `db/chat_checkpoint.py`,
+   and reserves one response row for each child agent before it starts. The
+   runtime, `ChatAgent` and the LLM adapter do not write chat rows. The memory
+   tool writes memories as its own side effect and refuses in any incognito mode
+   (`tools/tool_implementations/memory/memory_tool.py`).
+2. `turn-setup-detached-rows` **`ChatTurnSetup` carries no ORM rows.**
+   `chat/process_message.py:prepare_chat_turn` copies the persona into
+   `PersonaPromptConfig` and saved responses into SDK messages
+   (`chat/chat_utils.py:capture_chat_history`) while its DB session is open. A
+   new setup field that holds a row raises `DetachedInstanceError` in a
+   response thread under load.
+3. `threads-copy-context` **Each response, control and child thread runs in a
+   copied `contextvars.Context`.** `utils/threadpool_concurrency.py:start_thread_future`
+   and `agents/runtime.py:Run._start` copy it. `start_chat_turn` sets the
+   incognito mode and the content-free session ID before it starts threads, and
+   restores the caller's values after. A thread without the copy writes to the
+   wrong tenant or loses its trace ([[multi-tenancy#threads-copy-context]]).
+4. `no-db-session-across-stream` **No thread holds a DB session across the LLM
+   stream.** Tools open short sessions when they need one. Setup closes its
+   session before file loading. Cloud infrastructure drops idle connections
+   during long runs.
+5. `presentation-does-not-drive-execution` **Rendering never drives execution.**
+   Runtime state owns model and tool progress. `ResponsePresenter` and
+   `chat/renderer.py:MessageRenderer` only read events and saved steps to make
+   packets. Feature state that a later step needs lives on the agent, such as
+   `ChatAgent.search_context` and its citation mapping, and is captured in
+   `ChatFeatureState` for restoration. `ChatFeatureState.code_mode` keeps the
+   mode, so a restored run keeps its tool layout. All tools in one step read the same
+   `ChatAgent._tool_context`; citation and search state advance only in
+   `ChatAgent._after_step`, after every call in the step finishes.
+6. `persist-once-per-model` **One final outcome per model.** A new way to end a
+   response must resolve `ChatResponsePersistence.outcome` through `save`,
+   `save_failure`, `report_save_failure`, `report_worker_failure` or
+   `expire_save` (`UNCONFIRMED` after 30 s). When a worker raises or ends
+   without an outcome, `_poll_responses` reports that model's error and cancels
+   the whole turn. The control loop does not finish until each outcome is set.
+7. `reserve-before-first-token` **The assistant row exists before the first
+   token.** `db/chat.py:reserve_chat_response_ids` runs in setup. The stop key,
+   the resume buffer and the client key on it, and so does the root run ID when
+   the session keeps content. Do not move reservation later.
+8. `disconnect-is-not-stop` **Disconnect is not stop.** A disconnect never
+   cancels. The turn's `CancellationSignal` is cancelled by the user's stop key
+   (`chat/stop_signal_checker.py:request_stop`), the deadline backstop, a lost
+   admission, a control or response-polling failure, or a failed worker.
+   The execution deadline cancels each response run first. The turn cancels
+   remaining work 30 seconds later.
+   `ChatRunStore.poll_control` cancels one run when its owner lease is lost or
+   its `chat_response_stop:<id>` key is set. Cancellation reaches every run,
+   child and tool, and `ChatTurnExecution._publish` drops packets after it. It
+   does not forcibly interrupt blocked provider reads or tools that ignore their
+   cancellation signal; the turn keeps its admission until owned work drains.
+   MCP calls cancel their request coroutine and drain it before returning
+   ([[mcp-and-custom-tools#cancel-in-flight-request]]). The stop key is per stream ID, so a late
+   stop cannot cancel the next message when an API caller passes `stream_id`.
+   The web client omits `stream_id`: Stop targets the chat's current turn, the
+   stream in flight at request time or the turn in preparation, and pauses the
+   queue when no turn runs ([[#stop-before-launch]]). Replay shows `user_cancelled` from the saved
+   `RunStatus.CANCELLED`; only legacy rows match the stop sentence by text
+   ([[chat-persistence]]), except a saved `DEADLINE` failure replays as `timed_out`.
+9. `non-user-cancel` **Deadlines have their own stop reason.** Response runs
+   cancel themselves at the turn deadline and save `RunFailureKind.DEADLINE`.
+   `chat/presentation.py:overall_stop` maps that failure to `timed_out` for live
+   and replayed responses. The turn sends a fallback stop after draining when
+   preparation times out or the user stops, only for models without a delivered stop.
+   The fallback uses each saved response outcome, so a later Stop cannot replace
+   an earlier response deadline. The first cancellation reason wins.
+   Lost admission and control failures still
+   end without a live stop packet; they are not classified as deadlines.
+10. `stop-before-launch` **A Stop during setup applies at launch.** During
+    setup the fence holds no stream ID, and launch clears any earlier stop key
+    for the stream ID. A Stop without `stream_id`, and an `interrupt` pending
+    message, call `chat/chat_processing_checker.py:stop_current_turn`. Under the
+    admission lock it stops the stream in flight, or records a preparation Stop
+    that `ChatTurnAdmission.publish` turns into a stop key for the new stream.
+    `claim` discards a preparation Stop that no turn launched. A Stop with a
+    `stream_id` still needs the message-ID packet first, or the client aborts
+    the request itself, as `web/src/lib/chat/stopChatSession.ts` does.
+11. `session-admission` **One turn owns a session at a time.**
+    `chat/chat_processing_checker.py:ChatTurnAdmission` sets an owner key with a
+    120 s lease during preparation and a 60 s lease after launch. The control
+    thread renews it every 5 s and releases it after workers and saves drain,
+    before the stream ends. A second send fails with `CONFLICT`. A process crash blocks
+    new sends until the lease expires. A lost lease cancels the turn. The
+    processing fence holds the stream ID for Stop and resume; "is processing"
+    reads the owner key. Session details report `is_processing=True` when the
+    cache lookup fails, so a cache outage never enables a second send
+    (`server/query_and_chat/chat_backend.py:get_chat_session`). A pod on an older
+    image does not check the owner key, so drain old generation owners, including
+    in-process bots, before this runtime takes traffic (`chat/README.md`,
+    "Deploying the shared runtime").
+12. `crashed-turn` **A crashed turn is not recomputed.** `ChatRunStore.register`
+    marks each run's row `RUNNING` and sets `chat_response_owner:<response_id>`
+    (60 s TTL, renewed every 10 s). After a crash a response stays `RUNNING`,
+    and a reload replays it as is. `chat/run_store.py:interrupt_ownerless_responses`
+    marks it `ERROR` when a parent reads it, a live control worker scans its
+    results, or the dispatcher, which status polling also starts, finds it or
+    the selected root without an owner while admission is free ([[chat-persistence#save-chat-turn-one-commit]]). A row that was
+    reserved but never registered keeps the placeholder text from
+    `db/chat.py:reserve_chat_response_ids`. Stream resume does not restart work;
+    only a suspended checkpoint (`ChatRunStore.handoff` and `resume`) restores it.
+    Saved results can still start a new root response through status polling.
+    Status polling also restarts pending nested delivery: the status route
+    schedules dispatch for child work, and dispatch starts an agent host
+    (`chat/execution.py:host_agent_work`) when no running child remains.
+13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
+    to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
+    `Placement` handling also reaches deep research, the research agent and the
+    coding agent ([[context-assembly#history-builder-callers]]).
+14. `three-message-types` **Three message types exist.** `ChatMessage` is the DB
+    row; `ChatResponseItem` holds the steps of a saved response.
+    `llm/models.py:Message` is the SDK conversation type that agents and
+    history loading use, and the one to extend.
+    `llm/model_request.py:ChatCompletionMessage` is the provider wire form.
+15. `anonymous-send` **Anonymous users can send.**
+    `server/query_and_chat/chat_backend.py:handle_send_chat_message` uses
+    `require_permission(Permission.WRITE_CHAT, allow_anonymous=True)`, and so
+    does stream resume. Code that assumes a real user breaks public agents.
+    `stop_chat_session` does not allow anonymous users, so their Stop fails
+    authentication (see Known issues).
+16. `stopping-tools` **The step cap disables tool execution.**
+    `chat/agent.py:ChatAgent._prepare_step` uses `NONE` at the step cap.
+    Definitions remain where providers support this choice. Qwen, GLM, and
+    Bedrock omit definitions; Bedrock converts prior tool exchanges to text.
+    Image generation does not remove tools, even when the image call fails.
+    The default cap is six cycles, including the final answer cycle; code mode
+    uses `CODE_MODE_MAX_LLM_CYCLES` instead.
+
+
+---
+
+## Decisions
+
+- **A control thread separate from the reader.** The run must not depend on the
+  HTTP connection. The control thread always reaches the end, so the answer is
+  saved and the resume buffer is complete after a dropped connection, though a
+  turn-level cancel can omit the stop packet ([[#non-user-cancel]]).
+- **Single-model and multi-model share one path.** A single-model turn is the
+  `N=1` case of `ChatTurnExecution`. Every packet from a response carries a
+  `model_index`, `0` for one model.
+
+---
+
+## Known issues
+
+- **An unavailable preference fails the message.** `preferred_tool_id` selects an
+  Action from the tools built for this request. Disabled, unavailable, or excluded
+  Actions fail with `BAD_REQUEST` in `chat/execution.py:create_chat_agent`.
+  When project context replaces retrieval, preparation omits an enabled, configured, and allowed Search preference
+  for that request. Preferences do not grant access. Tool construction applies
+  `allowed_tool_ids` except to MemoryTool, which follows the user's memory setting.
+- **Stop waits for blocked work.** Cancellation takes effect when a provider
+  read returns or times out. Tools that honor `ToolInvocation.cancellation` can
+  stop earlier; tools that ignore it keep running until they return.
+  Slow cache calls on the control thread also delay the next Stop check.
+- **Anonymous users cannot stop.** `stop_chat_session` uses
+  `require_permission(Permission.WRITE_CHAT)` without `allow_anonymous`, so an
+  anonymous user can send and resume but not stop ([[#anonymous-send]]).
+- **Deleting a session or ending an incognito session does not cancel a running
+  turn.** The model runs to its end. The save then fails ("Chat response is
+  unavailable" after a hard delete, "Incognito session ended" for incognito) or
+  succeeds (soft delete).
+- **The chat turn repeats a document-set access check** that the search tool
+  also makes ([[internal-search#document-set-access-checks]]).
+
+---
+
+## Dependencies
+
+- [[agent-runtime]]: `Agent`, `Run`, the coordinator and compaction.
+- [[context-assembly]]: prompt content, message order, token budget.
+- [[tools-framework]]: `construct_tools` and the chat `Tool` binding.
+- [[llm-providers]]: `get_llm_for_persona` resolves provider, model and overrides.
+- [[streaming-protocol]]: the packet vocabulary and the resume buffer.
+- [[chat-persistence]]: the history stores and the response writer.
+- [[citations]]: one `DynamicCitationProcessor` per chat agent.
+- [[agents-personas]]: agent fields change the prompt and the tools.
+- [[projects]]: project fields change the prompt and the file scope.
+- [[hooks]]: the Query Processing hook in setup.
+- [[rate-and-usage-limits]]: `check_token_rate_limits` and `check_api_key_usage`
+  at the endpoint, and the LLM cost check and per-model spending limits
+  (`check_model_spend_limits`) in setup.
+- [[multi-tenancy]]: tenant context in threads.
+
+---
+
+## Recipes
+
+- `new-turn-exit` **A new way for a response to end.** Copy the startup failure
+  path in `ChatTurnExecution._run_response`, which calls
+  `ChatResponsePersistence.save_failure`. List the outcome paths with
+  `git grep -n "def save\|def report_\|def expire_save" backend/onyx/chat/persistence.py`.
+  Check that Stop, a startup failure and a runtime failure each still report one
+  outcome ([[#persist-once-per-model]]).
+- `turn-state-field` **A field saved with each response.** Add it to
+  `ChatResponseSnapshot` in `chat/models.py`, fill it in
+  `chat/presentation.py:project_response`, and write it in
+  `db/chat_response.py:save_chat_response_to_db`. Read it in
+  `gather_stream_full` (non-streaming API) if API callers need it. If the value
+  is agent state that a later step reads, also add it to `ChatFeatureState` and
+  to `ChatAgent.capture_state` and `restore_state`. Decide what each incognito
+  mode stores ([[chat-persistence#incognito-decision-per-field]]).
+- `in-process-caller` **A new in-process caller.** Copy the Slack bot: it calls
+  `chat/process_message.py:run_chat_turn`, which drains
+  `handle_stream_message_objects` into a `ChatFullResponse` with
+  `gather_stream_full`. List the callers with
+  `git grep -n "run_chat_turn(\|handle_stream_message_objects(" backend`. Do not
+  start a `ChatAgent` directly: admission, delivery and saving live in
+  `start_chat_turn`.
+- `investigate-stuck-turn` **Investigate a turn that does not end, a stop that
+  does nothing, or a send refused as busy.** In `backend/log/api_server_debug.log`,
+  find "Chat turn control failed", "Chat response polling failed", "Chat response
+  completion failed", "Chat session admission was lost", "Chat ownership control
+  failed", "Response ownership renewal failed", "Failed to read agent Stop
+  request", "Response persistence exceeded its wait bound" and "Chat turn
+  passed its deadline". A deadline sends `timed_out`; lost admission can end
+  the stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
+  session owner key is `chatprocessing_owner_<session_id>`, the processing fence
+  is `chatprocessing_fence_<session_id>` (it holds the stream ID, in the
+  integer format that every server version reads), the stream's responses
+  are `chatprocessing_responses_<session_id>` (the response IDs that the
+  stream still writes, and whether the turn resumes a suspended response),
+  and the stop
+  key is `chatsessionstop_fence_<session_id>_<stream_id>`. Each owned run also
+  has `chat_response_owner:<response_id>`, `chat_response_stop:<response_id>`
+  and `chat_response_lock:<response_id>`; a child run's owner lease keeps the
+  turn and its admission alive. An owner key with no live turn blocks sends
+  until its lease expires. A stop key for an older stream ID does nothing
+  ([[#disconnect-is-not-stop]]).
+
+---
+
+## Verification
+
+- Unit: `backend/tests/unit/onyx/chat/` covers the chat agent, preparation,
+  cancellation, multi-model streaming, the stream buffer and response projection.
+- External dependency: `backend/tests/external_dependency_unit/answer/` runs
+  turns through preparation and storage, including compaction.
+  `backend/tests/external_dependency_unit/chat/` covers the run store and
+  incognito storage.
+- Integration: `backend/tests/integration/tests/streaming_endpoints/`.
+  `INTEGRATION_TESTS_MODE=true` makes the renderer emit `ToolCallDebug` packets,
+  so a test can assert which tools ran. `TestClient` buffers the stream, so a
+  disconnect test needs a real socket, as
+  `backend/tests/integration/tests/streaming_endpoints/test_resume_stream.py`
+  does. A completion test holds a save open and asserts that admission stays
+  held.
+- Playwright: `web/tests/e2e/chat/stream_recovery.spec.ts` covers reload, network
+  recovery and stop against the real API with a scripted model.
+- By hand: send a message with Search selected as the preferred Action. Press stop during the answer and
+  reload: the partial answer must stay. Send again, close the tab during the
+  answer, and reopen the session: the answer must resume or show as saved. Run a
+  multi-model turn and confirm that each column ends with its own answer or error.

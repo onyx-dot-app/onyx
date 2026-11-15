@@ -15,12 +15,15 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.background.indexing.run_docfetching import connector_document_extraction
-from onyx.configs.constants import DocumentSource, OnyxCeleryPriority
+from onyx.configs.constants import (
+    DocumentSource,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+)
 from onyx.connectors.models import InputType
 from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
 )
@@ -98,7 +101,6 @@ def _create_test_search_settings(
         passage_prefix="",
         status=IndexModelStatus.PRESENT,
         index_name=index_name,
-        embedding_precision=EmbeddingPrecision.FLOAT,
     )
     db_session.add(search_settings)
     db_session.commit()
@@ -322,3 +324,147 @@ class TestDocprocessingPriorityInDocumentExtraction:
                 synchronize_session="fetch"
             )
             db_session.commit()
+
+
+@patch("onyx.background.indexing.run_docfetching._FINALIZING_RECHECK_INTERVAL_S", 0)
+@patch("onyx.background.indexing.run_docfetching.reindex_finalizing")
+@patch("onyx.background.indexing.run_docfetching.get_document_batch_storage")
+@patch("onyx.background.indexing.run_docfetching.MemoryTracer")
+@patch("onyx.background.indexing.run_docfetching._get_connector_runner")
+@patch(
+    "onyx.background.indexing.run_docfetching.strip_null_characters",
+    side_effect=lambda batch: batch,
+)
+@patch(
+    "onyx.background.indexing.run_docfetching.get_recent_completed_attempts_for_cc_pair"
+)
+@patch(
+    "onyx.background.indexing.run_docfetching.get_last_successful_attempt_poll_range_end"
+)
+@patch("onyx.background.indexing.run_docfetching.save_checkpoint")
+@patch("onyx.background.indexing.run_docfetching.get_latest_valid_checkpoint")
+@patch("onyx.background.indexing.run_docfetching.get_redis_client")
+@patch("onyx.background.indexing.run_docfetching.ensure_source_node_exists")
+@patch("onyx.background.indexing.run_docfetching.get_source_node_id_from_cache")
+@patch("onyx.background.indexing.run_docfetching.get_node_id_from_raw_id")
+@patch("onyx.background.indexing.run_docfetching.cache_hierarchy_nodes_batch")
+def test_running_future_attempt_gets_boost_when_reindex_finalizes(
+    mock_cache_hierarchy_nodes_batch: MagicMock,  # noqa: ARG001
+    mock_get_node_id_from_raw_id: MagicMock,
+    mock_get_source_node_id_from_cache: MagicMock,
+    mock_ensure_source_node_exists: MagicMock,
+    mock_get_redis_client: MagicMock,
+    mock_get_latest_valid_checkpoint: MagicMock,
+    mock_save_checkpoint: MagicMock,  # noqa: ARG001
+    mock_get_last_successful_attempt_poll_range_end: MagicMock,
+    mock_get_recent_completed_attempts: MagicMock,
+    mock_strip_null_characters: MagicMock,  # noqa: ARG001
+    mock_get_connector_runner: MagicMock,
+    mock_memory_tracer_class: MagicMock,
+    mock_get_batch_storage: MagicMock,
+    mock_reindex_finalizing: MagicMock,
+    db_session: Session,
+) -> None:
+    """A FUTURE attempt that started before the last port finished sends its
+    first batches at MEDIUM. Once the re-check sees the reindex finalizing, every
+    later batch goes out HIGH, and the attempt stops re-checking."""
+    unique_suffix = uuid4().hex[:8]
+    connector = _create_test_connector(
+        db_session, f"test_connector_fin_{unique_suffix}"
+    )
+    credential = _create_test_credential(db_session)
+    cc_pair = _create_test_cc_pair(
+        db_session,
+        connector,
+        credential,
+        ConnectorCredentialPairStatus.ACTIVE,
+        name=f"test_cc_pair_fin_{unique_suffix}",
+        last_successful_index_time=datetime.now(timezone.utc),
+    )
+    search_settings = _create_test_search_settings(
+        db_session, f"test_index_fin_{unique_suffix}"
+    )
+    # FUTURE, so the attempt is not the primary one
+    search_settings.status = IndexModelStatus.FUTURE
+    db_session.commit()
+    index_attempt = _create_test_index_attempt(db_session, cc_pair, search_settings)
+
+    try:
+        mock_get_batch_storage.return_value = MagicMock()
+        mock_memory_tracer_class.return_value = MagicMock()
+        mock_redis_client = MagicMock()
+        mock_redis_client.get.return_value = None
+        mock_redis_client.exists.return_value = 0
+        mock_get_redis_client.return_value = mock_redis_client
+        mock_ensure_source_node_exists.return_value = 1
+        mock_get_source_node_id_from_cache.return_value = 1
+        mock_get_node_id_from_raw_id.return_value = (None, False)
+        mock_get_latest_valid_checkpoint.return_value = (
+            MagicMock(has_more=True),
+            False,
+        )
+        mock_get_recent_completed_attempts.return_value = iter([])
+        mock_get_last_successful_attempt_poll_range_end.return_value = 0
+
+        def _doc(name: str) -> MagicMock:
+            doc = MagicMock()
+            doc.to_short_descriptor.return_value = name
+            doc.sections = []
+            doc.parent_hierarchy_raw_node_id = None
+            doc.parent_hierarchy_node_id = None
+            return doc
+
+        runner = MagicMock()
+        runner.connector = MagicMock()
+        runner.run.return_value = iter(
+            [
+                ([_doc("doc-1")], None, None, MagicMock(has_more=True)),
+                ([_doc("doc-2")], None, None, MagicMock(has_more=True)),
+                ([_doc("doc-3")], None, None, MagicMock(has_more=False)),
+            ]
+        )
+        mock_get_connector_runner.return_value = runner
+
+        # start of the attempt, re-check before batch 1: still porting;
+        # re-check before batch 2: the last port finished
+        mock_reindex_finalizing.side_effect = [False, False, True]
+
+        celery_app = MagicMock()
+        connector_document_extraction(
+            app=celery_app,
+            index_attempt_id=index_attempt.id,
+            cc_pair_id=cc_pair.id,
+            search_settings_id=search_settings.id,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            callback=None,
+        )
+
+        priorities = [
+            call.kwargs["priority"]
+            for call in celery_app.send_task.call_args_list
+            if call.kwargs.get("queue") == OnyxCeleryQueues.DOCPROCESSING
+        ]
+        assert priorities == [
+            OnyxCeleryPriority.MEDIUM,
+            OnyxCeleryPriority.HIGH,
+            OnyxCeleryPriority.HIGH,
+        ]
+        # no re-check after the boost
+        assert mock_reindex_finalizing.call_count == 3
+    finally:
+        db_session.query(IndexAttempt).filter(
+            IndexAttempt.id == index_attempt.id
+        ).delete(synchronize_session="fetch")
+        db_session.query(SearchSettings).filter(
+            SearchSettings.id == search_settings.id
+        ).delete(synchronize_session="fetch")
+        db_session.query(ConnectorCredentialPair).filter(
+            ConnectorCredentialPair.id == cc_pair.id
+        ).delete(synchronize_session="fetch")
+        db_session.query(Credential).filter(Credential.id == credential.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.query(Connector).filter(Connector.id == connector.id).delete(
+            synchronize_session="fetch"
+        )
+        db_session.commit()

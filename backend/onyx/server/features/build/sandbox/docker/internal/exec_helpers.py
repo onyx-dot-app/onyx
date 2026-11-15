@@ -271,7 +271,7 @@ def stream_stdout_from_container(
 
 def _unwrap_socket(sock: object) -> socket.socket:
     """Get the raw socket underneath docker SDK's SocketIO wrapper."""
-    raw = getattr(sock, "_sock", None)
+    raw = getattr(sock, "_sock", None)  # ods: ignore[getattr]
     if isinstance(raw, socket.socket):
         return raw
     if isinstance(sock, socket.socket):

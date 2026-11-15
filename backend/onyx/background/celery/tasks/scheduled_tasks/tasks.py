@@ -50,9 +50,7 @@ from onyx.db.scheduled_task import (
     insert_run,
     mark_run_status,
 )
-from onyx.server.features.build.scheduled_tasks.executor import (
-    run_scheduled_task_logic,
-)
+from onyx.microvm.admission import scheduled_run_jitter_seconds
 from onyx.server.features.build.timeouts import (
     QUEUE_RESIDENCY_SECONDS,
     SCHEDULED_RUN_HARD_CAP_SECONDS,
@@ -176,6 +174,9 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
     # Post-commit enqueues. If we crash between commit and enqueue, the
     # stuck-run sweeper picks the QUEUED rows up after ~15 min.
     for run_id in to_enqueue:
+        # Firecracker only: spread the VM starts of one tick.
+        delay = scheduled_run_jitter_seconds()
+        jitter = {"countdown": delay} if delay > 0 else {}
         try:
             self.app.send_task(
                 OnyxCeleryTask.SCHEDULED_TASKS_RUN,
@@ -187,6 +188,7 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                 priority=OnyxCeleryPriority.MEDIUM,
                 expires=RUN_EXPIRES_SECONDS,
                 headers={"enqueued_at": time.time()},
+                **jitter,
             )
         except Exception:
             task_logger.exception(
@@ -233,6 +235,10 @@ def run_scheduled_task(self: Task, *, run_id: str, tenant_id: str) -> None:
     _ = self  # bound only for symmetry with other shared_task wrappers
     _ = tenant_id
     try:
+        from onyx.server.features.build.scheduled_tasks.executor import (
+            run_scheduled_task_logic,
+        )
+
         run_scheduled_task_logic(UUID(run_id))
     except Exception:
         task_logger.exception(

@@ -1,7 +1,7 @@
 import abc
 from collections.abc import Generator, Iterator
 from types import TracebackType
-from typing import Any, Generic, TypeAlias, TypeVar
+from typing import Any, ClassVar, Generic, TypeAlias, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -48,6 +48,10 @@ class BaseConnector(abc.ABC, Generic[CT]):
     # Optional raw-file persistence hook to save original file
     raw_file_callback: RawFileCallback | None = None
 
+    # True when the slim listing filters `start` by the same date as indexing,
+    # so a prune can list only the documents from the indexing start.
+    slim_listing_honors_indexing_start: ClassVar[bool] = False
+
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError
@@ -63,7 +67,7 @@ class BaseConnector(abc.ABC, Generic[CT]):
             if isinstance(metadata_value, str):
                 metadata_lines.append(f"{metadata_key}: {metadata_value}")
             elif isinstance(metadata_value, list):
-                if not all([isinstance(val, str) for val in metadata_value]):
+                if not all(isinstance(val, str) for val in metadata_value):
                     raise RuntimeError(custom_parser_req_msg)
                 metadata_lines.append(f"{metadata_key}: {', '.join(metadata_value)}")
             else:
@@ -158,9 +162,16 @@ class SlimConnectorWithPermSync(BaseConnector):
 
 
 class OAuthConnector(BaseConnector):
+    supports_pkce: ClassVar[bool] = False
+    supports_manual_credentials: ClassVar[bool] = False
+
     class AdditionalOauthKwargs(BaseModel):
         # if overridden, all fields should be str type
         pass
+
+    @classmethod
+    def oauth_enabled(cls) -> bool:
+        return True
 
     @classmethod
     @abc.abstractmethod
@@ -174,6 +185,7 @@ class OAuthConnector(BaseConnector):
         base_domain: str,
         state: str,
         additional_kwargs: dict[str, str],
+        code_challenge: str | None = None,
     ) -> str:
         raise NotImplementedError
 
@@ -184,6 +196,7 @@ class OAuthConnector(BaseConnector):
         base_domain: str,
         code: str,
         additional_kwargs: dict[str, str],
+        code_verifier: str | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError
 
@@ -248,13 +261,6 @@ class CredentialsConnector(BaseConnector):
     def set_credentials_provider(
         self, credentials_provider: CredentialsProviderInterface
     ) -> None:
-        raise NotImplementedError
-
-
-# Event driven
-class EventConnector(BaseConnector):
-    @abc.abstractmethod
-    def handle_event(self, event: Any) -> GenerateDocumentsOutput:
         raise NotImplementedError
 
 
@@ -339,3 +345,17 @@ class HierarchyConnector(BaseConnector):
         end: SecondsSinceUnixEpoch,
     ) -> HierarchyOutput:
         raise NotImplementedError
+
+
+def prune_listing_honors_indexing_start(
+    connector_class: type[BaseConnector],
+) -> bool:
+    """True if a prune lists only the documents from the indexing start.
+    Follows the listing order of ``extract_ids_from_runnable_connector``: a
+    slim listing honors it only if the connector says so, a full load cannot
+    filter, and a poll or checkpoint run filters as indexing does."""
+    if issubclass(connector_class, (SlimConnector, SlimConnectorWithPermSync)):
+        return connector_class.slim_listing_honors_indexing_start
+    if issubclass(connector_class, LoadConnector):
+        return False
+    return issubclass(connector_class, (PollConnector, CheckpointedConnector))

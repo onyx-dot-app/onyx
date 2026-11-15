@@ -3,23 +3,28 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
+import { Collapsible, Text } from "@opal/components";
 import { SvgBubbleText, SvgChevronDown } from "@opal/icons";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
 import MinimalMarkdown from "@/components/chat/MinimalMarkdown";
 
 // MinimalMarkdown's default `p` goes through MemoizedParagraph which forces
 // the Opal `mainContentBody` preset (~16px). Override every text-bearing
 // element here so reasoning renders at a uniform smaller size.
-const thinkingP = ({ children }: { children?: ReactNode }) => (
-  <p className="text-sm leading-relaxed text-text-03 my-1">{children}</p>
+interface ThinkingBlockProps {
+  children?: ReactNode;
+  dir?: string;
+}
+
+const thinkingP = ({ children, dir }: ThinkingBlockProps) => (
+  <p dir={dir} className="text-sm leading-relaxed text-text-03 my-1">
+    {children}
+  </p>
 );
-const thinkingHeader = ({ children }: { children?: ReactNode }) => (
-  <p className="text-sm leading-relaxed text-text-03 font-semibold mt-4 mb-2">
+const thinkingHeader = ({ children, dir }: ThinkingBlockProps) => (
+  <p
+    dir={dir}
+    className="text-sm leading-relaxed text-text-03 font-semibold mt-4 mb-2"
+  >
     {children}
   </p>
 );
@@ -36,17 +41,26 @@ function normalizeThinking(text: string): string {
   out = out.replace(/(\*\*[^*\n]+\*\*)(?=[A-Z([])/g, "$1\n\n");
   return out;
 }
-const thinkingLi = ({ children }: { children?: ReactNode }) => (
-  <li className="text-sm leading-relaxed text-text-03 my-0.5">{children}</li>
+const thinkingLi = ({ children, dir }: ThinkingBlockProps) => (
+  <li dir={dir} className="text-sm leading-relaxed text-text-03 my-0.5">
+    {children}
+  </li>
 );
-const thinkingUl = ({ children }: { children?: ReactNode }) => (
-  <ul className="list-disc ml-4 my-1 text-sm">{children}</ul>
+const thinkingUl = ({ children, dir }: ThinkingBlockProps) => (
+  <ul dir={dir} className="list-disc ms-4 my-1 text-sm">
+    {children}
+  </ul>
 );
-const thinkingOl = ({ children }: { children?: ReactNode }) => (
-  <ol className="list-decimal ml-4 my-1 text-sm">{children}</ol>
+const thinkingOl = ({ children, dir }: ThinkingBlockProps) => (
+  <ol dir={dir} className="list-decimal ms-4 my-1 text-sm">
+    {children}
+  </ol>
 );
-const thinkingBlockquote = ({ children }: { children?: ReactNode }) => (
-  <blockquote className="text-sm text-text-02 border-l-2 border-border-02 pl-2 my-1">
+const thinkingBlockquote = ({ children, dir }: ThinkingBlockProps) => (
+  <blockquote
+    dir={dir}
+    className="text-sm text-text-02 border-s-2 border-border-02 ps-2 my-1"
+  >
     {children}
   </blockquote>
 );
@@ -97,8 +111,8 @@ export default function ThinkingCard({
   if (!content) return null;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
+    <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible.Trigger asChild>
         <button
           className={cn(
             "group w-full text-left px-3 py-1.5 rounded-md transition-colors duration-200",
@@ -107,7 +121,11 @@ export default function ThinkingCard({
         >
           <div className="flex items-center gap-2 min-w-0 w-full">
             <ThinkingActivityIcon isStreaming={isStreaming} />
-            <Text font="main-ui-muted" color="text-04" nowrap>
+            <Text
+              font="main-ui-muted"
+              color="text-04"
+              wordWrap="whitespace-nowrap"
+            >
               {isStreaming ? "Thinking..." : "Thinking"}
             </Text>
             <SvgChevronDown
@@ -119,8 +137,8 @@ export default function ThinkingCard({
             />
           </div>
         </button>
-      </CollapsibleTrigger>
-      <CollapsibleContent>
+      </Collapsible.Trigger>
+      <Collapsible.Content>
         <div className="px-3 pb-2 pt-0">
           <div className="py-1 max-h-48 overflow-y-auto">
             <MinimalMarkdown
@@ -131,7 +149,7 @@ export default function ThinkingCard({
             />
           </div>
         </div>
-      </CollapsibleContent>
-    </Collapsible>
+      </Collapsible.Content>
+    </Collapsible.Root>
   );
 }

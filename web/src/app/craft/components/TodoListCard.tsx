@@ -1,13 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
-import { Text } from "@opal/components";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/refresh-components/Collapsible";
+import { Collapsible, Text } from "@opal/components";
 import { SvgChevronDown, SvgCheckCircle } from "@opal/icons";
 import {
   TodoListState,
@@ -80,6 +76,7 @@ export default function TodoListCard({
   todoList,
   defaultOpen = true,
 }: TodoListCardProps) {
+  const t = useTranslations("craft.todoList");
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   // Update isOpen when defaultOpen changes (for auto-collapse behavior)
@@ -98,7 +95,7 @@ export default function TodoListCard({
   const allCompleted = completed === total && total > 0;
 
   return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+    <Collapsible.Root open={isOpen} onOpenChange={setIsOpen}>
       <div
         className={cn(
           "w-full border-[0.5px] rounded-lg overflow-hidden",
@@ -107,11 +104,11 @@ export default function TodoListCard({
             : "bg-background-neutral-01 border-border-01"
         )}
       >
-        <CollapsibleTrigger asChild>
+        <Collapsible.Trigger asChild>
           <button
             className={cn(
               "w-full flex items-center justify-between px-3 py-2",
-              "hover:bg-background-tint-02 transition-colors text-left"
+              "hover:bg-background-tint-02 transition-colors text-start"
             )}
           >
             <div className="flex items-center gap-2 min-w-0 flex-1">
@@ -125,13 +122,21 @@ export default function TodoListCard({
               )}
 
               {/* Title */}
-              <Text font="main-ui-action" color="text-04" nowrap>
-                Tasks
+              <Text
+                font="main-ui-action"
+                color="text-04"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("header.title")}
               </Text>
 
               {/* Progress count */}
-              <Text font="secondary-body" color="text-03" nowrap>
-                {`${completed}/${total} completed`}
+              <Text
+                font="secondary-body"
+                color="text-03"
+                wordWrap="whitespace-nowrap"
+              >
+                {t("progress.label", { completed, total })}
               </Text>
             </div>
 
@@ -143,9 +148,9 @@ export default function TodoListCard({
               )}
             />
           </button>
-        </CollapsibleTrigger>
+        </Collapsible.Trigger>
 
-        <CollapsibleContent>
+        <Collapsible.Content>
           <div className="px-3 pb-3 pt-0 space-y-0.5">
             {todoList.todos.map((todo, index) => (
               <TodoItemRow key={`${todoList.id}-${index}`} todo={todo} />
@@ -153,13 +158,13 @@ export default function TodoListCard({
             {todoList.todos.length === 0 && (
               <span className="italic">
                 <Text font="main-ui-body" color="text-03">
-                  No tasks
+                  {t("empty.label")}
                 </Text>
               </span>
             )}
           </div>
-        </CollapsibleContent>
+        </Collapsible.Content>
       </div>
-    </Collapsible>
+    </Collapsible.Root>
   );
 }

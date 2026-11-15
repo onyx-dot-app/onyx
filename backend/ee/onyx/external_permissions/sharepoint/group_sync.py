@@ -1,17 +1,12 @@
 from collections.abc import Generator
 
-from office365.sharepoint.client_context import ClientContext
-
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.sharepoint.permission_utils import (
     get_sharepoint_external_groups,
 )
 from ee.onyx.external_permissions.utils import credential_json
-from onyx.configs.app_configs import SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-from onyx.connectors.sharepoint.connector import (
-    SharepointConnector,
-    acquire_token_for_rest,
-)
+from onyx.connectors.factory import build_connector_kwargs
+from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
 
@@ -28,14 +23,10 @@ def sharepoint_group_sync(
     connector_config = cc_pair.connector.connector_specific_config
 
     # Create SharePoint connector instance and load credentials
-    connector = SharepointConnector(**connector_config)
+    connector = SharepointConnector(
+        **build_connector_kwargs(cc_pair.connector.source, connector_config)
+    )
     connector.load_credentials(credential_json(cc_pair))
-
-    if not connector.msal_app:
-        raise RuntimeError("MSAL app not initialized in connector")
-
-    if not connector.sp_tenant_domain:
-        raise RuntimeError("Tenant domain not initialized in connector")
 
     # Get site descriptors from connector (either configured sites or all sites)
     site_descriptors = connector.site_descriptors or connector.fetch_sites()
@@ -45,26 +36,16 @@ def sharepoint_group_sync(
 
     logger.info("Processing %s sites for group sync", len(site_descriptors))
 
-    enumerate_all = connector_config.get(
-        "exhaustive_ad_enumeration", SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION
-    )
-
-    msal_app = connector.msal_app
-    sp_tenant_domain = connector.sp_tenant_domain
-    sp_domain_suffix = connector.sharepoint_domain_suffix
+    # The gateway refuses a site host outside the tenant the REST token is
+    # minted for.
+    reader = connector.ops
     for site_descriptor in site_descriptors:
         logger.debug("Processing site: %s", site_descriptor.url)
 
-        ctx = ClientContext(site_descriptor.url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, sp_tenant_domain, sp_domain_suffix)
-        )
-
         external_groups = get_sharepoint_external_groups(
-            ctx,
-            connector.graph_client,
-            graph_api_base=connector.graph_api_base,
-            get_access_token=connector._get_graph_access_token,
-            enumerate_all_ad_groups=enumerate_all,
+            reader,
+            site_descriptor.url,
+            enumerate_all_ad_groups=connector.exhaustive_ad_enumeration,
         )
 
         # Yield each group

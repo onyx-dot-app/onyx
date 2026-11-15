@@ -17,15 +17,21 @@ from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+import onyx.server.features.usage.api as usage_api
 from onyx.auth.users import current_user
+from onyx.configs.constants import TokenRateLimitPeriod
+from onyx.db.cost_override import create_cost_override
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import (
+    LLMProvider,
+    ModelConfiguration,
     ModelCostOverride,
     TokenRateLimit,
-    TokenRateLimit__UserGroup,
+    TokenRateLimitScope,
     User__UserGroup,
     UserUsage,
 )
+from onyx.db.user_usage import get_period_window_reset
 from onyx.error_handling.exceptions import register_onyx_exception_handlers
 from onyx.llm import cost_overrides
 from onyx.llm.cost import ModelPrice, get_model_price_per_million
@@ -61,10 +67,11 @@ def db_session() -> Generator[Session, None, None]:
 
     for model in (
         UserUsage,
+        LLMProvider,
+        ModelConfiguration,
         ModelCostOverride,
         TokenRateLimit,
         User__UserGroup,
-        TokenRateLimit__UserGroup,
     ):
         cast(Table, model.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
@@ -116,6 +123,7 @@ def _seed_usage(
     cache_read_tokens: int,
     cost_cents: float,
     window_start: datetime.datetime,
+    cache_creation_tokens: int = 0,
 ) -> None:
     db_session.add(
         UserUsage(
@@ -127,6 +135,7 @@ def _seed_usage(
             input_tokens=input_tokens,
             output_tokens=output_tokens,
             cache_read_tokens=cache_read_tokens,
+            cache_creation_tokens=cache_creation_tokens,
             cost_cents=cost_cents,
         )
     )
@@ -158,7 +167,7 @@ def _seed_current_window(db_session: Session, user_id: str) -> datetime.datetime
     now = datetime.datetime.now(datetime.timezone.utc)
     window = get_window_start(now, USER_USAGE_BUCKET_SECONDS)
     _seed_usage(
-        db_session, user_id, "gpt-4o", "CHAT", "openai", 100, 50, 0, 1.25, window
+        db_session, user_id, "gpt-6-sol", "CHAT", "openai", 100, 50, 0, 1.25, window
     )
     return window
 
@@ -171,15 +180,25 @@ def test_returns_only_callers_rows_and_aggregates(
     window = _seed_current_window(db_session, caller)
     # Same window, distinct model -> second per-day row for the caller.
     _seed_usage(
-        db_session, caller, "claude-3", "CHAT", "anthropic", 200, 60, 5, 2.0, window
+        db_session,
+        caller,
+        "claude-3",
+        "CHAT",
+        "anthropic",
+        200,
+        60,
+        5,
+        2.0,
+        window,
+        cache_creation_tokens=7,
     )
     # Another user's usage must never surface.
     _seed_usage(
-        db_session, other, "gpt-4o", "CHAT", "openai", 999, 999, 0, 99.0, window
+        db_session, other, "gpt-6-sol", "CHAT", "openai", 999, 999, 0, 99.0, window
     )
 
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
     )
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     resp = client.get("/user/usage")
@@ -187,10 +206,11 @@ def test_returns_only_callers_rows_and_aggregates(
     body = resp.json()
 
     models = {r["model"]: r for r in body["per_day_by_model"]}
-    assert set(models) == {"gpt-4o", "claude-3"}
-    assert models["gpt-4o"]["input_tokens"] == 100
+    assert set(models) == {"gpt-6-sol", "claude-3"}
+    assert models["gpt-6-sol"]["input_tokens"] == 100
     assert models["claude-3"]["output_tokens"] == 60
     assert models["claude-3"]["cache_read_tokens"] == 5
+    assert models["claude-3"]["cache_creation_tokens"] == 7
     # No row leaks the other user's 999s.
     assert all(r["input_tokens"] != 999 for r in body["per_day_by_model"])
 
@@ -198,6 +218,154 @@ def test_returns_only_callers_rows_and_aggregates(
     assert body["budget_cents"] is None
     assert body["budget_remaining_cents"] is None
     assert body["selected_model_price"] is None
+
+
+def test_default_range_uses_usage_limit_window(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    fixed_now = datetime.datetime(2026, 8, 4, 12, 34, tzinfo=datetime.timezone.utc)
+    seen: dict[str, datetime.datetime] = {}
+
+    class _FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    def _capture_usage_bounds(
+        *_args: object,
+        since: datetime.datetime,
+        until: datetime.datetime,
+    ) -> list[object]:
+        seen["since"] = since
+        seen["until"] = until
+        return []
+
+    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
+    monkeypatch.setattr(
+        usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+    )
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage")
+
+    assert resp.status_code == 200
+    assert seen == {
+        "since": usage_api.get_window_start(
+            fixed_now, period_seconds=usage_api.USAGE_LIMIT_WINDOW_SECONDS
+        ),
+        "until": fixed_now,
+    }
+
+
+def test_days_range_uses_legacy_rolling_bounds(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    fixed_now = datetime.datetime(2026, 8, 4, 12, 34, tzinfo=datetime.timezone.utc)
+    seen: dict[str, datetime.datetime] = {}
+
+    class _FixedDatetime(datetime.datetime):
+        @classmethod
+        def now(cls, tz: datetime.tzinfo | None = None) -> datetime.datetime:
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    def _capture_usage_bounds(
+        *_args: object,
+        since: datetime.datetime,
+        until: datetime.datetime,
+    ) -> list[object]:
+        seen["since"] = since
+        seen["until"] = until
+        return []
+
+    monkeypatch.setattr(usage_api, "datetime", _FixedDatetime)
+    monkeypatch.setattr(
+        usage_api, "get_user_usage_by_day_and_model", _capture_usage_bounds
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+    )
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params={"days": 7}
+    )
+
+    assert resp.status_code == 200
+    assert seen == {
+        "since": fixed_now - datetime.timedelta(days=7),
+        "until": fixed_now,
+    }
+
+
+def test_custom_date_range_uses_inclusive_calendar_bounds(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    caller = str(uuid4())
+    _seed_usage(
+        db_session,
+        caller,
+        "model-a",
+        "CHAT",
+        "openai",
+        100,
+        50,
+        0,
+        1.0,
+        datetime.datetime(2026, 7, 1, 12, tzinfo=datetime.timezone.utc),
+    )
+    _seed_usage(
+        db_session,
+        caller,
+        "model-b",
+        "CHAT",
+        "openai",
+        200,
+        60,
+        0,
+        2.0,
+        datetime.datetime(2026, 7, 3, 23, 59, tzinfo=datetime.timezone.utc),
+    )
+    _seed_usage(
+        db_session,
+        caller,
+        "model-c",
+        "CHAT",
+        "openai",
+        300,
+        70,
+        0,
+        3.0,
+        datetime.datetime(2026, 7, 4, tzinfo=datetime.timezone.utc),
+    )
+    db_session.commit()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller)))
+        .get("/user/usage", params={"start": "2026-07-01", "end": "2026-07-03"})
+        .json()
+    )
+
+    assert [row["model"] for row in body["per_day_by_model"]] == [
+        "model-a",
+        "model-b",
+    ]
+
+
+def test_custom_date_range_rejects_start_after_end(db_session: Session) -> None:
+    caller = str(uuid4())
+
+    resp = TestClient(_make_app(db_session, _StubUser(caller))).get(
+        "/user/usage", params={"start": "2026-07-04", "end": "2026-07-03"}
+    )
+
+    assert resp.status_code == 400
+    assert resp.json()["error_code"] == "INVALID_INPUT"
 
 
 def test_selected_model_price_known_model(
@@ -208,20 +376,20 @@ def test_selected_model_price_known_model(
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     cost_overrides.invalidate_override_cache()  # no override; price from litellm
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model",
-        lambda _db: _StubModelConfig("gpt-4o", "openai"),
+        "onyx.server.features.usage.api.fetch_default_model",
+        lambda _db, _flow: _StubModelConfig("gpt-6-sol", "openai"),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
-        lambda *_a, **_k: [_StubProviderWithModels("openai", [(1, "gpt-4o", True)])],
+        lambda *_a, **_k: [_StubProviderWithModels("openai", [(1, "gpt-6-sol", True)])],
     )
 
     client = TestClient(_make_app(db_session, _StubUser(caller)))
     price = client.get("/user/usage").json()["selected_model_price"]
-    assert price["model"] == "gpt-4o"
+    assert price["model"] == "gpt-6-sol"
     assert price["provider"] == "openai"
-    # litellm prices gpt-4o at $2.50 in / $10.00 out per 1M.
-    assert price["input_per_mtok"] == pytest.approx(2.5)
+    # The catalog prices gpt-6-sol at $2.00 in / $10.00 out per 1M.
+    assert price["input_per_mtok"] == pytest.approx(2.0)
     assert price["output_per_mtok"] == pytest.approx(10.0)
 
 
@@ -232,8 +400,8 @@ def test_selected_model_price_unknown_model_nulls(
     _seed_current_window(db_session, caller)
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model",
-        lambda _db: _StubModelConfig("totally-unknown-model-xyz", None),
+        "onyx.server.features.usage.api.fetch_default_model",
+        lambda _db, _flow: _StubModelConfig("totally-unknown-model-xyz", None),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -253,13 +421,13 @@ def test_selected_model_price_requires_model_access(
     caller = str(uuid4())
     _seed_current_window(db_session, caller)
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model",
-        lambda _db: _StubModelConfig("gpt-4o", "openai", model_id=2),
+        "onyx.server.features.usage.api.fetch_default_model",
+        lambda _db, _flow: _StubModelConfig("gpt-6-sol", "openai", model_id=2),
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
         lambda *_a, **_k: [
-            _StubProviderWithModels("openai", [(1, "gpt-4o-mini", True)])
+            _StubProviderWithModels("openai", [(1, "gpt-6-luna", True)])
         ],
     )
 
@@ -269,15 +437,31 @@ def test_selected_model_price_requires_model_access(
     assert body["selected_model_price"] is None
 
 
+def _seed_model_configuration(db_session: Session, model: str = "gpt-6-sol") -> int:
+    llm_provider = LLMProvider(name=f"openai-{uuid4()}", provider="openai")
+    db_session.add(llm_provider)
+    db_session.flush()
+    config = ModelConfiguration(
+        llm_provider_id=llm_provider.id, name=model, is_visible=True
+    )
+    db_session.add(config)
+    db_session.commit()
+    return config.id
+
+
 class TestGetModelPricePerMillion:
     def test_override_beats_litellm(
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
-        cost_overrides.upsert_override(db_session, "gpt-4o", 1.0, 4.0, 0.5)
+        config_id = _seed_model_configuration(db_session)
+        create_cost_override(db_session, config_id, 1.0, 4.0, 0.5)
+        db_session.commit()
         cost_overrides.invalidate_override_cache()
 
-        price = get_model_price_per_million("gpt-4o", "openai", db_session)
+        price = get_model_price_per_million(
+            "gpt-6-sol", "openai", db_session, model_configuration_id=config_id
+        )
         assert price.input_per_mtok == pytest.approx(1.0)
         assert price.output_per_mtok == pytest.approx(4.0)
         assert price.cache_per_mtok == pytest.approx(0.5)
@@ -286,10 +470,13 @@ class TestGetModelPricePerMillion:
         self, db_session: Session, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+        config_id = _seed_model_configuration(db_session)
         # Clear tenant override cache between tests.
         cost_overrides.invalidate_override_cache()
-        price = get_model_price_per_million("gpt-4o", "openai", db_session)
-        assert price.input_per_mtok == pytest.approx(2.5)
+        price = get_model_price_per_million(
+            "gpt-6-sol", "openai", db_session, model_configuration_id=config_id
+        )
+        assert price.input_per_mtok == pytest.approx(2.0)
         assert price.output_per_mtok == pytest.approx(10.0)
 
     def test_unknown_model_nulls(self) -> None:
@@ -307,13 +494,13 @@ class TestGetModelPricePerMillion:
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         def _boom(*_a: object, **_k: object) -> None:
-            raise RuntimeError("litellm exploded")
+            raise RuntimeError("catalog exploded")
 
-        import litellm
+        from onyx.llm import cost as cost_mod
 
-        monkeypatch.setattr(litellm, "get_model_info", _boom)
-        assert get_model_price_per_million("gpt-4o", "openai") == ModelPrice(
-            model="gpt-4o",
+        monkeypatch.setattr(cost_mod, "find_model_cost", _boom)
+        assert get_model_price_per_million("gpt-6-sol", "openai") == ModelPrice(
+            model="gpt-6-sol",
             provider="openai",
             input_per_mtok=None,
             output_per_mtok=None,
@@ -324,7 +511,6 @@ class TestGetModelPricePerMillion:
 def test_budget_reflects_user_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     _seed_current_window(db_session, caller)  # records 1.25c of cost
@@ -333,13 +519,13 @@ def test_budget_reflects_user_cost_limit(
             enabled=True,
             token_budget=None,
             cost_budget_cents=100.0,
-            period_hours=168,
+            period=TokenRateLimitPeriod.WEEKLY,
             scope=TokenRateLimitScope.USER,
         )
     )
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
     )
 
     body = (
@@ -347,31 +533,36 @@ def test_budget_reflects_user_cost_limit(
     )
     assert body["budget_cents"] == pytest.approx(100.0)
     assert body["budget_remaining_cents"] == pytest.approx(98.75)  # 100 - 1.25
+    assert body["budget_period"] == TokenRateLimitPeriod.WEEKLY.value
+    assert body["budget_reset_at"] == get_period_window_reset(
+        datetime.datetime.now(datetime.timezone.utc), TokenRateLimitPeriod.WEEKLY
+    ).isoformat().replace("+00:00", "Z")
 
 
 def test_budget_reflects_global_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     other = str(uuid4())
     window = _seed_current_window(db_session, caller)  # caller records 1.25c
     # A GLOBAL budget sums tenant-wide cost, so another user's spend in the same
     # window must count against the caller's remaining headroom too.
-    _seed_usage(db_session, other, "gpt-4o", "CHAT", "openai", 500, 100, 0, 5.0, window)
+    _seed_usage(
+        db_session, other, "gpt-6-sol", "CHAT", "openai", 500, 100, 0, 5.0, window
+    )
     db_session.add(
         TokenRateLimit(
             enabled=True,
             token_budget=None,
             cost_budget_cents=100.0,
-            period_hours=168,
+            period=TokenRateLimitPeriod.WEEKLY,
             scope=TokenRateLimitScope.GLOBAL,
         )
     )
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
     )
 
     body = (
@@ -390,7 +581,7 @@ def test_available_model_prices_lists_priced_models(
     monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
     cost_overrides.invalidate_override_cache()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
     )
     monkeypatch.setattr(
         "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
@@ -398,9 +589,9 @@ def test_available_model_prices_lists_priced_models(
             _StubProviderWithModels(
                 "openai",
                 [
-                    (1, "gpt-4o", True),
+                    (1, "gpt-6-sol", True),
                     (2, "totally-unknown-model-xyz", True),
-                    (3, "gpt-4o-mini", False),
+                    (3, "gpt-6-luna", False),
                 ],
             )
         ],
@@ -410,18 +601,54 @@ def test_available_model_prices_lists_priced_models(
         TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
     )
     prices = {p["model"]: p for p in body["available_model_prices"]}
-    assert prices["gpt-4o"]["input_per_mtok"] == pytest.approx(2.5)
-    assert prices["gpt-4o"]["output_per_mtok"] == pytest.approx(10.0)
-    assert "cache_per_mtok" in prices["gpt-4o"]
+    assert prices["gpt-6-sol"]["input_per_mtok"] == pytest.approx(2.0)
+    assert prices["gpt-6-sol"]["output_per_mtok"] == pytest.approx(10.0)
+    assert "cache_per_mtok" in prices["gpt-6-sol"]
     # An unpriced model is skipped, not surfaced with null prices.
     assert "totally-unknown-model-xyz" not in prices
-    assert "gpt-4o-mini" not in prices
+    assert "gpt-6-luna" not in prices
+
+
+def test_available_model_prices_lists_each_overridden_copy(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two providers of one type serve gpt-6-sol; an override on one copy gives
+    it its own entry, while identical copies collapse to one."""
+    caller = str(uuid4())
+    _seed_current_window(db_session, caller)
+    monkeypatch.setattr(cost_overrides, "get_current_tenant_id", lambda: "public")
+    overridden_id = _seed_model_configuration(db_session)
+    catalog_id = _seed_model_configuration(db_session)
+    duplicate_id = _seed_model_configuration(db_session)
+    create_cost_override(db_session, overridden_id, 1.0, 4.0)
+    db_session.commit()
+    cost_overrides.invalidate_override_cache()
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
+    )
+    monkeypatch.setattr(
+        "onyx.server.features.usage.api.fetch_all_llm_providers_accessible_in_any_context",
+        lambda *_a, **_k: [
+            _StubProviderWithModels("openai", [(overridden_id, "gpt-6-sol", True)]),
+            _StubProviderWithModels("openai", [(catalog_id, "gpt-6-sol", True)]),
+            _StubProviderWithModels("openai", [(duplicate_id, "gpt-6-sol", True)]),
+        ],
+    )
+
+    body = (
+        TestClient(_make_app(db_session, _StubUser(caller))).get("/user/usage").json()
+    )
+    gpt_prices = sorted(
+        (p["input_per_mtok"], p["output_per_mtok"])
+        for p in body["available_model_prices"]
+        if p["model"] == "gpt-6-sol"
+    )
+    assert gpt_prices == [(1.0, 4.0), (2.0, 10.0)]
 
 
 def test_budget_reflects_group_cost_limit(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from onyx.db.models import TokenRateLimitScope
 
     caller = str(uuid4())
     _seed_current_window(db_session, caller)  # records 1.25c of cost
@@ -429,16 +656,15 @@ def test_budget_reflects_group_cost_limit(
         enabled=True,
         token_budget=None,
         cost_budget_cents=100.0,
-        period_hours=168,
+        period=TokenRateLimitPeriod.WEEKLY,
         scope=TokenRateLimitScope.USER_GROUP,
+        user_group_id=1,
     )
     db_session.add(limit)
-    db_session.flush()
     db_session.add(User__UserGroup(user_id=caller, user_group_id=1))
-    db_session.add(TokenRateLimit__UserGroup(rate_limit_id=limit.id, user_group_id=1))
     db_session.commit()
     monkeypatch.setattr(
-        "onyx.server.features.usage.api.fetch_default_llm_model", lambda _db: None
+        "onyx.server.features.usage.api.fetch_default_model", lambda _db, _flow: None
     )
 
     body = (

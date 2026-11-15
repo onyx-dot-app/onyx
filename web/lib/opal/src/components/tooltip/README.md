@@ -5,40 +5,38 @@
 A minimal tooltip wrapper that shows content on hover. When `tooltip` is `undefined`, children
 are returned as-is with no wrapping. Uses Radix Tooltip primitives internally.
 
-Supports both uncontrolled (default hover behavior) and controlled (`open` + `onOpenChange`)
-modes.
+Hover is Radix's to track. There is no controlled `open` — use `suppressed` to turn a tooltip
+off while keeping the trigger mounted.
 
 ## Props
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `tooltip` | `ReactNode \| RichStr` | — | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
-| `side` | `"top" \| "bottom" \| "left" \| "right"` | `"right"` | Which side the tooltip appears on |
-| `align` | `"start" \| "center" \| "end"` | `"center"` | Alignment along the tooltip's side axis |
-| `open` | `boolean` | — | Controlled open state. When omitted, uses default hover behavior. |
-| `onOpenChange` | `(open: boolean) => void` | — | Callback when open state changes. Use with `open` for controlled mode. |
-| `delayDuration` | `number` | — | Delay in ms before the tooltip appears on hover |
-| `sideOffset` | `number` | `4` | Distance in pixels between the trigger and the tooltip |
+| Prop            | Type                                     | Default    | Description                                                                                                    |
+| --------------- | ---------------------------------------- | ---------- | -------------------------------------------------------------------------------------------------------------- |
+| `tone` | `"default" \| "neutral"` | `"default"` | Neutral uses a theme-aware surface and subtle border instead of the fixed dark surface. |
+| `tooltip`       | `ReactNode \| RichStr`                   | —          | Tooltip content. `string`/`RichStr` rendered via `Text`; `ReactNode` rendered as-is. `undefined` = no tooltip. |
+| `side`          | `"top" \| "bottom" \| "start" \| "end"`   | `"end"`    | Which side the tooltip appears on. `start`/`end` are logical: in a right-to-left layout `start` is the right side |
+| `align`         | `"start" \| "center" \| "end" \| "follow"` | `"center"` | Alignment along the tooltip's side axis. `follow` slides it to stay level with the pointer, for a tall or wide trigger |
+| `suppressed`    | `boolean`                                | `false`    | Shows nothing on hover, but keeps the trigger mounted                                                          |
+| `delayDuration` | `number`                                 | —          | Delay in ms before the tooltip appears on hover                                                                |
+| `sideOffset`    | `number`                                 | `4`        | Distance in pixels between the trigger and the tooltip                                                         |
 
 ## Usage
 
 ```tsx
 import { Tooltip } from "@opal/components";
 
-// Uncontrolled (default hover behavior)
 <Tooltip tooltip="Delete this item">
   <Button icon={SvgTrash} />
-</Tooltip>
-
-// Controlled
-const [isOpen, setIsOpen] = useState(false);
-<Tooltip tooltip="Details" open={isOpen} onOpenChange={setIsOpen}>
-  <Button icon={SvgInfo} />
 </Tooltip>
 
 // Conditional — no tooltip when undefined
 <Tooltip tooltip={isDisabled ? "Not available" : undefined}>
   <Button>Action</Button>
+</Tooltip>
+
+// Suppressed — same tree, nothing on hover
+<Tooltip tooltip="Rename" suppressed={!isCollapsed}>
+  <Button icon={SvgEdit} />
 </Tooltip>
 ```
 
@@ -48,4 +46,18 @@ const [isOpen, setIsOpen] = useState(false);
   that forwards refs).
 - `string` and `RichStr` content is rendered via `Text font="secondary-body" color="inherit"`.
 - `ReactNode` content is rendered as-is for custom tooltip layouts.
-- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap.
+- The `opal-tooltip` CSS class provides z-indexing, animations, and a `max-width: 20rem` cap. Text with no spaces, such as a URL, breaks at that edge rather than running past it.
+- The default surface is dark in both themes, so content renders inside a `dark` theme scope. Adaptive
+  tokens (`text-03` and friends) resolve to their dark values; `text-inverted-*` resolves
+  backwards and is wrong here.
+- Neutral tooltips inherit the current theme. Use normal adaptive text colors in their content.
+- There is no controlled `open`. Radix drops any open change that already matches the value it
+  was given, so a caller that gates `open` on something other than the hover state stops hearing
+  about closes and holds a hover that ended.
+- Dropping `tooltip` returns children bare. The tree shape changes, so the children remount. Use
+  `suppressed` when the children hold state that is tied to the node: a ref that a measurement or
+  an observer reads, a running animation, or focus. A remount costs nothing otherwise, so a plain
+  conditional stays right for the usual "no tooltip in this state" case.
+- A suppressed tooltip prevents the default of pointer moves over its trigger, so it never opens in
+  Radix's state and never closes an enclosing tooltip. An enclosing tooltip therefore opens only
+  from pointer moves outside the suppressed trigger.

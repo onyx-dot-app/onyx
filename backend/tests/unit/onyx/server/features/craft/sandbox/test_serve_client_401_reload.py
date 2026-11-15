@@ -9,9 +9,11 @@ from onyx.server.features.build.sandbox.opencode.serve_client import OpencodeSer
 
 def test_request_reloads_password_on_401_and_retries() -> None:
     calls: list[str | None] = []
+    requests: list[httpx.Request] = []
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request.headers.get("authorization"))
+        requests.append(request)
         # First call (stale password) → 401; retry (fresh password) → 200.
         if len(calls) == 1:
             return httpx.Response(401)
@@ -34,6 +36,7 @@ def test_request_reloads_password_on_401_and_retries() -> None:
     assert len(calls) == 2, calls
     assert calls[0] != calls[1], "auth header should change after reload"
     assert len(reloads) == 1
+    assert all(request.extensions["timeout"]["read"] == 90.0 for request in requests)
     client.close()
 
 
@@ -54,7 +57,7 @@ def test_request_does_not_retry_when_password_unchanged() -> None:
     # 401 with unchanged password → no retry, surfaces as HTTPStatusError.
     try:
         client.ensure_session(None, directory="/workspace/sessions/x")
-        assert False, "expected HTTPStatusError"
+        raise AssertionError("expected HTTPStatusError")
     except httpx.HTTPStatusError:
         pass
     assert n == 1, n

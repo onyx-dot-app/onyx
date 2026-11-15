@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
 import useScreenSize from "@/hooks/useScreenSize";
 
 const SELECTOR = "[data-main-container]";
@@ -11,14 +10,21 @@ interface ContainerCenter {
   centerY: number | null;
   /** Viewport x of the container's left edge (the sidebar/content boundary). */
   left: number | null;
+  /** Distance from the inline-start viewport edge, for logical positioning. */
+  inlineStart: number | null;
   hasContainerCenter: boolean;
 }
 
-const NULL_MEASURE = { x: null, y: null, left: null } as const;
+const NULL_MEASURE = {
+  x: null,
+  y: null,
+  left: null,
+  inlineStart: null,
+} as const;
 
 function measure(
   el: HTMLElement
-): { x: number; y: number; left: number } | null {
+): { x: number; y: number; left: number; inlineStart: number } | null {
   if (!el.isConnected) return null;
   const rect = el.getBoundingClientRect();
   if (rect.width === 0 && rect.height === 0) return null;
@@ -26,6 +32,12 @@ function measure(
     x: rect.left + rect.width / 2,
     y: rect.top + rect.height / 2,
     left: rect.left,
+    // Distance from the inline-start viewport edge, for consumers that
+    // position with logical properties.
+    inlineStart:
+      getComputedStyle(el).direction === "rtl"
+        ? window.innerWidth - rect.right
+        : rect.left,
   };
 }
 
@@ -43,16 +55,20 @@ function measure(
  *
  * Uses a lazy `useState` initializer so the first render already has the
  * correct values (no flash), and a `ResizeObserver` to stay reactive when
- * the sidebar folds/unfolds. Re-subscribes on route changes because each
- * page renders its own `AppLayouts.Root`, replacing the DOM element.
+ * the sidebar folds/unfolds. Follows the element itself, because each chrome
+ * renders its own container and a navigation replaces it after the URL moves.
  */
 export default function useContainerCenter(): ContainerCenter {
-  const pathname = usePathname();
   const { isMediumScreen } = useScreenSize();
+  const [container, setContainer] = useState<HTMLElement | null>(() => {
+    if (typeof document === "undefined") return null;
+    return document.querySelector<HTMLElement>(SELECTOR);
+  });
   const [rect, setRect] = useState<{
     x: number | null;
     y: number | null;
     left: number | null;
+    inlineStart: number | null;
   }>(() => {
     if (typeof document === "undefined") return NULL_MEASURE;
     const el = document.querySelector<HTMLElement>(SELECTOR);
@@ -62,46 +78,50 @@ export default function useContainerCenter(): ContainerCenter {
   });
 
   useEffect(() => {
-    let resizeObserver: ResizeObserver | null = null;
-    let mutationObserver: MutationObserver | null = null;
-
-    const attach = (container: HTMLElement) => {
-      const update = () => setRect(measure(container) ?? NULL_MEASURE);
-      update();
-      resizeObserver = new ResizeObserver(update);
-      resizeObserver.observe(container);
+    let frame = 0;
+    const sync = () => {
+      frame = 0;
+      const el = document.querySelector<HTMLElement>(SELECTOR);
+      setContainer((current) => (current === el ? current : el));
+      if (!el) setRect(NULL_MEASURE);
     };
-
-    const existing = document.querySelector<HTMLElement>(SELECTOR);
-    if (existing) {
-      attach(existing);
-    } else {
-      // The container can mount after this hook (e.g. a root-level consumer
-      // renders before the auth shell reveals the chrome). Watch for it.
-      setRect(NULL_MEASURE);
-      mutationObserver = new MutationObserver(() => {
-        const el = document.querySelector<HTMLElement>(SELECTOR);
-        if (!el) return;
-        mutationObserver?.disconnect();
-        mutationObserver = null;
-        attach(el);
-      });
-      mutationObserver.observe(document.body, {
-        childList: true,
-        subtree: true,
-      });
-    }
+    sync();
+    // The container can mount after this hook (e.g. a root-level consumer
+    // renders before the auth shell reveals the chrome), and a navigation to
+    // another chrome replaces it. Check once per frame of DOM changes.
+    const mutationObserver = new MutationObserver(() => {
+      if (frame === 0) frame = requestAnimationFrame(sync);
+    });
+    mutationObserver.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
 
     return () => {
-      resizeObserver?.disconnect();
-      mutationObserver?.disconnect();
+      mutationObserver.disconnect();
+      cancelAnimationFrame(frame);
     };
-  }, [pathname]);
+  }, []);
+
+  useEffect(() => {
+    if (!container) return;
+
+    const update = () => setRect(measure(container) ?? NULL_MEASURE);
+    update();
+
+    const resizeObserver = new ResizeObserver(update);
+    resizeObserver.observe(container);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [container]);
 
   return {
     centerX: isMediumScreen ? null : rect.x,
     centerY: isMediumScreen ? null : rect.y,
     left: isMediumScreen ? null : rect.left,
+    inlineStart: isMediumScreen ? null : rect.inlineStart,
     hasContainerCenter: isMediumScreen
       ? false
       : rect.x !== null && rect.y !== null,

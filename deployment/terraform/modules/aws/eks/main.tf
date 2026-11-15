@@ -1,4 +1,37 @@
+# The Craft sandbox node group's map key was `craft_sandbox`; it is now
+# `sandbox`. The key is part of the upstream module's instance address, so
+# without this the group is destroyed and recreated, evicting its workloads.
+moved {
+  from = module.eks.module.eks_managed_node_group["craft_sandbox"]
+  to   = module.eks.module.eks_managed_node_group["sandbox"]
+}
+
+# Upstream v21 dropped enable_security_groups_for_pods (default true in v20),
+# so the cluster role keeps this policy through iam_role_additional_policies.
+moved {
+  from = module.eks.aws_iam_role_policy_attachment.this["AmazonEKSVPCResourceController"]
+  to   = module.eks.aws_iam_role_policy_attachment.additional["AmazonEKSVPCResourceController"]
+}
+
 locals {
+  # Upstream v21 changed these node group defaults. Pin the v20 values so the
+  # upgrade does not roll nodes, change AMIs or resize groups. A node group can
+  # still override any of them.
+  node_group_defaults = merge(
+    {
+      ami_type                       = "AL2023_x86_64_STANDARD"
+      enable_monitoring              = true
+      use_latest_ami_release_version = false
+      enable_efa_only                = false
+      metadata_options = {
+        http_endpoint               = "enabled"
+        http_tokens                 = "required"
+        http_put_response_hop_limit = 2
+      }
+    },
+    local.node_group_iam_role_settings,
+  )
+
   s3_bucket_arns = [for name in var.s3_bucket_names : {
     bucket_arn     = "arn:aws:s3:::${name}"
     bucket_objects = "arn:aws:s3:::${name}/*"
@@ -9,6 +42,63 @@ locals {
     (var.enable_rds_iam_for_service_account && var.rds_db_connect_arn != null)
   )
 
+  # Settings for every IAM role the upstream modules create. Only keys that are
+  # set, so leaving both inputs unset renders exactly the previous config.
+  node_group_iam_role_settings = {
+    for k, v in {
+      iam_role_permissions_boundary = var.iam_role_permissions_boundary
+      iam_role_path                 = var.iam_role_path
+    } : k => v if v != null
+  }
+  addon_iam_role_settings = {
+    for k, v in {
+      role_permissions_boundary_arn = var.iam_role_permissions_boundary
+      role_path                     = var.iam_role_path
+    } : k => v if v != null
+  }
+
+  # The module's default chart 1.7.1 (controller v2.7.1) strips the native preStop
+  # sleep the onyx chart sets, so api and web pods fail admission once the namespace
+  # has the readiness-gate label. Its bundled IAM policy predates the actions below,
+  # scoped as in the controller's docs/install/iam_policy.json.
+  aws_load_balancer_controller_settings = merge(local.addon_iam_role_settings, {
+    chart_version = "3.6.2"
+    policy_statements = [
+      {
+        sid = "ControllerDescribeSinceModulePolicy"
+        actions = [
+          "ec2:DescribeIpamPools",
+          "ec2:DescribeRouteTables",
+          "ec2:GetSecurityGroupsForVpc",
+          "elasticloadbalancing:DescribeCapacityReservation",
+          "elasticloadbalancing:DescribeListenerAttributes",
+        ]
+        resources = ["*"]
+      },
+      {
+        sid = "ControllerModifyOwnedSinceModulePolicy"
+        actions = [
+          "elasticloadbalancing:ModifyCapacityReservation",
+          "elasticloadbalancing:ModifyIpPools",
+          "elasticloadbalancing:ModifyListenerAttributes",
+        ]
+        resources = ["*"]
+        conditions = [
+          {
+            test     = "Null"
+            variable = "aws:ResourceTag/elbv2.k8s.aws/cluster"
+            values   = ["false"]
+          },
+        ]
+      },
+      {
+        sid       = "ControllerListenerRulesSinceModulePolicy"
+        actions   = ["elasticloadbalancing:SetRulePriorities"]
+        resources = ["*"]
+      },
+    ]
+  })
+
   workload_irsa_service_account_subjects = [
     for service_account_name in distinct(concat(
       [var.irsa_service_account_name],
@@ -17,32 +107,100 @@ locals {
     "system:serviceaccount:${var.irsa_service_account_namespace}:${service_account_name}"
   ]
 
-  # Optional dedicated node group for sandbox pods (nodeSelector/toleration below).
+  # Optional dedicated GPU node group for the embedding model server.
+  # Tainted so ONLY pods that tolerate nvidia.com/gpu (the model pod) land here,
+  # and uses the EKS NVIDIA accelerated AMI which ships the GPU driver + runtime.
+  gpu_node_groups = var.enable_gpu_node ? {
+    gpu = {
+      name           = "gpu-node-group"
+      instance_types = var.gpu_node_instance_types
+      ami_type       = "AL2023_x86_64_NVIDIA"
+      min_size       = 1
+      max_size       = 1
+      labels = {
+        "onyx.app/gpu" = "true"
+      }
+      taints = [
+        {
+          key    = "nvidia.com/gpu"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }
+      ]
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = 100
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+            iops                  = 3000
+            throughput            = 125
+          }
+        }
+      }
+    }
+  } : {}
+
+  craft_sandbox_firecracker       = var.craft_sandbox_runtime == "firecracker"
+  craft_firecracker_max_map_count = 1048576
+  craft_firecracker_sysctl_script = <<-EOT
+    #!/bin/bash
+    set -euo pipefail
+    echo "vm.max_map_count = ${local.craft_firecracker_max_map_count}" > /etc/sysctl.d/99-onyx-firecracker.conf
+    sysctl -w vm.max_map_count=${local.craft_firecracker_max_map_count}
+  EOT
+  craft_sandbox_metal = alltrue([
+    for t in var.craft_sandbox_node_instance_types : strcontains(t, ".metal")
+  ])
+
+  craft_sandbox_workload_taint = {
+    key    = "workload"
+    value  = "sandbox"
+    effect = "NO_SCHEDULE"
+  }
+  craft_sandbox_metadata_options = {
+    http_endpoint               = "enabled"
+    http_tokens                 = "required"
+    http_put_response_hop_limit = 1
+  }
+  # cluster-autoscaler auto-discovery: tag the node group's ASG so demand
+  # beyond min_size adds nodes (and scales back down when idle).
+  craft_sandbox_autoscaler_tags = {
+    "k8s.io/cluster-autoscaler/enabled"             = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+  }
+
+  # Optional dedicated Craft sandbox node group. Sandbox pods pin here
+  # via nodeSelector onyx.app/workload=sandbox + toleration of the workload taint.
   # IMDSv2 hop-limit 1 blocks sandboxed containers from the node metadata service.
+  # The root disk is sized via craft_sandbox_node_disk_size_gb so ephemeral-storage
+  # stops being the binding scheduling dimension (each sandbox pod reserves ~5.5Gi
+  # eph; the AMI default ~20Gi caps a node at ~3 sandboxes vs ~7 by CPU).
   craft_sandbox_node_groups = var.enable_craft ? {
-    craft_sandbox = {
+    sandbox = merge({
       name           = "sandbox-node-group"
       instance_types = var.craft_sandbox_node_instance_types
       min_size       = var.craft_sandbox_node_min_size
       max_size       = var.craft_sandbox_node_max_size
       desired_size   = var.craft_sandbox_node_desired_size
-      # Keep the sandbox nodes on the upstream shared node security group only.
-      # Attaching the EKS primary cluster SG as well puts two
-      # kubernetes.io/cluster/<name>-tagged SGs on the same nodes, which breaks
-      # tag-based discovery in controllers such as AWS Load Balancer Controller.
-      labels = {
-        "onyx.app/workload" = "sandbox"
-      }
-      taints = [{
-        key    = "workload"
-        value  = "sandbox"
-        effect = "NO_SCHEDULE"
-      }]
-      metadata_options = {
-        http_endpoint               = "enabled"
-        http_tokens                 = "required"
-        http_put_response_hop_limit = 1
-      }
+      labels = merge(
+        { "onyx.app/workload" = "sandbox" },
+        local.craft_sandbox_firecracker ? { "onyx.app/kvm" = "true" } : {},
+      )
+      # Kubelet does not count microVM memory, so a Firecracker node also
+      # carries the onyx.app/kvm taint. Only the host agent and preflight
+      # tolerate it; pod sandboxes and the image prepuller stay off.
+      taints = concat(
+        [local.craft_sandbox_workload_taint],
+        local.craft_sandbox_firecracker ? [{
+          key    = "onyx.app/kvm"
+          value  = "true"
+          effect = "NO_SCHEDULE"
+        }] : [],
+      )
+      metadata_options = local.craft_sandbox_metadata_options
       block_device_mappings = {
         xvda = {
           device_name = "/dev/xvda"
@@ -51,54 +209,136 @@ locals {
             volume_type           = "gp3"
             encrypted             = true
             delete_on_termination = true
+            iops                  = var.craft_sandbox_node_disk_iops
+            throughput            = var.craft_sandbox_node_disk_throughput
           }
         }
       }
-      # cluster-autoscaler auto-discovery tags (inert unless cluster-autoscaler
-      # runs in the cluster). min_size stays >= 1 so the group never scales to
-      # zero: scaling back up from zero would also require node-template
-      # label/taint tags, which are not set here.
-      tags = {
-        "k8s.io/cluster-autoscaler/enabled"             = "true"
-        "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
+      tags = local.craft_sandbox_autoscaler_tags
+      },
+      # Firecracker needs /dev/kvm. Non-metal Intel types get it from nested
+      # virtualization on the launch template. A spot reclaim kills every
+      # microVM on the node, so the group stays on-demand.
+      local.craft_sandbox_firecracker ? { capacity_type = "ON_DEMAND" } : {},
+      local.craft_sandbox_firecracker ? {
+        # AL2023 ships vm.max_map_count 524288; the Firecracker host agent
+        # preflight needs 1048576.
+        cloudinit_pre_nodeadm = [{
+          content_type = "text/x-shellscript"
+          content      = local.craft_firecracker_sysctl_script
+        }]
+      } : {},
+      local.craft_sandbox_firecracker && !local.craft_sandbox_metal ? {
+        cpu_options = { nested_virtualization = "enabled" }
+      } : {},
+    )
+  } : {}
+
+  # Optional pod sandbox group beside a Firecracker group. It has the same
+  # label and taint as a pod-runtime sandbox group but no onyx.app/kvm, so pod
+  # sandboxes and the image prepuller land here and not on the KVM nodes.
+  craft_pod_sandbox_node_groups = var.enable_craft && var.enable_craft_pod_sandbox_node_group ? {
+    sandbox_pod = {
+      name             = "sandbox-pod-group"
+      instance_types   = var.craft_pod_sandbox_node_instance_types
+      min_size         = var.craft_pod_sandbox_node_min_size
+      max_size         = var.craft_pod_sandbox_node_max_size
+      desired_size     = var.craft_pod_sandbox_node_desired_size
+      labels           = { "onyx.app/workload" = "sandbox" }
+      taints           = [local.craft_sandbox_workload_taint]
+      metadata_options = local.craft_sandbox_metadata_options
+      block_device_mappings = {
+        xvda = {
+          device_name = "/dev/xvda"
+          ebs = {
+            volume_size           = var.craft_sandbox_node_disk_size_gb
+            volume_type           = "gp3"
+            encrypted             = true
+            delete_on_termination = true
+            iops                  = 3000
+            throughput            = 125
+          }
+        }
       }
+      tags = local.craft_sandbox_autoscaler_tags
     }
   } : {}
 }
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
-  version = "~> 20.0"
+  version = "~> 21.23"
 
-  cluster_name    = var.cluster_name
-  cluster_version = var.cluster_version
+  name               = var.cluster_name
+  kubernetes_version = var.cluster_version
 
-  vpc_id                                   = var.vpc_id
-  subnet_ids                               = var.subnet_ids
-  cluster_endpoint_public_access           = var.public_cluster_enabled
-  cluster_endpoint_private_access          = var.private_cluster_enabled
-  cluster_endpoint_public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
-  enable_cluster_creator_admin_permissions = true
+  vpc_id                       = var.vpc_id
+  subnet_ids                   = var.subnet_ids
+  endpoint_public_access       = var.public_cluster_enabled
+  endpoint_private_access      = var.private_cluster_enabled
+  endpoint_public_access_cidrs = var.cluster_endpoint_public_access_cidrs
+  # By default the cluster-admin access entry and the KMS key administrator
+  # are whoever runs Terraform, so an apply by a different principal moves
+  # them. cluster_admin_principal_arn pins both. It reuses the module's own
+  # cluster_creator / admin keys, so pinning the current principal plans no
+  # change.
+  enable_cluster_creator_admin_permissions = var.cluster_admin_principal_arn == null
+  access_entries = var.cluster_admin_principal_arn == null ? {} : {
+    cluster_creator = {
+      principal_arn = var.cluster_admin_principal_arn
+      type          = "STANDARD"
+      policy_associations = {
+        admin = {
+          policy_arn = "arn:${data.aws_partition.current.partition}:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = {
+            type = "cluster"
+          }
+        }
+      }
+    }
+  }
+  kms_key_administrators = var.cluster_admin_principal_arn == null ? [] : [var.cluster_admin_principal_arn]
 
-  # Control plane logging
-  cluster_enabled_log_types              = var.cluster_enabled_log_types
-  cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
-
-  eks_managed_node_group_defaults = {
-    ami_type = "AL2023_x86_64_STANDARD"
+  iam_role_permissions_boundary = var.iam_role_permissions_boundary
+  iam_role_path                 = var.iam_role_path
+  iam_role_additional_policies = {
+    AmazonEKSVPCResourceController = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonEKSVPCResourceController"
   }
 
-  eks_managed_node_groups = merge({
-    for k, v in var.eks_managed_node_groups : k => merge(v,
-      # (vespa group is skipped entirely when var.vespa_node_enabled is false — see the `if` at the end of this for-expression)
+  # Control plane logging
+  enabled_log_types                      = var.cluster_enabled_log_types
+  cloudwatch_log_group_retention_in_days = var.cloudwatch_log_group_retention_in_days
+
+  # Opt-in per cluster: adopts the VPC CNI addon and turns on NetworkPolicy
+  # enforcement. Off by default so existing clusters' NetworkPolicies stay
+  # inert (the cloud cluster has legacy policies of unknown effect).
+  addons = var.enable_network_policy ? {
+    vpc-cni = {
+      # Pin to the cluster's running CNI so adoption only flips enableNetworkPolicy.
+      addon_version = var.vpc_cni_addon_version
+      most_recent   = false
+      # PRESERVE keeps out-of-band aws-node settings; OVERWRITE on create is
+      # required to adopt the previously-unmanaged addon (PRESERVE isn't valid there).
+      resolve_conflicts_on_create = "OVERWRITE"
+      resolve_conflicts_on_update = "PRESERVE"
+      configuration_values = jsonencode({
+        enableNetworkPolicy = "true"
+      })
+    }
+  } : {}
+
+  eks_managed_node_groups = {
+    for k, v in merge(var.eks_managed_node_groups, local.gpu_node_groups, local.craft_sandbox_node_groups, local.craft_pod_sandbox_node_groups) : k => merge(local.node_group_defaults, v,
       {
         instance_types = v.instance_types != null ? v.instance_types : (
           k == "main" ? var.main_node_instance_types :
           k == "vespa" ? var.vespa_node_instance_types :
           v.instance_types
         )
+        # Upstream v21 takes taints as a map. Accept the list form too.
+        taints = try({ for i, t in tolist(v.taints) : tostring(i) => t }, v.taints, null)
       },
-      # Only add subnet_ids override for vespa node group if specified
+      # Only add subnet_ids override for the document-index node group if specified
       k == "vespa" && length(var.vespa_node_subnet_ids) > 0 ? {
         subnet_ids = var.vespa_node_subnet_ids
       } : {},
@@ -106,8 +346,9 @@ module "eks" {
       k == "main" && length(var.main_node_subnet_ids) > 0 ? {
         subnet_ids = var.main_node_subnet_ids
       } : {},
-      # Scaling-bound overrides for the main node group; null keeps the map
-      # default. desired_size must be >= min_size or the EKS API rejects the
+      # Override main node group scaling bounds (defaults preserve prior behavior).
+      # Raising min_size forces the cluster-autoscaler to keep an always-on
+      # baseline. desired_size must be >= min_size or the EKS API rejects the
       # node group at creation (the upstream module defaults desired to 1 and
       # ignores changes to it after create).
       k == "main" ? {
@@ -115,7 +356,7 @@ module "eks" {
         max_size     = coalesce(var.main_node_max_size, v.max_size)
         desired_size = try(v.desired_size, coalesce(var.main_node_min_size, v.min_size))
       } : {},
-      # Disk override for the Vespa/document-index node; null keeps the map
+      # Disk override for the document-index node; null keeps the map
       # default. Merge preserves any other device mappings on the group.
       k == "vespa" && var.vespa_node_disk_size_gb != null ? {
         block_device_mappings = merge(try(v.block_device_mappings, {}), {
@@ -129,12 +370,44 @@ module "eks" {
         })
       } : {}
     ) if k != "vespa" || var.vespa_node_enabled
-  }, local.craft_sandbox_node_groups)
+  }
 
   tags = var.tags
 }
 
+# NVIDIA device plugin: advertises nvidia.com/gpu on the GPU nodes so the
+# embedding model pod can request it. Tolerates the GPU taint and only runs on
+# nodes labeled onyx.app/gpu=true. Only created when the GPU node group exists.
+resource "helm_release" "nvidia_device_plugin" {
+  count = var.enable_gpu_node ? 1 : 0
+
+  name       = "nvidia-device-plugin"
+  repository = "https://nvidia.github.io/k8s-device-plugin"
+  chart      = "nvidia-device-plugin"
+  version    = "0.17.1"
+  namespace  = "kube-system"
+
+  # Null out the chart's default Node Feature Discovery affinity (we don't run
+  # NFD, so its pci-10de / nvidia.com/gpu.present requirements exclude our node).
+  # null (not {}) is required to actually override the chart default. Pin the
+  # plugin to our labeled, tainted GPU node via nodeSelector + toleration.
+  values = [<<-YAML
+    affinity: null
+    nodeSelector:
+      onyx.app/gpu: "true"
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+  YAML
+  ]
+
+  depends_on = [module.eks]
+}
+
 # https://aws.amazon.com/blogs/containers/amazon-ebs-csi-driver-is-now-generally-available-in-amazon-eks-add-ons/
+data "aws_partition" "current" {}
+
 data "aws_iam_policy" "ebs_csi_policy" {
   arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
 }
@@ -145,6 +418,8 @@ module "irsa-ebs-csi" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFEBSCSIRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = [data.aws_iam_policy.ebs_csi_policy.arn]
   oidc_fully_qualified_subjects = ["system:serviceaccount:kube-system:ebs-csi-controller-sa"]
@@ -199,7 +474,56 @@ module "eks_blueprints_addons" {
   enable_metrics_server               = true
   enable_cluster_autoscaler           = true
 
+  # The two add-ons above that create IRSA roles.
+  aws_load_balancer_controller = local.aws_load_balancer_controller_settings
+  cluster_autoscaler           = local.addon_iam_role_settings
+
   depends_on = [module.eks]
+}
+
+# Supplementary RBAC for the cluster-autoscaler: its chart's hardcoded
+# ClusterRole covers storageclasses/csinodes/csidrivers but NOT
+# volumeattachments (and exposes no values hook to extend it), so EBS-AZ-aware
+# scale-up fails with "cannot list volumeattachments" — a pod pending on an
+# AZ-locked volume never triggers a node in that AZ. NOTE: if these objects
+# were already created by hand on the cluster, import them before the first
+# apply:
+#   terraform import '...kubernetes_cluster_role.cluster_autoscaler_volumeattachments' onyx-cluster-autoscaler-volumeattachments
+#   terraform import '...kubernetes_cluster_role_binding.cluster_autoscaler_volumeattachments' onyx-cluster-autoscaler-volumeattachments
+resource "kubernetes_cluster_role" "cluster_autoscaler_volumeattachments" {
+  metadata {
+    name   = "onyx-cluster-autoscaler-volumeattachments"
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
+  }
+
+  rule {
+    api_groups = ["storage.k8s.io"]
+    resources  = ["volumeattachments"]
+    verbs      = ["list", "watch", "get"]
+  }
+
+  depends_on = [module.eks_blueprints_addons]
+}
+
+resource "kubernetes_cluster_role_binding" "cluster_autoscaler_volumeattachments" {
+  metadata {
+    name   = "onyx-cluster-autoscaler-volumeattachments"
+    labels = { "app.kubernetes.io/managed-by" = "terraform" }
+  }
+
+  role_ref {
+    api_group = "rbac.authorization.k8s.io"
+    kind      = "ClusterRole"
+    name      = kubernetes_cluster_role.cluster_autoscaler_volumeattachments.metadata[0].name
+  }
+
+  subject {
+    kind      = "ServiceAccount"
+    name      = "cluster-autoscaler-sa"
+    namespace = "kube-system"
+  }
+
+  depends_on = [module.eks_blueprints_addons]
 }
 
 # Create IAM policy for S3 access (optional)
@@ -235,6 +559,8 @@ module "irsa-workload-access" {
 
   create_role                   = true
   role_name                     = "AmazonEKSTFWorkloadAccessRole-${module.eks.cluster_name}"
+  role_path                     = coalesce(var.iam_role_path, "/")
+  role_permissions_boundary_arn = var.iam_role_permissions_boundary != null ? var.iam_role_permissions_boundary : ""
   provider_url                  = module.eks.oidc_provider
   role_policy_arns              = aws_iam_policy.s3_access_policy[*].arn
   oidc_fully_qualified_subjects = local.workload_irsa_service_account_subjects

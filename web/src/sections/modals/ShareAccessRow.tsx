@@ -104,18 +104,18 @@ export function ShareAccessRow({
   return (
     <div className="min-h-11 w-full rounded-12 bg-background-tint-01 px-1">
       <ContentAction
+        font="main-ui-action"
+        responsive
         description={description}
         icon={LeadingIcon}
-        padding="sm"
+        padding={1}
         rightChildren={
           <PermissionColumns
             rightChildren={rightChildren}
             trailing={trailing}
           />
         }
-        sizePreset="main-ui"
         title={title ?? ""}
-        variant="section"
       />
     </div>
   );

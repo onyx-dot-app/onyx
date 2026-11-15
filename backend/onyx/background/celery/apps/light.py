@@ -5,12 +5,6 @@ from celery.apps.worker import Worker
 from celery.signals import celeryd_init, worker_init, worker_ready, worker_shutdown
 
 import onyx.background.celery.apps.app_base as app_base
-from onyx.background.celery.celery_utils import httpx_init_vespa_pool
-from onyx.configs.app_configs import (
-    MANAGED_VESPA,
-    VESPA_CLOUD_CERT_PATH,
-    VESPA_CLOUD_KEY_PATH,
-)
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_LIGHT_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
 from onyx.server.metrics.celery_task_metrics import (
@@ -61,13 +55,17 @@ def on_task_postrun(
 
 @signals.task_retry.connect
 def on_task_retry(sender: Any | None = None, **kwargs: Any) -> None:  # noqa: ARG001
-    task_id = getattr(getattr(sender, "request", None), "id", None)
+    task_id = getattr(  # ods: ignore[getattr]
+        getattr(sender, "request", None),  # ods: ignore[getattr]
+        "id",
+        None,
+    )
     on_celery_task_retry(task_id, sender)
 
 
 @signals.task_revoked.connect
 def on_task_revoked(sender: Any | None = None, **kwargs: Any) -> None:
-    task_name = getattr(sender, "name", None) or str(sender)
+    task_name = getattr(sender, "name", None) or str(sender)  # ods: ignore[getattr]
     on_celery_task_revoked(kwargs.get("task_id"), task_name)
     app_base.on_task_revoked(**kwargs)
 
@@ -77,7 +75,7 @@ def on_task_rejected(sender: Any | None = None, **kwargs: Any) -> None:  # noqa:
     message = kwargs.get("message")
     task_name: str | None = None
     if message is not None:
-        headers = getattr(message, "headers", None) or {}
+        headers = getattr(message, "headers", None) or {}  # ods: ignore[getattr]
         task_name = headers.get("task")
     if task_name is None:
         task_name = "unknown"
@@ -105,17 +103,6 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
         pool_size=sender.concurrency,  # ty: ignore[unresolved-attribute]
         max_overflow=EXTRA_CONCURRENCY,
     )
-
-    if MANAGED_VESPA:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY,  # ty: ignore[unresolved-attribute]
-            ssl_cert=VESPA_CLOUD_CERT_PATH,
-            ssl_key=VESPA_CLOUD_KEY_PATH,
-        )
-    else:
-        httpx_init_vespa_pool(
-            sender.concurrency + EXTRA_CONCURRENCY  # ty: ignore[unresolved-attribute]
-        )
 
     app_base.wait_for_redis(sender, **kwargs)
     app_base.wait_for_db(sender, **kwargs)
@@ -156,11 +143,11 @@ celery_app.autodiscover_tasks(
             "onyx.background.celery.tasks.shared",
             "onyx.background.celery.tasks.vespa",
             "onyx.background.celery.tasks.connector_deletion",
+            "onyx.background.celery.tasks.index_reclaim",
             "onyx.background.celery.tasks.doc_permission_syncing",
             "onyx.background.celery.tasks.docprocessing",
-            "onyx.background.celery.tasks.opensearch_migration",
-            # Sandbox cleanup tasks (build feature)
-            "onyx.background.celery.tasks.build",
+            "onyx.background.celery.tasks.cc_pair_ids_backfill",
+            "onyx.background.celery.tasks.capability_checks",
         ]
     )
 )

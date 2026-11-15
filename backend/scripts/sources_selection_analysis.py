@@ -176,7 +176,9 @@ class CompareAnalysis:
                                 pos
                                 if content_key == "score"
                                 else {
-                                    "x": k for k, v in new_content.items() if v == data
+                                    "x": k  # noqa: B035
+                                    for k, v in new_content.items()
+                                    if v == data
                                 }.get("x", "not_ranked")
                             ),
                             "document_id": self._previous_content[pos]["document_id"],
@@ -318,8 +320,8 @@ class SelectionAnalysis:
     def __init__(
         self,
         exectype: str,
-        analysisfiles: list = [],
-        queries: list = [],
+        analysisfiles: list | None = None,
+        queries: list | None = None,
         threshold: float = 0.0,
         web_port: int = 3000,
         auth_cookie: str = "",
@@ -339,6 +341,10 @@ class SelectionAnalysis:
             wait (int, optional): The waiting time (in seconds) to respect between queries.
                                     It is helpful to avoid hitting the Generative AI rate limiting.
         """
+        if queries is None:
+            queries = []
+        if analysisfiles is None:
+            analysisfiles = []
         self._exectype = exectype
         self._analysisfiles = analysisfiles
         self._queries = queries
@@ -443,14 +449,13 @@ class SelectionAnalysis:
         Returns:
             dict: Data regarding the selected sources document
         """
-        return {
-            pos: doc
-            for pos, doc in enumerate(
+        return dict(
+            enumerate(
                 sorted(
                     contents["top_ranked_docs"], key=lambda d: d["score"], reverse=True
                 )[:5]
             )
-        }
+        )
 
     def save_analysisfile(self, content: list[dict]) -> Optional[str]:
         """Save the extracted content

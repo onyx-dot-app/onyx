@@ -100,6 +100,12 @@ def perform_ttl_management_task(
     if not owns_chain:
         return
 
+    # The chain carries the limit it started with, so a limit cleared since
+    # then has to end it here.
+    if load_settings().maximum_chat_retention_days is None:
+        _release_chain_if_owned(redis_client, chain_token)
+        return
+
     with get_session_with_current_tenant() as db_session:
         old_chat_sessions = get_chat_sessions_older_than(
             retention_limit_days, db_session, limit=CHAT_TTL_DELETE_BATCH_SIZE

@@ -7,10 +7,15 @@ in text to use the smallest possible numbers while respecting existing mappings.
 
 from datetime import datetime
 
-from onyx.chat.citation_processor import CitationMapping
-from onyx.chat.citation_utils import collapse_citations
+from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
+from onyx.chat.citation_utils import (
+    collapse_citations,
+    message_citation_sources,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
+from onyx.deep_research.models import ResearchAgentCallResult
+from onyx.llm.models import ToolResultMessage
 
 # ============================================================================
 # Helper Functions
@@ -482,3 +487,19 @@ class TestCollapseCitationsComplexScenarios:
         assert "[50]" not in result_text
         assert "[51]" not in result_text
         assert len(mapping) == 6
+
+
+def test_research_results_restore_sources_and_reserve_citation_numbers() -> None:
+    document = create_test_search_doc()
+    result = ToolResultMessage(
+        tool_call_id="research",
+        tool_name="research_agent",
+        content="Report [4]",
+        details=ResearchAgentCallResult(
+            intermediate_report="Report [4]", citation_mapping={4: document}
+        ),
+    )
+    processor = DynamicCitationProcessor()
+    processor.update_citation_mapping(message_citation_sources(result))
+    assert processor.citation_to_doc == {4: document}
+    assert processor.get_next_citation_number() == 5

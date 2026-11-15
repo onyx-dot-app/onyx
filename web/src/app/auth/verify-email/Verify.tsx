@@ -1,31 +1,32 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { Text } from "@opal/components";
 import { Spacer } from "@opal/components";
 import { RequestNewVerificationEmail } from "../waiting-on-verification/RequestNewVerificationEmail";
 import { User } from "@/lib/types";
-import { Logo } from "@/lib/app/components";
+import { FoldableLogo } from "@/lib/app/components";
 import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
+import { useTranslations } from "next-intl";
 
 export interface VerifyProps {
   user: User | null;
 }
 
 export default function Verify({ user }: VerifyProps) {
+  const t = useTranslations("auth");
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
 
   const [error, setError] = useState("");
 
   const verify = useCallback(async () => {
-    const token = searchParams?.get("token");
+    const token = searchParams.get("token");
     const firstUser =
-      searchParams?.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
+      searchParams.get("first_user") === "true" && NEXT_PUBLIC_CLOUD_ENABLED;
     if (!token) {
-      setError(
-        "Missing verification token. Try requesting a new verification email."
-      );
+      setError(t("verifyEmail.missingToken.error"));
       return;
     }
 
@@ -43,19 +44,17 @@ export default function Verify({ user }: VerifyProps) {
       const loginUrl = firstUser
         ? "/auth/login?verified=true&first_user=true"
         : "/auth/login?verified=true";
-      window.location.href = loginUrl;
+      navigation.load(loginUrl);
     } else {
-      let errorDetail = "unknown error";
+      let errorDetail = t("verifyEmail.unknownError.text");
       try {
         errorDetail = (await response.json()).detail;
       } catch (e) {
         console.error("Failed to parse verification error response:", e);
       }
-      setError(
-        `Failed to verify your email - ${errorDetail}. Please try requesting a new verification email.`
-      );
+      setError(t("verifyEmail.verificationFailed.error", { errorDetail }));
     }
-  }, [searchParams]);
+  }, [searchParams, t, navigation]);
 
   useEffect(() => {
     verify();
@@ -64,11 +63,15 @@ export default function Verify({ user }: VerifyProps) {
   return (
     <main>
       <div className="min-h-screen flex flex-col items-center justify-center py-12 px-4 sm:px-6 lg:px-8">
-        <Logo folded size={64} className="mx-auto w-fit animate-pulse" />
+        <FoldableLogo
+          folded
+          size={64}
+          className="mx-auto w-fit animate-pulse"
+        />
         {!error ? (
           <>
             <Spacer rem={0.5} />
-            <Text as="p">Verifying your email...</Text>
+            <Text as="p">{t("verifyEmail.verifying.text")}</Text>
           </>
         ) : (
           <div>
@@ -80,7 +83,7 @@ export default function Verify({ user }: VerifyProps) {
                 <RequestNewVerificationEmail email={user.email}>
                   {/* TODO(@raunakab): migrate to @opal/components Text */}
                   <p className="text-sm mt-2 text-link">
-                    Get new verification email
+                    {t("verifyEmail.getNewEmailLink.label")}
                   </p>
                 </RequestNewVerificationEmail>
               </div>

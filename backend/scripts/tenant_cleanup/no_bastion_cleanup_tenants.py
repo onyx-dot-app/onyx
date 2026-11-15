@@ -24,13 +24,20 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 
+from scripts.tenant_cleanup.activity_utils import (
+    DEFAULT_INACTIVE_DAYS,
+    get_last_activity_time,
+)
 from scripts.tenant_cleanup.no_bastion_cleanup_utils import (
     TenantNotFoundInControlPlaneError,
+    TenantRecentlyActiveError,
     confirm_step,
     execute_control_plane_delete,
     find_background_pod,
     find_worker_pod,
     get_tenant_status,
+    parse_pod_overrides,
+    positional_tenant_id,
     read_tenant_ids_from_csv,
     validate_tenant_id,
 )
@@ -63,6 +70,10 @@ def setup_scripts_on_pod(pod_name: str, context: str) -> None:
         ("on_pod_scripts/cleanup_tenant_schema.py", "/tmp/cleanup_tenant_schema.py"),
         ("on_pod_scripts/get_tenant_users.py", "/tmp/get_tenant_users.py"),
         ("on_pod_scripts/get_tenant_index_name.py", "/tmp/get_tenant_index_name.py"),
+        (
+            "on_pod_scripts/check_tenant_activity.py",
+            "/tmp/check_tenant_activity.py",
+        ),
     ]
 
     for local_path, remote_path in scripts_to_copy:
@@ -221,6 +232,58 @@ def get_tenant_users(pod_name: str, tenant_id: str, context: str) -> list[str]:
     except Exception as e:
         print(f"⚠ Failed to get users for tenant {tenant_id}: {e}")
         return []
+
+
+def check_tenant_still_inactive(
+    pod_name: str, tenant_id: str, context: str, inactive_days: int
+) -> None:
+    """Re-read activity at deletion time and refuse a tenant that has become active.
+
+    The CSV comes from an analyze pass that may be days old, and the control plane
+    status check alone would not notice a tenant that started being used since.
+
+    Raises:
+        RuntimeError: if the tenant has chat or Craft activity inside the window.
+    """
+    result = subprocess.run(
+        [
+            "kubectl",
+            "exec",
+            "--context",
+            context,
+            pod_name,
+            "--",
+            "python",
+            "/tmp/check_tenant_activity.py",
+            tenant_id,
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    data = json.loads(result.stdout)
+
+    if data.get("status") == "not_found":
+        print("✓ Schema no longer present; nothing to re-check")
+        return
+    if data.get("status") != "success":
+        raise RuntimeError(f"Activity check failed: {data.get('message')}")
+
+    last_activity = get_last_activity_time(data)
+    if last_activity is None:
+        print("✓ No chat or Craft activity on record")
+        return
+
+    age_days = (datetime.now(timezone.utc) - last_activity).days
+    if age_days < inactive_days:
+        raise TenantRecentlyActiveError(
+            f"Tenant was active {age_days} days ago "
+            f"({last_activity.isoformat()}), inside the {inactive_days} day window. "
+            "The CSV is stale; re-run the analyze step."
+        )
+    print(
+        f"✓ Last activity {age_days} days ago, outside the {inactive_days} day window"
+    )
 
 
 def check_documents_deleted(pod_name: str, tenant_id: str, context: str) -> None:
@@ -411,6 +474,7 @@ def cleanup_tenant(
     data_plane_context: str,
     control_plane_context: str,
     force: bool = False,
+    inactive_days: int = DEFAULT_INACTIVE_DAYS,
 ) -> bool:
     """Main cleanup function that orchestrates all cleanup steps.
 
@@ -529,6 +593,17 @@ def cleanup_tenant(
         f"Step 2/3: Drop data plane schema '{tenant_id}' (CASCADE - will delete all tables, functions, etc.)",
         force,
     ):
+        # Re-read activity as late as possible. The CSV comes from an analyze pass
+        # that may be days old, and tenant status alone does not show renewed use.
+        # Infrastructure failures propagate; only a genuinely active tenant is a skip.
+        try:
+            check_tenant_still_inactive(
+                data_plane_pod, tenant_id, data_plane_context, inactive_days
+            )
+        except TenantRecentlyActiveError as e:
+            print(f"✗ Skipping tenant {tenant_id}: {e}", file=sys.stderr)
+            return False
+
         try:
             drop_data_plane_schema(data_plane_pod, tenant_id, data_plane_context)
         except Exception as e:
@@ -629,6 +704,21 @@ def main() -> None:
 
     # Parse concurrency
     concurrency: int = 1
+    inactive_days = DEFAULT_INACTIVE_DAYS
+    if "--inactive-days" in sys.argv:
+        idx = sys.argv.index("--inactive-days")
+        if idx + 1 >= len(sys.argv):
+            print("Error: --inactive-days requires a value", file=sys.stderr)
+            sys.exit(1)
+        try:
+            inactive_days = int(sys.argv[idx + 1])
+        except ValueError:
+            print("Error: --inactive-days must be an integer", file=sys.stderr)
+            sys.exit(1)
+        if inactive_days < 1:
+            print("Error: --inactive-days must be at least 1", file=sys.stderr)
+            sys.exit(1)
+
     if "--concurrency" in sys.argv:
         try:
             concurrency_index = sys.argv.index("--concurrency")
@@ -683,21 +773,7 @@ def main() -> None:
 
     # Pinning pods lets several batches run against different pods instead of all
     # piling onto whichever one the random pick returns.
-    data_plane_pod_override = None
-    control_plane_pod_override = None
-    for flag, target in (
-        ("--data-plane-pod", "data"),
-        ("--control-plane-pod", "control"),
-    ):
-        if flag in sys.argv:
-            idx = sys.argv.index(flag)
-            if idx + 1 >= len(sys.argv):
-                print(f"Error: {flag} requires a pod name", file=sys.stderr)
-                sys.exit(1)
-            if target == "data":
-                data_plane_pod_override = sys.argv[idx + 1]
-            else:
-                control_plane_pod_override = sys.argv[idx + 1]
+    data_plane_pod_override, control_plane_pod_override = parse_pod_overrides(sys.argv)
 
     # Validate required contexts
     if not data_plane_context:
@@ -736,7 +812,11 @@ def main() -> None:
             sys.exit(1)
     else:
         # Single tenant mode
-        tenant_ids = [sys.argv[1]]
+        single_tenant_id = positional_tenant_id(sys.argv)
+        if not single_tenant_id:
+            print("Error: no tenant id given", file=sys.stderr)
+            sys.exit(1)
+        tenant_ids = [single_tenant_id]
 
     # Initial confirmation (unless --force is used)
     if not force:
@@ -771,7 +851,7 @@ def main() -> None:
 
     # Find pods in both clusters before processing
     try:
-        if data_plane_pod_override:
+        if data_plane_pod_override is not None:
             data_plane_pod = data_plane_pod_override
             print(f"✓ Using pinned data plane worker pod: {data_plane_pod}")
         else:
@@ -779,7 +859,7 @@ def main() -> None:
             data_plane_pod = find_worker_pod(data_plane_context)
             print(f"✓ Using data plane worker pod: {data_plane_pod}")
 
-        if control_plane_pod_override:
+        if control_plane_pod_override is not None:
             control_plane_pod = control_plane_pod_override
             print(f"✓ Using pinned control plane pod: {control_plane_pod}\n")
         else:
@@ -835,6 +915,7 @@ def main() -> None:
                         data_plane_context,
                         control_plane_context,
                         force,
+                        inactive_days,
                     )
 
                     if was_cleaned:
@@ -879,6 +960,7 @@ def main() -> None:
                         data_plane_context,
                         control_plane_context,
                         force,
+                        inactive_days,
                     )
                     return (tenant_id, was_cleaned, None)
                 except Exception as e:

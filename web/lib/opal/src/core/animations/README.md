@@ -6,25 +6,26 @@ Provides coordinated hover-state animations across a group of elements. A `Hover
 
 ## Sub-components
 
-| Sub-component | Role |
-|---|---|
-| `Hoverable.Root` | Wraps a group of items. Tracks mouse enter/leave and provides hover state via context. |
+| Sub-component    | Role                                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Hoverable.Root` | Wraps a group of items. Tracks mouse enter/leave and provides hover state via context.                                                           |
 | `Hoverable.Item` | Reads hover state from its group's context. Applies a CSS class (`opal-hoverable-item`) with variant-specific transitions (e.g. opacity, scale). |
 
 ## Props
 
 ### Hoverable.Root
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
+| Prop    | Type     | Default     | Description                                |
+| ------- | -------- | ----------- | ------------------------------------------ |
 | `group` | `string` | `"default"` | Named group for independent hover tracking |
 
 ### Hoverable.Item
 
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `group` | `string` | `"default"` | Which group to listen to |
-| `variant` | `HoverableItemVariant` | `"fade"` | Animation variant |
+| Prop      | Type                   | Default     | Description              |
+| --------- | ---------------------- | ----------- | ------------------------ |
+| `group`   | `string`               | `"default"` | Which group to listen to |
+| `variant` | `HoverableItemVariant` | `"fade"`    | Animation variant        |
+| `revealed` | `boolean`             | `false`     | Shows the item whatever the hover state, e.g. a toggle that stays visible while on. Keeps the tree's shape, so children keep their state and transitions |
 
 ## Usage
 
@@ -37,5 +38,5 @@ import { Hoverable } from "@opal/core";
       <span>Appears on hover</span>
     </Hoverable.Item>
   </div>
-</Hoverable.Root>
+</Hoverable.Root>;
 ```

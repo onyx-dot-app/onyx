@@ -1,10 +1,8 @@
 """Test bulk invite limit for free trial tenants."""
 
-import json
 import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -13,6 +11,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import EmailInviteStatus, UserByEmail
 from onyx.server.manage.users import bulk_invite_users, remove_invited_user
+from tests.utils.audit import audit_events
 
 
 def _make_shared_session_mock(next_total: int) -> MagicMock:
@@ -159,11 +158,7 @@ def test_bulk_invite_emits_user_create(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         bulk_invite_users(emails=["new@example.com"], current_user=admin)
 
-    events: list[dict[str, Any]] = [
-        json.loads(r.getMessage())
-        for r in caplog.records
-        if r.name.startswith("onyx.audit")
-    ]
+    events = audit_events(caplog)
     assert len(events) == 1
     assert events[0]["action"] == "user.create"
     assert events[0]["outcome"] == "success"
@@ -195,8 +190,7 @@ def test_bulk_invite_reinvite_emits_nothing(
     with caplog.at_level(logging.INFO, logger="onyx.audit"):
         bulk_invite_users(emails=["known@example.com"], current_user=MagicMock())
 
-    events = [r for r in caplog.records if r.name.startswith("onyx.audit")]
-    assert events == []
+    assert audit_events(caplog) == []
 
 
 @_with_common_patches

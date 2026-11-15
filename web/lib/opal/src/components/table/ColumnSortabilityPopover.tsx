@@ -11,6 +11,7 @@ import { Button, Divider, LineItemButton, Text } from "@opal/components";
 import { useTableSize } from "@opal/components/table/TableSizeContext";
 import { SvgArrowUpDown, SvgSortOrder, SvgCheck } from "@opal/icons";
 import { Popover } from "@opal/components/popover/components";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Popover UI
@@ -20,18 +21,15 @@ interface SortingPopoverProps<TData extends RowData = RowData> {
   table: Table<TData>;
   sorting: SortingState;
   footerText?: string;
-  ascendingLabel?: string;
-  descendingLabel?: string;
 }
 
 function SortingPopover<TData extends RowData>({
   table,
   sorting,
   footerText,
-  ascendingLabel = "Ascending",
-  descendingLabel = "Descending",
 }: SortingPopoverProps<TData>) {
   const size = useTableSize();
+  const strings = useOpalStrings();
   const [open, setOpen] = useState(false);
   const sortableColumns = table
     .getAllLeafColumns()
@@ -45,13 +43,13 @@ function SortingPopover<TData extends RowData>({
         <Button
           icon={currentSort === null ? SvgArrowUpDown : SvgSortOrder}
           interaction={open ? "hover" : "rest"}
-          size={size === "md" ? "sm" : "md"}
+          size={size === 2.25 ? "sm" : "md"}
           prominence="tertiary"
-          tooltip="Sort"
+          tooltip={strings.sort}
         />
       </Popover.Trigger>
 
-      <Popover.Content width="lg" align="end" side="bottom">
+      <Popover.Content width={60} align="end" side="bottom">
         <Popover.Menu
           footer={
             footerText ? (
@@ -63,13 +61,13 @@ function SortingPopover<TData extends RowData>({
             ) : undefined
           }
         >
-          <Divider title="Sort by" />
+          <Divider title={strings.sortBy} />
 
           <LineItemButton
+            font="main-ui-action"
             selectVariant="select-heavy"
             state={currentSort === null ? "selected" : "empty"}
-            title="Manual Ordering"
-            sizePreset="main-ui"
+            title={strings.manualOrdering}
             rightChildren={
               currentSort === null ? (
                 <SvgCheck size={16} className="text-action-selection-05" />
@@ -89,11 +87,11 @@ function SortingPopover<TData extends RowData>({
 
             return (
               <LineItemButton
+                font="main-ui-action"
                 key={column.id}
                 selectVariant="select-heavy"
                 state={isSorted ? "selected" : "empty"}
                 title={label}
-                sizePreset="main-ui"
                 rightChildren={
                   isSorted ? (
                     <SvgCheck size={16} className="text-action-selection-05" />
@@ -112,13 +110,13 @@ function SortingPopover<TData extends RowData>({
 
           {currentSort !== null && (
             <>
-              <Divider title="Sorting Order" />
+              <Divider title={strings.sortingOrder} />
 
               <LineItemButton
+                font="main-ui-action"
                 selectVariant="select-heavy"
                 state={!currentSort.desc ? "selected" : "empty"}
-                title={ascendingLabel}
-                sizePreset="main-ui"
+                title={strings.ascending}
                 rightChildren={
                   !currentSort.desc ? (
                     <SvgCheck size={16} className="text-action-selection-05" />
@@ -130,10 +128,10 @@ function SortingPopover<TData extends RowData>({
               />
 
               <LineItemButton
+                font="main-ui-action"
                 selectVariant="select-heavy"
                 state={currentSort.desc ? "selected" : "empty"}
-                title={descendingLabel}
-                sizePreset="main-ui"
+                title={strings.descending}
                 rightChildren={
                   currentSort.desc ? (
                     <SvgCheck size={16} className="text-action-selection-05" />
@@ -157,8 +155,6 @@ function SortingPopover<TData extends RowData>({
 
 interface CreateSortingColumnOptions {
   footerText?: string;
-  ascendingLabel?: string;
-  descendingLabel?: string;
 }
 
 function createSortingColumn<TData>(
@@ -175,8 +171,6 @@ function createSortingColumn<TData>(
         table={table}
         sorting={table.getState().sorting}
         footerText={options?.footerText}
-        ascendingLabel={options?.ascendingLabel}
-        descendingLabel={options?.descendingLabel}
       />
     ),
     cell: () => null,

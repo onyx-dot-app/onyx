@@ -10,17 +10,42 @@ import type {
   SizeVariants,
   WithoutStyles,
 } from "@opal/types";
-import { Button } from "@opal/components";
+import type { ContentColor } from "@opal/layouts/content/components";
+import { Button, ShadowDiv, Tooltip } from "@opal/components";
 import { Content, Section, type SectionProps } from "@opal/layouts";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import { SvgX } from "@opal/icons";
 import useContainerCenter from "@opal/hooks/useContainerCenter";
+import { useModalOwner } from "@opal/components/modal/context";
+import { useOpalStrings } from "@opal/strings";
 
 // ---------------------------------------------------------------------------
 // Root + Overlay
 // ---------------------------------------------------------------------------
 
-const ModalRoot = DialogPrimitive.Root;
+type ModalRootProps = React.ComponentProps<typeof DialogPrimitive.Root>;
+
+/**
+ * Radix's root. Under a `useCreateModal` owner that is closing, it closes
+ * too, so the modal animates out before the owner unmounts it.
+ */
+function ModalRoot({ open, ...props }: ModalRootProps) {
+  const owner = useModalOwner();
+  return (
+    <DialogPrimitive.Root
+      open={owner && !owner.isOpen ? false : open}
+      {...props}
+    />
+  );
+}
+
+/** Registers the card with its owner, which unmounts once no card is left. */
+function ModalExitSignal() {
+  // A stable store method, so this runs only on mount and unmount.
+  const registerCard = useModalOwner()?.registerCard;
+  React.useEffect(() => registerCard?.(), [registerCard]);
+  return null;
+}
 
 interface ModalOverlayProps extends WithoutStyles<
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
@@ -35,6 +60,15 @@ function ModalOverlay({ ref, ...props }: ModalOverlayProps) {
       className="opal-modal-overlay"
       {...props}
     />
+  );
+}
+
+/** A persistent backdrop for flows that switch between Content screens. */
+function ModalBackdrop() {
+  return (
+    <DialogPrimitive.Portal>
+      <ModalOverlay />
+    </DialogPrimitive.Portal>
   );
 }
 
@@ -73,12 +107,8 @@ interface ModalContentProps extends WithoutStyles<
 
   width?: ModalWidth;
   height?: ModalHeight;
-
-  /**
-   * Vertical placement. `"center"` (default) centers in the viewport.
-   * `"top"` pins the modal near the top, the command-menu position.
-   */
-  position?: "center" | "top";
+  /** CSS length limiting the modal height, within the available viewport. */
+  maxHeight?: string;
 
   /**
    * Two-stage close guard: once the user has typed into any text input in
@@ -98,12 +128,20 @@ interface ModalContentProps extends WithoutStyles<
   bottomSlot?: React.ReactNode;
 }
 
+/** A toast sits outside the dialog, but using it must not close the modal. */
+function isToastEvent(e: Event): boolean {
+  return (
+    e.target instanceof Element &&
+    e.target.closest(".opal-toast-viewport") !== null
+  );
+}
+
 function ModalContent({
   ref,
   children,
   width = "xl",
   height = "fit",
-  position = "center",
+  maxHeight,
   preventAccidentalClose = true,
   skipOverlay = false,
   background = "default",
@@ -147,26 +185,18 @@ function ModalContent({
     hasUserTypedRef.current = true;
   }, []);
 
-  const containerNodeRef = React.useRef<HTMLDivElement | null>(null);
-
-  const contentRef = React.useCallback(
-    (node: HTMLDivElement | null) => {
-      if (containerNodeRef.current) {
-        containerNodeRef.current.removeEventListener(
-          "input",
-          handleInput,
-          true
-        );
-      }
-      if (node) {
-        node.addEventListener("input", handleInput, true);
-        containerNodeRef.current = node;
-      } else {
-        containerNodeRef.current = null;
-      }
-    },
-    [handleInput]
+  const [contentNode, setContentNode] = React.useState<HTMLDivElement | null>(
+    null
   );
+
+  React.useEffect(() => {
+    if (!contentNode) return;
+
+    contentNode.addEventListener("input", handleInput, true);
+    return () => {
+      contentNode.removeEventListener("input", handleInput, true);
+    };
+  }, [contentNode, handleInput]);
 
   const handleInteractOutside = React.useCallback(
     (e: Event) => {
@@ -198,37 +228,31 @@ function ModalContent({
       } else if (ref) {
         ref.current = node;
       }
-      contentRef(node);
+      setContentNode(node);
     },
-    [ref, contentRef]
+    [ref]
   );
 
-  // Center on [data-main-container] when present (the content area beside
-  // the sidebar) instead of the viewport.
-  const { centerX, centerY, hasContainerCenter } = useContainerCenter();
+  // Center horizontally on [data-main-container] when present (the content
+  // area beside the sidebar) instead of the viewport.
+  const { centerX, hasContainerCenter } = useContainerCenter();
 
-  const isTop = position === "top";
+  const containerStyle: React.CSSProperties | undefined = hasContainerCenter
+    ? ({
+        left: centerX,
+        "--tw-enter-translate-x": "-50%",
+        "--tw-exit-translate-x": "-50%",
+      } as React.CSSProperties)
+    : undefined;
 
-  const containerStyle: React.CSSProperties | undefined =
-    hasContainerCenter && !isTop
-      ? ({
-          left: centerX,
-          top: centerY,
-          "--tw-enter-translate-x": "-50%",
-          "--tw-exit-translate-x": "-50%",
-          "--tw-enter-translate-y": "-50%",
-          "--tw-exit-translate-y": "-50%",
-        } as React.CSSProperties)
-      : hasContainerCenter && isTop
-        ? ({
-            left: centerX,
-            "--tw-enter-translate-x": "-50%",
-            "--tw-exit-translate-x": "-50%",
-          } as React.CSSProperties)
-        : undefined;
+  const positionerStyle = maxHeight
+    ? {
+        ...containerStyle,
+        maxHeight: `min(${maxHeight}, var(--opal-modal-available-height))`,
+      }
+    : containerStyle;
 
   const positionerData = {
-    "data-position": position,
     "data-width": width,
     ...(!hasContainerCenter && { "data-viewport-centered": "" }),
   };
@@ -259,8 +283,28 @@ function ModalContent({
         >
       >[0]
     ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
       handleInteractOutside(e);
       props.onPointerDownOutside?.(e);
+    },
+    // Covers focus moving out too, e.g. onto a toast's close button.
+    onInteractOutside: (
+      e: Parameters<
+        NonNullable<
+          React.ComponentPropsWithoutRef<
+            typeof DialogPrimitive.Content
+          >["onInteractOutside"]
+        >
+      >[0]
+    ) => {
+      if (isToastEvent(e)) {
+        e.preventDefault();
+        return;
+      }
+      props.onInteractOutside?.(e);
     },
   };
 
@@ -280,7 +324,7 @@ function ModalContent({
             {...dialogEventHandlers}
           >
             <div
-              style={containerStyle}
+              style={positionerStyle}
               className="opal-modal-positioner opal-modal-stack"
               {...positionerData}
             >
@@ -292,12 +336,13 @@ function ModalContent({
                 {children}
               </div>
               <div className="opal-modal-bottom-slot">{bottomSlot}</div>
+              <ModalExitSignal />
             </div>
           </DialogPrimitive.Content>
         ) : (
           <DialogPrimitive.Content
             ref={handleRef}
-            style={containerStyle}
+            style={positionerStyle}
             className="opal-modal-positioner opal-modal-card"
             data-height={height}
             data-background={background}
@@ -305,6 +350,7 @@ function ModalContent({
             {...dialogEventHandlers}
           >
             {children}
+            <ModalExitSignal />
           </DialogPrimitive.Content>
         )}
       </DialogPrimitive.Portal>
@@ -326,6 +372,8 @@ interface ModalHeaderProps extends Omit<WithoutStyles<SectionProps>, "title"> {
   icon?: IconFunctionComponent;
   moreIcon1?: IconFunctionComponent;
   moreIcon2?: IconFunctionComponent;
+  /** Colour of the icon and title, as on `Content`. */
+  color?: ContentColor;
   title: string | RichStr;
   description?: string | RichStr;
   onClose?: () => void;
@@ -336,17 +384,30 @@ function ModalHeader({
   icon,
   moreIcon1,
   moreIcon2,
+  color,
   title,
   description,
   onClose,
   children,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  padding = 2,
+  alignItems = "start",
+  height = "fit",
   ...props
 }: ModalHeaderProps) {
   const { closeButtonRef, setHasDescription } = useModalContext();
+  const strings = useOpalStrings();
 
   React.useLayoutEffect(() => {
     setHasDescription(!!description);
   }, [description, setHasDescription]);
+
+  const [pointerOverClose, setPointerOverClose] = React.useState(false);
 
   const closeButton = onClose && (
     <div
@@ -354,39 +415,57 @@ function ModalHeader({
       ref={closeButtonRef as React.RefObject<HTMLDivElement>}
       className="opal-modal-close-focus"
     >
-      <DialogPrimitive.Close asChild>
-        <Button
-          aria-label="Close"
-          icon={SvgX}
-          prominence="tertiary"
-          size="sm"
-          onClick={onClose}
-        />
-      </DialogPrimitive.Close>
+      {/* Pointer-only tooltip: an open tooltip takes the first Escape, so a
+          tooltip on the auto-focused close button would stop Escape from
+          closing the modal. */}
+      <Tooltip
+        tooltip={strings.close}
+        side="start"
+        suppressed={!pointerOverClose}
+      >
+        <DialogPrimitive.Close asChild>
+          <Button
+            aria-label={strings.close}
+            icon={SvgX}
+            prominence="tertiary"
+            size="sm"
+            onClick={onClose}
+            onPointerEnter={() => setPointerOverClose(true)}
+            onPointerLeave={() => setPointerOverClose(false)}
+          />
+        </DialogPrimitive.Close>
+      </Tooltip>
     </div>
   );
 
   return (
-    <Section ref={ref} padding={0.5} alignItems="start" height="fit" {...props}>
+    <Section
+      ref={ref}
+      padding={padding}
+      alignItems={alignItems}
+      height={height}
+      {...props}
+    >
       <Section
         flexDirection="row"
         justifyContent="between"
         alignItems="start"
         gap={0}
-        padding={0.5}
+        padding={2}
       >
         <div className="opal-modal-header-content">
           <div className="opal-modal-header-close">{closeButton}</div>
           <DialogPrimitive.Title asChild>
             <div>
               <Content
+                font="heading-section"
+                orientation="stacked"
                 icon={icon}
                 moreIcon1={moreIcon1}
                 moreIcon2={moreIcon2}
+                color={color}
                 title={title}
                 description={description}
-                sizePreset="section"
-                variant="heading"
               />
               {description && (
                 <DialogPrimitive.Description className="opal-modal-a11y-description">
@@ -416,6 +495,16 @@ function ModalBody({
   ref,
   twoTone = true,
   children,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  height = "auto",
+  padding = 4,
+  gap = 4,
+  alignItems = "start",
   ...props
 }: ModalBodyProps) {
   return (
@@ -424,9 +513,22 @@ function ModalBody({
       className="opal-modal-body"
       {...(twoTone && { "data-two-tone": "" })}
     >
-      <Section height="auto" padding={1} gap={1} alignItems="start" {...props}>
-        {children}
-      </Section>
+      {/* The background stays on the body, so the mask fades only content. */}
+      <ShadowDiv
+        variant={{ top: "shadow", bottom: "mask" }}
+        containerClassName="opal-modal-body-frame"
+        className="opal-modal-body-scroll"
+      >
+        <Section
+          height={height}
+          padding={padding}
+          gap={gap}
+          alignItems={alignItems}
+          {...props}
+        >
+          {children}
+        </Section>
+      </ShadowDiv>
     </div>
   );
 }
@@ -435,15 +537,29 @@ interface ModalFooterProps extends WithoutStyles<SectionProps> {
   ref?: React.Ref<HTMLDivElement>;
 }
 
-function ModalFooter({ ref, ...props }: ModalFooterProps) {
+function ModalFooter({
+  ref,
+  /*
+   * Defaulted here rather than written before the spread below: a spread
+   * copies a key even when its value is `undefined`, so a caller writing
+   * `prop={condition ? x : undefined}` would replace the default rather than
+   * fall back to it.
+   */
+  flexDirection = "row",
+  justifyContent = "end",
+  gap = 2,
+  padding = 4,
+  height = "fit",
+  ...props
+}: ModalFooterProps) {
   return (
     <Section
       ref={ref}
-      flexDirection="row"
-      justifyContent="end"
-      gap={0.5}
-      padding={1}
-      height="fit"
+      flexDirection={flexDirection}
+      justifyContent={justifyContent}
+      gap={gap}
+      padding={padding}
+      height={height}
       {...props}
     />
   );
@@ -456,6 +572,7 @@ function ModalFooter({ ref, ...props }: ModalFooterProps) {
  */
 const Modal = Object.assign(ModalRoot, {
   Content: ModalContent,
+  Backdrop: ModalBackdrop,
   Header: ModalHeader,
   Body: ModalBody,
   Footer: ModalFooter,
@@ -469,15 +586,35 @@ interface BasicModalFooterProps {
   left?: React.ReactNode;
   cancel?: React.ReactNode;
   submit?: React.ReactNode;
+  /** Put navigation above actions on narrow screens. Requires a wrapping footer. */
+  stackOnSmallScreens?: boolean;
 }
 
 /** Footer layout with an optional left slot and right-aligned cancel/submit. */
-function BasicModalFooter({ left, cancel, submit }: BasicModalFooterProps) {
+function BasicModalFooter({
+  left,
+  cancel,
+  submit,
+  stackOnSmallScreens = false,
+}: BasicModalFooterProps) {
   return (
     <>
-      {left && <Section alignItems="start">{left}</Section>}
+      {left && (
+        <Section
+          alignItems="start"
+          className={stackOnSmallScreens ? "sm:w-auto sm:flex-1" : undefined}
+        >
+          {left}
+        </Section>
+      )}
       {(cancel || submit) && (
-        <Section flexDirection="row" justifyContent="end" gap={0.5}>
+        <Section
+          flexDirection="row"
+          justifyContent="end"
+          gap={2}
+          wrap={stackOnSmallScreens}
+          className={stackOnSmallScreens ? "sm:w-auto" : undefined}
+        >
           {cancel}
           {submit}
         </Section>

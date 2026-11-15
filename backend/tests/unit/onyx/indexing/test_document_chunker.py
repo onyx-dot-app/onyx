@@ -675,6 +675,22 @@ def test_first_empty_section_with_title_is_processed_not_skipped() -> None:
 # --- clean_text is applied to section text -----------------------------------
 
 
+def test_chunking_preserves_numeric_ranges() -> None:
+    dc = _make_document_chunker()
+    text = "Collect for 1–2 weeks at 1–5%; use 3–6 clusters."
+    doc = _make_doc(sections=[Section(type=SectionType.TEXT, text=text, link="l1")])
+    chunks = dc.chunk(
+        document=doc,
+        sections=doc.processed_sections,
+        title_prefix="",
+        metadata_suffix_semantic="",
+        metadata_suffix_keyword="",
+        content_token_limit=CHUNK_LIMIT,
+    )
+    assert len(chunks) == 1
+    assert chunks[0].content == text
+
+
 def test_clean_text_strips_control_chars_from_section_content() -> None:
     """clean_text() should remove control chars before the text enters the
     accumulator — verifies the call isn't dropped by a refactor."""
@@ -799,7 +815,7 @@ def test_file_backed_tabular_section_in_untitled_doc_is_chunked(
 ) -> None:
     """A file-backed TabularSection holds its content in csv_file_id, not text,
     so the empty-section guard would otherwise drop it in a no-title doc. It
-    must instead reach the tabular chunker and produce row chunks."""
+    must instead reach the tabular chunker and be described in the chunks."""
     import onyx.indexing.chunking.tabular_section_chunker.tabular_section_chunker as tab_mod
 
     csv_text = "name,score\n" + "\n".join(f"rowval{i},{i}" for i in range(30))
@@ -829,5 +845,9 @@ def test_file_backed_tabular_section_in_untitled_doc_is_chunked(
     )
 
     joined = "\n".join(c.content for c in chunks)
+    # The sheet reached the chunker: it is named, sized and sampled. Which rows
+    # appear is the chunking strategy's business, not this test's.
+    assert chunks
+    assert "Sheet1" in joined
+    assert "30 rows" in joined
     assert "rowval0" in joined
-    assert "rowval29" in joined

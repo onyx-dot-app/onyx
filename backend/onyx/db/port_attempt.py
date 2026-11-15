@@ -152,6 +152,24 @@ def count_active_port_attempts(
     ).scalar_one()
 
 
+def has_active_port_attempts(db_session: Session, search_settings_id: int) -> bool:
+    """True if any attempt for this settings is still active (NOT_STARTED / IN_PROGRESS),
+    either scope. Gates reclaiming a reverted/superseded FUTURE's index: cancel only FLAGS
+    in-progress attempts (they self-ack at their next batch boundary), so dropping the index
+    first could race a lagging write. A dead worker is terminalized by the stall watchdog, so
+    this can't wedge cleanup."""
+    return bool(
+        db_session.execute(
+            select(
+                exists().where(
+                    PortAttempt.search_settings_id == search_settings_id,
+                    PortAttempt.status.in_(_ACTIVE_STATUSES),
+                )
+            )
+        ).scalar()
+    )
+
+
 def _latest_port_status_by_user(
     db_session: Session,
     search_settings_id: int,
@@ -223,6 +241,36 @@ def _reindex_port_scope(
     )
     user_ids = fetch_port_scope_user_ids(db_session)
     return cc_pair_ids, user_ids
+
+
+def connector_ports_complete(
+    db_session: Session, search_settings_id: int, cc_pair_ids: Collection[int]
+) -> bool:
+    """True once the latest port attempt of every cc_pair is SUCCESS. A cc_pair with
+    no attempt, or with an active, FAILED or PAUSED latest attempt, is not complete."""
+    if not cc_pair_ids:
+        return True
+    latest = _latest_port_status_by_cc_pair(db_session, search_settings_id, cc_pair_ids)
+    return all(
+        latest.get(cc_pair_id) == PortAttemptStatus.SUCCESS
+        for cc_pair_id in cc_pair_ids
+    )
+
+
+def reindex_finalizing(db_session: Session, future: SearchSettings | None) -> bool:
+    """The finalizing phase of a port-flow reindex: every connector's port is SUCCESS
+    and only the FUTURE index attempts still have to catch up on documents indexed
+    during the port. The indexing scheduler puts them first in this phase. INSTANT
+    swaps before the port, so it has no such phase."""
+    if (
+        future is None
+        or future.status != IndexModelStatus.FUTURE
+        or not future.use_port_flow
+        or future.switchover_type == SwitchoverType.INSTANT
+    ):
+        return False
+    cc_pair_ids, _ = _reindex_port_scope(db_session, future.id)
+    return connector_ports_complete(db_session, future.id, cc_pair_ids)
 
 
 class ReindexProgressCounts(BaseModel):
@@ -418,6 +466,36 @@ def port_backfill_has_pending_work(
     return bool(set(in_scope_cc_pair_ids) - settled_cc_pairs)
 
 
+def latest_port_bounds_by_user(
+    db_session: Session,
+    search_settings_id: int,
+    user_ids: Collection[UUID],
+) -> dict[UUID, str | None]:
+    """Maps each user to the `up_to_doc_id` of their latest port attempt.
+
+    Users with no attempt on these settings are left out.
+    """
+    if not user_ids:
+        return {}
+    return {
+        user_id: up_to_doc_id
+        for user_id, up_to_doc_id in db_session.execute(
+            select(PortAttempt.port_user_id, PortAttempt.up_to_doc_id)
+            .where(
+                PortAttempt.search_settings_id == search_settings_id,
+                PortAttempt.port_user_id.in_(user_ids),
+            )
+            .distinct(PortAttempt.port_user_id)
+            .order_by(
+                PortAttempt.port_user_id,
+                PortAttempt.time_created.desc(),
+                PortAttempt.id.desc(),
+            )
+        )
+        if user_id is not None
+    }
+
+
 def all_user_scopes_ported(
     db_session: Session, search_settings_id: int, user_ids: list[UUID]
 ) -> bool:
@@ -530,7 +608,7 @@ def count_consecutive_failed_port_attempts_no_progress(
 
 def any_future_port_in_progress(db_session: Session) -> bool:
     """True if any PortAttempt against a FUTURE SearchSettings is active
-    (NOT_STARTED / IN_PROGRESS). The vespa sync producer drops deferred-doc syncs
+    (NOT_STARTED / IN_PROGRESS). The document index sync producer drops deferred-doc syncs
     to LOW priority while a port runs so they don't starve normal needs_sync work."""
     stmt = select(
         exists()
@@ -592,6 +670,26 @@ def mark_port_in_progress(
         raise
 
 
+def fail_unstarted_port_attempt(
+    db_session: Session, port_attempt_id: int, error_msg: str
+) -> bool:
+    """Flip NOT_STARTED -> FAILED, returning True. Any other status is left alone, so
+    a duplicate task cannot fail an attempt that another worker already claimed."""
+    try:
+        attempt = _get_locked(db_session, port_attempt_id)
+        if attempt.status != PortAttemptStatus.NOT_STARTED:
+            db_session.rollback()
+            return False
+        attempt.status = PortAttemptStatus.FAILED
+        attempt.time_completed = func.now()
+        attempt.error_msg = error_msg
+        db_session.commit()
+        return True
+    except Exception:
+        db_session.rollback()
+        raise
+
+
 def commit_port_cursor(
     db_session: Session,
     port_attempt_id: int,
@@ -633,26 +731,12 @@ def touch_port_progress(db_session: Session, port_attempt_id: int) -> None:
         raise
 
 
-def mark_port_succeeded(db_session: Session, port_attempt_id: int) -> None:
-    _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.SUCCESS)
-
-
-def mark_port_failed(
-    db_session: Session, port_attempt_id: int, error_msg: str | None = None
-) -> None:
-    _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.FAILED, error_msg)
-
-
-def mark_port_canceled(db_session: Session, port_attempt_id: int) -> None:
-    _mark_terminal(db_session, port_attempt_id, PortAttemptStatus.CANCELED)
-
-
 def pause_port_attempt(db_session: Session, port_attempt_id: int) -> bool:
     """Flip a FAILED attempt to PAUSED (auto-pause); returns True if it flipped.
 
     Acts only while the status is still FAILED, so a resume or cancel that already moved
-    the row wins (no-op). Can't reuse mark_port_* here: those go through _mark_terminal,
-    which refuses to change an already-terminal row -- and FAILED is terminal, so it would
+    the row wins (no-op). Can't reuse mark_port_terminal here:
+    it refuses to change an already-terminal row -- and FAILED is terminal, so it would
     silently do nothing. Leaves last_processed_doc_id (resume cursor) and error_msg (shown
     to the operator) untouched."""
     try:
@@ -767,12 +851,15 @@ def request_port_cancel(db_session: Session, port_attempt_id: int) -> None:
         raise
 
 
-def _mark_terminal(
+def mark_port_terminal(
     db_session: Session,
     port_attempt_id: int,
     status: PortAttemptStatus,
     error_msg: str | None = None,
 ) -> None:
+    if not status.is_terminal():
+        raise ValueError(f"Expected a terminal port status, got {status.value}")
+
     try:
         attempt = _get_locked(db_session, port_attempt_id)
         if attempt.status.is_resting():

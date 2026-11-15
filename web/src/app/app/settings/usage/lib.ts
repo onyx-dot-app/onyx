@@ -3,6 +3,9 @@
 import useSWR from "swr";
 import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { formatDateForApiParam } from "@/lib/dateUtils";
+import { buildApiPath } from "@/lib/urlBuilder";
+import type { Period } from "@/lib/spendingLimits/types";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
@@ -10,12 +13,16 @@ export interface UsagePerDayByModel {
   input_tokens: number;
   output_tokens: number;
   cache_read_tokens: number;
+  cache_creation_tokens: number;
   cost_cents: number;
 }
 
 export interface ModelPrice {
   model: string;
   provider: string | null;
+  /** The saved model configuration this price is for; providers of one type
+   *  can price the same model name differently. */
+  model_configuration_id: number | null;
   input_per_mtok: number | null; // $/1M tokens; null if the model is unpriced
   output_per_mtok: number | null;
   cache_per_mtok: number | null; // null => cache reads bill at the input rate
@@ -24,22 +31,23 @@ export interface ModelPrice {
 export interface UserUsageResponse {
   per_day_by_model: UsagePerDayByModel[];
   window_cost_cents: number;
-  // The user's cost budget, what's left, and its window in hours (for the
-  // "per week/day/hour" label). All null when no cost limit applies.
+  // The user's cost budget, remaining allowance, and next fixed reset.
   budget_cents: number | null;
   budget_remaining_cents: number | null;
-  budget_period_hours: number | null;
+  budget_period: Period | null;
+  budget_reset_at: string | null;
   selected_model_price: ModelPrice | null;
   available_model_prices: ModelPrice[];
 }
 
-export function useUserUsage(days: number) {
-  return useSWR<UserUsageResponse>(
-    SWR_KEYS.userUsage(days),
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      onErrorRetry: skipRetryOnAuthError,
-    }
-  );
+export function useUserUsage(range: { from: Date; to: Date } | undefined) {
+  const url = buildApiPath(SWR_KEYS.userUsage, {
+    start: range?.from ? formatDateForApiParam(range.from) : undefined,
+    end: range?.to ? formatDateForApiParam(range.to) : undefined,
+  });
+
+  return useSWR<UserUsageResponse>(url, errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    onErrorRetry: skipRetryOnAuthError,
+  });
 }

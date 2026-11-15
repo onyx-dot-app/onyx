@@ -3,15 +3,39 @@
 ## Overview
 This directory contains Terraform modules to provision the core AWS infrastructure for Onyx:
 
-- `vpc`: Creates a VPC with public/private subnets sized for EKS
-- `eks`: Provisions an Amazon EKS cluster, essential addons (EBS CSI, metrics server, cluster autoscaler), and optional IRSA for S3 access
-- `postgres`: Creates an Amazon RDS for PostgreSQL instance and returns a connection URL
-- `redis`: Creates an ElastiCache for Redis replication group
-- `s3`: Creates an S3 bucket and locks access to a provided S3 VPC endpoint
-- `opensearch`: Creates an Amazon OpenSearch domain for managed search workloads
+- `vpc`: Creates a VPC with public/private subnets sized for EKS, an optional S3 gateway endpoint, and VPC flow logs
+- `eks`: Provisions an Amazon EKS cluster, essential addons (EBS CSI, metrics server, cluster autoscaler), and optional IRSA for S3 and RDS access
+- `postgres`: Creates an Amazon RDS for PostgreSQL instance, CloudWatch alarms, and returns a connection URL
+- `redis`: Creates an ElastiCache for Redis replication group with CloudWatch alarms
+- `s3`: Creates an S3 bucket with versioning, encryption, lifecycle rules, and a scoped bucket policy
+- `opensearch`: Creates an Amazon OpenSearch domain for managed search workloads, with CloudWatch alarms
 - `onyx`: A higher-level composition that wires the above modules together for a complete, opinionated stack
 
 Use the `onyx` module if you want a working EKS + Postgres + Redis + S3 stack with sane defaults. Use the individual modules if you need more granular control.
+
+These are the same modules Onyx runs for its own managed deployments. The managed
+deployments add operational wiring on top (alert routing, secret management, log
+aggregation) but provision the underlying AWS infrastructure from exactly this code.
+
+## Consuming these modules from another repository
+
+The quickstart below uses local paths. To consume the modules from somewhere
+else, point `source` at this repository and pin a ref:
+
+```hcl
+module "vpc" {
+  source   = "git::https://github.com/onyx-dot-app/onyx.git//deployment/terraform/modules/aws/vpc?ref=tf/v1.0.2"
+  vpc_name = "onyx-vpc"
+}
+```
+
+Releases are tagged `tf/vX.Y.Z`, versioned independently of Onyx product
+releases. A commit sha works as a `ref` too, and is the better choice for
+automated consumers: a sha cannot be moved, where a tag can. Terraform clones
+the whole repository either way, so there is no meaningful speed difference.
+
+Pin something. Without a `ref` Terraform tracks the default branch, so an
+unrelated merge can change your infrastructure.
 
 ## Quickstart (copy/paste)
 The snippet below shows a minimal working example that:
@@ -22,7 +46,10 @@ The snippet below shows a minimal working example that:
 
 ```hcl
 locals {
-  region = "us-west-2"
+  region            = "us-west-2"
+  postgres_username = "pgusername"
+  # Supply this from a secret store or TF_VAR_ in anything but a scratch stack.
+  postgres_password = "your-postgres-password"
 }
 
 provider "aws" {
@@ -37,8 +64,8 @@ module "onyx" {
 
   region            = local.region
   name              = "onyx"            # used as a prefix and workspace-aware
-  postgres_username = "pgusername"
-  postgres_password = "your-postgres-password"
+  postgres_username = local.postgres_username
+  postgres_password = local.postgres_password
   # create_vpc    = true  # default true; set to false to use an existing VPC (see below)
 }
 
@@ -77,7 +104,7 @@ output "cluster_name" {
   value = module.onyx.cluster_name
 }
 output "postgres_connection_url" {
-  value     = module.onyx.postgres_connection_url
+  value     = "postgres://${urlencode(local.postgres_username)}:${urlencode(local.postgres_password)}@${module.onyx.postgres_address}:${module.onyx.postgres_port}/${module.onyx.postgres_db_name}"
   sensitive = true
 }
 output "redis_connection_url" {
@@ -181,58 +208,229 @@ module "onyx" {
 }
 ```
 
+### Accounts that require a permissions boundary on new roles
+Some AWS accounts let operators create IAM roles only if each role carries a set permissions boundary. Pass that boundary, and optionally an IAM path, to apply it to every role the stack creates (VPC flow logs, EKS cluster and node groups, EBS CSI, workload, load balancer controller and cluster autoscaler roles):
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  iam_role_permissions_boundary = "arn:aws:iam::123456789012:policy/MyBoundary"
+  iam_role_path                 = "/bounded/"
+}
+```
+
+Both default to null, which leaves existing stacks unchanged. Setting `iam_role_path` on an existing stack replaces its roles, so set it only on new stacks.
+
+### Pinning the cluster admin
+By default the EKS module gives cluster-admin, and the cluster's KMS key administrator role, to whoever runs Terraform. If a different person or role applies later, the plan replaces that access entry and rewrites the key policy. Pin both to one principal:
+
+```hcl
+module "onyx" {
+  source = "./modules/aws/onyx"
+  # ...
+  cluster_admin_principal_arn = "arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/us-east-2/AWSReservedSSO_AdministratorAccess_abc123"
+}
+```
+
+On an existing cluster, set it to the principal in the current `cluster_creator` access entry (`terraform state show 'module.onyx.module.eks.module.eks.aws_eks_access_entry.this["cluster_creator"]'`). The pinned entry reuses the same Terraform addresses, so that plans no changes.
+
 ## What each module does
 
 ### `onyx`
 - Orchestrates `vpc`, `eks`, `postgres`, `redis`, and `s3`
 - Names resources using `name` and the current Terraform workspace
 - Exposes convenient outputs:
-  - `cluster_name`: EKS cluster name
-  - `postgres_connection_url` (sensitive): `postgres://...`
+  - `cluster_name`, `oidc_provider`, `oidc_provider_arn`, `workload_irsa_role_arn`
+  - `postgres_endpoint`, `postgres_port`, `postgres_db_name`, `postgres_username` (sensitive), `postgres_dbi_resource_id`
   - `redis_connection_url` (sensitive): hostname:port
+  - `opensearch_endpoint`, `opensearch_dashboard_endpoint`, `opensearch_domain_arn` (null unless `enable_opensearch`)
+  - `sandbox_archive_bucket_name`, `sandbox_archive_kms_key_arn` (null unless `enable_sandbox_archive_bucket`)
 
 Inputs (common):
 - `name` (default `onyx`), `region` (default `us-west-2`), `tags`
 - `size` (`small`/`medium`/`large`, default `medium`) — see "T-shirt sizing" above — plus per-setting overrides (`main_node_*`, `vespa_node_*`, `postgres_instance_type`, `postgres_storage_gb`, `redis_instance_type`, `opensearch_*`)
-- `postgres_username`, `postgres_password`
+- `postgres_username`, `postgres_password`, `postgres_multi_az`
+- `redis_auth_token`: required unless `enable_redis_iam_auth` is true, because the
+  Redis module enables transit encryption and AWS requires a token in that case
 - `create_vpc` (default true) or existing VPC details and `s3_vpc_endpoint_id`
+- `single_nat_gateway` (default false): one NAT gateway per AZ. Set true to trade AZ independence for cost
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
+- `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
+- Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
+- `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
+  session archives. See "Sandbox archive bucket" below
 
 ### `vpc`
 - Builds a VPC sized for EKS with multiple private and public subnets
-- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`, `s3_vpc_endpoint_id`
+- Creates an S3 gateway VPC endpoint (`create_s3_vpc_endpoint`, default true)
+- Publishes VPC flow logs to CloudWatch with a minimal IAM role
+- Outputs: `vpc_id`, `private_subnets`, `public_subnets`, `vpc_cidr_block`, `nat_gateway_public_ips`, `s3_vpc_endpoint_id`
 
 ### `eks`
 - Creates the EKS cluster and node groups
 - Enables addons: EBS CSI driver, metrics server, cluster autoscaler
 - Optionally configures IRSA for S3 access to specified buckets
-- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`, `s3_access_role_arn` (if created)
+- Outputs: `cluster_name`, `cluster_endpoint`, `cluster_certificate_authority_data`,
+  `oidc_provider`, `oidc_provider_arn`, `cluster_security_group_id`, `node_security_group_id`,
+  and `workload_irsa_role_arn` / `workload_irsa_service_account_subjects` when `s3_bucket_names` is set
 
 Key inputs include:
 - `cluster_name`, `cluster_version` (default `1.33`)
 - `vpc_id`, `subnet_ids`
-- `public_cluster_enabled` (default true), `private_cluster_enabled` (default false)
-- `cluster_endpoint_public_access_cidrs` (optional)
-- `eks_managed_node_groups` (defaults include a main and a vespa-dedicated group with GP3 volumes)
+- `public_cluster_enabled` (default true), `private_cluster_enabled` (default true)
+- `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
+- `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version
 - Accepts VPC/subnets and ingress CIDRs; returns a ready-to-use connection URL
+- Creates CloudWatch alarms for CPU, freeable memory, free storage, IOPS, and
+  connection count. Set `alarm_actions` to an SNS topic ARN to be notified;
+  leave it empty and the alarms exist but notify nothing
 
 ### `redis`
 - ElastiCache for Redis (transit encryption enabled by default)
-- Supports optional `auth_token` and instance sizing
+- Supports optional `auth_token`, IAM authentication, and instance sizing
+- Creates CloudWatch alarms for memory usage, engine CPU, and swap. Set
+  `alarm_actions` to route them to SNS
 - Outputs endpoint, port, and whether SSL is enabled
 
 ### `s3`
-- Creates an S3 bucket for file storage and scopes access to the provided S3 gateway VPC endpoint
+- Creates an S3 bucket for file storage with versioning, server-side encryption
+  (`aws:kms`, or `AES256` when anonymous read is enabled), a public access block,
+  and lifecycle rules for noncurrent versions, expiration, and IA transition
+- Always attaches a module-owned bucket policy with a `DenyInsecureTransport`
+  statement, so the bucket rejects requests that do not use TLS. The module owns
+  the whole policy: do not edit it outside Terraform, or the next apply replaces
+  your changes. To keep custom statements, pass them as JSON documents via
+  `additional_policy_documents`; the module merges them into its policy. Custom
+  statements cannot replace the module's own statements — on a SID collision the
+  module statement wins. Do not serve a module bucket through an S3 static
+  website endpoint; those endpoints are HTTP-only, so the deny blocks them
+- Access can be scoped to an S3 gateway VPC endpoint (`s3_vpc_endpoint_id`), and
+  optionally to source IPs or VPCs (`allow_anonymous_read` with
+  `allowed_source_ips` / `allowed_vpc_ids`)
+- `create_kms_key` (default false) creates a customer-managed KMS key with
+  rotation and an `alias/<bucket_name>` alias (dots become hyphens), and
+  encrypts the bucket with it. It cannot be combined with `kms_key_id` or
+  `allow_anonymous_read`. Output: `kms_key_arn` (the created key, null when off)
+- `abort_incomplete_multipart_upload_days` (default 0, off) removes unfinished
+  multipart uploads
+
+#### Sandbox archive bucket
+
+`onyx` creates a second `s3` instance when `enable_sandbox_archive_bucket` is
+true. The bucket holds Craft sandbox session archives:
+
+- Its own KMS key (`create_kms_key = true`), with rotation
+- Public access blocked, TLS required, versioning on
+- Objects expire after `sandbox_archive_expiration_days` (default 30).
+  Noncurrent versions expire after `sandbox_archive_noncurrent_expiration_days`
+  (default 7). Unfinished multipart uploads are removed after 7 days
+- No Intelligent-Tiering, because objects are short-lived
+- No node or pod role gets access. The bucket is not in `s3_bucket_names` and
+  has no VPC endpoint grant. The api_server will hand out presigned URLs
+- The plan fails if `sandbox_archive_bucket_name` equals the file store or
+  upload bucket name, so the expiry rules cannot reach those buckets
 
 ### `opensearch`
 - Creates an Amazon OpenSearch domain inside the VPC
 - Supports custom subnets, security groups, fine-grained access control, encryption, and CloudWatch log publishing
+- Creates CloudWatch alarms for cluster status, node count, free storage, JVM
+  memory pressure, and write-blocked indices. Set `alarm_actions` to route them to SNS
 - Outputs domain endpoints, ARN, and the managed security group ID when it creates one
+
+## Upgrading from an earlier version of these modules
+
+These modules were realigned with the versions Onyx runs in production. If you
+applied an earlier revision, note the following before your next `terraform apply`.
+
+**Renamed resources are handled for you.** The modules ship `moved` blocks that
+relabel state in place, so the plan shows moves rather than destroy/create:
+
+| Module | Old address | New address |
+|---|---|---|
+| `s3` | `aws_s3_bucket.bucket` | `aws_s3_bucket.this` |
+| `s3` | `aws_s3_bucket_policy.bucket_policy` | `aws_s3_bucket_policy.anonymous_read[0]` |
+| `vpc` | `aws_vpc_endpoint.s3` | `aws_vpc_endpoint.s3[0]` |
+| `redis` | `aws_security_group.redis_sg` | `aws_security_group.redis_sg[0]` |
+| `postgres` | `aws_db_subnet_group.this` | `aws_db_subnet_group.this[0]` |
+| `postgres` | `aws_security_group.this` | `aws_security_group.this[0]` |
+
+**Review the plan before applying.** Expect in-place updates where the new
+modules add settings the old ones did not manage:
+- `s3` now manages versioning, encryption, a public access block, and lifecycle rules
+- `s3` now attaches a bucket policy to every bucket, not only when anonymous
+  read or a VPC endpoint grant is configured. The policy denies non-TLS
+  requests. If you attached your own policy to a module bucket outside
+  Terraform, the apply replaces it. Before you apply, move those statements
+  into `additional_policy_documents` on the `s3` module (on the `onyx` module:
+  `s3_additional_policy_documents` / `s3_upload_additional_policy_documents`)
+- `vpc` now creates flow logs and their IAM role
+- `postgres`, `redis`, and `opensearch` now create CloudWatch alarms
+- `postgres` now manages Multi-AZ (default false). If you enabled a standby
+  outside Terraform, set `postgres_multi_az = true` on the `onyx` module (or
+  `multi_az` on the `postgres` module) before applying, or the standby is removed
+- `eks` now enables the private API endpoint by default (`private_cluster_enabled`).
+  This is additive and does not remove public access
+
+**`cluster_endpoint_public_access_cidrs` now defaults to `[]`.** If you relied on
+the previous default, set the value explicitly before applying.
+
+**The Craft sandbox node group's key changed** from `craft_sandbox` to `sandbox`.
+A `moved` block handles the relabel, so the group is not recreated.
+
+### AWS provider 6 and EKS module v21
+
+The `eks`, `onyx`, `vpc`, `opensearch`, `redis` and `waf` modules now need AWS
+provider `~> 6.59`. The `s3` and `postgres` modules still allow `>= 5.100, < 7.0`.
+The `eks` module uses `terraform-aws-modules/eks/aws` `~> 21.23` (was `~> 20.0`),
+which resolves to a release that needs AWS provider 6.59 or later. EKS module
+21.23 is the first version with the nested-virtualization launch template
+option.
+
+Before you upgrade:
+
+1. Allow `hashicorp/aws` `~> 6.59` in your root module.
+2. Run `terraform init -upgrade` to update `.terraform.lock.hcl`.
+3. Run `terraform plan` and check that it replaces nothing.
+
+**The inputs of these modules did not change.** The `eks` module maps its inputs
+to the renamed upstream inputs:
+
+| Upstream v20 input | Upstream v21 input |
+|---|---|
+| `cluster_name` | `name` |
+| `cluster_version` | `kubernetes_version` |
+| `cluster_endpoint_public_access` | `endpoint_public_access` |
+| `cluster_endpoint_private_access` | `endpoint_private_access` |
+| `cluster_endpoint_public_access_cidrs` | `endpoint_public_access_cidrs` |
+| `cluster_enabled_log_types` | `enabled_log_types` |
+| `cluster_addons` | `addons` |
+| `eks_managed_node_group_defaults` | removed; the `eks` module merges defaults into each group |
+| `enable_security_groups_for_pods` | removed; the `eks` module attaches `AmazonEKSVPCResourceController` itself |
+
+**The `eks` module keeps the v20 node group defaults.** Upstream v21 changed
+them, which would roll every node. The module pins the v20 values: IMDS hop
+limit 2, detailed monitoring on, no automatic move to the latest AMI release,
+and no EFA-only network interfaces. The Craft sandbox group keeps hop limit 1.
+
+**Expected plan changes:**
+- One move: the cluster role's `AmazonEKSVPCResourceController` attachment.
+- In-place tag updates: upstream v21 no longer adds the
+  `terraform-aws-modules = "eks"` tag to the cluster and its KMS key.
+- The `vpc` flow log now sets `log_destination`, because provider 6 removed
+  `log_group_name`. The value is the ARN the flow log already has, so the plan
+  must not replace it.
+
+**If you pass your own `eks_managed_node_groups`:** upstream v21 types each
+group, so every attribute must exist in the v21 node group object. Rename
+`cluster_version` to `kubernetes_version`. Remove `platform`, `schedules`,
+`create_schedule`, `elastic_gpu_specifications`, `elastic_inference_accelerator`,
+`placement_group_az` and `placement_group_strategy`. `taints` can be a list or a map.
 
 ## Installing the Onyx Helm chart (after Terraform)
 Once the cluster is active, deploy application workloads via Helm. You can use the chart in `deployment/helm/charts/onyx`.
@@ -255,6 +453,115 @@ helm upgrade --install onyx /path/to/onyx/deployment/helm/charts/onyx \
 Notes:
 - The EKS module can create an IRSA role plus a Kubernetes `ServiceAccount` named `onyx-s3-access` (by default in namespace `onyx`) when `s3_bucket_names` is provided. Use that service account in the Helm chart to avoid static S3 credentials.
 - If you prefer MinIO inside the cluster, leave `minio.enabled=true` (default) and skip IRSA.
+
+### Onyx Craft on EKS
+
+Terraform creates the AWS resources for Craft. Helm creates the Craft Kubernetes
+objects. With `ENABLE_CRAFT=true`, the chart creates the `onyx-sandboxes` namespace, the `sandbox`
+ServiceAccount, the sandbox RBAC, the sandbox proxy, and the sandbox NetworkPolicies.
+
+- **Sandbox nodes.** `enable_craft = true` adds a node group labeled
+  `onyx.app/workload=sandbox` and tainted `workload=sandbox:NoSchedule`, with IMDSv2
+  and hop limit 1. Sandbox pods select that label and tolerate that taint.
+  Other nodes with the same label, taint, and IMDS settings also work.
+  Do not attach the EKS primary cluster security group to these nodes. Nodes must
+  have exactly one security group tagged `kubernetes.io/cluster/<name>`.
+- **Snapshots.** The API server and Celery workers store sandbox snapshots through
+  the normal Onyx file store. Craft needs no extra bucket or IAM role. The `sandbox`
+  ServiceAccount has no IRSA annotation and does not mount a token.
+- **Sandbox proxy.** The proxy reads Postgres and Redis on each request, so it
+  needs the same endpoints and network access as the API server. With RDS IAM
+  auth, add the rendered proxy ServiceAccount name (`onyx-sandbox-proxy` for
+  release `onyx`) to `irsa_additional_service_account_names`, and annotate it
+  through `sandboxProxy.serviceAccount.annotations` with `workload_irsa_role_arn`.
+- **Push key.** Set `auth.sandboxPushSecret.enabled=true` and give it an Ed25519
+  private key. The comment above `sandboxPushSecret` in the chart's `values.yaml`
+  shows how to generate one.
+- **Manually created objects.** Helm does not install over sandbox RBAC or
+  ServiceAccounts that lack Helm ownership metadata. With no sandboxes running,
+  delete those objects, then run `helm upgrade`.
+
+Check the result:
+
+```bash
+kubectl get nodes -l onyx.app/workload=sandbox
+kubectl auth can-i create pods/exec -n onyx-sandboxes \
+  --as system:serviceaccount:onyx:<workload-service-account>
+kubectl -n onyx-sandboxes get sa sandbox -o yaml
+```
+
+To tear down a cluster, run `helm uninstall` before `terraform destroy`. If destroy
+fails with `DependencyViolation`, delete orphaned `aws-K8S-*` network interfaces
+that the VPC CNI left, then run destroy again.
+
+### Craft sandboxes on Firecracker
+
+Craft can run each sandbox as a Firecracker microVM instead of a pod. This
+needs `/dev/kvm` on the sandbox nodes. Set it on the sandbox node group:
+
+```hcl
+enable_craft                       = true
+craft_sandbox_runtime              = "firecracker"
+craft_sandbox_node_instance_types  = ["m8i.2xlarge"]
+craft_sandbox_node_disk_iops       = 6000
+craft_sandbox_node_disk_throughput = 500
+```
+
+With `"firecracker"`, the `eks` module:
+
+- turns on nested virtualization in the launch template (non-metal types only);
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+- sets `vm.max_map_count` to `1048576` with a cloud-init script that runs
+  before nodeadm (AL2023 ships `524288`);
+- keeps the group on-demand. A spot reclaim stops every microVM on the node;
+- keeps IMDSv2 with hop limit 1.
+
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on these nodes. To keep pod sandboxes, add a
+small pod sandbox group next to the Firecracker group:
+
+```hcl
+enable_craft_pod_sandbox_node_group = true
+craft_pod_sandbox_node_instance_types = ["m8i.xlarge"] # default
+craft_pod_sandbox_node_min_size       = 1              # default
+craft_pod_sandbox_node_max_size       = 2              # default
+```
+
+This group has the label `onyx.app/workload=sandbox` and the taint
+`workload=sandbox:NoSchedule`, but no `onyx.app/kvm` label or taint. It uses
+`craft_sandbox_node_disk_size_gb` with baseline gp3 (3000 IOPS, 125 MiB/s).
+EKS updates the taints of an existing node group in place; it does not replace
+the nodes. `NoSchedule` does not evict running pods, and the new pod group does
+not move them. Pod sandboxes and the prepuller pod that already run on a
+Firecracker node stay there until they stop. Let those sandboxes finish, delete
+the prepuller pod on that node, and check that no such pod is left:
+
+```bash
+kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
+```
+
+The default, `"pod"`, leaves the group as it is. A change to
+`craft_sandbox_runtime` makes a new launch template version (user data, and
+nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
+`craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
+volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
+500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
+needed.
+
+Node requirements:
+
+| Item | Allowed | Blocked |
+|---|---|---|
+| Nested virtualization | Intel `c8i`, `m8i`, `r8i` and their `-flex` types | `m7i` and older Intel (no nested virtualization or slow page faults), Graviton (`g`), AMD (`a`) |
+| Metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal`, `a1.metal`, `mac*.metal` |
+| AMI | AL2023 (module default `AL2023_x86_64_STANDARD`). Use an AMI release with kernel 6.18, the tested host kernel. | — |
+| Capacity | On-demand | Spot |
+| `vm.max_map_count` | `1048576` or more (set by the module) | The AL2023 default `524288` |
+
+The module refuses a blocked type, and a group that mixes `.metal` and
+nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,
+AMD, or older Intel non-metal sandbox nodes.
 
 ## Workflow tips
 - First apply can be infra-only; once EKS is active, install the Helm chart.

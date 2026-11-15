@@ -13,6 +13,9 @@ from unittest.mock import MagicMock, Mock, patch
 import pytest
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.blob.config import BlobStorageConnectorConfig
+from onyx.connectors.event_inbox.source_registry import registered_webhook_sources
+from onyx.connectors.event_inbox.sources import load_event_sources
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     UnexpectedValidationError,
@@ -44,7 +47,9 @@ class TestConnectorMappingValidation:
                 module = importlib.import_module(mapping.module_path)
 
                 # Try to get the class
-                connector_class = getattr(module, mapping.class_name)
+                connector_class = getattr(  # ods: ignore[getattr]
+                    module, mapping.class_name
+                )
 
                 # Verify it's a subclass of BaseConnector
                 if not issubclass(connector_class, BaseConnector):
@@ -85,6 +90,7 @@ class TestConnectorMappingValidation:
         expected_mapping = ConnectorMapping(
             module_path="onyx.connectors.blob.connector",
             class_name="BlobStorageConnector",
+            config_class=BlobStorageConnectorConfig,
         )
 
         for source in blob_sources:
@@ -214,6 +220,10 @@ class TestConnectorMappingIntegrity:
             DocumentSource.CRAFT_FILE,  # Direct S3 upload via API, no connector needed
             # Add other legitimately unmapped sources here if they exist
         }
+        # An event source is drained by EventInboxConnector, which the factory
+        # picks from the pair's input type. It has no class of its own.
+        load_event_sources()
+        expected_unmapped |= {spec.source for spec in registered_webhook_sources()}
 
         unmapped_sources = all_sources - mapped_sources - expected_unmapped
 
@@ -262,7 +272,8 @@ class TestInstantiateConnectorIntegration:
 
         # This should trigger lazy loading but will fail on actual instantiation
         # due to missing real configuration - that's expected
-        with pytest.raises(Exception):  # We expect some kind of error due to mock data
+        # We expect some kind of error due to mock data
+        with pytest.raises(Exception):  # noqa: B017
             instantiate_connector(
                 mock_session,
                 DocumentSource.WEB,  # Simple connector
@@ -307,6 +318,7 @@ class TestValidateCCPairForUser:
                 credential_id=2,
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
+                user=None,
             )
 
         assert "SSL verification failed" in str(exc_info.value)
@@ -341,6 +353,7 @@ class TestValidateCCPairForUser:
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
                 enforce_creation=False,
+                user=None,
             )
 
         assert valid is False
@@ -375,4 +388,5 @@ class TestValidateCCPairForUser:
                 credential_id=2,
                 access_type=AccessType.PUBLIC,
                 db_session=MagicMock(),
+                user=None,
             )

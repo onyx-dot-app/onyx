@@ -1,7 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useCallback, useMemo, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
 import {
   Button,
   Divider,
@@ -10,11 +12,11 @@ import {
   Text,
 } from "@opal/components";
 import { Disabled } from "@opal/core";
-import { SettingsLayouts, InputVertical, toast } from "@opal/layouts";
-import * as GeneralLayouts from "@/layouts/general-layouts";
+import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
-import PreApprovalPicker from "@/app/craft/v1/tasks/components/PreApprovalPicker";
+import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
+import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -22,9 +24,12 @@ import {
 import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
-import { useCraftMcpServers } from "@/lib/tools/hooks";
+import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import { useEntryPicker } from "@/lib/skills/hooks";
+import type { CaretText } from "@/lib/contentEditable";
 import {
-  detectSlashTrigger,
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryPromptPrefix,
   toPickerSections,
@@ -36,12 +41,13 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
   updateScheduledTask,
 } from "@/app/craft/v1/tasks/api";
 import { TASKS_PATH, taskDetailPath } from "@/app/craft/v1/tasks/constants";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface ScheduleTaskFormInitial {
   /** ``null`` for create. */
@@ -50,7 +56,6 @@ export interface ScheduleTaskFormInitial {
   prompt: string;
   mode: EditorMode;
   payload: EditorPayload;
-  preApprovedAppIds: number[];
 }
 
 interface ScheduleTaskFormProps {
@@ -72,14 +77,17 @@ export default function ScheduleTaskForm({
   description,
   onBack,
 }: ScheduleTaskFormProps) {
-  const router = useRouter();
+  const t = useTranslations("craft.tasks.form");
+  const tActionPolicies = useTranslations("craft.actionPolicies");
+  const navigation = useNavigation();
+  const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [preApprovedAppIds, setPreApprovedAppIds] = useState<number[]>(
-    initial.preApprovedAppIds
-  );
+  const [actionPolicies, setActionPolicies] = useState<
+    TaskAppActionPolicies[] | null
+  >(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
   const [promptTouched, setPromptTouched] = useState(false);
@@ -93,81 +101,38 @@ export default function ScheduleTaskForm({
       toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
     [skillsData, externalAppsData, craftMcpData]
   );
-  const [skillPicker, setSkillPicker] = useState<{
-    open: boolean;
-    anchorRect: DOMRect | null;
-    query: string;
-    slashIndex: number;
-  }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
-
-  const evaluateSkillPicker = useCallback((value: string, cursor: number) => {
-    const textBefore = value.slice(0, cursor);
-    const trigger = detectSlashTrigger(textBefore);
-    if (!trigger) {
-      setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-      return;
-    }
-    const anchorRect =
-      promptTextareaRef.current?.getBoundingClientRect() ?? null;
-    setSkillPicker({
-      open: true,
-      anchorRect,
-      query: trigger.query,
-      slashIndex: trigger.slashIndex,
-    });
-  }, []);
-
-  const handlePromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value;
-      setPrompt(value);
-      evaluateSkillPicker(value, e.target.selectionStart ?? value.length);
-    },
-    [evaluateSkillPicker]
-  );
-
-  const handlePromptCursorChange = useCallback(
-    (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-      const target = e.currentTarget;
-      evaluateSkillPicker(target.value, target.selectionStart ?? 0);
-    },
-    [evaluateSkillPicker]
-  );
-
-  const closeSkillPicker = useCallback(() => {
-    setSkillPicker((s) => ({ ...s, open: false }));
-  }, []);
-
-  const handleSkillPickerSelect = useCallback(
-    (entry: PickerEntry) => {
+  const pickPromptEntry = useCallback(
+    (entry: PickerEntry, token: CaretText) => {
       const connectionPath = pickerEntryConnectionPath(entry);
       if (connectionPath) {
-        setSkillPicker((s) => ({ ...s, open: false }));
-        router.push(connectionPath);
+        navigation.go(connectionPath);
         return;
       }
-      setSkillPicker((prev) => {
-        if (!prev.open) return prev;
-        const replacement = `${pickerEntryPromptPrefix(entry)} `;
-        const newPrompt =
-          prompt.slice(0, prev.slashIndex) +
+      const textarea = promptTextareaRef.current;
+      if (!textarea) return;
+      // The caret is still where the last input left it, inside the word.
+      const caret = textarea.selectionStart;
+      const start = caret - token.before.length;
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      setPrompt(
+        textarea.value.slice(0, start) +
           replacement +
-          prompt.slice(prev.slashIndex + 1 + prev.query.length);
-        setPrompt(newPrompt);
-
-        const cursorPos = prev.slashIndex + replacement.length;
-        const textarea = promptTextareaRef.current;
-        if (textarea) {
-          requestAnimationFrame(() => {
-            textarea.focus();
-            textarea.setSelectionRange(cursorPos, cursorPos);
-          });
-        }
-        return { ...prev, open: false };
+          textarea.value.slice(caret + token.after.length)
+      );
+      const cursorPos = start + replacement.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(cursorPos, cursorPos);
       });
     },
-    [prompt, router]
+    [navigation]
   );
+  const promptPicker = useEntryPicker({
+    trigger: CRAFT_PICKER_TRIGGER,
+    entries: pickerSections,
+    filter: filterPickerSections,
+    onSelect: pickPromptEntry,
+  });
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
@@ -177,25 +142,34 @@ export default function ScheduleTaskForm({
   // Validation states. These gate submission regardless of interaction, but
   // are only surfaced inline once the user has touched (blurred) the field so
   // a pristine form doesn't render red on load.
-  const nameError = trimmedName.length === 0 ? "Name is required." : null;
-  const promptError = trimmedPrompt.length === 0 ? "Prompt is required." : null;
+  const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
+  const promptError =
+    trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
   const scheduleError = !compiled.ok ? compiled.error : null;
 
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;
 
-  const canSubmit = !nameError && !promptError && !scheduleError && !saving;
+  const canSubmit =
+    !nameError &&
+    !promptError &&
+    !scheduleError &&
+    !saving &&
+    actionPolicies !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
   // events, so the tooltip must live on the (interactive) wrapper instead.
   const disabledReason = saving
-    ? "Saving..."
-    : (nameError ?? promptError ?? scheduleError ?? undefined);
+    ? t("savingLabel")
+    : (nameError ??
+      promptError ??
+      scheduleError ??
+      (actionPolicies === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -205,14 +179,19 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            pre_approved_app_ids: preApprovedAppIds,
+            action_policies: actionPolicies,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
             body
           );
-          toast.success("Scheduled task updated.");
-          router.push(taskDetailPath(updated.id));
+          await mutate(SWR_KEYS.scheduledTask(updated.id), updated, {
+            revalidate: false,
+          });
+          await mutate(SWR_KEYS.taskActionPolicies(updated.id));
+          await mutate(SWR_KEYS.scheduledTasks);
+          toast.success(t("toasts.updated"));
+          navigation.go(taskDetailPath(updated.id));
         } else {
           const body: ScheduledTaskCreateBody = {
             name: trimmedName,
@@ -220,19 +199,18 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            pre_approved_app_ids: preApprovedAppIds,
+            action_policies: actionPolicies,
           };
           await createScheduledTask(body);
+          await mutate(SWR_KEYS.scheduledTasks);
           toast.success(
-            runImmediately
-              ? "Scheduled task created and queued."
-              : "Scheduled task created."
+            runImmediately ? t("toasts.createdAndQueued") : t("toasts.created")
           );
-          router.push(TASKS_PATH);
+          navigation.go(TASKS_PATH);
         }
       } catch (err) {
         toast.error(
-          err instanceof Error ? err.message : "Failed to save scheduled task"
+          err instanceof Error ? err.message : t("toasts.saveFailed")
         );
       } finally {
         setSaving(false);
@@ -243,11 +221,13 @@ export default function ScheduleTaskForm({
       isEdit,
       initial.taskId,
       mode,
+      mutate,
       payload,
-      preApprovedAppIds,
-      router,
+      actionPolicies,
+      navigation,
       trimmedName,
       trimmedPrompt,
+      t,
     ]
   );
 
@@ -257,65 +237,58 @@ export default function ScheduleTaskForm({
         icon={SvgClock}
         title={title}
         description={description}
-        backButton={onBack}
+        cancel={() => navigation.go(TASKS_PATH)}
         divider
-        rightChildren={
-          <div className="flex gap-2 self-start">
+        actions={[
+          ...(!isEdit
+            ? [
+                <Disabled
+                  key="run"
+                  disabled={!canSubmit}
+                  tooltip={disabledReason}
+                  tooltipSide="bottom"
+                >
+                  <Button
+                    variant="default"
+                    prominence="secondary"
+                    type="button"
+                    disabled={!canSubmit}
+                    onClick={() => void submit(true)}
+                    data-testid="save-and-run-now"
+                  >
+                    {t("saveAndRunNowButton")}
+                  </Button>
+                </Disabled>,
+              ]
+            : []),
+          <Disabled
+            key="save"
+            disabled={!canSubmit}
+            tooltip={disabledReason}
+            tooltipSide="bottom"
+          >
             <Button
               variant="default"
-              prominence="secondary"
+              prominence="primary"
               type="button"
-              onClick={() => router.push(TASKS_PATH)}
-              disabled={saving}
-            >
-              Cancel
-            </Button>
-            {!isEdit && (
-              <Disabled
-                disabled={!canSubmit}
-                tooltip={disabledReason}
-                tooltipSide="bottom"
-              >
-                <Button
-                  variant="default"
-                  prominence="secondary"
-                  type="button"
-                  disabled={!canSubmit}
-                  onClick={() => void submit(true)}
-                  data-testid="save-and-run-now"
-                >
-                  Save and run now
-                </Button>
-              </Disabled>
-            )}
-            <Disabled
               disabled={!canSubmit}
-              tooltip={disabledReason}
-              tooltipSide="bottom"
+              onClick={() => void submit(false)}
+              data-testid="save-task"
             >
-              <Button
-                variant="default"
-                prominence="primary"
-                type="button"
-                disabled={!canSubmit}
-                onClick={() => void submit(false)}
-                data-testid="save-task"
-              >
-                {isEdit ? "Save changes" : "Save"}
-              </Button>
-            </Disabled>
-          </div>
-        }
+              {isEdit ? t("saveChangesButton") : t("saveButton")}
+            </Button>
+          </Disabled>,
+        ]}
       />
 
       <SettingsLayouts.Body>
-        <GeneralLayouts.Section>
-          <InputVertical withLabel title="Name">
+        <Section>
+          <InputVertical withLabel title={t("fields.name.label")}>
             <InputTypeIn
               value={name}
               onChange={(e) => setName(e.target.value)}
               onBlur={() => setNameTouched(true)}
-              placeholder="e.g. Weekly customer escalations digest"
+              placeholder={t("fields.name.placeholder")}
               data-testid="task-name-input"
               variant={shownNameError ? "error" : undefined}
             />
@@ -328,17 +301,18 @@ export default function ScheduleTaskForm({
 
           <InputVertical
             withLabel
-            title="Prompt"
-            description="This message is sent to Craft each time the task fires."
+            title={t("fields.prompt.label")}
+            description={t("fields.prompt.description")}
           >
             <InputTextArea
               ref={promptTextareaRef}
               value={prompt}
-              onChange={handlePromptChange}
-              onKeyUp={handlePromptCursorChange}
-              onClick={handlePromptCursorChange}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                promptPicker.onInput(e);
+              }}
               onBlur={() => setPromptTouched(true)}
-              placeholder="Describe what Craft should do on each run..."
+              placeholder={t("fields.prompt.placeholder")}
               rows={6}
               autoResize
               maxRows={12}
@@ -346,12 +320,14 @@ export default function ScheduleTaskForm({
               variant={shownPromptError ? "error" : undefined}
             />
             <EntryPickerPopover
-              open={skillPicker.open}
-              anchorRect={skillPicker.anchorRect}
-              query={skillPicker.query}
-              sections={pickerSections}
-              onSelect={handleSkillPickerSelect}
-              onClose={closeSkillPicker}
+              open={promptPicker.open}
+              anchorRect={promptPicker.anchorRect}
+              query={promptPicker.query}
+              sections={promptPicker.sections}
+              onSelect={promptPicker.onSelect}
+              onEscape={promptPicker.onEscape}
+              onDismiss={promptPicker.reset}
+              trigger={CRAFT_PICKER_TRIGGER}
             />
             {shownPromptError && (
               <Text font="secondary-body" color="status-error-05">
@@ -359,12 +335,12 @@ export default function ScheduleTaskForm({
               </Text>
             )}
           </InputVertical>
-        </GeneralLayouts.Section>
+        </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <GeneralLayouts.Section>
-          <InputVertical title="Schedule">
+        <Section>
+          <InputVertical title={t("fields.schedule.label")}>
             <ScheduleEditor
               mode={mode}
               onModeChange={setMode}
@@ -373,21 +349,17 @@ export default function ScheduleTaskForm({
               error={scheduleError}
             />
           </InputVertical>
-        </GeneralLayouts.Section>
+        </Section>
 
-        <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+        <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-        <GeneralLayouts.Section>
-          <InputVertical
-            title="Pre-approved apps"
-            description="Selected apps can act without pausing for approval while this task runs on its own. Note: an app you don't pre-approve will pause mid-run to ask for your approval. The run may stall or fail if you do not approve an action request."
-          >
-            <PreApprovalPicker
-              selectedIds={preApprovedAppIds}
-              onChange={setPreApprovedAppIds}
-            />
-          </InputVertical>
-        </GeneralLayouts.Section>
+        <Section alignItems="stretch">
+          <TaskActionPolicies
+            taskId={initial.taskId}
+            value={actionPolicies}
+            onChange={setActionPolicies}
+          />
+        </Section>
       </SettingsLayouts.Body>
     </SettingsLayouts.Root>
   );
@@ -400,6 +372,5 @@ export function defaultFormInitial(): ScheduleTaskFormInitial {
     prompt: "",
     mode: "interval",
     payload: { unit: "hours", every: 1 },
-    preApprovedAppIds: [],
   };
 }

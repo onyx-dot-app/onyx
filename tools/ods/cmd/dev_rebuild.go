@@ -19,15 +19,20 @@ Use after the published image has been updated or after changing devcontainer.js
 Examples:
   ods dev rebuild`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runDevRebuild()
+			if err := runDevRebuild(); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
 	return cmd
 }
 
-func runDevRebuild() {
-	image := devcontainerImage()
+func runDevRebuild() error {
+	image, err := devcontainerImage()
+	if err != nil {
+		return err
+	}
 
 	log.Infof("Pulling %s...", image)
 	pull := exec.Command("docker", "pull", image)
@@ -37,5 +42,5 @@ func runDevRebuild() {
 		log.Warnf("Failed to pull image (continuing with local copy): %v", err)
 	}
 
-	runDevcontainer("up", []string{"--remove-existing-container"})
+	return runDevcontainer("up", []string{"--remove-existing-container"})
 }

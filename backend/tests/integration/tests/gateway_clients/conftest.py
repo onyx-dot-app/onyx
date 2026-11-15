@@ -22,9 +22,9 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import Permission
 from onyx.llm.constants import LlmProviderNames
+from tests.common.models import CI_OPENAI_MODEL
 from tests.integration.common_utils import http_client
 from tests.integration.common_utils.constants import API_SERVER_URL, GENERAL_HEADERS
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
@@ -47,7 +47,7 @@ from tests.utils.secret_names import TestSecret
 
 CLI_TIMEOUT_SECONDS = 120
 ANTHROPIC_MODEL_NAME = "claude-haiku-4-5"
-OPENAI_MODEL_NAME = "gpt-5-mini"
+OPENAI_MODEL_NAME = CI_OPENAI_MODEL
 CLAUDE_CODE_PACKAGE = "@anthropic-ai/claude-code@2.1.221"
 CODEX_PACKAGE = "@openai/codex@0.146.0"
 
@@ -156,15 +156,15 @@ def gateway_admin(_real_api_server: None) -> DATestUser:  # noqa: ARG001
     its data the way the root `admin_user` fixture does on role mismatch.
     """
     try:
-        # role/is_active are placeholders; login_as_user overwrites role from
-        # the real /me response.
+        # is_admin/is_active are placeholders; login_as_user overwrites them
+        # from the real /me response.
         return UserManager.login_as_user(
             DATestUser(
                 id="",
                 email=_DEV_ADMIN_EMAIL,
                 password=DEFAULT_PASSWORD,
                 headers=dict(GENERAL_HEADERS),
-                role=UserRole.BASIC,
+                is_admin=False,
                 is_active=True,
             )
         )
@@ -183,8 +183,8 @@ def gateway_admin(_real_api_server: None) -> DATestUser:  # noqa: ARG001
             f"Could not create {_DEV_ADMIN_EMAIL} in the fresh CI deployment: "
             f"{create_error}"
         )
-    if user.role != UserRole.ADMIN:
-        pytest.fail(f"Created {_DEV_ADMIN_EMAIL} with role {user.role}, expected admin")
+    if not UserManager.is_admin(user):
+        pytest.fail(f"Created {_DEV_ADMIN_EMAIL} without admin panel access")
     return user
 
 

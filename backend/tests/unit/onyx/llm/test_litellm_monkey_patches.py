@@ -2,6 +2,7 @@ from datetime import datetime
 from typing import Any, cast
 from unittest import mock
 
+import pytest
 from litellm.completion_extras.litellm_responses_transformation.transformation import (
     LiteLLMResponsesTransformationHandler,
     OpenAiResponsesToChatCompletionStreamIterator,
@@ -9,7 +10,8 @@ from litellm.completion_extras.litellm_responses_transformation.transformation i
 from litellm.litellm_core_utils.litellm_logging import Logging
 from litellm.llms.ollama.chat.transformation import OllamaChatCompletionResponseIterator
 from litellm.types.llms.openai import ResponseAPIUsage, ResponsesAPIResponse
-from litellm.types.utils import ModelResponse
+from litellm.types.utils import ChatCompletionDeltaToolCall, ModelResponse
+from openai.types.responses.response import IncompleteDetails
 from openai.types.responses.response_output_message import ResponseOutputMessage
 from openai.types.responses.response_output_text import ResponseOutputText
 from openai.types.responses.response_reasoning_item import (
@@ -62,7 +64,12 @@ def test_ollama_chunk_parser_transitions_from_native_thinking_to_content() -> No
     assert thinking_response.choices[0].delta.reasoning_content == "Let me think"
     assert thinking_response.choices[0].delta.content is None
 
-    assert getattr(content_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            content_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert content_response.choices[0].delta.content == "Final answer"
     assert iterator.finished_reasoning_content is True
 
@@ -84,7 +91,12 @@ def test_ollama_chunk_parser_keeps_tagged_thinking_until_close_tag() -> None:
     assert middle_response.choices[0].delta.reasoning_content == "step 2"
     assert middle_response.choices[0].delta.content is None
 
-    assert getattr(close_response.choices[0].delta, "reasoning_content", None) is None
+    assert (
+        getattr(  # ods: ignore[getattr]
+            close_response.choices[0].delta, "reasoning_content", None
+        )
+        is None
+    )
     assert close_response.choices[0].delta.content == "final"
     assert iterator.finished_reasoning_content is True
 
@@ -118,40 +130,21 @@ def test_ollama_chunk_parser_preserves_content_when_thinking_and_content_coexist
     assert response.choices[0].delta.content == "Visible answer token"
 
 
-def test_responses_transform_response_preserves_reasoning_summary_sections() -> None:
-    apply_monkey_patches()
-    raw_response = ResponsesAPIResponse(
+def _build_responses_response(
+    output: list[Any],
+    incomplete_details: IncompleteDetails | None = None,
+    output_tokens: int = 3,
+) -> ResponsesAPIResponse:
+    return ResponsesAPIResponse(
         id="resp_1",
         created_at=0,
         error=None,
-        incomplete_details=None,
+        incomplete_details=incomplete_details,
         instructions=None,
         metadata={},
         model="m",
         object="response",
-        output=[
-            ResponseReasoningItem(
-                id="rs_1",
-                type="reasoning",
-                summary=[
-                    Summary(text="first section", type="summary_text"),
-                    Summary(text="second section", type="summary_text"),
-                ],
-            ),
-            ResponseOutputMessage(
-                id="msg_1",
-                type="message",
-                role="assistant",
-                status="completed",
-                content=[
-                    ResponseOutputText(
-                        type="output_text",
-                        text="answer",
-                        annotations=[],
-                    )
-                ],
-            ),
-        ],
+        output=output,
         parallel_tool_calls=False,
         temperature=None,
         tool_choice="auto",
@@ -160,15 +153,22 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
         max_output_tokens=None,
         previous_response_id=None,
         reasoning=None,
-        status="completed",
+        status="incomplete" if incomplete_details else "completed",
         text=None,
         truncation=None,
-        usage=ResponseAPIUsage(input_tokens=2, output_tokens=3, total_tokens=5),
+        usage=ResponseAPIUsage(
+            input_tokens=2,
+            output_tokens=output_tokens,
+            total_tokens=2 + output_tokens,
+        ),
         user=None,
         store=False,
     )
 
-    result = LiteLLMResponsesTransformationHandler().transform_response(
+
+def _invoke_transform_response(raw_response: ResponsesAPIResponse) -> Any:
+    apply_monkey_patches()
+    return LiteLLMResponsesTransformationHandler().transform_response(
         model="m",
         raw_response=raw_response,
         model_response=ModelResponse(),
@@ -188,9 +188,75 @@ def test_responses_transform_response_preserves_reasoning_summary_sections() -> 
         encoding=None,
     )
 
+
+def _reasoning_item(*texts: str) -> ResponseReasoningItem:
+    return ResponseReasoningItem(
+        id="rs_1",
+        type="reasoning",
+        summary=[Summary(text=text, type="summary_text") for text in texts],
+    )
+
+
+def _message_item(text: str) -> ResponseOutputMessage:
+    return ResponseOutputMessage(
+        id="msg_1",
+        type="message",
+        role="assistant",
+        status="completed",
+        content=[ResponseOutputText(type="output_text", text=text, annotations=[])],
+    )
+
+
+def test_responses_transform_response_preserves_reasoning_summary_sections() -> None:
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[
+                _reasoning_item("first section", "second section"),
+                _message_item("answer"),
+            ]
+        )
+    )
+
     assert (
         result.choices[0].message.reasoning_content == "first section\n\nsecond section"
     )
+
+
+def test_responses_transform_response_maps_incomplete_reply_to_empty_message() -> None:
+    """A reasoning model that spends max_output_tokens on reasoning returns an
+    incomplete reply with no message item. Upstream maps it to an empty message
+    with the truncation as finish_reason; the patch keeps the reasoning summary
+    readable with newlines between its parts."""
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[_reasoning_item("thinking about lighthouses", "ran out of budget")],
+            incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+            output_tokens=20,
+        )
+    )
+
+    choice = result.choices[0]
+    assert choice.finish_reason == "length"
+    assert not choice.message.content
+    assert (
+        choice.message.reasoning_content
+        == "thinking about lighthouses\n\nran out of budget"
+    )
+    assert result.usage.completion_tokens == 20
+
+
+def test_responses_transform_response_incomplete_with_message_uses_upstream() -> None:
+    """An incomplete reply that still carries a message item is upstream's
+    business: the partial text must come back, not an empty fallback."""
+    result = _invoke_transform_response(
+        _build_responses_response(
+            output=[_message_item("Once upon a")],
+            incomplete_details=IncompleteDetails(reason="max_output_tokens"),
+            output_tokens=20,
+        )
+    )
+
+    assert result.choices[0].message.content == "Once upon a"
 
 
 def _minimal_completed_response_dict() -> dict[str, Any]:
@@ -249,7 +315,10 @@ def test_responses_chunk_parser_ignores_empty_tool_argument_delta() -> None:
     )
     tool_calls = real.choices[0].delta.tool_calls
     assert tool_calls is not None
-    assert tool_calls[0].function.arguments == '{"query": "onboarding"}'
+    assert isinstance(tool_calls[0], ChatCompletionDeltaToolCall)
+    tool_call = tool_calls[0]
+    assert isinstance(tool_call, ChatCompletionDeltaToolCall)
+    assert tool_call.function.arguments == '{"query": "onboarding"}'
 
 
 def test_assembled_streaming_response_handles_dict_response() -> None:
@@ -295,11 +364,11 @@ def test_bridge_check_delegates_without_prefix() -> None:
 
     apply_monkey_patches()
     model_info, model = litellm_main.responses_api_bridge_check(
-        model="gpt-4o",
+        model="gpt-6-sol",
         custom_llm_provider="openai",
     )
     assert model_info.get("mode") != "responses"
-    assert model == "gpt-4o"
+    assert model == "gpt-6-sol"
 
 
 def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
@@ -313,7 +382,7 @@ def test_openai_should_fake_stream_streams_natively_on_registry_miss() -> None:
         side_effect=Exception("This model isn't mapped yet"),
     ) as get_model_info_mock:
         result = config.should_fake_stream(
-            model="bedrock_mantle/openai.gpt-5.6-sol",
+            model="bedrock_mantle/openai.gpt-6.1-sol",
             stream=True,
             custom_llm_provider="openai",
         )
@@ -376,3 +445,201 @@ def test_azure_should_fake_stream_inherits_registry_aware_patch() -> None:
             )
             is False
         )
+
+
+def _anthropic_body(
+    thinking: dict[str, str], messages: list[Any], vertex: bool = False
+) -> dict[str, Any]:
+    apply_monkey_patches()
+    from litellm.llms.anthropic.chat.transformation import AnthropicConfig
+    from litellm.llms.vertex_ai.vertex_ai_partner_models.anthropic.transformation import (
+        VertexAIAnthropicConfig,
+    )
+
+    config = VertexAIAnthropicConfig() if vertex else AnthropicConfig()
+    with mock.patch("litellm.modify_params", True):
+        return config.transform_request(
+            model="claude-sonnet-5",
+            messages=messages,
+            optional_params={"thinking": dict(thinking), "max_tokens": 1024},
+            litellm_params={},
+            headers={},
+        )
+
+
+_TOOL_HISTORY: list[Any] = [
+    {"role": "user", "content": "What's the weather in SF?"},
+    {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_1",
+                "type": "function",
+                "function": {"name": "get_weather", "arguments": "{}"},
+            }
+        ],
+    },
+    {"role": "tool", "tool_call_id": "call_1", "content": "Sunny, 70F"},
+]
+
+
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_disabled_thinking_survives_tool_call_history(off_type: str) -> None:
+    """Upstream drops any thinking param once tool calls arrive without thinking
+    blocks. Off thinking cannot cause the error that guard exists for, and
+    dropping it hands the Claude 5 line back its default effort."""
+    body = _anthropic_body({"type": off_type}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": off_type}
+
+
+def test_anthropic_api_keeps_enabled_thinking_after_tool_calls() -> None:
+    """Onyx sends thinking after a tool step with no blocks only when the model
+    chose not to think, and the Anthropic API accepts it."""
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+def test_vertex_keeps_enabled_thinking_after_tool_calls() -> None:
+    body = _anthropic_body({"type": "adaptive"}, list(_TOOL_HISTORY), vertex=True)
+    assert body["thinking"] == {"type": "adaptive"}
+
+
+def _converse_fields(thinking: dict[str, str], messages: list[Any]) -> Any:
+    apply_monkey_patches()
+    from litellm.llms.bedrock.chat.converse_transformation import AmazonConverseConfig
+
+    with mock.patch("litellm.modify_params", True):
+        data = AmazonConverseConfig()._transform_request_helper(
+            model="anthropic.claude-sonnet-5",
+            system_content_blocks=[],
+            optional_params={"thinking": dict(thinking), "maxTokens": 1024},
+            messages=messages,
+            headers={},
+        )
+    return data.get("additionalModelRequestFields")
+
+
+@pytest.mark.parametrize("off_type", ["disabled", "between_tools"])
+def test_converse_keeps_disabled_thinking_after_tool_calls(off_type: str) -> None:
+    """Converse carries its own copy of the upstream drop, and puts thinking
+    under additionalModelRequestFields rather than at the top level."""
+    fields = _converse_fields({"type": off_type}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": off_type}}
+
+
+def test_converse_keeps_enabled_thinking_after_tool_calls() -> None:
+    fields = _converse_fields({"type": "adaptive"}, list(_TOOL_HISTORY))
+    assert fields == {"thinking": {"type": "adaptive"}}
+
+
+def test_openrouter_chunk_parser_keeps_served_model() -> None:
+    from litellm.llms.openrouter.chat.transformation import (
+        OpenRouterChatCompletionStreamingHandler,
+    )
+
+    apply_monkey_patches()
+    handler = OpenRouterChatCompletionStreamingHandler(
+        streaming_response=iter([]), sync_stream=True
+    )
+    chunk = {
+        "id": "gen-1",
+        "created": 1762544600,
+        "model": "deepseek/deepseek-v4-flash",
+        "choices": [{"index": 0, "delta": {"content": "hi"}, "finish_reason": None}],
+    }
+
+    parsed = handler.chunk_parser(chunk)
+
+    assert parsed.provider_specific_fields == {
+        "routed_model": "deepseek/deepseek-v4-flash"
+    }
+
+
+def _gemini_thinking_config(model: str, reasoning_effort: str) -> Any:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    config = VertexGeminiConfig()
+    assert "reasoning_effort" in config.get_supported_openai_params(model)
+    params = config.map_openai_params(
+        non_default_params={"reasoning_effort": reasoning_effort},
+        optional_params={},
+        model=model,
+        drop_params=False,
+    )
+    return params["thinkingConfig"]
+
+
+def test_gemini_4_maps_reasoning_to_thinking_level() -> None:
+    assert _gemini_thinking_config("gemini-4-argon", "low") == {
+        "thinkingLevel": "low",
+        "includeThoughts": True,
+    }
+
+
+@pytest.mark.parametrize(
+    "model,level",
+    [
+        ("gemini-4-argon", "medium"),
+        ("gemini-3.1-pro-preview", "medium"),
+        ("gemini-3-pro-preview", "high"),
+    ],
+)
+def test_gemini_medium_effort_thinking_level(model: str, level: str) -> None:
+    assert _gemini_thinking_config(model, "medium")["thinkingLevel"] == level
+
+
+def test_gemini_2_keeps_thinking_budget() -> None:
+    assert "thinkingBudget" in _gemini_thinking_config("gemini-2.5-flash", "low")
+
+
+def test_gemini_candidate_without_content_yields_empty_choice() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [{"finishReason": "MAX_TOKENS", "index": 0}], response, {}
+    )
+    assert [(c.finish_reason, c.message.content) for c in response.choices] == [
+        ("length", None)
+    ]
+
+
+def test_gemini_candidate_without_content_does_not_inherit_prior_candidate() -> None:
+    from litellm.llms.vertex_ai.gemini.vertex_and_google_ai_studio_gemini import (
+        VertexGeminiConfig,
+    )
+
+    apply_monkey_patches()
+    response = ModelResponse()
+    response.choices = []
+    VertexGeminiConfig._process_candidates(
+        [
+            {
+                "content": {
+                    "role": "model",
+                    "parts": [
+                        {"text": "hi"},
+                        {"functionCall": {"name": "search", "args": {}}},
+                    ],
+                },
+                "finishReason": "STOP",
+            },
+            {"finishReason": "MAX_TOKENS"},
+        ],
+        response,
+        {},
+    )
+    first, second = response.choices
+    assert first.message.content == "hi"
+    assert first.message.tool_calls
+    assert (second.index, second.finish_reason) == (1, "length")
+    assert second.message.content is None
+    assert not second.message.tool_calls

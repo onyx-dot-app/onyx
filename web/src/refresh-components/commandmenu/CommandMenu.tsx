@@ -1,5 +1,6 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import React, {
   createContext,
   useContext,
@@ -8,18 +9,17 @@ import React, {
   useRef,
   useMemo,
 } from "react";
+import { useFocusOnMount } from "@opal/hooks";
+import { useTranslations } from "next-intl";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import * as VisuallyHidden from "@radix-ui/react-visually-hidden";
 import useContainerCenter from "@/hooks/useContainerCenter";
 import { cn } from "@opal/utils";
-import Text from "@/refresh-components/texts/Text";
-import { InputTypeIn } from "@opal/components";
+import { Text, InputTypeIn, Divider } from "@opal/components";
 import LineItem from "@/refresh-components/buttons/LineItem";
 import Tag from "@/refresh-components/buttons/Tag";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
-import Divider from "@/refresh-components/Divider";
-import { Section } from "@/layouts/general-layouts";
 import { SvgSearch, SvgX } from "@opal/icons";
 import type {
   CommandMenuProps,
@@ -269,6 +269,15 @@ function CommandMenuRoot({ open, onOpenChange, children }: CommandMenuProps) {
           break;
         }
         case "Enter": {
+          // A focused filter header already handled its own Enter. The search
+          // input also prevents Enter, so match on the item, not the flag.
+          if (
+            e.defaultPrevented &&
+            e.target instanceof Element &&
+            e.target.closest("[data-command-item]")
+          ) {
+            break;
+          }
           e.preventDefault();
           e.stopPropagation();
           if (highlightedValue) {
@@ -366,6 +375,7 @@ const CommandMenuContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   CommandMenuContentProps
 >(({ children }, ref) => {
+  const t = useTranslations("common.commandMenu");
   const { handleKeyDown } = useCommandMenuContext();
   const { centerX, hasContainerCenter } = useContainerCenter();
 
@@ -380,38 +390,25 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
         )}
       />
-      {/* Content - centered within the main container when available,
-          otherwise falls back to viewport centering */}
+      {/* Content - positioned and animated like every Opal modal: top-aligned,
+          centred on the main container when available, else the viewport */}
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
         style={
-          hasContainerCenter
-            ? ({
-                left: centerX,
-                "--tw-enter-translate-x": "-50%",
-                "--tw-exit-translate-x": "-50%",
-              } as React.CSSProperties)
-            : undefined
+          hasContainerCenter && centerX !== null ? { left: centerX } : undefined
         }
+        {...(!hasContainerCenter && { "data-viewport-centered": "" })}
         className={cn(
-          "fixed top-[72px]",
-          hasContainerCenter ? "-translate-x-1/2" : "inset-x-0 mx-auto",
-          "z-modal",
+          "opal-modal-positioner",
           "bg-background-tint-00 border rounded-16 shadow-2xl outline-hidden",
           "flex flex-col overflow-hidden",
-          "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-144px)]",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out",
-          "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-          "data-[state=open]:slide-in-from-bottom data-[state=open]:slide-in-from-left-0",
-          "data-[state=closed]:slide-out-to-bottom data-[state=closed]:slide-out-to-left-0",
-          "duration-200",
           "w-128",
           "min-h-60"
         )}
       >
         <VisuallyHidden.Root asChild>
-          <DialogPrimitive.Title>Command Menu</DialogPrimitive.Title>
+          <DialogPrimitive.Title>{t("dialog.title")}</DialogPrimitive.Title>
         </VisuallyHidden.Root>
         {children}
       </DialogPrimitive.Content>
@@ -431,7 +428,7 @@ CommandMenuContent.displayName = "CommandMenuContent";
  * Arrow keys preventDefault at input level (to stop cursor movement) then bubble to Content.
  */
 function CommandMenuHeader({
-  placeholder = "Search...",
+  placeholder,
   filters = [],
   value = "",
   onValueChange,
@@ -439,6 +436,9 @@ function CommandMenuHeader({
   onClose,
   onEmptyBackspace,
 }: CommandMenuHeaderProps) {
+  const t = useTranslations("common.commandMenu");
+  const focusOnMount = useFocusOnMount<HTMLInputElement>();
+
   // Prevent default for arrow/enter keys so they don't move cursor or submit forms
   // The actual handling happens in Root's centralized handler via event bubbling
   const handleInputKeyDown = useCallback(
@@ -458,12 +458,7 @@ function CommandMenuHeader({
     <div className="shrink-0">
       {/* Top row: Search icon, filters, close button */}
       <div className="px-3 pt-3 flex flex-row justify-between items-center">
-        <Section
-          flexDirection="row"
-          justifyContent="start"
-          gap={0.5}
-          width="fit"
-        >
+        <Section flexDirection="row" justifyContent="start" gap={2} width="fit">
           {/* Standalone search icon */}
           <SvgSearch className="w-6 h-6 stroke-text-04" />
           {filters.map((filter) => (
@@ -485,7 +480,7 @@ function CommandMenuHeader({
               prominence="tertiary"
               size="sm"
               onClick={onClose}
-              aria-label="Close menu"
+              aria-label={t("closeButton.ariaLabel")}
             />
           </DialogPrimitive.Close>
         )}
@@ -494,11 +489,11 @@ function CommandMenuHeader({
       <div className="px-2 pb-2 pt-0.5">
         <InputTypeIn
           variant="internal"
-          placeholder={placeholder}
+          placeholder={placeholder ?? t("search.placeholder")}
           value={value}
           onChange={(e) => onValueChange?.(e.target.value)}
           onKeyDown={handleInputKeyDown}
-          autoFocus
+          ref={focusOnMount}
         />
       </div>
     </div>
@@ -516,6 +511,7 @@ function CommandMenuHeader({
  * Uses ScrollIndicatorDiv for automatic scroll shadows.
  */
 function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
+  const t = useTranslations("common.commandMenu");
   const { isKeyboardNav, onListMouseLeave } = useCommandMenuContext();
   const childCount = React.Children.count(children);
 
@@ -526,7 +522,7 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
         role="status"
         aria-live="polite"
       >
-        <Text secondaryBody text03>
+        <Text font="secondary-body" color="text-03">
           {emptyMessage}
         </Text>
       </div>
@@ -536,7 +532,8 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
   return (
     <ScrollIndicatorDiv
       role="listbox"
-      aria-label="Command menu options"
+      tabIndex={-1}
+      aria-label={t("options.ariaLabel")}
       className="p-1 gap-1 max-h-[60vh] bg-background-tint-01"
       backgroundColor="var(--background-tint-01)"
       data-command-menu-list
@@ -563,7 +560,6 @@ function CommandMenuList({ children, emptyMessage }: CommandMenuListProps) {
 function CommandMenuFilter({
   value,
   children,
-  icon,
   isApplied,
   onSelect,
 }: CommandMenuFilterProps) {
@@ -586,31 +582,27 @@ function CommandMenuFilter({
 
   // When filter is applied, show as group label (non-interactive)
   if (isApplied) {
-    return (
-      <Divider
-        showTitle
-        text={children as string}
-        icon={icon}
-        dividerLine={false}
-      />
-    );
+    return <Divider title={children} />;
   }
 
   const isHighlighted = value === highlightedValue;
 
-  // Selectable filter - uses LineItem, delegates all events to context
+  // Selectable filter - a foldable Divider header, delegates all events to context
   return (
-    <div data-command-item={value} role="option" aria-selected={isHighlighted}>
+    <div
+      data-command-item={value}
+      role="option"
+      aria-selected={isHighlighted}
+      tabIndex={-1}
+      onMouseEnter={() => onItemMouseEnter(value)}
+      onMouseMove={() => onItemMouseMove(value)}
+    >
       <Divider
-        showTitle
-        text={children as string}
-        icon={icon}
+        title={children}
         foldable
-        isHighlighted={isHighlighted}
-        onClick={() => onItemClick(value)}
-        onMouseEnter={() => onItemMouseEnter(value)}
-        onMouseMove={() => onItemMouseMove(value)}
-        dividerLine={false}
+        open={false}
+        onOpenChange={() => onItemClick(value)}
+        interaction={isHighlighted ? "hover" : undefined}
       />
     </div>
   );
@@ -716,7 +708,7 @@ function CommandMenuAction({
         icon={icon}
         rightChildren={
           shortcut ? (
-            <Text figureKeystroke text02>
+            <Text font="figure-keystroke" color="text-02">
               {shortcut}
             </Text>
           ) : undefined
@@ -745,12 +737,7 @@ function CommandMenuAction({
 function CommandMenuFooter({ leftActions }: CommandMenuFooterProps) {
   return (
     <div className="shrink-0">
-      <Section
-        flexDirection="row"
-        justifyContent="start"
-        gap={1}
-        padding={0.75}
-      >
+      <Section flexDirection="row" justifyContent="start" gap={4} padding={3}>
         {leftActions}
       </Section>
     </div>
@@ -773,7 +760,7 @@ function CommandMenuFooterAction({
   return (
     <div className="flex items-center gap-1" aria-label={label}>
       <Icon className="w-3.5 h-3.5 stroke-text-02" aria-hidden="true" />
-      <Text mainUiBody text03>
+      <Text font="main-ui-body" color="text-03">
         {label}
       </Text>
     </div>

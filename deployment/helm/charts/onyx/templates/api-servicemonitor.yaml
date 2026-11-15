@@ -2,7 +2,7 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
-  name: {{ include "onyx.fullname" . }}-api
+  name: {{ include "onyx.resourceName" (list . "api") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.monitoring.serviceMonitors.labels }}

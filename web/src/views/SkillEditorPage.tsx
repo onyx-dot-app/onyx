@@ -1,5 +1,7 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
 import {
   useCallback,
   useEffect,
@@ -7,9 +9,8 @@ import {
   useState,
   type FormEvent,
 } from "react";
+import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
-import { useRouter } from "next/navigation";
-import type { Route } from "next";
 import {
   Button,
   Card,
@@ -18,31 +19,28 @@ import {
   InputTextArea,
   InputTypeIn,
   MessageCard,
-  Tag,
   Tooltip,
+  Text,
+  useCreateModal,
 } from "@opal/components";
-import {
-  SvgAlertTriangle,
-  SvgBlocks,
-  SvgShare,
-  SvgSimpleLoader,
-  SvgTrash,
-} from "@opal/icons";
+import { SvgAlertTriangle, SvgBlocks, SvgShare, SvgTrash } from "@opal/icons";
 import {
   Content,
   InputHorizontal,
   InputVertical,
   SettingsLayouts,
+  Section,
   toast,
 } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { refreshSkillLists } from "@/lib/skills/cache";
 import {
   createCustomSkillFromEditor,
   deleteUserSkill,
   inspectSkillBundle,
   isSkillNameConflict,
+  isSkillVersionStale,
   patchUserSkill,
   removeUserSkillFile,
   uploadUserSkillFiles,
@@ -58,6 +56,12 @@ import InstructionsDisplayModeToggle, {
   type InstructionsDisplayMode,
 } from "@/sections/skills/InstructionsDisplayModeToggle";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import SkillSharingSummary from "@/sections/skills/SkillSharingSummary";
+import {
+  emptySkillSharingDraft,
+  serializeSkillSharing,
+  type SkillSharingDraft,
+} from "@/lib/skills/sharing";
 import SkillNameConflictModal from "@/sections/modals/skills/SkillNameConflictModal";
 import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import UnsavedChangesModal from "@/sections/modals/UnsavedChangesModal";
@@ -65,6 +69,8 @@ import SkillFileTree from "@/sections/skills/SkillFileTree";
 import SkillFilesPicker from "@/sections/skills/SkillFilesPicker";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { externalAppAdminUrl } from "@/app/craft/v1/apps/admin/skillAssociationNavigation";
 
 interface SkillEditorPageProps {
@@ -74,58 +80,21 @@ interface SkillEditorPageProps {
   externalAppName?: string;
 }
 
-function getSharingStatus(skill: SkillEditableDetail): {
-  title: string;
-  description: string;
-  color: "blue" | "gray" | "purple";
-} {
-  if (skill.external_app) {
-    return {
-      title: "Organization",
-      description: `Organization-wide viewer access is required while this skill is associated with app “${skill.external_app.name}”.`,
-      color: "blue",
-    };
-  }
-  if (skill.public_permission !== null) {
-    return {
-      title: "Organization",
-      description:
-        skill.public_permission === "EDITOR"
-          ? "Everyone in your organization can use and edit this skill."
-          : "Everyone in your organization can use this skill.",
-      color: "blue",
-    };
-  }
-
-  const userCount = skill.user_shares.length;
-  const groupCount = skill.group_shares.length;
-  const shareCount = userCount + groupCount;
-  if (shareCount > 0) {
-    return {
-      title: `${shareCount} ${shareCount === 1 ? "share" : "shares"}`,
-      description: "Only selected users and groups can use this skill.",
-      color: "gray",
-    };
-  }
-
-  return {
-    title: "Personal",
-    description: "Only you can use this skill.",
-    color: "purple",
-  };
-}
-
 export default function SkillEditorPage({
   skillId,
   draftId,
   externalAppId,
   externalAppName,
 }: SkillEditorPageProps) {
+  const t = useTranslations("skills");
   const isCreating = skillId === undefined;
   const hasAppContext = externalAppId !== undefined;
   const isCreatingForApp = isCreating && hasAppContext;
-  const router = useRouter();
-  const { isAdmin } = useUser();
+  const navigation = useNavigation();
+  const { isAdmin, user } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const creationDraft = useMemo(
     () => (isCreating && draftId ? getSkillCreationDraft(draftId) : undefined),
     [draftId, isCreating]
@@ -151,8 +120,22 @@ export default function SkillEditorPage({
   const [instructionsDisplayMode, setInstructionsDisplayMode] =
     useState<InstructionsDisplayMode>("raw");
   const [hydratedSkillId, setHydratedSkillId] = useState<string | null>(null);
+  const [creationSharing, setCreationSharing] =
+    useState<SkillSharingDraft | null>(null);
+  const sharingDraft: SkillSharingDraft = {
+    ...emptySkillSharingDraft(
+      name || t("editor.header.createTitle"),
+      user ? { id: user.id, email: user.email } : null
+    ),
+    public_permission: isCreatingForApp ? "VIEWER" : null,
+    external_app: isCreatingForApp ? { name: externalAppName ?? "" } : null,
+    ...creationSharing,
+    name: name || t("editor.header.createTitle"),
+  };
   const [shareOpen, setShareOpen] = useState(false);
-  const [deleteOpen, setDeleteOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const confirmUploadModal = useCreateModal();
+  const nameConflictModal = useCreateModal();
   const [isSaving, setIsSaving] = useState(false);
   const [isPreparingFiles, setIsPreparingFiles] = useState(false);
   const [isUploadingFiles, setIsUploadingFiles] = useState(false);
@@ -168,11 +151,19 @@ export default function SkillEditorPage({
   const [appConflictingSkillName, setAppConflictingSkillName] = useState<
     string | null
   >(null);
+  // A save, upload or file removal started from an older version than the
+  // newest saved one. The user must reload before the next edit.
+  const [isVersionStale, setIsVersionStale] = useState(false);
+  const [isReloadingStale, setIsReloadingStale] = useState(false);
+  // The version the form fields show. A background refresh can load a newer
+  // version into `skill` without touching the fields, so edits send this id.
+  const [baseVersionId, setBaseVersionId] = useState<string | null>(null);
 
   const syncEditableFields = useCallback((nextSkill: SkillEditableDetail) => {
     setName(nextSkill.name);
     setDescription(nextSkill.description);
     setInstructionsMarkdown(nextSkill.instructions_markdown);
+    setBaseVersionId(nextSkill.current_version_id);
   }, []);
 
   useEffect(() => {
@@ -184,7 +175,11 @@ export default function SkillEditorPage({
   const isDirty = useMemo(() => {
     if (isCreating) {
       return Boolean(
-        name || description || instructionsMarkdown || pendingFilesUpload
+        name ||
+        description ||
+        instructionsMarkdown ||
+        pendingFilesUpload ||
+        creationSharing
       );
     }
     if (!skill) return false;
@@ -194,6 +189,7 @@ export default function SkillEditorPage({
     );
   }, [
     description,
+    creationSharing,
     instructionsMarkdown,
     isCreating,
     name,
@@ -214,8 +210,14 @@ export default function SkillEditorPage({
   // A bundle upload rewrites name/description/instructions from SKILL.md, so
   // lock the detail fields while one is in flight: edits made mid-upload
   // would be clobbered by the post-upload sync (or race it via Save).
+  // A file removal and a stale reload sync the fields from the server too.
   const fieldsLocked =
-    !canManageSkill || isPreparingFiles || isUploadingFiles || isSaving;
+    !canManageSkill ||
+    isPreparingFiles ||
+    isUploadingFiles ||
+    isSaving ||
+    removingFilePath !== null ||
+    isReloadingStale;
 
   const canSave =
     (isCreating || !!skill) &&
@@ -226,23 +228,19 @@ export default function SkillEditorPage({
     !!name.trim() &&
     !!description.trim() &&
     !!instructionsMarkdown.trim() &&
-    !isSaving;
+    !isSaving &&
+    removingFilePath === null &&
+    !isVersionStale;
 
   function leaveEditor() {
-    router.push(
-      hasAppContext
-        ? externalAppAdminUrl(externalAppId)
-        : ("/craft/v1/skills" as Route)
+    navigation.go(
+      hasAppContext ? externalAppAdminUrl(externalAppId) : "/craft/v1/skills"
     );
   }
 
   function handleCancel() {
     if (isSaving || isPreparingFiles || isUploadingFiles) return;
     unsavedChanges.requestLeave(leaveEditor);
-  }
-
-  async function refreshSkillList() {
-    await mutate(SWR_KEYS.userSkills);
   }
 
   async function handleSave(
@@ -261,13 +259,18 @@ export default function SkillEditorPage({
             description,
             instructions_markdown: instructionsMarkdown,
             auto_enable: isCreatingForApp ? false : !createDisabled,
-            ...(externalAppId !== undefined
-              ? { external_app_id: externalAppId }
-              : {}),
+            external_app_id: externalAppId,
+            sharing: creationSharing
+              ? serializeSkillSharing(
+                  creationSharing,
+                  isAdmin,
+                  canManageOrgSkills
+                )
+              : undefined,
           },
           pendingFilesUpload?.file
         );
-        setConflictingSkillName(null);
+        nameConflictModal.toggle(false);
         if (draftId) discardSkillCreationDraft(draftId);
         if (isCreatingForApp) {
           // The app editor reads this cache as soon as we return. Wait for its
@@ -281,14 +284,15 @@ export default function SkillEditorPage({
             );
           }
         }
-        void mutate(SWR_KEYS.userSkills).catch((error: unknown) => {
+        void refreshSkillLists(mutate).catch((error: unknown) => {
           console.error("Failed to refresh skill data after creation", error);
         });
-        toast.success(`Created "${created.name}"`);
-        router.replace(
+        toast.success(t("editor.toasts.created", { name: created.name }));
+        navigation.go(
           isCreatingForApp
             ? externalAppAdminUrl(externalAppId)
-            : ("/craft/v1/skills" as Route)
+            : "/craft/v1/skills",
+          { replace: true }
         );
         return;
       }
@@ -297,19 +301,35 @@ export default function SkillEditorPage({
       const updated = await patchUserSkill(skill.id, {
         description,
         instructions_markdown: instructionsMarkdown,
+        base_version_id: baseVersionId,
       });
-      const nextSkill: SkillEditableDetail = {
+      // Another save can commit before the server builds its response, so
+      // load the fields and their version together.
+      let fresh: SkillEditableDetail | undefined;
+      try {
+        fresh = await refreshSkill();
+      } catch (refreshError) {
+        console.error("Failed to reload skill after save", refreshError);
+      }
+      // Without a fresh load, `updated` can name a newer save than these
+      // fields. Keep the old base, so the next save gets a stale error.
+      const nextSkill: SkillEditableDetail = fresh ?? {
         ...skill,
         ...updated,
         instructions_markdown: instructionsMarkdown.trim(),
+        current_version_id: baseVersionId,
       };
-      await refreshSkill(nextSkill, { revalidate: false });
+      if (!fresh) await refreshSkill(nextSkill, { revalidate: false });
       syncEditableFields(nextSkill);
-      await refreshSkillList();
-      toast.success(`Saved "${updated.name}"`);
+      await refreshSkillLists(mutate);
+      toast.success(t("editor.toasts.saved", { name: updated.name }));
     } catch (err) {
       if (isCreatingForApp && isSkillNameConflict(err)) {
         setAppConflictingSkillName(name.trim());
+        return;
+      }
+      if (!isCreating && isSkillVersionStale(err)) {
+        setIsVersionStale(true);
         return;
       }
       if (
@@ -319,10 +339,13 @@ export default function SkillEditorPage({
         isSkillNameConflict(err)
       ) {
         setConflictingSkillName(name.trim());
+        nameConflictModal.toggle(true);
         return;
       }
       console.error("Failed to save skill", err);
-      toast.error(err instanceof Error ? err.message : "Failed to save skill");
+      toast.error(
+        err instanceof Error ? err.message : t("editor.toasts.saveFailed")
+      );
     } finally {
       setIsSaving(false);
     }
@@ -330,7 +353,12 @@ export default function SkillEditorPage({
 
   async function handleSharingSaved() {
     await refreshSkill();
-    await refreshSkillList();
+    await refreshSkillLists(mutate);
+  }
+
+  function handleVersionRestored(restored: SkillEditableDetail) {
+    void refreshSkill(restored, { revalidate: false });
+    syncEditableFields(restored);
   }
 
   async function applyFilesUpload(upload: PreparedSkillFilesUpload) {
@@ -353,7 +381,7 @@ export default function SkillEditorPage({
       } catch (err) {
         console.error("Failed to inspect skill bundle", err);
         toast.error(
-          err instanceof Error ? err.message : "Failed to inspect skill bundle"
+          err instanceof Error ? err.message : t("editor.toasts.inspectFailed")
         );
       } finally {
         setIsUploadingFiles(false);
@@ -364,15 +392,25 @@ export default function SkillEditorPage({
 
     setIsUploadingFiles(true);
     try {
-      const updated = await uploadUserSkillFiles(skill.id, upload.file);
+      const updated = await uploadUserSkillFiles(
+        skill.id,
+        upload.file,
+        baseVersionId
+      );
       await refreshSkill(updated, { revalidate: false });
       syncEditableFields(updated);
-      await refreshSkillList();
-      toast.success(`Updated files for "${updated.name}"`);
+      await refreshSkillLists(mutate);
+      toast.success(t("editor.toasts.filesUpdated", { name: updated.name }));
     } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsVersionStale(true);
+        return;
+      }
       console.error("Failed to update skill files", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to update skill files"
+        err instanceof Error
+          ? err.message
+          : t("editor.toasts.filesUpdateFailed")
       );
     } finally {
       setIsUploadingFiles(false);
@@ -386,6 +424,7 @@ export default function SkillEditorPage({
         return;
       }
       setFilesUploadToConfirm(upload);
+      confirmUploadModal.toggle(true);
       return;
     }
     void applyFilesUpload(upload);
@@ -393,7 +432,7 @@ export default function SkillEditorPage({
 
   function handleImportSelected(upload: PreparedSkillFilesUpload) {
     if (!upload.containsSkillMd) {
-      toast.error("Import a SKILL.md, ZIP, or folder containing SKILL.md.");
+      toast.error(t("editor.toasts.importMissingSkillMd"));
       return;
     }
     handleFilesSelected(upload);
@@ -403,17 +442,41 @@ export default function SkillEditorPage({
     if (!skill || !canManageSkill || removingFilePath !== null) return;
     setRemovingFilePath(path);
     try {
-      const updated = await removeUserSkillFile(skill.id, path);
+      const updated = await removeUserSkillFile(skill.id, path, baseVersionId);
       await refreshSkill(updated, { revalidate: false });
-      await refreshSkillList();
-      toast.success(`Removed "${path}"`);
+      // Removal is blocked while the fields are dirty, so take the fields
+      // with the version the server returned.
+      syncEditableFields(updated);
+      await refreshSkillLists(mutate);
+      toast.success(t("editor.toasts.fileRemoved", { path }));
     } catch (err) {
+      if (isSkillVersionStale(err)) {
+        setIsVersionStale(true);
+        return;
+      }
       console.error("Failed to remove skill file", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to remove skill file"
+        err instanceof Error ? err.message : t("editor.toasts.fileRemoveFailed")
       );
     } finally {
       setRemovingFilePath(null);
+    }
+  }
+
+  async function handleReloadStale() {
+    if (isReloadingStale) return;
+    setIsReloadingStale(true);
+    try {
+      const fresh = await refreshSkill();
+      if (fresh) syncEditableFields(fresh);
+      setIsVersionStale(false);
+    } catch (err) {
+      console.error("Failed to reload skill", err);
+      toast.error(
+        err instanceof Error ? err.message : t("editor.loadError.description")
+      );
+    } finally {
+      setIsReloadingStale(false);
     }
   }
 
@@ -435,13 +498,13 @@ export default function SkillEditorPage({
       }
       // The skill is gone — a transient list-refresh failure must not mask
       // the successful delete or block navigation off the dead editor page.
-      void refreshSkillList();
-      toast.success(`Deleted "${skill.name}"`);
+      void refreshSkillLists(mutate);
+      toast.success(t("editor.toasts.deleted", { name: skill.name }));
       leaveEditor();
     } catch (err) {
       console.error("Failed to delete skill", err);
       toast.error(
-        err instanceof Error ? err.message : "Failed to delete skill"
+        err instanceof Error ? err.message : t("editor.toasts.deleteFailed")
       );
     } finally {
       setIsDeleting(false);
@@ -450,36 +513,36 @@ export default function SkillEditorPage({
 
   const saveTooltip = isSaving
     ? isCreating
-      ? "Saving skill..."
-      : "Saving changes..."
+      ? t("editor.saveTooltip.savingSkill")
+      : t("editor.saveTooltip.savingChanges")
     : !isCreating && !skill
       ? undefined
       : !canManageSkill
-        ? "You don't have permission to edit this skill's details."
+        ? t("editor.saveTooltip.noPermission")
         : !name.trim()
-          ? "Add a name before saving."
+          ? t("editor.saveTooltip.missingName")
           : !description.trim()
-            ? "Add a description before saving."
+            ? t("editor.saveTooltip.missingDescription")
             : !instructionsMarkdown.trim()
-              ? "Add instructions before saving."
+              ? t("editor.saveTooltip.missingInstructions")
               : !isDirty
-                ? "No changes have been made."
+                ? t("editor.saveTooltip.noChanges")
                 : undefined;
 
-  const sharingStatus = skill ? getSharingStatus(skill) : null;
   const filesUploadDisabled =
     !canManageSkill ||
     isPreparingFiles ||
     isUploadingFiles ||
     isSaving ||
+    isVersionStale ||
     (!isCreating && isDirty);
   const filesUploadTooltip =
     !isCreating && isDirty
-      ? "Save detail changes before updating skill files."
+      ? t("editor.filesTooltip.saveFirst")
       : isUploadingFiles
-        ? "Updating skill files..."
+        ? t("editor.filesTooltip.updating")
         : !canManageSkill
-          ? "You don't have permission to update this skill's files."
+          ? t("editor.filesTooltip.noPermission")
           : undefined;
   const displayedFiles = isCreating
     ? (pendingFilesUpload?.entries ?? [])
@@ -494,79 +557,115 @@ export default function SkillEditorPage({
       <SettingsLayouts.Root>
         <SettingsLayouts.Header
           icon={SvgBlocks}
-          title={isCreating ? "Create skill" : "Edit skill"}
+          title={
+            isCreating
+              ? t("editor.header.createTitle")
+              : t("editor.header.editTitle")
+          }
           description={
             isCreating
               ? isCreatingForApp
-                ? `Add an organization skill to app “${externalAppName ?? "External app"}”`
-                : "Build a personal skill"
-              : "Update skill details and files"
+                ? t("editor.header.createForAppDescription", {
+                    appName:
+                      externalAppName ?? t("editor.header.appFallbackName"),
+                  })
+                : t("editor.header.createDescription")
+              : t("editor.header.editDescription")
           }
-          rightChildren={
-            <div className="flex items-center gap-2">
-              <Button
-                prominence="secondary"
-                type="button"
-                disabled={isSaving || isPreparingFiles || isUploadingFiles}
-                onClick={handleCancel}
-              >
-                Cancel
+          cancel={handleCancel}
+          actions={[
+            ...(canManageSkill && !isCreating && skill
+              ? [
+                  <Button
+                    key="sharing"
+                    type="button"
+                    prominence="secondary"
+                    icon={SvgShare}
+                    disabled={fieldsLocked}
+                    onClick={() => setShareOpen(true)}
+                  >
+                    {t("editor.management.sharing.edit.label")}
+                  </Button>,
+                ]
+              : []),
+            <Tooltip key="save" tooltip={saveTooltip} side="bottom">
+              <Button disabled={!canSave} type="submit">
+                {isSaving
+                  ? t("editor.header.save.pendingLabel")
+                  : t("editor.header.save.label")}
               </Button>
-              <Tooltip tooltip={saveTooltip} side="bottom">
-                <Button disabled={!canSave} type="submit">
-                  {isSaving ? "Saving..." : "Save"}
-                </Button>
-              </Tooltip>
-            </div>
-          }
-          backButton={handleCancel}
+            </Tooltip>,
+          ]}
           divider
         />
 
         <SettingsLayouts.Body>
           {!isCreating && isLoading && (
-            <div className="flex min-h-40 items-center justify-center">
-              <SvgSimpleLoader />
-            </div>
+            <Section height="auto" className="min-h-40">
+              <IconLoader />
+            </Section>
           )}
 
           {!isCreating && error && !isLoading && (
             <MessageCard
               variant="error"
-              title="Skill unavailable"
-              description="This skill may not exist, may be built-in, or may not be editable by your account."
+              title={t("editor.loadError.title")}
+              description={t("editor.loadError.description")}
             />
           )}
 
           {(isCreating || skill) && !isLoading && !error && (
             <>
+              {isVersionStale && (
+                <MessageCard
+                  variant="warning"
+                  title={t("editor.staleVersion.title")}
+                  description={t("editor.staleVersion.description")}
+                  rightChildren={
+                    <Button
+                      type="button"
+                      prominence="secondary"
+                      disabled={isReloadingStale}
+                      onClick={() => void handleReloadStale()}
+                    >
+                      {t("editor.staleVersion.reload.label")}
+                    </Button>
+                  }
+                />
+              )}
+
               {appConflictingSkillName && (
                 <MessageCard
                   variant="error"
-                  title="Choose a different skill name"
-                  description={`App “${externalAppName ?? "External app"}” already has an associated skill named “${appConflictingSkillName}”.`}
+                  title={t("editor.appConflict.title")}
+                  description={t("editor.appConflict.description", {
+                    appName:
+                      externalAppName ?? t("editor.header.appFallbackName"),
+                    skillName: appConflictingSkillName,
+                  })}
                 />
               )}
 
               {isCreating && !creationDraft && (
                 <>
-                  <Section gap={0.5} alignItems="stretch" height="auto">
-                    <Card border="solid" rounding="lg" padding="sm">
-                      <Section gap={0.5} alignItems="stretch" height="auto">
+                  <Section gap={2} alignItems="stretch" height="auto">
+                    <Card border="solid" rounding={4} padding={2}>
+                      <Section gap={2} alignItems="stretch" height="auto">
                         <Content
-                          title="Have an existing skill?"
-                          description="Import a SKILL.md, ZIP, or skill folder to prefill the form and include its files."
-                          sizePreset="main-content"
-                          variant="section"
+                          font="main-content-emphasis"
+                          title={t("editor.import.title")}
+                          description={t("editor.import.description")}
                         />
                         <SkillFilesPicker
                           disabled={filesUploadDisabled}
                           busyLabel={
-                            isUploadingFiles ? "Importing..." : undefined
+                            isUploadingFiles
+                              ? t("editor.import.busyLabel")
+                              : undefined
                           }
-                          buttonLabel="Import skill"
-                          inputLabel="Import existing skill"
-                          prompt="Choose a SKILL.md or ZIP, or drop a skill folder here."
+                          buttonLabel={t("editor.import.button.label")}
+                          inputLabel={t("editor.import.input.ariaLabel")}
+                          prompt={t("editor.import.prompt")}
                           onChange={handleImportSelected}
                           onError={(message) => toast.error(message)}
                           onPreparingChange={setIsPreparingFiles}
@@ -575,32 +674,42 @@ export default function SkillEditorPage({
                     </Card>
                   </Section>
 
-                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
                 </>
+              )}
+
+              {isCreating && (
+                <SkillSharingSummary
+                  title={t("editor.creationAccess.title")}
+                  draft={sharingDraft}
+                  count={1}
+                  configureLabel={t("editor.management.sharing.edit.label")}
+                  disabled={fieldsLocked}
+                  onConfigure={() => setShareOpen(true)}
+                />
               )}
 
               <Section alignItems="stretch">
                 <Content
-                  title="Details"
-                  description="Define when and how Craft should use this skill."
-                  sizePreset="main-content"
-                  variant="section"
+                  font="main-content-emphasis"
+                  title={t("editor.details.title")}
+                  description={t("editor.details.description")}
                 />
                 <InputVertical
                   withLabel="name"
-                  title="Name"
+                  title={t("editor.details.name.title")}
                   disabled={fieldsLocked || !isCreating}
                   description={
                     isCreating
-                      ? "Use lowercase letters, numbers, and single hyphens."
-                      : "Skill names cannot be changed after creation."
+                      ? t("editor.details.name.createDescription")
+                      : t("editor.details.name.lockedDescription")
                   }
                 >
                   <Tooltip
                     tooltip={
                       isCreating
                         ? undefined
-                        : "Skill names cannot be changed after creation."
+                        : t("editor.details.name.lockedDescription")
                     }
                     side="top"
                   >
@@ -613,7 +722,7 @@ export default function SkillEditorPage({
                           setName(event.target.value);
                           setAppConflictingSkillName(null);
                         }}
-                        placeholder="Name your skill"
+                        placeholder={t("editor.details.name.placeholder")}
                         variant={
                           fieldsLocked || !isCreating ? "disabled" : "primary"
                         }
@@ -624,8 +733,8 @@ export default function SkillEditorPage({
 
                 <InputVertical
                   withLabel="description"
-                  title="Description"
-                  description="Describe when this skill should be used."
+                  title={t("editor.details.descriptionField.title")}
+                  description={t("editor.details.descriptionField.description")}
                 >
                   <InputTextArea
                     id="description"
@@ -633,7 +742,9 @@ export default function SkillEditorPage({
                     rows={2}
                     value={description}
                     onChange={(event) => setDescription(event.target.value)}
-                    placeholder="What does this skill help with?"
+                    placeholder={t(
+                      "editor.details.descriptionField.placeholder"
+                    )}
                     autoResize
                     maxRows={8}
                     variant={fieldsLocked ? "disabled" : "primary"}
@@ -641,23 +752,28 @@ export default function SkillEditorPage({
                 </InputVertical>
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
               <Section alignItems="stretch">
-                <div className="flex w-full items-start justify-between gap-2">
+                <Section
+                  height="auto"
+                  flexDirection="row"
+                  alignItems="start"
+                  justifyContent="between"
+                  gap={2}
+                >
                   <Content
-                    title="Instructions"
-                    description="Write the behavior and workflow this skill adds to Craft."
-                    sizePreset="main-content"
-                    variant="section"
+                    font="main-content-emphasis"
+                    title={t("editor.instructions.title")}
+                    description={t("editor.instructions.description")}
                   />
                   <InstructionsDisplayModeToggle
                     value={instructionsDisplayMode}
                     onChange={setInstructionsDisplayMode}
                   />
-                </div>
+                </Section>
 
-                <Card border="solid" rounding="lg" padding="sm">
+                <Card border="solid" rounding={4} padding={2}>
                   {instructionsDisplayMode === "raw" ? (
                     <InputTextArea
                       id="instructions_markdown"
@@ -667,29 +783,29 @@ export default function SkillEditorPage({
                       onChange={(event) =>
                         setInstructionsMarkdown(event.target.value)
                       }
-                      placeholder="Write the skill instructions."
+                      placeholder={t("editor.instructions.placeholder")}
                       variant={fieldsLocked ? "disabled" : "internal"}
                     />
                   ) : (
                     <div className="min-h-[34rem] max-h-[70dvh] overflow-y-auto overflow-x-hidden rounded-08 bg-background-neutral-00 p-2">
                       <CompactMarkdown>
-                        {instructionsMarkdown || "No instructions yet."}
+                        {instructionsMarkdown ||
+                          t("editor.instructions.emptyFallback")}
                       </CompactMarkdown>
                     </div>
                   )}
                 </Card>
               </Section>
 
-              <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-              <Section gap={0.5} alignItems="stretch" height="auto">
+              <Section gap={2} alignItems="stretch" height="auto">
                 <Content
-                  title="Supporting files"
-                  description="Add references, scripts, assets, or other files used by this skill. ZIP files are unpacked automatically."
-                  sizePreset="main-content"
-                  variant="section"
+                  font="main-content-emphasis"
+                  title={t("editor.files.title")}
+                  description={t("editor.files.description")}
                 />
-                <Card border="solid" rounding="lg">
+                <Card border="solid" rounding={4}>
                   <SkillFileTree
                     files={displayedFiles}
                     onRemove={
@@ -699,7 +815,7 @@ export default function SkillEditorPage({
                     removeDisabled={filesUploadDisabled}
                     emptyMessage={
                       pendingFilesUpload?.entries === null
-                        ? "Files from this upload will appear after you create the skill."
+                        ? t("editor.files.pendingUpload.emptyMessage")
                         : undefined
                     }
                   />
@@ -710,9 +826,11 @@ export default function SkillEditorPage({
                           <SkillFilesPicker
                             value={pendingFilesUpload}
                             disabled={filesUploadDisabled}
-                            inputLabel="Add supporting files"
+                            inputLabel={t("editor.files.input.ariaLabel")}
                             busyLabel={
-                              isUploadingFiles ? "Uploading..." : undefined
+                              isUploadingFiles
+                                ? t("editor.files.busyLabel")
+                                : undefined
                             }
                             onChange={handleFilesSelected}
                             onError={(message) => toast.error(message)}
@@ -725,155 +843,102 @@ export default function SkillEditorPage({
                 </Card>
               </Section>
 
-              {skill && (
-                <>
-                  <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+              {skill &&
+                canManageSkill &&
+                (skill.installation_policy !== "REQUIRED" || isAdmin) &&
+                (skill.public_permission === null || canManageOrgSkills) && (
+                  <>
+                    <Divider paddingParallel={0} paddingPerpendicular={0} />
 
-                  <Section gap={0.5} alignItems="stretch" height="auto">
-                    <Content
-                      title="Management"
-                      description="Control who can use this skill."
-                      sizePreset="main-content"
-                      variant="section"
-                    />
-                    <Card border="solid" rounding="lg">
+                    <Card border="solid" rounding={4}>
                       <Section>
-                        {skill.external_app && (
-                          <InputHorizontal
-                            title="External app"
-                            description={
-                              skill.external_app.ready
-                                ? `This skill uses app “${skill.external_app.name}”.`
-                                : skill.external_app.enabled
-                                  ? `Connect app “${skill.external_app.name}” from the Apps page to use this skill.`
-                                  : `App “${skill.external_app.name}” is disabled by an administrator.`
-                            }
-                            center
+                        <InputHorizontal
+                          title={t("editor.delete.title")}
+                          description={t("editor.delete.description")}
+                          center
+                        >
+                          <Button
+                            type="button"
+                            variant="danger"
+                            prominence="secondary"
+                            icon={SvgTrash}
+                            disabled={isDeleting}
+                            onClick={() => deleteModal.toggle(true)}
                           >
-                            <div className="flex items-center gap-2">
-                              <Tag
-                                title={skill.external_app.name}
-                                color={
-                                  skill.external_app.ready ? "blue" : "amber"
-                                }
-                              />
-                              {isAdmin && (
-                                <Button
-                                  type="button"
-                                  prominence="secondary"
-                                  href={externalAppAdminUrl(
-                                    skill.external_app.external_app_id
-                                  )}
-                                >
-                                  Manage in app settings
-                                </Button>
-                              )}
-                            </div>
-                          </InputHorizontal>
-                        )}
-                        {sharingStatus && (
-                          <InputHorizontal
-                            title="Sharing"
-                            description={sharingStatus.description}
-                            center
-                          >
-                            <div className="flex items-center gap-2">
-                              <Tag
-                                title={sharingStatus.title}
-                                color={sharingStatus.color}
-                              />
-                              {canManageSkill && (
-                                <Button
-                                  type="button"
-                                  prominence="secondary"
-                                  icon={SvgShare}
-                                  onClick={() => setShareOpen(true)}
-                                >
-                                  Edit sharing
-                                </Button>
-                              )}
-                            </div>
-                          </InputHorizontal>
-                        )}
+                            {t("editor.delete.button.label")}
+                          </Button>
+                        </InputHorizontal>
                       </Section>
                     </Card>
-                  </Section>
-
-                  {canManageSkill && (
-                    <>
-                      <Divider
-                        paddingParallel="fit"
-                        paddingPerpendicular="fit"
-                      />
-
-                      <Card border="solid" rounding="lg">
-                        <Section>
-                          <InputHorizontal
-                            title="Delete this skill"
-                            description="Anyone using this skill will lose access. Deletion cannot be undone."
-                            center
-                          >
-                            <Button
-                              type="button"
-                              variant="danger"
-                              prominence="secondary"
-                              icon={SvgTrash}
-                              disabled={isDeleting}
-                              onClick={() => setDeleteOpen(true)}
-                            >
-                              Delete skill
-                            </Button>
-                          </InputHorizontal>
-                        </Section>
-                      </Card>
-                    </>
-                  )}
-                </>
-              )}
+                  </>
+                )}
             </>
           )}
         </SettingsLayouts.Body>
       </SettingsLayouts.Root>
 
-      <ShareSkillModal
-        skill={shareOpen ? (skill ?? null) : null}
-        open={shareOpen}
-        onClose={() => setShareOpen(false)}
-        onSaved={handleSharingSaved}
-      />
-
-      {filesUploadToConfirm && (
-        <ConfirmationModalLayout
-          icon={SvgAlertTriangle}
-          title={isCreating ? "Import this skill?" : "Replace skill content?"}
-          onClose={() => setFilesUploadToConfirm(null)}
-          submit={
-            <Button
-              type="button"
-              onClick={() => {
-                const upload = filesUploadToConfirm;
-                setFilesUploadToConfirm(null);
-                void applyFilesUpload(upload);
-              }}
-            >
-              {isCreating ? "Import skill" : "Replace content"}
-            </Button>
-          }
-        >
-          {isCreating
-            ? "This upload includes SKILL.md. Continuing will replace the current name, description, instructions, and files with the uploaded bundle."
-            : "This upload must use the same skill name. Continuing will replace the description, instructions, and files with the uploaded bundle."}
-        </ConfirmationModalLayout>
-      )}
-
-      {conflictingSkillName && (
-        <SkillNameConflictModal
-          skillName={conflictingSkillName}
-          onClose={() => setConflictingSkillName(null)}
-          onConfirm={() => void handleSave(undefined, true)}
-          pending={isSaving}
+      {isCreating ? (
+        <ShareSkillModal
+          mode="create"
+          draft={sharingDraft}
+          onSaveDraft={setCreationSharing}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
         />
-      )}
+      ) : skillId ? (
+        <ShareSkillModal
+          mode="edit"
+          skillId={skillId}
+          open={shareOpen}
+          onClose={() => setShareOpen(false)}
+          onSaved={handleSharingSaved}
+          onVersionRestored={handleVersionRestored}
+          restoreBlocked={isDirty}
+        />
+      ) : null}
+
+      <confirmUploadModal.Provider>
+        {filesUploadToConfirm && (
+          <ConfirmationModalLayout
+            icon={SvgAlertTriangle}
+            title={
+              isCreating
+                ? t("editor.confirmUpload.importTitle")
+                : t("editor.confirmUpload.replaceTitle")
+            }
+            onClose={() => confirmUploadModal.toggle(false)}
+            submit={
+              <Button
+                type="button"
+                onClick={() => {
+                  const upload = filesUploadToConfirm;
+                  confirmUploadModal.toggle(false);
+                  void applyFilesUpload(upload);
+                }}
+              >
+                {isCreating
+                  ? t("editor.confirmUpload.importSubmit.label")
+                  : t("editor.confirmUpload.replaceSubmit.label")}
+              </Button>
+            }
+          >
+            {isCreating
+              ? t("editor.confirmUpload.importBody")
+              : t("editor.confirmUpload.replaceBody")}
+          </ConfirmationModalLayout>
+        )}
+      </confirmUploadModal.Provider>
+
+      <nameConflictModal.Provider>
+        {conflictingSkillName && (
+          <SkillNameConflictModal
+            skillName={conflictingSkillName}
+            onClose={() => nameConflictModal.toggle(false)}
+            onConfirm={() => void handleSave(undefined, true)}
+            pending={isSaving}
+          />
+        )}
+      </nameConflictModal.Provider>
 
       <UnsavedChangesModal
         open={unsavedChanges.confirmationOpen}
@@ -881,16 +946,22 @@ export default function SkillEditorPage({
         onDiscard={unsavedChanges.discardAndLeave}
       />
 
-      {skill && deleteOpen && (
-        <ConfirmEntityModal
-          danger
-          entityType="skill"
-          entityName={skill.name}
-          actionButtonText={isDeleting ? "Deleting..." : "Delete"}
-          onClose={() => setDeleteOpen(false)}
-          onSubmit={handleDeleteConfirmed}
-        />
-      )}
+      <deleteModal.Provider>
+        {skill && (
+          <ConfirmEntityModal
+            danger
+            entityType={t("editor.deleteModal.entityType")}
+            entityName={skill.name}
+            actionButtonText={
+              isDeleting
+                ? t("editor.deleteModal.pendingLabel")
+                : t("editor.deleteModal.label")
+            }
+            onClose={() => deleteModal.toggle(false)}
+            onSubmit={handleDeleteConfirmed}
+          />
+        )}
+      </deleteModal.Provider>
     </form>
   );
 }

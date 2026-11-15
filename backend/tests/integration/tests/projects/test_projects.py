@@ -1,5 +1,6 @@
 from typing import List
 
+import httpx
 import pytest
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -194,7 +195,7 @@ def test_projects_flow(
             assert len(remaining_files) == 2
 
     # Case 7: Edge cases
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.HTTPStatusError):
         ProjectManager.create(
             name="",
             user_performing_action=basic_user,
@@ -207,14 +208,14 @@ def test_projects_flow(
     )
     assert not deletion_success
 
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.HTTPStatusError):
         ProjectManager.set_instructions(
             project_id=non_existent_id,
             instructions="Test instructions",
             user_performing_action=basic_user,
         )
 
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.HTTPStatusError):
         ProjectManager.upload_files(
             project_id=non_existent_id,
             files=[("test.txt", b"content")],
@@ -222,7 +223,7 @@ def test_projects_flow(
         )
 
     long_name = "a" * 1000
-    with pytest.raises(Exception):
+    with pytest.raises(httpx.HTTPStatusError):
         ProjectManager.create(
             name=long_name,
             user_performing_action=basic_user,

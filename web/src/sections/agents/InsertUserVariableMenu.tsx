@@ -1,10 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useTranslations } from "next-intl";
 import { useFormikContext } from "formik";
-import { Popover, PopoverMenu } from "@opal/components";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import IconButton from "@/refresh-components/buttons/IconButton";
+import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
 import { SvgBracketCurly } from "@opal/icons";
 import {
   USER_DIRECTORY_PLACEHOLDERS,
@@ -25,6 +24,7 @@ interface InsertUserVariableMenuProps {
 export default function InsertUserVariableMenu({
   fieldName,
 }: InsertUserVariableMenuProps) {
+  const t = useTranslations("agents");
   const [open, setOpen] = useState(false);
   const { setFieldValue, values } = useFormikContext<Record<string, unknown>>();
 
@@ -51,43 +51,37 @@ export default function InsertUserVariableMenu({
       const current = String(values[fieldName] ?? "");
       setFieldValue(fieldName, current + token);
     }
-
-    setOpen(false);
   }
 
-  function renderItem(placeholder: UserPlaceholder) {
-    return (
-      <LineItem
-        key={placeholder.key}
-        icon={SvgBracketCurly}
-        description={userPlaceholderToken(placeholder.key)}
-        onClick={() => insertToken(placeholder.key)}
-      >
-        {placeholder.label}
-      </LineItem>
-    );
+  function toItem(placeholder: UserPlaceholder): DropdownMenuItem {
+    return {
+      kind: "action",
+      id: placeholder.key,
+      icon: SvgBracketCurly,
+      title: placeholder.label,
+      description: userPlaceholderToken(placeholder.key),
+      onSelect: () => insertToken(placeholder.key),
+    };
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
-        <div>
-          <IconButton
-            internal
-            small
-            icon={SvgBracketCurly}
-            tooltip="Insert user variable"
-          />
-        </div>
-      </Popover.Trigger>
-      <Popover.Content>
-        <PopoverMenu>
-          {[
-            ...USER_DIRECTORY_PLACEHOLDERS.map(renderItem),
-            ...USER_IDENTITY_PLACEHOLDERS.map(renderItem),
-          ]}
-        </PopoverMenu>
-      </Popover.Content>
-    </Popover>
+    <Dropdown open={open} onOpenChange={setOpen}>
+      <Dropdown.Trigger asChild>
+        <Button
+          prominence="internal"
+          size="xs"
+          icon={SvgBracketCurly}
+          tooltip={t("userVariables.insert.tooltip")}
+          aria-label={t("userVariables.insert.tooltip")}
+        />
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("userVariables.insert.tooltip")}
+        items={[
+          ...USER_DIRECTORY_PLACEHOLDERS.map(toItem),
+          ...USER_IDENTITY_PLACEHOLDERS.map(toItem),
+        ]}
+      />
+    </Dropdown>
   );
 }

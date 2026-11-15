@@ -29,3 +29,12 @@ class WellKnownLLMProviderDescriptor(BaseModel):
     # NOTE: the recommended visible models are encoded in the known_models list
     known_models: list[ModelConfigurationView] = Field(default_factory=list)
     recommended_default_model: SimpleKnownModel | None = None
+
+
+class TypeSafeModel(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
+
+
+class TypeSafeModelsResponse(BaseModel):
+    models: list[TypeSafeModel]

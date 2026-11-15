@@ -1,7 +1,8 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 
 /**
@@ -11,15 +12,16 @@ import { CRAFT_PATH } from "@/app/craft/v1/constants";
  * This page exists for backwards compatibility.
  */
 export default function BuildPage() {
-  const router = useRouter();
+  const t = useTranslations("craft.redirect");
+  const navigation = useNavigation();
 
   useEffect(() => {
-    router.replace(CRAFT_PATH);
-  }, [router]);
+    navigation.go(CRAFT_PATH, { replace: true });
+  }, [navigation]);
 
   return (
     <div className="flex items-center justify-center h-screen">
-      <div className="animate-pulse text-text-03">Redirecting...</div>
+      <div className="animate-pulse text-text-03">{t("redirecting.label")}</div>
     </div>
   );
 }

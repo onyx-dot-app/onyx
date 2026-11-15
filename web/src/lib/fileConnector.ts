@@ -1,3 +1,5 @@
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
 export interface ConnectorFileInfo {
   file_id: string;
   file_name: string;
@@ -7,7 +9,12 @@ export interface ConnectorFileInfo {
 
 export interface ConnectorFilesResponse {
   files: ConnectorFileInfo[];
+  /** Every file of the connector, not just the ones in `files`. */
+  total_items: number;
 }
+
+/** Files per page wherever a connector's file list is listed. */
+export const CONNECTOR_FILES_PAGE_SIZE = 20;
 
 export interface FileUploadResponse {
   file_paths: string[];
@@ -39,7 +46,7 @@ export async function updateConnectorFiles(
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(
       `Failed to update connector files (${response.status}): ${
         error.detail || "Unknown error"

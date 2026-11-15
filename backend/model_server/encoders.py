@@ -1,12 +1,16 @@
 import asyncio
+import threading
 import time
+from concurrent.futures import Future, ThreadPoolExecutor
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from model_server.embedding_model_loader import load_embedding_model
 from model_server.utils import simple_log_function_time
 from onyx.utils.logger import setup_logger
-from shared_configs.configs import DEFAULT_DOCUMENT_ENCODER_MODEL
+from shared_configs.embedding_models import get_local_model_spec
 from shared_configs.enums import EmbedTextType
 from shared_configs.model_server_models import Embedding, EmbedRequest, EmbedResponse
 
@@ -19,6 +23,66 @@ router = APIRouter(prefix="/encoder")
 
 
 _GLOBAL_MODELS_DICT: dict[str, "SentenceTransformer"] = {}
+# The longest sequence that each model's RoPE caches are pre-warmed to.
+_ROPE_PREWARMED_TO: dict[str, int] = {}
+
+# One lock per model, so a model loads once even if requests race.
+_MODEL_LOCKS: dict[str, threading.Lock] = {}
+_MODEL_LOCKS_GUARD = threading.Lock()
+
+# Loads (downloads included) run here, off the event loop. Requests for the same
+# model and context length share one job, so requests that wait on a download
+# hold no threads.
+# Two workers: at most PRESENT + FUTURE weights load at once, which caps memory.
+_MODEL_LOAD_EXECUTOR = ThreadPoolExecutor(
+    max_workers=2, thread_name_prefix="embedding-model-load"
+)
+_PENDING_MODEL_JOBS: dict[tuple[str, int], Future["SentenceTransformer"]] = {}
+_PENDING_MODEL_JOBS_GUARD = threading.Lock()
+
+# Registry models get room for the query/passage prefix, which the chunker does
+# not count, so the prefix does not cut off the end of a full chunk.
+REGISTRY_MODEL_PREFIX_HEADROOM_TOKENS = 32
+
+
+def _model_lock(model_name: str) -> threading.Lock:
+    with _MODEL_LOCKS_GUARD:
+        lock = _MODEL_LOCKS.get(model_name)
+        if lock is None:
+            lock = threading.Lock()
+            _MODEL_LOCKS[model_name] = lock
+        return lock
+
+
+def _target_max_seq_length(model_name: str, max_context_length: int) -> int:
+    if get_local_model_spec(model_name) is not None:
+        return max_context_length + REGISTRY_MODEL_PREFIX_HEADROOM_TOKENS
+    return max_context_length
+
+
+def _prewarm_rope(
+    model_name: str, st_model: "SentenceTransformer", target_len: int
+) -> None:
+    """
+    Build RoPE cos/sin caches once on the final device/dtype so later forwards only read.
+    Works by calling the underlying HF model directly with dummy IDs/attention.
+    """
+    try:
+        # ensure > max seq after tokenization
+        # Ideally we would use the saved tokenizer, but whatever it's ok
+        # we'll make an assumption about tokenization here
+        long_text = "x " * (target_len * 2)
+        _ = st_model.encode(
+            [long_text],
+            batch_size=1,
+            convert_to_tensor=True,
+            show_progress_bar=False,
+            normalize_embeddings=False,
+        )
+        _ROPE_PREWARMED_TO[model_name] = target_len
+        logger.info("RoPE pre-warm successful")
+    except Exception as e:
+        logger.warning("RoPE pre-warm skipped/failed: %s", e)
 
 
 def get_embedding_model(
@@ -26,53 +90,65 @@ def get_embedding_model(
     max_context_length: int,
 ) -> "SentenceTransformer":
     """
-    Loads or returns a cached SentenceTransformer, sets max_seq_length, pins device,
-    pre-warms rotary caches once, and wraps encode() with a lock to avoid cache races.
+    Loads or returns a cached SentenceTransformer, sets max_seq_length and
+    pre-warms rotary caches.
+
+    Blocking: a first load can download gigabytes. Async code must use
+    `_get_embedding_model_off_loop`.
     """
-    from sentence_transformers import SentenceTransformer
+    max_seq_length = _target_max_seq_length(model_name, max_context_length)
 
-    def _prewarm_rope(st_model: "SentenceTransformer", target_len: int) -> None:
-        """
-        Build RoPE cos/sin caches once on the final device/dtype so later forwards only read.
-        Works by calling the underlying HF model directly with dummy IDs/attention.
-        """
-        try:
-            # ensure > max seq after tokenization
-            # Ideally we would use the saved tokenizer, but whatever it's ok
-            # we'll make an assumption about tokenization here
-            long_text = "x " * (target_len * 2)
-            _ = st_model.encode(
-                [long_text],
-                batch_size=1,
-                convert_to_tensor=True,
-                show_progress_bar=False,
-                normalize_embeddings=False,
+    with _model_lock(model_name):
+        model = _GLOBAL_MODELS_DICT.get(model_name)
+        if model is None:
+            logger.notice("Loading %s", model_name)
+            # Raises on failure, so a failed or rejected model is never cached.
+            model = load_embedding_model(model_name)
+            model.max_seq_length = max_seq_length
+            _prewarm_rope(model_name, model, max_seq_length)
+            _GLOBAL_MODELS_DICT[model_name] = model
+        elif max_seq_length != model.max_seq_length:
+            model.max_seq_length = max_seq_length
+            # Caches built for a longer sequence also serve a shorter one.
+            if max_seq_length > _ROPE_PREWARMED_TO.get(model_name, 0):
+                _prewarm_rope(model_name, model, max_seq_length)
+
+    return model
+
+
+def _forget_model_job(
+    job_key: tuple[str, int], job: Future["SentenceTransformer"]
+) -> None:
+    with _PENDING_MODEL_JOBS_GUARD:
+        if _PENDING_MODEL_JOBS.get(job_key) is job:
+            del _PENDING_MODEL_JOBS[job_key]
+
+
+async def _get_embedding_model_off_loop(
+    model_name: str, max_context_length: int
+) -> "SentenceTransformer":
+    """`get_embedding_model` without blocking the event loop."""
+    model = _GLOBAL_MODELS_DICT.get(model_name)
+    if model is not None and model.max_seq_length == _target_max_seq_length(
+        model_name, max_context_length
+    ):
+        return model
+
+    job_key = (model_name, max_context_length)
+    with _PENDING_MODEL_JOBS_GUARD:
+        job = _PENDING_MODEL_JOBS.get(job_key)
+        is_new_job = job is None
+        if job is None:
+            job = _MODEL_LOAD_EXECUTOR.submit(
+                get_embedding_model, model_name, max_context_length
             )
-            logger.info("RoPE pre-warm successful")
-        except Exception as e:
-            logger.warning("RoPE pre-warm skipped/failed: %s", e)
+            _PENDING_MODEL_JOBS[job_key] = job
+    if is_new_job:
+        # Outside the guard: the callback runs at once if the job is done.
+        job.add_done_callback(partial(_forget_model_job, job_key))
 
-    global _GLOBAL_MODELS_DICT
-
-    if model_name not in _GLOBAL_MODELS_DICT:
-        logger.notice("Loading %s", model_name)
-        model = SentenceTransformer(
-            model_name_or_path=model_name,
-            local_files_only=model_name == DEFAULT_DOCUMENT_ENCODER_MODEL,
-            trust_remote_code=False,
-        )
-        model.max_seq_length = max_context_length
-        _prewarm_rope(model, max_context_length)
-        _GLOBAL_MODELS_DICT[model_name] = model
-    else:
-        model = _GLOBAL_MODELS_DICT[model_name]
-        if max_context_length != model.max_seq_length:
-            model.max_seq_length = max_context_length
-            prev = getattr(model, "_rope_prewarmed_to", 0)
-            if max_context_length > int(prev or 0):
-                _prewarm_rope(model, max_context_length)
-
-    return _GLOBAL_MODELS_DICT[model_name]
+    # A cancelled request must not cancel the job that other requests share.
+    return await asyncio.shield(asyncio.wrap_future(job))
 
 
 ENCODING_RETRIES = 3
@@ -132,7 +208,7 @@ async def embed_text(
 
         prefixed_texts = [f"{prefix}{text}" for text in texts] if prefix else texts
 
-        local_model = get_embedding_model(
+        local_model = await _get_embedding_model_off_loop(
             model_name=model_name, max_context_length=max_context_length
         )
         # Run CPU-bound embedding in a thread pool

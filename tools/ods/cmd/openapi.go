@@ -70,7 +70,9 @@ Examples:
   ods openapi schema -o ./api.json           # Generate to custom path (relative to cwd)
   ods openapi schema -o /tmp/openapi.json    # Generate to absolute path`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runOpenAPISchema(opts)
+			if err := runOpenAPISchema(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -79,19 +81,20 @@ Examples:
 	return cmd
 }
 
-func runOpenAPISchema(opts *OpenAPIOptions) {
+func runOpenAPISchema(opts *OpenAPIOptions) error {
 	outputPath, err := openapi.ResolvePath(opts.OutputPath, DefaultSchemaPath)
 	if err != nil {
-		log.Fatalf("Failed to resolve output path: %v", err)
+		return fatalErrorf("Failed to resolve output path: %w", err)
 	}
 
 	log.Infof("Generating OpenAPI schema to: %s", outputPath)
 
 	if err := openapi.GenerateSchema(outputPath); err != nil {
-		log.Fatalf("Failed to generate OpenAPI schema: %v", err)
+		return fatalErrorf("Failed to generate OpenAPI schema: %w", err)
 	}
 
 	log.Info("Schema generation completed successfully")
+	return nil
 }
 
 // NewOpenAPIClientCommand creates the openapi client command.
@@ -116,7 +119,9 @@ Examples:
   ods openapi client -i ./api.json                # Use custom schema path
   ods openapi client -o ./my_client               # Generate to custom directory`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runOpenAPIClient(opts)
+			if err := runOpenAPIClient(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -126,25 +131,26 @@ Examples:
 	return cmd
 }
 
-func runOpenAPIClient(opts *OpenAPIOptions) {
+func runOpenAPIClient(opts *OpenAPIOptions) error {
 	schemaPath, err := openapi.ResolvePath(opts.SchemaPath, DefaultSchemaPath)
 	if err != nil {
-		log.Fatalf("Failed to resolve schema path: %v", err)
+		return fatalErrorf("Failed to resolve schema path: %w", err)
 	}
 
 	clientDir, err := openapi.ResolvePath(opts.ClientOutputDir, DefaultClientDir)
 	if err != nil {
-		log.Fatalf("Failed to resolve client output path: %v", err)
+		return fatalErrorf("Failed to resolve client output path: %w", err)
 	}
 
 	log.Infof("Generating Python client from: %s", schemaPath)
 	log.Infof("Output directory: %s", clientDir)
 
 	if err := openapi.GenerateClient(schemaPath, clientDir); err != nil {
-		log.Fatalf("Failed to generate Python client: %v", err)
+		return fatalErrorf("Failed to generate Python client: %w", err)
 	}
 
 	log.Info("Client generation completed successfully")
+	return nil
 }
 
 // NewOpenAPIAllCommand creates the openapi all command.
@@ -169,7 +175,9 @@ Examples:
   ods openapi all -o ./api.json                   # Use custom schema path
   ods openapi all --client-output ./my_client     # Custom client directory`,
 		Run: func(cmd *cobra.Command, args []string) {
-			runOpenAPIAll(opts)
+			if err := runOpenAPIAll(opts); err != nil {
+				log.Fatal(err)
+			}
 		},
 	}
 
@@ -179,15 +187,15 @@ Examples:
 	return cmd
 }
 
-func runOpenAPIAll(opts *OpenAPIOptions) {
+func runOpenAPIAll(opts *OpenAPIOptions) error {
 	schemaPath, err := openapi.ResolvePath(opts.OutputPath, DefaultSchemaPath)
 	if err != nil {
-		log.Fatalf("Failed to resolve schema path: %v", err)
+		return fatalErrorf("Failed to resolve schema path: %w", err)
 	}
 
 	clientDir, err := openapi.ResolvePath(opts.ClientOutputDir, DefaultClientDir)
 	if err != nil {
-		log.Fatalf("Failed to resolve client output path: %v", err)
+		return fatalErrorf("Failed to resolve client output path: %w", err)
 	}
 
 	log.Infof("Generating OpenAPI schema and Python client")
@@ -195,9 +203,9 @@ func runOpenAPIAll(opts *OpenAPIOptions) {
 	log.Infof("Client output: %s", clientDir)
 
 	if err := openapi.GenerateAll(schemaPath, clientDir); err != nil {
-		log.Fatalf("Failed to generate OpenAPI schema and client: %v", err)
+		return fatalErrorf("Failed to generate OpenAPI schema and client: %w", err)
 	}
 
 	log.Info("Generation completed successfully")
+	return nil
 }
-

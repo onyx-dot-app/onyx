@@ -4,7 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
-from onyx.auth.schemas import UserRole
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 
@@ -38,13 +37,16 @@ class UserGroupInfo(BaseModel):
 class FullUserSnapshot(BaseModel):
     id: UUID
     email: str
-    role: UserRole
     account_type: AccountType
+    is_admin: bool = False
     is_active: bool
     password_configured: bool
     personal_name: str | None
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    # Most recent chat activity. None when the user has never chatted. Distinct
+    # from `updated_at`, which only moves when the user row itself is written.
+    last_active: datetime.datetime | None = None
     groups: list[UserGroupInfo]
     is_scim_synced: bool
     # Per-user Craft override; None = follow the workspace default.
@@ -56,17 +58,20 @@ class FullUserSnapshot(BaseModel):
         user: User,
         groups: list[UserGroupInfo] | None = None,
         is_scim_synced: bool = False,
+        is_admin: bool = False,
+        last_active: datetime.datetime | None = None,
     ) -> "FullUserSnapshot":
         return cls(
             id=user.id,
             email=user.email,
-            role=user.role,
             account_type=user.account_type,
+            is_admin=is_admin,
             is_active=user.is_active,
             password_configured=user.password_configured,
             personal_name=user.personal_name,
             created_at=user.created_at,
             updated_at=user.updated_at,
+            last_active=last_active,
             groups=groups or [],
             is_scim_synced=is_scim_synced,
             craft_enabled=user.craft_enabled,

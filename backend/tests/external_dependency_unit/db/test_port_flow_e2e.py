@@ -1,4 +1,5 @@
-"""End-to-end composition test for the reindex port flow (MODEL_ONLY strategy).
+"""End-to-end composition test for the reindex port flow (MODEL_ONLY and
+COPY_VECTORS strategies).
 
 Proves the layers COMPOSE with NO PortCopier mocking: check_for_port kickoff ->
 run_port_attempt (real PIT scan of PRESENT + real re-embed under the FUTURE model
@@ -24,15 +25,14 @@ from onyx.access.models import DocumentAccess
 from onyx.background.celery.tasks.port import tasks as port_task
 from onyx.background.celery.tasks.port.tasks import run_check_for_port, run_port_attempt
 from onyx.configs.constants import DocumentSource
-from onyx.configs.model_configs import ASYM_PASSAGE_PREFIX, ASYM_QUERY_PREFIX
 from onyx.context.search.models import SavedSearchSettings
 from onyx.db import swap_index
 from onyx.db.enums import (
-    EmbeddingPrecision,
     IndexingStatus,
     IndexModelStatus,
     PortAttemptStatus,
     SwitchoverType,
+    VectorQuantization,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -42,7 +42,7 @@ from onyx.db.models import (
 )
 from onyx.db.port_attempt import get_port_attempt
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.client import OpenSearchIndexClient
 from onyx.document_index.opensearch.constants import DEFAULT_MAX_CHUNK_SIZE
 from onyx.document_index.opensearch.opensearch_document_index import (
@@ -62,6 +62,10 @@ from tests.external_dependency_unit.indexing_helpers import (
     seed_cc_pair_documents,
 )
 
+# nomic's own prefixes, set explicitly: the ASYM_* defaults follow the default
+# encoder, which may have none, and the MODEL_ONLY case needs a prefix change.
+_NOMIC_QUERY_PREFIX = "search_query: "
+_NOMIC_PASSAGE_PREFIX = "search_document: "
 _VECTOR_DIM = 768
 _CHUNKS_PER_DOC = 2
 _NUM_DOCS = 4
@@ -101,7 +105,6 @@ def _make_chunk(
         document_id=document_id,
         chunk_index=chunk_index,
         title=None,
-        title_vector=None,
         content=content,
         content_vector=list(_PLACEHOLDER_VECTOR),
         source_type=DocumentSource.FILE.value,
@@ -130,19 +133,21 @@ def _make_saved_settings(
     index_name: str,
     use_port_flow: bool,
     switchover_type: SwitchoverType,
+    passage_prefix: str = _NOMIC_PASSAGE_PREFIX,
+    vector_quantization: VectorQuantization = VectorQuantization.NONE,
 ) -> SavedSearchSettings:
-    """nomic MODEL_ONLY settings (contextual RAG off, provider None -> local
-    model server)."""
+    """nomic settings (contextual RAG off, provider None -> local model
+    server)."""
     return SavedSearchSettings(
         model_name="nomic-ai/nomic-embed-text-v1",
         model_dim=_VECTOR_DIM,
         normalize=True,
-        query_prefix=ASYM_QUERY_PREFIX,
-        passage_prefix=ASYM_PASSAGE_PREFIX,
+        query_prefix=_NOMIC_QUERY_PREFIX,
+        passage_prefix=passage_prefix,
         provider_type=None,
         index_name=index_name,
+        vector_quantization=vector_quantization,
         multipass_indexing=False,
-        embedding_precision=EmbeddingPrecision.FLOAT,
         reduced_dimension=None,
         enable_contextual_rag=False,
         contextual_rag_llm_name=None,
@@ -152,26 +157,53 @@ def _make_saved_settings(
     )
 
 
-def _create_os_index(index_name: str) -> OpenSearchIndexClient:
+def _create_os_index(
+    index_name: str,
+    vector_quantization: VectorQuantization = VectorQuantization.NONE,
+) -> OpenSearchIndexClient:
     client = OpenSearchIndexClient(index_name=index_name)
     mappings = DocumentSchema.get_document_schema(
-        vector_dimension=_VECTOR_DIM, multitenant=False
+        vector_dimension=_VECTOR_DIM,
+        multitenant=False,
+        vector_quantization=vector_quantization,
     )
     settings = DocumentSchema.get_index_settings_based_on_environment()
     client.create_index(mappings=mappings, settings=settings)
     return client
 
 
-# The port re-embeds PRESENT -> FUTURE against the local embedding model server;
-# ext-dep shards run with it disabled, so this composition test only runs where
-# a real model server is present (local dev / nightly with the server up).
-@pytest.mark.skipif(
-    MODEL_SERVER_HOST == "disabled",
-    reason="hits the real embedding model server, which is disabled in this env",
+@pytest.mark.parametrize(
+    "present_passage_prefix,future_quantization,expect_copy",
+    [
+        # A changed passage prefix changes the vector, so the port re-embeds
+        # against the local embedding model server. Ext-dep shards run with it
+        # disabled, so this case only runs where a real model server is present.
+        pytest.param(
+            "",
+            VectorQuantization.NONE,
+            False,
+            id="model_only",
+            marks=pytest.mark.skipif(
+                MODEL_SERVER_HOST == "disabled",
+                reason="hits the real embedding model server, which is disabled "
+                "in this env",
+            ),
+        ),
+        # Only the quantization changes, so the port copies the stored vector.
+        pytest.param(
+            _NOMIC_PASSAGE_PREFIX,
+            VectorQuantization.SCALAR_1_BIT,
+            True,
+            id="copy_vectors",
+        ),
+    ],
 )
 def test_port_flow_end_to_end(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
+    present_passage_prefix: str,
+    future_quantization: VectorQuantization,
+    expect_copy: bool,
 ) -> None:
     tenant_state = TenantState(tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False)
     present_index_name = f"test_e2e_present_{uuid4().hex[:8]}"
@@ -200,6 +232,7 @@ def test_port_flow_end_to_end(
                 index_name=present_index_name,
                 use_port_flow=False,
                 switchover_type=SwitchoverType.REINDEX,
+                passage_prefix=present_passage_prefix,
             ),
             db_session,
             status=IndexModelStatus.PAST,
@@ -210,6 +243,7 @@ def test_port_flow_end_to_end(
                 index_name=future_index_name,
                 use_port_flow=True,
                 switchover_type=SwitchoverType.REINDEX,
+                vector_quantization=future_quantization,
             ),
             db_session,
             status=IndexModelStatus.FUTURE,
@@ -218,7 +252,7 @@ def test_port_flow_end_to_end(
 
         # --- SETUP: OpenSearch indices + seed PRESENT chunks ---
         present_client = _create_os_index(present_index_name)
-        future_client = _create_os_index(future_index_name)
+        future_client = _create_os_index(future_index_name, future_quantization)
 
         seeded_ts = datetime.now(timezone.utc).replace(microsecond=0)
         seeded_content: dict[tuple[str, int], str] = {}
@@ -253,7 +287,7 @@ def test_port_flow_end_to_end(
         assert result == 1
         attempt_id = celery_app.send_task.call_args.kwargs["kwargs"]["port_attempt_id"]
 
-        # --- PORT: real PortCopier (re-embed via model server) ---
+        # --- PORT: real PortCopier (re-embed via model server, or copy) ---
         # get_current_search_settings is patched to our present-like row only
         # (the dev DB's live current row has no real model / index).
         with patch.object(
@@ -283,8 +317,11 @@ def test_port_flow_end_to_end(
                 fetched = future_client.get_document(document_chunk_id=chunk_id)
                 assert fetched.content == seeded_content[(doc_id, c_i)]
                 assert len(fetched.content_vector) == _VECTOR_DIM
-                # The port re-embedded: the vector is NOT the seeded placeholder.
-                assert fetched.content_vector != _PLACEHOLDER_VECTOR
+                if expect_copy:
+                    assert fetched.content_vector == pytest.approx(_PLACEHOLDER_VECTOR)
+                else:
+                    # Re-embedded: the vector is NOT the seeded placeholder.
+                    assert fetched.content_vector != _PLACEHOLDER_VECTOR
 
         # --- SWAP ---
         port_row = get_port_attempt(db_session, attempt_id)
@@ -306,7 +343,7 @@ def test_port_flow_end_to_end(
 
         # check_and_perform_index_swap fetches the FUTURE row via
         # get_secondary_search_settings (a stale FUTURE row exists in this dev
-        # DB), and get_all_document_indices would touch real Vespa/OpenSearch
+        # DB), and get_default_document_index would touch real OpenSearch
         # provisioning -> patch both in the swap_index namespace. The deferred
         # metadata-sync backlog is 0 in this dev DB; if it weren't, the swap
         # criterion would block, so we don't need to patch the count.
@@ -324,7 +361,7 @@ def test_port_flow_end_to_end(
                 "fetch_indexable_standard_connector_credential_pair_ids",
                 lambda *_, **__: [pair.id],
             ),
-            patch.object(swap_index, "get_all_document_indices", return_value=[]),
+            patch.object(swap_index, "get_default_document_index"),
         ):
             old_settings = swap_index.check_and_perform_index_swap(db_session)
 
@@ -390,7 +427,15 @@ def test_port_flow_end_to_end(
 
 
 def _count_doc_chunks(client: OpenSearchIndexClient, document_id: str) -> int:
-    return sum(len(page) for page in client.iter_chunks_for_doc_ids([document_id]))
+    return sum(
+        len(page)
+        for page in client.iter_chunks_for_doc_ids(
+            [document_id],
+            tenant_state=TenantState(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA, multitenant=False
+            ),
+        )
+    )
 
 
 def test_delete_port_written_chunks_only_marked(
@@ -421,7 +466,7 @@ def test_delete_port_written_chunks_only_marked(
             tenant_state=tenant_state,
             index_name=index_name,
             embedding_dim=_VECTOR_DIM,
-            embedding_precision=EmbeddingPrecision.FLOAT,
+            vector_quantization=VectorQuantization.NONE,
         )
         deleted = index.delete_port_written_chunks([marked_doc, unmarked_doc])
         client.refresh_index()

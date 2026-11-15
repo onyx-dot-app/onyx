@@ -2,7 +2,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "onyx.fullname" . }}-celery-worker-heavy
+  name: {{ include "onyx.resourceName" (list . "celery-worker-heavy") }}
   labels:
     {{- include "onyx.labels" . | nindent 4 }}
     {{- with .Values.celery_worker_heavy.deploymentLabels }}
@@ -22,6 +22,9 @@ spec:
     metadata:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with include "onyx.craftFcAgentClient.podAnnotations" . }}
+        {{- . | nindent 8 }}
+        {{- end }}
       {{- with .Values.celery_worker_heavy.podAnnotations }}
         {{- toYaml . | nindent 8 }}
       {{- end }}
@@ -56,7 +59,7 @@ spec:
       containers:
         - name: celery-worker-heavy
           securityContext:
-            {{- toYaml .Values.celery_shared.securityContext | nindent 12 }}
+            {{- include "onyx.containerSecurityContext" .Values.celery_shared.securityContext | nindent 12 }}
           image: "{{ .Values.celery_shared.image.repository }}:{{ .Values.celery_shared.image.tag | default .Values.global.version }}"
           imagePullPolicy: {{ .Values.global.pullPolicy }}
           command:
@@ -73,7 +76,7 @@ spec:
               {{- end }}
               "--hostname=heavy@%n",
               "-Q",
-              "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox,connector_hierarchy_fetching",
+              "connector_pruning,connector_doc_permissions_sync,connector_external_group_sync,csv_generation,sandbox,connector_hierarchy_fetching,capability_checks",
             ]
           ports:
             - name: metrics
@@ -97,13 +100,16 @@ spec:
                    Without it the sidecar client raises before sending and no snapshots are
                    created. Pairs with the heavy-worker rule in network-policy-sandbox-push. */}}
             {{- include "onyx.envSecretsRestricted" . | nindent 12}}
+            {{- with include "onyx.craftFcAgentClient.env" . }}
+            {{- . | nindent 12 }}
+            {{- end }}
             {{- with include "onyx.customCACerts.env" . }}
             {{- . | nindent 12 }}
             {{- end }}
             {{- with .Values.celery_worker_heavy.extraEnv }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
-          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" .Values.celery_worker_heavy.volumeMounts) }}
+          {{- with include "onyx.volumeMountsWithCA" (dict "ctx" . "volumeMounts" (concat (.Values.celery_worker_heavy.volumeMounts | default list) (include "onyx.craftFcAgentClient.volumeMounts" . | fromYamlArray))) }}
           {{- . | nindent 10 }}
           {{- end }}
           startupProbe:
@@ -128,7 +134,7 @@ spec:
                     python onyx/background/celery/celery_k8s_probe.py
                     --probe liveness
                     --filename /tmp/onyx_k8s_heavy_liveness.txt
-      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" .Values.celery_worker_heavy.volumes) }}
+      {{- with include "onyx.volumesWithCA" (dict "ctx" . "volumes" (concat (.Values.celery_worker_heavy.volumes | default list) (include "onyx.craftFcAgentClient.volumes" . | fromYamlArray))) }}
       {{- . | nindent 6 }}
       {{- end }}
 {{- end }}

@@ -6,8 +6,8 @@ from slack_sdk import WebClient
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import get_anonymous_user
-from onyx.chat.models import ChatBasicResponse
-from onyx.chat.process_message import gather_stream, handle_stream_message_objects
+from onyx.chat.models import ChatFullResponse
+from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.configs.onyxbot_configs import (
     ONYX_BOT_DISABLE_DOCS_ONLY_ANSWER,
@@ -19,6 +19,8 @@ from onyx.context.search.models import BaseFilters, Tag
 from onyx.db.models import SlackChannelConfig, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.users import get_or_create_slack_service_account, get_user_by_email
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.blocks import build_slack_response_blocks
 from onyx.onyxbot.slack.constants import SLACK_CHANNEL_REF_PATTERN
 from onyx.onyxbot.slack.models import SlackMessageInfo, ThreadMessage
@@ -34,6 +36,7 @@ from onyx.server.query_and_chat.models import (
     MessageOrigin,
     SendMessageRequest,
 )
+from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.logger import OnyxLoggingAdapter
@@ -307,17 +310,18 @@ def handle_regular_answer(
         new_message_request: SendMessageRequest,
         slack_context_str: str | None,
         onyx_user: User,
-    ) -> ChatBasicResponse:
+    ) -> ChatFullResponse:
         token = CURRENT_USER_ID_CONTEXTVAR.set(str(usage_user.id))
         try:
-            packets = handle_stream_message_objects(
+            answer = run_chat_turn(
                 new_msg_req=new_message_request,
                 user=onyx_user,
-                bypass_acl=False,
                 additional_context=slack_context_str,
                 slack_context=message_info.slack_context,
+                # TODO(wenxi-onyx): Slack cannot show approval
+                # requests yet, so its turns run the tools that would ask.
+                ask_for_approval=False,
             )
-            answer = gather_stream(packets)
         finally:
             CURRENT_USER_ID_CONTEXTVAR.reset(token)
 
@@ -326,34 +330,70 @@ def handle_regular_answer(
 
         return answer
 
+    # Same budgets as the chat route, charged to the principal that records
+    # this answer's usage.
+    try:
+        check_token_rate_limits(usage_user)
+    except OnyxError as e:
+        if e.error_code != OnyxErrorCode.RATE_LIMITED:
+            raise
+        logger.info("Skipping Slack answer: usage budget reached")
+        try:
+            respond_in_thread_or_channel(
+                client=client,
+                channel=channel,
+                receiver_ids=target_receiver_ids,
+                text=e.detail,
+                thread_ts=target_thread_ts,
+                send_as_ephemeral=send_as_ephemeral,
+            )
+        finally:
+            if feedback_reminder_id and message_info.sender_id:
+                try:
+                    client.chat_deleteScheduledMessage(
+                        channel=message_info.sender_id,
+                        scheduled_message_id=feedback_reminder_id,
+                    )
+                except Exception:
+                    logger.exception(
+                        "Unable to delete scheduled feedback reminder after Slack budget reply"
+                    )
+            if not is_slash_command:
+                update_emote_react(
+                    emoji=ONYX_BOT_REACT_EMOJI,
+                    channel=message_info.channel_to_respond,
+                    message_ts=message_info.msg_to_respond,
+                    remove=True,
+                    client=client,
+                )
+        return False
+
     try:
         filters = BaseFilters(
             source_type=None,
             document_set=document_set_names,
-            tags=channel_tags if channel_tags else None,
+            tags=channel_tags or None,
         )
 
-        # Slack answers should be grounded in retrieval (pre-#7399 behavior):
-        # force the search tool on the first LLM cycle, but only when the
-        # channel persona actually has a usable one — non-search personas and
-        # deployments without connectors keep the unforced behavior.
-        forced_search_tool_id = next(
+        # Prefer retrieval when this persona has usable search. Evidence and
+        # citation safeguards still apply when the model chooses to search.
+        preferred_search_tool_id = next(
             (
                 tool.id
                 for tool in persona.tools
-                if tool.in_code_tool_id == SEARCH_TOOL_ID
+                if tool.in_code_tool_id == SEARCH_TOOL_ID and tool.enabled
             ),
             None,
         )
-        if forced_search_tool_id is not None and not SearchTool.is_available(
+        if preferred_search_tool_id is not None and not SearchTool.is_available(
             db_session
         ):
-            forced_search_tool_id = None
+            preferred_search_tool_id = None
 
         new_message_request = SendMessageRequest(
             message=user_message.message,
             allowed_tool_ids=None,
-            forced_tool_id=forced_search_tool_id,
+            preferred_tool_id=preferred_search_tool_id,
             file_descriptors=[],
             internal_search_filters=filters,
             deep_research=False,
@@ -374,7 +414,15 @@ def handle_regular_answer(
 
         # If a channel filter was applied but no results were found, override
         # the LLM response to avoid hallucinated answers about unindexed channels
-        if channel_tags and not answer.citation_info and not answer.top_documents:
+        if (
+            channel_tags
+            and any(
+                call.tool_name == SearchTool.NAME and call.search_docs is not None
+                for call in answer.tool_calls
+            )
+            and not answer.citation_info
+            and not answer.top_documents
+        ):
             channel_names = ", ".join(f"#{tag.tag_value}" for tag in channel_tags)
             answer.answer = (
                 f"No indexed data found for {channel_names}. "

@@ -1,0 +1,53 @@
+name: "Install Python deps"
+description: "Syncs Python deps inside the devcontainer into the bind-mounted workspace, so later `uv run --no-sync` steps share one venv."
+inputs:
+  devcontainer-image:
+    description: "Fully qualified devcontainer image reference (registry:tag)"
+    required: true
+  save-cache:
+    description: "Save the uv cache when the key missed. Set it on one job per run, so parallel shards do not all upload."
+    required: false
+    default: "false"
+runs:
+  using: "composite"
+  steps:
+    # The RunsOn S3 cache has no size cap. On GitHub-hosted runners runs-on/cache
+    # falls back to the 10 GB GitHub cache, so skip it there.
+    - name: Restore uv cache
+      id: uv-cache
+      if: runner.environment == 'self-hosted'
+      uses: runs-on/cache/restore@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+      with:
+        path: ${{ runner.temp }}/uv-cache
+        key: ${{ runner.os }}-${{ runner.arch }}-uv-devcontainer-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-uv-devcontainer-
+
+    # The cache is a separate bind mount from /workspace, so uv cannot hardlink
+    # across them. UV_LINK_MODE=copy skips the failed hardlink attempt.
+    - name: Sync deps in devcontainer
+      shell: bash
+      env:
+        DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+        WORKSPACE: ${{ github.workspace }}
+        UV_CACHE_HOST_DIR: ${{ runner.temp }}/uv-cache
+      run: |
+        mkdir -p "${UV_CACHE_HOST_DIR}"
+        docker run --rm \
+          -v "${WORKSPACE}:/workspace" \
+          -v "${UV_CACHE_HOST_DIR}:/uv-cache" \
+          -e UV_CACHE_DIR=/uv-cache \
+          -e UV_LINK_MODE=copy \
+          -w /workspace \
+          "${DEVCONTAINER_IMAGE}" \
+          uv sync --frozen --no-group model_server
+
+    - name: Save uv cache
+      if: >-
+        runner.environment == 'self-hosted' &&
+        inputs.save-cache == 'true' &&
+        steps.uv-cache.outputs.cache-hit != 'true'
+      uses: runs-on/cache/save@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+      with:
+        path: ${{ runner.temp }}/uv-cache
+        key: ${{ steps.uv-cache.outputs.cache-primary-key }}

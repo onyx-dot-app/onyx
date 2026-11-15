@@ -4,31 +4,40 @@ from dataclasses import dataclass
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import and_, delete, func, select
+from sqlalchemy import and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.db.action_policy import (
+    get_or_create_gated_app_id,
+    replace_workspace_action_policies,
+)
 from onyx.db.enums import (
-    EndpointPolicy,
+    ActionPolicy,
     ExternalAppType,
     GatedAppKind,
+    SkillInstallationPolicy,
     SkillSharePermission,
-)
-from onyx.db.gated_app import (
-    get_or_create_gated_app_id,
-    replace_action_policies__no_commit,
 )
 from onyx.db.models import (
     ExternalApp,
     ExternalApp__Skill,
     ExternalAppUserCredential,
+    Plugin,
     Skill,
     User,
     UserSkillPreference,
 )
+from onyx.db.plugin import (
+    delete_plugin_preferences__no_commit,
+    get_plugin_version_validity,
+    lock_skill_plugin__no_commit,
+    publish_plugin__no_commit,
+)
 from onyx.db.utils import UNSET, UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.external_apps.providers.registry import PROVIDERS, get_provider_for_app
 from onyx.skills.built_in import EXTERNAL_APP_BUILT_IN_SKILL_IDS
 from onyx.utils.encryption import is_masked_credential
 from onyx.utils.logger import setup_logger
@@ -47,7 +56,7 @@ class SkillExternalAppDependencyState:
     ready: bool
 
 
-def _placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
+def placeholders_in_template(auth_template: dict[str, Any]) -> set[str]:
     placeholders: set[str] = set()
     for value in auth_template.values():
         if isinstance(value, str):
@@ -63,7 +72,7 @@ def required_user_credential_keys(
     references in `auth_template` values not pre-filled by
     `organization_credentials`."""
     return sorted(
-        _placeholders_in_template(auth_template) - organization_credentials.keys()
+        placeholders_in_template(auth_template) - organization_credentials.keys()
     )
 
 
@@ -313,7 +322,8 @@ def create_external_app(
     upstream_url_patterns: list[str],
     auth_template: dict[str, Any],
     organization_credentials: dict[str, str],
-    action_policies: dict[str, EndpointPolicy] | None = None,
+    action_policies: dict[str, ActionPolicy] | None = None,
+    enabled: bool = True,
 ) -> ExternalApp:
     """Create an external-app gateway row and its policy state.
 
@@ -324,7 +334,13 @@ def create_external_app(
     organization_credentials = resolve_masked_credentials(
         organization_credentials, None
     )
+    provider = PROVIDERS.get(app_type)
+    if provider is not None:
+        upstream_url_patterns = provider.resolve_upstream_url_patterns(
+            organization_credentials, upstream_url_patterns
+        )
     app = ExternalApp(
+        enabled=enabled,
         name=name,
         app_type=app_type,
         upstream_url_patterns=upstream_url_patterns,
@@ -334,8 +350,7 @@ def create_external_app(
     db_session.add(app)
     # Policies key off the gated_app identity row, which needs app.id.
     db_session.flush()
-    if action_policies is not None:
-        _write_policies__no_commit(db_session, app, action_policies)
+    _write_policies__no_commit(db_session, app, action_policies or {})
     return app
 
 
@@ -395,7 +410,9 @@ def associate_custom_skill_with_external_app__no_commit(
     external_app_id: int,
     skill_id: UUID,
 ) -> Skill:
-    """Associate a custom skill with an app and require org-wide visibility.
+    """Associate a custom skill with an app and publish it to the organization
+    (VIEWER). A name clash in the Organization library is refused with
+    CONFLICT.
 
     The skill row is locked so concurrent association attempts serialize.
     Existing user preferences and explicit editor grants are preserved.
@@ -419,7 +436,12 @@ def associate_custom_skill_with_external_app__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
-    if skill.is_valid is False:
+    # A skill with no plugin gets one first, so its validity is read too.
+    plugin = lock_skill_plugin__no_commit(skill, db_session)
+    if (
+        get_plugin_version_validity([skill.id], "current", db_session).get(skill.id)
+        is False
+    ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
             f"Invalid skill '{skill.name}' cannot be associated with an app.",
@@ -457,6 +479,7 @@ def associate_custom_skill_with_external_app__no_commit(
     skill.public_permission = SkillSharePermission.VIEWER
     db_session.add(ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id))
     db_session.flush()
+    publish_plugin__no_commit(plugin.id, "raise", db_session)
     return skill
 
 
@@ -468,9 +491,10 @@ def replace_custom_skill_associations__no_commit(
 ) -> list[Skill]:
     """Replace an app's custom-skill associations and return affected skills.
 
-    Built-in provider associations are preserved. New associations promote the
-    skill to organization-wide viewer access; removed skills keep their current
-    visibility and content.
+    Built-in provider associations are preserved. Each associated skill is
+    published to the organization (VIEWER); a name clash in the Organization
+    library is refused with CONFLICT. Removed skills stay published, because
+    publishing is one-way.
     """
     requested_ids = list(skill_ids)
     target_ids = set(requested_ids)
@@ -508,8 +532,15 @@ def replace_custom_skill_associations__no_commit(
             OnyxErrorCode.INVALID_INPUT,
             "Built-in skills cannot be associated through the admin workflow.",
         )
+    # target_skills is in id order, so the plugins lock in id order. A skill
+    # with no plugin gets one first, so its validity is read too.
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in target_skills
+    ]
+    # Associating publishes the current version.
+    validity = get_plugin_version_validity(target_ids, "current", db_session)
     invalid_skill = next(
-        (skill for skill in target_skills if skill.is_valid is False),
+        (skill for skill in target_skills if validity.get(skill.id) is False),
         None,
     )
     if invalid_skill is not None:
@@ -574,6 +605,8 @@ def replace_custom_skill_associations__no_commit(
             )
 
     db_session.flush()
+    for plugin_id in plugin_ids:
+        publish_plugin__no_commit(plugin_id, "raise", db_session)
     return current_custom_skills + [
         skill for skill in target_skills if skill.id not in current_ids
     ]
@@ -588,7 +621,7 @@ def update_external_app(
     upstream_url_patterns: list[str] | UnsetType = UNSET,
     auth_template: dict[str, Any] | UnsetType = UNSET,
     organization_credentials: dict[str, str] | UnsetType = UNSET,
-    action_policies: dict[str, EndpointPolicy] | UnsetType = UNSET,
+    action_policies: dict[str, ActionPolicy] | UnsetType = UNSET,
 ) -> ExternalApp:
     """Partial-update external-app gateway state (flush only).
 
@@ -624,12 +657,21 @@ def update_external_app(
         app.upstream_url_patterns = upstream_url_patterns
     if is_set(auth_template):
         app.auth_template = auth_template
-    if is_set(organization_credentials):
-        # Admin responses mask org credentials; restore any masked value the form
-        # echoed back so an unchanged secret isn't overwritten with its mask.
-        app.organization_credentials = resolve_masked_credentials(  # ty: ignore[invalid-assignment]
-            organization_credentials, app.organization_credentials
+    if is_set(upstream_url_patterns) or is_set(organization_credentials):
+        resolved_credentials = (
+            resolve_masked_credentials(
+                organization_credentials, app.organization_credentials
+            )
+            if is_set(organization_credentials)
+            else app.organization_credentials.get_value(apply_mask=False)
         )
+        provider = get_provider_for_app(app)
+        if provider is not None:
+            app.upstream_url_patterns = provider.resolve_upstream_url_patterns(
+                resolved_credentials, list(app.upstream_url_patterns)
+            )
+        if is_set(organization_credentials):
+            app.organization_credentials = resolved_credentials  # ty: ignore[invalid-assignment]
 
     if is_set(action_policies):
         _write_policies__no_commit(db_session, app, action_policies)
@@ -656,16 +698,16 @@ def set_external_app_organization_credentials(
 def _write_policies__no_commit(
     db_session: Session,
     app: ExternalApp,
-    policies: dict[str, EndpointPolicy],
+    policies: dict[str, ActionPolicy],
 ) -> None:
-    """Replace ``app``'s per-action policy rows with exactly ``policies``. No
+    """Replace ``app``'s action policy rows with exactly ``policies``. No
     commit — runs inside the caller's transaction. ``action_id`` validation is
     the caller's responsibility.
     """
     gated_app_id = get_or_create_gated_app_id(
         db_session, GatedAppKind.EXTERNAL_APP, app.id
     )
-    replace_action_policies__no_commit(db_session, gated_app_id, policies)
+    replace_workspace_action_policies(db_session, gated_app_id, policies)
 
 
 def delete_external_app(
@@ -685,13 +727,27 @@ def delete_external_app(
         )
 
     skills = get_skills_for_external_app(db_session, app.id)
-    custom_skill_ids = [skill.id for skill in skills if skill.is_custom]
+    custom_skills = _lock_custom_skills(
+        db_session, [skill.id for skill in skills if skill.is_custom]
+    )
+    custom_skill_ids = [skill.id for skill in custom_skills]
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id for skill in custom_skills
+    ]
+    for skill in custom_skills:
+        skill.installation_policy = SkillInstallationPolicy.AVAILABLE
     if custom_skill_ids:
         db_session.execute(
             delete(UserSkillPreference).where(
                 UserSkillPreference.skill_id.in_(custom_skill_ids)
             )
         )
+    # No setting: the plugin follows its marketplace default, as legacy
+    # AVAILABLE does.
+    db_session.execute(
+        update(Plugin).where(Plugin.id.in_(plugin_ids)).values(installation_policy=None)
+    )
+    delete_plugin_preferences__no_commit(plugin_ids, db_session)
 
     db_session.delete(app)
     for skill in skills:
@@ -772,7 +828,7 @@ def disconnect_external_app_for_user(
     external_app_id: int,
     user_id: UUID,
 ) -> None:
-    """Remove a user's app credentials and associated skill preferences.
+    """Remove app credentials and enabled selections; preserve explicit opt-outs.
 
     Flush only; the caller refreshes the user's sandbox and commits.
     """
@@ -782,6 +838,18 @@ def disconnect_external_app_for_user(
             ExternalAppUserCredential.user_id == user_id,
         )
     )
+    associated_skills = _lock_custom_skills(
+        db_session,
+        db_session.scalars(
+            select(ExternalApp__Skill.skill_id).where(
+                ExternalApp__Skill.external_app_id == external_app_id
+            )
+        ),
+    )
+    plugin_ids = [
+        lock_skill_plugin__no_commit(skill, db_session).id
+        for skill in associated_skills
+    ]
     associated_skill_ids = select(ExternalApp__Skill.skill_id).where(
         ExternalApp__Skill.external_app_id == external_app_id
     )
@@ -789,6 +857,26 @@ def disconnect_external_app_for_user(
         delete(UserSkillPreference).where(
             UserSkillPreference.user_id == user_id,
             UserSkillPreference.skill_id.in_(associated_skill_ids),
+            UserSkillPreference.enabled.is_(True),
         )
     )
+    delete_plugin_preferences__no_commit(
+        plugin_ids, db_session, user_id=user_id, enabled_only=True
+    )
     db_session.flush()
+
+
+def _lock_custom_skills(db_session: Session, skill_ids: Iterable[UUID]) -> list[Skill]:
+    """Lock the custom skill rows among ``skill_ids`` in id order, before their
+    plugin rows."""
+    ids = set(skill_ids)
+    if not ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(Skill)
+            .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
+            .order_by(Skill.id)
+            .with_for_update()
+        )
+    )

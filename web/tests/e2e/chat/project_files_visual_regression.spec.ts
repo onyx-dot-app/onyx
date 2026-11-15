@@ -1,11 +1,11 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
+import { ProjectFilesSection } from "@tests/e2e/pages/ProjectFilesSection";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import type { CategorizedFiles } from "@/lib/projects/types";
 
 const PROJECT_NAME = "E2E-PROJECT-FILES-VISUAL";
-const ATTACHMENT_ITEM_TITLE_TEST_ID = "attachment-item-title";
-const ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID = "attachment-item-icon-wrapper";
 const LONG_FILE_NAME =
   "CSE_202_Final_Project_Solution_Regression_Check_Long_Name.txt";
 const FILE_CONTENT = "Visual regression test content for long filename cards.";
@@ -23,20 +23,12 @@ type Geometry = {
   cardBottom: number;
 };
 
-function getFilesSection(page: Page): Locator {
-  return page
-    .locator("div")
-    .filter({ has: page.getByRole("button", { name: "Add Files" }) })
-    .filter({ hasText: "Chats in this project can access these files." })
-    .first();
-}
-
 async function uploadFileToProject(
   page: Page,
   targetProjectId: number,
   fileName: string,
   content: string
-): Promise<void> {
+): Promise<string[]> {
   const response = await page.request.post("/api/user/projects/file/upload", {
     multipart: {
       project_id: String(targetProjectId),
@@ -49,6 +41,9 @@ async function uploadFileToProject(
   });
 
   expect(response.ok()).toBeTruthy();
+  const body: CategorizedFiles = await response.json();
+  expect(body.rejected_files).toEqual([]);
+  return body.user_files.map((file) => file.id);
 }
 
 async function getElementGeometryInCard(
@@ -107,7 +102,14 @@ test.describe("Project Files visual regression", () => {
     const client = new OnyxApiClient(page.request);
 
     projectId = await client.createProject(PROJECT_NAME);
-    await uploadFileToProject(page, projectId, LONG_FILE_NAME, FILE_CONTENT);
+    const fileIds = await uploadFileToProject(
+      page,
+      projectId,
+      LONG_FILE_NAME,
+      FILE_CONTENT
+    );
+    // the page never re-polls a file it did not upload, so it must load after processing
+    await client.waitForUserFilesCompleted(fileIds);
 
     await context.close();
   });
@@ -146,27 +148,24 @@ test.describe("Project Files visual regression", () => {
   test("long underscore filename stays visually contained in file card", async ({
     page,
   }) => {
-    const filesSection = getFilesSection(page);
-    await expect(filesSection).toBeVisible();
+    const files = new ProjectFilesSection(page);
+    await expect(files.section).toBeVisible();
 
-    const fileTitle = filesSection
-      .locator(`[data-testid="${ATTACHMENT_ITEM_TITLE_TEST_ID}"]`)
-      .filter({ hasText: LONG_FILE_NAME })
-      .first();
+    const fileTitle = files.fileTitle(LONG_FILE_NAME);
     await expect(fileTitle).toBeVisible();
 
-    // Wait for deterministic post-processing state before geometry checks/screenshot.
-    await expect(fileTitle).not.toContainText("Processing...", {
+    // Wait for deterministic post-processing state before geometry
+    // checks/screenshot. Title and description are separate elements now, so
+    // the state text is asserted on the whole files section.
+    await expect(files.section).not.toContainText("Processing...", {
       timeout: 30_000,
     });
-    await expect(fileTitle).not.toContainText("Uploading...", {
+    await expect(files.section).not.toContainText("Uploading...", {
       timeout: 30_000,
     });
-    await expect(fileTitle).toContainText("TXT", { timeout: 30_000 });
+    await expect(files.section).toContainText("TXT", { timeout: 30_000 });
 
-    const iconWrapper = filesSection
-      .locator(`[data-testid="${ATTACHMENT_ITEM_ICON_WRAPPER_TEST_ID}"]`)
-      .first();
+    const iconWrapper = files.attachmentTile;
     await expect(iconWrapper).toBeVisible();
 
     const container = page.locator("[data-main-container]");

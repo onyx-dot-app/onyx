@@ -1,5 +1,6 @@
+import { MCPConnectionStatus } from "@/lib/mcp/types";
 import {
-  detectSlashTrigger,
+  detectPickerTrigger,
   filterPickerSections,
   flattenSections,
   pickerEntryConnectionPath,
@@ -16,32 +17,80 @@ import {
 } from "@/lib/skills/__fixtures__/picker";
 import type { SkillsList } from "@/lib/skills/types";
 
-describe("detectSlashTrigger", () => {
+describe("detectPickerTrigger", () => {
+  /** The text with the caret at its end. */
+  const atEnd = (before: string) => ({ before, after: "" });
+
   it("returns null when no slash present", () => {
-    expect(detectSlashTrigger("hello world")).toBeNull();
+    expect(detectPickerTrigger(atEnd("hello world"), "/")).toBeNull();
   });
 
   it("matches a leading slash with empty query", () => {
-    expect(detectSlashTrigger("/")).toEqual({ slashIndex: 0, query: "" });
-  });
-
-  it("matches a leading slash with a query", () => {
-    expect(detectSlashTrigger("/sla")).toEqual({ slashIndex: 0, query: "sla" });
-  });
-
-  it("matches a slash after whitespace", () => {
-    expect(detectSlashTrigger("hello /sl")).toEqual({
-      slashIndex: 6,
-      query: "sl",
+    expect(detectPickerTrigger(atEnd("/"), "/")).toEqual({
+      triggerIndex: 0,
+      query: "",
+      token: { before: "/", after: "" },
     });
   });
 
+  it("matches a slash after whitespace", () => {
+    expect(detectPickerTrigger(atEnd("hello /sl"), "/")).toEqual({
+      triggerIndex: 6,
+      query: "sl",
+      token: { before: "/sl", after: "" },
+    });
+  });
+
+  it("queries the whole word, through the caret to the next whitespace", () => {
+    expect(
+      detectPickerTrigger({ before: "hi /sl", after: "ack now" }, "/")
+    ).toEqual({
+      triggerIndex: 3,
+      query: "slack",
+      token: { before: "/sl", after: "ack" },
+    });
+    expect(detectPickerTrigger({ before: "/", after: "pptx" }, "/")).toEqual({
+      triggerIndex: 0,
+      query: "pptx",
+      token: { before: "/", after: "pptx" },
+    });
+  });
+
+  it("rejects a caret before the trigger", () => {
+    expect(detectPickerTrigger({ before: "", after: "/pptx" }, "/")).toBeNull();
+  });
+
   it("rejects a slash not preceded by whitespace", () => {
-    expect(detectSlashTrigger("http://x")).toBeNull();
+    expect(detectPickerTrigger(atEnd("http://x"), "/")).toBeNull();
   });
 
   it("rejects when query contains whitespace", () => {
-    expect(detectSlashTrigger("/foo bar")).toBeNull();
+    expect(detectPickerTrigger(atEnd("/foo bar"), "/")).toBeNull();
+  });
+
+  describe("with a `@` trigger", () => {
+    it("matches a leading or space-preceded `@`", () => {
+      expect(detectPickerTrigger(atEnd("@"), "@")).toEqual({
+        triggerIndex: 0,
+        query: "",
+        token: { before: "@", after: "" },
+      });
+      expect(detectPickerTrigger(atEnd("use @code-re"), "@")).toEqual({
+        triggerIndex: 4,
+        query: "code-re",
+        token: { before: "@code-re", after: "" },
+      });
+    });
+
+    it("rejects a mid-word `@`, as in an email", () => {
+      expect(detectPickerTrigger(atEnd("a@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("@@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("(@b"), "@")).toBeNull();
+    });
+
+    it("ignores `/` tokens", () => {
+      expect(detectPickerTrigger(atEnd("/pptx"), "@")).toBeNull();
+    });
   });
 });
 
@@ -168,11 +217,11 @@ describe("toPickerSections", () => {
     const servers = [
       mcpServerFixture({ id: 9, name: "Zulip MCP" }),
       // A credential row can exist while the proxy still cannot authenticate
-      // the user, so `is_authenticated` must not drive this.
+      // the user, so `connection_status` must not drive this.
       mcpServerFixture({
         id: 4,
         name: "Asana MCP",
-        is_authenticated: true,
+        connection_status: MCPConnectionStatus.CONNECTED,
         craft_connected: false,
       }),
     ];

@@ -7,7 +7,6 @@ from uuid import uuid4
 
 from sqlalchemy.orm import Session
 
-from onyx.auth.schemas import UserRole
 from onyx.db.mcp import get_mcp_servers_accessible_to_user, user_can_access_mcp_server
 from onyx.db.models import (
     MCPServer,
@@ -57,7 +56,7 @@ def _ids(user: User, db: Session) -> set[int]:
 
 
 def test_user_in_multiple_groups_sees_server_via_any_group(db_session: Session) -> None:
-    user = create_test_user(db_session, "edge_multi", role=UserRole.BASIC)
+    user = create_test_user(db_session, "edge_multi")
     g_a = _group(db_session, "edge_a")
     g_b = _group(db_session, "edge_b")
     _join(db_session, user, g_a)
@@ -72,9 +71,9 @@ def test_user_in_multiple_groups_sees_server_via_any_group(db_session: Session) 
 
 
 def test_server_restricted_to_multiple_groups(db_session: Session) -> None:
-    member_a = create_test_user(db_session, "edge_ma", role=UserRole.BASIC)
-    member_b = create_test_user(db_session, "edge_mb", role=UserRole.BASIC)
-    outsider = create_test_user(db_session, "edge_out", role=UserRole.BASIC)
+    member_a = create_test_user(db_session, "edge_ma")
+    member_b = create_test_user(db_session, "edge_mb")
+    outsider = create_test_user(db_session, "edge_out")
     g_a = _group(db_session, "edge_ga")
     g_b = _group(db_session, "edge_gb")
     _join(db_session, member_a, g_a)
@@ -89,8 +88,8 @@ def test_server_restricted_to_multiple_groups(db_session: Session) -> None:
 
 
 def test_private_server_with_no_grants_is_admin_only(db_session: Session) -> None:
-    admin = create_test_user(db_session, "edge_admin", role=UserRole.ADMIN)
-    basic = create_test_user(db_session, "edge_basic", role=UserRole.BASIC)
+    admin = create_test_user(db_session, "edge_admin", is_admin=True)
+    basic = create_test_user(db_session, "edge_basic")
     server = _server(db_session, "edge_locked", is_public=False)  # no users, no groups
 
     assert user_can_access_mcp_server(admin, server.id, db_session) is True
@@ -99,8 +98,8 @@ def test_private_server_with_no_grants_is_admin_only(db_session: Session) -> Non
 
 
 def test_direct_user_and_group_grants_coexist(db_session: Session) -> None:
-    direct = create_test_user(db_session, "edge_direct", role=UserRole.BASIC)
-    grp_member = create_test_user(db_session, "edge_grpm", role=UserRole.BASIC)
+    direct = create_test_user(db_session, "edge_direct")
+    grp_member = create_test_user(db_session, "edge_grpm")
     group = _group(db_session, "edge_coexist")
     _join(db_session, grp_member, group)
 
@@ -113,7 +112,7 @@ def test_direct_user_and_group_grants_coexist(db_session: Session) -> None:
 
 
 def test_flipping_public_flag_changes_visibility(db_session: Session) -> None:
-    outsider = create_test_user(db_session, "edge_flip_out", role=UserRole.BASIC)
+    outsider = create_test_user(db_session, "edge_flip_out")
     group = _group(db_session, "edge_flip_grp")
     server = _server(db_session, "edge_flip_server", is_public=True)
     _restrict_groups(db_session, server, [group])

@@ -1,11 +1,14 @@
 import concurrent.futures
 import re
 import threading
+import time
 
 import requests
+from anyio import to_thread
 from cachetools import TTLCache
 from fastapi import APIRouter, HTTPException, Response
 from fastapi.concurrency import run_in_threadpool
+from fastapi.responses import JSONResponse
 
 from onyx import __version__
 from onyx.auth.users import anonymous_user_enabled, user_needs_to_be_verified
@@ -17,8 +20,9 @@ from onyx.configs.constants import (
 )
 from onyx.db.auth import get_user_count
 from onyx.db.engine.sql_engine import get_session_with_shared_schema
-from onyx.db.enums import SSOProviderType
-from onyx.db.sso_provider import fetch_sso_providers
+from onyx.db.sso_provider import fetch_sso_providers, sso_authorize_path
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError, onyx_error_to_json_response
 from onyx.server.manage.models import (
     AllVersions,
     AuthConfigResponse,
@@ -28,18 +32,13 @@ from onyx.server.manage.models import (
 )
 from onyx.server.models import StatusResponse
 from onyx.server.security.store import get_security_settings
+from onyx.server.settings.store import load_settings
+from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
+logger = setup_logger()
+
 router = APIRouter()
-
-# GOOGLE_OAUTH and OIDC share the /auth/oidc router. SAML has its own. Keep in
-# sync with the router prefixes in oidc_multi.py and saml_multi.py.
-_SSO_AUTHORIZE_ROUTER = {
-    SSOProviderType.GOOGLE_OAUTH: "oidc",
-    SSOProviderType.OIDC: "oidc",
-    SSOProviderType.SAML: "saml",
-}
-
 
 # TTL matches the endpoint's HTTP max-age (60s). The two windows stack.
 # Admin mutations invalidate this pod directly. Other pods ride the TTL.
@@ -63,8 +62,8 @@ def invalidate_sso_provider_options_cache() -> None:
 
 
 def _fetch_sso_provider_options() -> list[SSOProviderOption]:
-    # Single-tenant only. /auth/type runs before any tenant context, so a
-    # multi-tenant lookup has no tenant to key on.
+    # One cached response for every visitor, so it can only speak for a
+    # deployment with one set of providers. Cloud uses /auth/sso/discover.
     if MULTI_TENANT:
         return []
     # The lock spans the DB read so a mutation's invalidate cannot land between
@@ -79,10 +78,7 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
                     name=provider.name,
                     display_name=provider.display_name,
                     provider_type=provider.provider_type,
-                    authorize_url=(
-                        f"/api/auth/{_SSO_AUTHORIZE_ROUTER[provider.provider_type]}"
-                        f"/{provider.name}/authorize"
-                    ),
+                    authorize_url=sso_authorize_path(provider),
                 )
                 for provider in fetch_sso_providers(db_session, enabled_only=True)
             ]
@@ -90,8 +86,114 @@ def _fetch_sso_provider_options() -> list[SSOProviderOption]:
         return options
 
 
+# Readiness thresholds. The server reports not-ready once every threadpool token
+# is borrowed AND at least this many requests are queued for a thread, for this
+# long. Bursty load queues briefly, so neither condition alone is a problem.
+# Constants until a deployment needs to tune them.
+_UNREADY_QUEUE_DEPTH = 1
+_UNREADY_AFTER_SECONDS = 10.0
+
+# Tracks when the threadpool was first observed saturated, so brief queueing
+# under bursty load does not flip readiness. Only ever touched from the event
+# loop inside `readiness`, with no await between the read and the write.
+#
+# The window is sampled at probe frequency, not observed continuously, so a pool
+# that drains and re-saturates between two probes reads as continuously
+# saturated. Accepted: readiness is reversible, so the next healthy sample
+# restores the pod one interval later. Restarting the streak on a large sample
+# gap would be worse — any probe interval above the threshold would then never
+# accumulate a streak, and Compose probes every 30s. Fixing it properly needs a
+# background sampler, which is not worth an always-on loop per process.
+_SATURATED_SINCE: float | None = None
+
+# Probes can hit /health/ready many times a second, so log only when readiness
+# changes. Logging every not-ready probe would flood the log with one line per
+# probe per replica, and add synchronous I/O exactly when the server is already
+# out of capacity.
+_REPORTED_NOT_READY = False
+
+
+def _threadpool_saturation() -> tuple[bool, dict[str, float]]:
+    """Report whether the sync-endpoint threadpool has no capacity left.
+
+    Must be called from the event loop — the limiter is per-loop.
+    """
+    stats = to_thread.current_default_thread_limiter().statistics()
+    depth = {
+        "threadpool_total_tokens": stats.total_tokens,
+        "threadpool_borrowed_tokens": stats.borrowed_tokens,
+        "threadpool_tasks_waiting": stats.tasks_waiting,
+    }
+    saturated = (
+        stats.borrowed_tokens >= stats.total_tokens
+        and stats.tasks_waiting >= _UNREADY_QUEUE_DEPTH
+    )
+    return saturated, depth
+
+
+# response_model=None only disables schema inference for the Response union
+# below. It does not declare a response model.
+@router.get("/health/ready", tags=PUBLIC_API_TAGS, response_model=None)
+async def readiness() -> StatusResponse[dict[str, float]] | JSONResponse:
+    """Readiness probe. Wire this to readinessProbe and to load balancers.
+
+    Sync endpoints run in the anyio threadpool, so a saturated pool means the
+    server cannot serve real traffic even though the event loop still turns.
+    This handler stays async on purpose: a sync handler would borrow a token of
+    the pool it is measuring, adding load exactly when there is none to spare,
+    and would queue rather than answer. Liveness lives at /health.
+    """
+    global _SATURATED_SINCE, _REPORTED_NOT_READY
+
+    saturated, depth = _threadpool_saturation()
+    now = time.monotonic()
+
+    if not saturated:
+        if _REPORTED_NOT_READY:
+            logger.notice("Threadpool recovered; reporting ready again")
+            _REPORTED_NOT_READY = False
+        _SATURATED_SINCE = None
+        return StatusResponse(success=True, message="ok", data=depth)
+
+    if _SATURATED_SINCE is None:
+        _SATURATED_SINCE = now
+
+    saturated_for = now - _SATURATED_SINCE
+    if saturated_for < _UNREADY_AFTER_SECONDS:
+        return StatusResponse(success=True, message="ok", data=depth)
+
+    if not _REPORTED_NOT_READY:
+        logger.warning(
+            "Threadpool saturated for %.1fs (%s/%s tokens borrowed, %s waiting); "
+            "reporting not ready",
+            saturated_for,
+            depth["threadpool_borrowed_tokens"],
+            depth["threadpool_total_tokens"],
+            depth["threadpool_tasks_waiting"],
+        )
+        _REPORTED_NOT_READY = True
+
+    # Returned rather than raised: the global OnyxError handler logs every 5xx,
+    # which would put one line per probe per replica back in the log. The
+    # response body and status are identical either way.
+    return onyx_error_to_json_response(
+        OnyxError(
+            OnyxErrorCode.SERVICE_UNAVAILABLE,
+            f"Request threadpool saturated for {saturated_for:.1f}s "
+            f"({depth['threadpool_tasks_waiting']:.0f} requests queued)",
+        )
+    )
+
+
 @router.get("/health", tags=PUBLIC_API_TAGS)
 async def healthcheck() -> StatusResponse:
+    """Liveness probe. Answers only "is this process still running".
+
+    Deliberately checks nothing else. Liveness failures restart the container,
+    and saturation is load-induced and correlated across replicas, so gating
+    restarts on it would turn a slowdown into an outage. Use /health/ready for
+    that.
+    """
     return StatusResponse(success=True, message="ok")
 
 
@@ -133,6 +235,11 @@ async def get_auth_type(response: Response) -> AuthConfigResponse:
         oauth_enabled=OAUTH_ENABLED,
         password_auth_enabled=security.password_auth_enabled,
         sso_providers=await run_in_threadpool(_fetch_sso_provider_options),
+        default_language=(
+            None
+            if MULTI_TENANT
+            else (await run_in_threadpool(load_settings)).default_language
+        ),
     )
 
 
@@ -141,54 +248,79 @@ def get_version() -> VersionResponse:
     return VersionResponse(backend_version=__version__)
 
 
-@router.get("/versions", tags=PUBLIC_API_TAGS)
-def get_versions() -> AllVersions:
-    """
-    Fetches the latest stable and beta versions of Onyx Docker images.
-    Since DockerHub does not explicitly flag stable and beta images,
-    this endpoint can be used to programmatically check for new images.
-    """
-    # Fetch the latest tags from DockerHub for each Onyx component
-    dockerhub_repos = [
-        "onyxdotapp/onyx-model-server",
-        "onyxdotapp/onyx-backend",
-        "onyxdotapp/onyx-web-server",
-    ]
+# The document index image the docker compose deployment runs. Keep in sync
+# with the `opensearch` service in
+# deployment/docker_compose/docker-compose.template.yml.
+DOCUMENT_INDEX_IMAGE = "opensearchproject/opensearch:3.6.0"
 
-    # For good measure, we fetch 10 pages of tags
-    def get_dockerhub_tags(repo: str, pages: int = 10) -> list[str]:
-        url = f"https://hub.docker.com/v2/repositories/{repo}/tags"
-        tags = []
-        for _ in range(pages):
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-            data = response.json()
-            tags.extend(
-                [
-                    tag["name"]
-                    for tag in data["results"]
-                    if re.match(r"^v\d", tag["name"])
-                ]
-            )
-            url = data.get("next")
-            if not url:
-                break
-        return tags
 
-    # Get tags for all repos in parallel
+_DOCKERHUB_REPOS = (
+    "onyxdotapp/onyx-model-server",
+    "onyxdotapp/onyx-backend",
+    "onyxdotapp/onyx-web-server",
+)
+_DOCKERHUB_PAGE_SIZE = 100
+_DOCKERHUB_MAX_PAGES = 2
+_DOCKERHUB_TIMEOUT_SECONDS = 5
+
+# Public endpoint, so cache the DockerHub lookup to keep it from being an
+# amplification vector. The lock makes concurrent misses share one fetch.
+_VERSIONS_TTL_SECONDS = 60 * 60
+_VERSIONS_CACHE: TTLCache[str, AllVersions] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_TTL_SECONDS
+)
+_VERSIONS_KEY = "versions"
+_VERSIONS_LOCK = threading.Lock()
+# Outlives the TTL so a DockerHub outage serves the last good answer.
+_LAST_GOOD_VERSIONS: AllVersions | None = None
+# A present entry means the last fetch failed: skip refetching and serve the
+# last good value or raise.
+_VERSIONS_FAILURE_COOLDOWN_SECONDS = 60
+_VERSIONS_FAILURE_CACHE: TTLCache[str, bool] = TTLCache(
+    maxsize=1, ttl=_VERSIONS_FAILURE_COOLDOWN_SECONDS
+)
+
+
+def _get_dockerhub_tags(repo: str) -> list[str]:
+    url: str | None = (
+        f"https://hub.docker.com/v2/repositories/{repo}/tags"
+        f"?page_size={_DOCKERHUB_PAGE_SIZE}"
+    )
+    tags: list[str] = []
+    for _ in range(_DOCKERHUB_MAX_PAGES):
+        if not url:
+            break
+        response = requests.get(url, timeout=_DOCKERHUB_TIMEOUT_SECONDS)
+        response.raise_for_status()
+        data = response.json()
+        tags.extend(
+            tag["name"] for tag in data["results"] if re.match(r"^v\d", tag["name"])
+        )
+        url = data.get("next")
+    return tags
+
+
+def _version_key(version: str) -> tuple[int, int, int, int]:
+    """Extract major, minor, patch, beta as integers for sorting"""
+    clean_version = version[1:]
+    if "-beta." in clean_version:
+        base_version, beta_num = clean_version.split("-beta.")
+        parts = base_version.split(".")
+        return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
+    parts = clean_version.split(".")
+    return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
+
+
+def _fetch_versions() -> AllVersions:
     with concurrent.futures.ThreadPoolExecutor() as executor:
         all_tags = list(
-            executor.map(lambda repo: set(get_dockerhub_tags(repo)), dockerhub_repos)
+            executor.map(lambda repo: set(_get_dockerhub_tags(repo)), _DOCKERHUB_REPOS)
         )
 
-    # Find common tags across all repos
     common_tags = set.intersection(*all_tags)
-
-    # Filter tags by strict version patterns
     dev_tags = [tag for tag in common_tags if DEV_VERSION_PATTERN.match(tag)]
     stable_tags = [tag for tag in common_tags if STABLE_VERSION_PATTERN.match(tag)]
 
-    # Ensure we have at least one tag of each type
     if not dev_tags:
         raise HTTPException(
             status_code=500,
@@ -200,43 +332,67 @@ def get_versions() -> AllVersions:
             detail="No valid stable versions found matching pattern v(number).(number).(number)",
         )
 
-    # Sort common tags and get the latest one
-    def version_key(version: str) -> tuple[int, int, int, int]:
-        """Extract major, minor, patch, beta as integers for sorting"""
-        # Remove 'v' prefix
-        clean_version = version[1:]
-
-        # Check if it's a beta version
-        if "-beta." in clean_version:
-            # Split on '-beta.' to separate version and beta number
-            base_version, beta_num = clean_version.split("-beta.")
-            parts = base_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), int(beta_num))
-        else:
-            # Stable version - no beta number
-            parts = clean_version.split(".")
-            return (int(parts[0]), int(parts[1]), int(parts[2]), 0)
-
-    latest_dev_version = sorted(dev_tags, key=version_key, reverse=True)[0]
-    latest_stable_version = sorted(stable_tags, key=version_key, reverse=True)[0]
+    latest_dev_version = max(dev_tags, key=_version_key)
+    latest_stable_version = max(stable_tags, key=_version_key)
 
     return AllVersions(
         stable=ContainerVersions(
             onyx=latest_stable_version,
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=DOCUMENT_INDEX_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
         dev=ContainerVersions(
             onyx=latest_dev_version,
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=DOCUMENT_INDEX_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
         migration=ContainerVersions(
             onyx="airgapped-intfloat-nomic-migration",
             relational_db="postgres:15.2-alpine",
-            index="vespaengine/vespa:8.277.17",
+            index=DOCUMENT_INDEX_IMAGE,
             nginx="nginx:1.25.5-alpine",
         ),
     )
+
+
+def _get_cached_versions() -> AllVersions:
+    global _LAST_GOOD_VERSIONS
+    with _VERSIONS_LOCK:
+        cached = _VERSIONS_CACHE.get(_VERSIONS_KEY)
+        if cached is not None:
+            return cached
+        if _VERSIONS_KEY in _VERSIONS_FAILURE_CACHE:
+            if _LAST_GOOD_VERSIONS is not None:
+                return _LAST_GOOD_VERSIONS
+            raise OnyxError(
+                OnyxErrorCode.SERVICE_UNAVAILABLE,
+                "Version lookup is temporarily unavailable",
+            )
+        try:
+            versions = _fetch_versions()
+        except Exception:
+            _VERSIONS_FAILURE_CACHE[_VERSIONS_KEY] = True
+            if _LAST_GOOD_VERSIONS is None:
+                logger.warning("DockerHub version lookup failed", exc_info=True)
+                raise
+            logger.warning(
+                "DockerHub version lookup failed; serving last good value",
+                exc_info=True,
+            )
+            return _LAST_GOOD_VERSIONS
+        _VERSIONS_CACHE[_VERSIONS_KEY] = versions
+        _LAST_GOOD_VERSIONS = versions
+        _VERSIONS_FAILURE_CACHE.pop(_VERSIONS_KEY, None)
+        return versions
+
+
+@router.get("/versions", tags=PUBLIC_API_TAGS)
+def get_versions() -> AllVersions:
+    """
+    Fetches the latest stable and beta versions of Onyx Docker images.
+    Since DockerHub does not explicitly flag stable and beta images,
+    this endpoint can be used to programmatically check for new images.
+    """
+    return _get_cached_versions()

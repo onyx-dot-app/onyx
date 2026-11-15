@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
 import { ConfirmationModalLayout } from "@opal/layouts";
@@ -17,20 +18,23 @@ export default function SkillNameConflictModal({
   onConfirm,
   pending = false,
 }: SkillNameConflictModalProps) {
+  const t = useTranslations("skills.modals");
+
   return (
     <ConfirmationModalLayout
       icon={SvgAlertTriangle}
-      title={`Create another “${skillName}” skill?`}
-      description="You already have an enabled skill with this name."
+      title={t("nameConflict.title", { name: skillName })}
+      description={t("nameConflict.description")}
       onClose={pending ? undefined : onClose}
       submit={
         <Button onClick={onConfirm} disabled={pending}>
-          {pending ? "Creating..." : "Create anyway"}
+          {pending
+            ? t("nameConflict.confirmButton.pendingLabel")
+            : t("nameConflict.confirmButton.label")}
         </Button>
       }
     >
-      The new skill will start disabled. You can switch which one is active from
-      the Skills page.
+      {t("nameConflict.body")}
     </ConfirmationModalLayout>
   );
 }

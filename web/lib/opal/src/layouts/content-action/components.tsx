@@ -1,10 +1,14 @@
 import "@opal/layouts/content-action/styles.css";
-import { Content, type ContentProps } from "@opal/layouts/content/components";
 import {
-  containerSizeVariants,
-  type ContainerSizeVariants,
-} from "@opal/shared";
+  Content,
+  ContentDescription,
+  contentColorStyle,
+  hasIconGap,
+  type ContentProps,
+} from "@opal/layouts/content/components";
 import { cn } from "@opal/utils";
+import { spacingToRem } from "@opal/shared";
+import type { Spacing } from "@opal/types";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -15,13 +19,24 @@ type ContentActionProps = ContentProps & {
   rightChildren?: React.ReactNode;
 
   /**
-   * Padding applied around the `Content` area.
-   * Uses the shared `SizeVariant` scale from `@opal/shared`.
+   * Padding applied around the `Content` area, as a spacing step (`N / 4` rem).
    *
-   * @default "lg"
-   * @see {@link ContainerSizeVariants} for the full list of presets.
+   * Narrowed to the four paddings `Interactive.Container` applies at its size
+   * presets. Matching them is the point of this prop — it is what lines a label
+   * up with an adjacent button of the same size — so an arbitrary step would
+   * only ever break that alignment.
+   *
+   * @default 2
    */
-  padding?: ContainerSizeVariants;
+  padding?: 0 | 0.5 | 1 | 1.5 | 2;
+
+  /**
+   * The gap between the `Content` area and `rightChildren`, as a spacing
+   * step (`N / 4` rem). Ignored in the `responsive` branch.
+   *
+   * @default 4
+   */
+  gapping?: Spacing;
 
   /**
    * When true, vertically centers the Content and rightChildren.
@@ -33,11 +48,9 @@ type ContentActionProps = ContentProps & {
   center?: boolean;
 
   /**
-   * When true, `rightChildren` reflows responsively — forwarded into the
-   * `ContentMd` slot so it sits to the right of the title/description on desktop
-   * and stacks between them on narrow viewports. Requires a `main-*` size
-   * preset (the only ones with the slot); other presets fall back to the
-   * standard right-hand column. `center` is ignored in this mode.
+   * When true, `rightChildren` reflows responsively: it sits to the right of
+   * the title and description on desktop, and between them on narrow
+   * viewports. `center` and `gapping` are ignored in this mode.
    *
    * @default false
    */
@@ -47,7 +60,9 @@ type ContentActionProps = ContentProps & {
    * When true, the `rightChildren` column grows to fill the row (capped at
    * `--block-width-form-input-column-max`) instead of hugging its content.
    * Intended for full-width form inputs; leave off for compact controls like
-   * toggles/buttons. Ignored in the `responsive` branch.
+   * toggles/buttons. In the `responsive` branch it applies on desktop, where
+   * the control sits beside the title; stacked on narrow viewports, the
+   * control always spans the full width.
    *
    * @default false
    */
@@ -58,26 +73,14 @@ type ContentActionProps = ContentProps & {
 // ContentAction
 // ---------------------------------------------------------------------------
 
-// Only the `main-*` presets route to ContentMd — the one layout with a
-// `rightChildren` slot — so `responsive` can only reflow for those.
-function routesToContentMd(props: {
-  sizePreset?: string;
-  variant?: string;
-}): boolean {
-  const isMdPreset =
-    props.sizePreset === "main-content" ||
-    props.sizePreset === "main-ui" ||
-    props.sizePreset === "secondary";
-  return isMdPreset && props.variant !== "body";
-}
-
 /**
  * A row layout that pairs a {@link Content} block with optional right-side
  * action children (e.g. buttons, badges).
  *
- * The `Content` area receives padding controlled by `padding`, using
- * the same size scale as `Interactive.Container` and `Button`. The
- * `rightChildren` wrapper stretches to the full height of the row.
+ * The `Content` area receives padding controlled by `padding`, whose four steps
+ * are the paddings `Interactive.Container` applies at its size presets — so a row
+ * lines up with an adjacent button. The `rightChildren` wrapper stretches to the
+ * full height of the row.
  *
  * @example
  * ```tsx
@@ -89,39 +92,86 @@ function routesToContentMd(props: {
  *   icon={SvgSettings}
  *   title="OpenAI"
  *   description="GPT"
- *   sizePreset="main-content"
- *   variant="section"
- *   padding="lg"
+ *   font="main-content-emphasis"
+ *   padding={2}
  *   rightChildren={<Button icon={SvgSettings} prominence="tertiary" />}
  * />
  * ```
  */
 function ContentAction({
   rightChildren,
-  padding = "lg",
+  padding = 2,
+  gapping = 4,
   center = false,
   responsive = false,
   fillRight = false,
   ...contentProps
 }: ContentActionProps) {
-  const { padding: paddingClass } = containerSizeVariants[padding];
+  const paddingStyle = { padding: spacingToRem(padding) };
 
-  // Responsive: forward rightChildren into the ContentMd slot, which reflows it
-  // to the right on desktop and between the title/description on narrow widths.
-  if (responsive && rightChildren && routesToContentMd(contentProps)) {
+  // Responsive: the title, the control and the description share a grid that
+  // puts the control on the right on desktop, and between the title and the
+  // description on narrow widths.
+  if (responsive && rightChildren) {
+    const { description, descriptionMaxLines, ...titleProps } = contentProps;
+    const font = contentProps.font ?? "main-ui-action";
+    // Only an icon before the title pushes the title in; reversed or
+    // stacked, the description already lines up with it.
+    const indent =
+      !!contentProps.icon &&
+      (contentProps.orientation ?? "inline") === "inline";
     // Full width: in a flex-col `align-items: start` parent (e.g. InputHorizontal's
     // Section) a wrapper without w-full shrinks to content width, so the input
     // wouldn't fill the row.
     return (
-      <div className={cn("w-full min-w-0", paddingClass)}>
-        <Content {...({ ...contentProps, rightChildren } as ContentProps)} />
+      <div
+        className="opal-content-action-responsive w-full min-w-0"
+        data-fill={fillRight || undefined}
+        data-content-color={contentProps.color ?? "default"}
+        // The same colour variables Content sets, so the description and the
+        // control inherit the content's colours.
+        style={{
+          ...paddingStyle,
+          ...contentColorStyle(
+            contentProps.color ?? "default",
+            contentProps.titleColor
+          ),
+        }}
+      >
+        <div className="opal-content-action-responsive-title">
+          <Content {...(titleProps as ContentProps)} />
+        </div>
+        <div className="opal-content-action-responsive-control">
+          {rightChildren}
+        </div>
+        {description && (
+          // With an icon, the description lines up under the title: one icon
+          // box (`1lh` of the title font) and the gap in.
+          <div
+            className={cn(
+              "opal-content-action-responsive-description",
+              indent && `font-${font}`
+            )}
+            data-indent={indent || undefined}
+            data-flush={(indent && !hasIconGap(font)) || undefined}
+          >
+            <ContentDescription
+              description={description}
+              maxLines={descriptionMaxLines}
+            />
+          </div>
+        )}
       </div>
     );
   }
 
   return (
-    <div className="opal-content-action" data-centered={center || undefined}>
-      <div className={cn("opal-content-action-content", paddingClass)}>
+    <div
+      className="opal-content-action"
+      data-centered={center || undefined}
+      style={{ gap: spacingToRem(gapping) }}
+    >
+      <div className="opal-content-action-content" style={paddingStyle}>
         <Content {...contentProps} />
       </div>
       {rightChildren && (

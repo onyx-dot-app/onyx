@@ -42,7 +42,7 @@ class TestLiteLLMErrorExtraction:
             message="Content filter triggered",
             status_code=400,
             llm_provider="azure",
-            model="gpt-4o",
+            model="gpt-6-sol",
         )
 
         with pytest.raises(ValueError, match="status_code=400"):
@@ -63,10 +63,10 @@ class TestLiteLLMErrorExtraction:
         mock_llm = MagicMock()
         mock_llm.invoke.side_effect = _make_litellm_style_error(
             message="Bad request",
-            model="gpt-4o",
+            model="gpt-6-sol",
         )
 
-        with pytest.raises(ValueError, match="model=gpt-4o"):
+        with pytest.raises(ValueError, match="model=gpt-6-sol"):
             _summarize_image("data:image/png;base64,abc", mock_llm)
 
     def test_all_fields_in_single_message(self) -> None:
@@ -75,7 +75,7 @@ class TestLiteLLMErrorExtraction:
             message="Rate limit exceeded",
             status_code=429,
             llm_provider="azure",
-            model="gpt-4o",
+            model="gpt-6-sol",
         )
 
         with pytest.raises(ValueError) as exc_info:
@@ -84,7 +84,7 @@ class TestLiteLLMErrorExtraction:
         msg = str(exc_info.value)
         assert "status_code=429" in msg
         assert "llm_provider=azure" in msg
-        assert "model=gpt-4o" in msg
+        assert "model=gpt-6-sol" in msg
         assert "Rate limit exceeded" in msg
 
     def test_plain_exception_without_litellm_attrs(self) -> None:

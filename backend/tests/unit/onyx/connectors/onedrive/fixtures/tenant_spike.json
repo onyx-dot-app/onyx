@@ -1,0 +1,1642 @@
+{
+  "schema_version": 2,
+  "delta_request_headers": {
+    "Prefer": "hierarchicalsharing, deltashowremovedasdeleted, deltatraversepermissiongaps, deltashowsharingchanges"
+  },
+  "full_delta_pages": [
+    {
+      "value": [
+        {
+          "id": "<fixture-root-item-id>",
+          "name": "Onyx OneDrive Connector Tests",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests",
+          "size": 0,
+          "folder": {
+            "childCount": 10
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<item-id-1>",
+            "path": "/drives/<owner-drive-id>/root:",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-1>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-1>",
+            "listItemUniqueId": "<listitemunique-id-2>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-direct-id>",
+          "name": "direct-subash.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36621,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-direct-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/10-direct",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-3>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-2>",
+            "listItemUniqueId": "<listitemunique-id-4>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<folder-inherited-id>",
+          "name": "20-inherited-subash",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests/20-inherited-subash",
+          "size": 0,
+          "folder": {
+            "childCount": 3
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<fixture-root-item-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-2>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-3>",
+            "listItemUniqueId": "<listitemunique-id-5>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<folder-restricted-id>",
+          "name": "restricted-raunak",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests/20-inherited-subash/restricted-raunak",
+          "size": 0,
+          "folder": {
+            "childCount": 1
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-inherited-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/20-inherited-subash",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-5>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-4>",
+            "listItemUniqueId": "<listitemunique-id-6>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-restricted-id>",
+          "name": "restricted-child.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36638,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-restricted-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/20-inherited-subash/restricted-raunak",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-6>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-5>",
+            "listItemUniqueId": "<listitemunique-id-7>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-inherited-id>",
+          "name": "inherited-child.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36628,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-inherited-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/20-inherited-subash",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-5>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-6>",
+            "listItemUniqueId": "<listitemunique-id-8>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-visible-group-id>",
+          "name": "visible-group.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36621,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-groups-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/30-groups",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-9>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-7>",
+            "listItemUniqueId": "<listitemunique-id-10>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-anonymous-link-id>",
+          "name": "anonymous-link.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36622,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-links-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/40-links",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-11>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-8>",
+            "listItemUniqueId": "<listitemunique-id-12>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-move-id>",
+          "name": "move-between-roots.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36635,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-move-source-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/50-move/source-subash",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-13>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-9>",
+            "listItemUniqueId": "<listitemunique-id-14>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<folder-move-destination-id>",
+          "name": "destination-raunak",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests/50-move/destination-raunak",
+          "size": 0,
+          "folder": {
+            "childCount": 0
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-move-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/50-move",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-15>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-10>",
+            "listItemUniqueId": "<listitemunique-id-16>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-remove-share-id>",
+          "name": "remove-direct-share.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36638,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-remove-share-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/60-permission-mutations/remove-share",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-17>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-11>",
+            "listItemUniqueId": "<listitemunique-id-18>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-restore-inheritance-id>",
+          "name": "restore-inheritance.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36648,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-restore-parent-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/60-permission-mutations/restore-parent-subash",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-19>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-12>",
+            "listItemUniqueId": "<listitemunique-id-20>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-update-id>",
+          "name": "update-during-delta.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36634,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-content-mutations-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/70-content-mutations",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-21>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-13>",
+            "listItemUniqueId": "<listitemunique-id-22>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-delete-id>",
+          "name": "delete-during-delta.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36633,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-content-mutations-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/70-content-mutations",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-21>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-14>",
+            "listItemUniqueId": "<listitemunique-id-23>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        }
+      ],
+      "@odata.deltaLink": "https://<graph-host>/v1.0/drives/<owner-drive-id>/root/delta?$top=50&$select=id,name,webUrl,size,file,folder,deleted,shared,createdDateTime,lastModifiedDateTime,lastModifiedBy,parentReference,sharepointIds,content.downloadUrl&token=<delta-token>",
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#Collection(driveItem)",
+      "@microsoft.graph.hasMoreData": false,
+      "@microsoft.graph.syncStatus": "FullData"
+    }
+  ],
+  "incremental_delta_pages": [
+    {
+      "value": [
+        {
+          "id": "<fixture-root-item-id>",
+          "name": "Onyx OneDrive Connector Tests",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests",
+          "size": 0,
+          "folder": {
+            "childCount": 10
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<item-id-1>",
+            "path": "/drives/<owner-drive-id>/root:",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-1>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-1>",
+            "listItemUniqueId": "<listitemunique-id-2>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<folder-move-destination-id>",
+          "name": "destination-raunak",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/Documents/Onyx%20OneDrive%20Connector%20Tests/50-move/destination-raunak",
+          "size": 36635,
+          "folder": {
+            "childCount": 1
+          },
+          "shared": {
+            "scope": "users"
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-move-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/50-move",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-15>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-10>",
+            "listItemUniqueId": "<listitemunique-id-16>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-move-id>",
+          "name": "move-between-roots.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36635,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-move-destination-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/50-move/destination-raunak",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-16>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-9>",
+            "listItemUniqueId": "<listitemunique-id-14>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-remove-share-id>",
+          "name": "remove-direct-share.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36638,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "shared": {},
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-remove-share-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/60-permission-mutations/remove-share",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-17>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-11>",
+            "listItemUniqueId": "<listitemunique-id-18>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-restore-inheritance-id>",
+          "name": "restore-inheritance.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36648,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-restore-parent-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/60-permission-mutations/restore-parent-subash",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-19>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-12>",
+            "listItemUniqueId": "<listitemunique-id-20>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-delete-id>",
+          "size": 0,
+          "file": {
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "deleted": {
+            "state": "deleted"
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-content-mutations-id>",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-21>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-14>",
+            "listItemUniqueId": "<listitemunique-id-23>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@odata.type": "#microsoft.graph.driveItem"
+        },
+        {
+          "id": "<file-update-id>",
+          "name": "update-during-delta.docx",
+          "webUrl": "https://<tenant-host>/personal/<owner-personal-path>/_layouts/15/Doc.aspx?sourcedoc=<query-value>&file=<query-value>&action=<query-value>&mobileredirect=<query-value>",
+          "size": 36632,
+          "file": {
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "fileExtension": ".docx",
+            "hashes": {
+              "quickXorHash": "<quick-xor-hash>"
+            }
+          },
+          "createdDateTime": "<timestamp>",
+          "lastModifiedDateTime": "<timestamp>",
+          "lastModifiedBy": {
+            "user": {
+              "displayName": "<user-display-name-1>"
+            },
+            "application": {
+              "displayName": "Microsoft Graph"
+            }
+          },
+          "parentReference": {
+            "driveId": "<owner-drive-id>",
+            "driveType": "business",
+            "id": "<folder-content-mutations-id>",
+            "path": "/drives/<owner-drive-id>/root:/Onyx OneDrive Connector Tests/70-content-mutations",
+            "siteId": "<site-id-1>",
+            "sharepointIds": {
+              "listId": "<list-id-1>",
+              "listItemUniqueId": "<listitemunique-id-21>",
+              "siteId": "<site-id-1>",
+              "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+              "webId": "<web-id-1>"
+            }
+          },
+          "sharepointIds": {
+            "listId": "<list-id-1>",
+            "listItemId": "<listitem-id-13>",
+            "listItemUniqueId": "<listitemunique-id-22>",
+            "siteId": "<site-id-1>",
+            "siteUrl": "https://<tenant-host>/personal/<owner-personal-path>",
+            "tenantId": "<tenant-id-1>",
+            "webId": "<web-id-1>"
+          },
+          "@microsoft.graph.downloadUrl": "<download-url>",
+          "@odata.type": "#microsoft.graph.driveItem"
+        }
+      ],
+      "@odata.deltaLink": "https://<graph-host>/v1.0/drives/<owner-drive-id>/root/delta?$top=50&$select=id,name,webUrl,size,file,folder,deleted,shared,createdDateTime,lastModifiedDateTime,lastModifiedBy,parentReference,sharepointIds,content.downloadUrl&token=<delta-token>",
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#Collection(driveItem)",
+      "@microsoft.graph.hasMoreData": false,
+      "@microsoft.graph.lastProcessedChange": "1;1;<site-id-1>;639251165872500000;1808111267",
+      "@microsoft.graph.syncStatus": "Incremental"
+    }
+  ],
+  "permission_shapes": {
+    "direct": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-direct-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-1>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-1>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<permission-id-2>",
+              "loginName": "i:0#.f|membership|<primary-user-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            }
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "inherited": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-inherited-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-1>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-1>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<permission-id-2>",
+              "loginName": "i:0#.f|membership|<primary-user-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        }
+      ]
+    },
+    "restricted": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-restricted-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        },
+        {
+          "id": "<permission-id-5>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-5>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-4>",
+              "id": "<alternate-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-4>",
+              "id": "<permission-id-6>",
+              "loginName": "i:0#.f|membership|<alternate-user-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-4>",
+              "id": "<alternate-user-id>"
+            }
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "visible_group": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-visible-group-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-7>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-7>",
+          "grantedToV2": {
+            "group": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<group-display-name-1>",
+              "email": "<email-id-1>",
+              "id": "<visible-group-id>"
+            },
+            "siteUser": {
+              "displayName": "<group-display-name-1>",
+              "email": "<email-id-1>",
+              "id": "<permission-id-8>",
+              "loginName": "c:0o.c|federateddirectoryclaimprovider|<visible-group-id>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-5>",
+              "email": "<email-id-1>",
+              "id": "<visible-group-id>"
+            }
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "hidden_group": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-hidden-group-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-9>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-9>",
+          "grantedToV2": {
+            "group": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<group-display-name-2>",
+              "email": "<email-id-2>",
+              "id": "<hidden-group-id>"
+            },
+            "siteUser": {
+              "displayName": "<group-display-name-2>",
+              "email": "<email-id-2>",
+              "id": "<permission-id-10>",
+              "loginName": "c:0o.c|federateddirectoryclaimprovider|<hidden-group-id>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-6>",
+              "email": "<email-id-2>",
+              "id": "<hidden-group-id>"
+            }
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "anonymous_link": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-anonymous-link-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-11>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-12>",
+          "hasPassword": false,
+          "grantedToIdentitiesV2": [],
+          "grantedToIdentities": [],
+          "link": {
+            "scope": "anonymous",
+            "type": "view",
+            "webUrl": "<sharing-link-url>",
+            "preventsDownload": false
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "organization_link": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-organization-link-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-13>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-14>",
+          "hasPassword": false,
+          "grantedToIdentitiesV2": [],
+          "grantedToIdentities": [],
+          "link": {
+            "scope": "organization",
+            "type": "view",
+            "webUrl": "<sharing-link-url>",
+            "preventsDownload": false
+          }
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "move_destination_after": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-move-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-5>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-5>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-4>",
+              "id": "<alternate-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-4>",
+              "id": "<permission-id-6>",
+              "loginName": "i:0#.f|membership|<alternate-user-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-4>",
+              "id": "<alternate-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        }
+      ]
+    },
+    "remove_share_after": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-remove-share-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          }
+        }
+      ]
+    },
+    "restore_inheritance_after": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#drives('<owner-drive-id>')/items('<file-restore-inheritance-id>')/permissions",
+      "value": [
+        {
+          "id": "<permission-id-1>",
+          "roles": [
+            "read"
+          ],
+          "shareId": "<permission-id-1>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<permission-id-2>",
+              "loginName": "i:0#.f|membership|<primary-user-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-2>",
+              "email": "<primary-user-email>",
+              "id": "<primary-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        },
+        {
+          "id": "<permission-id-3>",
+          "roles": [
+            "owner"
+          ],
+          "shareId": "<permission-id-3>",
+          "grantedToV2": {
+            "user": {
+              "@odata.type": "#microsoft.graph.sharePointIdentity",
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            },
+            "siteUser": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<permission-id-4>",
+              "loginName": "i:0#.f|membership|<owner-email>"
+            }
+          },
+          "grantedTo": {
+            "user": {
+              "displayName": "<user-display-name-3>",
+              "email": "<owner-email>",
+              "id": "<owner-user-id>"
+            }
+          },
+          "inheritedFrom": {}
+        }
+      ]
+    }
+  },
+  "group_transitive_member_shapes": {
+    "visible": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#directoryObjects(id,displayName,userPrincipalName,mail)",
+      "value": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "<primary-user-id>",
+          "displayName": "<user-display-name-2>",
+          "userPrincipalName": "<primary-user-email>",
+          "mail": "<primary-user-email>"
+        }
+      ]
+    },
+    "hidden": {
+      "@odata.context": "https://<graph-host>/v1.0/$metadata#directoryObjects(id,displayName,userPrincipalName,mail)",
+      "value": [
+        {
+          "@odata.type": "#microsoft.graph.user",
+          "id": "<alternate-user-id>",
+          "displayName": "<user-display-name-4>",
+          "userPrincipalName": "<alternate-user-email>",
+          "mail": null
+        }
+      ]
+    }
+  },
+  "full_fixture_item_count": 35,
+  "incremental_fixture_item_count": 12,
+  "observations": [
+    "Full delta returned 35 fixture items across 1 pages.",
+    "Timestamp delta returned 12 fixture items across 1 pages.",
+    "Timestamp delta marked 0 items with @microsoft.graph.sharedChanged.",
+    "Timestamp delta returned 1 tombstones."
+  ]
+}

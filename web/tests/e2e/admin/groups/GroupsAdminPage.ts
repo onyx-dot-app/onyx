@@ -49,7 +49,7 @@ export class GroupsAdminPage {
 
   /** The search input on the list page. */
   get listSearchInput(): Locator {
-    return this.page.getByPlaceholder("Search groups...");
+    return this.page.getByPlaceholder('Search groups or press "/" to focus...');
   }
 
   /** The "New Group" button on the list page header. */
@@ -73,7 +73,8 @@ export class GroupsAdminPage {
   /** Click into a group's edit page from the list. */
   async openGroup(name: string) {
     const card = this.getGroupCard(name);
-    await card.getByRole("button", { name: "View group" }).click();
+    // The member count is the button that opens the group.
+    await card.getByRole("button", { name: /^\d+ Members?$/ }).click();
     await expect(this.groupNameInput).toBeVisible({ timeout: 15000 });
   }
 
@@ -160,6 +161,36 @@ export class GroupsAdminPage {
     return this.page.getByRole("button", { name: "Delete Group" });
   }
 
+  /** The banner shown on a default (Admin/Basic) group. */
+  get systemGroupNotice(): Locator {
+    return this.page.getByText("System group", { exact: true });
+  }
+
+  /** Header of the group-permissions section (full admin, custom groups and Basic). */
+  get permissionsSectionHeader(): Locator {
+    return this.page.getByText("Group Permissions", { exact: true });
+  }
+
+  /** One permission row in that section, matched by its display name. */
+  permissionRow(displayName: string): Locator {
+    return this.page.getByText(displayName, { exact: true });
+  }
+
+  /** The switch of one permission row, matched by its display name. */
+  permissionSwitch(displayName: string): Locator {
+    return this.page.getByRole("switch", { name: displayName, exact: true });
+  }
+
+  /** Every permission switch on the edit page. */
+  get permissionSwitches(): Locator {
+    return this.page.getByRole("switch");
+  }
+
+  /** Header of the shared-resources section (custom groups only). */
+  get sharedResourcesSectionHeader(): Locator {
+    return this.page.getByText("Shared with This Group", { exact: true });
+  }
+
   /** Enter add-members mode on the edit page. */
   async startAddingMembers() {
     await this.addMembersButton.click();
@@ -180,6 +211,11 @@ export class GroupsAdminPage {
     const row = this.page.getByRole("row").filter({ hasText: emailOrName });
     // The remove button is an IconButton with SvgMinusCircle in the actions column
     await row.getByRole("button").last().click();
+  }
+
+  /** Flip one permission switch, matched by its row's display name. */
+  async togglePermission(displayName: string) {
+    await this.permissionSwitch(displayName).click();
   }
 
   /** Save the edit form. */

@@ -100,6 +100,9 @@ environment variable (the --host-key flag takes precedence).`,
   onyx-cli serve --host 0.0.0.0 --port 2222
   onyx-cli serve --idle-timeout 30m --max-session-timeout 2h`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Sessions here belong to remote clients; keep them off the host filesystem.
+			tui.RemoteMode = true
+
 			serverCfg := config.Load()
 			if serverCfg.ServerURL == "" {
 				return exitcodes.New(exitcodes.NotConfigured, "server URL is not configured\n  Run: onyx-cli chat to complete first-time setup")

@@ -1,7 +1,7 @@
 import type {
   DailyWeeklyPayload,
   IntervalPayload,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 import {
   compileLocalPayloadToUtcCron,
   decodeUtcCronToLocalPayload,

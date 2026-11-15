@@ -1,9 +1,10 @@
+import { redirect } from "@opal/navigation";
 import { User } from "@/lib/types";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 import { getAuthTypeMetadataSS, getAuthUrlSS } from "@/lib/auth/svcSS";
 import { AuthTypeMetadata } from "@/lib/auth/types";
 import { validateInternalRedirect } from "@/lib/auth/utils";
-import { redirect } from "next/navigation";
+import { SSO_AUTO_REDIRECT_PARAM } from "@/lib/auth/paths";
 import type { Route } from "next";
 import AuthFlowContainer from "@/components/auth/AuthFlowContainer";
 import LoginPage from "./LoginPage";
@@ -21,6 +22,7 @@ export default async function Page(props: PageProps) {
     : (searchParams?.next ?? null);
   const verified = searchParams?.verified === "true";
   const isFirstUser = searchParams?.first_user === "true";
+  const autoRedirectToSso = searchParams?.[SSO_AUTO_REDIRECT_PARAM] !== "false";
 
   // catch cases where the backend is completely unreachable here
   // without try / catch, will just raise an exception and the page
@@ -91,6 +93,7 @@ export default async function Page(props: PageProps) {
           hidePageRedirect={true}
           verified={verified}
           isFirstUser={isFirstUser}
+          autoRedirectToSso={autoRedirectToSso}
         />
       </AuthFlowContainer>
     </div>

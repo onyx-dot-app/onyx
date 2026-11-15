@@ -6,6 +6,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import ValidationError
 
 from onyx.auth.permissions import require_permission
+from onyx.auth.sso_url_guard import UnsafeSSOUrl, validate_idp_url
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -15,8 +16,14 @@ from onyx.server.security.models import (
     SecuritySettings,
     SecuritySettingsOverrides,
 )
-from onyx.server.security.store import apply_patch, get_security_settings
+from onyx.server.security.store import (
+    apply_patch,
+    env_pinned_active_fields,
+    get_security_settings,
+)
+from onyx.utils.audit import AuditActor
 from onyx.utils.logger import setup_logger
+from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
 from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
@@ -58,13 +65,37 @@ def get_security_settings_endpoint(
     return get_security_settings()
 
 
+@admin_router.get("/pinned-fields")
+def get_pinned_fields_endpoint(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> list[str]:
+    """Fields currently pinned by env vars, so the UI can lock their inputs."""
+    return sorted(env_pinned_active_fields())
+
+
 @admin_router.put("")
 async def put_security_settings_endpoint(
     request: Request,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
 ) -> SecuritySettings:
     raw = await request.body()
     overrides, present_keys = _parse_put_body(raw)
+
+    if "jwt_public_key_url" in present_keys and overrides.jwt_public_key_url:
+        try:
+            validate_idp_url(overrides.jwt_public_key_url, field="jwt_public_key_url")
+        except UnsafeSSOUrl as e:
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(e))
+
+    # A clear refusal instead of silently storing an override the env pin
+    # would render inert.
+    pinned_in_payload = present_keys & env_pinned_active_fields()
+    if pinned_in_payload:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "These fields are pinned by environment variables on this deployment: "
+            + ", ".join(sorted(pinned_in_payload)),
+        )
 
     lockdown_in_payload = present_keys & _PASSWORD_LOCKDOWN_FIELDS
     if lockdown_in_payload and MULTI_TENANT:
@@ -85,5 +116,22 @@ async def put_security_settings_endpoint(
                 + ", ".join(sorted(locked_in_payload)),
             )
 
+    # Turning it off is always allowed; turning it on is Business+ only.
+    if (
+        "allow_connector_group_restrictions" in present_keys
+        and overrides.allow_connector_group_restrictions
+    ):
+        await run_in_threadpool(
+            fetch_ee_implementation_or_noop(
+                "onyx.utils.tier",
+                "require_business_tier_for_connector_group_restrictions",
+                noop_return_value=None,
+            )
+        )
+
+    # The auth dependency always yields a user, test seams may not.
+    actor = (
+        AuditActor(user_id=str(user.id), email=user.email) if user is not None else None
+    )
     # Sync DB + Redis IO — offload so the event loop isn't blocked.
-    return await run_in_threadpool(apply_patch, overrides, present_keys)
+    return await run_in_threadpool(apply_patch, overrides, present_keys, actor)

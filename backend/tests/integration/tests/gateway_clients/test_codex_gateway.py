@@ -103,7 +103,7 @@ def test_encrypted_reasoning_statelessness(
             "model": model,
             "input": [{"role": "user", "content": "What is 6 times 7?"}],
             "include": ["reasoning.encrypted_content"],
-            "reasoning": {"effort": "low"},
+            "reasoning": {"effort": "medium"},
         },
         timeout=60,
     )

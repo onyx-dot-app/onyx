@@ -3,7 +3,9 @@ from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 import httpx
+from pydantic import TypeAdapter
 
+from onyx.chat.mention_models import Mention, RecordedMention
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
@@ -40,6 +42,7 @@ class StreamPacketObj(TypedDict, total=False):
         "image_generation_heartbeat",
         "image_generation_final",
         "tool_call_debug",
+        "error",
     ]
     content: str
     final_documents: list[dict[str, Any]]
@@ -50,6 +53,10 @@ class StreamPacketObj(TypedDict, total=False):
     tool_call_id: str
     tool_name: str
     tool_args: dict[str, Any]
+    error: str
+    stack_trace: str
+    error_code: str | None
+    details: dict[str, Any] | None
 
 
 class PlacementData(TypedDict, total=False):
@@ -64,8 +71,11 @@ class StreamPacketData(TypedDict, total=False):
     """Structure for streaming response packets."""
 
     reserved_assistant_message_id: int
+    mentions: list[dict[str, str]]
     error: str
     stack_trace: str
+    error_code: str | None
+    details: dict[str, Any] | None
     obj: StreamPacketObj
     placement: PlacementData
 
@@ -102,11 +112,12 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
+        preferred_tool_id: int | None = None,
         chat_session: DATestChatSession | None = None,
-        mock_llm_response: str | None = None,
         deep_research: bool = False,
+        accepts_follow_ups: bool = False,
         llm_override: LLMOverride | None = None,
+        mentions: list[Mention] | None = None,
     ) -> StreamedResponse:
         chat_message_req = SendMessageRequest(
             message=message,
@@ -118,10 +129,11 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
-            mock_llm_response=mock_llm_response,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
+            accepts_follow_ups=accepts_follow_ups,
             llm_override=llm_override,
+            mentions=mentions or [],
         )
 
         with client.stream(
@@ -162,8 +174,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
-        mock_llm_response: str | None = None,
+        preferred_tool_id: int | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> None:
@@ -192,8 +203,7 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
-            mock_llm_response=mock_llm_response,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
             llm_override=llm_override,
         )
@@ -229,17 +239,23 @@ class ChatSessionManager:
         heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
         assistant_message_id: int | None = None
+        mentions: list[RecordedMention] = []
         error = None
         ind: int
         for data in response_data:
             if reserved_id := data.get("reserved_assistant_message_id"):
                 assistant_message_id = reserved_id
+                mentions = TypeAdapter(list[RecordedMention]).validate_python(
+                    data["mentions"]
+                )
             elif data.get("error"):
                 error = ErrorResponse(
                     error=str(data["error"]),
                     stack_trace=str(data.get("stack_trace") or ""),
+                    error_code=data.get("error_code"),
+                    details=data.get("details") or {},
                 )
-            elif (error_obj := cast(dict[str, Any], data.get("obj") or {})) and (
+            elif (error_obj := data.get("obj")) and (
                 error_obj.get("error")
                 or error_obj.get("type") == StreamingType.ERROR.value
             ):
@@ -248,6 +264,8 @@ class ChatSessionManager:
                     stack_trace=str(
                         error_obj.get("stack_trace") or data.get("stack_trace") or ""
                     ),
+                    error_code=error_obj.get("error_code"),
+                    details=error_obj.get("details") or {},
                 )
             elif (
                 (data_obj := data.get("obj"))
@@ -285,7 +303,7 @@ class ChatSessionManager:
                     ind_to_tool_use[ind] = ToolResult(
                         tool_name=ToolName.IMAGE_GENERATION,
                     )
-                elif packet_type_str == StreamingType.IMAGE_GENERATION_HEARTBEAT.value:
+                elif packet_type_str == StreamingType.CHAT_HEARTBEAT.value:
                     # Track heartbeat packets for debugging/testing
                     heartbeat_packets.append(data)
                 elif packet_type_str == StreamingType.IMAGE_GENERATION_FINAL.value:
@@ -328,10 +346,16 @@ class ChatSessionManager:
         return StreamedResponse(
             full_message=full_message,
             assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
+            mentions=mentions,
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
             heartbeat_packets=[dict(packet) for packet in heartbeat_packets],
+            packets=[
+                {"placement": dict(data["placement"]), "obj": dict(data["obj"])}
+                for data in response_data
+                if "obj" in data and "placement" in data
+            ],
             error=error,
         )
 
@@ -354,6 +378,8 @@ class ChatSessionManager:
                 message=msg["message"],
                 message_type=msg.get("message_type"),
                 files=msg.get("files"),
+                mentions=msg.get("mentions", []),
+                reasoning_tokens=msg.get("reasoning_tokens"),
             )
             for msg in response.json()["messages"]
         ]

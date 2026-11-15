@@ -1,19 +1,16 @@
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
+
 export type ApprovalDecision = "APPROVED" | "REJECTED" | "EXPIRED";
 
-// Server-only EXPIRED is excluded; clients can only submit a yes/no.
-export type ApprovalSubmitDecision = "APPROVED" | "REJECTED";
-
-// Mirrors backend `EndpointPolicy`. DENY blocks before persistence, so
-// persisted entries are always ASK or ALWAYS — included only to match
-// the backend enum exactly.
-export type ApprovalActionPolicy = "ASK" | "ALWAYS" | "DENY";
+// Mirrors backend `ApprovalDecidedVia`.
+export type ApprovalDecidedVia = "USER" | "PRE_APPROVAL" | "SESSION_GRANT";
 
 // Mirrors backend `ActionMatch`.
 export interface ApprovalAction {
   action_type: string;
   display_name: string;
   description: string;
-  policy: ApprovalActionPolicy;
+  policy: ActionPolicy;
 }
 
 export interface ApprovalView {
@@ -25,11 +22,20 @@ export interface ApprovalView {
   payload: Record<string, unknown>;
   display_payload: Record<string, unknown>;
   created_at: string;
+  expires_at: string | null;
+  can_approve_for_session?: boolean;
   decision: ApprovalDecision | null;
   decided_at: string | null;
+  decided_via: ApprovalDecidedVia | null;
   is_live: boolean;
 }
 
 export interface ApprovalListResponse {
   items: ApprovalView[];
+}
+
+export interface ApprovalStatusView {
+  approval_id: string;
+  decision: ApprovalDecision | null;
+  is_live: boolean;
 }

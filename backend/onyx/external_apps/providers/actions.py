@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator
 
-from onyx.db.enums import EndpointPolicy
+from onyx.db.enums import ActionPolicy
 
 
 class ExternalAppAction(str, Enum):
@@ -74,12 +74,16 @@ def path_matches(template: str, path: str) -> bool:
         # Wildcard must swallow >=1 segment and reject empties (`//`), like `{name}`.
         if not tail or not all(tail):
             return False
-        return all(_segment_matches(e, a) for e, a in zip(prefix, actual_segments))
+        return all(
+            _segment_matches(e, a)
+            for e, a in zip(prefix, actual_segments, strict=False)
+        )
 
     if len(expected_segments) != len(actual_segments):
         return False
     return all(
-        _segment_matches(e, a) for e, a in zip(expected_segments, actual_segments)
+        _segment_matches(e, a)
+        for e, a in zip(expected_segments, actual_segments, strict=True)
     )
 
 
@@ -115,4 +119,7 @@ class EndpointSpec(BaseModel):
     matches: tuple[MatchRule, ...]
     # The policy a freshly-created built-in app starts this action at, unless the
     # admin overrides it.
-    default_policy: EndpointPolicy = EndpointPolicy.ASK
+    default_policy: ActionPolicy = ActionPolicy.ASK
+    # Set when the action needs a scope only a self-hosted deployment requests,
+    # which drops it from the cloud catalog (``registry.get_endpoint_catalog``).
+    requires_self_hosted_scope: bool = False

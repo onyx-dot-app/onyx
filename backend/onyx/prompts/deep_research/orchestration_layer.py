@@ -20,7 +20,6 @@ If you need to ask questions, follow these guidelines:
 - Be concise and do not ask more than 5 questions.
 - If there are ambiguous terms or questions, ask the user to clarify.
 - Your questions should be a numbered list for clarity.
-- Respond in the same language as the user's query.
 - Make sure to gather all the information needed to carry out the research task in a concise, well-structured manner.{{internal_search_clarification_guidance}}
 - Wrap up with a quick sentence on what the clarification will help with, it's ok to reference the user query closely here.
 """.strip()
@@ -73,7 +72,7 @@ In these cases, ensure that the new directions are thoroughly investigated prior
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You may use up to {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
@@ -166,7 +165,7 @@ Between calls, think deeply on what to do next. Be curious, identify knowledge g
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You may use up to {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \

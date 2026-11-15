@@ -4,16 +4,6 @@ inputs:
   runs-on-ecr-cache:
     description: "ECR cache registry from runs-on/action"
     required: true
-  ref-name:
-    description: "Git ref name used for cache suffix fallback"
-    required: true
-  pr-number:
-    description: "Optional PR number for cache suffix"
-    required: false
-    default: ""
-  github-sha:
-    description: "Commit SHA used for cache keys"
-    required: true
   run-id:
     description: "GitHub run ID used in output image tag"
     required: true
@@ -28,24 +18,13 @@ inputs:
     description: "Set to 'true' to disable docker build cache"
     required: false
     default: "false"
+outputs:
+  digest:
+    description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
+    value: ${{ steps.build.outputs.digest }}
 runs:
   using: "composite"
   steps:
-    - name: Format branch name for cache
-      id: format-branch
-      shell: bash
-      env:
-        PR_NUMBER: ${{ inputs.pr-number }}
-        REF_NAME: ${{ inputs.ref-name }}
-      run: |
-        if [ -n "${PR_NUMBER}" ]; then
-          CACHE_SUFFIX="${PR_NUMBER}"
-        else
-          # shellcheck disable=SC2001
-          CACHE_SUFFIX=$(echo "${REF_NAME}" | sed 's/[^A-Za-z0-9._-]/-/g')
-        fi
-        echo "cache-suffix=${CACHE_SUFFIX}" >> "$GITHUB_OUTPUT"
-
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # ratchet:docker/setup-buildx-action@v3
 
@@ -55,6 +34,7 @@ runs:
         ecr-registry: ${{ inputs.ecr-registry }}
 
     - name: Build and push Devcontainer Docker image
+      id: build
       uses: docker/build-push-action@bcafcacb16a39f128d818304e6c9c0c18556b85f
       with:
         context: .devcontainer
@@ -63,13 +43,19 @@ runs:
         build-args: |
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
         tags: ${{ inputs.runs-on-ecr-cache }}:${{ inputs.tag-prefix }}-${{ inputs.run-id }}
+        # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+        labels: ci.run-id=${{ inputs.run-id }}
+        # Attestations attach as ECR referrers to the image digest, which is
+        # stable across runs and caps out at 100 per subject.
+        provenance: false
+        sbom: false
+        # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+        # which get no secrets, import it. Other runs import only the published image.
         cache-from: |
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', inputs.runs-on-ecr-cache, runner.arch) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', inputs.runs-on-ecr-cache) || '' }}
           type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
+        # A stable cache digest can collect 1000 SHA/PR tags. Bound exports to one tag per architecture.
         cache-to: |
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ inputs.github-sha }},mode=max
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache,mode=max
+          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:devcontainer-cache-${{ runner.arch }},mode=max
         no-cache: ${{ inputs.docker-no-cache == 'true' }}

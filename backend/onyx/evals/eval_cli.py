@@ -9,7 +9,6 @@ import logging
 import os
 from typing import Any
 
-import braintrust
 import requests
 
 from onyx.configs.app_configs import (
@@ -77,8 +76,8 @@ def run_local(
     """
     Run evaluation with local configurations.
 
-    Tool forcing and assertions are configured per-test in the data file using:
-    - force_tools: List of tool type names to force
+    Tool preference and assertions are configured per-test in the data file using:
+    - preferred_tool: Tool type to prefer
     - expected_tools: List of tool type names expected to be called
     - require_all_tools: If true, all expected tools must be called
 
@@ -139,7 +138,7 @@ def run_remote(
     """
     Trigger an eval pipeline execution on a remote server.
 
-    Tool forcing and assertions are configured per-test in the dataset.
+    Tool preference and assertions are configured per-test in the dataset.
 
     Args:
         base_url: Base URL of the remote server (e.g., "https://test.onyx.app")
@@ -248,6 +247,8 @@ def main() -> None:
                 "--local-only cannot be used with --remote-dataset-name. Use --local-data-path with a local JSON file instead."
             )
         print(f"Loading data from remote dataset: {args.remote_dataset_name}")
+        import braintrust
+
         dataset = braintrust.init_dataset(
             project=args.braintrust_project, name=args.remote_dataset_name
         )
@@ -256,9 +257,7 @@ def main() -> None:
     if args.remote:
         if not args.api_key:
             print("Using API Key from ONYX_EVAL_API_KEY")
-        api_key: str = (
-            args.api_key if args.api_key else os.environ.get("ONYX_EVAL_API_KEY", "")
-        )
+        api_key: str = args.api_key or os.environ.get("ONYX_EVAL_API_KEY", "")
         print(f"Running evaluation on remote server: {args.base_url}")
 
         if args.search_permissions_email:

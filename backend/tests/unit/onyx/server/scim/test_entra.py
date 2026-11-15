@@ -372,7 +372,7 @@ class TestEntraUserLifecycle:
             department="Engineering",
             given_name="Test",
             family_name="User",
-            scim_emails_json='[{"value": "test@example.com", "type": "work", "primary": true}]',
+            scim_emails_json=None,
         )
 
     def test_patch_user_remove_external_id(
@@ -486,7 +486,7 @@ class TestEntraUserLifecycle:
             department="Marketing",
             given_name="Test",
             family_name="User",
-            scim_emails_json='[{"value": "test@example.com", "type": "work", "primary": true}]',
+            scim_emails_json=None,
         )
 
     def test_replace_user_includes_enterprise_schema(

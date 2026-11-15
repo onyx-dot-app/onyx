@@ -21,6 +21,10 @@ from onyx.connectors.slack.connector import (
     list_grid_team_ids,
 )
 from onyx.connectors.slack.models import ChannelType, MessageType
+from onyx.connectors.slack.source_operations import (
+    SlackTeamInfoResponse,
+    SlackTeamsPage,
+)
 from onyx.connectors.slack.utils import get_message_link
 
 
@@ -64,61 +68,48 @@ def _msg(ts: str, thread_ts: str | None = None) -> MessageType:
 
 class TestListGridTeamIds:
     def test_returns_team_ids_from_paginated_response(self) -> None:
-        with patch(
-            "onyx.connectors.slack.connector.make_paginated_slack_api_call"
-        ) as mock_paginate:
-            mock_paginate.return_value = iter(
-                [
-                    {"teams": [{"id": "T1"}, {"id": "T2"}]},
-                    {"teams": [{"id": "T3"}]},
-                ]
-            )
-            client = MagicMock()
-            assert list_grid_team_ids(client) == ["T1", "T2", "T3"]
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter(
+            [
+                SlackTeamsPage(teams=[{"id": "T1"}, {"id": "T2"}]),
+                SlackTeamsPage(teams=[{"id": "T3"}]),
+            ]
+        )
+        assert list_grid_team_ids(slack_client) == ["T1", "T2", "T3"]
 
     def test_skips_teams_without_id(self) -> None:
-        with patch(
-            "onyx.connectors.slack.connector.make_paginated_slack_api_call"
-        ) as mock_paginate:
-            mock_paginate.return_value = iter(
-                [{"teams": [{"id": "T1"}, {"name": "no-id-team"}, {"id": ""}]}]
-            )
-            assert list_grid_team_ids(MagicMock()) == ["T1"]
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter(
+            [SlackTeamsPage(teams=[{"id": "T1"}, {"name": "no-id-team"}, {"id": ""}])]
+        )
+        assert list_grid_team_ids(slack_client) == ["T1"]
 
     def test_empty_response_returns_empty_list(self) -> None:
-        with patch(
-            "onyx.connectors.slack.connector.make_paginated_slack_api_call"
-        ) as mock_paginate:
-            mock_paginate.return_value = iter([{"teams": []}])
-            assert list_grid_team_ids(MagicMock()) == []
+        slack_client = MagicMock()
+        slack_client.list_teams.return_value = iter([SlackTeamsPage(teams=[])])
+        assert list_grid_team_ids(slack_client) == []
 
 
 class TestFetchTeamUrl:
     def test_returns_url_from_team_info(self) -> None:
-        client = MagicMock()
-        client.team_info.return_value = MagicMock(
-            get=lambda key, default=None: (
-                {"id": "T1", "url": "https://acme.slack.com/"}
-                if key == "team"
-                else default
-            )
+        slack_client = MagicMock()
+        slack_client.fetch_team_info.return_value = SlackTeamInfoResponse(
+            team={"id": "T1", "url": "https://acme.slack.com/"}
         )
-        assert fetch_team_url(client, "T1") == "https://acme.slack.com/"
-        client.team_info.assert_called_once_with(team="T1")
+        assert fetch_team_url(slack_client, "T1") == "https://acme.slack.com/"
+        slack_client.fetch_team_info.assert_called_once_with(team_id="T1")
 
     def test_returns_none_when_slack_api_errors(self) -> None:
-        client = MagicMock()
+        slack_client = MagicMock()
         err_response = MagicMock()
         err_response.get.return_value = "team_not_found"
-        client.team_info.side_effect = SlackApiError("boom", err_response)
-        assert fetch_team_url(client, "T_BAD") is None
+        slack_client.fetch_team_info.side_effect = SlackApiError("boom", err_response)
+        assert fetch_team_url(slack_client, "T_BAD") is None
 
     def test_returns_none_when_url_missing(self) -> None:
-        client = MagicMock()
-        client.team_info.return_value = MagicMock(
-            get=lambda key, default=None: {} if key == "team" else default
-        )
-        assert fetch_team_url(client, "T1") is None
+        slack_client = MagicMock()
+        slack_client.fetch_team_info.return_value = SlackTeamInfoResponse(team={})
+        assert fetch_team_url(slack_client, "T1") is None
 
 
 class TestGetChannelsAcrossTeams:
@@ -228,11 +219,9 @@ class TestChannelToHierarchyNode:
 
 class TestGetMessageLinkTeamAware:
     def test_uses_per_team_url_when_provided(self) -> None:
-        client = MagicMock()
-        client.token = "xoxb-test"
         link = get_message_link(
             event=_msg("1700000000.000100"),
-            client=client,
+            slack_client=MagicMock(),
             channel_id="C1",
             team_id="T1",
             team_id_to_url={"T1": "https://team-one.slack.com"},
@@ -240,15 +229,13 @@ class TestGetMessageLinkTeamAware:
         assert link.startswith("https://team-one.slack.com/archives/C1/p")
 
     def test_falls_back_to_get_base_url_when_team_id_to_url_missing(self) -> None:
-        client = MagicMock()
-        client.token = "xoxb-fallback"
         with patch(
             "onyx.connectors.slack.utils.get_base_url",
             return_value="https://fallback.slack.com",
         ):
             link = get_message_link(
                 event=_msg("1700000000.000100"),
-                client=client,
+                slack_client=MagicMock(),
                 channel_id="C1",
                 team_id="T1",
                 team_id_to_url=None,
@@ -256,11 +243,9 @@ class TestGetMessageLinkTeamAware:
         assert link.startswith("https://fallback.slack.com/archives/C1/p")
 
     def test_thread_ts_appended_when_present(self) -> None:
-        client = MagicMock()
-        client.token = "xoxb-thread"
         link = get_message_link(
             event=_msg("1700000001.000200", thread_ts="1700000000.000100"),
-            client=client,
+            slack_client=MagicMock(),
             channel_id="C1",
             team_id="T1",
             team_id_to_url={"T1": "https://team-one.slack.com"},

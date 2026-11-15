@@ -1,15 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { SvgExternalLink, SvgUser, SvgUserPlus } from "@opal/icons";
-import { Button, MessageCard } from "@opal/components";
+import { useTranslations } from "next-intl";
+import { SvgUser, SvgUserPlus } from "@opal/icons";
+import { Button } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
 import { useScimToken } from "@/hooks/useScimToken";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import useUserCounts from "@/hooks/useUserCounts";
 import { UserStatus } from "@/lib/types";
-import type { StatusFilter } from "./interfaces";
+import type { StatusFilter } from "./types";
 
 import UsersSummary from "./UsersSummary";
 import UsersTable from "./UsersTable";
@@ -25,8 +26,13 @@ function UsersContent() {
   const { data: scimToken } = useScimToken();
   const showScim = enterpriseTier && !!scimToken;
 
-  const { activeCount, invitedCount, pendingCount, roleCounts, statusCounts } =
-    useUserCounts();
+  const {
+    activeCount,
+    invitedCount,
+    pendingCount,
+    accountTypeCounts,
+    statusCounts,
+  } = useUserCounts();
 
   const [selectedStatuses, setSelectedStatuses] = useState<StatusFilter>([]);
 
@@ -53,7 +59,7 @@ function UsersContent() {
       <UsersTable
         selectedStatuses={selectedStatuses}
         onStatusesChange={setSelectedStatuses}
-        roleCounts={roleCounts}
+        accountTypeCounts={accountTypeCounts}
         statusCounts={statusCounts}
       />
     </>
@@ -65,39 +71,24 @@ function UsersContent() {
 // ---------------------------------------------------------------------------
 
 export default function UsersPage() {
+  const t = useTranslations("admin.users");
   const [inviteOpen, setInviteOpen] = useState(false);
 
   return (
     <SettingsLayouts.Root width="lg">
       <SettingsLayouts.Header
-        title="Users & Requests"
+        title={t("page.title")}
         icon={SvgUser}
-        rightChildren={
-          <Button icon={SvgUserPlus} onClick={() => setInviteOpen(true)}>
-            Invite Users
-          </Button>
-        }
-      >
-        <MessageCard
-          variant="info"
-          title="Upcoming changes to permissions"
-          description="Onyx is transitioning to group-based permissions for more granular access control. Curator and Global Curator roles will be replaced by configurable group permissions. We recommend reviewing current role assignments to ensure a smooth transition."
-          rightChildren={
-            <Button
-              icon={SvgExternalLink}
-              onClick={() =>
-                window.open(
-                  "https://docs.onyx.app/admins/permissions/whats_changing",
-                  "_blank",
-                  "noopener,noreferrer"
-                )
-              }
-            >
-              Learn more
-            </Button>
-          }
-        />
-      </SettingsLayouts.Header>
+        actions={[
+          <Button
+            key="primary"
+            icon={SvgUserPlus}
+            onClick={() => setInviteOpen(true)}
+          >
+            {t("page.inviteButton.label")}
+          </Button>,
+        ]}
+      />
       <SettingsLayouts.Body>
         <UsersContent />
       </SettingsLayouts.Body>

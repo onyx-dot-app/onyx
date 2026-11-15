@@ -1,4 +1,4 @@
-import { redirect } from "next/navigation";
+import { redirect } from "@opal/navigation";
 import type { Route } from "next";
 import { requireAdminAuth } from "@/lib/auth/svcSS";
 import AdminChrome from "@/layouts/chromes/AdminChrome";
@@ -16,5 +16,12 @@ export default async function AdminSSChrome({ children }: AdminSSChromeProps) {
     return redirect(authResult.redirect as Route);
   }
 
-  return <AdminChrome>{children}</AdminChrome>;
+  // Seed the client gate so a cold deep-link doesn't self-redirect before /api/me loads.
+  return (
+    <AdminChrome
+      initialAdminCapabilities={authResult.user?.admin_capabilities ?? []}
+    >
+      {children}
+    </AdminChrome>
+  );
 }

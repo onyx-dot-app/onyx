@@ -3,7 +3,7 @@
 import { createContext, useContext } from "react";
 import { paidTierGated } from "@/ce";
 import { QueryControllerProvider as EEQueryControllerProvider } from "@/ee/providers/QueryControllerProvider";
-import { SearchDocWithContent, BaseFilters } from "@/lib/search/interfaces";
+import { SearchDocWithContent, BaseFilters } from "@/lib/search/types";
 
 export type AppMode = "auto" | "search" | "chat";
 
@@ -13,6 +13,13 @@ export type QueryState =
   | { phase: "searching" }
   | { phase: "search-results" }
   | { phase: "chat" };
+
+export interface SubmitQueryOptions {
+  filters?: BaseFilters;
+  /** Routes to chat, for a message that search cannot run, such as one with
+   * mentions or in incognito. */
+  chatOnly?: boolean;
+}
 
 export interface QueryControllerValue {
   /** Single state variable encoding both the query lifecycle phase and (when idle) the user's mode selection. */
@@ -29,7 +36,7 @@ export interface QueryControllerValue {
   submit: (
     query: string,
     onChat: (query: string) => void,
-    filters?: BaseFilters
+    options?: SubmitQueryOptions
   ) => Promise<void>;
   /** Re-run the current search query with updated server-side filters */
   refineSearch: (filters: BaseFilters) => Promise<void>;

@@ -155,11 +155,15 @@ def on_celery_task_prerun(
         labels = _get_task_labels(task)
         TASK_STARTED.labels(**labels).inc()
         TASKS_ACTIVE.labels(**labels).inc()
+        # Export both outcomes at 0 before the task ends, so the first failure
+        # is an increase that rate() and increase() can see.
+        for outcome in ("success", "failure"):
+            TASK_COMPLETED.labels(**labels, outcome=outcome)
         with _task_start_times_lock:
             _evict_stale_start_times()
             _task_start_times[task_id] = (time.monotonic(), labels)
 
-        headers = getattr(task.request, "headers", None) or {}
+        headers = getattr(task.request, "headers", None) or {}  # ods: ignore[getattr]
         enqueued_at = headers.get("enqueued_at")
         if isinstance(enqueued_at, (int, float)):
             TASK_QUEUE_WAIT.labels(**labels).observe(

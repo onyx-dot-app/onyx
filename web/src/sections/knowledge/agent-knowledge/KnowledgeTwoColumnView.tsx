@@ -1,14 +1,15 @@
 "use client";
 
+import { Section } from "@opal/layouts";
 import { memo, type ChangeEvent } from "react";
-import * as GeneralLayouts from "@/layouts/general-layouts";
 import * as TableLayouts from "@/layouts/table-layouts";
 import type { AgentAttachedDocument } from "@/lib/agents/types";
 import type {
   ConnectedSource,
   HierarchyNodeSearchSummary,
-} from "@/lib/hierarchy/interfaces";
-import type { DocumentSetSummary, ValidSources } from "@/lib/types";
+} from "@/lib/hierarchy/types";
+import type { DocumentSetSummary } from "@/lib/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import type { ProjectFile } from "@/lib/projects/types";
 
 import { KnowledgeSidebar } from "@/sections/knowledge/agent-knowledge/KnowledgeSidebar";
@@ -25,7 +26,7 @@ import {
 import type {
   KnowledgeSearchResults,
   KnowledgeView,
-} from "@/sections/knowledge/agent-knowledge/interfaces";
+} from "@/sections/knowledge/agent-knowledge/types";
 
 interface KnowledgeTwoColumnViewProps {
   activeView: KnowledgeView;
@@ -119,7 +120,7 @@ export const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
   searchNavigateNodeId,
 }: KnowledgeTwoColumnViewProps) {
   return (
-    <GeneralLayouts.Section gap={0.5} alignItems="stretch" height="auto">
+    <Section gap={2} alignItems="stretch" height="auto">
       {vectorDbEnabled && (
         <KnowledgeSearchBar
           query={searchQuery}
@@ -209,6 +210,6 @@ export const KnowledgeTwoColumnView = memo(function KnowledgeTwoColumnView({
           </TableLayouts.ContentColumn>
         </TableLayouts.TwoColumnLayout>
       )}
-    </GeneralLayouts.Section>
+    </Section>
   );
 });

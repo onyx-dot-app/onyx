@@ -1,8 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
 import { SlackBot } from "@/lib/types";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { useState, useEffect, useRef } from "react";
 import { updateSlackBotField } from "@/lib/updateSlackBotField";
 import { SlackTokensForm } from "./SlackTokensForm";
@@ -10,11 +11,15 @@ import { SlackTokensForm } from "./SlackTokensForm";
 import { EditableStringFieldDisplay } from "@/components/EditableStringFieldDisplay";
 import { deleteSlackBot } from "./new/lib";
 import GenericConfirmModal from "@/sections/modals/GenericConfirmModal";
-import { Button } from "@opal/components";
+import {
+  Button,
+  InputCheckbox as OpalInputCheckbox,
+  useCreateModal,
+} from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgChevronDownSmall, SvgTrash } from "@opal/icons";
 
-function Checkbox({
+function InputCheckbox({
   label,
   checked,
   onChange,
@@ -24,12 +29,11 @@ function Checkbox({
   onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
-    <label className="flex text-xs cursor-pointer">
-      <input
+    <label className="flex items-center gap-2 text-xs cursor-pointer">
+      <OpalInputCheckbox
         checked={checked}
         onChange={onChange}
-        type="checkbox"
-        className="mr-2 w-3.5 h-3.5 my-auto"
+        aria-label={label}
       />
       <span className="block font-medium text-text-700 text-sm">{label}</span>
     </label>
@@ -43,11 +47,12 @@ export const ExistingSlackBotForm = ({
   existingSlackBot: SlackBot;
   refreshSlackBot?: () => void;
 }) => {
+  const t = useTranslations("admin.slackBots");
   const [isExpanded, setIsExpanded] = useState(false);
   const [formValues, setFormValues] = useState(existingSlackBot);
-  const router = useRouter();
+  const navigation = useNavigation();
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const deleteModal = useCreateModal();
 
   const handleUpdateField = async (
     field: keyof SlackBot,
@@ -62,9 +67,8 @@ export const ExistingSlackBotForm = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      toast.success(`Connector ${field} updated successfully`);
     } catch (error) {
-      toast.error(`Failed to update connector ${field}`);
+      toast.error(t("updateForm.fieldUpdateFailed.toast", { field }));
     }
     setFormValues((prev) => ({ ...prev, [field]: value }));
   };
@@ -111,26 +115,25 @@ export const ExistingSlackBotForm = ({
               )}
               onClick={() => setIsExpanded(!isExpanded)}
             >
-              Update Tokens
+              {t("updateForm.updateTokensButton.label")}
             </Button>
             <Button
               variant="danger"
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => deleteModal.toggle(true)}
               icon={SvgTrash}
             >
-              Delete
+              {t("updateForm.deleteButton.label")}
             </Button>
           </div>
 
           {isExpanded && (
-            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 right-0 z-10 w-full md:w-3/4 lg:w-1/2">
+            <div className="bg-background border rounded-lg border-background-200 shadow-lg absolute mt-12 end-0 z-10 w-full md:w-3/4 lg:w-1/2">
               <div className="p-4">
                 <SlackTokensForm
                   isUpdate={true}
                   initialValues={formValues}
                   existingSlackBotId={existingSlackBot.id}
                   refreshSlackBot={refreshSlackBot}
-                  router={router}
                   onValuesChange={(values) => setFormValues(values)}
                 />
               </div>
@@ -140,33 +143,33 @@ export const ExistingSlackBotForm = ({
       </div>
       <div className="mt-2">
         <div className="inline-block border rounded-lg border-background-200 p-2">
-          <Checkbox
-            label="Enabled"
+          <InputCheckbox
+            label={t("updateForm.enabledCheckbox.label")}
             checked={formValues.enabled}
             onChange={(e) => handleUpdateField("enabled", e.target.checked)}
           />
         </div>
-        {showDeleteModal && (
+        <deleteModal.Provider>
           <GenericConfirmModal
-            title="Delete Slack Bot"
-            message="Are you sure you want to delete this Slack bot? This action cannot be undone."
-            confirmText="Delete"
-            onClose={() => setShowDeleteModal(false)}
+            title={t("deleteModal.title")}
+            message={t("deleteModal.message")}
+            confirmText={t("deleteModal.confirmButton.label")}
+            onClose={() => deleteModal.toggle(false)}
             onConfirm={async () => {
               try {
                 const response = await deleteSlackBot(existingSlackBot.id);
                 if (!response.ok) {
                   throw new Error(await response.text());
                 }
-                toast.success("Slack bot deleted successfully");
-                router.push("/admin/bots");
+                toast.success(t("deleteModal.success.toast"));
+                navigation.go("/admin/bots");
               } catch (error) {
-                toast.error("Failed to delete Slack bot");
+                toast.error(t("deleteModal.error.toast"));
               }
-              setShowDeleteModal(false);
+              deleteModal.toggle(false);
             }}
           />
-        )}
+        </deleteModal.Provider>
       </div>
     </div>
   );

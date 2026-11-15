@@ -69,7 +69,7 @@ def parse_bitbucket_datetime(value: str | None) -> datetime | None:
     """Parse a Bitbucket ISO-8601 timestamp into a tz-aware UTC datetime."""
     if not isinstance(value, str):
         return None
-    return datetime_to_utc(datetime.fromisoformat(value.replace("Z", "+00:00")))
+    return datetime_to_utc(datetime.fromisoformat(value))
 
 
 # Minimal fields for repository list calls
@@ -210,12 +210,12 @@ def map_pr_to_document(pr: dict[str, Any], workspace: str, repo_slug: str) -> Do
     created_on = pr.get("created_on")
     updated_on = pr.get("updated_on")
     updated_dt = (
-        datetime_to_utc(datetime.fromisoformat(updated_on.replace("Z", "+00:00")))
+        datetime_to_utc(datetime.fromisoformat(updated_on))
         if isinstance(updated_on, str)
         else None
     )
     created_dt = (
-        datetime_to_utc(datetime.fromisoformat(created_on.replace("Z", "+00:00")))
+        datetime_to_utc(datetime.fromisoformat(created_on))
         if isinstance(created_on, str)
         else None
     )

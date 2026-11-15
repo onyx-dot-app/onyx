@@ -1,20 +1,19 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { getSourceMetadata } from "@/lib/connectors/utils";
+import { useTranslations } from "next-intl";
 import { SvgEmpty, SvgFiles, SvgXOctagon } from "@opal/icons";
-import { Content } from "@opal/layouts";
-import { Section } from "@/layouts/general-layouts";
-import Card from "@/refresh-components/cards/Card";
-import LineItem from "@/refresh-components/buttons/LineItem";
-import Text from "@/refresh-components/texts/Text";
-import { Divider } from "@opal/components";
-import SimpleCollapsible from "@/refresh-components/SimpleCollapsible";
+import { Content, Section } from "@opal/layouts";
+import { LineItemButton, Text } from "@opal/components";
+import { Card, Divider } from "@opal/components";
+import { Collapsible } from "@opal/components";
 import AgentAvatar from "@/refresh-components/avatars/AgentAvatar";
 import { useConnectorStatus } from "@/lib/hooks";
 import { useDocumentSets } from "@/lib/hooks/useDocumentSets";
-import { useAgents } from "@/lib/agents/hooks";
-import { getSourceMetadata } from "@/lib/sources";
-import type { ValidSources } from "@/lib/types";
+import { useAdminAgents } from "@/lib/agents/hooks";
+import type { Agent } from "@/lib/agents/types";
+import type { ValidSources } from "@/lib/connectors/types/source";
 import ResourceContent from "@/views/admin/GroupsPage/SharedGroupResources/ResourceContent";
 import ResourcePopover from "@/views/admin/GroupsPage/SharedGroupResources/ResourcePopover";
 import type { PopoverSection } from "@/views/admin/GroupsPage/SharedGroupResources/interfaces";
@@ -26,16 +25,23 @@ interface SharedGroupResourcesProps {
   onDocSetIdsChange: (ids: number[]) => void;
   selectedAgentIds: number[];
   onAgentIdsChange: (ids: number[]) => void;
+  /** Already shared with this group; merged in so an agent the caller can't otherwise
+   *  see still renders as a chip. */
+  attachedAgents?: Agent[];
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
+// Stable identity for the default — an inline [] would re-run the merge every render.
+const NO_ATTACHED_AGENTS: Agent[] = [];
+
 function SharedBadge() {
+  const t = useTranslations("admin.groups");
   return (
-    <Text as="span" secondaryBody text03>
-      Shared
+    <Text as="span" font="secondary-body" color="text-03">
+      {t("sharedResources.sharedBadge.label")}
     </Text>
   );
 }
@@ -58,7 +64,7 @@ function SourceIconStack({ sources }: SourceIconStackProps) {
       width="auto"
       height="auto"
       gap={0}
-      className="shrink-0 p-0.5"
+      className="shrink-0"
     >
       {unique.map((s, i) => {
         const Icon = getSourceMetadata(s.source).icon;
@@ -87,13 +93,27 @@ function SharedGroupResources({
   onDocSetIdsChange,
   selectedAgentIds,
   onAgentIdsChange,
+  attachedAgents = NO_ATTACHED_AGENTS,
 }: SharedGroupResourcesProps) {
+  const t = useTranslations("admin.groups");
   const [connectorSearch, setConnectorSearch] = useState("");
   const [agentSearch, setAgentSearch] = useState("");
 
   const { data: connectors = [] } = useConnectorStatus();
   const { documentSets } = useDocumentSets();
-  const { agents } = useAgents();
+  // Admin list, not the chat list: a global holder gets every agent, a scoped manager
+  // only the ones they can edit. Built-ins are already public, so sharing one is a no-op.
+  const { agents: allAgents } = useAdminAgents();
+  const agents = useMemo(() => {
+    const shareable = allAgents.filter((agent) => !agent.builtin_persona);
+    const known = new Set(shareable.map((agent) => agent.id));
+    return [
+      ...shareable,
+      ...attachedAgents.filter(
+        (agent) => !known.has(agent.id) && !agent.builtin_persona
+      ),
+    ];
+  }, [allAgents, attachedAgents]);
 
   // --- Derived data ---
 
@@ -134,6 +154,11 @@ function SharedGroupResources({
         const isSelected = selectedCcPairSet.has(p.cc_pair_id);
         return {
           key: `c-${p.cc_pair_id}`,
+          label:
+            p.name ??
+            t("sharedResources.connectorFallback.label", {
+              id: p.cc_pair_id,
+            }),
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -142,17 +167,23 @@ function SharedGroupResources({
                 )
               : onCcPairIdsChange([...selectedCcPairIds, p.cc_pair_id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={!dimmed}
-              muted={dimmed}
+            <LineItemButton
+              font="main-ui-action"
+              presentational
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={getSourceMetadata(p.connector.source).icon}
-              strokeIcon={false}
+              title={
+                p.name ??
+                t("sharedResources.connectorFallback.label", {
+                  id: p.cc_pair_id,
+                })
+              }
+              titleMaxLines={1}
               rightChildren={
                 p.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {p.name ?? `Connector #${p.cc_pair_id}`}
-            </LineItem>
+            />
           ),
         };
       });
@@ -163,6 +194,7 @@ function SharedGroupResources({
         const isSelected = selectedDocSetSet.has(ds.id);
         return {
           key: `d-${ds.id}`,
+          label: ds.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
@@ -171,26 +203,38 @@ function SharedGroupResources({
                 )
               : onDocSetIdsChange([...selectedDocSetIds, ds.id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={!dimmed}
-              muted={dimmed}
+            <LineItemButton
+              font="main-ui-action"
+              presentational
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={SvgFiles}
+              title={ds.name}
+              titleMaxLines={1}
               rightChildren={
                 ds.groups.length > 0 || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {ds.name}
-            </LineItem>
+            />
           ),
         };
       });
 
     return [
       ...(connectorItems.length > 0
-        ? [{ label: "Connectors", items: connectorItems }]
+        ? [
+            {
+              label: t("sharedResources.popover.connectors.label"),
+              items: connectorItems,
+            },
+          ]
         : []),
       ...(docSetItems.length > 0
-        ? [{ label: "Document Sets", items: docSetItems }]
+        ? [
+            {
+              label: t("sharedResources.popover.documentSets.label"),
+              items: docSetItems,
+            },
+          ]
         : []),
     ];
   }, [
@@ -203,6 +247,7 @@ function SharedGroupResources({
     selectedDocSetIds,
     onCcPairIdsChange,
     onDocSetIdsChange,
+    t,
   ]);
 
   const agentSections: PopoverSection[] = useMemo(() => {
@@ -214,23 +259,27 @@ function SharedGroupResources({
         const isSelected = selectedAgentSet.has(a.id);
         return {
           key: `a-${a.id}`,
+          label: a.name,
           disabled: isSelected,
           onSelect: () =>
             isSelected
               ? onAgentIdsChange(selectedAgentIds.filter((id) => id !== a.id))
               : onAgentIdsChange([...selectedAgentIds, a.id]),
           render: (dimmed: boolean) => (
-            <LineItem
-              interactive={!dimmed}
-              muted={dimmed}
+            <LineItemButton
+              font="main-ui-action"
+              presentational
+              color={dimmed ? "default" : undefined}
+              titleColor={dimmed ? "text-03" : undefined}
               icon={(_props) => <AgentAvatar agent={a} size={16} />}
-              description="agent"
+              title={a.name}
+              titleMaxLines={1}
+              description={t("sharedResources.agent.description")}
+              descriptionMaxLines={1}
               rightChildren={
                 !a.is_public || dimmed ? <SharedBadge /> : undefined
               }
-            >
-              {a.name}
-            </LineItem>
+            />
           ),
         };
       });
@@ -242,6 +291,7 @@ function SharedGroupResources({
     selectedAgentSet,
     selectedAgentIds,
     onAgentIdsChange,
+    t,
   ]);
 
   // --- Handlers ---
@@ -262,15 +312,14 @@ function SharedGroupResources({
     selectedPairs.length > 0 || selectedDocSets.length > 0;
 
   return (
-    <SimpleCollapsible>
-      <SimpleCollapsible.Header
-        title="Shared with This Group"
-        description="Share connectors, document sets, agents with members of this group."
-      />
-      <SimpleCollapsible.Content>
-        <Card>
+    <Collapsible
+      title={t("sharedResources.section.title")}
+      description={t("sharedResources.section.description")}
+    >
+      <Card border="solid" rounding={4}>
+        <Section alignItems="start" height="fit">
           <Section
-            gap={1}
+            gap={4}
             height="auto"
             alignItems="stretch"
             justifyContent="start"
@@ -278,22 +327,22 @@ function SharedGroupResources({
           >
             {/* Connectors & Document Sets */}
             <Section
-              gap={0.5}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
             >
               <Section
-                gap={0.25}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Connectors & Document Sets
+                <Text font="main-ui-action" color="text-04">
+                  {t("sharedResources.connectors.label")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add connectors, document sets"
+                  placeholder={t("sharedResources.connectors.placeholder")}
                   searchValue={connectorSearch}
                   onSearchChange={setConnectorSearch}
                   sections={connectorDocSetSections}
@@ -303,7 +352,7 @@ function SharedGroupResources({
                 <Section
                   flexDirection="row"
                   wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
                   alignItems="start"
                   justifyContent="start"
@@ -312,8 +361,13 @@ function SharedGroupResources({
                     <ResourceContent
                       key={`c-${pair.cc_pair_id}`}
                       icon={getSourceMetadata(pair.connector.source).icon}
-                      title={pair.name ?? `Connector #${pair.cc_pair_id}`}
-                      description="Connector"
+                      title={
+                        pair.name ??
+                        t("sharedResources.connectorFallback.label", {
+                          id: pair.cc_pair_id,
+                        })
+                      }
+                      description={t("sharedResources.connector.description")}
                       onRemove={() => removeConnector(pair.cc_pair_id)}
                     />
                   ))}
@@ -322,7 +376,7 @@ function SharedGroupResources({
                       key={`d-${ds.id}`}
                       icon={SvgFiles}
                       title={ds.name}
-                      description="Document Set"
+                      description={t("sharedResources.documentSet.description")}
                       infoContent={
                         <SourceIconStack sources={ds.cc_pair_summaries} />
                       }
@@ -332,35 +386,34 @@ function SharedGroupResources({
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgEmpty}
-                  title="No connectors or document sets added"
-                  description="Add connectors or document set to share with this group."
-                  sizePreset="secondary"
-                  variant="section"
+                  title={t("sharedResources.noConnectors.title")}
+                  description={t("sharedResources.noConnectors.description")}
                 />
               )}
             </Section>
 
-            <Divider paddingParallel="fit" paddingPerpendicular="fit" />
+            <Divider paddingParallel={0} paddingPerpendicular={0} />
 
             {/* Agents */}
             <Section
-              gap={0.5}
+              gap={2}
               height="auto"
               alignItems="stretch"
               justifyContent="start"
             >
               <Section
-                gap={0.25}
+                gap={1}
                 height="auto"
                 alignItems="stretch"
                 justifyContent="start"
               >
-                <Text mainUiAction text04>
-                  Agents
+                <Text font="main-ui-action" color="text-04">
+                  {t("sharedResources.agents.label")}
                 </Text>
                 <ResourcePopover
-                  placeholder="Add agents"
+                  placeholder={t("sharedResources.agents.placeholder")}
                   searchValue={agentSearch}
                   onSearchChange={setAgentSearch}
                   sections={agentSections}
@@ -370,7 +423,7 @@ function SharedGroupResources({
                 <Section
                   flexDirection="row"
                   wrap
-                  gap={0.25}
+                  gap={1}
                   height="auto"
                   alignItems="start"
                   justifyContent="start"
@@ -384,25 +437,24 @@ function SharedGroupResources({
                         </div>
                       }
                       title={agent.name}
-                      description="agent"
+                      description={t("sharedResources.agent.description")}
                       onRemove={() => removeAgent(agent.id)}
                     />
                   ))}
                 </Section>
               ) : (
                 <Content
+                  font="secondary-action"
                   icon={SvgXOctagon}
-                  title="No agents added"
-                  description="Add agents to share with this group."
-                  sizePreset="secondary"
-                  variant="section"
+                  title={t("sharedResources.noAgents.title")}
+                  description={t("sharedResources.noAgents.description")}
                 />
               )}
             </Section>
           </Section>
-        </Card>
-      </SimpleCollapsible.Content>
-    </SimpleCollapsible>
+        </Section>
+      </Card>
+    </Collapsible>
   );
 }
 

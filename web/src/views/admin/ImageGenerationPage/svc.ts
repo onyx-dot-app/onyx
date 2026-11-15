@@ -3,6 +3,8 @@
  * API functions for managing image generation configurations
  */
 
+import type { ErrorResponseBody } from "@/lib/fetcher";
+
 // Types
 export interface ImageGenerationConfigView {
   image_provider_id: string; // Primary key
@@ -10,7 +12,24 @@ export interface ImageGenerationConfigView {
   model_name: string;
   llm_provider_id: number;
   llm_provider_name: string | null;
+  llm_provider_type: string;
+  llm_provider_owned: boolean;
   is_default: boolean;
+}
+
+export interface ImageGenerationProviderModel {
+  name: string;
+  display_name: string | null;
+  is_recommended: boolean;
+  image_provider_id: string | null;
+}
+
+export interface ImageGenerationLLMProvider {
+  llm_provider_id: number;
+  llm_provider_name: string | null;
+  provider: string;
+  is_public: boolean;
+  models: ImageGenerationProviderModel[];
 }
 
 export interface TestApiKeyResult {
@@ -26,44 +45,18 @@ export interface ImageGenerationCredentials {
   custom_config: Record<string, string> | null;
 }
 
-// Creation options - either clone from existing provider or use new credentials
-export interface ImageGenerationConfigCreateOptions {
-  imageProviderId: string;
-  modelName: string;
-  isDefault?: boolean;
-
-  // Option 1: Clone mode - use credentials from existing provider
-  sourceLlmProviderId?: number;
-
-  // Option 2: New credentials mode
-  provider?: string;
-  apiKey?: string;
-  apiBase?: string;
-  apiVersion?: string;
-  deploymentName?: string;
-  customConfig?: Record<string, string>;
-}
-
 // API Endpoints
 const IMAGE_GEN_CONFIG_URL = "/api/admin/image-generation/config";
 const IMAGE_GEN_TEST_URL = "/api/admin/image-generation/test";
 
 /**
  * Test API key for image generation provider
- *
- * Two modes:
- * 1. Direct: provider + apiKey provided
- * 2. From existing provider: sourceLlmProviderId provided (backend fetches API key)
  */
 export async function testImageGenerationApiKey(
   modelName: string,
   options: {
-    // Option 1: Direct API key
     provider?: string;
     apiKey?: string;
-    // Option 2: Use existing provider
-    sourceLlmProviderId?: number;
-    // Additional fields
     apiBase?: string;
     apiVersion?: string;
     deploymentName?: string;
@@ -78,7 +71,6 @@ export async function testImageGenerationApiKey(
         model_name: modelName,
         provider: options.provider || null,
         api_key: options.apiKey || null,
-        source_llm_provider_id: options.sourceLlmProviderId || null,
         api_base: options.apiBase || null,
         api_version: options.apiVersion || null,
         deployment_name: options.deploymentName || null,
@@ -87,7 +79,7 @@ export async function testImageGenerationApiKey(
     });
 
     if (!response.ok) {
-      const error = await response.json();
+      const error: ErrorResponseBody = await response.json();
       return {
         ok: false,
         errorMessage: error.detail || "API key validation failed",
@@ -133,47 +125,34 @@ export async function fetchImageGenerationCredentials(
 }
 
 /**
- * Create image generation configuration
- * Backend creates new LLM provider + model config + image config
+ * Use a model on a connected LLM provider. The config reuses that provider's credentials.
  */
-export async function createImageGenerationConfig(
-  options: ImageGenerationConfigCreateOptions
+export async function linkImageGenerationModel(
+  llmProviderId: number,
+  modelName: string,
+  isDefault: boolean
 ): Promise<ImageGenerationConfigView> {
-  const response = await fetch(IMAGE_GEN_CONFIG_URL, {
+  const response = await fetch(`${IMAGE_GEN_CONFIG_URL}/link`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      image_provider_id: options.imageProviderId,
-      model_name: options.modelName,
-      is_default: options.isDefault ?? false,
-      // Clone mode
-      source_llm_provider_id: options.sourceLlmProviderId,
-      // New credentials mode
-      provider: options.provider,
-      api_key: options.apiKey,
-      api_base: options.apiBase,
-      api_version: options.apiVersion,
-      deployment_name: options.deploymentName,
-      custom_config: options.customConfig,
+      llm_provider_id: llmProviderId,
+      model_name: modelName,
+      is_default: isDefault,
     }),
   });
 
   if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.detail || "Failed to create config");
+    const error: ErrorResponseBody = await response.json();
+    throw new Error(error.detail || "Failed to connect model");
   }
 
   return response.json();
 }
 
-// Update options - same structure but without isDefault
+// Update options
 export interface ImageGenerationConfigUpdateOptions {
   modelName: string;
-
-  // Option 1: Clone mode - use credentials from existing provider
-  sourceLlmProviderId?: number;
-
-  // Option 2: New credentials mode
   provider?: string;
   apiKey?: string;
   apiBase?: string;
@@ -198,9 +177,6 @@ export async function updateImageGenerationConfig(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       model_name: options.modelName,
-      // Clone mode
-      source_llm_provider_id: options.sourceLlmProviderId,
-      // New credentials mode
       provider: options.provider,
       api_key: options.apiKey,
       api_base: options.apiBase,
@@ -213,7 +189,7 @@ export async function updateImageGenerationConfig(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to update config");
   }
 
@@ -234,7 +210,7 @@ export async function setDefaultImageGenerationConfig(
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to set default");
   }
 }
@@ -253,7 +229,7 @@ export async function unsetDefaultImageGenerationConfig(
   );
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to unset default");
   }
 }
@@ -269,7 +245,7 @@ export async function deleteImageGenerationConfig(
   });
 
   if (!response.ok) {
-    const error = await response.json();
+    const error: ErrorResponseBody = await response.json();
     throw new Error(error.detail || "Failed to delete config");
   }
 }

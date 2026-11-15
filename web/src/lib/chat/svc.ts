@@ -1,3 +1,7 @@
+import { fetchErrorFrom } from "@/lib/fetcher";
+import type { ApprovalDecisionResponse } from "@/lib/chat/types";
+import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
+
 const CHAT_FILE_PREFIX = "/api/chat/file";
 
 /**
@@ -29,4 +33,27 @@ export async function fetchChatFile(
   }
 
   return response;
+}
+
+/** Throws a `FetchError`; status 409 means the request was already resolved.
+ * "approve_session" also approves later calls of the same tool in this chat. */
+export async function postChatApprovalDecision(
+  approvalId: string,
+  decision: ApprovalSubmitDecision
+): Promise<ApprovalDecisionResponse> {
+  const response = await fetch(
+    `/api/chat/approvals/${encodeURIComponent(approvalId)}/decision`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decision }),
+    }
+  );
+  if (!response.ok) {
+    throw await fetchErrorFrom(
+      response,
+      `Failed to submit the approval decision: ${response.status}`
+    );
+  }
+  return response.json();
 }

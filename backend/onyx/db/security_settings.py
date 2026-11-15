@@ -29,7 +29,7 @@ def upsert_overrides(db_session: Session, overrides: SecuritySettingsOverrides) 
     """
     # KV-backed overrides (no column) are persisted by the store layer.
     payload = {
-        name: getattr(overrides, name)
+        name: getattr(overrides, name)  # ods: ignore[getattr]
         for name in SecuritySettingsOverrides.model_fields
         if hasattr(SecuritySettingsRow, name)
     }

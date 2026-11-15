@@ -1,0 +1,75 @@
+name: Release agent plugin
+
+on:
+  push:
+    tags:
+      - "agent-plugin/v*.*.*"
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # needed to create the GitHub release and upload the zip
+    timeout-minutes: 10
+    env:
+      PLUGIN_DIR: extensions/agent-plugin
+      ZIP_NAME: onyx-agent-plugin.zip
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # The hosted marketplace.json is what users install from, so the tag must
+      # match the version and download URL it already lists. The Codex manifest
+      # carries the same version, since Codex caches the plugin by it.
+      - name: Check the tag against marketplace.json and the Codex manifest
+        run: |
+          entry="$(jq -c '.plugins[] | select(.name == "onyx")' "${PLUGIN_DIR}/.claude-plugin/marketplace.json")"
+          version="$(jq -r '.version' <<<"$entry")"
+          codex_version="$(jq -r '.version' "${PLUGIN_DIR}/.codex-plugin/plugin.json")"
+          url="$(jq -r '.source.url' <<<"$entry")"
+          expected_url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}/${ZIP_NAME}"
+          if [ "$version" != "${TAG#agent-plugin/v}" ]; then
+            echo "marketplace.json lists version ${version}, tag is ${TAG}" >&2
+            exit 1
+          fi
+          if [ "$codex_version" != "$version" ]; then
+            echo ".codex-plugin/plugin.json lists version ${codex_version}, marketplace.json lists ${version}" >&2
+            exit 1
+          fi
+          if [ "$url" != "$expected_url" ]; then
+            echo "marketplace.json download url is ${url}, expected ${expected_url}" >&2
+            exit 1
+          fi
+
+      - name: Build the plugin zip
+        run: |
+          cd "$PLUGIN_DIR"
+          zip -r -X "${RUNNER_TEMP}/${ZIP_NAME}" .
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "Install with \`/plugin marketplace add https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/${PLUGIN_DIR}/.claude-plugin/marketplace.json\` then \`/plugin install onyx@onyx\`."
+            echo
+            echo "sha256: $(sha256sum "${RUNNER_TEMP}/${ZIP_NAME}" | cut -d' ' -f1)"
+          } > "${RUNNER_TEMP}/release-notes.md"
+
+          # Create and upload separately so a rerun can heal a partial release.
+          # Lookup by tag skips drafts, so list the releases and match tag_name.
+          release_id="$(gh api --paginate "repos/${GITHUB_REPOSITORY}/releases" \
+            --jq ".[] | select(.tag_name == \"${TAG}\") | .id" | head -n 1)"
+          if [ -z "$release_id" ]; then
+            gh release create "$TAG" \
+              --verify-tag \
+              --title "Onyx agent plugin ${TAG#agent-plugin/}" \
+              --notes-file "${RUNNER_TEMP}/release-notes.md" \
+              --latest=false
+          elif [ "$(gh api "repos/${GITHUB_REPOSITORY}/releases/${release_id}" --jq .draft)" = "true" ]; then
+            gh api --method PATCH "repos/${GITHUB_REPOSITORY}/releases/${release_id}" \
+              -F draft=false -f make_latest=false >/dev/null
+          fi
+          gh release upload "$TAG" --clobber "${RUNNER_TEMP}/${ZIP_NAME}"

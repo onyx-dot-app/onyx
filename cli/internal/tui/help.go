@@ -4,7 +4,8 @@ const helpText = `Onyx CLI Commands
 
   /help              Show this help message
   /clear             Clear chat and start a new session
-  /agent             List and switch agents
+  /agent             List and switch agents (by ID or name)
+  /model             List and switch models
   /attach <path>     Attach a file to next message
   /sessions          Browse and resume previous sessions
   /configure         Re-run connection setup
@@ -16,7 +17,10 @@ const helpText = `Onyx CLI Commands
 Keyboard Shortcuts
 
   Enter              Send message
-  Escape             Cancel current generation
+  Escape, Ctrl+C     Cancel current generation
+  y / a / n          Approve once / approve for this session / reject a tool call
+  d                  Show all arguments of a tool call that waits for approval
+  Up/Down, Enter     Select and confirm a tool approval action
   Ctrl+O             Toggle source citations
   Ctrl+D             Quit (press twice)
   Scroll Up/Down     Mouse wheel or Shift+Up/Down

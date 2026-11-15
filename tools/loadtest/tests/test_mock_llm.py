@@ -1,0 +1,647 @@
+"""Contract tests for the mock LLM server.
+
+Each test replays the exact request shapes Onyx's LLM loops send (per
+backend/onyx/chat/llm_loop.py, llm_step.py and deep_research/dr_loop.py) and
+asserts the mock responds the way those loops need to make progress.
+
+Run:  uv run pytest tests/ -q
+"""
+
+from __future__ import annotations
+
+import ast
+import json
+import subprocess
+import sys
+from pathlib import Path
+from typing import Any
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+from mock_llm.app import app
+from mock_llm.search_workload import load_calibration, search_helper_answer
+
+from .fixtures import INTERNAL_SEARCH_TOOL
+
+client = TestClient(app)
+
+
+RESEARCH_AGENT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "research_agent",
+        "parameters": {
+            "type": "object",
+            "properties": {"task": {"type": "string"}},
+            "required": ["task"],
+        },
+    },
+}
+
+GENERATE_REPORT_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "generate_report",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
+GENERATE_PLAN_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "generate_plan",
+        "parameters": {"type": "object", "properties": {}},
+    },
+}
+
+WEB_SEARCH_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "web_search",
+        "parameters": {
+            "type": "object",
+            "properties": {"queries": {"type": "array", "items": {"type": "string"}}},
+            "required": ["queries"],
+        },
+    },
+}
+
+OPEN_URL_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "open_url",
+        "parameters": {
+            "type": "object",
+            "properties": {"urls": {"type": "array", "items": {"type": "string"}}},
+            "required": ["urls"],
+        },
+    },
+}
+
+THINK_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "think_tool",
+        "parameters": {
+            "type": "object",
+            "properties": {"reasoning": {"type": "string"}},
+            "required": ["reasoning"],
+        },
+    },
+}
+
+
+def complete(
+    model: str = "mock-ttft0-itl0-len20",
+    messages: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    body: dict[str, Any] = {
+        "model": model,
+        "stream": False,
+        "messages": messages or [{"role": "user", "content": "load test question"}],
+    }
+    body.update(kwargs)
+    response = client.post("/v1/chat/completions", json=body)
+    assert response.status_code == 200
+    return response.json()["choices"][0]
+
+
+def stream_chunks(
+    model: str = "mock-ttft0-itl0-len20",
+    messages: list[dict[str, Any]] | None = None,
+    **kwargs: Any,
+) -> list[dict[str, Any]]:
+    body: dict[str, Any] = {
+        "model": model,
+        "stream": True,
+        "messages": messages or [{"role": "user", "content": "load test question"}],
+    }
+    body.update(kwargs)
+    chunks = []
+    with client.stream("POST", "/v1/chat/completions", json=body) as response:
+        assert response.status_code == 200
+        chunks.extend(
+            json.loads(line[len("data: ") :])
+            for line in response.iter_lines()
+            if line.startswith("data: ") and line != "data: [DONE]"
+        )
+    return chunks
+
+
+def assistant_tool_calls_message(name: str, arguments: str = "{}") -> dict[str, Any]:
+    return {
+        "role": "assistant",
+        "content": None,
+        "tool_calls": [
+            {
+                "id": "call_prev_1",
+                "type": "function",
+                "function": {"name": name, "arguments": arguments},
+            }
+        ],
+    }
+
+
+def test_plain_chat_no_tools_streams_text_with_stop() -> None:
+    chunks = stream_chunks()
+    finish = [
+        c["choices"][0]["finish_reason"]
+        for c in chunks
+        if c["choices"][0]["finish_reason"]
+    ]
+    assert finish == ["stop"]
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert len(text.split()) == 20
+
+
+def test_tool_choice_none_forces_text_even_with_tools() -> None:
+    # Final chat cycle: tools offered but tool_choice="none" must yield text.
+    choice = complete(tools=[INTERNAL_SEARCH_TOOL], tool_choice="none")
+    assert choice["finish_reason"] == "stop"
+    assert choice["message"]["content"]
+
+
+def test_query_rephrase_flow_echoes_user_text() -> None:
+    # Query rephrase/expansion output feeds back into retrieval as the search
+    # query — detected by the prompt marker (Onyx's invoke() still streams at
+    # the wire level, so the stream flag can't discriminate). The mock must
+    # echo the question's terms, not return filler.
+    question = "what is the onboarding process for new connectors?"
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an assistant that reformulates the last user "
+            "message into a standalone, self-contained query.",
+        },
+        {
+            "role": "user",
+            "content": f"Chat history above. Final user query:\n{question}",
+        },
+    ]
+    chunks = stream_chunks(messages=messages)
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert question.split()[-3] in text  # echo contains the question's terms
+    assert "deterministic mock answer" not in text
+
+    choice = complete(messages=messages)  # non-streaming variant too
+    assert "onboarding" in choice["message"]["content"]
+
+
+def test_rephrase_echo_excludes_prompt_scaffolding() -> None:
+    # The rephrase output becomes the search query, so it must be the question
+    # alone. Echoing a fixed-width tail instead drags the prompt's boilerplate
+    # and the user's memories in, making every question embed to nearly the
+    # same vector and turning retrieval into a cache hit.
+    question = "how do I rotate database credentials?"
+    scaffolding = (
+        "Here is some information about the user: N/A Here are some memories "
+        "about the user: - User's email: loadtest@example.com "
+        "========================= CRITICAL: ONLY provide the standalone "
+        "query and nothing else."
+    )
+    messages = [
+        {
+            "role": "system",
+            "content": "You are an assistant that reformulates the last user "
+            "message into a standalone, self-contained query.",
+        },
+        {
+            "role": "user",
+            "content": f"{scaffolding}\n\nFinal user query:\n{question}",
+        },
+    ]
+    choice = complete(messages=messages)
+    text = choice["message"]["content"]
+    assert "rotate database credentials" in text
+    assert "memories about the user" not in text
+    assert "CRITICAL" not in text
+
+
+def test_search_tool_argument_uses_the_question() -> None:
+    # A synthesized search tool call must search for what the user asked, not
+    # for the head of the prompt.
+    question = "what are the hardware requirements for self-hosting?"
+    choice = complete(
+        messages=[
+            {
+                "role": "user",
+                "content": f"Context block that precedes the ask.\n\n"
+                f"Final user query:\n{question}",
+            }
+        ],
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="required",
+    )
+    args = choice["message"]["tool_calls"][0]["function"]["arguments"]
+    assert "hardware requirements" in args
+    assert "Context block" not in args
+
+
+def test_search_tool_argument_survives_message_padding() -> None:
+    # ONYX_MSG_CHARS pads a message with filler after the question, and a raw
+    # chat message carries no question label. Searching the padding would give
+    # every user the same query and restore the cache hits this avoids.
+    question = "which insurance plans are available to staff?"
+    padding = "Please consider the full context of the conversation so far. " * 40
+    choice = complete(
+        messages=[{"role": "user", "content": f"{question} {padding}"}],
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="required",
+    )
+    args = choice["message"]["tool_calls"][0]["function"]["arguments"]
+    assert "insurance plans" in args
+    assert "consider the full context" not in args
+
+
+def test_normal_answer_is_filler_not_echo() -> None:
+    chunks = stream_chunks(
+        messages=[{"role": "user", "content": "what is the onboarding process?"}]
+    )
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert "deterministic mock answer" in text
+
+
+def test_chat_auto_with_tools_knob_emits_internal_search_with_queries_array() -> None:
+    chunks = stream_chunks(
+        model="mock-tools1-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="auto",
+    )
+    assert chunks[-1]["choices"][0]["finish_reason"] == "tool_calls"
+    header = chunks[0]["choices"][0]["delta"]["tool_calls"][0]
+    assert header["function"]["name"] == "internal_search"
+    arguments = "".join(
+        tc["function"].get("arguments", "")
+        for c in chunks
+        for tc in (c["choices"][0]["delta"].get("tool_calls") or [])
+    )
+    parsed = json.loads(arguments)
+    assert isinstance(parsed["queries"], list) and parsed["queries"]
+
+
+def test_multi_tool_knob_emits_parallel_retrieval_calls() -> None:
+    # mock-tools3 + three retrieval tools offered → all three called in
+    # parallel in one assistant message (multi-tool chat turn).
+    choice = complete(
+        model="mock-tools3-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL, WEB_SEARCH_TOOL, OPEN_URL_TOOL],
+        tool_choice="auto",
+    )
+    assert choice["finish_reason"] == "tool_calls"
+    names = [c["function"]["name"] for c in choice["message"]["tool_calls"]]
+    assert names == ["internal_search", "web_search", "open_url"]
+
+
+def test_multi_tool_knob_caps_at_offered_retrieval_tools() -> None:
+    # mock-tools3 but only one retrieval tool offered → degrades to a single
+    # call rather than inventing tools.
+    choice = complete(
+        model="mock-tools3-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="auto",
+    )
+    calls = choice["message"]["tool_calls"]
+    assert len(calls) == 1
+    assert calls[0]["function"]["name"] == "internal_search"
+
+
+def test_tools_knob_count_is_honored() -> None:
+    # mock-tools2 picks exactly two of three offered retrieval tools.
+    choice = complete(
+        model="mock-tools2-ttft0-itl0",
+        tools=[INTERNAL_SEARCH_TOOL, WEB_SEARCH_TOOL, OPEN_URL_TOOL],
+        tool_choice="auto",
+    )
+    names = [c["function"]["name"] for c in choice["message"]["tool_calls"]]
+    assert names == ["internal_search", "web_search"]
+
+
+def test_chat_auto_after_tool_result_streams_final_answer() -> None:
+    messages = [
+        {"role": "user", "content": "find the docs"},
+        assistant_tool_calls_message("internal_search", '{"queries": ["docs"]}'),
+        {"role": "tool", "content": "doc snippets...", "tool_call_id": "call_prev_1"},
+    ]
+    choice = complete(
+        model="mock-tools1-ttft0-itl0-len20",
+        messages=messages,
+        tools=[INTERNAL_SEARCH_TOOL],
+        tool_choice="auto",
+    )
+    assert choice["finish_reason"] == "stop"
+    assert choice["message"]["content"]
+
+
+def test_chat_auto_without_knob_answers_directly() -> None:
+    choice = complete(tools=[INTERNAL_SEARCH_TOOL], tool_choice="auto")
+    assert choice["finish_reason"] == "stop"
+
+
+def test_dr_clarification_always_calls_generate_plan() -> None:
+    choice = complete(tools=[GENERATE_PLAN_TOOL], tool_choice="auto")
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"][0]["function"]["name"] == "generate_plan"
+
+
+def test_dr_plan_call_is_plain_text() -> None:
+    choice = complete(tools=[], tool_choice="none")
+    assert choice["finish_reason"] == "stop"
+    assert choice["message"]["content"]
+
+
+def test_dr_orchestrator_first_cycle_spawns_research_agents() -> None:
+    choice = complete(
+        model="mock-agents2-ttft0-itl0",
+        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL],
+        tool_choice="required",
+    )
+    assert choice["finish_reason"] == "tool_calls"
+    calls = choice["message"]["tool_calls"]
+    assert len(calls) == 2
+    assert all(c["function"]["name"] == "research_agent" for c in calls)
+    for c in calls:
+        assert json.loads(c["function"]["arguments"])["task"]
+
+
+def test_dr_orchestrator_second_cycle_generates_report() -> None:
+    messages = [
+        {"role": "user", "content": "research this"},
+        assistant_tool_calls_message("research_agent", '{"task": "aspect 1"}'),
+        {
+            "role": "tool",
+            "content": "intermediate report",
+            "tool_call_id": "call_prev_1",
+        },
+    ]
+    choice = complete(
+        messages=messages,
+        tools=[RESEARCH_AGENT_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL],
+        tool_choice="required",
+    )
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"][0]["function"]["name"] == "generate_report"
+
+
+def test_dr_research_agent_searches_then_reports() -> None:
+    agent_tools = [INTERNAL_SEARCH_TOOL, GENERATE_REPORT_TOOL, THINK_TOOL]
+    first = complete(tools=agent_tools, tool_choice="required")
+    assert first["message"]["tool_calls"][0]["function"]["name"] == "internal_search"
+
+    messages = [
+        {"role": "user", "content": "research task"},
+        assistant_tool_calls_message("internal_search", '{"queries": ["q"]}'),
+        {"role": "tool", "content": "results", "tool_call_id": "call_prev_1"},
+    ]
+    second = complete(messages=messages, tools=agent_tools, tool_choice="required")
+    assert second["message"]["tool_calls"][0]["function"]["name"] == "generate_report"
+
+
+def test_forced_unknown_tool_returns_400() -> None:
+    # Mirror OpenAI: forcing a function that isn't offered is a 400, not a
+    # silent fallback — fallback would mask real contract violations.
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "mock-ttft0-itl0",
+            "stream": False,
+            "messages": [{"role": "user", "content": "q"}],
+            "tools": [INTERNAL_SEARCH_TOOL],
+            "tool_choice": {"type": "function", "function": {"name": "nonexistent"}},
+        },
+    )
+    assert response.status_code == 400
+    assert "nonexistent" in response.text
+
+
+def test_forced_specific_tool_is_honored() -> None:
+    choice = complete(
+        tools=[INTERNAL_SEARCH_TOOL, GENERATE_REPORT_TOOL],
+        tool_choice={"type": "function", "function": {"name": "generate_report"}},
+    )
+    assert choice["finish_reason"] == "tool_calls"
+    assert choice["message"]["tool_calls"][0]["function"]["name"] == "generate_report"
+
+
+def test_max_tokens_caps_answer_length() -> None:
+    chunks = stream_chunks(model="mock-ttft0-itl0-len500", max_tokens=10)
+    text = "".join(c["choices"][0]["delta"].get("content") or "" for c in chunks)
+    assert len(text.split()) == 10
+
+
+def test_maxctx_rejects_oversized_prompt_with_context_error() -> None:
+    # Prompt over the maxctx limit → 400 context-window error (litellm maps
+    # this to ContextWindowExceededError, mimicking a real provider).
+    big = "word " * 5000  # ~25k chars ≈ ~6k tokens, over maxctx1000
+    response = client.post(
+        "/v1/chat/completions",
+        json={
+            "model": "mock-maxctx1000-ttft0-itl0",
+            "stream": False,
+            "messages": [{"role": "user", "content": big}],
+        },
+    )
+    assert response.status_code == 400
+    err = response.json()["error"]
+    assert err["code"] == "context_length_exceeded"
+    assert "maximum context length" in err["message"]
+
+
+def test_maxctx_allows_small_prompt() -> None:
+    choice = complete(model="mock-maxctx1000-ttft0-itl0-len10")
+    assert choice["finish_reason"] == "stop"
+
+
+def _production_prompt(name: str, filename: str = "search_prompts.py") -> str:
+    """Read prompt constants without importing Onyx or its runtime dependencies."""
+    path = Path(__file__).resolve().parents[3] / "backend/onyx/prompts" / filename
+    tree = ast.parse(path.read_text())
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(target, ast.Name) and target.id == name
+            for target in node.targets
+        ):
+            value = node.value
+            if (
+                isinstance(value, ast.Call)
+                and isinstance(value.func, ast.Attribute)
+                and value.func.attr == "strip"
+            ):
+                return str(ast.literal_eval(value.func.value)).strip()
+            return str(ast.literal_eval(value))
+    raise AssertionError(f"Prompt not found: {name}")
+
+
+def _selection_prompt(maximum: int = 10, count: int = 50) -> str:
+    return _production_prompt("DOCUMENT_SELECTION_PROMPT").format(
+        max_sections=maximum,
+        extra_instructions="",
+        formatted_doc_sections=json.dumps(
+            [
+                {"section_id": index, "content": f"Section {index}"}
+                for index in range(count)
+            ]
+        ),
+        user_query="Which launch decisions changed?",
+    )
+
+
+def _classification_prompt() -> str:
+    return _production_prompt("DOCUMENT_CONTEXT_SELECTION_PROMPT").format(
+        document_title="Example",
+        section_above="Before",
+        main_section="Main",
+        section_below="After",
+        user_query="Which launch decisions changed?",
+    )
+
+
+def test_search_helper_responses_match_across_transports() -> None:
+    prompts = [
+        _selection_prompt(),
+        _classification_prompt(),
+        _production_prompt(
+            "SOURCE_SCOPE_DECISION_PROMPT", "filter_extration.py"
+        ).format(
+            conversation_history="",
+            current_cycle_queries="launch decisions",
+            previous_cycles="",
+            valid_sources="file\nslack",
+            last_user_query="Which launch decisions changed?",
+        ),
+        _production_prompt("TIME_SCOPE_DECISION_PROMPT", "filter_extration.py").format(
+            conversation_history="",
+            current_day_time_str="2026-10-22",
+            last_user_query="Which launch decisions changed?",
+        ),
+    ]
+    expected_shapes = [
+        lambda value: isinstance(json.loads(value), list),
+        lambda value: value in "0123",
+        lambda value: value == "[]",
+        lambda value: value == "updated (None, None)",
+    ]
+    for prompt, valid in zip(prompts, expected_shapes, strict=True):
+        messages = [{"role": "user", "content": prompt}]
+        plain = complete(messages=messages)["message"]["content"]
+        streamed = "".join(
+            chunk["choices"][0]["delta"].get("content") or ""
+            for chunk in stream_chunks(messages=messages)
+        )
+        assert plain == streamed
+        assert valid(plain)
+
+
+def test_selection_respects_candidates_and_maximum() -> None:
+    for maximum, candidates in [(3, 50), (10, 2), (10, 0)]:
+        result = complete(
+            model="mock-sections10-ttft0-itl0",
+            messages=[
+                {"role": "user", "content": _selection_prompt(maximum, candidates)}
+            ],
+        )
+        indices = json.loads(result["message"]["content"])
+        assert len(indices) == min(maximum, candidates)
+        assert len(indices) == len(set(indices))
+        assert all(0 <= index < candidates for index in indices)
+
+
+def test_classification_override_exercises_each_expansion_path() -> None:
+    for value in range(4):
+        result = complete(
+            model=f"mock-class{value}-ttft0-itl0",
+            messages=[{"role": "user", "content": _classification_prompt()}],
+        )
+        assert result["message"]["content"] == str(value)
+    response = client.post(
+        "/v1/chat/completions", json={"model": "mock-class4", "messages": []}
+    )
+    assert response.status_code == 400
+
+
+def test_calibrated_selection_varies_without_invalid_ids() -> None:
+    counts = []
+    non_prefix = 0
+    for index in range(500):
+        prompt = _selection_prompt().replace(
+            "Which launch decisions changed?", f"Question {index}"
+        )
+        answer = search_helper_answer(prompt)
+        assert answer is not None
+        ids = json.loads(answer)
+        counts.append(len(ids))
+        non_prefix += ids != list(range(len(ids)))
+    assert set(counts) == set(range(1, 11))
+    assert 3 <= sorted(counts)[250] <= 5
+    assert non_prefix > 250
+
+
+def test_keyword_output_preserves_terms_and_ignores_prompt_scaffolding() -> None:
+    messages = [
+        {
+            "role": "system",
+            "content": _production_prompt("KEYWORD_REPHRASE_SYSTEM_PROMPT").format(
+                current_date="2026-10-22"
+            ),
+        },
+        {
+            "role": "user",
+            "content": _production_prompt("KEYWORD_REPHRASE_USER_PROMPT").format(
+                additional_context="User memory scaffolding",
+                user_query="What are the ACME-42 launch decisions?",
+            ),
+        },
+    ]
+    answer = complete(messages=messages)["message"]["content"]
+    assert answer == "ACME-42 launch decisions"
+    streamed = "".join(
+        chunk["choices"][0]["delta"].get("content") or ""
+        for chunk in stream_chunks(messages=messages)
+    )
+    assert streamed == answer
+
+
+def test_calibration_import_does_not_read_fixture() -> None:
+    subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from pathlib import Path; from unittest.mock import patch; "
+            "guard = patch.object(Path, 'read_text', side_effect=AssertionError('import read')); "
+            "guard.start(); import mock_llm.search_workload; guard.stop()",
+        ],
+        check=True,
+    )
+
+
+def test_calibration_loader_reuses_fixture() -> None:
+    fixture = (
+        Path(__file__).parents[1] / "mock_llm/search_calibration.json"
+    ).read_text()
+    load_calibration.cache_clear()
+    try:
+        with patch.object(Path, "read_text", return_value=fixture) as read:
+            first = load_calibration()
+            assert load_calibration() is first
+            assert read.call_count == 1
+    finally:
+        load_calibration.cache_clear()
+
+
+def test_helper_output_limits_match_text_usage_and_finish_reason() -> None:
+    messages = [{"role": "user", "content": _selection_prompt()}]
+    for field in ("max_tokens", "max_completion_tokens"):
+        body = {"model": "mock-sections10-ttft0-itl0", "messages": messages, field: 1}
+        response = client.post("/v1/chat/completions", json=body).json()
+        choice = response["choices"][0]
+        assert len(choice["message"]["content"].split()) == 1
+        assert choice["finish_reason"] == "length"
+        assert response["usage"]["completion_tokens"] == 1
+        chunks = stream_chunks(
+            model="mock-sections10-ttft0-itl0", messages=messages, **{field: 1}
+        )
+        text = "".join(
+            chunk["choices"][0]["delta"].get("content") or "" for chunk in chunks
+        )
+        assert text == choice["message"]["content"]
+        assert chunks[-1]["choices"][0]["finish_reason"] == "length"
