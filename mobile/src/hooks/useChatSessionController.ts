@@ -53,11 +53,6 @@ export async function recoverChatSession(
   if (!data || data.abortController) return;
   if (initialStream === null && data.chatState === "input") return;
 
-  store.getState().setAbortController(sessionId, controller);
-  recoveries.add(controller);
-  // Stop targets the stream this recovery follows.
-  if (initialStream !== null)
-    store.getState().setStreamId(sessionId, initialStream.stream_id);
   const stillOurs = () =>
     store.getState().sessions.get(sessionId)?.abortController === controller;
   const stillOpen = () =>
@@ -66,24 +61,30 @@ export async function recoverChatSession(
   const stillCurrent = () => stillOpen() && !controller.signal.aborted;
   const onUnconfirmed = () =>
     store.getState().updateChatState(sessionId, "unconfirmed");
-  // The one response a stream writes. A multi-model turn settles from the saved session.
-  const responseOf = (stream: ChatStream | null) =>
-    stream?.response_ids.length === 1 ? stream.response_ids[0] : undefined;
-  // The response whose local failure the settle keeps.
-  const initialResponse = responseOf(initialStream);
-  let node =
-    initialResponse !== undefined
-      ? getMessageByMessageId(data.messageTree, initialResponse)
-      : getLatestMessageChain(data.messageTree).at(-1);
-  let stream = initialStream;
-  // Where a reattach to `stream` continues, so no packet arrives twice. It belongs to that stream id.
-  let cursor = 0;
-  // A replay from the start holds its packets until it reaches the end of the output that
-  // existed when it began, so a replay that fails partway keeps what this device shows.
-  let restored = false;
-  let replay: Packet[] = [];
-  let backgroundWork = false;
+  store.getState().setAbortController(sessionId, controller);
+  recoveries.add(controller);
+  // Every failure after the claim releases the reader, so sends do not stay blocked.
   try {
+    // Stop targets the stream this recovery follows.
+    if (initialStream !== null)
+      store.getState().setStreamId(sessionId, initialStream.stream_id);
+    // The one response a stream writes. A multi-model turn settles from the saved session.
+    const responseOf = (stream: ChatStream | null) =>
+      stream?.response_ids.length === 1 ? stream.response_ids[0] : undefined;
+    // The response whose local failure the settle keeps.
+    const initialResponse = responseOf(initialStream);
+    let node =
+      initialResponse !== undefined
+        ? getMessageByMessageId(data.messageTree, initialResponse)
+        : getLatestMessageChain(data.messageTree).at(-1);
+    let stream = initialStream;
+    // Where a reattach to `stream` continues, so no packet arrives twice. It belongs to that stream id.
+    let cursor = 0;
+    // A replay from the start holds its packets until it reaches the end of the output that
+    // existed when it began, so a replay that fails partway keeps what this device shows.
+    let restored = false;
+    let replay: Packet[] = [];
+    let backgroundWork = false;
     while (true) {
       // "lost": delivery ended before the run's stop, so a paced reattach follows. "noBuffer":
       // resume-stream answered 404, so only a new stream is followed.

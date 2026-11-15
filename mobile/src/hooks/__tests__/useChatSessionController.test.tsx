@@ -21,7 +21,11 @@ import {
   type StreamEvent,
 } from "@/api/chat/stream";
 import { processRawChatHistory } from "@/chat/chatHistory";
-import { BackendChatSession, BackendMessage } from "@/chat/interfaces";
+import {
+  BackendChatSession,
+  BackendMessage,
+  ChatStream,
+} from "@/chat/interfaces";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
@@ -2115,6 +2119,25 @@ describe("watchBackgroundAgents", () => {
 
     // The baseline load and the reload.
     expect(getSessionMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("releases the reader when its setup fails", async () => {
+    await openIdle("v1");
+    useChatSessionStore.getState().updateChatState("s1", "settling");
+    // A stream that no API normalization reached.
+    const malformed = { stream_id: 7 } as unknown as ChatStream;
+
+    await recoverChatSession(
+      "s1",
+      malformed,
+      SERVER_URL,
+      client,
+      new AbortController(),
+    );
+
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.abortController,
+    ).toBeNull();
   });
 
   it("follows a stream that starts while it watches", async () => {

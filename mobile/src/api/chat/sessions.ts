@@ -25,12 +25,24 @@ export async function createChatSession(
 }
 
 // Session snapshot for hydration.
+// Older servers name a running stream without `response_ids`.
+function withResponseIds(stream: ChatStream | null | undefined) {
+  return stream
+    ? { ...stream, response_ids: stream.response_ids ?? [] }
+    : stream;
+}
+
 export async function getChatSession(
   sessionId: string,
 ): Promise<BackendChatSession> {
-  return apiFetch<BackendChatSession>(`/chat/get-chat-session/${sessionId}`, {
-    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
-  });
+  const session = await apiFetch<BackendChatSession>(
+    `/chat/get-chat-session/${sessionId}`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
+  );
+  return {
+    ...session,
+    current_stream: withResponseIds(session.current_stream),
+  };
 }
 
 export interface ChatSessionStatus {
@@ -51,9 +63,11 @@ export interface ChatSessionStatus {
 export async function getChatSessionStatus(
   sessionId: string,
 ): Promise<ChatSessionStatus> {
-  return apiFetch<ChatSessionStatus>(`/chat/chat-session/${sessionId}/status`, {
-    timeoutMs: SESSION_CONTROL_TIMEOUT_MS,
-  });
+  const status = await apiFetch<ChatSessionStatus>(
+    `/chat/chat-session/${sessionId}/status`,
+    { timeoutMs: SESSION_CONTROL_TIMEOUT_MS },
+  );
+  return { ...status, current_stream: withResponseIds(status.current_stream) };
 }
 
 // client abort alone leaves the backend generating
