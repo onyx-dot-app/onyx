@@ -568,7 +568,7 @@ def test_branch_checks_every_listed_repository() -> None:
     def get_branch(*, repo_full_name: str, branch: str) -> GitHubBranch:
         if repo_full_name == "acme/r6":
             raise api_error(404, "Branch not found")
-        return GitHubBranch(name=branch)
+        return GitHubBranch(name=branch, tree_sha="tree-sha")
 
     gateway.get_branch.side_effect = get_branch
 
