@@ -328,17 +328,21 @@ export async function settleChatSession({
         }
       }
     }
-    let nextStreamId = await waitForChatResponseEnd(
-      sessionId,
-      stream?.stream_id
-    );
+    let next = await waitForChatResponseEnd(sessionId, stream?.stream_id);
     if (!ownsSettlement()) return;
-    // Incognito keeps output locally, so follow execution without replaying history.
-    while (nextStreamId != null && session?.incognito) {
-      nextStreamId = await waitForChatResponseEnd(sessionId, nextStreamId);
+    // Incognito keeps output locally, so it replays no history. It follows a
+    // later stream of its own answers, such as an approved answer's
+    // continuation, and waits through other turns.
+    while (next && session?.incognito) {
+      const local = useChatSessionStore.getState().sessions.get(sessionId);
+      if (local && streamResponses(local.messageTree, next)) {
+        followChatStream(sessionId, next, errorMessage);
+        return;
+      }
+      next = await waitForChatResponseEnd(sessionId, next.stream_id);
       if (!ownsSettlement()) return;
     }
-    if (nextStreamId != null) {
+    if (next) {
       await refreshChatSession(sessionId, errorMessage);
       return;
     }

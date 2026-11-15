@@ -405,10 +405,12 @@ to that stream, because it has no buffer. A network error, a 5xx, a 429 or an
 end before the first cursor reattaches after the next status read; a 401 or
 403 surfaces through the failed status read. Otherwise
 `lib/chat/sessionReadiness.ts:waitForChatResponseEnd` polls `/status`
-until that response releases ownership. The status includes the current stream
-ID. A queued response can take ownership without making the session idle;
-`refreshChatSession` loads the latest page and `followChatSession` attaches to
-it. `refreshChatSession` runs only when no reader owns the session: when
+until that response releases ownership, and returns the current stream of
+the turn that owns the session next. A queued response can take ownership
+without making the session idle; `refreshChatSession` loads the latest page
+and `followChatSession` attaches to it. An incognito chat loads no history: it
+follows a next stream whose answers it has, such as an approved answer's
+continuation, with `followChatStream`, and waits through other turns. `refreshChatSession` runs only when no reader owns the session: when
 settlement finds a next stream, or when a status read shows an idle chat a
 running turn or a latest response it does not have. Readiness polls write each
 status into the SWR status cache, so `lib/chat/hooks.ts:useChatSessionQueue`

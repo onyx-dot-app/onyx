@@ -362,11 +362,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
-    await expect(
-      card.card.getByText(`mailer wants to run ${toolDisplayName}`, {
-        exact: true,
-      })
-    ).toBeVisible();
+    await card.expectAgentRequest("mailer", toolDisplayName);
     await card.expectPendingInView();
     await chat.inputBar.expectAcceptsSend();
 
@@ -394,11 +390,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     // The session load replays the agent's waiting request.
     await chat.reload();
     await card.expectPending(toolDisplayName);
-    await expect(
-      card.card.getByText(`mailer wants to run ${toolDisplayName}`, {
-        exact: true,
-      })
-    ).toBeVisible();
+    await card.expectAgentRequest("mailer", toolDisplayName);
 
     await test.step("a send runs while the agent's card waits", async () => {
       const nonce = mockLlmNonce();
@@ -437,9 +429,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     // The decision starts no stream; the chat reads its status until the
     // resumed agent parks on its next request.
     await card.approve();
-    await expect(
-      card.card.getByText(secondArgument, { exact: true })
-    ).toBeVisible({ timeout: 60_000 });
+    await card.expectArgument(secondArgument, 60_000);
     await card.expectPending(toolDisplayName);
 
     await card.approve();

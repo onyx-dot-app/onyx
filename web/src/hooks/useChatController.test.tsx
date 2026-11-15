@@ -446,7 +446,7 @@ test.each([false, true])(
 test("a lost stream keeps its waiting approval open after the server is idle", async () => {
   jest.spyOn(console, "log").mockImplementation(() => {});
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
-  const idle = Promise.withResolvers<number | null>();
+  const idle = Promise.withResolvers<null>();
   jest.mocked(waitForChatResponseEnd).mockReturnValueOnce(idle.promise);
   useChatSessionStore.setState({
     sessions: new Map(),

@@ -293,8 +293,8 @@ afterEach(() => fetchSpy.mockRestore());
 
 test("completion checks stay with their sessions across navigation", async () => {
   const user = setupUser();
-  const firstIdle = deferred<number | null>();
-  const secondIdle = deferred<number | null>();
+  const firstIdle = deferred<null>();
+  const secondIdle = deferred<null>();
   jest
     .mocked(waitForChatResponseEnd)
     .mockImplementation((sessionId) =>
@@ -376,7 +376,7 @@ test.each([false, true])(
   "retrying completion preserves the draft and paused queue (failed acknowledgement: %s)",
   async (failedAcknowledgement) => {
     const user = setupUser();
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
 
     const store = useChatSessionStore.getState();

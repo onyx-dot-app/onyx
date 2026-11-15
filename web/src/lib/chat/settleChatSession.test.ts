@@ -211,7 +211,7 @@ describe("with stubbed server checks", () => {
         chatState: "unconfirmed",
       });
 
-      const idle = Promise.withResolvers<number | null>();
+      const idle = Promise.withResolvers<null>();
       const polling = Promise.withResolvers<void>();
       jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
         polling.resolve();
@@ -280,7 +280,7 @@ describe("with stubbed server checks", () => {
   });
 
   test("stopping waits for saved history and preserves error retry details", async () => {
-    const idle = Promise.withResolvers<number | null>();
+    const idle = Promise.withResolvers<null>();
     const history = Promise.withResolvers<BackendChatSession>();
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
@@ -433,7 +433,7 @@ describe("with stubbed server checks", () => {
   );
 
   test("a late failed readiness check cannot change a newer request", async () => {
-    const idle = Promise.withResolvers<number | null>();
+    const idle = Promise.withResolvers<null>();
     jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
     const pending = settle();
     useChatSessionStore
@@ -547,6 +547,60 @@ describe("with stubbed server checks", () => {
     expect(settled.chatState).toBe("input");
     expect(settled.messageTree.get(2)?.streamLost).toBeUndefined();
     expect(settled.messageTree.get(3)?.streamLost).toBeUndefined();
+  });
+
+  test("incognito follows its approved answer's continuation in a later stream", async () => {
+    const tree = new Map<number, Message>([
+      [1, message(1, "user", "Private question")],
+      [
+        2,
+        {
+          ...message(2, "assistant", ""),
+          messageId: 72,
+          parentNodeId: 1,
+          packets: [approvalRequest("approval")],
+        },
+      ],
+    ]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      incognito: true,
+      messageTree: tree,
+    });
+    // Another answer's turn held the chat; the decided answer continues next.
+    jest
+      .mocked(waitForChatResponseEnd)
+      .mockResolvedValueOnce(stream(970, [72]))
+      .mockResolvedValue(null);
+    const answerText: Packet = {
+      placement: { turn_index: 2 },
+      obj: { type: "message_delta", content: "Created the issue." },
+    };
+    jest.mocked(resumeStream).mockImplementation(async function* () {
+      yield answerText;
+      yield { placement: { turn_index: 2 }, obj: { type: "stop" } };
+      yield { stream_id: 970, next_cursor: 2, replay_complete: true };
+    });
+
+    await settle();
+
+    expect(resumeStream).toHaveBeenCalledWith(
+      "session",
+      970,
+      0,
+      expect.anything()
+    );
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")
+      ).toMatchObject({ chatState: "input" })
+    );
+    const answer = useChatSessionStore
+      .getState()
+      .sessions.get("session")!
+      .messageTree.get(2)!;
+    expect(answer.packets).toContainEqual(answerText);
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
   });
 
   test("an old rejected attempt does not hide the latest saved answer", async () => {

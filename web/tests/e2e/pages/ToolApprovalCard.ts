@@ -47,9 +47,18 @@ export class ToolApprovalCard {
     await expect(this.card).toBeInViewport();
   }
 
-  async expectArgument(value: string): Promise<void> {
+  async expectArgument(value: string, timeout?: number): Promise<void> {
     // A waiting request shows its details.
-    await expect(this.card.getByText(value, { exact: true })).toBeVisible();
+    await expect(this.card.getByText(value, { exact: true })).toBeVisible({
+      timeout,
+    });
+  }
+
+  /** The waiting card names the agent that asks. */
+  async expectAgentRequest(agent: string, toolName: string): Promise<void> {
+    await expect(
+      this.card.getByText(`${agent} wants to run ${toolName}`, { exact: true })
+    ).toBeVisible();
   }
 
   async approve(): Promise<void> {

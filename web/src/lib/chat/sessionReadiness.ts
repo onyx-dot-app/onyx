@@ -1,18 +1,21 @@
 import { mutate } from "swr";
-import type { BackendChatSession } from "@/app/app/types";
+import type { BackendChatSession, ChatStream } from "@/app/app/types";
 import { chatPageUrl } from "@/lib/chat/pagedSession";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 export const CHAT_STATUS_POLL_MS = 1000;
 
-const pendingChecks = new Map<string, Promise<number | null>>();
+const pendingChecks = new Map<string, Promise<ChatStream | null>>();
 
-/** Wait for this response to release the session; another queued turn can own it next. */
+/**
+ * Wait for this response to release the session; returns the stream of the
+ * turn that owns it next, such as a queued turn or a continuation.
+ */
 export function waitForChatResponseEnd(
   sessionId: string,
   streamId?: number | null
-): Promise<number | null> {
+): Promise<ChatStream | null> {
   const key = `${sessionId}:${streamId ?? ""}`;
   const existing = pendingChecks.get(key);
   if (existing) return existing;
@@ -27,14 +30,13 @@ export function waitForChatResponseEnd(
 async function pollSession(
   sessionId: string,
   streamId: number | null | undefined
-): Promise<number | null> {
+): Promise<ChatStream | null> {
   // A successful busy response confirms live work, regardless of its duration.
   while (true) {
     const status = await readChatSessionStatus(sessionId);
     if (!status.is_processing) return null;
-    const nextStreamId = status.current_stream?.stream_id;
-    if (nextStreamId !== undefined && nextStreamId !== streamId)
-      return nextStreamId;
+    const next = status.current_stream;
+    if (next && next.stream_id !== streamId) return next;
     await new Promise<void>((resolve) =>
       setTimeout(resolve, CHAT_STATUS_POLL_MS)
     );

@@ -64,7 +64,7 @@ test.each([false, true])(
   async (multiModel) => {
     const admitted = Promise.withResolvers<void>();
     const provider = Promise.withResolvers<void>();
-    const idle = Promise.withResolvers<number | null>();
+    const idle = Promise.withResolvers<null>();
     const pollingStarted = Promise.withResolvers<void>();
     jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
       pollingStarted.resolve();
@@ -229,7 +229,9 @@ test("Stop after the accepted stream ended stops the queued turn that followed i
     sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: Promise.resolve(),
   });
-  jest.mocked(waitForChatResponseEnd).mockResolvedValue(43);
+  jest
+    .mocked(waitForChatResponseEnd)
+    .mockResolvedValue({ stream_id: 43, response_ids: [43] });
   await stopChatSession("session", errorMessage);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/chat/stop-chat-session/session",

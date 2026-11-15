@@ -116,7 +116,7 @@ afterEach(() => {
 });
 
 test("reloaded setup stays busy until execution and history are settled", async () => {
-  const idle = deferred<number | null>();
+  const idle = deferred<null>();
   const history = deferred<BackendChatSession>();
   jest.mocked(waitForChatResponseEnd).mockReturnValue(idle.promise);
   jest.mocked(fetchSettledChatSession).mockReturnValue(history.promise);
@@ -438,7 +438,7 @@ test.each([
 ])(
   "incognito recovery preserves local content (busy: $busy, aborted: $aborted)",
   async ({ busy, aborted }) => {
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const question: Message = {
       nodeId: -101,
       messageId: 1,
@@ -717,7 +717,7 @@ test("recovery replay does not mutate retained local messages", async () => {
 });
 
 test("Stop targets a reloaded multi-model stream without replay", async () => {
-  const idle = deferred<number | null>();
+  const idle = deferred<null>();
   const question: Message = {
     nodeId: 41,
     messageId: 41,
@@ -1055,7 +1055,7 @@ test.each([false, true])(
   "interrupted initial restoration retains its acknowledged prefix (network error: %s)",
   async (networkError) => {
     jest.spyOn(console, "error").mockImplementation(() => {});
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
@@ -1128,7 +1128,7 @@ test.each([false, true])(
 test.each([false, true])(
   "incognito failures close existing display content only after confirmed idle (content: %s)",
   async (hasContent) => {
-    const idle = deferred<number | null>();
+    const idle = deferred<null>();
     const reserved: Message = {
       nodeId: 42,
       messageId: 42,
