@@ -137,7 +137,7 @@ class ChatFullResponse(BaseModel):
     chat_session_id: UUID | None = None
     incognito: bool = False
     error_msg: str | None = None
-    # Not empty when the response returned early to wait for an approval
+    # Not empty when the response stopped to wait for approval decisions
     pending_tool_approvals: list[ToolApprovalRequest] = []
 ```
 
@@ -148,10 +148,9 @@ Every client of this API must handle approvals. See [Approvals in Chat](/admins/
 for the policies.
 
 <Warning>
-  A client that does not handle approvals cannot answer a request.
-  The call does not run until the request times out after 10 minutes,
-  and the chat session does not accept new messages until then. Older mobile app builds, Onyx CLI versions,
-  and pinned widget versions do not handle approvals. Upgrade them.
+  A client that does not handle approvals cannot answer a request. A request has no time limit. The call does not run,
+  and the chat session does not accept new messages, until the user decides in a client that handles approvals.
+  Older mobile app builds, Onyx CLI versions, and pinned widget versions do not handle approvals. Upgrade them.
 </Warning>
 
 ### Approval packets
@@ -166,9 +165,13 @@ The packet has these fields:
 | `tool_name` | The name of the tool that the model called. |
 | `display_name` | The tool name to show to the user. |
 | `arguments` | The arguments of the call. Show them to the user before they decide. |
-| `expires_at` | The deadline in ISO 8601 UTC. A call with no decision by this time does not run. |
 
-The stream keeps the response open while the call waits. Other calls and heartbeats can continue.
+A request waits until the user decides. Other calls of the answer can continue while it waits.
+When only approval requests remain, Onyx saves the answer,
+and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_approval`.
+That stop does not end the requests. Keep them open for a decision. After the decisions,
+the answer continues in a new stream. See [Send a decision](#send-a-decision).
+
 A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each request:
 
 | `outcome` | Meaning |
@@ -176,26 +179,32 @@ A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each req
 | `approved` | The user approved the call, and it runs. |
 | `approved_for_chat` | The user approved the tool for the chat session, with this request or an earlier one, and the call runs. |
 | `rejected` | The user rejected the call, or stopped the answer while the call waited. It did not run. |
-| `expired` | No decision arrived before `expires_at`. The call did not run. |
 | `disabled` | The user approved the call, but the tool became disabled while the call waited. The call did not run. |
-| `cancelled` | The call stopped waiting without a decision, for example because its program ended or the API server restarted. |
+| `cancelled` | The call stopped waiting without a decision, for example because its code mode program ended or held too much data to pause. |
 
-When you stop the answer, Onyx rejects each call that waits.
+Stop applies only while the answer runs. When you stop a running answer, Onyx rejects each call that waits.
 The stream sends the `tool_approval_resolved` packet with `rejected` before its `stop` packet.
 If you close the stream after you send the stop, record the requests that wait as rejected.
-Treat a request with no resolution as ended when its response stops. Ignore an `outcome` that you do not recognize.
+After the stream ends with `awaiting_approval`, no answer runs, so a stop has no effect and the requests still wait.
+To end the wait, reject each request.
+
+Treat a request with no resolution as ended when its response stops for a reason other than `awaiting_approval`.
+Ignore an `outcome` that you do not recognize.
 
 ### Approvals in saved answers
 
-`GET /chat/get-chat-session/{chat_session_id}` returns the approval packets of each answer that has ended,
-so a client shows the same records after a reload. Each request has its `tool_approval_request` packet,
-then its `tool_approval_resolved` packet, at the placement of the call's card. In a saved answer:
+`GET /chat/get-chat-session/{chat_session_id}` returns the approval packets of each answer that has ended or that waits
+for approval, so a client shows the same records and requests after a reload.
+Each request has its `tool_approval_request` packet, then its `tool_approval_resolved` packet if it has a decision,
+at the placement of the call's card.
+An answer that waits for approval ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
+as its stream did. In a saved answer:
 
 - `tool_call_id` is the ID of the call whose card shows the request. For a call that a code mode program made,
   it is the ID of the program's call.
 - `arguments` is empty for a call that a code mode program made.
 
-An answer that still runs has no approval packets in the chat session.
+An answer that runs has no approval packets in the chat session.
 Read its requests from `GET /chat/chat-session/{chat_session_id}/resume-stream`.
 A `200` stream starts with a cursor line. A `404` means that the stream cannot continue from your cursor;
 read the chat session instead.
@@ -208,6 +217,11 @@ Call `POST /chat/approvals/{approval_id}/decision` with one of these bodies:
 - `{"decision": "approve_session"}` approves this call and later calls of the same tool in the chat session.
 - `{"decision": "reject"}` rejects this call.
 
+Each body can also have `mcp_headers`,
+an object of headers that Onyx forwards to MCP tool calls when the answer continues, for example `{"decision":
+"approve_once", "mcp_headers": {"Authorization": "Bearer <user_jwt>"}}`. Onyx does not save these headers.
+If your MCP servers need them, send the same `mcp_headers` with each decision.
+
 The response contains `approval_id`, `decision` (`APPROVED` or `REJECTED`) and `decided_via`:
 
 | `decided_via` | Meaning |
@@ -218,8 +232,17 @@ The response contains `approval_id`, `decision` (`APPROVED` or `REJECTED`) and `
 
 Only the user who owns the chat session can decide. Other users get a `404`.
 A repeated decision returns `200` with the saved decision, also after the answer ends or the tool's policy changes.
-A `409` means that the request has a different decision or no longer waits,
-for example because the API server that ran the answer restarted.
+A `409` means that the request has a different decision or no longer waits, for example because its answer ended.
+
+When the last request of an answer has a decision, the answer continues in a new stream.
+Onyx starts that stream before the decision call returns. To follow it:
+
+- Read `GET /chat/chat-session/{chat_session_id}/status`. `current_stream.stream_id` is the ID of the new stream,
+  and `is_processing` is `true` while the answer runs.
+- Read `GET /chat/chat-session/{chat_session_id}/resume-stream` with `cursor=0`. The stream replays the saved answer,
+  then continues it. Show its packets in place of the saved answer.
+
+A decision that leaves other requests of the answer open does not continue the answer.
 
 While a call in a chat session waits for a decision,
 a new message to that session gets a `409` with the `error_code` `APPROVAL_PENDING`. Send the decision first.
@@ -227,23 +250,24 @@ Turns that start from queued messages can also wait for approval.
 
 ### Approvals without streaming
 
-With `stream=false`, Onyx does not wait for the decision. When a call needs approval, the response returns at once with:
+With `stream=false`, Onyx does not wait for the decision. When the answer stops to wait for approval,
+the response returns with:
 
-- `pending_tool_approvals`: every request of the answer that waits for a decision when the response returns,
+- `pending_tool_approvals`: every request of the answer that waits for a decision,
   with the same fields as the `tool_approval_request` packet
 - `message_id`: the ID of the assistant message that waits
-- an empty `answer`
+- the `answer` text so far, which can be empty
 
-The answer continues on the server. Send the decision, then read the answer:
+The answer does not continue until every request has a decision. Send the decisions, then read the answer:
 
-- Read the chat session with `GET /chat/get-chat-session/{chat_session_id}` until the message with `message_id` has its answer, or
-- Read the live stream with `GET /chat/chat-session/{chat_session_id}/resume-stream`.
+- Read `GET /chat/chat-session/{chat_session_id}/status` until `is_processing` is `false`,
+  then read the chat session with `GET /chat/get-chat-session/{chat_session_id}`, or
+- Read the new stream with `GET /chat/chat-session/{chat_session_id}/resume-stream` and `cursor=0`.
 
-More calls can need approval after the response returns, for example after your decision.
-Only the resume stream shows their `tool_approval_request` packets.
-The chat session does not show the requests of an answer that still runs, so polling cannot find a later request.
-That call waits until its deadline. If the agent can ask for more than one approval in an answer,
-read the resume stream. A new message to the session gets a `409` with `APPROVAL_PENDING` while a call waits.
+The answer can stop again for more approvals after your decision. In the chat session,
+the message with `message_id` then ends with a `stop` packet whose `stop_reason` is `awaiting_approval`,
+and its `tool_approval_request` packets without a resolution are the requests that wait.
+A new message to the session gets a `409` with `APPROVAL_PENDING` while a call waits.
 
 <Note>
   The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
