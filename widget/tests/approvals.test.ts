@@ -1563,6 +1563,80 @@ describe("widget while a request waits", () => {
     expect(saved).toEqual(expected);
   });
 
+  it("places a recovered turn before a newer turn in the saved order", async () => {
+    const { stored, saved, restore } = fakeSessionStorage();
+    const initial = JSON.stringify({
+      sessionId: "session",
+      messages: [
+        { id: 1, role: "user", content: "first", timestamp: 0 },
+        { id: 2, role: "assistant", content: "first answer", timestamp: 0 },
+        { id: 5, role: "user", content: "third", timestamp: 0 },
+        {
+          id: 6,
+          role: "assistant",
+          content: "",
+          timestamp: 0,
+          isStreaming: true,
+        },
+      ],
+      timestamp: Date.now(),
+      identity: "shared",
+    });
+    stored.set("onyx-widget-session", initial);
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/status"))
+        return Response.json({ is_processing: false });
+      if (url.includes("/get-chat-session/"))
+        return Response.json({
+          messages: [
+            { message_id: 1, message_type: "user" },
+            { message_id: 2, message_type: "assistant", parent_message: 1 },
+            { message_id: 3, message_type: "user", parent_message: 2 },
+            { message_id: 4, message_type: "assistant", parent_message: 3 },
+            { message_id: 5, message_type: "user", parent_message: 4 },
+            { message_id: 6, message_type: "assistant", parent_message: 5 },
+          ],
+          packets: [
+            [{ obj: { type: "stop" } }],
+            [
+              { obj: { type: "user_message", id: "sdk-3", message: "second" } },
+              { obj: { type: "message_start" } },
+              { obj: { type: "message_delta", content: "second answer" } },
+              { obj: { type: "stop" } },
+            ],
+            [
+              { obj: { type: "message_start" } },
+              { obj: { type: "message_delta", content: "third answer" } },
+              { obj: { type: "stop" } },
+            ],
+          ],
+        });
+      return new Response("none", { status: 404 });
+    }) as typeof fetch;
+    const widget = restoredWidget();
+    widget["messages"] = [];
+    widget["currentIdentity"] = async () => "shared";
+    try {
+      widget["restoreSession"]();
+      await waitUntil(() => stored.get("onyx-widget-session") !== initial);
+      await waitUntil(() => widget["abortController"] === undefined);
+    } finally {
+      restore();
+    }
+
+    const expected = [
+      [1, "first"],
+      [2, "first answer"],
+      [3, "second"],
+      [4, "second answer"],
+      [5, "third"],
+      [6, "third answer"],
+    ];
+    expect(widget["messages"].map((m) => [m.id, m.content])).toEqual(expected);
+    expect(saved()?.map((m) => [m.id, m.content])).toEqual(expected);
+  });
+
   it("answers a stored question from the saved session when its replay is gone", async () => {
     const { shown, saved } = await restoreUnanswered({
       messages: [

@@ -945,10 +945,30 @@ export class OnyxChatWidget extends LitElement {
             if (!stillOurs()) return;
           }
           this.approvalsChanged = false;
-          // A response the server has no saved copy of keeps its snapshot.
-          this.messages = this.messages.map((message) =>
-            message.isStreaming ? { ...message, isStreaming: false } : message
+          // Recovered turns take their saved place in the conversation, so a
+          // later send answers the latest saved turn. A message the session
+          // does not list stays after the message before it.
+          const savedOrder = new Map(
+            session.messages.map((message, index) => [
+              message.message_id,
+              index,
+            ])
           );
+          let position = -1;
+          this.messages = this.messages
+            .map((message) => {
+              const saved =
+                typeof message.id === "number"
+                  ? savedOrder.get(message.id)
+                  : undefined;
+              if (saved !== undefined) position = saved;
+              return { message, position };
+            })
+            .sort((a, b) => a.position - b.position)
+            .map(({ message }) =>
+              // A response the server has no saved copy of keeps its snapshot.
+              message.isStreaming ? { ...message, isStreaming: false } : message
+            );
           saveSession(sessionId, this.messages, identity);
         }
         reservedAssistantId = null;
