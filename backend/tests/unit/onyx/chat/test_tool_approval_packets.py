@@ -364,7 +364,7 @@ def test_a_non_streaming_response_returns_the_requests_that_wait() -> None:
 
     def packets() -> Iterator[AnswerStreamPart]:
         yield MessageResponseIDInfo(
-            user_message_id=None, reserved_assistant_message_id=1
+            user_message_id=None, reserved_assistant_message_id=1, mentions=[]
         )
         yield request(approval_ids[0])
         # A program's request that ended when its program stopped.

@@ -751,7 +751,7 @@ def test_a_question_saves_its_picks_and_reserves_room_for_their_skills(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.load_message_branch",
-        lambda *_args: ([parent], parent),
+        lambda *_args, **_kwargs: ([parent], parent),
     )
     store = MagicMock()
     store.prepare_messages.side_effect = lambda history, _text: (history, None, None)
