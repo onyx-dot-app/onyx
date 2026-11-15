@@ -88,15 +88,24 @@ send → ApiService                                   services/api-service.ts
   │         └─ saveSession to sessionStorage, scoped by credential identity
   ├─ stream over → resumeStream({sent}): the one follow path below
   └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
-       from the status (replays the latest saved answer), point at the card
+       from the status with a session load (shows the waiting card), point
+       at the card
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+  no follow runs:
   ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
-  │    (stored for the active follow, which never reads a stream twice)
-  ├─ continuation null, root request → keep reading; nothing else starts
+  ├─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
+  │    and the saved session shows the outcome
   ├─ continuation null, background agent request → resumeStream from the
   │    status (agents polled, below)
-  └─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
-       and the saved session shows the outcome
+  ├─ continuation null, "Approve for this chat" → resumeStream from the
+  │    current stream with a session load: the server also approved the
+  │    chat's other requests for the tool, which only the load shows
+  ├─ continuation null, last root request → resumeStream from the current
+  │    stream, then each stream the status reports, then the saved session
+  └─ continuation null, other root requests wait → nothing starts
+  a follow runs: a continuation is stored, and the follow takes it before it
+    ends (never a stream it just read); with none, the follow reads the
+    status once more before it ends
 restore / sent stream / decision / 409 → resumeStream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
   │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
@@ -110,19 +119,24 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
   │    same stream → reattach from the last cursor; new stream → from 0
   ├─ after its stop → waitForSessionIdle, then enable Send; a new stream id
   │    → follow from 0
-  └─ idle with a response unfinished or waiting for decisions, an
-       acknowledged answer not shown, a question with no answer after it,
-       (restore, 409) a latest answer not shown, or a changed
-       approvals_version → GET /chat/get-chat-session/{id}, replay the saved
-       answers (by parent_message for questions; a question with none is
-       removed; a version change replays answers with agent requests and
-       the latest answer); the load's approvals_version becomes the baseline;
-       on failure it stays unfinished for the next load
+  └─ idle with a response unfinished or waiting for decisions, a sent
+       answer or a status read's latest_response_id not shown, a question
+       with no answer after it, or a changed approvals_version (restore and
+       409 count as changed) → GET /chat/get-chat-session/{id} (every
+       branch); walk the selected branch from the root along
+       latest_child_message and replay its saved answers (by parent_message
+       for questions; a question with none is removed; a version change
+       replays answers with approval requests and answers the transcript
+       lacks); the transcript takes the branch order; the load's
+       approvals_version becomes the baseline; on failure the response stays
+       unfinished and the version change stays pending for the next load
   replay_end and a resolution sent again (replay, then live) change nothing
 any status read with has_active_subagents (a decided agent that waits to
-  resume counts) → read the status every 1s until it is false; each
-  approvals_version change loads the session again; a new stream is followed; Send
-  stays enabled, and a send ends the poll (its own follow polls on)
+  resume counts) or has_startable_input (queued input or an agent's unread
+  result can start a turn) → read the status every 1s until both are false;
+  each approvals_version change or unseen latest_response_id loads the
+  session again; a new stream is followed; Send stays enabled, and a send
+  ends the poll (its own follow polls on)
 card status = the server's tool_approval_resolved outcome ("cancelled" →
   "No longer waiting"), else this widget's decision until the outcome
   arrives; no stop changes a card
@@ -281,7 +295,7 @@ panel picks up the new session when the user returns.
 ## Known issues
 
 - **The extension has no tests, build, type check or lint.** The widget tests
-  cover only session readiness and failed drafts.
+  cover session readiness, failed drafts and tool approvals.
 - **`<all_urls>` is broader than the features need.** Only the selection icon
   and tab reading need page access. Open question: the host grant may also be
   what lets the panel iframe send its `SameSite=Lax` auth cookie, because
