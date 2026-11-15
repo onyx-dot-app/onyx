@@ -172,6 +172,22 @@ describe("ScheduleTaskForm app picker", () => {
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
   });
 
+  it("a paste never opens it and closes an open one", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.click(prompt);
+    await user.paste("/pptx");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(prompt).toHaveValue("/pptx\n");
+
+    await user.type(prompt, "/p");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+    await user.paste("ptx");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
   it("closes on a word that matches nothing, with substring matching", async () => {
     const user = setupUser();
     renderForm();

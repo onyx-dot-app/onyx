@@ -142,10 +142,11 @@ function readCaret(input: HTMLElement): { node: Node; offset: number } | null {
 /** Drives the trigger-character entry picker over a contentEditable input or
  * a textarea. The host forwards the input's input events; their
  * `currentTarget` is read for the text around the caret and the caret
- * position. Only input opens the picker or changes its query. Any selection
- * change that leaves the caret elsewhere than the last input put it ends the
- * session. When `entries` change while open, the query is matched again, and a
- * query that matches nothing ends the session. */
+ * position. Only typing or deleting opens the picker or changes its query; a
+ * paste or drop ends the session. Any selection change that leaves the caret
+ * elsewhere than the last input put it ends the session. When `entries`
+ * change while open, the query is matched again, and a query that matches
+ * nothing ends the session. */
 export function useEntryPicker({
   trigger,
   entries,
@@ -180,6 +181,15 @@ export function useEntryPicker({
   const onInput = useCallback(
     (event: SyntheticEvent<HTMLElement>) => {
       if (!hasEntries) return;
+      // A paste, yank or drop is not typing, so it ends the session like a
+      // caret move.
+      if (
+        event.nativeEvent instanceof InputEvent &&
+        /^insertFrom(Paste|Yank|Drop)/.test(event.nativeEvent.inputType)
+      ) {
+        commit(INITIAL_PICKER_SESSION);
+        return;
+      }
       const input = event.currentTarget;
       let text: CaretText | null;
       if (input instanceof HTMLTextAreaElement) {

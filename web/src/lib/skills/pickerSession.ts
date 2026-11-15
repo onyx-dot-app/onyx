@@ -4,8 +4,9 @@
  * The picker is a typing session keyed on the active trigger character ("/"
  * in Craft, "@" in chat; see `detectPickerTrigger`), not a reflection of the caret.
  * `triggerIndex` tracks that character; `suppressed` hides the picker within the
- * token after Esc; both reset once the trigger is gone. Only input opens the
- * picker or changes its query; the host ends the session when the caret moves.
+ * token after Esc; both reset once the trigger is gone. Only typing or deleting
+ * opens the picker or changes its query; the host ends the session on a paste,
+ * a drop or a caret move.
  * An open session always has entries to show: a word that matches nothing ends
  * it.
  *

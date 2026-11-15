@@ -72,9 +72,9 @@
   limit, the picker offers only the skills already picked, and each request
   sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
   is the whole word, from the `@` through the caret to the next whitespace.
-  Only typing or deleting opens the picker or changes its query. A paste never opens it. Any other
-  caret move, such as a click, an arrow key or a paste, closes it, and a word
-  that matches no skill closes it. Esc hides it until the user deletes the
+  Only typing or deleting opens the picker or changes its query. A paste, a
+  drop and any other caret move, such as a click or an arrow key, close it,
+  and a word that matches no skill closes it. Esc hides it until the user deletes the
   `@`. A pick replaces the whole word with a mention tile that reads `@name`.
   Craft's `/` pickers, in the input bar and in the scheduled task prompt,
   follow the same rules and match a substring
