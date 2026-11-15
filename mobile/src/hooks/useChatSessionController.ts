@@ -352,11 +352,23 @@ export async function recoverChatSession(
 // changed `approvals_version` reloads the session, and a stream that starts, such as the root
 // answer that an agent's result continues, is followed. When the agents stop, a last reload shows
 // their outcomes.
+
+// The running watch of each session. A later call only marks it `again`, so a decision made while
+// a read or reload is in flight gets one more read before the watch can end.
+const agentWatches = new Map<string, { again: boolean }>();
+
 export async function watchBackgroundAgents(
   sessionId: string,
   serverUrl: string | null,
   queryClient: QueryClient,
 ): Promise<void> {
+  const running = agentWatches.get(sessionId);
+  if (running) {
+    running.again = true;
+    return;
+  }
+  const watch = { again: false };
+  agentWatches.set(sessionId, watch);
   const store = useChatSessionStore;
   // A reader owns a busy session and reloads it when its stream ends.
   const idle = () => {
@@ -369,51 +381,59 @@ export async function watchBackgroundAgents(
       data.chatState === "input"
     );
   };
-  while (true) {
-    // The caller may still own the session; each read waits a poll interval.
-    await new Promise((resolve) =>
-      setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
-    );
-    if (!idle()) return;
-    let status;
-    try {
-      status = await getChatSessionStatus(sessionId);
-    } catch (error) {
-      if (isAuthError(error) || (isApiError(error) && error.status === 404))
-        return;
-      continue;
-    }
-    if (!idle()) return;
-    if (status.is_processing && status.current_stream) {
-      void recoverChatSession(
-        sessionId,
-        status.current_stream,
-        serverUrl,
-        queryClient,
-        new AbortController(),
+  try {
+    while (true) {
+      // The caller may still own the session; each read waits a poll interval.
+      await new Promise((resolve) =>
+        setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
       );
-      return;
-    }
-    const settled = status.has_active_subagents !== true;
-    if (approvalsChangedSince(sessionId, status.approvals_version) || settled) {
+      if (!idle()) return;
+      watch.again = false;
+      let status;
       try {
-        const saved = await loadChatSession(sessionId);
-        if (!idle()) return;
-        store
-          .getState()
-          .hydrateSession(
-            sessionId,
-            processRawChatHistory(saved.messages, saved.packets),
-          );
-        queryClient.setQueryData(
-          QUERY_KEYS.chatSession(serverUrl, sessionId),
-          saved,
-        );
+        status = await getChatSessionStatus(sessionId);
       } catch (error) {
-        console.warn("Could not load background agent requests", error);
+        if (isAuthError(error) || (isApiError(error) && error.status === 404))
+          return;
+        continue;
       }
+      if (!idle()) return;
+      if (status.is_processing && status.current_stream) {
+        void recoverChatSession(
+          sessionId,
+          status.current_stream,
+          serverUrl,
+          queryClient,
+          new AbortController(),
+        );
+        return;
+      }
+      const settled = status.has_active_subagents !== true && !watch.again;
+      if (
+        approvalsChangedSince(sessionId, status.approvals_version) ||
+        settled
+      ) {
+        try {
+          const saved = await loadChatSession(sessionId);
+          if (!idle()) return;
+          store
+            .getState()
+            .hydrateSession(
+              sessionId,
+              processRawChatHistory(saved.messages, saved.packets),
+            );
+          queryClient.setQueryData(
+            QUERY_KEYS.chatSession(serverUrl, sessionId),
+            saved,
+          );
+        } catch (error) {
+          console.warn("Could not load background agent requests", error);
+        }
+      }
+      if (settled && !watch.again) return;
     }
-    if (settled) return;
+  } finally {
+    agentWatches.delete(sessionId);
   }
 }
 

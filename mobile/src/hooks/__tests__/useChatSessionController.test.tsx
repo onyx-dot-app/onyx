@@ -1518,6 +1518,76 @@ describe("watchBackgroundAgents", () => {
     expect(getSessionMock).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps one watch per chat for quick agent decisions, with one last reload", async () => {
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
+    const baseline = await loadChatSession("s1");
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        processRawChatHistory(baseline.messages, baseline.packets),
+      );
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    const status = jest.mocked(getChatSessionStatus);
+    status
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValue({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v1",
+      });
+
+    const first = watchBackgroundAgents("s1", SERVER_URL, client);
+    const second = watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(6000);
+    await Promise.all([first, second]);
+
+    expect(status).toHaveBeenCalledTimes(2);
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
+  });
+
+  // The second decision lands while the watch's read is in flight, so that read may predate it.
+  it("reads again for a decision made during an in-flight read", async () => {
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
+    const baseline = await loadChatSession("s1");
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        processRawChatHistory(baseline.messages, baseline.packets),
+      );
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    const status = jest.mocked(getChatSessionStatus);
+    const quiet = {
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v1",
+    };
+    let answer: (value: typeof quiet) => void = () => {};
+    status
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answer = resolve;
+          }),
+      )
+      .mockResolvedValue(quiet);
+
+    const first = watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(status).toHaveBeenCalledTimes(1);
+    const second = watchBackgroundAgents("s1", SERVER_URL, client);
+    answer(quiet);
+    await jest.advanceTimersByTimeAsync(6000);
+    await Promise.all([first, second]);
+
+    expect(status).toHaveBeenCalledTimes(2);
+  });
+
   it("follows a stream that starts while it watches", async () => {
     seedLiveSession(null);
     jest.mocked(getChatSessionStatus).mockResolvedValueOnce({

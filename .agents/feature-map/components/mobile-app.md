@@ -174,7 +174,8 @@ wants to run {tool}". It and its outcome arrive only in the session replay,
 never live in the answer's stream, and it never blocks a send. A decided agent
 that waits to resume counts in `has_active_subagents`, so a decision on an
 agent's card, which names no `continuation`, starts `watchBackgroundAgents`.
-It reads status until the agents stop and shows their later requests.
+It reads status until the agents stop and shows their later requests. A chat
+has at most one watch; a later decision makes the running watch read again.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
