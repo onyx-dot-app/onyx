@@ -5,7 +5,6 @@ from onyx.agents.tools import ToolInvocation
 from onyx.chat.mention_models import SkillMention
 from onyx.db.models import User
 from onyx.llm.cancellation import CancellationSignal
-from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
@@ -208,7 +207,13 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
         return_value={triage.version_id: "Sort.", report.version_id: kept + "é" * 10}
     )
 
-    with patch("onyx.skills.chat.read_versions_skill_md", read):
+    # One token per character keeps the test off the real tokenizer download.
+    tokenizer = Mock()
+    tokenizer.encode.side_effect = list
+    with (
+        patch("onyx.skills.chat.read_versions_skill_md", read),
+        patch("onyx.skills.chat.get_tokenizer", return_value=tokenizer),
+    ):
         accepted = accept_picked_skills(
             [
                 [
@@ -249,10 +254,9 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
     )
     assert f'name="report" and start_char={len(kept)}' in report_message.content
     assert triage_message.content == "<skill>\n<name>triage</name>\nSort.\n</skill>"
-    tokenizer = get_tokenizer(None, None)
     assert [message.token_count for message in accepted[0].skill_messages] == [
-        len(tokenizer.encode(report_message.content)),
-        len(tokenizer.encode(triage_message.content)),
+        len(report_message.content),
+        len(triage_message.content),
     ]
 
 

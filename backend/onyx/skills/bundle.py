@@ -7,6 +7,7 @@ import io
 import stat
 import sys
 import zipfile
+import zlib
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
@@ -176,6 +177,12 @@ def read_stored_bundle(zip_bytes: bytes) -> tuple[str, list[SkillBundleFile]]:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is missing SKILL.md.",
+            ) from exc
+        # A damaged member fails its CRC or decompression only when read.
+        except (zipfile.BadZipFile, zlib.error) as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle SKILL.md is unreadable.",
             ) from exc
         files: list[SkillBundleFile] = []
         for info in zf.infolist():
