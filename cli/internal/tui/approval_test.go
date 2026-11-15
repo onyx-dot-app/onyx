@@ -1279,6 +1279,30 @@ func TestOlderSessionLoadDoesNotReopenAResolvedCard(t *testing.T) {
 	}
 }
 
+func TestAgentsFirstRequestFoundBetweenReadsKeepsTheWatch(t *testing.T) {
+	approved := map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "approved"}
+	client := &pollingClient{
+		resumingClient: &resumingClient{},
+		statuses: []models.ChatSessionStatus{
+			{ApprovalsVersion: "v1", HasActiveSubagents: true},
+			// The agent parks at its first request: a waiting agent is not active.
+			{ApprovalsVersion: "v2"},
+			// Another client approves it.
+			{ApprovalsVersion: "v3"},
+		},
+		sessions: map[string]*models.ChatSessionDetailResponse{
+			"v1": agentSession(t, "v1"),
+			"v2": agentSession(t, "v2", agentAsks("b1")),
+			"v3": agentSession(t, "v3", agentAsks("b1"), approved),
+		},
+	}
+	m, cmd := answerEnds(t, client, models.ChatSessionStatus{HasActiveSubagents: true})
+	m = runAll(t, m, cmd)
+	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" || len(m.approvals) != 0 {
+		t.Fatalf("b1 = %q, want the other client's outcome", got)
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)

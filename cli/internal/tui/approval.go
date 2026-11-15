@@ -313,8 +313,8 @@ func pollApprovals(client api.ClientAPI, sessionID string, poll int, delay time.
 // handleApprovalsPoll loads the session cards when the approvals version
 // changes, and follows a response that runs while no stream does, such as a
 // root turn that agent results start. It reads again while background agents
-// run or wait to resume, or while a card waits; without a stream, also while
-// a turn can start or a response prepares.
+// run or wait to resume, while a card waits or a session load runs; without
+// a stream, also while a turn can start or a response prepares.
 func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	if msg.poll != m.approvalsPoll || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
 		return m, nil
@@ -333,7 +333,8 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 		m, follow = m.reloadUnseenResponse(msg.sessionID, msg.status)
 	}
 	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
-	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable {
+	// A load in flight can add cards, such as an agent's first request.
+	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable && m.approvalsLoadVersion == "" {
 		return m, tea.Batch(load, follow)
 	}
 	return m, tea.Batch(load, follow, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))

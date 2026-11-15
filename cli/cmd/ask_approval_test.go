@@ -693,6 +693,83 @@ func TestAsk_PromptEndsWhenTheServerEndsTheRequest(t *testing.T) {
 	}
 }
 
+// newSavedParkServer answers like a server whose continuations finish
+// before ask attaches to them: decisions name no stream and the session is
+// idle. After a1's decision the saved response parks at a2; after a2's, it
+// has finished.
+func newSavedParkServer(t *testing.T) chan string {
+	t.Helper()
+	decisions := make(chan string, 8)
+	var mu sync.Mutex
+	decided := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintf(w, "{\"chat_session_id\":%q}\n", testSessionID)
+		fmt.Fprintln(w, `{"user_message_id":1,"reserved_assistant_message_id":2}`)
+		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Filing. "}))
+		fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a1")))
+		fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+	})
+	mux.HandleFunc("POST /api/chat/approvals/{id}/decision", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		decided++
+		mu.Unlock()
+		decisions <- r.PathValue("id")
+		fmt.Fprintf(w, `{"approval_id":%q,"decision":"APPROVED","decided_via":"USER","continuation":null}`, r.PathValue("id"))
+	})
+	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"is_processing":false}`)
+	})
+	mux.HandleFunc("/api/chat/get-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		resolved := func(id string) string {
+			return streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": "approved"})
+		}
+		packets := []string{
+			streamLine("message_delta", map[string]any{"content": "Filing. "}),
+			streamLine("tool_approval_request", requestEvent("a1")),
+			resolved("a1"),
+			streamLine("message_delta", map[string]any{"content": "Checking. "}),
+			streamLine("tool_approval_request", requestEvent("a2")),
+		}
+		text := "Filing. Checking. "
+		if decided >= 2 {
+			packets = append(packets, resolved("a2"), streamLine("message_delta", map[string]any{"content": "done"}), streamLine("stop", map[string]any{"stop_reason": "finished"}))
+			text += "done"
+		} else {
+			packets = append(packets, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+		}
+		message, _ := json.Marshal(text)
+		fmt.Fprintf(w, `{"chat_session_id":%q,"messages":[{"message_id":1,"message":"file a ticket","message_type":"user"},{"message_id":2,"message":%s,"message_type":"assistant"}],"packets":[[%s]]}`,
+			testSessionID, message, strings.Join(packets, ","))
+	})
+	mux.HandleFunc("/api/chat/rename-chat-session", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"new_name":"Title"}`)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	testutil.IsolateConfig(t, srv.URL)
+	t.Setenv("CI", "")
+	return decisions
+}
+
+func TestAsk_SavedResponseThatParksAgainLoadsAfterTheNextDecision(t *testing.T) {
+	decisions := newSavedParkServer(t)
+	ios, out, errOut := pipedIOS()
+	if err := runApprovalAsk(t, ios, "--approve=once"); err != nil {
+		t.Fatalf("Execute: %v; stderr = %q", err, errOut.String())
+	}
+	for _, want := range []string{"a1", "a2"} {
+		if got := within(t, decisions); got != want {
+			t.Fatalf("decision = %q, want %q", got, want)
+		}
+	}
+	if out.String() != "Filing. Checking. done\n" {
+		t.Errorf("stdout = %q, want the finished answer", out.String())
+	}
+}
+
 func TestAsk_RejectsUnknownApproveValue(t *testing.T) {
 	newApprovalServer(t, approvalServerOptions{})
 	ios, _, _ := pipedIOS()

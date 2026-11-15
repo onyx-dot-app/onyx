@@ -238,7 +238,8 @@ type askRun struct {
 	replaying bool
 	// The server has no buffer for the stream that ch reads.
 	unavailable bool
-	// ch reads the saved response, not a stream.
+	// ch reads the saved response, not a stream, and no decision was sent
+	// since; another load of the saved response would show nothing new.
 	fromSaved bool
 	// The answer text shown so far, as the saved response renders it: a
 	// continuation's replay of the saved response replaces the live text up
@@ -472,6 +473,8 @@ func (r *askRun) answerApproval(req models.ToolApprovalRequestEvent) {
 			case resolved := <-decided:
 				r.deferred = append(r.deferred, resolved)
 				r.ended[req.ApprovalID] = true
+				// The decision lets the response go on, also as saved.
+				r.fromSaved = false
 				fmt.Fprintln(ios.ErrOut)
 				return
 			case line := <-p.lines:
@@ -511,7 +514,10 @@ func (r *askRun) answerApproval(req models.ToolApprovalRequestEvent) {
 		if result.Continuation != nil {
 			r.continuation = result.Continuation
 		}
+		// The decision lets the response go on, also as saved.
+		r.fromSaved = false
 	case api.IsApprovalNoLongerWaiting(err):
+		r.fromSaved = false
 		if !r.json {
 			fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.NoLongerWaiting, title)
 		}
@@ -589,6 +595,7 @@ func (r *askRun) continueResponse() (bool, error) {
 	saved := make(chan models.StreamEvent)
 	close(saved)
 	r.ch = saved
+	r.cursor, r.resumedFrom = 0, 0
 	r.replaying, r.fromSaved = false, true
 	r.gotStop, r.awaiting, r.unavailable = false, false, false
 	return true, nil
