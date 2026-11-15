@@ -12,6 +12,7 @@ export const idle = (
   is_processing: false,
   has_active_subagents: false,
   has_startable_input: false,
+  latest_response_id: null,
   current_stream: null,
   approvals_version: null,
   ...fields,

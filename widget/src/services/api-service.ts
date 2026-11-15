@@ -452,6 +452,11 @@ export function readChatSessionStatus(value: unknown): ChatSessionStatus {
       "has_active_subagents" in value && value.has_active_subagents === true,
     has_startable_input:
       "has_startable_input" in value && value.has_startable_input === true,
+    latest_response_id:
+      "latest_response_id" in value &&
+      typeof value.latest_response_id === "number"
+        ? value.latest_response_id
+        : null,
     current_stream:
       "current_stream" in value ? readChatStream(value.current_stream) : null,
     approvals_version:

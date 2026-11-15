@@ -1214,6 +1214,50 @@ describe("widget while a request waits", () => {
     });
   });
 
+  it("loads a root answer that started and finished between two status reads", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [
+      { id: 6, role: "user", content: "Research it", timestamp: 0 },
+      { ...streamingMessage([]), isStreaming: false },
+    ];
+    // The agent's result started answer 9, which finished before this read.
+    api.waitForSessionIdle = mock(async () => idle({ latest_response_id: 9 }));
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
+        {
+          message_id: 7,
+          message_type: "assistant",
+          parent_message: 6,
+          latest_child_message: 8,
+        },
+        {
+          message_id: 8,
+          message_type: "agent_results",
+          parent_message: 7,
+          latest_child_message: 9,
+        },
+        { message_id: 9, message_type: "assistant", parent_message: 8 },
+      ],
+      packets: [
+        [{ obj: { type: "stop" } }],
+        [
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "Agent done." } },
+          { obj: { type: "stop" } },
+        ],
+      ],
+    }));
+
+    await widget["resumeStream"]("session", null);
+
+    expect(api.getChatSession).toHaveBeenCalledTimes(1);
+    expect(widget["messages"].at(-1)).toMatchObject({
+      id: 9,
+      content: "Agent done.",
+    });
+  });
+
   it("refreshes the saved session after approving for the chat with no continuation", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => ({

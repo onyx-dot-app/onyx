@@ -743,8 +743,20 @@ export class OnyxChatWidget extends LitElement {
       let streamWithoutBuffer: number | null = null;
       // The last stream followed; it does not run again
       let lastStreamId: number | null = null;
-      // The sent answer, which the saved session shows when no stream did
-      let reservedAssistantId = sent?.assistantMessageId ?? null;
+      // An answer that the saved session shows when no stream did: the sent
+      // answer, or the latest answer a status read names, which can start
+      // and finish between two reads
+      let unseenAnswerId = sent?.assistantMessageId ?? null;
+      const noteLatestAnswer = (status: ChatSessionStatus) => {
+        const latest = status.latest_response_id;
+        if (
+          latest !== null &&
+          !this.messages.some((message) => message.id === latest) &&
+          (unseenAnswerId === null ||
+            this.messages.some((message) => message.id === unseenAnswerId))
+        )
+          unseenAnswerId = latest;
+      };
       // The saved session can show what the streams of this pass did not
       let recover = true;
       // Server work waits, so the status is read again: background agents
@@ -839,6 +851,7 @@ export class OnyxChatWidget extends LitElement {
           }
           if (!stillOurs()) return;
           this.noteApprovalsVersion(status);
+          noteLatestAnswer(status);
           workWaits =
             status.has_active_subagents || status.has_startable_input;
           lastStreamId = current.streamId;
@@ -879,10 +892,10 @@ export class OnyxChatWidget extends LitElement {
           .map((message) => message.id)
           .filter((id): id is number => typeof id === "number");
         if (
-          reservedAssistantId !== null &&
-          !this.messages.some((message) => message.id === reservedAssistantId)
+          unseenAnswerId !== null &&
+          !this.messages.some((message) => message.id === unseenAnswerId)
         ) {
-          recoverIds.push(reservedAssistantId);
+          recoverIds.push(unseenAnswerId);
         }
         if (
           approvalsChanged ||
@@ -1001,7 +1014,7 @@ export class OnyxChatWidget extends LitElement {
             );
           saveSession(sessionId, this.messages, identity);
         }
-        reservedAssistantId = null;
+        unseenAnswerId = null;
         // A decision made during this pass, for example while the saved
         // session loaded, names a continuation that no stream followed.
         const queued = this.continuationStreamId;
@@ -1034,6 +1047,7 @@ export class OnyxChatWidget extends LitElement {
         );
         if (!stillOurs()) return;
         this.noteApprovalsVersion(status);
+        noteLatestAnswer(status);
         workWaits = status.has_active_subagents || status.has_startable_input;
         const next = status.is_processing ? status.current_stream : null;
         if (next !== null) {
@@ -1042,7 +1056,7 @@ export class OnyxChatWidget extends LitElement {
           if (this.continuationStreamId === next.stream_id)
             this.continuationStreamId = null;
         }
-        recover = next !== null;
+        recover = next !== null || unseenAnswerId !== null;
       }
     } catch (err: unknown) {
       if (stillOurs() && !(err instanceof Error && err.name === "AbortError")) {

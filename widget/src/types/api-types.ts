@@ -248,6 +248,8 @@ export interface ChatSessionStatus {
   // Queued input or unread root results can start a turn; a paused queue
   // cannot
   has_startable_input: boolean;
+  // The newest response on the selected branch
+  latest_response_id: number | null;
   current_stream: ChatStream | null;
   // Changes when a request of the chat opens, is decided or is removed
   approvals_version: string | null;
