@@ -111,13 +111,14 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
       setSubmitting(false);
     }
     const store = useChatSessionStore.getState();
-    // Reopening the chat recovers it; a reader that already runs follows the server's next stream.
-    if (
-      !sessionId ||
-      store.currentSessionId !== sessionId ||
-      store.sessions.get(sessionId)?.abortController
-    )
+    // Reopening the chat recovers it.
+    if (!sessionId || store.currentSessionId !== sessionId) return;
+    // A reader that owns the chat can be past its last status read; it follows the continuation,
+    // or reads status again, before it releases the chat.
+    if (store.sessions.get(sessionId)?.abortController) {
+      store.queueFollow(sessionId, continuation);
       return;
+    }
     // A background agent's later requests and outcomes show only in the saved session.
     if (continuation === null && !gone && request.agent_name) {
       void watchBackgroundAgents(sessionId, serverUrl, queryClient);

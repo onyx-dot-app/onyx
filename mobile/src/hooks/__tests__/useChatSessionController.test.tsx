@@ -32,7 +32,6 @@ import {
   toolApprovalStatus,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
-import { loadChatSession } from "@/chat/sessionReadiness";
 import {
   recoverChatSession,
   useChatSessionController,
@@ -1634,12 +1633,13 @@ describe("watchBackgroundAgents", () => {
   // A decided agent that waits to resume counts as active, so reads go on until it stops.
   it("loads an agent's later request while the decided agent runs, then stops once it stops", async () => {
     getSessionMock.mockResolvedValueOnce(saved([historyPacket("asked")], "v1"));
-    const baseline = await loadChatSession("s1");
+    const baseline = await getChatSession("s1");
     useChatSessionStore
       .getState()
       .hydrateSession(
         "s1",
         processRawChatHistory(baseline.messages, baseline.packets),
+        baseline.approvals_version,
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
     jest
@@ -1677,12 +1677,13 @@ describe("watchBackgroundAgents", () => {
 
   it("stops after one read when no background agent runs or waits to resume", async () => {
     getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
-    const baseline = await loadChatSession("s1");
+    const baseline = await getChatSession("s1");
     useChatSessionStore
       .getState()
       .hydrateSession(
         "s1",
         processRawChatHistory(baseline.messages, baseline.packets),
+        baseline.approvals_version,
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
     jest.mocked(getChatSessionStatus).mockResolvedValue({
@@ -1701,12 +1702,13 @@ describe("watchBackgroundAgents", () => {
 
   it("keeps one watch per chat for quick agent decisions, with one last reload", async () => {
     getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
-    const baseline = await loadChatSession("s1");
+    const baseline = await getChatSession("s1");
     useChatSessionStore
       .getState()
       .hydrateSession(
         "s1",
         processRawChatHistory(baseline.messages, baseline.packets),
+        baseline.approvals_version,
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
     const status = jest.mocked(getChatSessionStatus);
@@ -1734,12 +1736,13 @@ describe("watchBackgroundAgents", () => {
   // The second decision lands while the watch's read is in flight, so that read may predate it.
   it("reads again for a decision made during an in-flight read", async () => {
     getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
-    const baseline = await loadChatSession("s1");
+    const baseline = await getChatSession("s1");
     useChatSessionStore
       .getState()
       .hydrateSession(
         "s1",
         processRawChatHistory(baseline.messages, baseline.packets),
+        baseline.approvals_version,
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
     const status = jest.mocked(getChatSessionStatus);
@@ -1773,12 +1776,13 @@ describe("watchBackgroundAgents", () => {
     getSessionMock.mockResolvedValueOnce(
       saved([historyPacket("asked")], version),
     );
-    const baseline = await loadChatSession("s1");
+    const baseline = await getChatSession("s1");
     useChatSessionStore
       .getState()
       .hydrateSession(
         "s1",
         processRawChatHistory(baseline.messages, baseline.packets),
+        baseline.approvals_version,
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
   }
@@ -1987,6 +1991,130 @@ describe("watchBackgroundAgents", () => {
     await jest.advanceTimersByTimeAsync(3000);
 
     expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
+  });
+
+  // A finished agent's unread result starts the root's turn after a recovery's idle read.
+  it("watches startable work that a recovery's idle read reports", async () => {
+    await openIdle("v1");
+    useChatSessionStore.getState().updateChatState("s1", "settling");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_startable_input: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        current_stream: { stream_id: 9, response_ids: [2] },
+        approvals_version: "v1",
+      })
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    getSessionMock.mockResolvedValue(saved([historyPacket("asked")], "v1"));
+    resumeMock.mockReturnValueOnce(
+      scripted([startPacket("done"), stopPacket(), cursor(2)]),
+    );
+
+    void recoverChatSession(
+      "s1",
+      null,
+      SERVER_URL,
+      client,
+      new AbortController(),
+    );
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
+  });
+
+  it("reloads again on reopen when the user left during the last reload", async () => {
+    await openIdle("v1");
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v2",
+    });
+    let release: (session: BackendChatSession) => void = () => {};
+    getSessionMock.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const first = watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(50);
+    useChatSessionStore.setState({ currentSessionId: null });
+    release(saved([historyPacket("asked"), agentRequest], "v2"));
+    await first;
+    expect(waitingIds()).toEqual([]);
+
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+    const second = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    await jest.advanceTimersByTimeAsync(100);
+    await second;
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+  });
+
+  // With two waiting requests, the second decision can return while recovery loads history.
+  it("follows a continuation that a decision queued while recovery settled", async () => {
+    await openIdle("v1");
+    useChatSessionStore.getState().updateChatState("s1", "settling");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    getSessionMock
+      .mockImplementationOnce(async () => {
+        useChatSessionStore
+          .getState()
+          .queueFollow("s1", { stream_id: 40, response_ids: [2] });
+        return saved([historyPacket("asked")], "v1");
+      })
+      .mockResolvedValue(saved([historyPacket("asked done")], "v1"));
+    resumeMock.mockReturnValueOnce(
+      scripted([
+        startPacket("asked"),
+        deltaPacket(" done"),
+        stopPacket(),
+        cursor(3),
+      ]),
+    );
+
+    void recoverChatSession(
+      "s1",
+      null,
+      SERVER_URL,
+      client,
+      new AbortController(),
+    );
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(resumeMock.mock.calls[0]?.[1]).toBe(40);
+    expect(
+      useChatSessionStore.getState().sessions.get("s1")?.queuedFollow,
+    ).toBe(null);
+  });
+
+  // A reply can start and finish between two status reads.
+  it("reloads a newer response that the chat does not show", async () => {
+    await openIdle("v1");
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v1",
+      latest_response_id: 4,
+    });
+    getSessionMock.mockResolvedValue(saved([historyPacket("asked")], "v1"));
+
+    const watch = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    await jest.advanceTimersByTimeAsync(100);
+    await watch;
+
+    // The baseline load and the reload.
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
   });
 
   it("follows a stream that starts while it watches", async () => {

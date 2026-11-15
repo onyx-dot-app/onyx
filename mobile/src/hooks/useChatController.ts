@@ -7,6 +7,7 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/api/query-keys";
 import {
   createChatSession,
+  getChatSession,
   getChatSessionStatus,
   renameChatSession,
   stopChatSession,
@@ -20,7 +21,7 @@ import {
   streamChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
-import { loadChatSession, waitForSessionIdle } from "@/chat/sessionReadiness";
+import { waitForSessionIdle } from "@/chat/sessionReadiness";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
@@ -312,21 +313,24 @@ async function runChatStream(
     ) {
       void nameNewSession(sessionId, server);
     }
+    // A decision made during this send names its continuation or needs another status read.
+    const queued =
+      wait.kind === "idle"
+        ? store.getState().takeQueuedFollow(sessionId)
+        : null;
     // An idle server still reloads the saved session when this device lacks what the server
     // saved: a lost send's answer, the requests that refused this send, the outcomes a Stop
-    // gave, or approvals that changed since the last status read.
+    // gave, or approvals and responses that the chat does not show.
     if (
       wait.kind === "stream" ||
+      queued !== null ||
       (wait.kind === "idle" &&
-        (lost ||
-          approvalPending ||
-          unresolvedAfterStop ||
-          wait.approvalsChanged))
+        (lost || approvalPending || unresolvedAfterStop || wait.stale))
     ) {
       store.getState().setAbortController(sessionId, null);
       void recoverChatSession(
         sessionId,
-        wait.kind === "stream" ? wait.stream : null,
+        wait.kind === "stream" ? wait.stream : (queued?.stream ?? null),
         server.serverUrl,
         server.queryClient,
         new AbortController(),
@@ -335,7 +339,7 @@ async function runChatStream(
     }
     if (wait.kind !== "idle" || !stillOurs()) return;
     store.getState().updateChatState(sessionId, "input");
-    if (wait.agentsRunning)
+    if (wait.backgroundWork)
       void watchBackgroundAgents(
         sessionId,
         server.serverUrl,
@@ -405,7 +409,7 @@ export function useChatController(
     queryKey: QUERY_KEYS.chatSession(serverUrl, sessionId ?? "new"),
     enabled: needsHydration && serverUrl != null,
     queryFn: async () => {
-      const backend = await loadChatSession(sessionId!);
+      const backend = await getChatSession(sessionId!);
       // A live stream may have filled the store meanwhile — don't clobber it.
       if (!useChatSessionStore.getState().sessions.has(sessionId!)) {
         useChatSessionStore
@@ -413,6 +417,7 @@ export function useChatController(
           .hydrateSession(
             sessionId!,
             processRawChatHistory(backend.messages, backend.packets),
+            backend.approvals_version,
           );
       }
       return backend;

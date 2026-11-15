@@ -44,6 +44,8 @@ export interface ChatSessionStatus {
   has_startable_input?: boolean;
   // Changes when a tool approval request of the session opens, is decided or is removed.
   approvals_version?: string;
+  // The newest response on the selected branch.
+  latest_response_id?: number | null;
 }
 
 export async function getChatSessionStatus(

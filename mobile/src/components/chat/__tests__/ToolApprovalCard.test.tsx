@@ -337,6 +337,10 @@ describe("ToolApprovalCard continuation", () => {
       ),
     );
     expect(recoverMock).not.toHaveBeenCalled();
+    // The reader follows it before it releases the chat.
+    expect(
+      useChatSessionStore.getState().sessions.get("s")?.queuedFollow,
+    ).toEqual({ stream: continuation });
   });
 });
 
