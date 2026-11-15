@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,11 +9,16 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
-from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ChatSessionSharedStatus,
+)
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
+from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
 from onyx.tools.models import ChatToolSelection
 
@@ -304,6 +309,31 @@ class StopChatResponse(BaseModel):
     message: str
 
 
+class ChatApprovalDecisionRequest(DecisionBody):
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
+
+
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
+
+    stream_id: int
+    # The responses that the stream writes. A stream that continues a response
+    # after its approvals has an ID that no message has.
+    response_ids: list[int] = Field(default_factory=list)
+
+
+class ApprovalDecisionResponse(BaseModel):
+    approval_id: UUID
+    decision: Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]
+    decided_via: ApprovalDecidedVia
+    # The stream that continues the request's response, when the decision
+    # started it or found it running; None while the response still waits, or
+    # for a background agent's request, which continues without a stream.
+    continuation: CurrentStreamInfo | None = None
+
+
 class StopSubagentsResponse(BaseModel):
     # The running agent runs that were interrupted.
     stopped_count: int
@@ -382,12 +412,6 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentStreamInfo(BaseModel):
-    """Unfinished response available for stream reconnection."""
-
-    stream_id: int
-
-
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
     # Background agents are active on the selected branch, or their queued work waits.
@@ -397,6 +421,11 @@ class ChatSessionProcessingStatus(BaseModel):
     # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
+    # Changes when an approval request of the chat opens, is decided or is
+    # removed; reload the session to show the requests. Opaque, and empty
+    # while the chat has no request: a client that loaded nothing compares
+    # against the empty version.
+    approvals_version: str = ""
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -425,6 +454,8 @@ class ChatSessionDetailResponse(BaseModel):
     has_older_messages: bool = False
     # The owner's saved tools and search filters; NULL means the agent's tools.
     tool_selection: ChatToolSelection | None = None
+    # The status route's `approvals_version` for the requests this load shows.
+    approvals_version: str = ""
 
 
 class AdminSearchRequest(BaseModel):

@@ -676,7 +676,7 @@ streamed. Instructions that cannot fit after compaction fail the run. Public wai
 
 The SDK owns synchronous execution, typed events, safe suspension, and resumption.
 Tools return a result or a pending request. They do not manage checkpoint storage or ownership.
-Approval policies, question forms, and their HTTP endpoints are future product work.
+Chat applies the MCP action policy through `approval_required` and `ChatRunStore.request_approval` (`onyx/chat/tool_approvals.py`); question forms are future product work.
 The SDK accepts new user messages between model steps through `RunOwnership.receive_inputs`; the feature decides how each step uses them.
 
 A chat request follows this path:
@@ -769,23 +769,33 @@ Bind authorized history lookup and the feature factory with
 Application control calls `poll_control()` while `has_owned_work` is true, including during reconstruction.
 Each poll scans the inbox after a notification and while children run on the branch.
 `read_chat_inbox` reads the work: the next root turn, idle children's queued messages, and their result follow-ups.
-A store dispatches only while its response is on the selected branch, so it starts inbox work from each agent's newest run.
+A store starts inbox work only while its response is on the selected branch, so it starts that work from each agent's newest run.
+It resumes the parked agent runs of its own branch whether or not that branch is selected.
 A dispatch failure never stops the turn. Transient errors retry at a later poll. Work that cannot start becomes a failed run; if even that fails, the work is dropped.
-When child work can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
-The host prepares the selected response's configuration without a root run, starts the work, and holds the leases until the runs release.
+When child work or a parked agent run can start but no running child keeps a store scanning, `dispatch_pending_chat_messages` starts an agent host.
+The host prepares the configuration of the selected response, or of a parked run's root response, without a root run, starts the work, and holds the leases until the runs release.
+It runs on the saved model of the first parked agent that it resumes. When it cannot start for any reason other than a transient error, a conflict or a rate limit, it ends the agents that it would resume; after a rate limit they stay parked for a later dispatch.
 Any API pod can start it; chat admission keeps hosts and turns from starting the same work.
+Every turn and agent host hands its admission to the resume of a parked root response that can continue, so the chat shows processing until that resume publishes its stream.
+A resume that fails to start for a moment retries after a backoff.
 `handoff()` requires a suspended, idle run and saves a `ChatResponseCheckpoint` beside its response history.
-Its foreground children must have terminal results before transfer.
+Its foreground children must have ended or parked before transfer.
+Any run whose waits are all on people parks in one park pass of `poll_control`, the root included; the root reports its park to its turn through the store's `on_root_parked` callback.
+A park that the run's change (`RunNotTransferable`) or a storage error stops keeps the run, and a later poll tries again.
+The checkpoint row also names the foreground child runs that the run waits for and the program dumps that it owns.
+An agent run's checkpoint binds to its agent's saved runs before it, so any pod rebuilds the same history.
 The checkpoint contains execution progress and callback payloads omitted from normal conversation history.
 It contains no repeated response text, full model requests, history prefix, or nested child transcripts.
 The original step budget and applied-callback boundary survive transfer.
 Before handoff, the adapter verifies that saved history can reconstruct the captured input and output.
 Unsupported input representations fail while the original run still owns execution.
 
-`resume(run_id, context=...)` requires authorized history reconstructed by the application.
+`resume(run_id, context=...)` requires authorized history reconstructed by the application; an agent run's comes from its agent's saved runs.
+A run is parked while its response is `SUSPENDED` with a checkpoint row.
+Dispatch resumes a parked run, on any branch, once its waits end, the leaf first: a root response in a turn, an agent run in the store of its branch or an agent host.
 The adapter validates its history digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
 Only one process can claim a checkpoint. Conditional revision checks reject stale writers.
-Reconstruction failure before execution releases the claim for retry.
+Reconstruction failure before execution releases the claim. Chat then ends the response as failed (`fail_suspended_response`), so no retry repeats the failure.
 Completion removes the checkpoint while preserving chat history.
 
 Live inspection snapshots are not transferable checkpoints. An in-flight tool must finish before ownership transfers.
@@ -794,8 +804,11 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 
 ### Delivery and failure boundaries
 
-There is no durable generic control ledger. The store does not accept approval answers. Human messages sent to a running response are stored in `chat_input`, as described above.
-SDK tests exercise pending requests and early answers directly. Future product adapters must persist decisions before acknowledging them.
+There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
+Tool approval decisions are saved in `approval_request` before the decision API returns, which then dispatches.
+A run that waits for them has handed off, so the resumed run reads the saved decisions; requests have no deadline.
+When a run ends, the run store closes its open requests as it releases the run; a program's call that stops waiting while its run goes on ends its request through `withdraw_approval`.
+The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, then gives each of those runs its answers through `Run.submit` and cancels it, under the run's execution lock, so the requests end rejected, as with Reject.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 
@@ -804,4 +817,5 @@ Closing the old coordinator does not cancel execution claimed by another pod.
 Incognito runs have no child agents. `USAGE_ONLY` incognito runs keep only local ownership, have no directory, and write no durable execution checkpoints or child conversations to PostgreSQL. `FULL_HISTORY` incognito runs keep content, so `ChatRunStore` gives them run ownership and the agent directory.
 
 Checkpoint file data uses existing file-store references. Generated files are stored under the chat session before transfer.
-Deleting the chat removes those files. Tool execution loads file contents when needed.
+A parked program's dump gets a unique ID, and the checkpoint row owns it: ending or replacing the checkpoint, a failed transfer, and soft deleting the chat delete it.
+Hard deleting the chat removes those files. Tool execution loads file contents when needed.

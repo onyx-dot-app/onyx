@@ -6,7 +6,7 @@ A row is pending until a step or a new run consumes it; consuming deletes it.
 from collections.abc import Callable, Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, delete, func, or_, select, type_coerce
+from sqlalchemy import Select, and_, delete, exists, func, or_, select, type_coerce
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -44,7 +44,11 @@ from onyx.db.chat import (
     root_response_id,
     session_ancestors,
 )
-from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
+from onyx.db.chat_checkpoint import (
+    chat_has_checkpoint,
+    check_checkpoint_owner__no_commit,
+    resumable_parked_runs,
+)
 from onyx.db.chat_response import reserve_child_response__no_commit
 from onyx.db.chat_subagents import (
     agent_metadata,
@@ -55,6 +59,7 @@ from onyx.db.chat_subagents import (
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
+    ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
     ToolCall,
@@ -72,6 +77,7 @@ logger = setup_logger()
 
 MAX_PENDING_MESSAGES = 64
 MAX_PENDING_MESSAGE_BYTES = 1024 * 1024
+START_FAILED_MESSAGE = "The response could not start"
 # A root response reserved for a turn has no status until its run starts.
 _ACCEPTING_STATUSES = (None, RunStatus.RUNNING, RunStatus.SUSPENDED)
 
@@ -434,6 +440,16 @@ def next_queued_turn(
     return None
 
 
+def _has_checkpoint(session: Session, response_id: int) -> bool:
+    return bool(
+        session.scalar(
+            select(
+                exists().where(ChatResponseCheckpoint.chat_message_id == response_id)
+            )
+        )
+    )
+
+
 def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     """Read the selected branch's running children and the work that can start.
 
@@ -444,14 +460,26 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
+    has_inputs = has_chat_inputs(session, chat_session_id)
+    # A parked agent has a result row, so only a parked root response can wait
+    # in a chat without inbox rows.
+    if has_inputs or chat_has_checkpoint(session, chat_session_id):
+        inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
+    # A selected response that is active and not parked has, or had, an owner.
+    if selected is not None and (
+        selected.response_status == RunStatus.RUNNING
+        or (
+            selected.response_status == RunStatus.SUSPENDED
+            and not _has_checkpoint(session, selected.id)
+        )
+    ):
+        inbox.running_response_ids.append(selected.id)
     # Only conversations with inbox rows have queued turns or child work.
-    if not has_chat_inputs(session, chat_session_id):
+    if not has_inputs:
         return inbox
     inbox.results = agent_result_states(session, branch.message_ids)
-    if selected is not None and selected.response_status == RunStatus.RUNNING:
-        inbox.running_response_ids.append(selected.id)
     inbox.running_response_ids.extend(
-        result.response_id for result in inbox.results if result.is_active
+        result.response_id for result in inbox.results if result.is_running
     )
     inbox.next_turn = next_queued_turn(
         session, chat_session_id, selected, branch, inbox.results
@@ -478,10 +506,15 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
         if agent_id in {work.agent_id for work in inbox.child_work}:
             continue
         if not _dispatch_would_start(row.delivery, row.target_response_id, latest):
+            # A parked run has no owner to lose.
             if (
                 latest is not None
                 and latest.response_status is not None
                 and not latest.response_status.is_terminal
+                and not (
+                    latest.response_status == RunStatus.SUSPENDED
+                    and _has_checkpoint(session, latest.id)
+                )
             ):
                 inbox.waiting_response_ids.append(latest.id)
             continue
@@ -588,8 +621,16 @@ def agent_result_states(
             ChatInput.root_response_id.label("root_response_id"),
             ChatMessage.response_status.label("status"),
             ChatMessage.response_failure.label("failure"),
+            and_(
+                ChatMessage.response_status == RunStatus.SUSPENDED,
+                ChatResponseCheckpoint.chat_message_id.is_not(None),
+            ).label("parked"),
         )
         .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
+        .outerjoin(
+            ChatResponseCheckpoint,
+            ChatResponseCheckpoint.chat_message_id == ChatMessage.id,
+        )
         .where(_results_on_branch(visible_ids))
         .order_by(ChatInput.id)
     )
@@ -1068,7 +1109,7 @@ def reserve_inbox_run__no_commit(
 def fail_response_start__no_commit(
     session: Session,
     response_id: int,
-    failure_message: str = "The response could not start",
+    failure_message: str = START_FAILED_MESSAGE,
 ) -> None:
     """Record that reserved work could not start, so it does not retry forever."""
     response = session.get(ChatMessage, response_id)
@@ -1089,7 +1130,7 @@ def fail_inbox_start__no_commit(
     branch: ChatBranch,
     agent_id: str,
     message_id: str | None,
-    failure_message: str = "The response could not start",
+    failure_message: str = START_FAILED_MESSAGE,
 ) -> None:
     """Consume inbox work that could not start, so it does not retry.
 

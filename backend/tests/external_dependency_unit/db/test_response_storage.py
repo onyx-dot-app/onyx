@@ -111,6 +111,7 @@ from onyx.db.chat_inputs import (
     read_run_inputs,
 )
 from onyx.db.chat_response import (
+    load_chat_approvals,
     read_chat_execution,
     read_response__no_commit,
     read_response_replay_data,
@@ -563,7 +564,9 @@ def test_later_child_run_keeps_earlier_unread_result(
     coordinator = AgentCoordinator()
     owner.bind(
         coordinator,
-        build_agent=lambda _: pytest.fail("No execution should be restored"),
+        build_agent=lambda _checkpoint, _depth: pytest.fail(
+            "No execution should be restored"
+        ),
     )
     try:
         owner.poll_control()
@@ -679,7 +682,8 @@ def test_abandoned_background_child_is_delivered_as_failure(
     )
     coordinator = AgentCoordinator()
     run_store.bind(
-        coordinator, build_agent=lambda _: pytest.fail("No execution is restored")
+        coordinator,
+        build_agent=lambda _checkpoint, _depth: pytest.fail("No execution is restored"),
     )
 
     # A control poll saves the lost child as failed; the root's next step receives it.
@@ -2933,16 +2937,27 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
             skip_permission_check=True,
             prefetch_message_details=True,
         )
+        responses = [
+            message
+            for message in messages
+            if message.message_type == MessageType.ASSISTANT
+        ]
+        # As the session load reads the chat's approval requests once.
+        chat_approvals = load_chat_approvals(
+            db_session, session_id, [message.id for message in responses]
+        )
         replayed = [
             "".join(
                 packet.obj.content
                 for packet in translate_assistant_message_to_packets(
-                    message, load_session_tools([message], db_session), db_session
+                    message,
+                    load_session_tools([message], db_session),
+                    db_session,
+                    chat_approvals,
                 )
                 if isinstance(packet.obj, AgentResponseDelta)
             )
-            for message in messages
-            if message.message_type == MessageType.ASSISTANT
+            for message in responses
         ]
         assert replayed == answers
         query_counts.append(len(executed_sql))

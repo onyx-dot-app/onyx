@@ -38,6 +38,7 @@ from onyx.db.file_record import (
 )
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
+    TRANSIENT_STORAGE_STATUS,
     PresignableFileStore,
     PresignedUrlsNotSupportedError,
     content_byte_size,
@@ -184,6 +185,19 @@ class AzureBlobBackedFileStore(PresignableFileStore):
         if len(key) == 1024:
             logger.info("File name was too long and was truncated: %s", file_name)
         return key
+
+    def is_transient_error(self, error: Exception) -> bool:
+        from azure.core.exceptions import (
+            HttpResponseError,
+            ServiceRequestError,
+            ServiceResponseError,
+        )
+
+        # A request that did not reach the service, or got no response, retries.
+        return isinstance(error, (ServiceRequestError, ServiceResponseError)) or (
+            isinstance(error, HttpResponseError)
+            and error.status_code in TRANSIENT_STORAGE_STATUS
+        )
 
     def initialize(self) -> None:
         """Initialize the Azure file store by ensuring the container exists."""

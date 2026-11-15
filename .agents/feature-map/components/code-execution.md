@@ -470,8 +470,10 @@ health calls are not retried.
     rejected call raises the rejection in the program. The program's lifetime
     counts the time it ran before it parked, not the wait. A run that ends
     while a cell is parked closes it; a restored run that ends before a saved
-    cell resumes gives that cell's observation the same cancelled record. The cells never delete a dump: the
-    checkpoint that saved it owns it (chat-persistence). A hook that
+    cell resumes gives that cell's observation the same cancelled record. The
+    cells never delete a dump: the checkpoint row that saved it owns it and
+    deletes it when it ends or is replaced
+    ([[chat-persistence#checkpoints-for-approvals]]). A hook that
     raises fails the run, as for a direct call: `NestedCallGate.decide` raises
     `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
     cannot catch; the cell stops its program, and the observation that reports

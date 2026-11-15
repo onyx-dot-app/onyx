@@ -30,6 +30,7 @@ from onyx.chat.run_store import ChatRunStore, _OwnedRun, _OwnerLease
 from onyx.db.models import User
 from onyx.llm.models import AssistantMessage, ToolResultMessage
 from onyx.llm.models import ToolCall as ModelToolCall
+from onyx.tools.interface import Tool
 
 
 class Clock:
@@ -193,6 +194,8 @@ def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
 ) -> None:
     cache = MagicMock(spec=CacheBackend)
     name = "mcp__3__my__srv__create_issue"
+    tool = MagicMock(spec=Tool, id=7, approval=None)
+    tool.name = name
     store = ChatRunStore(
         tenant_id="tenant",
         chat_session_id=uuid4(),
@@ -202,7 +205,7 @@ def test_saved_child_tool_calls_keep_their_tool_id_and_display_name(
         follow_up_steps=4,
         control_cache=cache,
         user=User(),
-        tool_ids={name: 7},
+        tools=[tool],
     )
     call = ModelToolCall(id="call", name=name, arguments={})
     snapshot = RunState(

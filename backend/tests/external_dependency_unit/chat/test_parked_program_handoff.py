@@ -105,7 +105,7 @@ def _resume_program_in_process(session_id: str, message_id: str) -> None:
     coordinator = AgentCoordinator()
     sent: list[str] = []
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         agent_id = checkpoint.run_state.agent_id
         assert agent_id is not None
         return _program_agent(sent, agent_id=agent_id, state=checkpoint.agent_state)
@@ -144,7 +144,9 @@ def test_a_parked_program_resumes_in_another_process(
     sent: list[str] = []
     coordinator = owner.bind(
         AgentCoordinator(),
-        build_agent=lambda _checkpoint: _program_agent([], agent_id=str(branch[0])),
+        build_agent=lambda _checkpoint, _depth: _program_agent(
+            [], agent_id=str(branch[0])
+        ),
     )
     agent = _program_agent(sent, agent_id=str(branch[0]))
     run = agent.start(messages=[user_message], max_steps=3, coordinator=coordinator)
@@ -187,6 +189,8 @@ def test_a_parked_program_resumes_in_another_process(
         assert saved_result is not None and saved_result.status == RunStatus.COMPLETE
         db_session.expire_all()
         assert db_session.get(ChatResponseCheckpoint, branch[1]) is None
+        # The checkpoint owned the dump, which went when the response ended.
+        assert file_store.list_files_by_prefix(prefix) == []
     finally:
         coordinator.close(timeout=1)
         for record in file_store.list_files_by_prefix(prefix):

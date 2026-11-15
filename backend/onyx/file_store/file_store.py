@@ -13,7 +13,12 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
 import puremagic
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
+from botocore.retries.standard import (
+    RetryContext,
+    ThrottledRetryableChecker,
+    TransientRetryableChecker,
+)
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -428,6 +433,16 @@ class FileStore(ABC):
         List all file IDs that start with the given prefix.
         """
 
+    def is_transient_error(self, error: Exception) -> bool:  # noqa: ARG002
+        """Whether a later attempt can succeed after this store raised `error`:
+        the backing service throttled or failed for a moment. A denied access
+        or a missing bucket fails every attempt."""
+        return False
+
+
+# HTTP statuses of an object store that throttled or failed for a moment.
+TRANSIENT_STORAGE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 class PresignableFileStore(FileStore):
     """A file store on a cloud object store (S3, GCS, Azure) that can sign URLs.
@@ -632,6 +647,19 @@ class PresignableFileStore(FileStore):
 
 class S3BackedFileStore(PresignableFileStore):
     """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
+
+    def is_transient_error(self, error: Exception) -> bool:
+        # A connection error retries; an error response retries as botocore's
+        # retry checks decide.
+        if not isinstance(error, ClientError):
+            return isinstance(error, BotoCoreError)
+        context = RetryContext(attempt_number=1, parsed_response=error.response)
+        return (
+            error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            in TRANSIENT_STORAGE_STATUS
+            or TransientRetryableChecker().is_retryable(context)
+            or ThrottledRetryableChecker().is_retryable(context)
+        )
 
     def __init__(
         self,

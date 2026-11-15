@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent, build_chat_agent
@@ -19,6 +20,7 @@ from onyx.chat.models import (
     StagedChatFiles,
 )
 from onyx.configs.constants import FileOrigin
+from onyx.db.chat_response import CHECKPOINT_DUMP_CLEANUP
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.models import (
     DeepResearchFeatureState,
@@ -28,12 +30,14 @@ from onyx.deep_research.models import (
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResult
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
 _FEATURE_STATE = TypeAdapter(
     Annotated[
@@ -92,13 +96,20 @@ def restore_subagent(
 
 def restore_chat_agent(
     checkpoint: ExecutionCheckpoint,
+    depth: int,
     *,
     llm: LLM,
     tools: list[Tool],
     user_identity: LLMUserIdentity | None,
-    create_subagent: Callable[[], Agent] | None = None,
+    subagent_factory: Callable[[int], Callable[[], Agent]],
 ) -> Agent:
-    """Build feature code and resources; Agent.resume restores saved execution state."""
+    """Build feature code and resources; Agent.resume restores saved execution state.
+
+    `depth` counts the agent's levels below the root. A chat agent gets the
+    agent tools when it had them: every subagent, and a root whose saved step
+    declared them. Its children are one level deeper (`subagent_factory`); an
+    agent at `MAX_CHILD_DEPTH` cannot start agents.
+    """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
         raise ValueError("Agent restoration requires saved execution progress")
@@ -131,7 +142,11 @@ def restore_chat_agent(
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
-            create_subagent=create_subagent,
+            create_subagent=subagent_factory(depth + 1)
+            if depth > 0
+            or any(tool.name == ListAgentsTool.name for tool in snapshot.progress.tools)
+            else None,
+            can_spawn=depth < MAX_CHILD_DEPTH,
         )
     if isinstance(state, ResearchFeatureState):
         return ResearchAgent(
@@ -166,15 +181,20 @@ def restore_chat_agent(
 
 def persist_checkpoint_files(
     checkpoint: ExecutionCheckpoint, *, session_id: UUID
-) -> None:
-    """Replace transient file contents with tenant-scoped file-store references."""
+) -> list[str]:
+    """Replace transient file contents with tenant-scoped file-store references,
+    and drop the request context, which is never stored.
 
-    def save(file: SavedChatFile, *, unique: bool = False) -> None:
+    Returns the file IDs of the parked programs' dumps that it saved, which
+    only this checkpoint holds; a failed save deletes the dumps saved before it."""
+    dumps: list[str] = []
+
+    def save(file: SavedChatFile, *, unique: bool = False) -> str:
         """Save under a content ID, or a `unique` one for content that only
-        this checkpoint owns."""
+        this checkpoint owns; returns the file ID."""
         if file.file_id is not None:
             file.content = None
-            return
+            return file.file_id
         if file.content is None:
             raise ValueError("Checkpoint file is missing its contents")
         name = uuid4().hex if unique else hashlib.sha256(file.content).hexdigest()
@@ -194,6 +214,7 @@ def persist_checkpoint_files(
             )
         file.file_id = file_id
         file.content = None
+        return file_id
 
     def payload(value: BaseModel | None) -> None:
         if isinstance(value, StagedChatFiles):
@@ -227,17 +248,31 @@ def persist_checkpoint_files(
                         ),
                     ]:
                         save(file)
-                    for cell in state.code_cells:
+                    dumps.extend(
                         save(cell.program.dump, unique=True)
-                    progress.feature_state = _JSON_OBJECT.validate_python(
-                        state.model_dump(mode="json")
+                        for cell in state.code_cells
                     )
-            for answer in progress.human_tool_answers.values():
-                if answer.result is not None:
-                    payload(answer.result.details)
-                    payload(answer.result.metadata)
+                if not isinstance(state, ResearchFeatureState):
+                    # The request's context is never stored; a run that
+                    # continues from storage continues without it.
+                    state.request_context = None
+                progress.feature_state = _JSON_OBJECT.validate_python(
+                    state.model_dump(mode="json")
+                )
+            for result in [
+                answer.result
+                for answer in progress.human_tool_answers.values()
+                if answer.result is not None
+            ]:
+                payload(result.details)
+                payload(result.metadata)
         for child in record.child_runs:
             snapshot(child)
 
-    messages(checkpoint.agent_state.messages)
-    snapshot(checkpoint.run_state)
+    try:
+        messages(checkpoint.agent_state.messages)
+        snapshot(checkpoint.run_state)
+    except BaseException:
+        delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+        raise
+    return dumps

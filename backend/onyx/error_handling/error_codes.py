@@ -91,6 +91,9 @@ class OnyxErrorCode(Enum):
     # An edit that started from a plugin version older than the newest one.
     # The client loads the newest version and makes the change again.
     PLUGIN_VERSION_STALE = ("PLUGIN_VERSION_STALE", 409)
+    # A message sent to a chat that waits for the user's approval. The client
+    # keeps the draft until the user decides the pending requests.
+    APPROVAL_PENDING = ("APPROVAL_PENDING", 409)
 
     # --------------------------------------------------------------------------
     # Rate Limiting / Quotas (429 / 402)

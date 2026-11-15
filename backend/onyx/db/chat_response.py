@@ -1,7 +1,8 @@
 import json
+from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import delete, inspect, select
+from sqlalchemy import delete, exists, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens, is_input_context
@@ -18,6 +19,8 @@ from onyx.agents.models import (
 )
 from onyx.chat.mention_models import PickedSkillMessage
 from onyx.chat.models import (
+    AgentToolApproval,
+    ChatApprovals,
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
@@ -26,6 +29,7 @@ from onyx.chat.models import (
     ResponseReplayData,
     ResponseStatus,
     SavedResponse,
+    SavedToolApproval,
     ToolRecordReference,
     ToolReplayData,
     accepted_input_messages,
@@ -61,6 +65,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
     AcceptedChatInput,
+    ApprovalRequest,
     ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
@@ -71,6 +76,7 @@ from onyx.db.models import (
 )
 from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.models import (
     GenerationRequestParams,
     Message,
@@ -78,11 +84,14 @@ from onyx.llm.models import (
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 logger = setup_logger()
+# The context of logs about the parked programs' dumps that checkpoints owned.
+CHECKPOINT_DUMP_CLEANUP = "parked program dumps"
 
 
 def _extract_referenced_file_descriptors(
@@ -361,7 +370,7 @@ def save_chat_response_to_db(
             if response.error is not None
             else None
         )
-        finish_checkpoint__no_commit(session, message_id)
+        dumps = finish_checkpoint__no_commit(session, message_id)
         save_chat_turn(
             message_text=answer,
             reasoning_tokens=response.reasoning,
@@ -380,6 +389,7 @@ def save_chat_response_to_db(
             response_record=response.response,
             presentation=response.presentation,
         )
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
     return answer
 
 
@@ -1115,10 +1125,14 @@ def write_response_items(
     return tools
 
 
-def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
+def finish_checkpoint__no_commit(session: Session, message_id: int) -> list[str]:
+    """Delete the response's checkpoint. Returns the dumps that it owned, which
+    the caller deletes after commit."""
     row = session.get(ChatResponseCheckpoint, message_id)
-    if row is not None:
-        session.delete(row)
+    if row is None:
+        return []
+    session.delete(row)
+    return list(row.dump_file_ids)
 
 
 def read_response_status__no_commit(
@@ -1256,13 +1270,35 @@ def save_response_record__no_commit(
     session.flush()
 
 
+def read_suspended_response_replay(
+    db_session: Session, response_id: int
+) -> tuple[ChatExecutionRecord, ResponseReplayData]:
+    """The saved output of a suspended response, to replay where its run
+    continues."""
+    message = db_session.get(ChatMessage, response_id)
+    execution = read_chat_execution(message) if message is not None else None
+    if execution is None or execution.response.status != RunStatus.SUSPENDED:
+        raise ValueError("The response is not suspended")
+    return execution, read_response_replay_data(execution, db_session)
+
+
 def read_response_replay_data(
-    execution: ChatExecutionRecord, db_session: Session
+    execution: ChatExecutionRecord,
+    db_session: Session,
+    chat_approvals: ChatApprovals | None = None,
 ) -> ResponseReplayData:
-    """Load detached display data for an already authorized response execution."""
+    """Load detached display data for an already authorized response execution.
+
+    `chat_approvals` holds the requests of a page of responses that includes
+    this one (`load_chat_approvals`); it is read for this response when not
+    given."""
     root = db_session.get(ChatMessage, int(execution.response.run_id))
     if root is None:
         raise ValueError("Chat response is unavailable")
+    if chat_approvals is None:
+        chat_approvals = load_chat_approvals(
+            db_session, root.chat_session_id, [root.id]
+        )
     documents = {
         document.document_id: translate_db_search_doc_to_saved_search_doc(document)
         for document in root.search_docs or []
@@ -1272,15 +1308,35 @@ def read_response_replay_data(
         reference.record_id: reference for reference in execution.tool_records
     }
     accepted: set[tuple[str, str]] = set()
-    pending = [execution.response]
+    # The runs whose records the replay shows: background agents' runs, which
+    # agent tools start, show elsewhere.
+    run_ids: list[str] = []
+    pending = [(execution.response, True)]
     while pending:
-        response = pending.pop()
+        response, shown = pending.pop()
+        agent_calls = {
+            call.id
+            for step in response.steps
+            for call in step.message.tool_calls
+            if call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        }
+        if shown:
+            run_ids.append(response.run_id)
         for step in response.steps:
             if step.message.id is not None:
                 accepted.update(
                     (step.message.id, call.id) for call in step.message.tool_calls
                 )
-        pending.extend(response.child_runs)
+        pending.extend(
+            (child, shown and child.parent_tool_call_id not in agent_calls)
+            for child in response.child_runs
+        )
+    # Only agent tools start background agents.
+    starts_agents = any(
+        call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        for step in execution.response.steps
+        for call in step.message.tool_calls
+    )
     if len(references) != len(execution.tool_records) or any(
         (reference.message_id, reference.tool_call_id) not in accepted
         for reference in references.values()
@@ -1332,7 +1388,132 @@ def read_response_replay_data(
         )
     if len(rows) != len(references):
         raise ValueError("Accepted tool replay data is unavailable")
+    # A running response's requests reach the client through its stream.
+    approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
+    status = execution.response.status
+    if accepted and (status.is_terminal or status == RunStatus.SUSPENDED):
+        for run_id in run_ids:
+            for request in chat_approvals.requests.get(int(run_id), []):
+                approvals.setdefault((run_id, request.tool_call_id), []).append(request)
+    # Background agents wait independently of this response's status; the
+    # runs whose records the response shows are left out.
+    agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
+    if starts_agents:
+        for agent_response_id, anchor_call_id in chat_approvals.started_runs.get(
+            root.id, []
+        ):
+            if str(agent_response_id) in run_ids:
+                continue
+            agent_approvals.setdefault((str(root.id), anchor_call_id), []).extend(
+                AgentToolApproval(
+                    approval=request,
+                    agent_name=chat_approvals.agent_names.get(agent_response_id, ""),
+                )
+                for request in chat_approvals.requests.get(agent_response_id, [])
+            )
+        for shown in agent_approvals.values():
+            shown.sort(key=lambda agent: (agent.approval.created_at, agent.approval.id))
     return ResponseReplayData(
         tools=tools,
         documents=documents,
+        approvals=approvals,
+        agent_approvals=agent_approvals,
     )
+
+
+def load_chat_approvals(
+    db_session: Session, chat_session_id: UUID, response_ids: Collection[int]
+) -> ChatApprovals:
+    """The approval requests of `response_ids` and of the runs that they
+    started, directly or through the runs they started, for the replays of
+    those responses. Requests always belong to the root chat session; a chat
+    without requests reads nothing else."""
+    approvals = ChatApprovals()
+    if not response_ids or not db_session.scalar(
+        select(exists().where(ApprovalRequest.chat_session_id == chat_session_id))
+    ):
+        return approvals
+    question = aliased(ChatMessage)
+    started = (
+        select(
+            ChatMessage.id.label("response_id"),
+            ToolCall.parent_chat_message_id.label("root_id"),
+            ToolCall.tool_call_id.label("anchor_call_id"),
+        )
+        .join(question, question.id == ChatMessage.parent_message_id)
+        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .where(ToolCall.parent_chat_message_id.in_(response_ids))
+        .cte("agent_runs_started", recursive=True)
+    )
+    child = aliased(ChatMessage)
+    child_question = aliased(ChatMessage)
+    child_call = aliased(ToolCall)
+    started = started.union_all(
+        select(child.id, started.c.root_id, started.c.anchor_call_id)
+        .join(child_question, child_question.id == child.parent_message_id)
+        .join(child_call, child_call.id == child_question.invoking_tool_call_id)
+        .join(started, child_call.parent_chat_message_id == started.c.response_id)
+        .where(child.id > started.c.response_id)
+    )
+    started_runs = db_session.execute(
+        select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
+    ).all()
+    rows = db_session.execute(
+        select(ApprovalRequest, ChatMessage.chat_session_id, ChatSession.agent_name)
+        .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .where(
+            ApprovalRequest.chat_session_id == chat_session_id,
+            ApprovalRequest.chat_message_id.in_(
+                {*response_ids, *(run.response_id for run in started_runs)}
+            ),
+        )
+        .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
+    ).all()
+    for request, session_id, agent_name in rows:
+        approvals.requests.setdefault(request.chat_message_id, []).append(
+            SavedToolApproval.model_validate(request)
+        )
+        if session_id != chat_session_id:
+            approvals.agent_names[request.chat_message_id] = agent_name or ""
+    for response_id, root_id, anchor_call_id in started_runs:
+        if response_id in approvals.requests:
+            approvals.started_runs.setdefault(root_id, []).append(
+                (response_id, anchor_call_id)
+            )
+    return approvals
+
+
+def waiting_approval_reply_ids(db_session: Session, chat_session_id: UUID) -> set[int]:
+    """The chat's responses that have a request waiting for a decision, or
+    that started a run, directly or through the runs it started, that has
+    one; a chat without waiting requests reads nothing else."""
+    if not db_session.scalar(
+        select(
+            exists().where(
+                ApprovalRequest.chat_session_id == chat_session_id,
+                ApprovalRequest.decision.is_(None),
+            )
+        )
+    ):
+        return set()
+    approvals = load_chat_approvals(
+        db_session,
+        chat_session_id,
+        db_session.scalars(
+            select(ChatMessage.id).where(
+                ChatMessage.chat_session_id == chat_session_id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+        ).all(),
+    )
+    waiting = {
+        response_id
+        for response_id, requests in approvals.requests.items()
+        if any(request.decision is None for request in requests)
+    }
+    return waiting | {
+        root_id
+        for root_id, runs in approvals.started_runs.items()
+        if any(run_id in waiting for run_id, _ in runs)
+    }

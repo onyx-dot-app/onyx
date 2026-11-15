@@ -1,11 +1,13 @@
 """Rebuild feature configuration and resources without replacing saved conversation state."""
 
+from collections.abc import Callable
 from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
 from pydantic import JsonValue
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import (
     AgentState,
     AgentStep,
@@ -178,9 +180,11 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     saved = checkpoint.model_copy(deep=True)
     rebuilt = restore_chat_agent(
         checkpoint,
+        0,
         llm=llm,
         tools=[EchoTool()] if name == "chat" else [],
         user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
     )
     assert rebuilt is not original
     assert rebuilt.id == original.id
@@ -250,7 +254,14 @@ def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
         lambda _request, _signal: AssistantMessage(content=[TextContent(text="done")])
     )
     with pytest.raises(ValueError, match="no supported chat feature state"):
-        restore_chat_agent(checkpoint, llm=llm, tools=[], user_identity=None)
+        restore_chat_agent(
+            checkpoint,
+            0,
+            llm=llm,
+            tools=[],
+            user_identity=None,
+            subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+        )
 
 
 def _offered(llm: ScriptedLLM) -> tuple[list[str], ToolChoiceOptions, str]:
@@ -267,8 +278,10 @@ def _chat_agent(
     *,
     code_mode: bool = False,
     tools: list[Tool] | None = None,
+    create_subagent: Callable[[], Agent] | None = None,
 ) -> ChatAgent:
     return ChatAgent(
+        create_subagent=create_subagent,
         messages=[],
         tools=tools or [EchoTool()],
         code_mode=code_mode,
@@ -299,8 +312,10 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
             agent_id=agent.id,
             status=RunStatus.SUSPENDED,
             steps=[],
+            # The suspended step declared the agent's tools.
             progress=RunProgress(
                 step_limit=3,
+                tools=[tool.definition for tool in agent.tools],
                 feature_state=state,
             ),
         ),
@@ -325,14 +340,17 @@ def test_restored_chat_keeps_the_saved_code_mode(
 ) -> None:
     # Restoration reads only the saved state, never the deployment setting.
     llm = ScriptedLLM([Delta(content="done")])
-    original = _chat_agent(llm, code_mode=saved_code_mode)
+    original = _chat_agent(
+        llm, code_mode=saved_code_mode, create_subagent=lambda: _chat_agent(llm)
+    )
     state = original.capture_state().model_dump(mode="json")
     rebuilt = restore_chat_agent(
         _suspended(original, state),
+        0,
         llm=llm,
         tools=[EchoTool()],
         user_identity=None,
-        create_subagent=lambda: _chat_agent(llm),
+        subagent_factory=lambda _depth: lambda: _chat_agent(llm),
     )
     assert isinstance(rebuilt, ChatAgent)
     assert (rebuilt.code_cells is not None) == saved_code_mode
@@ -379,9 +397,11 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
 
     rebuilt = restore_chat_agent(
         _suspended(original, state),
+        0,
         llm=llm,
         tools=original.configured_tools,
         user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
     )
     assert isinstance(rebuilt, ChatAgent)
     rebuilt.restore_state(state)
@@ -409,9 +429,11 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
 
     rebuilt = restore_chat_agent(
         _suspended(original, original.capture_state().model_dump(mode="json")),
+        0,
         llm=llm,
         tools=original.application_tools,
         user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
     )
 
     names = [tool.definition.name for tool in original.tools]
@@ -423,3 +445,37 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     for agent in (original, rebuilt):
         assert agent.skills_catalog_message is not None
         assert "- triage: Sort." in agent.skills_catalog_message.text
+
+
+@pytest.mark.parametrize(
+    ("agent_tools", "depth"),
+    [(False, 0), (True, 0), (True, 1), (True, MAX_CHILD_DEPTH)],
+)
+def test_restored_chat_keeps_its_agent_tools_at_its_depth(
+    agent_tools: bool, depth: int
+) -> None:
+    # A root whose client offered no agent tools resumes without them, and a
+    # child's children are one level deeper; at the limit it cannot spawn.
+    llm = ScriptedLLM([Delta(content="done")])
+    original = _chat_agent(
+        llm, create_subagent=(lambda: _chat_agent(llm)) if agent_tools else None
+    )
+    state = original.capture_state().model_dump(mode="json")
+    child_depths: list[int] = []
+
+    def subagent_factory(child_depth: int) -> Callable[[], Agent]:
+        child_depths.append(child_depth)
+        return lambda: _chat_agent(llm)
+
+    rebuilt = restore_chat_agent(
+        _suspended(original, state),
+        depth,
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        subagent_factory=subagent_factory,
+    )
+    names = {tool.name for tool in rebuilt.tools}
+    assert ("list_agents" in names) == agent_tools
+    assert ("spawn_agent" in names) == (agent_tools and depth < MAX_CHILD_DEPTH)
+    assert child_depths == ([depth + 1] if agent_tools else [])
