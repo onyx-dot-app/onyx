@@ -139,20 +139,13 @@ def _retained_state(
         size > _MAX_CONTEXT_BYTES or len(state.messages) > _MAX_CONTEXT_MESSAGES
     ) and len(state.messages) > required_messages:
         # Keep each question, its attachments and skills, and all its responses
-        # together.
+        # together: remove everything before the second input group.
         remove_count = 0
         for index, message in enumerate(state.messages):
-            if (
-                isinstance(message, UserMessage)
-                and not (
-                    isinstance(message.metadata, PromptMetadata)
-                    and message.metadata.file_id is not None
-                )
-                and not is_input_context(message)
-            ):
-                next_turn = input_group_start(state.messages, index)
-                if next_turn > 0:
-                    remove_count = next_turn
+            if isinstance(message, UserMessage) and not is_input_context(message):
+                start, _ = input_group(state.messages, index)
+                if start > 0:
+                    remove_count = start
                     break
         if remove_count == 0:
             break
@@ -255,8 +248,10 @@ def _update_incognito_state(
     return False
 
 
-def input_group_start(messages: Sequence[Message], question_index: int) -> int:
-    """Find the attachment messages immediately before a user question."""
+def input_group(messages: Sequence[Message], question_index: int) -> tuple[int, int]:
+    """The bounds of a user question's input group: the attachments before
+    it, the question, and the input context after it, such as its skills. An
+    attachment's index gives the same start."""
     start = question_index
     while start > 0:
         previous = messages[start - 1]
@@ -267,7 +262,10 @@ def input_group_start(messages: Sequence[Message], question_index: int) -> int:
         ):
             break
         start -= 1
-    return start
+    end = question_index + 1
+    while end < len(messages) and is_input_context(messages[end]):
+        end += 1
+    return start, end
 
 
 def save_incognito_user_messages(
@@ -318,7 +316,7 @@ def save_incognito_user_messages(
         if question.id is not None:
             for index, stored in enumerate(context.messages):
                 if isinstance(stored, UserMessage) and stored.id == question.id:
-                    start = input_group_start(context.messages, index)
+                    start, _ = input_group(context.messages, index)
                     context.messages = context.messages[:start]
                     context.previous_run_id = None
                     break

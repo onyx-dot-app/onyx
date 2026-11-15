@@ -23,7 +23,7 @@ from onyx.db.skill import (
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
-from onyx.skills.content import read_versions_instructions
+from onyx.skills.content import read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -142,14 +142,19 @@ def test_chat_skills_use_the_version_each_user_runs(
         org_skills[name].description,
         org_skills[name].short_description,
     ) == ("Skill one", None)
-    assert read_versions_instructions(
+    # The whole SKILL.md of each version, frontmatter included.
+    skill_md = read_versions_skill_md(
         [author_skills[name].version_id, org_skills[name].version_id],
         author.id,
         db_session,
-    ) == {
-        author_skills[name].version_id: "Instructions two",
-        org_skills[name].version_id: "Instructions one",
-    }
+    )
+    for version_id, version in (
+        (author_skills[name].version_id, "two"),
+        (org_skills[name].version_id, "one"),
+    ):
+        assert skill_md[version_id].startswith(f"---\nname: {name}\n")
+        assert f"description: Skill {version}" in skill_md[version_id]
+        assert skill_md[version_id].rstrip().endswith(f"Instructions {version}")
     built_in_names = {
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=author)

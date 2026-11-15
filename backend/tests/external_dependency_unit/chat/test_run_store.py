@@ -204,6 +204,7 @@ def unpolled_store(
         cache=get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE),
         follow_up_steps=4,
         user=User(),
+        chat_skills=[],
     )
 
 
@@ -690,6 +691,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
             cache=get_cache_backend(),
             follow_up_steps=4,
             user=User(),
+            chat_skills=[],
         )
         with pytest.raises(ValueError, match="unavailable on this branch"):
             unauthorized.read_run(run.id, "")

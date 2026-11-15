@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ee.onyx.server.query_history.api import snapshot_from_chat_session
 from ee.onyx.server.query_history.models import QuestionAnswerPairSnapshot
 from onyx.agents.models import ExecutionStatus, InputSource
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
     create_chat_session,
@@ -64,11 +65,22 @@ def test_export_lists_accepted_inputs_in_model_order(
         message_type=MessageType.ASSISTANT,
         db_session=db_session,
     )
+    picked = RecordedSkillMention(name="bench", version_id=uuid4())
     steps = [
         [AcceptedChatInput(id="late", source=InputSource.HUMAN, content="Then cost")],
         [
             AcceptedChatInput(
-                id="first", source=InputSource.HUMAN, content="Focus on latency"
+                id="first",
+                source=InputSource.HUMAN,
+                content="Focus on latency",
+                mentions=[picked],
+                skill_messages=[
+                    PickedSkillMessage(
+                        version_id=picked.version_id,
+                        content="<skill>\n<name>bench</name>\nTime it.\n</skill>",
+                        token_count=9,
+                    )
+                ],
             ),
             AcceptedChatInput(
                 id="result",
@@ -108,6 +120,9 @@ def test_export_lists_accepted_inputs_in_model_order(
         "result",
         "late",
     ]
+    # The export keeps the record of a pick, not the skill text.
+    assert pair.accepted_inputs[0].mentions == [picked]
+    assert "Time it." not in snapshot.model_dump_json()
     assert pair.to_json()["accepted_inputs"] == (
         "[human] Focus on latency\n\n[agent_result] Vendor A is faster\n\n"
         "[human] Then cost"

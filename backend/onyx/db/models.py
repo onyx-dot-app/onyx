@@ -62,7 +62,7 @@ from onyx.agents.models import (
     RunStatus,
 )
 from onyx.auth.schemas import UserRole
-from onyx.chat.mention_models import AcceptedMention, Mention
+from onyx.chat.mention_models import Mention, PickedSkillMessage, RecordedMention
 from onyx.coding_agent.models import CodingAgentCallResult
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
@@ -3700,12 +3700,20 @@ class ChatMessage(Base):
         postgresql.JSONB(), nullable=True
     )
     # What the user tagged in the question, as the turn accepted it. A skill
-    # keeps the version the user ran and the SKILL.md text the question gave
-    # the model; its `<skill>` message follows the question in history.
-    mentions: Mapped[list[AcceptedMention]] = mapped_column(
-        PydanticListType(AcceptedMention),
+    # keeps the version the user ran.
+    mentions: Mapped[list[RecordedMention]] = mapped_column(
+        PydanticListType(RecordedMention),
         default=list,
         server_default=text("'[]'::jsonb"),
+    )
+    # The `<skill>` message of each picked skill, which follows the question
+    # in history; empty in a row that keeps no conversation content. Only
+    # the history the model gets loads it.
+    skill_messages: Mapped[list[PickedSkillMessage]] = mapped_column(
+        PydanticListType(PickedSkillMessage),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        deferred=True,
     )
 
     # Maps the citation numbers to a SearchDoc id
@@ -3791,8 +3799,9 @@ class AcceptedChatInput(BaseModel):
     source: InputSource
     source_run_id: str | None = None
     content: str
-    # What a user message picked, with the text each pick gave the model.
-    mentions: list[AcceptedMention] = Field(default_factory=list)
+    # What a user message picked, and the `<skill>` message of each pick.
+    mentions: list[RecordedMention] = Field(default_factory=list)
+    skill_messages: list[PickedSkillMessage] = Field(default_factory=list)
 
 
 class ChatResponseItem(Base):

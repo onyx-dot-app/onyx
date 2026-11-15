@@ -16,10 +16,12 @@ from onyx.agents.models import (
     ToolExecutionRecord,
     agent_result_message_id,
 )
+from onyx.chat.mention_models import PickedSkillMessage
 from onyx.chat.models import (
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
+    PromptMetadata,
     ResponseRecord,
     ResponseReplayData,
     ResponseStatus,
@@ -853,7 +855,14 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
             input_messages=[
                 message
                 for item in row.inputs
-                for message in accepted_input_messages(item)
+                for message in accepted_input_messages(
+                    message_id=item.id,
+                    content=item.content,
+                    source=item.source,
+                    source_run_id=item.source_run_id,
+                    mentions=item.mentions,
+                    skill_messages=item.skill_messages,
+                )
             ],
             message=row.message.model_copy(deep=True),
             generation_status=row.generation_status,
@@ -902,13 +911,31 @@ def _invoking_message_id(invocation: ToolCall) -> str:
 
 def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
     inputs: list[AcceptedChatInput] = []
-    for message in messages:
-        # The text of a picked skill is saved with its pick.
+    for index, message in enumerate(messages):
+        # A picked skill's message is saved with the input that picked it.
         if is_input_context(message):
             continue
         if message.id is None or not isinstance(message.content, str):
             raise ValueError("Saved response inputs require an identity and text")
         origin = message.metadata
+        mentions = recorded_mentions(message)
+        skill_messages: list[PickedSkillMessage] = []
+        for offset, mention in enumerate(mentions, start=index + 1):
+            skill = messages[offset] if offset < len(messages) else None
+            if (
+                skill is None
+                or skill.id != f"{message.id}:skill:{mention.version_id}"
+                or not isinstance(skill.metadata, PromptMetadata)
+                or skill.metadata.token_count is None
+            ):
+                raise ValueError("Each picked skill needs its skill message")
+            skill_messages.append(
+                PickedSkillMessage(
+                    version_id=mention.version_id,
+                    content=sanitize_string(skill.text),
+                    token_count=skill.metadata.token_count,
+                )
+            )
         inputs.append(
             AcceptedChatInput(
                 id=sanitize_string(message.id),
@@ -919,7 +946,8 @@ def _accepted_inputs(messages: list[UserMessage]) -> list[AcceptedChatInput]:
                 if isinstance(origin, InputMessageMetadata)
                 else None,
                 content=sanitize_string(message.content),
-                mentions=recorded_mentions(message),
+                mentions=mentions,
+                skill_messages=skill_messages,
             )
         )
     if len({item.id for item in inputs}) != len(inputs):

@@ -12,7 +12,7 @@ from onyx.agents.compaction import is_input_context
 from onyx.agents.models import CompactionCheckpoint
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.incognito_context import (
-    input_group_start,
+    input_group,
     load_incognito_context,
     save_incognito_response,
     save_incognito_user_messages,
@@ -180,19 +180,13 @@ class RedisChatHistoryStore(ChatHistoryStore):
             if isinstance(message, UserMessage) and message.id == selected_id:
                 # Regeneration reuses the exact saved question, attachment and
                 # skill content.
-                end = index + 1
-                while end < len(stored.messages) and is_input_context(
-                    stored.messages[end]
-                ):
-                    end += 1
+                start, end = input_group(stored.messages, index)
                 return (
                     history.model_copy(
                         update={
                             "messages": [
                                 *selected_history,
-                                *stored.messages[
-                                    input_group_start(stored.messages, index) : end
-                                ],
+                                *stored.messages[start:end],
                             ],
                             "input_start": len(selected_history),
                         }

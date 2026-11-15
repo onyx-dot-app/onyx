@@ -8,13 +8,20 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.chat.mention_models import AcceptedSkillMention, Mention
+from onyx.chat.mention_models import (
+    AcceptedPicks,
+    Mention,
+    PickedSkillMessage,
+    RecordedSkillMention,
+)
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import (
+    MENTIONED_SKILL_PROMPT,
     MENTIONED_SKILL_TRUNCATED_NOTE,
     SKILLS_CATALOG_PROMPT,
     SKILLS_OMITTED_LINE,
 )
-from onyx.skills.content import read_versions_instructions
+from onyx.skills.content import read_versions_skill_md
 from onyx.skills.models import ChatSkill
 
 # Codex limits: the catalog uses at most 2% of the context window, at four
@@ -27,39 +34,33 @@ _BYTES_PER_TOKEN: Final = 4
 _ELLIPSIS: Final = "..."
 
 
-def truncate_skill_description(description: str, limit: int) -> str:
-    """The description cut to `limit` characters with an ellipsis, or empty
-    when the limit leaves no room past the ellipsis."""
-    if len(description) <= limit:
+def truncate_catalog_description(description: str) -> str:
+    """The description cut to the catalog's limit, with an ellipsis where it
+    is cut."""
+    if len(description) <= MAX_CATALOG_DESCRIPTION_CHARS:
         return description
-    if limit <= len(_ELLIPSIS):
-        return ""
-    return description[: limit - len(_ELLIPSIS)] + _ELLIPSIS
+    return description[: MAX_CATALOG_DESCRIPTION_CHARS - len(_ELLIPSIS)] + _ELLIPSIS
 
 
 def render_skills_catalog(
     skills: Sequence[ChatSkill], context_window_tokens: int
 ) -> str | None:
     """The catalog of skill names and descriptions, each skill's short
-    description when it has one. Over budget, every description gets the same
-    shorter limit; if names alone do not fit, the last skills are omitted and
-    counted."""
+    description when it has one. Over budget, every description is cut to the
+    same shorter limit, without an ellipsis; if names alone do not fit, the
+    last skills are omitted and counted."""
     if not skills:
         return None
     budget = int(context_window_tokens * CATALOG_CONTEXT_FRACTION * _BYTES_PER_TOKEN)
     descriptions = [
-        " ".join((skill.short_description or skill.description).split())
+        truncate_catalog_description(skill.short_description or skill.description)
         for skill in skills
     ]
 
     def lines(limit: int) -> list[str]:
         return [
-            f"- {skill.name}: {text}" if text else f"- {skill.name}"
-            for skill, text in zip(
-                skills,
-                (truncate_skill_description(text, limit) for text in descriptions),
-                strict=True,
-            )
+            f"- {skill.name}: {text[:limit]}" if text[:limit] else f"- {skill.name}"
+            for skill, text in zip(skills, descriptions, strict=True)
         ]
 
     limit = (
@@ -101,16 +102,19 @@ def accept_picked_skills(
     skills: Sequence[ChatSkill],
     user_id: UUID,
     db_session: Session,
-) -> list[list[AcceptedSkillMention]]:
-    """Record the skills that each message picked, with the SKILL.md text that
-    the message gives the model, from one read with the user's current access.
+) -> list[AcceptedPicks]:
+    """Resolve the skills that each message picked, from one read with the
+    user's current access.
 
-    A pick is recorded at the version the user runs, its text cut to
-    `MAX_SKILL_PROMPT_BYTES` with a note where the rest begins. A skill that
-    the user cannot use, or whose SKILL.md cannot be read, is left out, so the
-    message does not apply it; a repeated pick counts once."""
+    `skills` is the list the message is accepted against: the turn's, or the
+    running response's. A pick is recorded at that version, with the
+    `<skill>` message it gives the model: the whole SKILL.md, cut to
+    `MAX_SKILL_PROMPT_BYTES` with a note where the rest begins, and its token
+    count. A skill that the user cannot use, or whose SKILL.md cannot be
+    read, is left out, so the message does not apply it; a repeated pick
+    counts once."""
     versions = {skill.name: skill.version_id for skill in skills}
-    instructions = read_versions_instructions(
+    readable = read_versions_skill_md(
         {
             versions[mention.name]
             for mentions in picks
@@ -120,12 +124,14 @@ def accept_picked_skills(
         user_id,
         db_session,
     )
-    accepted: list[list[AcceptedSkillMention]] = []
+    # Stored counts use one tokenizer, as question counts do.
+    tokenizer = get_tokenizer(None, None)
+    accepted: list[AcceptedPicks] = []
     for mentions in picks:
-        message_skills: list[AcceptedSkillMention] = []
+        message = AcceptedPicks()
         for mention in dict.fromkeys(mentions):
             version_id = versions.get(mention.name)
-            text = instructions.get(version_id) if version_id is not None else None
+            text = readable.get(version_id) if version_id is not None else None
             if version_id is None or text is None:
                 continue
             if len(encoded := text.encode()) > MAX_SKILL_PROMPT_BYTES:
@@ -134,10 +140,18 @@ def accept_picked_skills(
                 text = kept + MENTIONED_SKILL_TRUNCATED_NOTE.format(
                     name=mention.name, start_char=len(kept)
                 )
-            message_skills.append(
-                AcceptedSkillMention(
-                    name=mention.name, version_id=version_id, instructions=text
+            content = MENTIONED_SKILL_PROMPT.format(
+                name=mention.name, instructions=text
+            )
+            message.mentions.append(
+                RecordedSkillMention(name=mention.name, version_id=version_id)
+            )
+            message.skill_messages.append(
+                PickedSkillMessage(
+                    version_id=version_id,
+                    content=content,
+                    token_count=len(tokenizer.encode(content)),
                 )
             )
-        accepted.append(message_skills)
+        accepted.append(message)
     return accepted

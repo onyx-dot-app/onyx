@@ -289,7 +289,10 @@ def capture_chat_history(
     token_counter: Callable[[str], int],
     checkpoint: CompactionCheckpoint | None = None,
 ) -> list[ChatHistoryMessage]:
-    """Copy replay data while ORM relationships are available; the caller owns the session."""
+    """Copy replay data while ORM relationships are available; the caller owns the session.
+
+    A question's saved skill messages are read here; `load_message_branch`
+    loads them with the branch."""
     history: list[ChatHistoryMessage] = []
     for message in messages:
         response_messages: list[Message] = []
@@ -334,7 +337,16 @@ def capture_chat_history(
                 token_count=message.token_count,
                 files=message.files or [],
                 is_clarification=message.is_clarification,
-                mentions=message.mentions or [],
+                # A row that keeps no conversation content keeps no skill
+                # messages; temporary history holds them.
+                skill_messages=picked_skill_messages(
+                    f"chat:{message.id}", message.mentions, message.skill_messages
+                )
+                if message.mentions
+                and record_mode_persists_content(
+                    message.chat_session.incognito_record_mode
+                )
+                else [],
                 response_messages=response_messages,
             )
         )
@@ -414,9 +426,7 @@ def convert_chat_history(
                 )
             )
             # The SKILL.md of each picked skill follows its question.
-            messages.extend(
-                picked_skill_messages(f"chat:{chat_message.id}", chat_message.mentions)
-            )
+            messages.extend(chat_message.skill_messages)
 
         elif chat_message.message_type == MessageType.ASSISTANT:
             messages.extend(chat_message.response_messages)

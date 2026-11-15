@@ -75,8 +75,9 @@ class MessageSnapshot(BaseModel):
             feedback_type=feedback_type,
             feedback_text=feedback_text,
             time_created=message.time_sent,
+            # Query history shows what a message picked, not the skill text.
             accepted_inputs=[
-                accepted
+                accepted.model_copy(update={"skill_messages": []})
                 for item in sorted(
                     message.response_items, key=lambda item: item.step_index
                 )

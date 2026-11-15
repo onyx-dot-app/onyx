@@ -25,7 +25,7 @@ from onyx.chat.history_store import (
     RedisChatHistoryStore,
     get_chat_history_store,
 )
-from onyx.chat.mention_models import AcceptedSkillMention
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
 from onyx.chat.models import (
     ChatBranch,
     ChatHistoryResult,
@@ -379,6 +379,7 @@ def test_agent_lookup_uses_its_tenant_and_restores_the_callers_context(
             cache=cache,
             follow_up_steps=4,
             user=User(),
+            chat_skills=[],
             control_cache=cache,
         )
         CURRENT_TENANT_ID_CONTEXTVAR.set("caller-tenant")
@@ -449,9 +450,17 @@ def test_incognito_regeneration_preserves_results_before_selected_question() -> 
 
 
 def _skill_message(question_id: str) -> UserMessage:
+    version_id = uuid4()
     return picked_skill_messages(
         question_id,
-        [AcceptedSkillMention(name="triage", version_id=uuid4(), instructions="Sort.")],
+        [RecordedSkillMention(name="triage", version_id=version_id)],
+        [
+            PickedSkillMessage(
+                version_id=version_id,
+                content="<skill>\n<name>triage</name>\nSort.\n</skill>",
+                token_count=6,
+            )
+        ],
     )[0]
 
 

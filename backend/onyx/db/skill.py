@@ -592,11 +592,8 @@ def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
                     frontmatter_in_version("description", run_version.id.expression),
                     Skill.description,
                 ),
-                func.nullif(
-                    frontmatter_in_version(
-                        ("metadata", "short-description"), run_version.id.expression
-                    ),
-                    "",
+                frontmatter_in_version(
+                    ("metadata", "short-description"), run_version.id.expression
                 ),
                 run_version.id,
             )

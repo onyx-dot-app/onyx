@@ -169,13 +169,24 @@ class GitHubSkillBundle(BaseModel):
 
 
 class ChatSkill(BaseModel):
-    """A custom skill the user runs, at the version the user runs."""
+    """A custom skill the user runs, at the version the user runs. Each
+    description is one line: runs of whitespace become one space."""
 
     model_config = ConfigDict(frozen=True)
 
     name: str
     description: str
     # `metadata.short-description` in the frontmatter, which the catalog
-    # prefers.
+    # prefers. None when it is missing or blank.
     short_description: str | None = None
     version_id: UUID
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @field_validator("short_description")
+    @classmethod
+    def normalize_short_description(cls, value: str | None) -> str | None:
+        return (" ".join(value.split()) or None) if value is not None else None

@@ -52,8 +52,12 @@ from onyx.agents.tools import (
 )
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.files import build_file_context
-from onyx.chat.mention_models import AcceptedSkillMention
-from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
+from onyx.chat.models import (
+    ChatHistoryMessage,
+    CheckpointBinding,
+    picked_skill_messages,
+)
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.configs.constants import MessageType
@@ -359,7 +363,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
-        mentions=[],
+        skill_messages=[],
         id=1,
         message_type=MessageType.ASSISTANT,
         message="Old findings. " * 600,
@@ -373,7 +377,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
         ],
     )
     question = ChatHistoryMessage(
-        mentions=[],
+        skill_messages=[],
         id=2,
         message_type=MessageType.USER,
         message="Current question. " * (160 if long_question else 1),
@@ -823,7 +827,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
         token_count=stored_image_tokens,
     )
     question = ChatHistoryMessage(
-        mentions=[],
+        skill_messages=[],
         id=1,
         message_type=MessageType.USER,
         message=older_text,
@@ -1010,6 +1014,7 @@ def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
 
 def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() -> None:
     model = ContextModel()
+    version_id = uuid4()
     question = ChatHistoryMessage(
         id=1,
         message_type=MessageType.USER,
@@ -1017,11 +1022,17 @@ def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() ->
         token_count=0,
         files=[],
         is_clarification=False,
-        mentions=[
-            AcceptedSkillMention(
-                name="triage", version_id=uuid4(), instructions="Sort by area."
-            )
-        ],
+        skill_messages=picked_skill_messages(
+            "chat:1",
+            [RecordedSkillMention(name="triage", version_id=version_id)],
+            [
+                PickedSkillMessage(
+                    version_id=version_id,
+                    content="<skill>\n<name>triage</name>\nSort by area.\n</skill>",
+                    token_count=9,
+                )
+            ],
+        ),
         response_messages=[],
     )
     history: list[Message] = [

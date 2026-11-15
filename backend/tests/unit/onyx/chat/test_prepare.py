@@ -3,7 +3,7 @@ from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import Event
-from typing import cast
+from typing import Any, cast
 from unittest.mock import ANY, MagicMock, patch
 from uuid import UUID, uuid4
 
@@ -16,7 +16,13 @@ from onyx.chat.chat_processing_checker import (
     PREPARATION_LEASE_SECONDS,
     ChatTurnAdmission,
 )
-from onyx.chat.mention_models import AcceptedSkillMention, SkillMention
+from onyx.chat.chat_utils import capture_chat_history
+from onyx.chat.mention_models import (
+    AcceptedPicks,
+    PickedSkillMessage,
+    RecordedSkillMention,
+    SkillMention,
+)
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
@@ -25,6 +31,7 @@ from onyx.chat.models import (
     IncognitoState,
     PendingChatMessage,
     QueuedChatTurn,
+    picked_skill_messages,
 )
 from onyx.chat.process_message import (
     prepare_chat_turn,
@@ -53,7 +60,6 @@ from onyx.file_store.models import (
 )
 from onyx.hooks.executor import HookSkipped, HookSoftFailed
 from onyx.hooks.points.query_processing import QueryProcessingResponse
-from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.models import (
     AssistantMessage,
     ReasoningEffort,
@@ -221,7 +227,7 @@ def _mock_chat_preparation(
     monkeypatch: pytest.MonkeyPatch, chat_session: ChatSession
 ) -> None:
     parent = ChatMessage(
-        id=1, message_type=MessageType.ASSISTANT, is_clarification=False
+        id=1, message_type=MessageType.ASSISTANT, is_clarification=False, mentions=[]
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.incognito_session_ended", lambda _id: False
@@ -299,7 +305,7 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.capture_chat_history",
         lambda _messages, _tools, _tokens, checkpoint: [
             ChatHistoryMessage(
-                mentions=[],
+                skill_messages=[],
                 id=2,
                 message_type=MessageType.USER,
                 message="Accepted",
@@ -539,6 +545,7 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
             return_value=[(model, "Test")],
         ),
         patch("onyx.chat.process_message.create_new_chat_message") as create_message,
+        patch("onyx.chat.process_message.accept_picked_skills") as accept_picks,
         pytest.raises(OnyxError) as raised,
     ):
         prepare_chat_turn(
@@ -546,6 +553,7 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
                 message="Question",
                 chat_session_id=chat_session.id,
                 deep_research=True,
+                mentions=[SkillMention(name="review")],
             ),
             User(id=uuid4(), email="reader@example.com"),
             llm_overrides=None,
@@ -553,6 +561,8 @@ def test_invalid_deep_research_is_rejected_before_the_question_is_saved(
     assert raised.value.error_code == OnyxErrorCode.BAD_REQUEST
     assert raised.value.detail == detail
     create_message.assert_not_called()
+    # A rejected question reads no skills.
+    accept_picks.assert_not_called()
 
 
 def test_incognito_rejects_a_preferred_coding_agent_before_the_question_is_saved(
@@ -663,22 +673,7 @@ def test_an_agent_host_checks_the_owner_budget_for_every_model(
     assert raised.value.error_code == OnyxErrorCode.RATE_LIMITED
 
 
-def test_context_files_leave_room_for_the_questions_picked_skills(
-    monkeypatch: pytest.MonkeyPatch,
-    chat_session: ChatSession,
-    _mock_chat_preparation: None,
-) -> None:
-    instructions = "Check every section. " * 400
-    monkeypatch.setattr(
-        "onyx.chat.process_message.accept_picked_skills",
-        lambda *_args: [
-            [
-                AcceptedSkillMention(
-                    name="review", version_id=uuid4(), instructions=instructions
-                )
-            ]
-        ],
-    )
+def _capture_reservations(monkeypatch: pytest.MonkeyPatch) -> list[int]:
     reserved: list[int] = []
 
     def extract(*, reserved_token_count: int, **_kwargs: object) -> object:
@@ -693,6 +688,77 @@ def test_context_files_leave_room_for_the_questions_picked_skills(
         )
 
     monkeypatch.setattr("onyx.chat.process_message.extract_context_files", extract)
+    return reserved
+
+
+def _review_pick(token_count: int) -> AcceptedPicks:
+    version_id = uuid4()
+    return AcceptedPicks(
+        mentions=[RecordedSkillMention(name="review", version_id=version_id)],
+        skill_messages=[
+            PickedSkillMessage(
+                version_id=version_id,
+                content="<skill>\n<name>review</name>\nCheck it.\n</skill>",
+                token_count=token_count,
+            )
+        ],
+    )
+
+
+@pytest.mark.parametrize("record_mode", [None, IncognitoRecordMode.USAGE_ONLY])
+def test_a_question_saves_its_picks_and_reserves_room_for_their_skills(
+    monkeypatch: pytest.MonkeyPatch,
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+    record_mode: IncognitoRecordMode | None,
+) -> None:
+    chat_session.incognito_record_mode = record_mode
+    picks = _review_pick(token_count=40)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.accept_picked_skills", lambda *_args: [picks]
+    )
+    created: list[ChatMessage] = []
+
+    def create(**kwargs: Any) -> ChatMessage:
+        created.append(
+            ChatMessage(
+                id=2,
+                chat_session=chat_session,
+                message_type=MessageType.USER,
+                message=kwargs["message"],
+                token_count=kwargs["token_count"],
+                files=kwargs["files"],
+                is_clarification=False,
+                mentions=kwargs["mentions"],
+                skill_messages=kwargs["skill_messages"] or [],
+            )
+        )
+        return created[-1]
+
+    monkeypatch.setattr("onyx.chat.process_message.create_new_chat_message", create)
+    # History is read from the saved rows.
+    monkeypatch.setattr(
+        "onyx.chat.process_message.capture_chat_history", capture_chat_history
+    )
+    parent = ChatMessage(
+        id=1,
+        chat_session=chat_session,
+        message_type=MessageType.ASSISTANT,
+        message="Earlier answer",
+        token_count=2,
+        is_clarification=False,
+        mentions=[],
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.load_message_branch",
+        lambda *_args: ([parent], parent),
+    )
+    store = MagicMock()
+    store.prepare_messages.side_effect = lambda history, _text: (history, None, None)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.RedisChatHistoryStore", lambda **_kwargs: store
+    )
+    reserved = _capture_reservations(monkeypatch)
 
     setup = prepare_chat_turn(
         SendMessageRequest(
@@ -705,16 +771,74 @@ def test_context_files_leave_room_for_the_questions_picked_skills(
     )
     setup.admission.release()
 
-    # The reservation holds the system prompt and the skill text that the
-    # question gives the model.
-    assert reserved == [100 + get_llm_token_counter(ScriptedLLM([]))(instructions)]
+    # The question records its pick; a content-free row keeps no skill text.
+    (question,) = created
+    assert question.mentions == picks.mentions
+    assert question.skill_messages == (
+        [] if record_mode is not None else picks.skill_messages
+    )
+    assert setup.mentions == picks.mentions
+    # The skill message follows the question, and the reservation holds it
+    # with the system prompt.
+    assert [(message.id, message.text) for message in setup.input_messages][1:] == [
+        (
+            f"chat:2:skill:{picks.mentions[0].version_id}",
+            picks.skill_messages[0].content,
+        )
+    ]
+    assert reserved == [140]
+
+
+def test_incognito_regeneration_reserves_room_for_the_questions_skills(
+    monkeypatch: pytest.MonkeyPatch,
+    chat_session: ChatSession,
+    _mock_chat_preparation: None,
+) -> None:
+    chat_session.incognito_record_mode = IncognitoRecordMode.USAGE_ONLY
+    picks = _review_pick(token_count=40)
+    # The content-free question keeps the record of its pick; temporary
+    # history holds its skill message.
+    question = ChatMessage(
+        id=2, message_type=MessageType.USER, message="", mentions=picks.mentions
+    )
+    store = MagicMock()
+    store.prepare_messages.return_value = (
+        ChatHistoryResult(
+            messages=[
+                UserMessage(id="chat:2", content="Review it."),
+                *picked_skill_messages("chat:2", picks.mentions, picks.skill_messages),
+            ],
+            input_start=0,
+            all_injected_file_metadata={},
+        ),
+        None,
+        None,
+    )
+    reserved = _capture_reservations(monkeypatch)
+
+    with (
+        patch(
+            "onyx.chat.process_message.load_message_branch",
+            return_value=([question], question),
+        ),
+        patch("onyx.chat.process_message.RedisChatHistoryStore", return_value=store),
+    ):
+        setup = prepare_chat_turn(
+            SendMessageRequest(message="", chat_session_id=chat_session.id),
+            User(id=uuid4(), email="reader@example.com"),
+            llm_overrides=None,
+        )
+    setup.admission.release()
+
+    assert setup.mentions == picks.mentions
+    assert reserved == [140]
 
 
 def test_regeneration_reuses_user_message_without_writing(
     chat_session: ChatSession,
     _mock_chat_preparation: None,
 ) -> None:
-    parent = ChatMessage(id=2, message_type=MessageType.USER)
+    parent = ChatMessage(id=2, message_type=MessageType.USER, mentions=[])
     with (
         patch(
             "onyx.chat.process_message.load_message_branch",
@@ -830,6 +954,7 @@ def test_incognito_history_retains_summary_checkpoint(
     parent = ChatMessage(
         id=2 if accepted_text is None else 1,
         is_clarification=False,
+        mentions=[],
         message_type=MessageType.USER
         if accepted_text is None
         else MessageType.ASSISTANT,
@@ -984,7 +1109,7 @@ def test_preparation_uses_selected_recorded_response_as_predecessor(
         is_clarification=False,
     )
     legacy = ChatMessage(
-        id=8, message_type=MessageType.ASSISTANT, is_clarification=False
+        id=8, message_type=MessageType.ASSISTANT, is_clarification=False, mentions=[]
     )
     with patch(
         "onyx.chat.process_message.load_message_branch",

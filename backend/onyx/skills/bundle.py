@@ -158,23 +158,42 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return instructions_markdown.strip()
 
 
-def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+def _open_stored_bundle(zip_bytes: bytes) -> zipfile.ZipFile:
     try:
-        zf = open_bundle_zip(zip_bytes)
+        return open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle is not a valid zip.",
         ) from exc
 
-    with zf:
-        try:
-            raw_skill_md = zf.read(SKILL_MD_NAME)
-        except KeyError as exc:
-            raise OnyxError(
-                OnyxErrorCode.INTERNAL_ERROR,
-                "Stored skill bundle is missing SKILL.md.",
-            ) from exc
+
+def _read_stored_skill_md(zf: zipfile.ZipFile) -> str:
+    try:
+        raw_skill_md = zf.read(SKILL_MD_NAME)
+    except KeyError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle is missing SKILL.md.",
+        ) from exc
+    try:
+        return raw_skill_md.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Stored skill bundle SKILL.md must be UTF-8 encoded.",
+        ) from exc
+
+
+def read_custom_bundle_skill_md(zip_bytes: bytes) -> str:
+    """The whole root SKILL.md of a stored bundle, frontmatter included."""
+    with _open_stored_bundle(zip_bytes) as zf:
+        return _read_stored_skill_md(zf)
+
+
+def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+    with _open_stored_bundle(zip_bytes) as zf:
+        skill_md = _read_stored_skill_md(zf)
         files: list[SkillBundleFile] = []
         for info in zf.infolist():
             if info.is_dir():
@@ -183,14 +202,6 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             if normalized == SKILL_MD_NAME or _is_ignored_bundle_path(normalized):
                 continue
             files.append(SkillBundleFile(path=normalized, size=info.file_size))
-
-    try:
-        skill_md = raw_skill_md.decode("utf-8")
-    except UnicodeDecodeError as exc:
-        raise OnyxError(
-            OnyxErrorCode.INTERNAL_ERROR,
-            "Stored skill bundle SKILL.md must be UTF-8 encoded.",
-        ) from exc
 
     sorted_files = sorted(files, key=lambda entry: entry.path)
     return CustomSkillBundleContents(

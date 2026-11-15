@@ -1,4 +1,3 @@
-from collections.abc import Sequence
 from datetime import datetime
 from enum import Enum
 from typing import Any
@@ -61,19 +60,19 @@ class MultiModelMessageResponseIDInfo(BaseModel):
 def response_id_info(
     user_message_id: int | None,
     responses: list[ModelResponseSlot],
-    mentions: Sequence[RecordedMention],
+    mentions: list[RecordedMention],
 ) -> "MessageResponseIDInfo | MultiModelMessageResponseIDInfo":
     """The packet that names a turn's saved question and reserved responses."""
     if len(responses) > 1:
         return MultiModelMessageResponseIDInfo(
             user_message_id=user_message_id,
             responses=responses,
-            mentions=list(mentions),
+            mentions=mentions,
         )
     return MessageResponseIDInfo(
         user_message_id=user_message_id,
         reserved_assistant_message_id=responses[0].message_id,
-        mentions=list(mentions),
+        mentions=mentions,
     )
 
 

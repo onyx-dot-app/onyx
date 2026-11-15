@@ -16,6 +16,7 @@ from onyx.skills.bundle import (
     TEMPLATE_SUFFIX,
     custom_bundle_contents_from_stored,
     inspect_custom_bundle,
+    read_custom_bundle_skill_md,
     strip_skill_md_frontmatter,
 )
 from onyx.skills.models import CustomSkillBundleContents
@@ -97,32 +98,32 @@ def read_version_contents(
     )
 
 
-def read_versions_instructions(
+def read_versions_skill_md(
     version_ids: Collection[UUID],
     user_id: UUID,
     db_session: Session,
 ) -> dict[UUID, str]:
-    """The SKILL.md instructions of each version whose skill the user can see
-    now, from one query. A version that stores no SKILL.md text (one copied
-    from a legacy skill row) opens its bundle. A version that is gone, hidden
-    from the user or unreadable is left out."""
+    """The whole SKILL.md, frontmatter included, of each version whose skill
+    the user can see now, from one query. A version that stores no SKILL.md
+    text opens its bundle. A version that is gone, hidden from the user or
+    unreadable is left out."""
     if not version_ids:
         return {}
-    instructions: dict[UUID, str] = {}
+    skill_md: dict[UUID, str] = {}
     for version_id, stored in get_visible_versions_skill_md(
         version_ids, user_id, db_session
     ).items():
         if stored.skill_md is not None:
-            instructions[version_id] = strip_skill_md_frontmatter(stored.skill_md)
+            skill_md[version_id] = stored.skill_md
             continue
         try:
-            instructions[version_id] = inspect_custom_bundle(
+            skill_md[version_id] = read_custom_bundle_skill_md(
                 read_skill_bundle_blob(stored.bundle_file_id, str(version_id))
-            ).instructions_markdown
+            )
         except OnyxError:
             logger.warning(
                 "Could not read the bundle of skill version %s",
                 version_id,
                 exc_info=True,
             )
-    return instructions
+    return skill_md

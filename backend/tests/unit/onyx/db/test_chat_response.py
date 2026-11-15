@@ -263,6 +263,7 @@ def test_save_chat_turn_sanitizes_message_and_reasoning(
 
 def test_chat_detail_validates_stored_request_parameters() -> None:
     message = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="answer",
@@ -315,6 +316,7 @@ def test_history_returns_failure_separately_from_partial_answer(
         ),
     )
     message = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="Partial answer",
@@ -359,6 +361,7 @@ def test_history_returns_failure_separately_from_partial_answer(
 @pytest.mark.parametrize("status", [None, *RunStatus])
 def test_message_detail_exposes_saved_response_status(status: RunStatus | None) -> None:
     response = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="Response was terminated prior to completion, try regenerating.",
@@ -425,6 +428,7 @@ def test_saved_cancelled_answer_preserves_the_stop_reason(
 def test_history_keeps_deadline_cancellation_out_of_error_fields() -> None:
     failure = RunFailure(kind=RunFailureKind.DEADLINE, message="Deadline reached")
     message = ChatMessage(
+        mentions=[],
         id=1,
         chat_session_id=uuid4(),
         message="Partial answer",

@@ -17,7 +17,7 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
     file_was_loaded: bool, summarize_answer: bool
 ) -> None:
     question = ChatHistoryMessage(
-        mentions=[],
+        skill_messages=[],
         id=1,
         message_type=MessageType.USER,
         message="Explain the attachment",
@@ -27,7 +27,7 @@ def test_saved_cutoff_survives_file_loading_and_later_turn(
         response_messages=[],
     )
     answer = ChatHistoryMessage(
-        mentions=[],
+        skill_messages=[],
         id=2,
         message_type=MessageType.ASSISTANT,
         message="First answer",

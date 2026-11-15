@@ -42,6 +42,7 @@ from onyx.chat.incognito import (
     incognito_llm_request_policy,
 )
 from onyx.chat.incognito_context import incognito_session_ended
+from onyx.chat.mention_models import AcceptedPicks
 from onyx.chat.models import (
     AnswerStream,
     ChatFullResponse,
@@ -50,9 +51,11 @@ from onyx.chat.models import (
     ChatTurnSetup,
     CreateChatSessionID,
     PersonaPromptConfig,
+    PromptMetadata,
     QueuedChatTurn,
     ReservedChatResponse,
     ToolCallResponse,
+    picked_skill_messages,
 )
 from onyx.chat.prompt_utils import (
     calculate_reserved_tokens,
@@ -329,19 +332,6 @@ def prepare_chat_turn(
             chat_history, parent_message = load_message_branch(
                 chat_session.id, new_msg_req.parent_message_id, db_session
             )
-            # One read serves the skill tools, their catalog and the skills
-            # that an accepted question picked.
-            chat_skills = list_chat_skills(db_session, user)
-            # A question records its picks, with the SKILL.md text it gives
-            # the model, when it is accepted; regeneration reuses the record.
-            mentions = (
-                accept_picked_skills(
-                    [new_msg_req.mentions], chat_skills, user.id, db_session
-                )[0]
-                if queued_turn is not None
-                or (not agent_host and parent_message.message_type != MessageType.USER)
-                else []
-            )
             accepted_text = None
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
@@ -359,7 +349,6 @@ def prepare_chat_turn(
                         message_type=MessageType.AGENT_RESULTS
                         if results_turn
                         else MessageType.USER,
-                        mentions=mentions,
                         db_session=db_session,
                         commit=False,
                     )
@@ -449,7 +438,28 @@ def prepare_chat_turn(
                     OnyxErrorCode.BAD_REQUEST,
                     "The Coding Agent is not available in incognito. Start a normal chat to use it.",
                 )
+            # One read serves the skill tools, their catalog and the skills
+            # that an accepted question picked.
+            chat_skills = list_chat_skills(db_session, user)
+            # A question records its picks when it is accepted, after the
+            # checks that can reject it; regeneration reuses the record.
+            accepts_question = queued_turn is not None or (
+                not agent_host and parent_message.message_type != MessageType.USER
+            )
+            picks = (
+                accept_picked_skills(
+                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                )[0]
+                if accepts_question
+                else AcceptedPicks()
+            )
+            mentions = picks.mentions if accepts_question else parent_message.mentions
             if queued_turn is not None:
+                # A queued question is saved before its checks, so that a
+                # failed check answers it.
+                if picks.mentions:
+                    chat_history[-1].mentions = picks.mentions
+                    chat_history[-1].skill_messages = picks.skill_messages
                 set_response_model_names__no_commit(
                     db_session,
                     {
@@ -487,14 +497,9 @@ def prepare_chat_turn(
                         if keeps_content
                         else content_free_file_descriptors(new_msg_req.file_descriptors)
                     ),
-                    # A content-free question keeps its picks for display, but
-                    # not their skill text, which is conversation content.
-                    mentions=mentions
-                    if keeps_content
-                    else [
-                        mention.model_copy(update={"instructions": None})
-                        for mention in mentions
-                    ],
+                    mentions=picks.mentions,
+                    # Skill messages are conversation content.
+                    skill_messages=picks.skill_messages if keeps_content else None,
                     db_session=db_session,
                     commit=False,
                 )
@@ -596,14 +601,6 @@ def prepare_chat_turn(
                 if user.use_memories
                 else memory.without_memories(),
                 base_system_prompt=base_system_prompt,
-            ) + sum(
-                # The SKILL.md text that the question's picks give the model.
-                token_counter(mention.instructions or "")
-                for mention in (
-                    mentions
-                    if accepted_text is not None
-                    else chat_history[-1].mentions or []
-                )
             )
             tools = get_tools(db_session)
             research_tool_id = next(
@@ -658,9 +655,11 @@ def prepare_chat_turn(
             if accepted_text is not None and not record_mode_persists_content(
                 incognito_record_mode
             ):
-                # Filenames and skill text belong to the live input, not the
+                # Filenames and skill messages belong to the live input, not the
                 # content-free database row.
-                captured_history[-1].mentions = mentions
+                captured_history[-1].skill_messages = picked_skill_messages(
+                    f"chat:{response_parent_id}", picks.mentions, picks.skill_messages
+                )
                 descriptors.update(
                     {
                         descriptor["id"]: descriptor
@@ -676,30 +675,6 @@ def prepare_chat_turn(
             skip_clarification = is_last_assistant_message_clarification(chat_history)
         # File loading can be slow; release the preparation DB session first.
         admission.refresh()
-        extracted_files = extract_context_files(
-            user_files=context_user_files,
-            llm_max_context_window=min(
-                llm.config.max_input_tokens for llm, _ in selected_models
-            ),
-            reserved_token_count=reserved_tokens,
-        )
-        admission.refresh()
-        search_params = determine_search_params(persona_id, project_id, extracted_files)
-        # Inline project context replaces retrieval for this request.
-        if (
-            search_params.search_usage == SearchToolUsage.DISABLED
-            and (
-                new_msg_req.allowed_tool_ids is None
-                or preferred_tool_id in new_msg_req.allowed_tool_ids
-            )
-            and any(
-                tool.id == preferred_tool_id
-                and tool.in_code_tool_id == SEARCH_TOOL_ID
-                and tool.enabled
-                for tool in tool_configuration.tools
-            )
-        ):
-            preferred_tool_id = None
         # Temporary history already owns earlier attachment text. Only new inputs need extraction.
         text_file_ids: set[str] | None = None
         if not record_mode_persists_content(incognito_record_mode):
@@ -740,6 +715,40 @@ def prepare_chat_turn(
             if incognito_session_ended(chat_session_id):
                 raise RuntimeError("Incognito session ended")
         admission.refresh()
+        extracted_files = extract_context_files(
+            user_files=context_user_files,
+            llm_max_context_window=min(
+                llm.config.max_input_tokens for llm, _ in selected_models
+            ),
+            # The reservation also holds the `<skill>` messages that the
+            # question's picks give the model, as history or temporary
+            # history holds them.
+            reserved_token_count=reserved_tokens
+            + sum(
+                message.metadata.token_count or 0
+                for message in history.messages[history.input_start :]
+                if isinstance(message.metadata, PromptMetadata)
+                and message.metadata.is_input_context
+            ),
+        )
+        admission.refresh()
+        search_params = determine_search_params(persona_id, project_id, extracted_files)
+        # Inline project context replaces retrieval for this request.
+        if (
+            search_params.search_usage == SearchToolUsage.DISABLED
+            and (
+                new_msg_req.allowed_tool_ids is None
+                or preferred_tool_id in new_msg_req.allowed_tool_ids
+            )
+            and any(
+                tool.id == preferred_tool_id
+                and tool.in_code_tool_id == SEARCH_TOOL_ID
+                and tool.enabled
+                for tool in tool_configuration.tools
+            )
+        ):
+            preferred_tool_id = None
+        admission.refresh()
         # Reserve assistant message IDs so each model response has a saved identity.
         with get_session_with_current_tenant() as db_session:
             if not response_ids:
@@ -768,7 +777,7 @@ def prepare_chat_turn(
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
-            mentions=list(captured_history[-1].mentions),
+            mentions=mentions,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"
                 if user.is_anonymous

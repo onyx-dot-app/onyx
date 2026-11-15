@@ -9,12 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from onyx.agents.tools import ToolInvocation
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.llm.models import SystemMessage, ToolDefinition, ToolResult
-from onyx.skills.chat import (
-    MAX_CATALOG_DESCRIPTION_CHARS,
-    render_skills_catalog,
-    truncate_skill_description,
-)
-from onyx.skills.content import read_versions_instructions
+from onyx.skills.chat import render_skills_catalog, truncate_catalog_description
+from onyx.skills.content import read_versions_skill_md
 from onyx.skills.models import ChatSkill
 from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
 from onyx.tools.interface import (
@@ -80,10 +76,7 @@ class SkillsListTool(_SkillTool):
         request = parse_tool_arguments(SkillsListArguments, invocation.arguments)
         page = self.skills[request.offset : request.offset + SKILLS_PER_PAGE]
         lines = [
-            f"- {skill.name}: "
-            + truncate_skill_description(
-                skill.description, MAX_CATALOG_DESCRIPTION_CHARS
-            )
+            f"- {skill.name}: {truncate_catalog_description(skill.description)}"
             for skill in page
         ]
         end = request.offset + len(page)
@@ -99,8 +92,8 @@ class SkillsReadTool(_SkillTool):
     name = SKILLS_READ_TOOL_NAME
     display_name = "Read skill"
     description = (
-        "Read the SKILL.md instructions of a skill by name. Read the whole file "
-        "before you use the skill."
+        "Read the SKILL.md of a skill by name. Read the whole file before you "
+        "use the skill."
     )
     arguments = SkillsReadArguments
 
@@ -122,21 +115,21 @@ class SkillsReadTool(_SkillTool):
                 ),
             )
         with get_session_with_current_tenant() as db_session:
-            instructions = read_versions_instructions(
+            skill_md = read_versions_skill_md(
                 [skill.version_id], self.user_id, db_session
             ).get(skill.version_id)
-        if instructions is None:
+        if skill_md is None:
             raise ToolCallException(
                 message=f"Unreadable skill: {request.name}",
                 llm_facing_message=(
-                    f"The instructions of skill '{request.name}' cannot be read now."
+                    f"The SKILL.md of skill '{request.name}' cannot be read now."
                 ),
             )
-        end = min(request.start_char + SKILL_READ_MAX_CHARS, len(instructions))
-        content = instructions[request.start_char : end]
-        if end < len(instructions):
+        end = min(request.start_char + SKILL_READ_MAX_CHARS, len(skill_md))
+        content = skill_md[request.start_char : end]
+        if end < len(skill_md):
             content += (
-                f"\n\n[Characters {request.start_char}-{end} of {len(instructions)}. "
+                f"\n\n[Characters {request.start_char}-{end} of {len(skill_md)}. "
                 f"Use start_char={end} to continue reading.]"
             )
         return ToolResult(content=content, details=self._summary({"skill": skill.name}))

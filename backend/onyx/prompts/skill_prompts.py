@@ -1,7 +1,8 @@
 from onyx.tools.constants import SKILLS_LIST_TOOL_NAME, SKILLS_READ_TOOL_NAME
 
 # Codex's skills instructions, without file paths, root aliases, bundled files
-# or scripts, which chat cannot open.
+# or scripts, which chat cannot open. The steps address the agent that reads
+# the catalog, which can be a Deep Research research agent.
 SKILLS_CATALOG_PROMPT = f"""<skills_instructions>
 ## Skills
 A skill is a set of instructions provided through a `SKILL.md` source. Below \
@@ -22,18 +23,17 @@ skills across turns unless re-mentioned.
 - Missing/blocked: If a named skill isn't in the list or its `SKILL.md` can't \
 be read, say so briefly and continue with the best fallback.
 - How to use a skill (progressive disclosure):
-  1) After deciding to use a skill, the main agent must read its `SKILL.md` \
-completely before taking task actions: call `{SKILLS_READ_TOOL_NAME}` with its \
-name. If `{SKILLS_READ_TOOL_NAME}` says the file continues, call it again with \
+  1) After deciding to use a skill, you must read its `SKILL.md` completely \
+before taking task actions: call `{SKILLS_READ_TOOL_NAME}` with its name. If \
+`{SKILLS_READ_TOOL_NAME}` says the file continues, call it again with \
 `start_char` until the end. A skill in a <skill> block is already loaded; do \
 not read it again unless its block says it continues.
   2) You cannot open the other files of a skill or run its scripts. Follow its \
 instructions as far as your tools allow, and tell the user when a step needs a \
 bundled file or script.
-  3) The main agent must read each selected skill itself before acting on it. \
-Do not delegate reading, summarizing, or interpreting skill instructions to a \
-subagent. Subagents may still perform task work when the selected skill allows \
-it.
+  3) Read each selected skill yourself before acting on it. Do not delegate \
+reading, summarizing, or interpreting skill instructions to another agent. \
+Agents you start may still perform task work when the selected skill allows it.
 - Coordination and sequencing:
   - If multiple skills apply, choose the minimal set that covers the request \
 and state the order you'll use them.
@@ -42,10 +42,6 @@ an obvious skill, say why.
 - Context hygiene:
   - Progressive disclosure applies to selecting relevant files, not partially \
 reading a selected instruction file. Do not load unrelated skills.
-  - Avoid deep reference-chasing: prefer reading only the skills the request \
-names or clearly needs unless you're blocked.
-  - When variants exist (frameworks, providers, domains), pick only the \
-relevant skill(s) and note that choice.
 - Safety and fallback: If a skill can't be applied cleanly (unclear \
 instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.

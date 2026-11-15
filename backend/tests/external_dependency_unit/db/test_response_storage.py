@@ -1,5 +1,6 @@
 """Response storage preserves accepted content, branch lineage, and compaction."""
 
+import json
 import threading
 from collections.abc import Generator
 from contextlib import nullcontext
@@ -53,9 +54,10 @@ from onyx.chat.citation_processor import DynamicCitationProcessor
 from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.mention_models import AcceptedSkillMention
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
 from onyx.chat.models import (
     ChatBranch,
+    ChatInputMetadata,
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CheckpointBinding,
@@ -129,7 +131,6 @@ from onyx.db.chat_subagents import (
 )
 from onyx.db.enums import IncognitoRecordMode
 from onyx.db.models import (
-    AcceptedChatInput,
     ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -557,6 +558,7 @@ def test_later_child_run_keeps_earlier_unread_result(
         cache=cache,
         follow_up_steps=4,
         user=User(),
+        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -674,6 +676,7 @@ def test_abandoned_background_child_is_delivered_as_failure(
         cache=cache,
         follow_up_steps=4,
         user=User(),
+        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator()
@@ -1239,21 +1242,35 @@ def test_suspended_run_with_picked_skills_restores_after_database_round_trip(
     assert response.parent_message is not None
     question_id = f"chat:{response.parent_message.id}"
     instruction = UserMessage(id=question_id, content=response.parent_message.message)
-    question_skill = AcceptedSkillMention(
-        name="notes", version_id=uuid4(), instructions="Group by area."
-    )
-    sent_skill = AcceptedSkillMention(
-        name="summary", version_id=uuid4(), instructions="Keep it short."
+    question_skill = RecordedSkillMention(name="notes", version_id=uuid4())
+    sent_skill = RecordedSkillMention(name="summary", version_id=uuid4())
+    sent_message = PickedSkillMessage(
+        version_id=sent_skill.version_id,
+        content="<skill>\n<name>summary</name>\nKeep it short.\n</skill>",
+        token_count=11,
     )
     # The question and a send accepted during the run each picked a skill.
-    run_input = [instruction, *picked_skill_messages(question_id, [question_skill])]
+    run_input = [
+        instruction,
+        *picked_skill_messages(
+            question_id,
+            [question_skill],
+            [
+                PickedSkillMessage(
+                    version_id=question_skill.version_id,
+                    content="<skill>\n<name>notes</name>\nGroup by area.\n</skill>",
+                    token_count=12,
+                )
+            ],
+        ),
+    ]
     sent = accepted_input_messages(
-        AcceptedChatInput(
-            id="sent",
-            source=InputSource.HUMAN,
-            content="Also summarize.",
-            mentions=[sent_skill],
-        )
+        message_id="sent",
+        content="Also summarize.",
+        source=InputSource.HUMAN,
+        source_run_id=None,
+        mentions=[sent_skill],
+        skill_messages=[sent_message],
     )
     snapshot = RunState(
         run_id=str(response.id),
@@ -1298,11 +1315,19 @@ def test_suspended_run_with_picked_skills_restores_after_database_round_trip(
     restored = deserialize_checkpoint(checkpoint, saved.response, context, binding)
 
     assert restored.run_state.model_dump() == snapshot.model_dump()
-    # The send is saved once, with its skill text; its skill message is rebuilt
-    # from that text.
+    # The send is saved once, with the record of its pick and its skill
+    # message; its metadata holds only the record, and its skill message is
+    # rebuilt from the saved one.
     (row,) = response.response_items
     assert [item.id for item in row.inputs] == ["sent"]
     assert row.inputs[0].mentions == [sent_skill]
+    assert row.inputs[0].skill_messages == [sent_message]
+    assert sent[0].metadata == ChatInputMetadata(
+        source=InputSource.HUMAN, mentions=[sent_skill]
+    )
+    assert (
+        json.dumps(row.inputs[0].model_dump(mode="json")).count("Keep it short.") == 1
+    )
     restored_inputs = restored.run_state.steps[0].input_messages
     assert [message.text for message in restored_inputs] == [
         message.text for message in sent
@@ -2807,6 +2832,7 @@ def test_coordinator_discovery_reads_no_content_or_inbox(
         cache=cache,
         follow_up_steps=4,
         user=User(),
+        chat_skills=[],
         control_cache=cache,
     )
     coordinator = AgentCoordinator(directory=store)
@@ -2983,6 +3009,56 @@ def test_history_loads_items_only_for_selected_ancestry(
     executed_sql.clear()
     capture_chat_history(history, {}, len)
     assert not any("search_doc" in query for query in executed_sql)
+
+
+def test_only_history_loads_the_skill_messages_of_a_question(
+    db_session: Session,
+    conversation: ChatSession,
+    executed_sql: list[str],
+) -> None:
+    root = get_or_create_root_message(conversation.id, db_session)
+    response = _response(
+        db_session, conversation, text="Use the notes skill", previous=root
+    )
+    question = response.parent_message
+    assert question is not None
+    root.latest_child_message_id = question.id
+    question.latest_child_message_id = response.id
+    mention = RecordedSkillMention(name="notes", version_id=uuid4())
+    skill_message = PickedSkillMessage(
+        version_id=mention.version_id,
+        content="<skill>\n<name>notes</name>\nGroup by area.\n</skill>",
+        token_count=12,
+    )
+    question.mentions = [mention]
+    question.skill_messages = [skill_message]
+    _save(db_session, response, _record(response))
+    session_id, question_id, response_id = conversation.id, question.id, response.id
+    db_session.expire_all()
+    executed_sql.clear()
+
+    # A chat load for display reads the records of picks, not their text.
+    messages = get_chat_messages_by_session(
+        session_id,
+        None,
+        db_session,
+        skip_permission_check=True,
+        prefetch_message_details=True,
+    )
+    (shown,) = [message for message in messages if message.id == question_id]
+    assert translate_db_message_to_chat_message_detail(shown).mentions == [mention]
+    assert "skill_messages" in inspect(shown).unloaded
+    assert not any("skill_messages" in query for query in executed_sql)
+
+    db_session.expire_all()
+    executed_sql.clear()
+    history, _ = load_message_branch(session_id, response_id, db_session)
+    captured = capture_chat_history(history, {}, len)
+
+    # History loads the skill messages of picking questions in one query.
+    assert sum("skill_messages" in query for query in executed_sql) == 1
+    (asked,) = [entry for entry in captured if entry.id == question_id]
+    assert [message.text for message in asked.skill_messages] == [skill_message.content]
 
 
 @pytest.mark.parametrize("invalid_character", ["\x00", "\ud800"])
@@ -3978,6 +4054,7 @@ def test_existing_descendant_accepts_an_ancestor_invocation_without_reparenting(
             cache=cache,
             follow_up_steps=4,
             user=User(),
+            chat_skills=[],
             control_cache=cache,
         )
 

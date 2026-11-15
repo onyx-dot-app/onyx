@@ -665,6 +665,7 @@ def bind_run_store(
         cache=get_cache_backend(),
         follow_up_steps=follow_up_steps,
         user=user,
+        chat_skills=setup.chat_skills,
         restore_subagent=partial(
             restore_subagent,
             setup=setup,

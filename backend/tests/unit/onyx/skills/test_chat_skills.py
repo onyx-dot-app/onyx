@@ -4,6 +4,7 @@ from uuid import uuid4
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.mention_models import SkillMention
 from onyx.llm.cancellation import CancellationSignal
+from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
@@ -79,6 +80,8 @@ def test_catalog_shortens_long_descriptions_to_one_limit_over_budget() -> None:
     cut = {len(line.split(": ", 1)[1]) for line in lines[:-1]}
     assert len(cut) == 1
     assert lines[-1] == "- short: Fits."
+    # A description cut for the budget has no ellipsis.
+    assert not any(line.endswith("...") for line in lines)
     # The largest limit is used: one more character for each cut description
     # would not fit.
     assert total + len(lines) - 1 > 1600
@@ -94,7 +97,9 @@ def test_catalog_budget_counts_utf8_bytes() -> None:
     assert catalog is not None
     lines = _catalog_lines(catalog)
     assert len("\n".join(lines).encode()) <= 1600
-    assert all(line.endswith("...") for line in lines)
+    assert all(
+        line.endswith("é") and len(line) < len("- skill-0: ") + 100 for line in lines
+    )
 
 
 def test_catalog_omits_skills_when_names_do_not_fit() -> None:
@@ -142,17 +147,34 @@ def test_skills_list_shows_the_full_description_capped() -> None:
     assert long == "- long: " + "z" * (MAX_CATALOG_DESCRIPTION_CHARS - 3) + "..."
 
 
-def test_picked_skills_are_recorded_with_text_from_one_read() -> None:
+def test_chat_skill_descriptions_are_one_line() -> None:
+    skill = ChatSkill(
+        name="notes",
+        description="Write\n  release   notes.",
+        short_description=" \n ",
+        version_id=uuid4(),
+    )
+
+    # A blank short description is none, so the description is used.
+    assert (skill.description, skill.short_description) == (
+        "Write release notes.",
+        None,
+    )
+
+
+def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() -> None:
     triage = _skill("triage")
     report = _skill("report")
     unreadable = _skill("unreadable")
-    # The byte limit falls inside a two-byte character, which is left out.
-    kept = "a" + "é" * (MAX_SKILL_PROMPT_BYTES // 2 - 1)
+    # The whole SKILL.md is cut; the byte limit falls inside a two-byte
+    # character, which is left out.
+    kept = "---\nname: report\n---\n" + "é" * (MAX_SKILL_PROMPT_BYTES // 2 - 11)
+    assert len(kept.encode()) == MAX_SKILL_PROMPT_BYTES - 1
     read = Mock(
         return_value={triage.version_id: "Sort.", report.version_id: kept + "é" * 10}
     )
 
-    with patch("onyx.skills.chat.read_versions_instructions", read):
+    with patch("onyx.skills.chat.read_versions_skill_md", read):
         accepted = accept_picked_skills(
             [
                 [
@@ -177,15 +199,27 @@ def test_picked_skills_are_recorded_with_text_from_one_read() -> None:
         unreadable.version_id,
     }
     # A repeat counts once; a skill the user cannot use or read is left out.
-    assert [[(m.name, m.version_id) for m in message] for message in accepted] == [
+    assert [
+        [(mention.name, mention.version_id) for mention in message.mentions]
+        for message in accepted
+    ] == [
         [("report", report.version_id), ("triage", triage.version_id)],
         [("triage", triage.version_id)],
     ]
-    cut = accepted[0][0].instructions
-    assert cut is not None
-    assert cut.startswith(f"{kept}\n\n[SKILL.md continues")
-    assert f'name="report" and start_char={len(kept)}' in cut
-    assert accepted[0][1].instructions == "Sort."
+    # Each pick has its `<skill>` message, cut with a note where the rest
+    # begins, and the token count of that message.
+    report_message, triage_message = accepted[0].skill_messages
+    assert report_message.version_id == report.version_id
+    assert report_message.content.startswith(
+        f"<skill>\n<name>report</name>\n{kept}\n\n[SKILL.md continues"
+    )
+    assert f'name="report" and start_char={len(kept)}' in report_message.content
+    assert triage_message.content == "<skill>\n<name>triage</name>\nSort.\n</skill>"
+    tokenizer = get_tokenizer(None, None)
+    assert [message.token_count for message in accepted[0].skill_messages] == [
+        len(tokenizer.encode(report_message.content)),
+        len(tokenizer.encode(triage_message.content)),
+    ]
 
 
 def test_send_request_accepts_a_recorded_mention_on_resend() -> None:

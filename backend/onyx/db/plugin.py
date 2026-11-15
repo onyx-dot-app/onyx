@@ -399,8 +399,8 @@ def get_stored_version_content(
 
 @dataclass(frozen=True)
 class StoredSkillMd:
-    """The root SKILL.md text of a version, None for a version copied from a
-    legacy skill row, and the bundle that holds it."""
+    """The raw root SKILL.md of a version, None where the version stores no
+    text (over 256 KiB or not yet repaired), and the bundle that holds it."""
 
     bundle_file_id: str | None
     skill_md: str | None

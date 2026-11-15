@@ -20,6 +20,7 @@ from onyx.agents.models import (
     CompactionCheckpoint,
     CompactionMetadata,
     InputMessageMetadata,
+    InputSource,
     MessageDelivery,
     RunFailure,
     RunFailureKind,
@@ -30,16 +31,12 @@ from onyx.agents.models import (
 from onyx.agents.tools import InputDecision
 from onyx.cache.interface import CacheBackend
 from onyx.chat.chat_processing_checker import ChatTurnAdmission
-from onyx.chat.mention_models import AcceptedMention, Mentions, RecordedMention
+from onyx.chat.mention_models import Mentions, PickedSkillMessage, RecordedMention
 from onyx.configs.constants import MessageType
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import (
-    SAVED_TOOL_RESULT_TYPES,
-    AcceptedChatInput,
-    SavedToolResultDetails,
-)
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
@@ -57,7 +54,6 @@ from onyx.llm.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.onyxbot.slack.models import SlackContext
-from onyx.prompts.skill_prompts import MENTIONED_SKILL_PROMPT
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     MultiModelMessageResponseIDInfo,
@@ -115,13 +111,13 @@ class PromptMetadata(CompactionMetadata):
 
 
 class ChatInputMetadata(InputMessageMetadata):
-    """A user message accepted between steps, with what it picked. The
-    `<skill>` message of each pick follows it in history."""
+    """A user message accepted between steps, with the records of what it
+    picked. The `<skill>` message of each pick follows it in history."""
 
-    mentions: list[AcceptedMention] = Field(default_factory=list)
+    mentions: list[RecordedMention] = Field(default_factory=list)
 
 
-def recorded_mentions(message: Message) -> list[AcceptedMention]:
+def recorded_mentions(message: Message) -> list[RecordedMention]:
     """What a message accepted between steps picked."""
     return (
         message.metadata.mentions
@@ -131,43 +127,51 @@ def recorded_mentions(message: Message) -> list[AcceptedMention]:
 
 
 def picked_skill_messages(
-    message_id: str, mentions: Sequence[AcceptedMention]
+    message_id: str,
+    mentions: Sequence[RecordedMention],
+    skill_messages: Sequence[PickedSkillMessage],
 ) -> list[UserMessage]:
-    """The `<skill>` messages that follow a message in history, one for each
-    skill it picked, from the text stored with the pick. A pick stored without
-    text, in a row that keeps no conversation content, has none."""
+    """The `<skill>` messages that follow a message in history, in the order
+    it picked the skills."""
+    by_version = {message.version_id: message for message in skill_messages}
+    if by_version.keys() != {mention.version_id for mention in mentions}:
+        raise ValueError("Each picked skill needs its saved skill message")
     return [
         UserMessage(
             id=f"{message_id}:skill:{mention.version_id}",
-            content=MENTIONED_SKILL_PROMPT.format(
-                name=mention.name, instructions=mention.instructions
+            content=by_version[mention.version_id].content,
+            metadata=PromptMetadata(
+                token_count=by_version[mention.version_id].token_count,
+                is_input_context=True,
             ),
-            metadata=PromptMetadata(is_input_context=True),
         )
         for mention in mentions
-        if mention.instructions is not None
     ]
 
 
-def accepted_input_messages(item: AcceptedChatInput) -> list[UserMessage]:
+def accepted_input_messages(
+    *,
+    message_id: str,
+    content: str,
+    source: InputSource,
+    source_run_id: str | None,
+    mentions: list[RecordedMention],
+    skill_messages: list[PickedSkillMessage],
+) -> list[UserMessage]:
     """A user message accepted between steps and the `<skill>` messages of
     its picks, as the run accepted it and as its saved record restores it."""
     return [
         UserMessage(
-            id=item.id,
-            content=item.content,
+            id=message_id,
+            content=content,
             # Only a message that picked skills has the chat metadata.
             metadata=ChatInputMetadata(
-                source=item.source,
-                source_run_id=item.source_run_id,
-                mentions=item.mentions,
+                source=source, source_run_id=source_run_id, mentions=mentions
             )
-            if item.mentions
-            else InputMessageMetadata(
-                source=item.source, source_run_id=item.source_run_id
-            ),
+            if mentions
+            else InputMessageMetadata(source=source, source_run_id=source_run_id),
         ),
-        *picked_skill_messages(item.id, item.mentions),
+        *picked_skill_messages(message_id, mentions, skill_messages),
     ]
 
 
@@ -510,7 +514,8 @@ class ChatHistoryMessage(BaseModel):
     token_count: int
     files: list[FileDescriptor]
     is_clarification: bool
-    mentions: list[AcceptedMention]
+    # The `<skill>` messages of the skills a question picked.
+    skill_messages: list[UserMessage]
     response_messages: list[Message]
     checkpoint: CompactionCheckpoint | None = None
 
