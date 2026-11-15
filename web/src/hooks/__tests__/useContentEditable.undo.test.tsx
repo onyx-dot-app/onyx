@@ -440,3 +440,24 @@ describe("token deletion history", () => {
     expect(input().textContent).toBe("Prompt ");
   });
 });
+
+describe("paste tile edits", () => {
+  it("updates the tile's accessible name with its text", () => {
+    render(<Harness pasteTilesEnabled />);
+    act(() => api.pasteText("first line\nb\nc\nd\ne"));
+    const tile = input().querySelector<HTMLElement>("[data-rich-tile]")!;
+    expect(tile).toHaveAttribute(
+      "aria-label",
+      "Pasted text: first line, 5 lines"
+    );
+
+    act(() =>
+      api.handleTileClick({
+        target: tile,
+      } as unknown as React.MouseEvent<HTMLDivElement>)
+    );
+    act(() => api.updateTileText("edited\nx"));
+
+    expect(tile).toHaveAttribute("aria-label", "Pasted text: edited, 2 lines");
+  });
+});

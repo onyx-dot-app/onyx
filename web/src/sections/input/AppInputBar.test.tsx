@@ -922,4 +922,19 @@ describe("`@` skill mentions", () => {
       mentions: [{ type: "skill", name: "code-review", index: 4 }],
     });
   });
+
+  test("voice auto-send drops a mention whose tile the transcript removed", async () => {
+    mockSttEnabled = true;
+    const onSubmit = jest.fn();
+    render(<Composer plugins={[]} onSubmit={onSubmit} />);
+    await pickCodeReview(setupUser());
+
+    const microphone = mockMicrophone;
+    if (!microphone) throw new Error("The microphone button did not render");
+    act(() => microphone.onAutoSend?.("review this please"));
+    expect(onSubmit).toHaveBeenCalledWith({
+      message: "review this please",
+      mentions: [],
+    });
+  });
 });

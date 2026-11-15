@@ -167,7 +167,9 @@ chat agent's configured tools when the turn's user has a chat skill
 remove them. Restored and child agents receive them with the other configured
 tools. The tools hold only the user and read the user's current chat skills
 on each call; `skills_read` checks that the user can still see the skill and
-returns the whole SKILL.md, frontmatter included. The Deep Research orchestrator binds
+returns its SKILL.md, frontmatter included, up to 32,000 characters per call
+(`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
+`start_char` offset of the next call. The Deep Research orchestrator binds
 both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
@@ -176,8 +178,9 @@ a short JSON summary, not the SKILL.md text.
 **Argument models.** A tool declares its arguments as one Pydantic
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and
 `tools/interface.py:tool_definition_from_arguments` makes the tool's
-definition from its JSON schema without titles, so the schema and the parser
-cannot drift. The skill and subagent tools use it.
+definition from its JSON schema without titles. The skill and subagent tools
+use it, so their schema and parser cannot drift. Other tools, such as
+`SearchTool`, still write their schema by hand.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.

@@ -1473,6 +1473,8 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
     "craft",
     { onClose }
   );
+  const skillListFetches = () =>
+    requests.mock.calls.filter(([url]) => url === SWR_KEYS.userSkills).length;
   const user = setupUser();
   await user.click(screen.getByRole("tab", { name: "Skills" }));
   const enable = await screen.findByRole("switch", {
@@ -1481,9 +1483,12 @@ test("skill saves disable conflicts first and retry only unsaved changes", async
   const disable = screen.getByRole("switch", { name: "Disable report-writer" });
   await user.click(enable);
   await user.click(disable);
+  const fetchesBeforeSave = skillListFetches();
   await user.click(screen.getByRole("button", { name: "Save" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("Enable failed");
   expect(onClose).not.toHaveBeenCalled();
+  // The disable that succeeded before the failure refreshes the skill lists.
+  await waitFor(() => expect(skillListFetches()).toBe(fetchesBeforeSave + 1));
   expect(
     requests.mock.calls
       .filter(([, init]) => init?.method === "PUT")

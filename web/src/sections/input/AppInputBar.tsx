@@ -43,7 +43,11 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import type { PickerEntry } from "@/lib/skills/picker";
 import type { CaretText } from "@/lib/contentEditable";
-import { filterMentionEntries, MENTION_TRIGGER } from "@/lib/chat/mentions";
+import {
+  filterMentionEntries,
+  MENTION_TRIGGER,
+  placeMentions,
+} from "@/lib/chat/mentions";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
@@ -1046,10 +1050,12 @@ const AppInputBar = React.memo(
                 stopRecordingRef={stopRecordingRef}
                 currentMessage={message}
                 onRecordingStart={() => {}}
+                // Like `setMessage`, keep only the mentions whose `@name`
+                // is still in the text.
                 onAutoSend={(text) =>
                   submitMessage({
                     message: text,
-                    mentions: composedRef.current.mentions,
+                    mentions: placeMentions(text, composedRef.current.mentions),
                   })
                 }
                 onMuteChange={setIsMuted}

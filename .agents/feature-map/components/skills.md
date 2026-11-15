@@ -52,9 +52,10 @@
   `skills_list` shows the full description. The agent reads a skill's
   SKILL.md with `skills_read` when the task matches. Deep Research and its
   research agents get the same catalog and both tools.
-  A skill the user mentions in a message adds that whole SKILL.md,
-  frontmatter included, right after the message, as it was read when the
-  message was accepted, at the version the user ran. History keeps that text, so a later edit, a deletion or lost access
+  A skill the user mentions in a message adds its SKILL.md, frontmatter
+  included, right after the message, as it was read when the message was
+  accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
+  there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
   the message is accepted is not applied. Built-in skills
   and skills of an external app do not reach chat, because they need the
@@ -82,7 +83,8 @@
   by delete or cut removes its mention, and undo brings it back. A draft,
   a failed send's restore and voice input keep each tile where it was, also
   against other text such as `(` or a word typed after it, and leave typed
-  `@name` text as text. A message with picks that the user sends while a
+  `@name` text as text. Voice auto-send sends only the mentions whose
+  `@name` is still in the sent text. A message with picks that the user sends while a
   response runs carries its mentions like any pending input: a send applies
   them in the running response when the response accepts the message, and a
   queued or interrupting message applies them in its own turn. While the picker is open, the `/` prompt shortcuts stay closed. In the owner's chat
@@ -291,8 +293,9 @@ agent's tool selection; restored and child agents get them with the other
 configured tools. The Deep Research orchestrator binds both in its research
 phase, and its research agents bind both. The tools hold only the user: each
 call reads the user's current chat skills (`list_chat_skills`), and
-`skills_read` reads the whole SKILL.md, frontmatter included, of the version
-the user runs now, with the same access check. The catalog is a snapshot:
+`skills_read` reads the SKILL.md, frontmatter included, of the version the
+user runs now, with the same access check, in parts of up to 32,000
+characters that a `start_char` offset continues. The catalog is a snapshot:
 each agent loads the user's chat skills once, when it is built
 (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`), and renders it for its own
 model's window, so the catalog stays the same across the agent's steps.

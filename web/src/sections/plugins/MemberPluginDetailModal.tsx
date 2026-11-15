@@ -365,6 +365,7 @@ export function MemberPluginDetailContent({
       return;
     setSaving(true);
     setSaveError(null);
+    let skillChanged = false;
     try {
       if (preferencesDirty) {
         if (plugin.kind === "mcp") {
@@ -419,6 +420,7 @@ export function MemberPluginDetailContent({
           }
           throw error;
         }
+        skillChanged = true;
         if (skillId === replaceSkillId) setSkillConflict(null);
         const updateSkill = (skill: Skill): Skill =>
           skill.id === updated.id
@@ -441,13 +443,14 @@ export function MemberPluginDetailContent({
           return next;
         });
       }
-      if (changes.length > 0) void refreshSkillLists(mutate);
       onClose();
     } catch (error) {
       setSaveError(
         error instanceof Error ? error.message : t("defaults.saveFailed")
       );
     } finally {
+      // Other skill lists must see the changes saved before a failure too.
+      if (skillChanged) void refreshSkillLists(mutate);
       setSaving(false);
     }
   }

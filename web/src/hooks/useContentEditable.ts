@@ -763,17 +763,23 @@ export function useContentEditable({
       tile.setAttribute("data-text", newText);
       tile.title = newText.length > 200 ? newText.slice(0, 200) + "…" : newText;
 
-      const preview = tile.querySelector(".rich-input-tile-preview");
-      if (preview) {
-        preview.textContent = getPasteTilePreview(newText);
+      const preview = getPasteTilePreview(newText);
+      const meta = getPasteTileMeta(newText);
+      tile.setAttribute(
+        "aria-label",
+        t("pasteTile.ariaLabel", { preview, meta })
+      );
+      const previewEl = tile.querySelector(".rich-input-tile-preview");
+      if (previewEl) {
+        previewEl.textContent = preview;
       }
-      const meta = tile.querySelector(".rich-input-tile-meta");
-      if (meta) {
-        meta.textContent = getPasteTileMeta(newText);
+      const metaEl = tile.querySelector(".rich-input-tile-meta");
+      if (metaEl) {
+        metaEl.textContent = meta;
       }
       syncFromDOM();
     },
-    [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit]
+    [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit, t]
   );
 
   const handleTileKeyDown = useCallback(

@@ -5,12 +5,7 @@
  * individual tests remain declarative.
  */
 
-import {
-  type Page,
-  type Locator,
-  type Response,
-  expect,
-} from "@playwright/test";
+import { type Page, type Locator, expect } from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
@@ -107,25 +102,28 @@ export class ChatPage {
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
-    const skillsLoaded = skills && this.chatSkillsResponse();
+    const skillsLoaded = skills && this.chatSkillsLoaded();
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
-    if (skillsLoaded) expect((await skillsLoaded).ok()).toBe(true);
+    if (skillsLoaded) await skillsLoaded;
   }
 
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async reload({ skills = false } = {}): Promise<void> {
-    const skillsLoaded = skills && this.chatSkillsResponse();
+    const skillsLoaded = skills && this.chatSkillsLoaded();
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
-    if (skillsLoaded) expect((await skillsLoaded).ok()).toBe(true);
+    if (skillsLoaded) await skillsLoaded;
   }
 
-  private chatSkillsResponse(): Promise<Response> {
-    return this.page.waitForResponse(
+  private async chatSkillsLoaded(): Promise<void> {
+    const response = await this.page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/skills/chat"
     );
+    expect(response.ok()).toBe(true);
+    // The wait resolves on the headers; the skills arrive with the body.
+    await response.body();
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
