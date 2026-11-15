@@ -1525,6 +1525,44 @@ describe("widget while a request waits", () => {
     };
   }
 
+  it("restores a turn accepted after the transcript was saved when its replay is gone", async () => {
+    const { shown, saved } = await restoreUnanswered({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+        { message_id: 3, message_type: "user", parent_message: 2 },
+        { message_id: 4, message_type: "assistant", parent_message: 3 },
+        { message_id: 5, message_type: "user", parent_message: 4 },
+        { message_id: 6, message_type: "assistant", parent_message: 5 },
+      ],
+      packets: [
+        [{ obj: { type: "stop" } }],
+        [
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "second answer" } },
+          { obj: { type: "stop" } },
+        ],
+        [
+          { obj: { type: "user_message", id: "sdk-5", message: "third" } },
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "third answer" } },
+          { obj: { type: "stop" } },
+        ],
+      ],
+    });
+
+    const expected = [
+      [1, "first"],
+      [2, "first answer"],
+      [3, "second"],
+      [4, "second answer"],
+      [5, "third"],
+      [6, "third answer"],
+    ];
+    expect(shown).toEqual(expected);
+    expect(saved).toEqual(expected);
+  });
+
   it("answers a stored question from the saved session when its replay is gone", async () => {
     const { shown, saved } = await restoreUnanswered({
       messages: [

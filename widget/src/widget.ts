@@ -234,8 +234,9 @@ export class OnyxChatWidget extends LitElement {
       if (!stored) return;
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
-      // The stored transcript can predate request outcomes, so the load
-      // replays the answers that hold approval requests.
+      // The stored transcript can predate request outcomes and later turns,
+      // so the load replays the answers that hold approval requests or that
+      // the transcript lacks.
       this.approvalsChanged = true;
       // A response that still runs or waits for a decision shows again, even
       // when the page closed before it saved any of it.
@@ -842,8 +843,9 @@ export class OnyxChatWidget extends LitElement {
         // copy finishes the response or shows its waiting requests, and
         // answers or removes a saved question with no answer after it. A
         // changed approvals version replays every saved answer that holds an
-        // approval request. On a failure the snapshot stays unfinished and
-        // the version change stays pending, so the next load tries again.
+        // approval request or that the transcript lacks. On a failure the
+        // snapshot stays unfinished and the version change stays pending, so
+        // the next load tries again.
         const approvalsChanged = this.approvalsChanged;
         const unanswered = this.messages
           .filter(
@@ -899,15 +901,19 @@ export class OnyxChatWidget extends LitElement {
           }
           if (approvalsChanged) {
             // A background agent's request is saved under the answer that
-            // started the agent, which can be any earlier answer.
+            // started the agent, which can be any earlier answer. A turn
+            // accepted after the transcript was saved is missing from it.
             assistants.forEach((message, index) => {
               if (
                 !recoverIds.includes(message.message_id) &&
-                session.packets[index]?.some(
-                  (packet) =>
-                    "type" in packet.obj &&
-                    packet.obj.type === "tool_approval_request"
-                )
+                (!this.messages.some(
+                  (shown) => shown.id === message.message_id
+                ) ||
+                  session.packets[index]?.some(
+                    (packet) =>
+                      "type" in packet.obj &&
+                      packet.obj.type === "tool_approval_request"
+                  ))
               ) {
                 recoverIds.push(message.message_id);
               }
