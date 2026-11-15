@@ -13,7 +13,6 @@ import {
   argumentRows,
   decidedStatus,
   findPendingApproval,
-  responseEnded,
 } from "../src/services/approvals";
 import {
   type ApprovalCardView,
@@ -103,27 +102,23 @@ describe("approval packets", () => {
 });
 
 describe("approval status", () => {
-  it("trusts the server outcome, then the local decision, then the stop", () => {
-    expect(approvalStatus(entry("a", "cancelled"), "approved", false)).toBe(
-      "closed"
+  it("trusts the server outcome, then the local decision", () => {
+    expect(approvalStatus(entry("a", "cancelled"), "approved")).toBe("closed");
+    expect(approvalStatus(entry("a", "rejected"), "approved")).toBe("rejected");
+    expect(approvalStatus(entry("a", "approved_for_chat"), undefined)).toBe(
+      "approvedForSession"
     );
-    expect(approvalStatus(entry("a", "rejected"), "approved", false)).toBe(
-      "rejected"
-    );
-    expect(
-      approvalStatus(entry("a", "approved_for_chat"), undefined, true)
-    ).toBe("approvedForSession");
-    expect(approvalStatus(entry("a"), "rejected", true)).toBe("rejected");
-    expect(approvalStatus(entry("a"), undefined, true)).toBe("closed");
-    expect(approvalStatus(entry("a"), undefined, false)).toBe("pending");
+    expect(approvalStatus(entry("a"), "rejected")).toBe("rejected");
+    expect(approvalStatus(entry("a"), "submitting")).toBe("pending");
+    expect(approvalStatus(entry("a"), undefined)).toBe("pending");
   });
 
-  it("keeps a subagent request open after the response ends, and out of the send gate", () => {
+  it("keeps a subagent request out of the send gate", () => {
     const agentEntry: ApprovalEntry = {
       request: { ...request("c"), agent_name: "Research" },
       outcome: null,
     };
-    expect(approvalStatus(agentEntry, undefined, true)).toBe("pending");
+    expect(approvalStatus(agentEntry, undefined)).toBe("pending");
     expect(
       findPendingApproval(
         [{ ...streamingMessage([agentEntry]), awaitingApproval: true }],
@@ -134,31 +129,40 @@ describe("approval status", () => {
 
   it("finds the first request that still waits", () => {
     const messages = [
-      { ...streamingMessage([entry("old")]), isStreaming: false },
+      { ...streamingMessage([entry("old", "cancelled")]), isStreaming: false },
       streamingMessage([entry("a"), entry("b")]),
     ];
     const local = new Map([["a", "approved" as const]]);
     expect(findPendingApproval(messages, local)?.request.approval_id).toBe("b");
-    // A response that ended closes what still waits.
-    expect(
-      findPendingApproval(
-        messages.map((message) => ({ ...message, isStreaming: false })),
-        local
-      )
-    ).toBeNull();
   });
 
-  it("keeps requests pending after a stop for decisions, not after other stops", () => {
-    const waiting = streamingMessage([entry("a")]);
-    const stop = (stop_reason: string | null) =>
-      processPacket({ obj: { type: "stop", stop_reason } }, waiting).message!;
-    expect(
-      findPendingApproval([stop("awaiting_approval")], new Map())?.request
-        .approval_id
-    ).toBe("a");
-    expect(findPendingApproval([stop(null)], new Map())).toBeNull();
-    expect(findPendingApproval([stop("user_cancelled")], new Map())).toBeNull();
-  });
+  it.each(["awaiting_approval", null, "user_cancelled", "finished"])(
+    "keeps a request pending after a %s stop until the server resolves it",
+    (stop_reason) => {
+      const waiting = streamingMessage([entry("a")]);
+      const stopped = processPacket(
+        { obj: { type: "stop", stop_reason } },
+        waiting
+      ).message!;
+      expect(
+        findPendingApproval([stopped], new Map())?.request.approval_id
+      ).toBe("a");
+      const cancelled = processPacket(
+        {
+          obj: {
+            type: "tool_approval_resolved",
+            approval_id: "a",
+            outcome: "cancelled",
+          },
+        },
+        stopped
+      ).message!;
+      expect(findPendingApproval([cancelled], new Map())).toBeNull();
+      expect(approvalStatus(cancelled.approvals![0]!, undefined)).toBe(
+        "closed"
+      );
+    }
+  );
 
   it.each([
     ["APPROVED", "USER", "approved"],
@@ -522,11 +526,7 @@ describe("widget while a request waits", () => {
     const approval = message.approvals!.find(
       (item) => item.request.approval_id === id
     )!;
-    return approvalStatus(
-      approval,
-      widget["localApprovals"].get(id),
-      responseEnded(message)
-    );
+    return approvalStatus(approval, widget["localApprovals"].get(id));
   };
 
   it("follows the continuation the decision names from its start, while a sibling still shows as waiting", async () => {
@@ -644,15 +644,20 @@ describe("widget while a request waits", () => {
     return { widget, api };
   }
 
-  it("stops following at a stop for decisions", async () => {
+  it("stops following at a stop for decisions, then only reads the agents' status", async () => {
     const { widget, api } = sendingWidget();
 
     await widget["sendMessage"]();
 
     expect(widget["isStreaming"]).toBe(false);
     expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
-    expect(api.waitForSessionIdle).not.toHaveBeenCalled();
+    // The new chat's baseline read, then the agents' read.
+    expect(api.waitForSessionIdle).toHaveBeenCalledTimes(2);
+    expect(api.waitForSessionIdle.mock.calls[1]?.[5]).toMatchObject({
+      seenRunning: true,
+    });
     expect(api.resumeStream).not.toHaveBeenCalled();
+    expect(api.getChatSession).not.toHaveBeenCalled();
   });
 
   it("follows a continuation named while the stream that stops for decisions is still read", async () => {
@@ -797,6 +802,8 @@ describe("widget while a request waits", () => {
         isStreaming: false,
       },
     ];
+    // The version of the load that showed the transcript.
+    widget["approvalsVersion"] = "v0";
     let version = "v1";
     api.waitForSessionIdle = mock(
       async (
@@ -804,13 +811,14 @@ describe("widget while a request waits", () => {
         _signal: AbortSignal,
         _onUnconfirmed: () => void,
         _attachable?: (streamId: number) => boolean,
-        onApprovalsVersion: (version: string) => void = () => {}
+        onApprovalsVersion: (version: string) => boolean = () => false
       ) => {
         onApprovalsVersion(version);
         return null;
       }
     );
     api.getChatSession = mock(async () => ({
+      approvals_version: version,
       messages: [
         { message_id: 6, message_type: "user" },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -841,6 +849,156 @@ describe("widget while a request waits", () => {
     await widget["resumeStream"]("session");
     expect(api.getChatSession).toHaveBeenCalledTimes(2);
     expect(status(widget, "c")).toBe("approved");
+  });
+
+  /**
+   * A widget whose answer 7 holds agent request c, shown by the load of
+   * version v0. Each status read takes the next of `statuses`; each session
+   * load replays c resolved, plus d once the version is v2.
+   */
+  function agentWidget(
+    statuses: { has_active_subagents: boolean; approvals_version: string }[],
+    onStatusRead: (reads: number) => void = () => {}
+  ) {
+    skipPollPauses();
+    const widget = new OnyxChatWidget();
+    widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+    widget["currentIdentity"] = async () => "user";
+    const api = new ApiService("https://onyx.test/api", async () => "key");
+    widget["apiService"] = api;
+    widget["chatSessionId"] = "session";
+    widget["messages"] = [
+      { id: 6, role: "user", content: "Research it", timestamp: 0 },
+      {
+        ...streamingMessage([{ request: agentRequest("c"), outcome: null }]),
+        isStreaming: false,
+      },
+    ];
+    widget["approvalsVersion"] = "v0";
+    api.submitApprovalDecision = mock(async () => ({
+      decision: "APPROVED" as const,
+      decided_via: "USER",
+      continuation: null,
+    }));
+    const urls: string[] = [];
+    let version = "v0";
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.endsWith("/status")) {
+        onStatusRead(urls.filter((item) => item.endsWith("/status")).length);
+        const status = statuses.shift() ?? {
+          has_active_subagents: false,
+          approvals_version: version,
+        };
+        version = status.approvals_version;
+        return Response.json({ is_processing: false, ...status });
+      }
+      const resolved = {
+        obj: {
+          type: "tool_approval_resolved",
+          approval_id: "c",
+          outcome: "approved",
+        },
+      };
+      return Response.json({
+        messages: [
+          { message_id: 6, message_type: "user" },
+          { message_id: 7, message_type: "assistant", parent_message: 6 },
+        ],
+        packets: [
+          [
+            { obj: agentRequest("c") },
+            resolved,
+            ...(version === "v2" ? [{ obj: agentRequest("d") }] : []),
+            { obj: { type: "stop" } },
+          ],
+        ],
+        approvals_version: version,
+      });
+    }) as typeof fetch;
+    const count = (part: string) =>
+      urls.filter((url) => url.includes(part)).length;
+    return { widget, count };
+  }
+
+  const agentRequest = (id: string) => ({
+    ...request(id),
+    agent_name: "Research",
+  });
+  const agentStatus = (running: boolean, version: string) => ({
+    has_active_subagents: running,
+    approvals_version: version,
+  });
+
+  it("watches the agents after a decision until they run and park, reloading on each version", async () => {
+    const { restore } = fakeSessionStorage();
+    // The decision changes the version before the agent host starts; the
+    // agent then runs, opens d and parks.
+    const { widget, count } = agentWidget([
+      agentStatus(false, "v1"),
+      agentStatus(false, "v1"),
+      agentStatus(true, "v1"),
+      agentStatus(false, "v2"),
+    ]);
+
+    try {
+      await widget["decideApproval"](agentRequest("c"), "approve_once");
+      await waitUntil(() => !widget["isStreaming"]);
+    } finally {
+      restore();
+    }
+
+    expect(count("/get-chat-session/")).toBe(2);
+    // The parked read with v2 reloads; one more read sees the agents settled.
+    expect(count("/status")).toBe(5);
+    expect(count("/resume-stream")).toBe(0);
+    expect(widget["messages"][1]?.approvals).toMatchObject([
+      { request: { approval_id: "c" }, outcome: "approved" },
+      { request: { approval_id: "d" }, outcome: null },
+    ]);
+    expect(widget["approvalsVersion"]).toBe("v2");
+  });
+
+  it("ends the watch after five reads that never see an agent run", async () => {
+    const { restore } = fakeSessionStorage();
+    const { widget, count } = agentWidget([]);
+
+    try {
+      await widget["decideApproval"](agentRequest("c"), "approve_once");
+      await waitUntil(() => !widget["isStreaming"]);
+    } finally {
+      restore();
+    }
+
+    expect(count("/status")).toBe(5);
+    expect(count("/get-chat-session/")).toBe(0);
+  });
+
+  it("restarts the watch counts on a second decision", async () => {
+    const { restore } = fakeSessionStorage();
+    let second: Promise<void> | undefined;
+    // The second decision lands while the watch makes its third read.
+    const { widget, count } = agentWidget([], (reads) => {
+      if (reads === 3)
+        second = widget["decideApproval"](agentRequest("e"), "approve_once");
+    });
+    widget["messages"][1]!.approvals!.push({
+      request: agentRequest("e"),
+      outcome: null,
+    });
+
+    try {
+      await widget["decideApproval"](agentRequest("c"), "approve_once");
+      await waitUntil(() => second !== undefined && !widget["isStreaming"]);
+      await second;
+    } finally {
+      restore();
+    }
+
+    // Two reads for the first watch; the read in flight at the second
+    // decision is the first of five fresh ones.
+    expect(count("/status")).toBe(7);
   });
 
   it("shows a waiting request that the restored snapshot lacks from the saved session", async () => {

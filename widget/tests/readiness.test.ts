@@ -207,11 +207,15 @@ describe("widget readiness", () => {
       yield { obj: { type: "overall_stop" as const } };
     });
     let resolveIdle!: () => void;
-    api.waitForSessionIdle = mock(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveIdle = resolve;
-        })
+    let reads = 0;
+    // The new chat's baseline read and the agents' read return at once; the
+    // idle wait after the stop holds the send.
+    api.waitForSessionIdle = mock(() =>
+      reads++ === 1
+        ? new Promise<null>((resolve) => {
+            resolveIdle = () => resolve(null);
+          })
+        : Promise.resolve(null)
     );
     widget["apiService"] = api;
     const pending = widget["sendMessage"]();
@@ -387,7 +391,10 @@ describe("widget readiness", () => {
       api.streamMessage = mock(async function* () {
         yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       });
+      let reads = 0;
+      // A new chat's baseline read passes; the read after the send fails.
       api.waitForSessionIdle = mock(async () => {
+        if (afterSending && reads++ === 0) return null;
         throw new Error("Session unavailable");
       });
       api.resumeStream = mock(async function* () {});
@@ -622,9 +629,10 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
+          attachable?: (streamId: number) => boolean
         ) => {
-          if (attempts.length > 0) return null;
+          // The new chat's baseline read offers no stream.
+          if (!attachable || attempts.length > 0) return null;
           // The sent response's stream 2 still saves; another client
           // started stream 4.
           offered.push(attachable(2));
@@ -776,7 +784,6 @@ describe("widget readiness", () => {
     });
   });
 });
-
 
 it.each([401, 405])("reports permanent readiness failure (%s)", async (status) => {
   globalThis.fetch = mock(async () => new Response(null, {status})) as typeof fetch;

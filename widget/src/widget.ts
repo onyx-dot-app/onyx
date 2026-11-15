@@ -30,6 +30,7 @@ import {
   READINESS_POLL_INTERVAL_MS,
   ResumeEnd,
   pause,
+  type AgentWatch,
 } from "./services/api-service";
 import {
   APPROVAL_PENDING_ERROR_CODE,
@@ -40,7 +41,6 @@ import {
   findPendingApproval,
   LocalApproval,
   readOutcome,
-  responseEnded,
 } from "./services/approvals";
 import { renderApprovalCard } from "./services/approval-card";
 import { MessageIDs, processPacket } from "./services/stream-parser";
@@ -122,14 +122,26 @@ export class OnyxChatWidget extends LitElement {
   private citationMap = new Map<number, string>();
   // A continuation a decision named while another stream was followed
   private continuationStreamId: number | null = null;
-  // The last `approvals_version` a status read reported; a change replays
-  // the saved session, the one source of subagent request outcomes
+  // The agent watch of the running follow, which it runs after its stream;
+  // a decision on an agent's request sets or restarts it
+  private agentWatch: AgentWatch | null = null;
+  // The `approvals_version` of the requests the transcript shows, from the
+  // last session load; a change replays the saved session, the one source of
+  // background agent requests and their outcomes
   private approvalsVersion: string | null = null;
   private approvalsChanged = false;
-  private readonly noteApprovalsVersion = (version: string) => {
-    if (version === this.approvalsVersion) return;
+  /** Notes a status read's version; true when it differs from the baseline. */
+  private readonly noteApprovalsVersion = (version: string): boolean => {
+    if (version === this.approvalsVersion) return false;
+    // A chat this widget just created has no load; its first read is the
+    // baseline.
+    if (this.approvalsVersion === null) {
+      this.approvalsVersion = version;
+      return false;
+    }
     this.approvalsVersion = version;
     this.approvalsChanged = true;
+    return true;
   };
 
   constructor() {
@@ -228,9 +240,15 @@ export class OnyxChatWidget extends LitElement {
       if (!stored) return;
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
+      // The stored transcript can predate request outcomes, so the load
+      // replays the answers that hold agent requests.
+      this.approvalsChanged = true;
       // A response that still runs or waits for a decision shows again, even
       // when the page closed before it saved any of it.
-      await this.resumeStream(stored.sessionId, { showLatest: true });
+      await this.resumeStream(stored.sessionId, {
+        showLatest: true,
+        agentWatch: { seenRunning: true, reads: 0 },
+      });
     })();
   }
 
@@ -308,6 +326,7 @@ export class OnyxChatWidget extends LitElement {
     this.localApprovals = new Map();
     this.expandedArguments = new Set();
     this.continuationStreamId = null;
+    this.agentWatch = null;
     this.approvalsVersion = null;
     this.approvalsChanged = false;
     this.documentMap.clear();
@@ -501,15 +520,31 @@ export class OnyxChatWidget extends LitElement {
     );
     // Follow the continuation the server names. A request that no longer
     // waits (404 or 409) follows the session's current stream, and the saved
-    // session shows its outcome.
+    // session shows its outcome. A background agent continues without a
+    // stream, so its later requests come from the saved session.
     const continuation = result === "closed" ? null : result.continuation;
-    if (this.chatSessionId && (result === "closed" || continuation)) {
+    const followAgents =
+      result !== "closed" && !continuation && Boolean(request.agent_name);
+    if (
+      this.chatSessionId &&
+      (result === "closed" || continuation || followAgents)
+    ) {
       if (!this.abortController) {
         void this.resumeStream(this.chatSessionId, {
           startStreamId: continuation?.stream_id ?? null,
+          agentWatch: followAgents ? { seenRunning: false, reads: 0 } : null,
+          agentsOnly: followAgents,
         });
       } else if (continuation) {
         this.continuationStreamId = continuation.stream_id;
+      } else if (followAgents) {
+        // The agent host starts after the decision returns: fresh counts.
+        if (this.agentWatch) {
+          this.agentWatch.seenRunning = false;
+          this.agentWatch.reads = 0;
+        } else {
+          this.agentWatch = { seenRunning: false, reads: 0 };
+        }
       }
     }
     // The focused button is gone, so focus moves on.
@@ -574,7 +609,17 @@ export class OnyxChatWidget extends LitElement {
         );
         if (!stillOurs()) return;
         this.chatSessionId = sessionId;
+        this.approvalsVersion = null;
         this.isLoading = false;
+        // The new chat's version is the baseline that later reads compare to.
+        await this.apiService.waitForSessionIdle(
+          sessionId,
+          controller.signal,
+          () => {},
+          undefined,
+          this.noteApprovalsVersion
+        );
+        if (!stillOurs()) return;
       }
 
       // Resolved once per send, so every persisted transcript is tagged with
@@ -659,7 +704,10 @@ export class OnyxChatWidget extends LitElement {
     }
     // An unacknowledged send left no stream; only the idle wait remains.
     if (follow.assistantMessageId === null) follow.ended = true;
-    await this.resumeStream(sentSessionId, { sent: follow });
+    await this.resumeStream(sentSessionId, {
+      sent: follow,
+      agentWatch: { seenRunning: true, reads: 0 },
+    });
   }
 
   /**
@@ -674,6 +722,12 @@ export class OnyxChatWidget extends LitElement {
    * cursor while the session still runs it. After a stop, a new stream that
    * the status reports is followed from its start. A stop for decisions ends
    * the follow, unless a decision meanwhile named the continuation.
+   *
+   * `agentWatch` then reads the status every second while background agents
+   * run. A changed approvals version replays the saved session and the watch
+   * goes on; a new stream is followed. The watch ends once the agents settle
+   * (see `ApiService.waitForSessionIdle`). `agentsOnly` skips the stream and
+   * starts at the saved session and the agents' status.
    */
   private async resumeStream(
     sessionId: string,
@@ -681,15 +735,24 @@ export class OnyxChatWidget extends LitElement {
       sent = null,
       startStreamId = null,
       showLatest = false,
+      agentWatch = null,
+      agentsOnly = false,
     }: {
       sent?: StreamFollow | null;
       startStreamId?: number | null;
       showLatest?: boolean;
+      agentWatch?: AgentWatch | null;
+      agentsOnly?: boolean;
     } = {}
   ) {
     if (this.abortController) return;
+    // The stream to follow next while agents run, or null to replay the saved
+    // session; undefined when the follow ends.
+    let followNext: number | null | undefined = undefined;
+    let nextWatch: AgentWatch | null = null;
     const controller = new AbortController();
     this.abortController = controller;
+    this.agentWatch = agentWatch;
     const stillOurs = () =>
       this.abortController === controller && !controller.signal.aborted;
     const onUnconfirmed = () => {
@@ -705,7 +768,11 @@ export class OnyxChatWidget extends LitElement {
       let applied = sent !== null;
       // A stream without a replay buffer is never requested again.
       let streamWithoutBuffer: number | null = null;
-      while (true) {
+      let following = !agentsOnly;
+      // The followed response stopped for decisions: the transcript is
+      // current, and only the agents' status remains.
+      let waitsForDecisions = false;
+      while (following) {
         let end: ResumeEnd | null = null;
         if (!applied) {
           const { streamId, cursor } = follow;
@@ -741,7 +808,11 @@ export class OnyxChatWidget extends LitElement {
           // A decision made during this stream named its continuation.
           const next = this.continuationStreamId;
           this.continuationStreamId = null;
-          if (next === null || next === follow.streamId) return;
+          if (next === null || next === follow.streamId) {
+            if (!this.agentWatch) return;
+            waitsForDecisions = true;
+            break;
+          }
           follow = newFollow(next);
           continue;
         }
@@ -787,12 +858,12 @@ export class OnyxChatWidget extends LitElement {
       // was closed), or the replay buffer ended early. The server's saved
       // copy finishes the response or shows its waiting requests, and
       // answers or removes a saved question with no answer after it. A
-      // changed approvals version replays the answers whose subagent
-      // requests wait, and the latest answer, which can hold new requests.
+      // changed approvals version replays the answers that hold agent
+      // requests, and the latest answer, which can hold new requests.
       // On a failure the snapshot stays unfinished, so the next load tries
       // again.
       const approvalsChanged = this.approvalsChanged;
-      this.approvalsChanged = false;
+      if (!waitsForDecisions) this.approvalsChanged = false;
       const unanswered = this.messages
         .filter(
           (message, index) =>
@@ -807,9 +878,7 @@ export class OnyxChatWidget extends LitElement {
             message.isStreaming ||
             message.awaitingApproval ||
             (approvalsChanged &&
-              message.approvals?.some(
-                (entry) => entry.request.agent_name && entry.outcome === null
-              ))
+              message.approvals?.some((entry) => entry.request.agent_name))
         )
         .map((message) => message.id)
         .filter((id): id is number => typeof id === "number");
@@ -821,6 +890,7 @@ export class OnyxChatWidget extends LitElement {
         recoverIds.push(reservedAssistantId);
       }
       if (
+        !waitsForDecisions &&
         stillOurs() &&
         (showLatest ||
           approvalsChanged ||
@@ -833,6 +903,9 @@ export class OnyxChatWidget extends LitElement {
           controller.signal
         );
         if (!stillOurs()) return;
+        // The load's version is the baseline for the requests it shows.
+        if (session.approvals_version !== undefined)
+          this.approvalsVersion = session.approvals_version;
         const assistants = session.messages.filter(
           (message) => message.message_type === "assistant"
         );
@@ -889,6 +962,30 @@ export class OnyxChatWidget extends LitElement {
         );
         saveSession(sessionId, this.messages, identity);
       }
+      const watch = this.agentWatch;
+      if (watch && stillOurs()) {
+        // A parked agent does not count as active. A reload does not end the
+        // watch; the agents settling does.
+        if (watch.reads > 0 && !this.approvalsChanged)
+          await pause(READINESS_POLL_INTERVAL_MS, controller.signal);
+        const next = this.approvalsChanged
+          ? null
+          : await this.apiService.waitForSessionIdle(
+              sessionId,
+              controller.signal,
+              onUnconfirmed,
+              (id) =>
+                id !== streamWithoutBuffer &&
+                !(follow.ended && id === follow.streamId),
+              this.noteApprovalsVersion,
+              watch
+            );
+        if (!stillOurs()) return;
+        if (typeof next === "number" || this.approvalsChanged) {
+          followNext = next;
+          nextWatch = watch;
+        }
+      }
     } catch (err: unknown) {
       if (stillOurs() && !(err instanceof Error && err.name === "AbortError")) {
         console.error("Failed to resume the response:", err);
@@ -901,8 +998,15 @@ export class OnyxChatWidget extends LitElement {
         this.streamingStatus = "";
         this.abortController = undefined;
         this.continuationStreamId = null;
+        this.agentWatch = null;
       }
     }
+    if (followNext !== undefined)
+      await this.resumeStream(sessionId, {
+        startStreamId: followNext,
+        agentWatch: nextWatch,
+        agentsOnly: followNext === null,
+      });
   }
 
   /** Applies a response stream to the transcript and persists it. */
@@ -1236,22 +1340,18 @@ export class OnyxChatWidget extends LitElement {
                 const local = this.localApprovals.get(
                   entry.request.approval_id
                 );
-                return renderApprovalCard(
-                  entry,
-                  approvalStatus(entry, local, responseEnded(msg)),
-                  {
-                    submitting: local === "submitting",
-                    failed: local === "failed",
-                    expanded: this.expandedArguments,
-                    onDecide: (request, decision) =>
-                      this.decideApproval(request, decision),
-                    onToggle: (id) => {
-                      const expanded = new Set(this.expandedArguments);
-                      if (!expanded.delete(id)) expanded.add(id);
-                      this.expandedArguments = expanded;
-                    },
-                  }
-                );
+                return renderApprovalCard(entry, approvalStatus(entry, local), {
+                  submitting: local === "submitting",
+                  failed: local === "failed",
+                  expanded: this.expandedArguments,
+                  onDecide: (request, decision) =>
+                    this.decideApproval(request, decision),
+                  onToggle: (id) => {
+                    const expanded = new Set(this.expandedArguments);
+                    if (!expanded.delete(id)) expanded.add(id);
+                    this.expandedArguments = expanded;
+                  },
+                });
               })}
             </div>
           `

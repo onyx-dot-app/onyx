@@ -175,8 +175,8 @@ export interface ToolApprovalResolved {
   outcome: string;
 }
 
-/** The stream that continues the response after a decision. */
-export interface ApprovalContinuation {
+/** A running stream and the responses it writes. */
+export interface ChatStream {
   stream_id: number;
   response_ids: number[];
 }
@@ -185,8 +185,9 @@ export interface ApprovalDecisionResponse {
   decision: "APPROVED" | "REJECTED";
   // "POLICY": the action policy disabled the tool, so the approval rejected it.
   decided_via: string;
-  // Null while other requests still wait, or when nothing resumed
-  continuation: ApprovalContinuation | null;
+  // The stream that continues the response; null while other requests still
+  // wait, or for a background agent's request, which continues without one
+  continuation: ChatStream | null;
 }
 
 /** The stream's last packet. */
@@ -232,6 +233,19 @@ export interface ChatSessionDetail {
   }[];
   // One replay packet list for each assistant message, in message order
   packets: Packet[][];
+  // The status's `approvals_version` for the requests this load shows
+  approvals_version?: string;
+}
+
+/** The fields of `/chat/chat-session/{id}/status` that the widget reads. */
+export interface ChatSessionStatus {
+  is_processing: boolean;
+  // Background agents run or their queued work waits; a parked agent that
+  // waits for a decision does not count
+  has_active_subagents: boolean;
+  current_stream: ChatStream | null;
+  // Changes when a request of the chat opens, is decided or is removed
+  approvals_version: string | null;
 }
 
 export interface SendMessageRequest {

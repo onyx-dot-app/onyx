@@ -66,20 +66,18 @@ export function readOutcome(value: unknown): ApprovalOutcome | null {
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision from
- * this widget decides it; a response that ended closes the root agent's
- * request. A subagent's request outlives the response and resolves on a
- * session refetch.
+ * this widget decides it. The server resolves every request it ends, so a stop
+ * never changes the status.
  */
 export function approvalStatus(
   entry: ApprovalEntry,
-  local: LocalApproval | undefined,
-  ended: boolean
+  local: LocalApproval | undefined
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      if (local !== undefined && local !== "submitting" && local !== "failed")
-        return local;
-      return ended && !entry.request.agent_name ? "closed" : "pending";
+      return local !== undefined && local !== "submitting" && local !== "failed"
+        ? local
+        : "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -101,14 +99,6 @@ export function decidedStatus(
 }
 
 /**
- * The server ended the response. A stop while it waits for decisions does not
- * end it, and neither does a stream this widget lost.
- */
-export function responseEnded(message: ChatMessage): boolean {
-  return !message.isStreaming && !message.awaitingApproval;
-}
-
-/**
  * The first root agent request that still waits for this user. Subagent
  * requests never hold the chat.
  */
@@ -120,11 +110,8 @@ export function findPendingApproval(
     const pending = message.approvals?.find(
       (entry) =>
         !entry.request.agent_name &&
-        approvalStatus(
-          entry,
-          localApprovals.get(entry.request.approval_id),
-          responseEnded(message)
-        ) === "pending"
+        approvalStatus(entry, localApprovals.get(entry.request.approval_id)) ===
+          "pending"
     );
     if (pending) return pending;
   }

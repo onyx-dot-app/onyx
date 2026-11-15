@@ -81,7 +81,8 @@ session.
   └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
 send → ApiService                                   services/api-service.ts
   ├─ waitForSessionIdle  (existing session) → GET /chat/chat-session/{id}/status
-  ├─ createChatSession   (first message only)
+  ├─ createChatSession   (first message only), then one status read: its
+  │    approvals_version is the new chat's baseline
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
@@ -91,7 +92,8 @@ send → ApiService                                   services/api-service.ts
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
   ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
   │    (stored for the active follow when a stream is followed)
-  ├─ continuation null → follow nothing; other requests still wait
+  ├─ continuation null, root request → follow nothing; other requests wait
+  ├─ continuation null, background agent request → poll the agents (below)
   └─ 404/409 → card shows "No longer waiting"; resumeStream follows the
        current stream, and the saved session shows the outcome
 restore / sent stream / decision / 409 → resumeStream    widget.ts
@@ -111,9 +113,18 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
        (restore, 409) a latest answer not shown, or a changed
        approvals_version → GET /chat/get-chat-session/{id}, replay the saved
        answers (by parent_message for questions; a question with none is
-       removed; a version change replays answers with waiting subagent
-       requests and the latest answer); on failure it stays unfinished for
-       the next load
+       removed; a version change replays answers with agent requests and
+       the latest answer); the load's approvals_version becomes the baseline;
+       on failure it stays unfinished for the next load
+after a send or a restore (agents counted as seen running), or an agent
+  decision → read the status every 1s; each approvals_version change loads
+  the session again and the watch goes on; a new stream is followed; the
+  watch ends when has_active_subagents is false after it was true once (a
+  parked agent does not count), or after 5 reads that never saw it true; a
+  later decision restarts the counts
+card status = the server's tool_approval_resolved outcome ("cancelled" →
+  "No longer waiting"), else this widget's decision until the outcome
+  arrives; no stop changes a card
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
