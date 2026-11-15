@@ -300,12 +300,16 @@ its background task end ([[#pure-asgi-middleware]]).
    After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
    and `cli/internal/tui/app.go` keep the approval cards and stop reading.
    They follow the stream that a decision response names in `continuation`
-   from cursor 0, and keep reading their stream when it is `null`. Otherwise
-   they read the status and follow a new `current_stream`. `ask` follows it
-   only when its `response_ids` include the response. `ask` drops the
-   replayed events up to the `replay_end` packet, except outcomes of requests
-   it asked. When no stream continues the response, or its buffer is gone,
-   `ask` shows the rest from the saved session. The TUI keeps a card until a
+   from cursor 0. When it is `null`, or after another client's decision, and
+   no stream that they read writes the response,
+   `cli/internal/api/client.go:FollowResponse` reads the status while
+   `is_processing` until a `current_stream` lists the response in
+   `response_ids`, and they follow it. When the session goes idle first, the
+   saved session shows the response. `ask` drops the replayed events up to
+   the `replay_end` packet, except outcomes of requests it asked, and keeps
+   the replayed text as the text it showed. From the saved session it shows
+   only the text after that prefix, because the saved packets render the
+   response as a replay does. The TUI loads the session. The TUI keeps a card until a
    resolution or a session load gives its outcome, and loads the session
    again when the status reports a new `approvals_version`. After a decision
    on a background agent's card, it reads the status at once and again while

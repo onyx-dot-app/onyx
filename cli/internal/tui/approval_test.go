@@ -518,7 +518,7 @@ func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
 
 // stoppedForDecisions is a chat whose response 2 stopped its stream to wait
 // for a1 and a2.
-func stoppedForDecisions(t *testing.T, client *resumingClient) Model {
+func stoppedForDecisions(t *testing.T, client api.ClientAPI) Model {
 	t.Helper()
 	m, ch := streamingModel(client)
 	session := waitingSessionID
@@ -542,11 +542,20 @@ func TestDecisionsFollowTheContinuationThatTheServerNames(t *testing.T) {
 		t.Fatal("the cards are not actionable after the stream stopped")
 	}
 
-	// a2 still waits, so the server names no continuation.
+	// a2 still waits, so the server names no continuation, and the idle
+	// session's saved state shows a2 waiting.
+	saved := waitingSession(t)
+	saved.Packets[0] = append(saved.Packets[0][:2],
+		savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "approved"}),
+		savedPacket(t, map[string]any{"type": "tool_approval_request", "approval_id": "a2", "tool_name": "mcp__3__linear__create_issue", "display_name": "Create issue"}),
+		savedPacket(t, map[string]any{"type": "stop", "stop_reason": "awaiting_approval"}))
+	client.saved = saved
 	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
-	m, next := run(t, m, cmd)
-	if next != nil || m.activeApproval() != 1 || len(client.resumed) != 0 {
-		t.Fatal("followed a response that the server did not continue")
+	m, follow := run(t, m, cmd)
+	m, load := run(t, m, follow)
+	m, _ = run(t, m, load)
+	if m.isStreaming || len(m.approvals) != 1 || m.approvals[0].request.ApprovalID != "a2" || len(client.resumed) != 0 {
+		t.Fatalf("the idle session's saved state does not show a2 waiting: %+v", m.approvals)
 	}
 
 	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
@@ -597,6 +606,28 @@ func TestSessionGrantThatDecidesTheOtherRequestsFollowsTheContinuation(t *testin
 	m = receive(t, m, client.running, models.ToolApprovalResolvedEvent{ApprovalID: "a2", Outcome: "approved_for_chat"})
 	if got := approvalEntry(t, m, "a2"); got != "● Approved for this session: Create issue" {
 		t.Fatalf("a2 = %q, want the grant's outcome", got)
+	}
+}
+
+func TestRootDecisionWithoutContinuationFollowsTheResponseAfterTheTurnThatHoldsTheChat(t *testing.T) {
+	client := &pollingClient{
+		resumingClient: &resumingClient{running: make(chan models.StreamEvent, 8)},
+		statuses: []models.ChatSessionStatus{
+			// Another model's resume holds the chat when the decisions land.
+			{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 4, ResponseIDs: []int{5}}},
+			// Its release hands the chat to this response's resume.
+			{IsProcessing: true},
+			{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 6, ResponseIDs: []int{2}}},
+		},
+	}
+	m := stoppedForDecisions(t, client)
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, _ = run(t, m, cmd)
+	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, follow := run(t, m, cmd)
+	m, _ = run(t, m, follow)
+	if len(client.requests) != 1 || *client.requests[0].streamID != 6 || client.requests[0].cursor != 0 || m.streamCh != client.running {
+		t.Fatalf("requests = %+v, want stream 6 from cursor 0", client.requests)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -58,6 +59,10 @@ type approvalServerOptions struct {
 	unbuffered bool
 	// The continuation fails after its replay, before the run starts.
 	resumeFails bool
+	// The continuation writes more text, then asks again, as a9. The
+	// decision names stream 4, which has no buffer, so the saved session
+	// finishes the answer.
+	asksAgain bool
 }
 
 // newApprovalServer streams some text and the response's tool approval
@@ -135,6 +140,9 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		if continuing {
 			continuation = `{"stream_id":3,"response_ids":[2]}`
 		}
+		if id == "a9" {
+			continuation = `{"stream_id":4,"response_ids":[2]}`
+		}
 		fmt.Fprintf(w, `{"approval_id":%q,"decision":%q,"decided_via":%q,"continuation":%s}`, id, decision, decidedVia, continuation)
 	})
 	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/status", func(w http.ResponseWriter, r *http.Request) {
@@ -179,6 +187,14 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 			id := request["approval_id"]
 			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
 		}
+		if opts.asksAgain {
+			fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "Done"}))
+			fmt.Fprintln(w, streamLine("tool_approval_request", requestEvent("a9")))
+			fmt.Fprintln(w, streamLine("stop", map[string]any{"stop_reason": "awaiting_approval"}))
+			fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 9+2*len(all)+len(requests))
+			continuing = false
+			return
+		}
 		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "done"}))
 		fmt.Fprintln(w, streamLine("stop", nil))
 		fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 7+2*len(all)+len(requests))
@@ -187,8 +203,24 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	mux.HandleFunc("/api/chat/get-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		// The saved session renders the response as a continuation's replay
+		// does. A response that no stream continued keeps its live text.
+		text := []string{"Filing.", "done"}
+		switch {
+		case opts.unbuffered:
+			text = []string{"Filing. ", "done"}
+		case opts.asksAgain:
+			text = []string{"Filing.", "Done", " filed."}
+		}
 		var packets []string
-		for _, request := range all {
+		for _, content := range text {
+			packets = append(packets, streamLine("message_delta", map[string]any{"content": content}))
+		}
+		saved := all
+		if opts.asksAgain {
+			saved = append(slices.Clone(all), requestEvent("a9"))
+		}
+		for _, request := range saved {
 			id := request["approval_id"].(string)
 			packets = append(packets, streamLine("tool_approval_request", request))
 			if outcome, decided := outcomes[id]; decided {
@@ -196,8 +228,9 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 			}
 		}
 		packets = append(packets, streamLine("stop", map[string]any{"stop_reason": "finished"}))
-		fmt.Fprintf(w, `{"chat_session_id":%q,"messages":[{"message_id":1,"message":"file a ticket","message_type":"user"},{"message_id":2,"message":"Filing. done","message_type":"assistant"}],"packets":[[%s]]}`,
-			testSessionID, strings.Join(packets, ","))
+		message, _ := json.Marshal(strings.Join(text, ""))
+		fmt.Fprintf(w, `{"chat_session_id":%q,"messages":[{"message_id":1,"message":"file a ticket","message_type":"user"},{"message_id":2,"message":%s,"message_type":"assistant"}],"packets":[[%s]]}`,
+			testSessionID, message, strings.Join(packets, ","))
 	})
 	mux.HandleFunc("/api/chat/stop-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
 		run.stops <- r.URL.Query().Get("stream_id")
@@ -393,6 +426,22 @@ func TestAsk_ContinuationWithoutBufferShowsTheSavedAnswer(t *testing.T) {
 		t.Errorf("stdout = %q, want the rest of the saved answer", out.String())
 	}
 	if strings.Count(errOut.String(), "Approved: Create issue") != 1 {
+		t.Errorf("the saved outcome does not show once: %q", errOut.String())
+	}
+}
+
+func TestAsk_SavedAnswerAfterAContinuationShowsOnlyItsRest(t *testing.T) {
+	newApprovalServer(t, approvalServerOptions{asksAgain: true})
+	ios, out, errOut := pipedIOS()
+	if err := runApprovalAsk(t, ios, "--approve=once"); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	// The replay's text differs from the live text, and the saved session
+	// renders the response as the replay does.
+	if out.String() != "Filing. Done filed.\n" {
+		t.Errorf("stdout = %q, want each part of the answer once", out.String())
+	}
+	if strings.Count(errOut.String(), "Approved: Tool a9") != 1 {
 		t.Errorf("the saved outcome does not show once: %q", errOut.String())
 	}
 }

@@ -94,6 +94,9 @@ func cmdNew(m Model) (Model, tea.Cmd) {
 		m, _ = m.cancelStream()
 		m, _ = m.finishStream(nil)
 	}
+	if m.followCancel != nil {
+		m.followCancel()
+	}
 	m.chatSessionID = nil
 	m.approvals = nil
 	m.approvalsVersion = ""

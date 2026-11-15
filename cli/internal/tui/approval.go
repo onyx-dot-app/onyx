@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -19,8 +20,11 @@ import (
 // approvalCard is a tool approval request whose outcome the server has not
 // reported yet.
 type approvalCard struct {
-	request  models.ToolApprovalRequestEvent
-	selected int
+	request models.ToolApprovalRequestEvent
+	// responseID is the response that waits for the request, or 0 when
+	// unknown.
+	responseID int
+	selected   int
 	// sending is the decision in flight; empty while the user decides.
 	sending models.ApprovalDecision
 	// decided labels the outcome of this client's decision. The card shows it
@@ -45,6 +49,8 @@ type approvalDecidedMsg struct {
 	// sessionID is the chat that showed the request, or empty.
 	sessionID  string
 	approvalID string
+	// responseID is the response that waits for the request.
+	responseID int
 	// agent marks a background agent's request.
 	agent  bool
 	result models.ApprovalDecisionResult
@@ -150,29 +156,40 @@ func (m Model) renderApprovals() {
 // load's approvals version becomes the version that the cards reflect.
 func (m Model) showSavedApprovals(detail *models.ChatSessionDetailResponse) Model {
 	m.approvalsVersion = detail.ApprovalsVersion
-	var requests []models.ToolApprovalRequestEvent
+	// The packets hold one list for each assistant message, in order.
+	var responseIDs []int
+	for _, message := range detail.Messages {
+		if message.MessageType == "assistant" {
+			responseIDs = append(responseIDs, message.MessageID)
+		}
+	}
+	var requests []approvalCard
 	outcomes := map[string]string{}
-	for _, packets := range detail.Packets {
+	for i, packets := range detail.Packets {
+		responseID := 0
+		if i < len(responseIDs) {
+			responseID = responseIDs[i]
+		}
 		for _, packet := range packets {
 			if !bytes.Contains(packet, []byte("tool_approval_")) {
 				continue
 			}
 			switch e := parser.ParseStreamLine(string(packet)).(type) {
 			case models.ToolApprovalRequestEvent:
-				requests = append(requests, e)
+				requests = append(requests, approvalCard{request: e, responseID: responseID})
 			case models.ToolApprovalResolvedEvent:
 				outcomes[e.ApprovalID] = e.Outcome
 			}
 		}
 	}
-	for _, request := range requests {
-		index := m.approvalIndex(request.ApprovalID)
-		outcome, resolved := outcomes[request.ApprovalID]
+	for _, card := range requests {
+		index := m.approvalIndex(card.request.ApprovalID)
+		outcome, resolved := outcomes[card.request.ApprovalID]
 		switch {
 		case resolved && index >= 0:
 			m = m.resolveApproval(index, approval.OutcomeLabel(outcome))
 		case !resolved && index < 0:
-			m.approvals = append(m.approvals, approvalCard{request: request})
+			m.approvals = append(m.approvals, card)
 		}
 	}
 	m.renderApprovals()
@@ -202,26 +219,30 @@ func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd
 	return m.showSavedApprovals(msg.detail), nil
 }
 
-// currentStreamMsg carries the session status read after a decision that
-// the server did not apply.
-type currentStreamMsg struct {
+// continuationMsg carries the stream that continues a decided response, or
+// nil once the session is idle.
+type continuationMsg struct {
 	sessionID string
-	status    models.ChatSessionStatus
+	stream    *models.ChatStream
 	err       error
 }
 
-// handleCurrentStream follows the stream that another client's decision
-// started.
-func (m Model) handleCurrentStream(msg currentStreamMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
+// handleContinuation follows the stream that continues a decided response.
+// When none does, the saved session shows how the response went on.
+func (m Model) handleContinuation(msg continuationMsg) (tea.Model, tea.Cmd) {
+	if m.chatSessionID == nil || msg.sessionID != *m.chatSessionID || errors.Is(msg.err, context.Canceled) {
 		return m, nil
 	}
-	m, load := m.noteApprovalsVersion(msg.status)
-	if msg.status.CurrentStream == nil {
-		return m, load
+	switch {
+	case msg.err != nil:
+		m.viewport.addError("Could not follow the response after the approval decision: " + msg.err.Error())
+		return m, nil
+	case msg.stream != nil:
+		return m.followContinuation(*msg.stream)
 	}
-	m, follow := m.followContinuation(*msg.status.CurrentStream)
-	return m, tea.Batch(load, follow)
+	// The idle session ended any stream that this client still reads.
+	m.reloading = m.isStreaming
+	return cmdResume(m, msg.sessionID, m.streamCh)
 }
 
 // noteApprovalsVersion loads the session's approval requests when a status
@@ -233,9 +254,6 @@ func (m Model) noteApprovalsVersion(status models.ChatSessionStatus) (Model, tea
 	m.approvalsVersion = status.ApprovalsVersion
 	return m, loadApprovals(m.client, *m.chatSessionID)
 }
-
-// statusPollInterval paces the status reads that wait for the server.
-var statusPollInterval = time.Second
 
 // approvalsPollMsg carries a status read that follows a background agent's
 // decision.
@@ -264,7 +282,7 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	}
 	if msg.err != nil {
 		if api.IsRetryableReadinessError(msg.err) {
-			return m, pollApprovals(m.client, msg.sessionID, msg.poll, statusPollInterval)
+			return m, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval)
 		}
 		return m, nil
 	}
@@ -272,7 +290,7 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	if !msg.status.HasActiveSubagents {
 		return m, load
 	}
-	return m, tea.Batch(load, pollApprovals(m.client, msg.sessionID, msg.poll, statusPollInterval))
+	return m, tea.Batch(load, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
 }
 
 // resolveApproval replaces a card with a one-line record of how it ended.
@@ -288,6 +306,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 	m.renderApprovals()
 	client, approvalID := m.client, m.approvals[index].request.ApprovalID
 	agent := m.approvals[index].request.AgentName != ""
+	responseID := m.approvals[index].responseID
 	sessionID := ""
 	if m.chatSessionID != nil {
 		sessionID = *m.chatSessionID
@@ -296,7 +315,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := client.DecideApproval(ctx, approvalID, decision)
-		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, agent: agent, result: result, err: err}
+		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, responseID: responseID, agent: agent, result: result, err: err}
 	}
 }
 
@@ -327,17 +346,29 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 		// later requests show only in a session load.
 		m.approvalsPoll++
 		return m, pollApprovals(m.client, msg.sessionID, m.approvalsPoll, 0)
-	case noLongerWaiting:
-		// Another client decided; the status names the stream it started.
-		client, sessionID := m.client, msg.sessionID
-		return m, func() tea.Msg {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer cancel()
-			status, err := client.ChatSessionStatus(ctx, sessionID)
-			return currentStreamMsg{sessionID, status, err}
-		}
+	case msg.err != nil && !noLongerWaiting:
+		return m, nil
 	}
-	return m, nil
+	// The response continues on a stream that the status names: after
+	// another client's decision, or after this decision once the turn that
+	// holds the chat releases it.
+	if m.isStreaming && !m.stopReceived && *m.parentMessageID == msg.responseID {
+		// The stream that this client reads writes the response.
+		return m, nil
+	}
+	if m.followCancel != nil {
+		m.followCancel()
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	m.followCancel = cancel
+	client, sessionID, responseID, streamID := m.client, msg.sessionID, msg.responseID, 0
+	if m.isStreaming && m.streamID != nil {
+		streamID = *m.streamID
+	}
+	return m, func() tea.Msg {
+		stream, err := api.FollowResponse(ctx, client, sessionID, responseID, streamID)
+		return continuationMsg{sessionID, stream, err}
+	}
 }
 
 // followContinuation shows the response from the start of the stream that

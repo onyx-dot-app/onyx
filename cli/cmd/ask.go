@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -25,10 +24,6 @@ import (
 )
 
 const defaultMaxOutputBytes = 50000
-
-// statusPollInterval paces the status reads that wait for a response to
-// continue.
-var statusPollInterval = time.Second
 
 func newAskCmd(ios *iostreams.IOStreams) *cobra.Command {
 	var (
@@ -165,8 +160,12 @@ waiting for another client.`,
 			unavailable := false
 			// ch reads the saved response, not a stream.
 			fromSaved := false
-			// The answer text shown so far.
+			// The answer text shown so far, as the saved response renders it: a
+			// continuation's replay of the saved response replaces the live text
+			// up to its end marker.
 			var answer strings.Builder
+			// The text of the replay that the current continuation sends.
+			var replayed strings.Builder
 			// approvalErr ends the run after a decision failed. The owner of a
 			// running stream stops its response; a waiting response keeps waiting.
 			var approvalErr error
@@ -345,6 +344,12 @@ waiting for another client.`,
 						switch e := event.(type) {
 						case models.ReplayEndEvent:
 							replaying = false
+							answer.Reset()
+							answer.WriteString(replayed.String())
+							replayed.Reset()
+							continue
+						case models.MessageDeltaEvent:
+							replayed.WriteString(e.Content)
 							continue
 						case models.ErrorEvent, models.StreamUnavailableEvent:
 						case models.ToolApprovalResolvedEvent:
@@ -466,31 +471,15 @@ waiting for another client.`,
 				if next != nil && next.StreamID == streamID {
 					next = nil
 				}
-				for next == nil {
-					status, err := client.ChatSessionStatus(ctx, sessionID)
+				if next == nil {
+					followed, err := api.FollowResponse(ctx, client, sessionID, responseID, streamID)
 					if ctx.Err() != nil {
 						break
 					}
-					if err != nil && !api.IsRetryableReadinessError(err) {
+					if err != nil {
 						return fmt.Errorf("cannot follow the response after the approval decisions: %w", err)
 					}
-					if err == nil {
-						current := status.CurrentStream
-						if current != nil && current.StreamID != streamID && slices.Contains(current.ResponseIDs, responseID) {
-							next = current
-						} else if !status.IsProcessing {
-							break
-						}
-					}
-					if next == nil {
-						select {
-						case <-ctx.Done():
-						case <-time.After(statusPollInterval):
-						}
-					}
-				}
-				if ctx.Err() != nil {
-					break
+					next = followed
 				}
 				if next != nil {
 					streamID = next.StreamID
@@ -517,28 +506,35 @@ waiting for another client.`,
 						continue
 					}
 					if message.MessageID == responseID && assistant < len(detail.Packets) {
-						if rest, shown := strings.CutPrefix(message.Message, answer.String()); !shown {
-							deferred = append(deferred, models.MessageDeltaEvent{Content: "\n\n" + message.Message})
-						} else if rest != "" {
-							deferred = append(deferred, models.MessageDeltaEvent{Content: rest})
-						}
+						// The saved packets render the response as a replay does,
+						// so the text that ask showed is their prefix.
+						var saved strings.Builder
 						// Like a stream, ask shows only the response's own requests.
 						requested := map[string]bool{}
+						var events []models.StreamEvent
 						for _, packet := range detail.Packets[assistant] {
 							switch e := parser.ParseStreamLine(string(packet)).(type) {
+							case models.MessageDeltaEvent:
+								saved.WriteString(e.Content)
 							case models.ToolApprovalRequestEvent:
 								if e.AgentName == "" {
 									requested[e.ApprovalID] = true
-									deferred = append(deferred, e)
+									events = append(events, e)
 								}
 							case models.ToolApprovalResolvedEvent:
 								if requested[e.ApprovalID] {
-									deferred = append(deferred, e)
+									events = append(events, e)
 								}
 							case models.StopEvent:
-								deferred = append(deferred, e)
+								events = append(events, e)
 							}
 						}
+						if rest, shown := strings.CutPrefix(saved.String(), answer.String()); !shown {
+							fmt.Fprintln(ios.ErrOut, "warning: the saved answer differs from the text shown; open the chat to see all of it")
+						} else if rest != "" {
+							deferred = append(deferred, models.MessageDeltaEvent{Content: rest})
+						}
+						deferred = append(deferred, events...)
 						if message.Error != nil {
 							deferred = append(deferred, models.ErrorEvent{Error: *message.Error})
 						}

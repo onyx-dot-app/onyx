@@ -56,6 +56,9 @@ type Model struct {
 	// approvalsPoll numbers the status polls that follow a background
 	// agent's decision; a newer poll replaces an older one.
 	approvalsPoll int
+	// followCancel ends the status reads that wait for a decided response
+	// to continue.
+	followCancel context.CancelFunc
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool
@@ -193,8 +196,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case approvalDecidedMsg:
 		return m.handleApprovalDecided(msg)
-	case currentStreamMsg:
-		return m.handleCurrentStream(msg)
+	case continuationMsg:
+		return m.handleContinuation(msg)
 	case approvalsLoadedMsg:
 		return m.handleApprovalsLoaded(msg)
 	case approvalsPollMsg:
@@ -646,7 +649,7 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	case models.ToolApprovalRequestEvent:
 		// A replay shows a card that this client already shows at its place.
 		if m.approvalIndex(e.ApprovalID) < 0 {
-			m.approvals = append(m.approvals, approvalCard{request: e})
+			m.approvals = append(m.approvals, approvalCard{request: e, responseID: *m.parentMessageID})
 		}
 		m.renderApprovals()
 
@@ -703,7 +706,7 @@ type sessionReadyMsg struct {
 
 func checkSessionReady(client api.ClientAPI, sessionID string, channel <-chan models.StreamEvent) tea.Cmd {
 	return func() tea.Msg {
-		time.Sleep(statusPollInterval)
+		time.Sleep(api.StatusPollInterval)
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		status, err := client.ChatSessionStatus(ctx, sessionID)
@@ -952,6 +955,9 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m, _ = m.finishStream(nil)
 	}
 
+	if m.followCancel != nil && (m.chatSessionID == nil || *m.chatSessionID != msg.Detail.ChatSessionID) {
+		m.followCancel()
+	}
 	detail := msg.Detail
 	m.chatSessionID = &detail.ChatSessionID
 	m.approvals = nil

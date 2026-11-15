@@ -5,13 +5,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
 )
 
 // TestMain runs the status reads that wait for the server without delay.
 func TestMain(m *testing.M) {
-	statusPollInterval = 0
+	api.StatusPollInterval = 0
 	os.Exit(m.Run())
 }
 

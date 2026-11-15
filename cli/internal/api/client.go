@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -461,6 +462,9 @@ func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (model
 	}, nil
 }
 
+// StatusPollInterval paces the status reads that wait for the server.
+var StatusPollInterval = time.Second
+
 // WaitForChatSessionIdle keeps completion separate from delivery.
 func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID string) error {
 	for {
@@ -477,7 +481,38 @@ func WaitForChatSessionIdle(ctx context.Context, client ClientAPI, sessionID str
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Second):
+		case <-time.After(StatusPollInterval):
+		}
+	}
+}
+
+// FollowResponse reads the session status until a stream other than
+// streamID writes the response responseID, and returns that stream. While
+// another turn holds the session, the status reports processing, so the
+// read continues. It returns nil once the session is idle: the saved session
+// then shows how the response went on.
+func FollowResponse(ctx context.Context, client ClientAPI, sessionID string, responseID, streamID int) (*models.ChatStream, error) {
+	for {
+		status, err := client.ChatSessionStatus(ctx, sessionID)
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if err != nil && !IsRetryableReadinessError(err) {
+			return nil, err
+		}
+		if err == nil {
+			current := status.CurrentStream
+			if current != nil && current.StreamID != streamID && slices.Contains(current.ResponseIDs, responseID) {
+				return current, nil
+			}
+			if !status.IsProcessing {
+				return nil, nil
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(StatusPollInterval):
 		}
 	}
 }
