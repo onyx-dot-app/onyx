@@ -10,11 +10,14 @@ import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  claimStreamReader,
   followChatSession,
   followChatStream,
   preserveFailedMessages,
   refreshChatSession,
+  releaseStreamReader,
   settleChatSession,
+  writesAnswer,
 } from "@/lib/chat/settleChatSession";
 import {
   readWaitingToolApprovals,
@@ -766,6 +769,87 @@ describe("with stubbed server checks", () => {
       parentNodeId: 1,
       packets: [asked, finalText],
     });
+  });
+
+  test("incognito reads the saved answer of a continuation whose resume failed before its first batch", async () => {
+    const asked = approvalRequest("approval");
+    const waited: Packet = {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+    };
+    const finalText: Packet = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta", content: "Created the issue." },
+    };
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      incognito: true,
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [
+          2,
+          {
+            ...message(2, "assistant", ""),
+            messageId: 78,
+            parentNodeId: 1,
+            packets: [asked, waited],
+          },
+        ],
+      ]),
+    });
+    // The resume request fails before its first batch.
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(
+        Response.json({ detail: "Service unavailable" }, { status: 503 })
+      );
+    jest.mocked(processRawChatHistory).mockReturnValue(
+      new Map([
+        [
+          9,
+          {
+            ...message(9, "assistant", "Created the issue."),
+            messageId: 78,
+            responseStatus: "complete" as const,
+            packets: [asked, finalText],
+          },
+        ],
+      ])
+    );
+
+    followChatStream("session", stream(991, [78]), errorMessage);
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")
+      ).toMatchObject({ chatState: "input" })
+    );
+    await waitFor(() =>
+      expect(
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")!
+          .messageTree.get(2)?.packets
+      ).toEqual([asked, finalText])
+    );
+  });
+
+  test("an answer that a newer stream took over stays with it after that stream ends", () => {
+    expect(claimStreamReader(stream(992, [79]))).toBe(true);
+    expect(claimStreamReader(stream(993, [79]))).toBe(true);
+    releaseStreamReader(stream(993, [79]));
+
+    expect(writesAnswer(992, 79)).toBe(false);
+    expect(writesAnswer(993, 79)).toBe(true);
+    releaseStreamReader(stream(992, [79]));
   });
 
   test("incognito closes a lost answer that the server did not park", async () => {

@@ -26,6 +26,8 @@ interface SettleChatSessionOptions {
   refreshHistory?: boolean;
   /** Resume returned 404: the stream has no buffer, so it cannot reattach. */
   streamUnavailable?: boolean;
+  /** The reader failed before its first batch, so its answers are unread. */
+  streamUnread?: boolean;
 }
 
 /** The rows a stream writes, in model-index order; null when one is missing. */
@@ -278,6 +280,7 @@ export async function settleChatSession({
   mode = "completion",
   refreshHistory = true,
   streamUnavailable = false,
+  streamUnread = false,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -418,7 +421,7 @@ export async function settleChatSession({
               !response.packets.some((packet) => packet.obj.type === "stop"))
         );
         const unread =
-          streamUnavailable && stream
+          (streamUnavailable || streamUnread) && stream
             ? (streamResponses(current.messageTree, stream) ?? []).filter(
                 (response) => !lost.includes(response)
               )
@@ -498,8 +501,9 @@ export async function settleChatSession({
 // Streams this browser reads: a send's own stream or a replay. A stream has
 // one reader even if a send, navigation, refresh and decisions overlap.
 const streamReaders = new Set<number>();
-// The stream that writes each answer, by message ID. A newer stream of an
-// answer, such as its continuation, takes it over from an older reader.
+// The newest stream of each answer, by message ID. A newer stream, such as
+// a continuation, takes the answer over; an older reader never writes it
+// again, even after the newer reader ends.
 const answerWriters = new Map<number, number>();
 
 /** Claims the stream and its answers for one reader; false when another
@@ -514,9 +518,6 @@ export function claimStreamReader(stream: ChatStream): boolean {
 
 export function releaseStreamReader(stream: ChatStream): void {
   streamReaders.delete(stream.stream_id);
-  for (const responseId of stream.response_ids)
-    if (answerWriters.get(responseId) === stream.stream_id)
-      answerWriters.delete(responseId);
 }
 
 /** Whether the reader of `streamId` still writes the answer `messageId`. */
@@ -638,6 +639,8 @@ export async function followChatSession({
   const abortController = new AbortController();
   // Only a 404 means the stream has no buffer; a new stream can follow it.
   let streamUnavailable = false;
+  let streamUnread = false;
+  let batches = 0;
   try {
     for await (const rawPacket of resumeStream(
       sessionId,
@@ -654,6 +657,7 @@ export async function followChatSession({
         if (rawPacket.stream_id !== streamId) {
           throw new Error("Replay cursor belongs to another response");
         }
+        batches += 1;
         if (restoring) {
           responses.forEach((response, index) => {
             response.restoredPacketCount = accumulated[index]!.length;
@@ -720,6 +724,7 @@ export async function followChatSession({
   } catch (error) {
     if (error instanceof FetchError && error.status === 404)
       streamUnavailable = true;
+    streamUnread = batches === 0;
     console.error("Failed to resume in-flight run", { streamId, error });
   } finally {
     abortController.abort();
@@ -735,6 +740,7 @@ export async function followChatSession({
         errorMessage,
         mode,
         streamUnavailable,
+        streamUnread,
       });
     }
   }

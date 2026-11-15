@@ -83,7 +83,8 @@
   name, unless this browser already reads it (the send reader and every
   replay reader claim their stream, `claimStreamReader`) or those rows are
   not loaded. A claim also takes over the stream's answers: an older reader
-  of an answer skips it (`writesAnswer`), and both the send reader and a
+  of an answer skips it (`writesAnswer`), even after the newer reader ends,
+  and both the send reader and a
   replay reader merge their answers into the current tree. Without a `continuation`, an incognito chat, which has no
   status subscriber, waits for the next stream (`waitForChatResponseEnd`)
   and follows it. When none comes because the continuation already ended,
@@ -438,7 +439,8 @@ row is `running`. After a clean send, the streamed tree stays. Settlement
 never reloads the whole history of an incognito session, in either record
 mode. On a reload or recovery, each answer of the latest turn
 (`getLatestTurn`) that lost its stream, and each answer of a named stream
-that ended before this browser could read it, takes its saved copy if the
+that this browser could not read (it ended first, or its resume failed
+before its first batch), takes its saved copy if the
 server parked it or the answer asked for approval (`savedAnswers`; only a
 chat that saves content parks an answer or asks).
 Each other lost answer gets a stop packet if it has none, and loses its
