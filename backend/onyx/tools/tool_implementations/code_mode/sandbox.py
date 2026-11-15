@@ -1329,7 +1329,13 @@ def _offered(
     ):
         metrics.count_suspension("over_budget")
         parked = None
-    if park(parked) and parked is not None:
+    try:
+        accepted = park(parked)
+    except BaseException:
+        if parked is not None and not reserved:
+            suspended_bytes.release(len(parked.snapshot))
+        raise
+    if accepted and parked is not None:
         metrics.count_suspension("parked")
         return parked
     if parked is not None and not reserved:

@@ -668,3 +668,34 @@ def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
     assert resumed.wait_for_idle(10)
 
     assert received == [{"repo-name": "A", "repo_name": "B"}]
+
+
+def test_a_park_whose_arguments_cannot_be_saved_is_refused(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The saved copy of a call's keyword arguments has its own bound. A copy
+    over it refuses the park, as a dump that does not fit does, and the dump's
+    reservation ends."""
+    limit = 256 * 1024 * 1024
+    budget = sandbox._SuspendedBytes(limit)
+    monkeypatch.setattr(sandbox, "suspended_bytes", budget)
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.code_mode.cells.suspended_bytes", budget
+    )
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.code_mode.cells.MAX_TOOL_ARGUMENT_BYTES", 1
+    )
+    agents = Agents(
+        _execute(
+            "program",
+            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            '    print("failed:", error)',
+        )
+    )
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert PARK_REFUSED_MESSAGE.format(name="send") in output
+    assert budget.free == limit

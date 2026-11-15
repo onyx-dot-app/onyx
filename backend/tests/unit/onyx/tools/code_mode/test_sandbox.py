@@ -1621,3 +1621,27 @@ def test_type_checker_notes_stay_within_the_output_limit() -> None:
     # The last diagnostic is kept.
     assert "main.py:60:" in result.type_check_notes
     assert len(result.type_check_notes) < LIMITS.max_output_chars + 100
+
+
+def test_a_park_that_raises_returns_the_dump_reservation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    budget = sandbox._SuspendedBytes(100)
+    monkeypatch.setattr(sandbox, "suspended_bytes", budget)
+    run_state = sandbox._Run(
+        limits=LIMITS,
+        function_names=FUNCTIONS,
+        plain_functions={},
+        async_functions={},
+        handler=lambda _call: None,
+        cancellation=CancellationSignal(),
+        on_print=lambda _text: None,
+        on_yield=lambda: None,
+    )
+
+    def park(_parked: object) -> bool:
+        raise RuntimeError("The park failed")
+
+    with pytest.raises(RuntimeError, match="The park failed"):
+        sandbox._offered(run_state, b"x" * 10, park, reserved=False)
+    assert budget.free == 100

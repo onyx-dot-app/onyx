@@ -1340,43 +1340,55 @@ class CodeCell:
     def _park(self, parked: ParkedProgram | None) -> bool:
         """Keep the program while it waits only for calls that wait for input.
         Refuse it when it could not be dumped or its dump does not fit
-        MAX_SUSPENDED_BYTES (None), or the cell stops: then each such call ends
-        its request and fails, and the program continues. The dump's
-        reservation of that budget, which the sandbox passes on, ends when
-        nothing holds the saved program."""
+        MAX_SUSPENDED_BYTES (None), its calls' arguments cannot be saved, or
+        the cell stops: then each such call ends its request and fails, and
+        the program continues. The dump's reservation of that budget, which
+        the sandbox passes on, ends when nothing holds the saved program."""
         with self._lock:
             if parked is not None and not self._stopping.cancelled:
                 functions = self._program.stubs.functions
-                saved = SavedProgram(
-                    # A JSON copy of each call's keyword arguments, to save;
-                    # the resumed call converts them to tool arguments.
-                    state=parked.state.model_copy(
-                        update={
-                            "waiting": {
-                                call_id: external.model_copy(
-                                    update={
-                                        "kwargs": json_value(
-                                            external.kwargs,
-                                            f"The arguments of {external.function_name}()",
-                                            MAX_TOOL_ARGUMENT_BYTES,
-                                        ).value
-                                    }
-                                )
-                                for call_id, external in parked.state.waiting.items()
+                try:
+                    saved = SavedProgram(
+                        # A JSON copy of each call's keyword arguments, to save;
+                        # the resumed call converts them to tool arguments.
+                        state=parked.state.model_copy(
+                            update={
+                                "waiting": {
+                                    call_id: external.model_copy(
+                                        update={
+                                            "kwargs": json_value(
+                                                external.kwargs,
+                                                f"The arguments of {external.function_name}()",
+                                                MAX_TOOL_ARGUMENT_BYTES,
+                                            ).value
+                                        }
+                                    )
+                                    for call_id, external in parked.state.waiting.items()
+                                }
                             }
-                        }
-                    ),
-                    dump=SavedChatFile(
-                        filename=f"code-cell-{self.id}.dump", content=parked.snapshot
-                    ),
-                    monty_version=pydantic_monty.__version__,
-                    parameters={
-                        record.call.tool_name: functions[record.call.function_name]
-                        .tool.tool_definition()
-                        .parameters
-                        for record in (self._calls[index] for index in self._requests)
-                    },
-                )
+                        ),
+                        dump=SavedChatFile(
+                            filename=f"code-cell-{self.id}.dump",
+                            content=parked.snapshot,
+                        ),
+                        monty_version=pydantic_monty.__version__,
+                        parameters={
+                            record.call.tool_name: functions[record.call.function_name]
+                            .tool.tool_definition()
+                            .parameters
+                            for record in (
+                                self._calls[index] for index in self._requests
+                            )
+                        },
+                    )
+                except (TypeError, ValueError):
+                    # The copy of the keyword arguments can exceed the bound
+                    # that their tool arguments met; refused like a dump that
+                    # does not fit.
+                    saved = None
+            else:
+                saved = None
+            if saved is not None and parked is not None:
                 weakref.finalize(saved, suspended_bytes.release, len(parked.snapshot))
                 self._parked = saved
                 self._release_slot()
