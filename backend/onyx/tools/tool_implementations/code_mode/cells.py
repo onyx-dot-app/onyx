@@ -10,6 +10,7 @@ observer.
 import json
 import threading
 import time
+import weakref
 from collections.abc import Callable, Collection, Iterator, Mapping, Sequence
 from contextlib import contextmanager, nullcontext
 from functools import partial
@@ -81,6 +82,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     StoreCommit,
     StoreSnapshot,
     code_mode_results,
+    entry_bytes,
     json_text,
 )
 from onyx.tools.tool_implementations.code_mode.prompt import (
@@ -95,6 +97,7 @@ from onyx.tools.tool_implementations.code_mode.sandbox import (
     MAX_RUNNING_CELLS,
     StdoutCollector,
     execute_program,
+    suspended_bytes,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     ProgramStore,
@@ -457,6 +460,68 @@ def _interrupted_amendments(
     ]
 
 
+def _unresumed_amendment(saved: SavedCodeCell) -> ToolResultAmendment:
+    """The result of the observation that a saved cell's parked program waits
+    in, when the run ends before the cell resumes, which only its cancellation
+    does: the program is cancelled as a live parked cell is, keeping its output
+    and calls."""
+    records = sorted(saved.calls, key=lambda record: record.call.index)
+    calls = [
+        record.call.unfinished() if record.ended_in is None else record.call
+        for record in records
+    ]
+    window_calls = [
+        call
+        for call, record in zip(calls, records, strict=True)
+        if record.in_window(saved.window)
+    ]
+    stdout = StdoutCollector(
+        saved.limits.max_output_chars, live_chars=LIVE_OUTPUT_CHARS
+    )
+    stdout.write(saved.stdout)
+    end = SandboxResult(
+        status="cancelled", duration_seconds=saved.program.state.elapsed_seconds
+    )
+    first = saved.observer_number == 0
+    details = CodeModeExecutionResult(
+        cell_id=saved.cell_id,
+        observation=saved.observer_number,
+        code=saved.code if first else "",
+        status="cancelled",
+        stdout=stdout.text,
+        result=None,
+        error=None,
+        duration_seconds=end.duration_seconds,
+        calls=window_calls,
+        commit=None,
+        tool_call_count=len(calls),
+        lost_store_writes=saved.lost_store_writes if first else None,
+    )
+    saved_chars = APPROX_CHARS_PER_TOKEN * saved.observer_max_tokens
+    return ToolResultAmendment(
+        call_id=saved.observer_call_id,
+        result=ToolResult(
+            content=format_content(
+                details,
+                heading=observation_heading(details),
+                status=details.status,
+                cell_id=saved.cell_id,
+                cell_calls=calls,
+                max_tokens=saved.observer_max_tokens,
+                end=end,
+                discarded=DiscardedWrites(
+                    keys=tuple(changed_writes(saved.store.values, saved.store_writes)),
+                    reason=STOPPED_BEFORE_END,
+                ),
+                elided_chars=stdout.dropped,
+                lost_store_writes=details.lost_store_writes,
+            ),
+            details=details.model_copy(update={"stdout": stdout.cut(saved_chars)}),
+            is_error=True,
+        ),
+    )
+
+
 class StoreLimitError(Exception):
     """A commit that would exceed a store limit, with the keys of the writes that
     would change the store at commit time."""
@@ -680,7 +745,15 @@ class CodeCell:
         self._staged_files = [file.restore() for file in saved.staged_files]
         self._lost_store_writes = saved.lost_store_writes
         self._program_store = ProgramStore(saved.store)
-        for key, value in saved.store_writes.items():
+        # The final writes, those that shrink the store first: the store then
+        # never holds more than at the program's start or at its park.
+        for key, value in sorted(
+            saved.store_writes.items(),
+            key=lambda write: (
+                entry_bytes(write[0], write[1])
+                - entry_bytes(write[0], saved.store.values.get(write[0]))
+            ),
+        ):
             self._program_store.store(key, value)
         self._parked = saved.program
 
@@ -762,8 +835,12 @@ class CodeCell:
                 answered = by_request[request.request.request_id]
                 record = self._calls[index]
                 function = functions.get(record.call.function_name)
+                # The function name can now name another tool, whose suffix
+                # comes from the current tool set.
                 unchanged = (
                     function is not None
+                    and function.tool.name == record.call.tool_name
+                    and function.tool.id == record.call.tool_id
                     and function.tool.tool_definition().parameters
                     == parked.parameters.get(record.call.tool_name)
                 )
@@ -1260,12 +1337,14 @@ class CodeCell:
 
     def _park(self, parked: ParkedProgram | None) -> bool:
         """Keep the program while it waits only for calls that wait for input.
-        Refuse it when it could not be dumped (None) or the cell stops: then
-        each such call ends its request and fails, and the program continues."""
+        Refuse it when it could not be dumped (None), its dump does not fit
+        MAX_SUSPENDED_BYTES, or the cell stops: then each such call ends its
+        request and fails, and the program continues. The dump counts against
+        that budget until nothing holds the saved program."""
         with self._lock:
             if parked is not None and not self._stopping.cancelled:
                 functions = self._program.stubs.functions
-                self._parked = SavedProgram(
+                saved = SavedProgram(
                     # The JSON copy of each call's arguments, to save.
                     state=parked.state.model_copy(
                         update={
@@ -1293,9 +1372,14 @@ class CodeCell:
                         for record in (self._calls[index] for index in self._requests)
                     },
                 )
-                self._release_slot()
-                self._changed.notify_all()
-                return True
+                if suspended_bytes.reserve(len(parked.snapshot)):
+                    weakref.finalize(
+                        saved, suspended_bytes.release, len(parked.snapshot)
+                    )
+                    self._parked = saved
+                    self._release_slot()
+                    self._changed.notify_all()
+                    return True
             requests = list(self._requests.values())
             for index in self._requests:
                 self._answers[index] = ToolResult(
@@ -1796,6 +1880,10 @@ class CodeCells:
     ) -> list[ToolResultAmendment]:
         with self._lock:
             cells = list(self._cells.values())
+            # Saved cells that did not resume stay saved while the run pauses.
+            unresumed = [] if reason == "suspended" else list(self._saved.values())
+            if unresumed:
+                self._saved.clear()
         closing = [
             cell
             for cell in cells
@@ -1821,7 +1909,14 @@ class CodeCells:
                 )
         amendments = [
             *amendments,
-            *_interrupted_amendments(results, {cell.id for cell in cells}),
+            *(_unresumed_amendment(saved) for saved in unresumed),
+            *_interrupted_amendments(
+                results,
+                {
+                    *(cell.id for cell in cells),
+                    *(saved.cell_id for saved in unresumed),
+                },
+            ),
         ]
         # A hook failure that no observation raised fails the run, as for a
         # direct call; the first one wins.

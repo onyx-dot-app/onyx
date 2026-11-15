@@ -2055,6 +2055,89 @@ def test_parent_handoff_releases_feature_and_preserves_child_dependency() -> Non
         assert owner.close(3)
 
 
+def test_a_released_background_child_that_a_parent_waits_for_is_observed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A parent waits for a background child through ChildRunWait. When the
+    child hands off, the coordinator observes it in storage for the parent,
+    as it does for a foreground child."""
+    monkeypatch.setattr(agent_coordination, "REMOTE_POLL_SECONDS", 0.01)
+    status_reads: list[str] = []
+
+    def read_status(run_id: str, _parent_id: str) -> RunStatus:
+        status_reads.append(run_id)
+        return RunStatus.SUSPENDED
+
+    owner = AgentCoordinator(directory=FakeAgentDirectory(read_run_status=read_status))
+    submissions: list[SpawnResult] = []
+    child = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="q", name="q", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="q", description="", parameters={}),
+                execute=lambda _: PendingToolInput(
+                    request_id="answer", prompt="Question", mode=InputMode.RESULT
+                ),
+            )
+        ],
+    )
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        submission = invocation.agents.spawn_agent(
+            child,
+            name="child",
+            description="",
+            messages=[],
+            max_steps=2,
+            lifetime=AgentLifetime.BACKGROUND,
+        )
+        submissions.append(submission)
+        return ChildRunWait(run_ids=[submission.run_id])
+
+    parent = Agent(
+        FakeModelClient(
+            lambda *_: AssistantMessage(
+                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+            )
+        ),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=delegate,
+                result_from_children=lambda *_: ToolResult(content="child finished"),
+            )
+        ],
+    )
+    run = parent.start(max_steps=2, coordinator=owner)
+    try:
+        child_run = None
+        deadline = time.monotonic() + 10
+        while child_run is None and time.monotonic() < deadline:
+            if submissions:
+                child_run = owner.run(submissions[0].run_id)
+            time.sleep(0.01)
+        assert child_run is not None
+        assert child_run.wait_until_settled(10).status == RunStatus.SUSPENDED
+        assert run.wait_until_settled(10).status == RunStatus.SUSPENDED
+        child_run.handoff()
+        deadline = time.monotonic() + 10
+        while not status_reads and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert status_reads == [submissions[0].run_id] * len(status_reads)
+        assert status_reads
+    finally:
+        run.cancel()
+        assert owner.close(3)
+
+
 def test_parent_hands_off_after_its_waiting_child_hands_off(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

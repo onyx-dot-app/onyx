@@ -274,11 +274,16 @@ class AgentCoordinator:
                 tracked.execution = None
                 self._state.agents.pop(run.agent_id, None)
                 self._state.latest[run.agent_id] = snapshot
+                # Local runs wait for their foreground children, and for the
+                # runs that a ChildRunWait or a delegation watches.
                 still_waited = {
                     run_id
                     for entry in self._state.tracked_runs.values()
                     if entry.coordination is not None
-                    for run_id in entry.coordination.children
+                    for run_id in (
+                        *entry.coordination.children,
+                        *entry.coordination.run.watched_run_ids,
+                    )
                 }
                 has_waiters = run.id in still_waited
                 for run_id in waited - still_waited:

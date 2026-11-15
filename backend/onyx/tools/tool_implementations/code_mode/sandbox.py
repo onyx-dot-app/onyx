@@ -688,10 +688,12 @@ class _WorkerDemand:
 
 class _SuspendedBytes:
     """The budget of dumped programs held in the server process
-    (MAX_SUSPENDED_BYTES)."""
+    (MAX_SUSPENDED_BYTES): suspended ones and parked ones."""
 
     def __init__(self, limit: int) -> None:
-        self._lock = threading.Lock()
+        # Reentrant: a garbage collection inside `reserve` can release a
+        # parked program's bytes (`CodeCell._park`).
+        self._lock = threading.RLock()
         self._free = limit
 
     @property
@@ -714,7 +716,7 @@ class _SuspendedBytes:
 
 
 _worker_demand = _WorkerDemand(MAX_SANDBOX_PROCESSES)
-_suspended_bytes = _SuspendedBytes(MAX_SUSPENDED_BYTES)
+suspended_bytes = _SuspendedBytes(MAX_SUSPENDED_BYTES)
 
 
 def _call_host(
@@ -1203,7 +1205,7 @@ def _load(
             suspended.snapshot, print_callback=run.print_callback
         )
     finally:
-        _suspended_bytes.release(len(suspended.snapshot))
+        suspended_bytes.release(len(suspended.snapshot))
 
 
 def _segment(
@@ -1291,7 +1293,7 @@ def _suspend(
     `_dump` cannot dump it. The program's last dump size estimates the next, so
     a dump that cannot fit is skipped.
     """
-    if run.last_dump_bytes > _suspended_bytes.free:
+    if run.last_dump_bytes > suspended_bytes.free:
         metrics.count_suspension("over_budget")
         return None
     snapshot = _dump(run, waiting, worker, DUMP_MEMORY_MESSAGE)
@@ -1299,7 +1301,7 @@ def _suspend(
         metrics.count_suspension("over_memory")
         return None
     run.last_dump_bytes = len(snapshot)
-    if not _suspended_bytes.reserve(len(snapshot)):
+    if not suspended_bytes.reserve(len(snapshot)):
         metrics.count_suspension("over_budget")
         return None
     metrics.count_suspension("dumped")
@@ -1605,4 +1607,4 @@ def _drive(
                             return offered
     finally:
         if suspended is not None:
-            _suspended_bytes.release(len(suspended.snapshot))
+            suspended_bytes.release(len(suspended.snapshot))

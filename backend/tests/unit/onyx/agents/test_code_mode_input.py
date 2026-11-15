@@ -1,6 +1,7 @@
 """Code mode programs whose calls wait for the user's input: the program parks,
 the run saves it, and any process continues it after the answer."""
 
+import gc
 import json
 import threading
 from collections.abc import Callable, Mapping
@@ -42,6 +43,7 @@ from onyx.llm.models import (
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
+from onyx.tools.tool_implementations.code_mode import store as store_module
 from onyx.tools.tool_implementations.code_mode.cells import (
     PARK_REFUSED_MESSAGE,
     PROGRAM_VERSION_MESSAGE,
@@ -394,3 +396,157 @@ def test_a_park_that_runs_out_of_memory_stops_the_program_clearly(
     assert [(event.request.request_id, event.answer) for event in ended] == [
         (REQUEST_ID, None)
     ]
+
+
+def test_a_restored_run_that_ends_before_its_answer_closes_the_saved_cell() -> None:
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[]
+    )
+    _suspended(resumed)
+
+    resumed.cancel()
+    assert resumed.wait_for_idle(10)
+
+    snapshot = resumed.snapshot()
+    assert snapshot.status == RunStatus.CANCELLED
+    # The same record as when the run that parked the program ends.
+    result = snapshot.steps[0].tools["program"].result
+    assert result is not None and result.is_error
+    assert "before" in result.text and "[0] send: unfinished" in result.text
+    assert agents.sent == []
+
+
+def test_a_restored_call_whose_function_now_names_another_tool_does_not_run() -> None:
+    """`send-mail` and `send_mail` share the identifier `send_mail`; the first
+    keeps it. With `send-mail` gone, `send_mail` names the other tool, whose
+    parameters are the same; its approval does not carry over."""
+    sent: list[str] = []
+
+    def sender(name: str) -> FakeTool:
+        def run(_invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+            sent.append(name)
+            return ToolResult(content=json.dumps({"sent": name}))
+
+        return FakeTool(name, run)
+
+    def agent(names: list[str], state: AgentState | None = None) -> Agent:
+        cells = CodeCells()
+        execute = CodeModeTool(
+            [sender(name) for name in names], cells=cells, limits=PARKING_LIMITS
+        )
+        return Agent(
+            FakeModelClient(
+                _reply(
+                    (_execute("program", 'print(await send_mail(value="x"))'),),
+                    threading.Event(),
+                )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=state,
+            tools=[
+                execute.bind(ToolContext),
+                WaitCodeTool(cells, execute.program).bind(ToolContext),
+            ],
+            before_tool_call=lambda context: (
+                PendingToolInput(
+                    request_id=REQUEST_ID, prompt="Send?", mode=InputMode.EXECUTE
+                )
+                if context.call.name == "send-mail"
+                else None
+            ),
+            on_suspend=cells.suspend,
+            on_finish=cells.finish,
+            restoration=CellsFeature(cells),
+        )
+
+    run = agent(["send-mail", "send_mail"]).start(
+        max_steps=3, messages=[UserMessage(content="Send")]
+    )
+    _suspended(run)
+    checkpoint = _transferred(run)
+    resumed = agent(["send_mail"], checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert sent == []
+    assert UNAVAILABLE_CALL_MESSAGE in output
+
+
+def test_a_program_whose_dump_exceeds_the_budget_continues_without_the_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sandbox, "suspended_bytes", sandbox._SuspendedBytes(0))
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.code_mode.cells.suspended_bytes",
+        sandbox.suspended_bytes,
+    )
+    agents = Agents(
+        _execute(
+            "program",
+            'try:\n    await send(value="x")\nexcept RuntimeError as error:\n'
+            '    print("failed:", error)',
+        )
+    )
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    output = run.result(timeout=20).output.text
+    assert run.wait_for_idle(10)
+
+    assert agents.sent == []
+    assert PARK_REFUSED_MESSAGE.format(name="send") in output
+
+
+def test_a_parked_dump_counts_against_the_budget_until_nothing_holds_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    limit = 256 * 1024 * 1024
+    budget = sandbox._SuspendedBytes(limit)
+    monkeypatch.setattr(sandbox, "suspended_bytes", budget)
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.code_mode.cells.suspended_bytes", budget
+    )
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    assert budget.free < limit
+
+    run.cancel()
+    assert run.wait_for_idle(10)
+    del run
+    gc.collect()
+    assert budget.free == limit
+
+
+def test_a_restored_store_applies_the_writes_that_shrink_it_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The program writes `n`, deletes `a`, then enlarges `n`. Its store fits
+    at each step, but `n`'s final value with `a` still stored does not."""
+    monkeypatch.setattr(store_module, "MAX_STORE_BYTES", 1_000)
+    agents = Agents(
+        _execute("first", 'store("a", "x" * 580)'),
+        _execute(
+            "program",
+            'store("n", "x")\nstore("a", None)\nstore("n", "y" * 580)\n'
+            f'{PROGRAM}\nprint(len(load("n")), load("a"))',
+        ),
+    )
+    agents.shown.set()
+    run = agents.agent().start(max_steps=4, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+
+    resumed = agents.agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    output = resumed.result(timeout=20).output.text
+    assert resumed.wait_for_idle(10)
+
+    assert agents.sent == ["x"]
+    assert "580 None" in output

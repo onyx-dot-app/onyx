@@ -1254,6 +1254,13 @@ class Run:
             self._state.child_runs = children
         return False
 
+    @property
+    def watched_run_ids(self) -> tuple[str, ...]:
+        """The runs that this run has watched for completion. Read without the
+        execution lock: the coordinator reads it under its own lock, which
+        holders of that lock can wait for."""
+        return tuple(self._watched_children)
+
     def watch_children(self, run_ids: list[str]) -> None:
         if self.coordination is None:
             raise RuntimeError("Child dependencies require a coordinator")

@@ -806,7 +806,7 @@ def test_a_waiting_program_keeps_its_worker_while_no_other_waits(
 def test_a_dump_over_the_byte_budget_keeps_the_worker(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "_suspended_bytes", sandbox._SuspendedBytes(0))
+    monkeypatch.setattr(sandbox, "suspended_bytes", sandbox._SuspendedBytes(0))
     over_budget = _suspensions("over_budget")
     dumped = _suspensions("dumped")
     with Monty(
@@ -827,7 +827,7 @@ def test_a_dump_over_the_byte_budget_keeps_the_worker(
 
 
 def test_a_dump_that_cannot_fit_is_skipped(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(sandbox, "_suspended_bytes", sandbox._SuspendedBytes(10))
+    monkeypatch.setattr(sandbox, "suspended_bytes", sandbox._SuspendedBytes(10))
 
     class Snapshot:
         dumps = 0
