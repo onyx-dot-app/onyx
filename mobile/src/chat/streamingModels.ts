@@ -390,6 +390,8 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  // The subagent that asks; null or absent for the root agent's own request.
+  agent_name?: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {

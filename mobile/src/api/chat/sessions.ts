@@ -5,7 +5,7 @@ import { apiFetch } from "@/api/client";
 import { QUERY_KEYS } from "@/api/query-keys";
 import { useSession } from "@/state/session";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
-import { BackendChatSession } from "@/chat/interfaces";
+import { BackendChatSession, ChatStream } from "@/chat/interfaces";
 
 const SESSION_CONTROL_TIMEOUT_MS = 10_000;
 
@@ -36,7 +36,9 @@ export async function getChatSession(
 export interface ChatSessionStatus {
   is_processing: boolean;
   // The running response's stream, once it has one.
-  current_stream?: { stream_id: number } | null;
+  current_stream?: ChatStream | null;
+  // Changes when a tool approval request of the session opens or resolves.
+  approvals_version?: string;
 }
 
 export async function getChatSessionStatus(

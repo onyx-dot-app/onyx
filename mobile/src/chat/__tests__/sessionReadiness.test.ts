@@ -50,11 +50,11 @@ describe("session readiness", () => {
       .mockResolvedValueOnce({ is_processing: true, current_stream: null })
       .mockResolvedValueOnce({
         is_processing: true,
-        current_stream: { stream_id: 7 },
+        current_stream: { stream_id: 7, response_ids: [7] },
       })
       .mockResolvedValueOnce({
         is_processing: true,
-        current_stream: { stream_id: 8 },
+        current_stream: { stream_id: 8, response_ids: [8] },
       });
     const pending = waitForSessionIdle(
       "s",
@@ -63,8 +63,38 @@ describe("session readiness", () => {
       (streamId) => streamId !== 7,
     );
     await jest.advanceTimersByTimeAsync(2000);
-    expect(await pending).toEqual({ kind: "stream", streamId: 8 });
+    expect(await pending).toEqual({
+      kind: "stream",
+      stream: { stream_id: 8, response_ids: [8] },
+    });
     expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
+  });
+
+  it("reports approvals that changed since the session's last status read", async () => {
+    const status = jest.mocked(getChatSessionStatus);
+    status.mockResolvedValueOnce({
+      is_processing: false,
+      approvals_version: "v1",
+    });
+    expect(
+      await waitForSessionIdle("versioned", () => true, jest.fn()),
+    ).toEqual({ kind: "idle", approvalsChanged: false });
+
+    status.mockResolvedValueOnce({
+      is_processing: false,
+      approvals_version: "v1",
+    });
+    expect(
+      await waitForSessionIdle("versioned", () => true, jest.fn()),
+    ).toEqual({ kind: "idle", approvalsChanged: false });
+
+    status.mockResolvedValueOnce({
+      is_processing: false,
+      approvals_version: "v2",
+    });
+    expect(
+      await waitForSessionIdle("versioned", () => true, jest.fn()),
+    ).toEqual({ kind: "idle", approvalsChanged: true });
   });
 });
 

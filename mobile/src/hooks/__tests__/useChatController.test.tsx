@@ -21,8 +21,10 @@ import {
 } from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
+import { getLatestMessageChain } from "@/chat/messageTree";
 import {
-  findPendingToolApprovalIds,
+  readToolApprovals,
+  toolApprovalStatus,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
 import { useChatController } from "@/hooks/useChatController";
@@ -101,6 +103,10 @@ function startPacket(content: string): StreamEvent {
     obj: { type: PacketType.MESSAGE_START, id: "m", content },
   } as StreamEvent;
 }
+const pausedStop = {
+  placement: { turn_index: 0 },
+  obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+} as StreamEvent;
 const approvalRequest = {
   placement: { turn_index: 0 },
   obj: {
@@ -179,6 +185,22 @@ function savedTurn(packets: unknown[], answer = "") {
   };
 }
 
+// The requests that the latest response of session s1 shows as waiting.
+function waitingIds(): string[] {
+  const tree = useChatSessionStore.getState().sessions.get("s1")?.messageTree;
+  const response = tree ? getLatestMessageChain(tree).at(-1) : undefined;
+  const { localStatuses } = useToolApprovalUi.getState();
+  return readToolApprovals(response?.packets ?? [])
+    .filter(
+      (entry) =>
+        toolApprovalStatus(
+          entry,
+          localStatuses.get(entry.request.approval_id),
+        ) === "pending",
+    )
+    .map((entry) => entry.request.approval_id);
+}
+
 async function* scripted(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
   for (const event of events) yield event;
 }
@@ -216,25 +238,16 @@ describe("useChatController", () => {
     useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
   });
 
-  it("blocks a send while a tool approval waits and keeps the draft", async () => {
+  it("sends while a tool approval waits, then keeps the draft when the server refuses", async () => {
     useChatSessionStore.getState().ensureSession("s1");
-    getSessionMock.mockResolvedValue(savedTurn([approvalRequest]));
-    streamMock.mockReturnValueOnce(
-      scripted([
-        idInfo,
-        {
-          placement: { turn_index: 0 },
-          obj: {
-            type: PacketType.TOOL_APPROVAL_REQUEST,
-            approval_id: "a1",
-            tool_call_id: "c1",
-            tool_name: "lookup",
-            display_name: "Lookup",
-            arguments: {},
-          },
-        } as StreamEvent,
-      ]),
-    );
+    getSessionMock.mockResolvedValue(savedTurn([approvalRequest, pausedStop]));
+    streamMock
+      .mockReturnValueOnce(scripted([idInfo, approvalRequest, pausedStop]))
+      .mockReturnValueOnce(
+        (async function* (): AsyncGenerator<StreamEvent> {
+          throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
+        })(),
+      );
     const onAccepted = jest.fn();
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
@@ -245,13 +258,19 @@ describe("useChatController", () => {
     await act(async () => {
       await result.current.submit("Follow-up", [], onAccepted);
     });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    expect(streamMock).toHaveBeenCalledTimes(1);
+    expect(streamMock).toHaveBeenCalledTimes(2);
     expect(onAccepted).not.toHaveBeenCalled();
     expect(toast.warning).toHaveBeenCalledWith(
       "Approve or reject the pending tool calls first.",
     );
     expect(useToolApprovalUi.getState().nudgeSeq).toBe(1);
+    expect(result.current.messages.map((m) => m.message)).toEqual([
+      "Question",
+      "",
+    ]);
+    expect(waitingIds()).toEqual(["a1"]);
   });
 
   it("releases input when a response pauses for approval, keeping its card open", async () => {
@@ -275,11 +294,7 @@ describe("useChatController", () => {
     });
 
     await waitFor(() => expect(result.current.chatState).toBe("input"));
-    expect(
-      findPendingToolApprovalIds(
-        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-      ),
-    ).toEqual(["a1"]);
+    expect(waitingIds()).toEqual(["a1"]);
     expect(result.current.messages[1]?.streamingStartedAt).toBeUndefined();
     expect(getSessionMock).not.toHaveBeenCalled();
   });
@@ -292,7 +307,7 @@ describe("useChatController", () => {
       .mockResolvedValueOnce({ is_processing: false })
       .mockResolvedValue({
         is_processing: true,
-        current_stream: { stream_id: 11 },
+        current_stream: { stream_id: 11, response_ids: [11] },
       });
     streamMock.mockReturnValueOnce(
       (async function* (): AsyncGenerator<StreamEvent> {
@@ -320,13 +335,7 @@ describe("useChatController", () => {
       expect(resumeMock).toHaveBeenCalledWith("s1", 11, 0, expect.anything()),
     );
     // The card stays reachable: the response is still a live answer, not an error.
-    await waitFor(() =>
-      expect(
-        findPendingToolApprovalIds(
-          useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-        ),
-      ).toEqual(["a1"]),
-    );
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
     expect(result.current.messages.map((m) => m.type)).toEqual([
       "user",
       "assistant",
@@ -375,11 +384,7 @@ describe("useChatController", () => {
     expect(accumulated(result.current.messages[1]!.packets)).toBe(
       "Part of the answer",
     );
-    expect(
-      findPendingToolApprovalIds(
-        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-      ),
-    ).toEqual([]);
+    expect(waitingIds()).toEqual([]);
   });
 
   it("does not let a failed response's request block the next send", async () => {
@@ -412,8 +417,9 @@ describe("useChatController", () => {
     clock.mockRestore();
   });
 
-  it("points at the waiting approval when the server refuses a send", async () => {
+  it("loads the waiting card when the server refuses a send", async () => {
     useChatSessionStore.getState().ensureSession("s1");
+    getSessionMock.mockResolvedValue(savedTurn([approvalRequest, pausedStop]));
     streamMock.mockReturnValueOnce(
       (async function* (): AsyncGenerator<StreamEvent> {
         throw new StreamHttpError("Waiting.", 409, "APPROVAL_PENDING");
@@ -425,9 +431,14 @@ describe("useChatController", () => {
     await act(async () => {
       await result.current.submit("Question", [], onAccepted);
     });
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
     await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    expect(result.current.messages).toEqual([]);
+    expect(getSessionMock).toHaveBeenCalledWith("s1");
+    expect(result.current.messages.map((m) => m.message)).toEqual([
+      "Question",
+      "",
+    ]);
     expect(onAccepted).not.toHaveBeenCalled();
     expect(toast.error).not.toHaveBeenCalled();
     expect(toast.warning).toHaveBeenCalledWith(
@@ -442,7 +453,7 @@ describe("useChatController", () => {
       .mockResolvedValueOnce({ is_processing: false })
       .mockResolvedValue({
         is_processing: true,
-        current_stream: { stream_id: 21 },
+        current_stream: { stream_id: 21, response_ids: [21] },
       });
     streamMock.mockReturnValueOnce(
       (async function* (): AsyncGenerator<StreamEvent> {
@@ -477,7 +488,7 @@ describe("useChatController", () => {
       ],
       packets: [[]],
       time_created: "",
-      current_stream: { stream_id: 21 },
+      current_stream: { stream_id: 21, response_ids: [21] },
     });
     let endReplay: () => void = () => {};
     resumeMock.mockReturnValueOnce(
@@ -496,13 +507,7 @@ describe("useChatController", () => {
       await result.current.submit("Question", [], onAccepted);
     });
 
-    await waitFor(() =>
-      expect(
-        findPendingToolApprovalIds(
-          useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-        ),
-      ).toEqual(["a1"]),
-    );
+    await waitFor(() => expect(waitingIds()).toEqual(["a1"]));
     expect(resumeMock).toHaveBeenCalledWith("s1", 21, 0, expect.anything());
     expect(result.current.messages.map((m) => m.message)).toEqual([
       "Asked elsewhere",
@@ -524,11 +529,11 @@ describe("useChatController", () => {
       .mockResolvedValueOnce({ is_processing: false })
       .mockResolvedValueOnce({
         is_processing: true,
-        current_stream: { stream_id: 11 },
+        current_stream: { stream_id: 11, response_ids: [11] },
       })
       .mockResolvedValue({
         is_processing: true,
-        current_stream: { stream_id: 21 },
+        current_stream: { stream_id: 21, response_ids: [21] },
       });
     streamMock.mockReturnValueOnce(
       (async function* (): AsyncGenerator<StreamEvent> {
@@ -562,7 +567,7 @@ describe("useChatController", () => {
     useChatSessionStore.getState().ensureSession("s1");
     const status = Promise.withResolvers<{
       is_processing: boolean;
-      current_stream: { stream_id: number };
+      current_stream: { stream_id: number; response_ids: number[] };
     }>();
     jest
       .mocked(getChatSessionStatus)
@@ -589,7 +594,7 @@ describe("useChatController", () => {
     await act(async () => {
       status.resolve({
         is_processing: true,
-        current_stream: { stream_id: 11 },
+        current_stream: { stream_id: 11, response_ids: [11] },
       });
     });
 
@@ -685,28 +690,49 @@ describe("useChatController", () => {
     );
   });
 
-  it("records the requests that wait as rejected when the user stops", async () => {
+  it("reloads the outcomes the server saved for a stopped response's requests", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     stopSessionMock.mockResolvedValue();
+    const agentRequest = {
+      placement: { turn_index: 0 },
+      obj: {
+        ...(approvalRequest as { obj: object }).obj,
+        approval_id: "a2",
+        agent_name: "Researcher",
+      },
+    } as StreamEvent;
     streamMock.mockImplementation((_body, signal) =>
       (async function* () {
         yield idInfo;
-        yield {
-          placement: { turn_index: 0 },
-          obj: {
-            type: PacketType.TOOL_APPROVAL_REQUEST,
-            approval_id: "a1",
-            tool_call_id: "c1",
-            tool_name: "lookup",
-            display_name: "Lookup",
-            arguments: {},
-          },
-        } as StreamEvent;
+        yield approvalRequest;
+        yield agentRequest;
         await new Promise<void>((resolve) => {
           if (signal.aborted) resolve();
           else signal.addEventListener("abort", () => resolve());
         });
       })(),
+    );
+    // Stop rejects the root agent's request; the subagent's request still waits.
+    getSessionMock.mockResolvedValue(
+      savedTurn([
+        approvalRequest,
+        agentRequest,
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.TOOL_APPROVAL_RESOLVED,
+            approval_id: "a1",
+            outcome: "rejected",
+          },
+        },
+        {
+          placement: { turn_index: 0 },
+          obj: {
+            type: PacketType.STOP,
+            stop_reason: StopReason.USER_CANCELLED,
+          },
+        },
+      ]),
     );
 
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
@@ -719,14 +745,11 @@ describe("useChatController", () => {
     await act(async () => {
       result.current.stop();
     });
-    await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    // The server rejects them on Stop; the cut stream does not report it.
-    await waitFor(() =>
-      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
-        "rejected",
-      ),
-    );
+    await waitFor(() => expect(getSessionMock).toHaveBeenCalledWith("s1"));
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+    expect(waitingIds()).toEqual(["a2"]);
+    expect(useToolApprovalUi.getState().localStatuses.size).toBe(0);
   });
 
   it("keeps a waiting request decidable when the server Stop fails", async () => {
@@ -765,11 +788,7 @@ describe("useChatController", () => {
     expect(stopSessionMock).toHaveBeenCalledWith("s1", 11);
     expect(controller?.signal.aborted).toBe(false);
     expect(result.current.chatState).toBe("streaming");
-    expect(
-      findPendingToolApprovalIds(
-        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-      ),
-    ).toEqual(["a1"]);
+    expect(waitingIds()).toEqual(["a1"]);
     expect(useToolApprovalUi.getState().localStatuses.size).toBe(0);
     expect(toast.error).toHaveBeenCalledWith(
       "Could not stop the response. Try again.",
@@ -1490,11 +1509,7 @@ describe("useChatController", () => {
       });
 
       expect(controller?.signal.aborted).toBe(false);
-      expect(
-        findPendingToolApprovalIds(
-          useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-        ),
-      ).toEqual(["a1"]);
+      expect(waitingIds()).toEqual(["a1"]);
       controller?.abort();
       unmount();
     } finally {

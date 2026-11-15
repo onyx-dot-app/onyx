@@ -42,7 +42,7 @@ import {
 } from "@/chat/streamingModels";
 import {
   APPROVAL_PENDING_ERROR_CODE,
-  findPendingToolApprovalIds,
+  readToolApprovals,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
@@ -98,11 +98,6 @@ async function stopAcknowledgedStream(
   streamId: number,
   controller: AbortController,
 ): Promise<void> {
-  // The server's Stop rejects the requests that wait. The cut stream does not
-  // deliver their resolutions, so this device records them.
-  const waiting = findPendingToolApprovalIds(
-    useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
-  );
   try {
     await stopChatSession(sessionId, streamId);
   } catch (error) {
@@ -114,8 +109,6 @@ async function stopAcknowledgedStream(
     }
     return;
   }
-  const { recordStatus } = useToolApprovalUi.getState();
-  for (const approvalId of waiting) recordStatus(approvalId, "rejected");
   controller.abort();
 }
 
@@ -277,6 +270,13 @@ async function runChatStream(
   if (!stillOurs()) return;
   // Delivery ended before the run's stop, and the run can go on without it.
   const lost = accepted && !signal.aborted && !hadError && !sawStop;
+  // The cut stream of a stopped response does not deliver the resolutions of its requests.
+  const unresolvedAfterStop =
+    signal.aborted &&
+    readToolApprovals(
+      store.getState().sessions.get(sessionId)?.messageTree.get(agentNodeId)
+        ?.packets ?? [],
+    ).some((entry) => entry.outcome === null);
   // The wait is not stream time; a continuation restarts the timer.
   if (paused) {
     store
@@ -298,15 +298,23 @@ async function runChatStream(
       stillOurs,
       () => store.getState().updateChatState(sessionId, "unconfirmed"),
       // A Stop the server confirms during the wait ends following.
-      (next) => !signal.aborted && (lost || paused || next !== streamId),
+      (next) => !signal.aborted && (lost || next !== streamId),
     );
-    // A lost send also reloads the saved session when the server is already idle, so the
-    // answer and its approval outcomes replace the partial output.
-    if (wait.kind === "stream" || (wait.kind === "idle" && lost)) {
+    // An idle server still reloads the saved session when this device lacks what the server
+    // saved: a lost send's answer, the requests that refused this send, the outcomes a Stop
+    // gave, or approvals that changed since the last status read.
+    if (
+      wait.kind === "stream" ||
+      (wait.kind === "idle" &&
+        (lost ||
+          approvalPending ||
+          unresolvedAfterStop ||
+          wait.approvalsChanged))
+    ) {
       store.getState().setAbortController(sessionId, null);
       void recoverChatSession(
         sessionId,
-        wait.kind === "stream" ? wait.streamId : null,
+        wait.kind === "stream" ? wait.stream : null,
         server.serverUrl,
         server.queryClient,
         new AbortController(),
@@ -414,15 +422,6 @@ export function useChatController(
       if (!text) return;
       const fileDescriptors = files ?? [];
       if (submittingRef.current) return;
-      if (
-        sessionId != null &&
-        findPendingToolApprovalIds(
-          useChatSessionStore.getState().sessions.get(sessionId)?.messageTree,
-        ).length > 0
-      ) {
-        showPendingApproval();
-        return;
-      }
       submittingRef.current = true;
       try {
         const isNewSession = sessionId == null;

@@ -40,7 +40,11 @@ const postMock = postApprovalDecision as unknown as Mock<
   (
     approvalId: string,
     decision: string,
-  ) => Promise<{ decision: string; decided_via?: string }>
+  ) => Promise<{
+    decision: string;
+    decided_via?: string;
+    continuation: { stream_id: number; response_ids: number[] } | null;
+  }>
 >;
 
 const request: ToolApprovalRequest = {
@@ -114,6 +118,7 @@ describe("ToolApprovalCard", () => {
       postMock.mockResolvedValue({
         decision: serverDecision,
         decided_via: decidedVia,
+        continuation: null,
       });
       const view = render(<ToolApprovalCard approval={approval()} />);
 
@@ -145,6 +150,19 @@ describe("ToolApprovalCard", () => {
     },
   );
 
+  it("names the subagent that asks", () => {
+    const view = render(
+      <ToolApprovalCard
+        approval={{
+          ...approval(),
+          request: { ...request, agent_name: "Researcher" },
+        }}
+      />,
+    );
+    expect(view.getByText("Researcher wants to run Lookup")).toBeTruthy();
+    expect(view.getByText("Approval requested: Lookup")).toBeTruthy();
+  });
+
   it("keeps the request actionable after another failure", async () => {
     jest.spyOn(console, "warn").mockImplementation(() => {});
     postMock.mockRejectedValue(new ApiError({ status: 500 }));
@@ -171,6 +189,8 @@ describe("ToolApprovalCard continuation", () => {
     placement: { turn_index: 0 },
     obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
   };
+  // The continuation's stream ID is no message ID.
+  const continuation = { stream_id: 40, response_ids: [2] };
 
   function openPausedResponse(requests: ToolApprovalRequest[]) {
     const node: Message = {
@@ -195,24 +215,70 @@ describe("ToolApprovalCard continuation", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
-    postMock.mockResolvedValue({ decision: "APPROVED", decided_via: "USER" });
   });
 
-  it("follows the continuation once no request of the paused response waits", async () => {
+  // "Approve for this chat" also approves the waiting sibling on the server.
+  it("follows the continuation the decision names while a sibling card still shows", async () => {
+    openPausedResponse([request, { ...request, approval_id: "a2" }]);
+    postMock.mockResolvedValue({
+      decision: "APPROVED",
+      decided_via: "SESSION_GRANT",
+      continuation,
+    });
+    const view = render(<ToolApprovalCard approval={approval()} />);
+
+    fireEvent.press(view.getByText("Approve for this chat"));
+
+    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+    expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", continuation]);
+  });
+
+  it("starts nothing when the decision names no continuation", async () => {
     openPausedResponse([request]);
+    postMock.mockResolvedValue({
+      decision: "APPROVED",
+      decided_via: "USER",
+      continuation: null,
+    });
     const view = render(<ToolApprovalCard approval={approval()} />);
 
     fireEvent.press(view.getByText("Approve once"));
 
-    await waitFor(() => expect(recoverMock).toHaveBeenCalled());
-    expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", null]);
-    expect(useChatSessionStore.getState().sessions.get("s")?.chatState).toBe(
-      "settling",
+    await waitFor(() =>
+      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
+        "approved",
+      ),
     );
+    expect(recoverMock).not.toHaveBeenCalled();
   });
 
-  it("waits while another request of the response still waits", async () => {
-    openPausedResponse([request, { ...request, approval_id: "a2" }]);
+  it.each([404, 409])(
+    "reads the session status for the running stream after a %i",
+    async (statusCode) => {
+      openPausedResponse([request]);
+      postMock.mockRejectedValue(new ApiError({ status: statusCode }));
+      const view = render(<ToolApprovalCard approval={approval()} />);
+
+      fireEvent.press(view.getByText("Approve once"));
+
+      await waitFor(() => expect(recoverMock).toHaveBeenCalled());
+      expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", null]);
+      expect(useChatSessionStore.getState().sessions.get("s")?.chatState).toBe(
+        "settling",
+      );
+    },
+  );
+
+  it("leaves the next stream to a reader that already runs", async () => {
+    openPausedResponse([request]);
+    useChatSessionStore
+      .getState()
+      .setAbortController("s", new AbortController());
+    postMock.mockResolvedValue({
+      decision: "APPROVED",
+      decided_via: "USER",
+      continuation,
+    });
     const view = render(<ToolApprovalCard approval={approval()} />);
 
     fireEvent.press(view.getByText("Approve once"));

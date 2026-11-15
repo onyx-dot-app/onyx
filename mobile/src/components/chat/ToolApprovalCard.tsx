@@ -6,13 +6,11 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { postApprovalDecision } from "@/api/chat/approvals";
 import { isApiError } from "@/api/errors";
-import { getLatestMessageChain } from "@/chat/messageTree";
-import { PacketType, StopReason } from "@/chat/streamingModels";
+import { ChatStream } from "@/chat/interfaces";
 import {
   ApprovalDecision,
   ApprovalStatus,
   decidedStatus,
-  findPendingToolApprovalIds,
   ToolApproval,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
@@ -56,6 +54,10 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
 
   const headline = request.display_name || request.tool_name;
   const header = `Approval requested: ${headline}`;
+  // A subagent's request names its agent, since the response shows it among the root's cards.
+  const agentLabel = request.agent_name
+    ? `${request.agent_name} wants to run ${headline}`
+    : null;
   const record =
     status === "pending" ? null : `${RECORD_PREFIX[status]}: ${headline}`;
 
@@ -71,21 +73,26 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     announced.current = message;
   }, [message, record]);
 
-  // The decided status shows at once; the resolution packet then confirms it.
+  // The decided status shows at once; the resolution packet then confirms it. The server names
+  // the stream that continues the response. When the request no longer waits, recovery reads the
+  // session status for that stream instead, or reloads the saved outcome.
   async function decide(decision: ApprovalDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     setSubmitting(true);
     setError(false);
+    let continuation: ChatStream | null = null;
+    let gone = false;
     try {
-      recordStatus(
+      const response = await postApprovalDecision(
         request.approval_id,
-        decidedStatus(
-          await postApprovalDecision(request.approval_id, decision),
-        ),
+        decision,
       );
+      recordStatus(request.approval_id, decidedStatus(response));
+      continuation = response.continuation;
     } catch (cause) {
       if (isApiError(cause) && (cause.status === 409 || cause.status === 404)) {
         recordStatus(request.approval_id, "closed");
+        gone = true;
       } else {
         console.warn("Could not submit the approval decision", cause);
         setError(true);
@@ -95,30 +102,23 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     } finally {
       setSubmitting(false);
     }
-    // A response paused for approvals continues in a new stream once none of its requests waits.
     const store = useChatSessionStore.getState();
     const sessionId = store.currentSessionId;
-    const session = sessionId ? store.sessions.get(sessionId) : undefined;
-    const lastPacket = session
-      ? getLatestMessageChain(session.messageTree).at(-1)?.packets.at(-1)
-      : undefined;
+    // A reader that already runs follows the server's next stream itself.
     if (
-      sessionId &&
-      session &&
-      !session.abortController &&
-      lastPacket?.obj.type === PacketType.STOP &&
-      lastPacket.obj.stop_reason === StopReason.AWAITING_APPROVAL &&
-      findPendingToolApprovalIds(session.messageTree).length === 0
-    ) {
-      store.updateChatState(sessionId, "settling");
-      void recoverChatSession(
-        sessionId,
-        null,
-        serverUrl,
-        queryClient,
-        new AbortController(),
-      );
-    }
+      !sessionId ||
+      store.sessions.get(sessionId)?.abortController ||
+      (continuation === null && !gone)
+    )
+      return;
+    if (continuation === null) store.updateChatState(sessionId, "settling");
+    void recoverChatSession(
+      sessionId,
+      continuation,
+      serverUrl,
+      queryClient,
+      new AbortController(),
+    );
   }
 
   if (record !== null) {
@@ -148,7 +148,7 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     );
   }
 
-  return (
+  const card = (
     <View
       testID="tool-approval-card"
       className="overflow-hidden rounded-08 border border-status-info-02 bg-background-neutral-00"
@@ -222,6 +222,15 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
           Reject
         </Button>
       </View>
+    </View>
+  );
+  if (agentLabel === null) return card;
+  return (
+    <View className="gap-8">
+      <Text font="secondary-body" color="text-03">
+        {agentLabel}
+      </Text>
+      {card}
     </View>
   );
 }

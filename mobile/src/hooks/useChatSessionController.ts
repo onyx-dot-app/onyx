@@ -23,7 +23,7 @@ import {
 } from "@/chat/sessionReadiness";
 import { processRawChatHistory } from "@/chat/chatHistory";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
-import { BackendChatSession } from "@/chat/interfaces";
+import { BackendChatSession, ChatStream } from "@/chat/interfaces";
 import {
   getLatestMessageChain,
   getMessageByMessageId,
@@ -38,10 +38,11 @@ import { toast } from "@/hooks/useToast";
 // useChatSessionController aborts and releases them when the user leaves.
 const recoveries = new WeakSet<AbortController>();
 
-// Follows a live run until the server is idle, then settles from the saved session.
+// Follows a live run until the server is idle, then settles from the saved session. With no
+// stream, it reads status for one and otherwise settles.
 export async function recoverChatSession(
   sessionId: string,
-  runId: number | null,
+  initialStream: ChatStream | null,
   serverUrl: string | null,
   queryClient: QueryClient,
   controller: AbortController,
@@ -49,12 +50,13 @@ export async function recoverChatSession(
   const store = useChatSessionStore;
   const data = store.getState().sessions.get(sessionId);
   if (!data || data.abortController) return;
-  if (runId === null && data.chatState === "input") return;
+  if (initialStream === null && data.chatState === "input") return;
 
   store.getState().setAbortController(sessionId, controller);
   recoveries.add(controller);
   // Stop targets the stream this recovery follows.
-  if (runId !== null) store.getState().setStreamId(sessionId, runId);
+  if (initialStream !== null)
+    store.getState().setStreamId(sessionId, initialStream.stream_id);
   const stillOurs = () =>
     store.getState().sessions.get(sessionId)?.abortController === controller;
   const stillOpen = () =>
@@ -63,13 +65,17 @@ export async function recoverChatSession(
   const stillCurrent = () => stillOpen() && !controller.signal.aborted;
   const onUnconfirmed = () =>
     store.getState().updateChatState(sessionId, "unconfirmed");
+  // The one response a stream writes. A multi-model turn settles from the saved session.
+  const responseOf = (stream: ChatStream | null) =>
+    stream?.response_ids.length === 1 ? stream.response_ids[0] : undefined;
   // The response whose local failure the settle keeps.
+  const initialResponse = responseOf(initialStream);
   let node =
-    runId !== null
-      ? getMessageByMessageId(data.messageTree, runId)
+    initialResponse !== undefined
+      ? getMessageByMessageId(data.messageTree, initialResponse)
       : getLatestMessageChain(data.messageTree).at(-1);
-  let streamId = runId;
-  // Where a reattach to `streamId` continues, so no packet arrives twice.
+  let stream = initialStream;
+  // Where a reattach to `stream` continues, so no packet arrives twice. It belongs to that stream id.
   let cursor = 0;
   // A replay from the start holds its packets until it reaches the end of the output that
   // existed when it began, so a replay that fails partway keeps what this device shows.
@@ -80,13 +86,14 @@ export async function recoverChatSession(
       // "lost": delivery ended before the run's stop, so a paced reattach follows. "noBuffer":
       // resume-stream answered 404, so only a new stream is followed.
       let end: "finished" | "lost" | "noBuffer" = "noBuffer";
-      // The stream ended while the response waits for approval decisions. The server continues
-      // it in a new stream, which can reuse the stream ID.
+      // The stream ended while the response waits for approval decisions.
       let paused = false;
-      if (streamId !== null && stillCurrent()) {
+      const responseId = responseOf(stream);
+      if (stream !== null && responseId !== undefined && stillCurrent()) {
+        const streamId = stream.stream_id;
         let target = getMessageByMessageId(
           store.getState().sessions.get(sessionId)?.messageTree ?? new Map(),
-          streamId,
+          responseId,
         );
         if (!target) {
           // A response this device has not seen: load it, so its output and requests show.
@@ -98,7 +105,7 @@ export async function recoverChatSession(
                 saved.packets,
               );
               store.getState().hydrateSession(sessionId, messages);
-              target = getMessageByMessageId(messages, streamId);
+              target = getMessageByMessageId(messages, responseId);
             }
           } catch (error) {
             console.warn("Could not load the running response", error);
@@ -110,7 +117,6 @@ export async function recoverChatSession(
           node = target;
           end = "finished";
         }
-        // Single-model only: a multi-model stream_id is the user message, not an assistant node.
         if (target?.type === "assistant" && stillCurrent()) {
           node = target;
           const nodeId = target.nodeId;
@@ -239,31 +245,29 @@ export async function recoverChatSession(
       }
       if (!stillOurs()) return;
       store.getState().updateChatState(sessionId, "settling");
-      const followed = streamId;
+      const followed = stream?.stream_id;
       const wait = await waitForSessionIdle(
         sessionId,
         stillOpen,
         onUnconfirmed,
         // After a confirmed Stop only idle ends the wait.
         (next) =>
-          !controller.signal.aborted &&
-          (end === "lost" || paused || next !== followed),
+          !controller.signal.aborted && (end === "lost" || next !== followed),
       );
       if (wait.kind === "released") return;
       if (wait.kind === "idle") break;
-      if (wait.streamId === streamId) {
+      if (wait.stream.stream_id === followed) {
         // Paces reattaching to a stream whose connection keeps failing.
         await new Promise((resolve) =>
           setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
         );
-      }
-      if (wait.streamId !== streamId || paused) {
-        streamId = wait.streamId;
-        store.getState().setStreamId(sessionId, streamId);
+      } else {
+        store.getState().setStreamId(sessionId, wait.stream.stream_id);
         cursor = 0;
         restored = false;
         replay = [];
       }
+      stream = wait.stream;
     }
     if (!stillOpen()) return;
 
@@ -348,13 +352,14 @@ export function useChatSessionController(sessionId: string | null): void {
     enabled: false,
   });
 
-  const runId = data?.current_stream?.stream_id ?? null;
+  // Structural sharing keeps this reference while the stream stays the same.
+  const currentStream = data?.current_stream ?? null;
 
   useEffect(() => {
     if (sessionId == null) return;
     void recoverChatSession(
       sessionId,
-      runId,
+      currentStream,
       serverUrl,
       queryClient,
       new AbortController(),
@@ -369,5 +374,5 @@ export function useChatSessionController(sessionId: string | null): void {
       store.updateChatState(sessionId, "settling");
       store.setAbortController(sessionId, null);
     };
-  }, [sessionId, runId, serverUrl, queryClient]);
+  }, [sessionId, currentStream, serverUrl, queryClient]);
 }

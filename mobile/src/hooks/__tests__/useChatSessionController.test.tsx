@@ -20,7 +20,11 @@ import {
   getMessageByMessageId,
 } from "@/chat/messageTree";
 import { Packet, PacketType, StopReason } from "@/chat/streamingModels";
-import { findPendingToolApprovalIds } from "@/chat/toolApprovals";
+import {
+  readToolApprovals,
+  toolApprovalStatus,
+  useToolApprovalUi,
+} from "@/chat/toolApprovals";
 import {
   recoverChatSession,
   useChatSessionController,
@@ -151,7 +155,10 @@ function seedLiveSession(currentRunId: number | null): void {
     messages: backendMessages(""),
     packets: [[]],
     time_created: "",
-    current_stream: currentRunId == null ? null : { stream_id: currentRunId },
+    current_stream:
+      currentRunId == null
+        ? null
+        : { stream_id: currentRunId, response_ids: [currentRunId] },
   };
   client.setQueryData(QUERY_KEYS.chatSession(SERVER_URL, "s1"), snapshot);
 }
@@ -169,6 +176,22 @@ function assistantText(sessionId: string, messageId: number): string {
     )
     .map((p) => (p.obj as { content?: string }).content ?? "")
     .join("");
+}
+
+// The requests that the latest response of session s1 shows as waiting.
+function waitingIds(): string[] {
+  const tree = useChatSessionStore.getState().sessions.get("s1")?.messageTree;
+  const response = tree ? getLatestMessageChain(tree).at(-1) : undefined;
+  const { localStatuses } = useToolApprovalUi.getState();
+  return readToolApprovals(response?.packets ?? [])
+    .filter(
+      (entry) =>
+        toolApprovalStatus(
+          entry,
+          localStatuses.get(entry.request.approval_id),
+        ) === "pending",
+    )
+    .map((entry) => entry.request.approval_id);
 }
 
 async function* scripted(events: StreamEvent[]): AsyncGenerator<StreamEvent> {
@@ -440,7 +463,7 @@ describe("useChatSessionController", () => {
         messages: backendMessages(""),
         packets: [[]],
         time_created: "",
-        current_stream: { stream_id: 2 },
+        current_stream: { stream_id: 2, response_ids: [2] },
       });
     });
 
@@ -942,7 +965,7 @@ describe("useChatSessionController", () => {
       .patchNode("s1", 2, { packets: [historyPacket("A"), approval] });
     jest.mocked(getChatSessionStatus).mockResolvedValue({
       is_processing: true,
-      current_stream: { stream_id: 2 },
+      current_stream: { stream_id: 2, response_ids: [2] },
     });
     const resumed = Promise.withResolvers<void>();
     resumeMock
@@ -962,10 +985,6 @@ describe("useChatSessionController", () => {
           await new Promise(() => {});
         })(),
       );
-    const pendingIds = () =>
-      findPendingToolApprovalIds(
-        useChatSessionStore.getState().sessions.get("s1")?.messageTree,
-      );
 
     const { unmount } = renderHook(() => useChatSessionController("s1"), {
       wrapper,
@@ -981,7 +1000,7 @@ describe("useChatSessionController", () => {
         ),
       { timeout: 3000 },
     );
-    expect(pendingIds()).toEqual(["a1"]);
+    expect(waitingIds()).toEqual(["a1"]);
     await act(async () => resumed.resolve());
     await waitFor(() =>
       expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
@@ -1001,7 +1020,7 @@ describe("useChatSessionController", () => {
       ).not.toBe(node?.packets),
     );
     expect(assistantText("s1", 2)).toBe("A");
-    expect(pendingIds()).toEqual(["a1"]);
+    expect(waitingIds()).toEqual(["a1"]);
     expect(
       getMessageByMessageId(
         useChatSessionStore.getState().sessions.get("s1")!.messageTree,
@@ -1011,11 +1030,12 @@ describe("useChatSessionController", () => {
     unmount();
   });
 
-  it("restarts at cursor 0 when a paused response continues under the same stream ID", async () => {
+  it("follows a paused response's continuation stream into the response it names", async () => {
     seedLiveSession(2);
+    // The continuation's stream ID is no message ID; `response_ids` names the response.
     jest.mocked(getChatSessionStatus).mockResolvedValueOnce({
       is_processing: true,
-      current_stream: { stream_id: 2 },
+      current_stream: { stream_id: 7, response_ids: [2] },
     });
     getSessionMock.mockResolvedValueOnce({
       chat_session_id: "s1",
@@ -1045,7 +1065,7 @@ describe("useChatSessionController", () => {
           startPacket("asked"),
           deltaPacket(" done"),
           stopPacket(),
-          cursor(3),
+          { stream_id: 7, next_cursor: 3, replay_complete: true },
         ]),
       );
 
@@ -1060,8 +1080,10 @@ describe("useChatSessionController", () => {
     );
     expect(resumeMock.mock.calls.map((call) => [call[1], call[2]])).toEqual([
       [2, 0],
-      [2, 0],
+      [7, 0],
     ]);
+    // Only the settle loads the saved session.
+    expect(getSessionMock).toHaveBeenCalledTimes(1);
     expect(assistantText("s1", 2)).toBe("asked done");
   });
 
@@ -1071,11 +1093,11 @@ describe("useChatSessionController", () => {
       .mocked(getChatSessionStatus)
       .mockResolvedValueOnce({
         is_processing: true,
-        current_stream: { stream_id: 2 },
+        current_stream: { stream_id: 2, response_ids: [2] },
       })
       .mockResolvedValueOnce({
         is_processing: true,
-        current_stream: { stream_id: 4 },
+        current_stream: { stream_id: 4, response_ids: [4] },
       });
     const nextTurn: BackendMessage[] = [
       ...backendMessages("first"),
@@ -1158,7 +1180,7 @@ describe("useChatSessionController", () => {
     useChatSessionStore.getState().updateChatState("s1", "settling");
     jest.mocked(getChatSessionStatus).mockResolvedValue({
       is_processing: true,
-      current_stream: { stream_id: 4 },
+      current_stream: { stream_id: 4, response_ids: [4] },
     });
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     const nextTurn: BackendMessage[] = [
@@ -1237,7 +1259,7 @@ describe("useChatSessionController", () => {
     seedLiveSession(2);
     jest.mocked(getChatSessionStatus).mockResolvedValue({
       is_processing: true,
-      current_stream: { stream_id: 2 },
+      current_stream: { stream_id: 2, response_ids: [2] },
     });
     const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
     resumeMock.mockReturnValueOnce(firstAttempt()).mockReturnValueOnce(
@@ -1289,7 +1311,7 @@ describe("useChatSessionController", () => {
     seedLiveSession(2);
     jest.mocked(getChatSessionStatus).mockResolvedValue({
       is_processing: true,
-      current_stream: { stream_id: 2 },
+      current_stream: { stream_id: 2, response_ids: [2] },
     });
     resumeMock
       .mockImplementationOnce((_id, _streamId, _cursor, signal) =>
@@ -1308,7 +1330,13 @@ describe("useChatSessionController", () => {
         })(),
       );
     const handOff = new AbortController();
-    void recoverChatSession("s1", 2, SERVER_URL, client, handOff);
+    void recoverChatSession(
+      "s1",
+      { stream_id: 2, response_ids: [2] },
+      SERVER_URL,
+      client,
+      handOff,
+    );
     await waitFor(() => expect(resumeMock).toHaveBeenCalledTimes(1));
 
     const first = renderHook(() => useChatSessionController("s1"), {

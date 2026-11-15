@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it } from "@jest/globals";
 
-import type { Message } from "@/chat/interfaces";
-import { upsertMessages } from "@/chat/messageTree";
 import {
   Packet,
   PacketType,
@@ -12,7 +10,6 @@ import type { ApprovalDecisionResponse } from "@/api/chat/approvals";
 import {
   ApprovalStatus,
   decidedStatus,
-  findPendingToolApprovalIds,
   orderApprovalsByTurn,
   readToolApprovals,
   toolApprovalStatus,
@@ -48,35 +45,8 @@ function resolved(approvalId: string, outcome: string): Packet {
   } as Packet;
 }
 
-const stop: Packet = {
-  placement: { turn_index: 0 },
-  obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
-};
-
 function statusOf(packets: Packet[], local?: "approved") {
-  const { entries, stopped } = readToolApprovals(packets);
-  return toolApprovalStatus(entries[0]!, local, stopped);
-}
-
-function node(
-  nodeId: number,
-  type: Message["type"],
-  packets: Packet[],
-  parentNodeId: number | null,
-): Message {
-  return {
-    nodeId,
-    messageId: nodeId,
-    parentNodeId,
-    type,
-    message: "",
-    files: [],
-    packets,
-  };
-}
-
-function treeOf(messages: Message[]) {
-  return upsertMessages(new Map(), messages, false);
+  return toolApprovalStatus(readToolApprovals(packets)[0]!, local);
 }
 
 describe("toolApprovalStatus", () => {
@@ -106,11 +76,15 @@ describe("toolApprovalStatus", () => {
     expect(statusOf([request("a")], "approved")).toBe("approved");
   });
 
-  it("closes a request whose response stopped without an outcome", () => {
-    expect(statusOf([request("a"), stop])).toBe("closed");
-  });
-
+  // A subagent's request outlives the root's stop; the server resolves the root's own requests.
   it.each<[string, Packet]>([
+    [
+      "ends the response",
+      {
+        placement: { turn_index: 0 },
+        obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+      },
+    ],
     [
       "waits for approval",
       {
@@ -145,31 +119,6 @@ describe("tool approval store", () => {
     useToolApprovalUi.getState().forgetStatuses(["a", "b"]);
     expect(useToolApprovalUi.getState().localStatuses.size).toBe(0);
   });
-
-  it("finds a waiting request only in the latest turn", () => {
-    const older = treeOf([
-      node(1, "user", [], null),
-      node(2, "assistant", [request("a")], 1),
-    ]);
-    expect(findPendingToolApprovalIds(older)).toEqual(["a"]);
-
-    const newer = treeOf([
-      node(1, "user", [], null),
-      node(2, "assistant", [request("a")], 1),
-      node(3, "user", [], 2),
-      node(4, "assistant", [request("b"), resolved("b", "rejected")], 3),
-    ]);
-    expect(findPendingToolApprovalIds(newer)).toEqual([]);
-  });
-
-  it("does not report a request this device already decided", () => {
-    const tree = treeOf([
-      node(1, "user", [], null),
-      node(2, "assistant", [request("a")], 1),
-    ]);
-    useToolApprovalUi.setState({ localStatuses: new Map([["a", "rejected"]]) });
-    expect(findPendingToolApprovalIds(tree)).toEqual([]);
-  });
 });
 
 describe("decidedStatus", () => {
@@ -189,6 +138,7 @@ describe("decidedStatus", () => {
       approval_id: "a",
       decision,
       decided_via: decidedVia,
+      continuation: null,
     };
     expect(decidedStatus(response)).toBe(status);
   });

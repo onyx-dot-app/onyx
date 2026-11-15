@@ -66,6 +66,13 @@ export interface BackendMessage {
   processing_duration_seconds?: number | null;
 }
 
+// A running response's stream. `stream_id` is not a message id; `response_ids` names the response
+// rows it writes, in model order for a multi-model turn.
+export interface ChatStream {
+  stream_id: number;
+  response_ids: number[];
+}
+
 // `packets` is indexed by assistant-message ordinal.
 export interface BackendChatSession {
   chat_session_id: string;
@@ -75,5 +82,5 @@ export interface BackendChatSession {
   packets: Packet[][];
   time_created: string;
   time_updated?: string;
-  current_stream?: { stream_id: number } | null; // set while a run is in flight
+  current_stream?: ChatStream | null; // set while a run is in flight
 }

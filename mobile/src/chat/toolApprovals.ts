@@ -4,11 +4,9 @@
 import { create } from "zustand";
 
 import type { ApprovalDecisionResponse } from "@/api/chat/approvals";
-import { getLatestMessageChain, MessageTreeState } from "@/chat/messageTree";
 import {
   Packet,
   PacketType,
-  StopReason,
   ToolApprovalRequest,
   ToolApprovalResolved,
 } from "@/chat/streamingModels";
@@ -20,7 +18,8 @@ export type ApprovalDecision = "approve_once" | "approve_session" | "reject";
 
 // "approvedForSession": approved by a grant for the chat's later requests of the same tool.
 // "disabled": an approval found the tool disabled, so the call did not run.
-// "closed": nothing waits for a decision any more, and the outcome is unknown.
+// "closed": the request no longer waits for a decision ("cancelled", or a decision answered 404 or
+// 409).
 export type ApprovalStatus =
   | "pending"
   | "approved"
@@ -50,16 +49,11 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
   "cancelled",
 ]);
 
-// A resolution without a known outcome counts as no resolution. Only a server stop that ends the
-// response stops it: a stop that waits for approval does not, and a stop without a reason is this
-// device's own.
-export function readToolApprovals(packets: Packet[]): {
-  entries: ToolApprovalEntry[];
-  stopped: boolean;
-} {
+// A resolution without a known outcome counts as no resolution. The server resolves the root
+// agent's requests in packets; a subagent's request resolves in a reload of the saved session.
+export function readToolApprovals(packets: Packet[]): ToolApprovalEntry[] {
   const entries = new Map<string, ToolApprovalEntry>();
   const outcomes = new Map<string, ToolApprovalResolved["outcome"]>();
-  let stopped = false;
   for (const packet of packets) {
     if (packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST) {
       entries.set(packet.obj.approval_id, {
@@ -72,33 +66,22 @@ export function readToolApprovals(packets: Packet[]): {
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (
-      packet.obj.type === PacketType.STOP &&
-      packet.obj.stop_reason !== undefined &&
-      packet.obj.stop_reason !== StopReason.AWAITING_APPROVAL
-    ) {
-      stopped = true;
     }
   }
-  return {
-    entries: Array.from(entries.values(), (entry) => ({
-      ...entry,
-      outcome: outcomes.get(entry.request.approval_id) ?? null,
-    })),
-    stopped,
-  };
+  return Array.from(entries.values(), (entry) => ({
+    ...entry,
+    outcome: outcomes.get(entry.request.approval_id) ?? null,
+  }));
 }
 
-// The server's outcome wins. Before it arrives, a decision made here decides it, and a stopped
-// response closes it.
+// The server's outcome wins. Before it arrives, a decision made here decides it.
 export function toolApprovalStatus(
   entry: ToolApprovalEntry,
   localStatus: ApprovalStatus | undefined,
-  stopped: boolean,
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return localStatus ?? (stopped ? "closed" : "pending");
+      return localStatus ?? "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -147,31 +130,6 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set) => ({
     }),
   nudge: () => set((state) => ({ nudgeSeq: state.nudgeSeq + 1 })),
 }));
-
-// The requests of the latest turn that still wait for this user, in order. A failed response's run
-// has ended, so its requests wait for nothing.
-export function findPendingToolApprovalIds(
-  tree: MessageTreeState | undefined,
-): string[] {
-  if (!tree) return [];
-  const chain = getLatestMessageChain(tree);
-  const lastUser = chain.findLastIndex((message) => message.type === "user");
-  const { localStatuses } = useToolApprovalUi.getState();
-  return chain.slice(lastUser + 1).flatMap((response) => {
-    if (response.type === "error") return [];
-    const { entries, stopped } = readToolApprovals(response.packets);
-    return entries
-      .filter(
-        (entry) =>
-          toolApprovalStatus(
-            entry,
-            localStatuses.get(entry.request.approval_id),
-            stopped,
-          ) === "pending",
-      )
-      .map((entry) => entry.request.approval_id);
-  });
-}
 
 // A card follows the display groups of its own turn and of every earlier turn.
 export function orderApprovalsByTurn<G extends { turn_index: number }>(

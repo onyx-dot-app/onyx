@@ -410,8 +410,8 @@ its background task end ([[#pure-asgi-middleware]]).
     its hidden parent with `message_type: "agent_results"`.
     Other clients wait for the session to become idle. Mobile's
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle` also reports
-    `current_stream`, so mobile follows a stream that runs instead of its
-    send ([[mobile-app]]). The others are
+    `current_stream` (stream id and `response_ids`), so mobile follows a
+    stream that runs instead of its send ([[mobile-app]]). The others are
     `cli/internal/api/client.go:IsChatSessionProcessing` and
     `widget/src/services/api-service.ts`. The CLI and widget stop with an error
     when an older server has no status endpoint. An old client in the field

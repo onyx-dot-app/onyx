@@ -112,10 +112,10 @@ decidable. Recovery sets the session's `streamId` to each stream it follows,
 so Stop targets that stream. Before that
 packet arrives, `mobile/src/hooks/useChatController.ts:stop` waits for it
 (`STOP_ACK_TIMEOUT_MS`), then aborts locally and never sends an unscoped Stop.
-The server's Stop rejects the tool approval requests that wait, and the cut
-stream does not deliver their resolutions, so a confirmed Stop records them as
-rejected on the device (`stopAcknowledgedStream`,
-`chat/toolApprovals.ts:findPendingToolApprovalIds`).
+The cut stream does not deliver the resolutions that the server's Stop gives
+the waiting tool approval requests. So when the stopped response still shows
+a request without an outcome, the send reloads the saved session once the
+server is idle. The device never marks a card rejected by itself.
 
 **Readiness.** When delivery ends, the session goes to `settling` and
 `chat/sessionReadiness.ts:waitForSessionIdle` polls
@@ -136,22 +136,36 @@ reattaches from the last cursor while the poll reports the same stream,
 paced by `SESSION_POLL_INTERVAL_MS`. Only a 404 marks a stream as having no
 buffer; recovery then waits for a new stream id or for idle. A lost send
 whose first poll is already idle still reloads the saved session before it
-returns to `input`. When the user leaves the chat, `useChatSessionController`
+returns to `input`. So does a send that the server refuses with
+`APPROVAL_PENDING`, and any send whose polls saw `approvals_version` change.
+`waitForSessionIdle` keeps the last version per session and reports a change
+as `approvalsChanged`; the app reads status only in its existing waits, with
+no idle poll. Recovery follows a stream into the response that
+`current_stream.response_ids` names, never into a message with the stream id.
+A multi-model stream names several responses; recovery does not stream it and
+settles from the saved session. A retained cursor belongs to one stream id;
+a new stream id restarts at cursor 0. When the user leaves the chat, `useChatSessionController`
 aborts and releases the session's recovery, including one a send started, so
 reopening attaches a new one.
 
 **Approval waits.** A response that waits for tool approvals ends its stream
-with `stop` and reason `awaiting_approval`. The session goes to `input`, but
-`findPendingToolApprovalIds` blocks the next send. A suspended turn has no
-Stop; the user decides each card. That stop does not finish
-the response in `chat/messageProcessor.ts` and does not close cards; only a
-server stop with another reason closes a card without an outcome. The client
-clears the response's `streamingStartedAt`, so the wait is not timed. After a
-decision, `components/chat/ToolApprovalCard.tsx` starts `recoverChatSession`
-with no stream when no reader runs and no request of the latest turn waits.
-The poll then finds the continuation stream. That stream can reuse the paused
-stream's id, so after a paused stream recovery and the send path follow the
-same id again, from cursor 0.
+with `stop` and reason `awaiting_approval`. The session goes to `input`. The
+app does not check for waiting cards before a send. The server refuses the
+send with 409 `APPROVAL_PENDING`; the app then keeps the draft, scrolls to the
+card (`useToolApprovalUi.nudge`, without animation when the OS reduces
+motion) and shows a toast. A suspended turn has no Stop; the user decides
+each card. That stop does not finish the response in
+`chat/messageProcessor.ts`. No stop closes a card: a card's outcome comes only
+from a `tool_approval_resolved` packet or a reload. A decision made on the
+device shows until then (`chat/toolApprovals.ts:useToolApprovalUi`). The
+client clears the response's `streamingStartedAt`, so the wait is not timed.
+After a decision, `components/chat/ToolApprovalCard.tsx` follows the
+`continuation` that the decision response names, from cursor 0, when no
+reader runs. A 404 or 409 decision starts `recoverChatSession` with no
+stream, which reads status once and follows `current_stream` or reloads the
+saved session. A subagent's request (`agent_name`) shows the label "{agent}
+wants to run {tool}". The server never resolves it in a packet, and it never
+blocks a send.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and
