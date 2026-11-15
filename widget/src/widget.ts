@@ -123,6 +123,9 @@ export class OnyxChatWidget extends LitElement {
   private citationMap = new Map<number, string>();
   // A continuation a decision named while another stream was followed
   private continuationStreamId: number | null = null;
+  // A decision with no continuation landed while a follow ran; the follow
+  // reads the status again before it ends
+  private statusRecheck = false;
   // The `approvals_version` of the requests the transcript shows, from the
   // last session load or the new chat's first status read; a change replays
   // the saved session, the one source of background agent requests and
@@ -318,6 +321,7 @@ export class OnyxChatWidget extends LitElement {
     this.localApprovals = new Map();
     this.expandedArguments = new Set();
     this.continuationStreamId = null;
+    this.statusRecheck = false;
     this.approvalsVersion = null;
     this.approvalsChanged = false;
     this.documentMap.clear();
@@ -510,10 +514,11 @@ export class OnyxChatWidget extends LitElement {
       result === "closed" ? "closed" : decidedStatus(result)
     );
     // Follow the continuation the server names. A running follow reads it
-    // after its current stream; with no continuation it keeps reading. A
-    // request that no longer waits (404 or 409) follows the session's status,
-    // and the saved session shows its outcome. A background agent continues
-    // without a stream, so its later requests come from the saved session.
+    // after its current stream; with no continuation it reads the status
+    // again before it ends. A request that no longer waits (404 or 409)
+    // follows the session's status, and the saved session shows its
+    // outcome. A background agent continues without a stream, so its later
+    // requests come from the saved session.
     // The last root decision with no continuation landed while another turn
     // held the chat: the follow reads the current stream, then each stream
     // the status reports, and the saved session when the session is idle.
@@ -535,6 +540,8 @@ export class OnyxChatWidget extends LitElement {
       }
     } else if (continuation) {
       this.continuationStreamId = continuation.stream_id;
+    } else {
+      this.statusRecheck = true;
     }
     // The focused button is gone, so focus moves on.
     if (!this.isConnected) return;
@@ -1001,6 +1008,12 @@ export class OnyxChatWidget extends LitElement {
           follow = newFollow(queued);
           continue;
         }
+        // A status read from before such a decision can show no running
+        // agent and an older approvals version.
+        if (this.statusRecheck) {
+          this.statusRecheck = false;
+          agentsRun = true;
+        }
         if (!agentsRun) return;
         // Agents never hold the chat: a send can end this poll. The poll
         // leaves the streaming state alone until it follows a stream.
@@ -1041,6 +1054,7 @@ export class OnyxChatWidget extends LitElement {
         this.streamingStatus = "";
         this.abortController = undefined;
         this.continuationStreamId = null;
+        this.statusRecheck = false;
       }
     }
   }

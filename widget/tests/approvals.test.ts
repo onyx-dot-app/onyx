@@ -1124,6 +1124,65 @@ describe("widget while a request waits", () => {
     ).toBe(true);
   });
 
+  it("reads the status again after an agent decision made while the saved session loads", async () => {
+    const { widget, api } = waitingWidget();
+    const agentEntry = { request: { ...request("c"), agent_name: "Research" } };
+    widget["messages"] = [
+      {
+        ...streamingMessage([{ ...agentEntry, outcome: null }]),
+        isStreaming: false,
+      },
+    ];
+    widget["approvalsVersion"] = "v0";
+    // The decision moves the version from v1 to v2.
+    let version = "v1";
+    api.waitForSessionIdle = mock(async () =>
+      idle({ approvals_version: version })
+    );
+    api.submitApprovalDecision = mock(async () => {
+      version = "v2";
+      return {
+        decision: "APPROVED" as const,
+        decided_via: "USER",
+        continuation: null,
+      };
+    });
+    let loaded: () => void = () => {};
+    const loading = new Promise<void>((resolve) => {
+      loaded = resolve;
+    });
+    let loads = 0;
+    api.getChatSession = mock(async () => {
+      loads += 1;
+      if (loads === 1) await loading;
+      return {
+        approvals_version: loads === 1 ? "v1" : "v2",
+        messages: [
+          { message_id: 6, message_type: "user", latest_child_message: 7 },
+          { message_id: 7, message_type: "assistant", parent_message: 6 },
+        ],
+        packets: [
+          [
+            { obj: { ...request("c"), agent_name: "Research" } },
+            ...(loads === 1
+              ? []
+              : [{ obj: { ...request("d"), agent_name: "Research" } }]),
+            { obj: { type: "stop" } },
+          ],
+        ],
+      };
+    });
+
+    const resumed = widget["resumeStream"]("session", { streamId: null });
+    await waitUntil(() => loads === 1);
+    await widget["decideApproval"](agentEntry.request, "approve_once");
+    loaded();
+    await resumed;
+
+    expect(api.getChatSession).toHaveBeenCalledTimes(2);
+    expect(status(widget, "d")).toBe("pending");
+  });
+
   it("refreshes the saved session after approving for the chat with no continuation", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => ({
