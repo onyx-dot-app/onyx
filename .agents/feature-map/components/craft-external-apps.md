@@ -53,7 +53,8 @@ This component owns:
   verdict, approval waits and credential injection;
 - external-app models, provider catalogs, URL matching and OAuth token
   refresh;
-- action policy resolution and storage, and the personal policy routes;
+- action policy resolution and storage, and the personal policy routes,
+  which need Craft for external apps but not for MCP servers;
 - the user app routes, OAuth connect and connect-app decisions;
 - approval rows and the approval decision routes.
 

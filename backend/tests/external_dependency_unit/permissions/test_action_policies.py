@@ -337,9 +337,78 @@ def test_mcp_uses_same_settings_and_access_rules(
     update_mcp_server__no_commit(
         server_id=server.id, db_session=db_session, available_in_craft=False
     )
+    save_user_action_policies(
+        db_session, user, _settings(app_id, {"send_report": ALLOW})
+    )
+    assert (
+        list_action_policies(
+            db_session, user, target=(GatedAppKind.MCP_SERVER, server.id)
+        )[0]
+        .actions[0]
+        .effective_policy
+        == ALLOW
+    )
+    assert not any(
+        view.kind == "mcp_server" and view.target_id == server.id
+        for view in list_action_policies(db_session, user)
+    )
+    with pytest.raises(OnyxError, match="App is unavailable"):
+        update_scheduled_task(
+            db_session=db_session,
+            user_id=user.id,
+            task_id=task.id,
+            action_policies=_task_settings(app_id, {"send_report": ASK}),
+        )
+
+
+def test_personal_mcp_settings_require_server_access(
+    db_session: Session, owner_and_app: tuple[User, int]
+) -> None:
+    from onyx.db.mcp import create_mcp_server__no_commit
+    from onyx.db.models import Tool
+
+    owner, _ = owner_and_app
+    outsider = User(
+        id=uuid4(),
+        email=f"permissions-outsider-{uuid4()}@example.com",
+        hashed_password="unused",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(outsider)
+    server = create_mcp_server__no_commit(
+        owner_email=owner.email,
+        name="Private MCP",
+        description=None,
+        server_url="https://example.com/private-mcp",
+        auth_type=None,
+        transport=None,
+        auth_performer=None,
+        db_session=db_session,
+        is_public=False,
+    )
+    db_session.add(
+        Tool(name="send_report", description="Send report", mcp_server_id=server.id)
+    )
+    db_session.flush()
+    app_id = get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
+
+    with pytest.raises(OnyxError, match="App is unavailable"):
+        list_action_policies(
+            db_session, outsider, target=(GatedAppKind.MCP_SERVER, server.id)
+        )
     with pytest.raises(OnyxError, match="App is unavailable"):
         save_user_action_policies(
-            db_session, user, _settings(app_id, {"send_report": ASK})
+            db_session, outsider, _settings(app_id, {"send_report": ALLOW})
+        )
+    save_user_action_policies(
+        db_session, owner, _settings(app_id, {"send_report": ALLOW})
+    )
+
+    replace_workspace_action_policies(db_session, app_id, None, users_can_manage=False)
+    with pytest.raises(OnyxError, match="Workspace settings prevent"):
+        save_user_action_policies(
+            db_session, owner, _settings(app_id, {"send_report": ASK})
         )
 
 
@@ -791,3 +860,63 @@ def test_scheduled_session_without_active_run_cannot_use_personal_policies(
     session.origin = SessionOrigin.INTERACTIVE
     db_session.flush()
     assert get_active_scheduled_task_context(db_session, session.id) is None
+
+
+def test_personal_routes_require_craft_only_for_external_apps(
+    db_session: Session,
+    owner_and_app: tuple[User, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from onyx.db.mcp import create_mcp_server__no_commit
+    from onyx.db.models import Tool
+    from onyx.external_apps.models import SaveActionPolicies
+    from onyx.server.features.action_policies import api
+
+    user, external_app_id = owner_and_app
+    monkeypatch.setattr(api, "is_craft_enabled_for_user", lambda _user: False)
+    server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name="Chat MCP",
+        description=None,
+        server_url="https://example.com/chat-mcp",
+        auth_type=None,
+        transport=None,
+        auth_performer=None,
+        db_session=db_session,
+        is_public=True,
+    )
+    db_session.add(
+        Tool(name="send_report", description="Send report", mcp_server_id=server.id)
+    )
+    db_session.flush()
+    get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
+
+    saved = api.save_personal_action_policies(
+        "mcp_server",
+        server.id,
+        SaveActionPolicies(action_policies={"send_report": ALLOW}),
+        user,
+        db_session,
+    )
+    assert saved.actions[0].effective_policy == ALLOW
+    assert (
+        api.get_personal_action_policies("mcp_server", server.id, user, db_session)
+        .actions[0]
+        .stored_policy
+        == ALLOW
+    )
+    external_target = list_action_policies(
+        db_session, user, gated_app_id=external_app_id
+    )[0].target_id
+    with pytest.raises(OnyxError, match="Onyx Craft is not available"):
+        api.get_personal_action_policies(
+            "external_app", external_target, user, db_session
+        )
+    with pytest.raises(OnyxError, match="Onyx Craft is not available"):
+        api.save_personal_action_policies(
+            "external_app",
+            external_target,
+            SaveActionPolicies(action_policies={READ: ALLOW}),
+            user,
+            db_session,
+        )
