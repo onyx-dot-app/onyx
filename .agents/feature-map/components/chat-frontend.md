@@ -83,8 +83,8 @@
   name, unless this browser already reads it (the send reader and every
   replay reader claim their stream, `claimStreamReader`) or those rows are
   not loaded. A claim also takes over the stream's answers: an older reader
-  of an answer skips it (`writesAnswer`), and a replay reader writes its
-  answers into the current tree. Without a `continuation`, an incognito chat, which has no
+  of an answer skips it (`writesAnswer`), and both the send reader and a
+  replay reader merge their answers into the current tree. Without a `continuation`, an incognito chat, which has no
   status subscriber, waits for the next stream (`waitForChatResponseEnd`)
   and follows it. When none comes because the continuation already ended,
   the card replaces the answer that holds the request with its saved copy.

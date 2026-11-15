@@ -988,16 +988,24 @@ export default function useChatController({
           ];
         }
 
-        // A newer stream of an answer, such as its continuation, writes it.
+        writeAnswers(messagesToUpsert);
+      }
+
+      /** Merges the send's updates into the chat's current tree. An answer
+       *  that a newer stream writes, such as its continuation, keeps its
+       *  rows, and rows that others added stay. */
+      function writeAnswers(messages: Message[]) {
         const streamId = claimedStream?.stream_id ?? null;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: messagesToUpsert.filter(
+          messages: messages.filter(
             (message) =>
               message.type === "user" ||
               writesAnswer(streamId, message.messageId)
           ),
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          completeMessageTreeOverride:
+            useChatSessionStore.getState().sessions.get(frozenSessionId)
+              ?.messageTree ?? currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
       }
 
@@ -1284,22 +1292,18 @@ export default function useChatController({
                   });
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
-                  currentMessageTreeLocal = upsertToCompleteMessageTree({
-                    messages: [
-                      {
-                        ...buildAssistantNodeUpdate(errorModelIndex),
-                        errorMessage: streamingError.error,
-                        type: "error",
-                        stackTrace: streamingError.stack_trace || null,
-                        errorCode: streamingError.error_code || null,
-                        isRetryable: streamingError.is_retryable ?? true,
-                        errorDetails: streamingError.details || null,
-                        is_generating: false,
-                      },
-                    ],
-                    completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId!,
-                  });
+                  writeAnswers([
+                    {
+                      ...buildAssistantNodeUpdate(errorModelIndex),
+                      errorMessage: streamingError.error,
+                      type: "error",
+                      stackTrace: streamingError.stack_trace || null,
+                      errorCode: streamingError.error_code || null,
+                      isRetryable: streamingError.is_retryable ?? true,
+                      errorDetails: streamingError.details || null,
+                      is_generating: false,
+                    },
+                  ]);
                 } else {
                   // Error without model_index in multi-model — can't route
                   // to a specific panel. Log and continue; the stream loop
@@ -1529,11 +1533,7 @@ export default function useChatController({
                 },
               ];
 
-          currentMessageTreeLocal = upsertToCompleteMessageTree({
-            messages: [userErrorNode, ...errorAssistantNodes],
-            completeMessageTreeOverride: currentMessageTreeLocal,
-            chatSessionId: frozenSessionId,
-          });
+          writeAnswers([userErrorNode, ...errorAssistantNodes]);
         }
       } finally {
         try {
@@ -1543,11 +1543,7 @@ export default function useChatController({
             initialAssistantNodes.length > 0 &&
             streamSucceeded
           ) {
-            upsertToCompleteMessageTree({
-              messages: buildNonErroredNodes({ is_generating: false }),
-              completeMessageTreeOverride: currentMessageTreeLocal,
-              chatSessionId: frozenSessionId,
-            });
+            writeAnswers(buildNonErroredNodes({ is_generating: false }));
           }
         } finally {
           controller.signal.removeEventListener("abort", discardUnsentTurn);

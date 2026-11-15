@@ -17,6 +17,7 @@ import {
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
 import {
+  claimStreamReader,
   followChatStream,
   refreshChatSession,
 } from "@/lib/chat/settleChatSession";
@@ -574,6 +575,93 @@ test("a continuation that names the send's own stream keeps the send as its only
     answerEnds.resolve();
     await sending;
   });
+});
+
+test("a send reader's later flush keeps an answer that its continuation took over", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const takenOver = Promise.withResolvers<void>();
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 31, reserved_assistant_message_id: 32 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: "Before" },
+    };
+    await takenOver.promise;
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: { type: "message_delta", content: " stale" },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const answer = () =>
+    [
+      ...useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.values(),
+    ].find((message) => message.messageId === 32);
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      mentions: [],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(answer()?.packets).toHaveLength(1));
+
+  // A continuation of the answer claims it and writes its rows.
+  const continuedPacket = {
+    placement: { turn_index: 2, tab_index: 0 },
+    obj: { type: "message_delta" as const, content: "Continued" },
+  };
+  const continued = { ...answer()!, packets: [continuedPacket] };
+  act(() => {
+    expect(claimStreamReader({ stream_id: 940, response_ids: [32] })).toBe(
+      true
+    );
+    const store = useChatSessionStore.getState();
+    store.updateSessionMessageTree(
+      "session",
+      new Map(store.sessions.get("session")!.messageTree).set(
+        continued.nodeId,
+        continued
+      )
+    );
+  });
+  await act(async () => {
+    takenOver.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  });
+
+  expect(answer()?.packets).toEqual([continuedPacket]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
+  expect(answer()?.packets).toEqual([continuedPacket]);
 });
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {
