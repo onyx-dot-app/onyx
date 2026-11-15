@@ -138,18 +138,23 @@ the shared system prompt. Each agent builds it from its `skills_list` tool's
 skill list for its own model's window
 (`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`);
 a change to the user's skills changes the prefix from the catalog on.
-Mentioned skills are recorded history. When a message is accepted, its picks
-are stored with their cut SKILL.md text ([[skills]]): a question's in
-`ChatMessage.mentions`, and a message sent into a running response in its
-accepted input. History puts one user-role `<skill>` message for each pick
-right after the message that picked it (id `<message id>:skill:<version id>`),
-built from the stored text: `chat/chat_utils.py:convert_chat_history` for a
-question and `chat/models.py:accepted_input_messages` for an accepted send.
+Mentioned skills are recorded history. When a message is accepted, each
+pick is stored as a record and a `<skill>` message with the cut SKILL.md and
+its token count ([[skills]]): a question's in `chat_message.mentions` and the
+deferred `chat_message.skill_messages`, which only
+`db/chat.py:load_message_branch` loads, and a message sent into a running
+response in its accepted input, with its records in its metadata
+(`chat/models.py:ChatInputMetadata`). History puts one user-role `<skill>`
+message for each pick right after the message that picked it (id
+`<message id>:skill:<version id>`), built from the stored message:
+`chat/chat_utils.py:convert_chat_history` for a question and
+`chat/models.py:accepted_input_messages` for an accepted send.
 Old turns never read the skill again, so their prompt stays the same after
-the skill changes, is deleted or is hidden from the user. A skill message is
-marked as input context (`CompactionMetadata.is_input_context`, predicate
-`agents/compaction.py:is_input_context`): it belongs to the message before
-it and is never a user turn. Compaction never takes it as the user's task
+the skill changes, is deleted or is hidden from the user. A skill message has
+`PromptMetadata` with `is_input_context` (from `CompactionMetadata`,
+predicate `agents/compaction.py:is_input_context`) and the stored
+`token_count`: it belongs to the message before it and is never a user turn.
+Compaction never takes it as the user's task
 (`agents/compaction.py:messages_after_compaction`), the summarizer sees it,
 and compacted history drops it with the summarized prefix. No cut falls just
 before one (`agents/compaction.py:history_boundaries`), so a kept message
@@ -265,7 +270,10 @@ counts what is sent, not the stored token counts.
    `chat/prompt_utils.py:calculate_reserved_tokens` runs before
    `chat/files.py:extract_context_files` in
    `chat/process_message.py:prepare_chat_turn`. Reverse them and a large project
-   takes space the prompt needs.
+   takes space the prompt needs. Extraction runs after history assembly, and
+   in a usage-only session after the temporary history save. Its reservation
+   adds the stored token counts of the current input's skill messages, from
+   history or temporary history, so a usage-only regeneration counts them too.
 5. `fixed-parts-must-fit` **The fixed parts must fit, or the response fails.**
    The head prompt, project files, notices, the reminder and the newest
    question and request-only context always stay. Before the first model step,
@@ -311,9 +319,9 @@ counts what is sent, not the stored token counts.
     ([[chat-persistence#incognito-decision-per-field]]), and whether a resumed
     turn needs it. Mentioned skills, for example, are recorded history: the
     accepted message stores each SKILL.md, history puts it after its message
-    as input context, and compaction summarizes it but never takes it as the
-    task; `prepare_chat_turn` adds the current question's skill text to the
-    reservation; a usage-only session keeps the skill messages in temporary history
+    as input context, and the summarizer sees it but compaction never takes it
+    as the task; `prepare_chat_turn` adds the current input's skill messages to
+    the reservation; a usage-only session keeps the skill messages in temporary history
     while its content-free rows keep the picks without text; a resumed turn
     rebuilds the catalog from its restored skill tools. Add request-only context through
     `prepare_prompt`, outside recorded history. Compaction cutoffs identify

@@ -182,7 +182,7 @@ one place at any moment. The delivery and the reader decide its path:
 
 | Message | Path |
 | --- | --- |
-| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the skills it picked at the versions that acceptance resolved, with their text |
+| `send` that a running step reads | `chat_input` row → deleted when the step accepts it → `chat_response_item.inputs` of the reading step, in the same transaction, with the records of the skills it picked (`mentions`, at the versions that acceptance resolved) and their `<skill>` messages (`skill_messages`) |
 | `queue`, `interrupt`, or a `send` that no step can read | `chat_input` row → deleted when a turn accepts it → a USER `chat_message` that starts the new turn, in the same transaction |
 
 Agent messages follow the same two paths. Child results go into the
@@ -200,8 +200,11 @@ Human input needs no invoking tool call or source response. Main Chat accepts
 text without attachments or request headers. A queued or interrupting message
 keeps its Deep Research choice (`chat_input.deep_research`), the model the
 picker showed (`chat_input.llm_override`) and what the user tagged with `@`
-(`chat_input.mentions`); its turn accepts the picks, with their text, when
-it accepts the message ([[skills]]). The human queue belongs to the
+(`chat_input.mentions`); its turn accepts the picks when it accepts the
+message, and stores their records in `chat_message.mentions` and their
+`<skill>` messages in the deferred `chat_message.skill_messages` column
+([[skills]]). Only `db/chat.py:load_message_branch`, the branch load for
+model history, loads that column. The human queue belongs to the
 session: only a `send` row targets a response, and a `send` that its run never
 reads waits like queued input. Withdrawing pending text uses the
 same recipient lock as acceptance; accepted text cannot be withdrawn. Promotion
@@ -334,8 +337,12 @@ The database branch selects retained user messages and response output IDs from
 the temporary list. Saving a new input removes future turns and unselected model
 answers before appending its text-file messages and then its question. The
 temporary question keeps its skill messages, with their SKILL.md text, right
-after it, while the content-free database row keeps each pick without text.
-Later turns and regenerations reuse that text and never read the skill again.
+after it, while the content-free database row keeps the records and leaves
+`skill_messages` empty. Later turns and regenerations reuse that text and
+never read the skill again. One helper,
+`chat/incognito_context.py:input_group`, finds a question's input group (its
+text-file messages before it and its skill messages after it) for trimming,
+regeneration and saves.
 A small response
 index keeps run IDs, output IDs and each response’s checkpoint.
 Continuation and regeneration use the selected parent’s
@@ -430,8 +437,8 @@ Community downgrade clears it ([[billing]]).
    becomes a generic message. A question keeps its `mentions` record (for a
    skill, its name and version id) in a content-free session, because a
    mention identifies a record, not conversation content. The skill text is
-   content: a content-free row stores each pick without it, and temporary
-   history keeps the text.
+   content: a content-free row leaves `chat_message.skill_messages` empty,
+   and temporary history keeps the skill messages.
    Token counts and `request_params` are kept on purpose for usage metering. `db/chat.py:update_chat_session` drops a title
    with no error. Every runtime writer (`_ResponseWriter`, child reservation,
    `db/chat_checkpoint.py:publish_checkpoint__no_commit`) refuses a
