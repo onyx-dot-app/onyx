@@ -496,7 +496,7 @@ def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
     for key in cache.expiries:
         cache.expiries[key] = ACTIVE_LEASE_SECONDS - 20
     assert is_chat_session_processing(session_id, cache)
-    assert get_processing_stream(session_id, cache) == (_STREAM_ID, [])
+    assert get_processing_stream(session_id, cache) == (_STREAM_ID, [], False)
     admission.release()
     assert not is_chat_session_processing(session_id, cache)
 

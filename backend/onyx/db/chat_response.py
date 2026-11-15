@@ -1,4 +1,5 @@
 import json
+from collections.abc import Collection
 from uuid import UUID
 
 from sqlalchemy import delete, inspect, select
@@ -19,6 +20,7 @@ from onyx.agents.models import (
 from onyx.chat.mention_models import PickedSkillMessage
 from onyx.chat.models import (
     AgentToolApproval,
+    ChatApprovals,
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
@@ -37,7 +39,6 @@ from onyx.chat.models import (
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
-from onyx.db.approval_request import get_response_approval_requests
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
     MAX_AGENT_HISTORY_RUNS,
@@ -89,6 +90,8 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 logger = setup_logger()
+# The context of logs about the parked programs' dumps that checkpoints owned.
+CHECKPOINT_DUMP_CLEANUP = "parked program dumps"
 
 
 def _extract_referenced_file_descriptors(
@@ -386,7 +389,7 @@ def save_chat_response_to_db(
             response_record=response.response,
             presentation=response.presentation,
         )
-    delete_files_best_effort(dumps, "parked program dumps")
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
     return answer
 
 
@@ -1280,12 +1283,21 @@ def read_suspended_response_replay(
 
 
 def read_response_replay_data(
-    execution: ChatExecutionRecord, db_session: Session
+    execution: ChatExecutionRecord,
+    db_session: Session,
+    chat_approvals: ChatApprovals | None = None,
 ) -> ResponseReplayData:
-    """Load detached display data for an already authorized response execution."""
+    """Load detached display data for an already authorized response execution.
+
+    `chat_approvals` holds the chat's requests (`load_chat_approvals`); it is
+    read for this response when not given."""
     root = db_session.get(ChatMessage, int(execution.response.run_id))
     if root is None:
         raise ValueError("Chat response is unavailable")
+    if chat_approvals is None:
+        chat_approvals = load_chat_approvals(
+            db_session, root.chat_session_id, [root.id]
+        )
     documents = {
         document.document_id: translate_db_search_doc_to_saved_search_doc(document)
         for document in root.search_docs or []
@@ -1379,70 +1391,83 @@ def read_response_replay_data(
     approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
     status = execution.response.status
     if accepted and (status.is_terminal or status == RunStatus.SUSPENDED):
-        for request in get_response_approval_requests(
-            db_session, [int(run_id) for run_id in run_ids]
+        for run_id in run_ids:
+            for request in chat_approvals.requests.get(int(run_id), []):
+                approvals.setdefault((run_id, request.tool_call_id), []).append(request)
+    # Background agents wait independently of this response's status; the
+    # runs whose records the response shows are left out.
+    agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
+    if starts_agents:
+        for agent_response_id, anchor_call_id in chat_approvals.started_runs.get(
+            root.id, []
         ):
-            approvals.setdefault(
-                (str(request.chat_message_id), request.tool_call_id), []
-            ).append(SavedToolApproval.model_validate(request))
+            if str(agent_response_id) in run_ids:
+                continue
+            agent_approvals.setdefault((str(root.id), anchor_call_id), []).extend(
+                AgentToolApproval(
+                    approval=request,
+                    agent_name=chat_approvals.agent_names.get(agent_response_id, ""),
+                )
+                for request in chat_approvals.requests.get(agent_response_id, [])
+            )
+        for shown in agent_approvals.values():
+            shown.sort(key=lambda agent: (agent.approval.created_at, agent.approval.id))
     return ResponseReplayData(
         tools=tools,
         documents=documents,
         approvals=approvals,
-        # Background agents wait independently of this response's status.
-        agent_approvals=_agent_approvals(db_session, root.id, run_ids)
-        if starts_agents
-        else {},
+        agent_approvals=agent_approvals,
     )
 
 
-def _agent_approvals(
-    db_session: Session, response_id: int, shown_run_ids: list[str]
-) -> dict[tuple[str, str], list[AgentToolApproval]]:
-    """The requests of the runs that the response's calls started, directly or
-    through the runs they started, by the response's run ID and that call's ID.
-
-    Runs whose records the response shows (`shown_run_ids`) are left out.
-    """
+def load_chat_approvals(
+    db_session: Session, chat_session_id: UUID, response_ids: Collection[int]
+) -> ChatApprovals:
+    """The approval requests of the chat, with the runs that `response_ids`
+    started, for the replays of those responses. Requests always belong to
+    the root chat session; a chat without requests reads nothing else."""
+    rows = db_session.execute(
+        select(ApprovalRequest, ChatMessage.chat_session_id, ChatSession.agent_name)
+        .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .where(ApprovalRequest.chat_session_id == chat_session_id)
+        .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
+    ).all()
+    approvals = ChatApprovals()
+    for request, session_id, agent_name in rows:
+        approvals.requests.setdefault(request.chat_message_id, []).append(
+            SavedToolApproval.model_validate(request)
+        )
+        if session_id != chat_session_id:
+            approvals.agent_names[request.chat_message_id] = agent_name or ""
+    if not approvals.agent_names or not response_ids:
+        return approvals
     question = aliased(ChatMessage)
     started = (
         select(
             ChatMessage.id.label("response_id"),
+            ToolCall.parent_chat_message_id.label("root_id"),
             ToolCall.tool_call_id.label("anchor_call_id"),
         )
         .join(question, question.id == ChatMessage.parent_message_id)
         .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
-        .where(ToolCall.parent_chat_message_id == response_id)
+        .where(ToolCall.parent_chat_message_id.in_(response_ids))
         .cte("agent_runs_started", recursive=True)
     )
     child = aliased(ChatMessage)
     child_question = aliased(ChatMessage)
     child_call = aliased(ToolCall)
     started = started.union_all(
-        select(child.id, started.c.anchor_call_id)
+        select(child.id, started.c.root_id, started.c.anchor_call_id)
         .join(child_question, child_question.id == child.parent_message_id)
         .join(child_call, child_call.id == child_question.invoking_tool_call_id)
         .join(started, child_call.parent_chat_message_id == started.c.response_id)
         .where(child.id > started.c.response_id)
     )
-    rows = db_session.execute(
-        select(ApprovalRequest, started.c.anchor_call_id, ChatSession.agent_name)
-        .join(started, started.c.response_id == ApprovalRequest.chat_message_id)
-        .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
-        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-        .where(
-            ApprovalRequest.chat_message_id.not_in(
-                [int(run_id) for run_id in shown_run_ids]
-            )
-        )
-        .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
-    ).all()
-    approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
-    for request, anchor_call_id, agent_name in rows:
-        approvals.setdefault((str(response_id), anchor_call_id), []).append(
-            AgentToolApproval(
-                approval=SavedToolApproval.model_validate(request),
-                agent_name=agent_name or "",
-            )
+    for response_id, root_id, anchor_call_id in db_session.execute(
+        select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
+    ).all():
+        approvals.started_runs.setdefault(root_id, []).append(
+            (response_id, anchor_call_id)
         )
     return approvals

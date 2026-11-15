@@ -57,6 +57,7 @@ class StreamingType(Enum):
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     TOOL_APPROVAL_REQUEST = "tool_approval_request"
     TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
+    REPLAY_END = "replay_end"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
     REASONING_START = "reasoning_start"
@@ -108,6 +109,12 @@ AWAITING_APPROVAL = "awaiting_approval"
 class OverallStop(BaseObj):
     type: Literal["stop"] = StreamingType.STOP.value
     stop_reason: str | None = None
+
+
+# Ends the replayed prefix of a stream that continues a suspended response:
+# the packets before it repeat the saved output, the packets after it are live.
+class ReplayEnd(BaseObj):
+    type: Literal["replay_end"] = StreamingType.REPLAY_END.value
 
 
 class PacketException(BaseObj):
@@ -548,6 +555,7 @@ PacketObj = Union[
     CustomToolDelta,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ReplayEnd,
     FileReaderStart,
     FileReaderResult,
     MemoryToolStart,

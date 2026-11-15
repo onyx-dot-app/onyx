@@ -438,6 +438,16 @@ def next_queued_turn(
     return None
 
 
+def _has_checkpoint(session: Session, response_id: int) -> bool:
+    return bool(
+        session.scalar(
+            select(
+                exists().where(ChatResponseCheckpoint.chat_message_id == response_id)
+            )
+        )
+    )
+
+
 def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     """Read the selected branch's running children and the work that can start.
 
@@ -448,24 +458,28 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
-    inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
+    has_inputs = has_chat_inputs(session, chat_session_id)
+    # A parked agent has a result row, so only a parked root response can wait
+    # in a chat without inbox rows.
+    if has_inputs or session.scalar(
+        select(
+            exists()
+            .where(ChatResponseCheckpoint.chat_message_id == ChatMessage.id)
+            .where(ChatMessage.chat_session_id == chat_session_id)
+        )
+    ):
+        inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
     # A selected response that is active and not parked has, or had, an owner.
     if selected is not None and (
         selected.response_status == RunStatus.RUNNING
         or (
             selected.response_status == RunStatus.SUSPENDED
-            and not session.scalar(
-                select(
-                    exists().where(
-                        ChatResponseCheckpoint.chat_message_id == selected.id
-                    )
-                )
-            )
+            and not _has_checkpoint(session, selected.id)
         )
     ):
         inbox.running_response_ids.append(selected.id)
     # Only conversations with inbox rows have queued turns or child work.
-    if not has_chat_inputs(session, chat_session_id):
+    if not has_inputs:
         return inbox
     inbox.results = agent_result_states(session, branch.message_ids)
     inbox.running_response_ids.extend(
@@ -496,10 +510,15 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
         if agent_id in {work.agent_id for work in inbox.child_work}:
             continue
         if not _dispatch_would_start(row.delivery, row.target_response_id, latest):
+            # A parked run has no owner to lose.
             if (
                 latest is not None
                 and latest.response_status is not None
                 and not latest.response_status.is_terminal
+                and not (
+                    latest.response_status == RunStatus.SUSPENDED
+                    and _has_checkpoint(session, latest.id)
+                )
             ):
                 inbox.waiting_response_ids.append(latest.id)
             continue

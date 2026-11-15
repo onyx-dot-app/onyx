@@ -24,6 +24,7 @@ from onyx.db.models import (
     ChatResponseCheckpoint,
     ChatSession,
 )
+from onyx.llm.override_models import LLMOverride
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
@@ -51,9 +52,21 @@ def publish_checkpoint__no_commit(
 ) -> list[str]:
     """Save a paused response's checkpoint, with the foreground child runs it
     waits for and the program dumps it owns. Returns the dumps of the
-    checkpoint that it replaces, which the caller deletes after commit."""
+    checkpoint that it replaces, which the caller deletes after commit.
+
+    A deleted chat parks nothing: nobody can decide its requests. The share
+    lock on the root chat row waits for a soft delete in progress, which ends
+    the parked responses that it reads after its commit.
+    """
     if data.binding.response_id != str(message_id):
         raise ValueError("Checkpoint binding does not match its response")
+    chain = response_invocation_chain(session, message_id)
+    if not chain or session.scalar(
+        select(ChatSession.deleted)
+        .where(ChatSession.id == chain[-1].session_id)
+        .with_for_update(read=True)
+    ):
+        raise ValueError("A deleted chat cannot park a response")
     response = _lock_response(session, message_id)
     if not record_mode_persists_content(response.chat_session.incognito_record_mode):
         raise ValueError("Content-free responses cannot store execution checkpoints")
@@ -87,6 +100,22 @@ def publish_checkpoint__no_commit(
     response.response_status = RunStatus.SUSPENDED
     session.flush()
     return replaced
+
+
+def parked_response_model(session: Session, message_id: int) -> LLMOverride | None:
+    """The model that a parked response ran, by its saved configuration and
+    with its display name; None when its checkpoint names none."""
+    row = session.execute(
+        select(
+            ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
+            ChatMessage.model_display_name,
+        )
+        .join(ChatMessage, ChatMessage.id == ChatResponseCheckpoint.chat_message_id)
+        .where(ChatResponseCheckpoint.chat_message_id == message_id)
+    ).one_or_none()
+    if row is None or row[0] is None:
+        return None
+    return LLMOverride(model_configuration_id=row[0], display_name=row[1])
 
 
 def claim_checkpoint__no_commit(

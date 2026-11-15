@@ -5,8 +5,10 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 from uuid import UUID
 
+from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -30,6 +32,9 @@ from onyx.llm.models import (
     ToolResultMessage,
 )
 from onyx.server.features.action_policies.models import ApprovalChoice
+from onyx.server.query_and_chat.chat_backend import (
+    get_chat_session_processing_status,
+)
 from onyx.tools.models import ToolApprovalScope, ToolContext
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
@@ -204,8 +209,20 @@ def test_a_parked_agent_resumes_in_another_process(
         assert owned.coordinator.close(timeout=10)
         owned_runs.remove(owned)
 
+        def has_active_subagents() -> bool:
+            return get_chat_session_processing_status(
+                chat.chat_session_id,
+                BackgroundTasks(),
+                MagicMock(headers={}),
+                user=chat.user,
+            ).has_active_subagents
+
+        # A parked agent that waits for the user is not active; once decided,
+        # it is, from the decision's commit until it resumes and ends.
+        assert not has_active_subagents()
         [row] = chat.rows(db_session)
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+        assert has_active_subagents()
         completed = subprocess.run(
             [
                 sys.executable,

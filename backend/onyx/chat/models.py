@@ -973,6 +973,9 @@ class ResponseCheckpoint(BaseModel):
     message_payloads: list[MessagePayload]
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
+    # The saved model configuration that the response runs; a parked response
+    # continues on it.
+    model_configuration_id: int | None = None
 
 
 class SavedCheckpoint(BaseModel):
@@ -1012,6 +1015,20 @@ class AgentToolApproval(BaseModel):
 
     approval: SavedToolApproval
     agent_name: str
+
+
+class ChatApprovals(BaseModel):
+    """The approval requests of a chat, read once for the replays of its
+    responses."""
+
+    # Every request of the chat and its agents, by response (the request's
+    # chat message), in the order they were made.
+    requests: dict[int, list[SavedToolApproval]] = Field(default_factory=dict)
+    # The agent names of the responses of background agents.
+    agent_names: dict[int, str] = Field(default_factory=dict)
+    # The runs that each response's calls started, directly or through the
+    # runs they started, with the ID of the response's call.
+    started_runs: dict[int, list[tuple[int, str]]] = Field(default_factory=dict)
 
 
 class ResponseReplayData(BaseModel):

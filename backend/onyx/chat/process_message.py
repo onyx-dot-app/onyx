@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy.orm import Session
 
 from onyx.agents.compaction import is_input_context
+from onyx.agents.models import RunStatus
 from onyx.auth.permissions import has_global_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheBackend
@@ -84,6 +85,7 @@ from onyx.db.chat import (
     reserve_stream_id,
     set_response_model_names__no_commit,
 )
+from onyx.db.chat_checkpoint import parked_response_model
 from onyx.db.chat_inputs import (
     accept_queued_turn__no_commit,
     fail_inbox_start__no_commit,
@@ -280,6 +282,7 @@ def prepare_chat_turn(
     agent_host: bool = False,
     ask_for_approval: bool = True,
     resumed_response_id: int | None = None,
+    handed_admission: ChatTurnAdmission | None = None,
     on_reserved: Callable[
         [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
         None,
@@ -300,6 +303,9 @@ def prepare_chat_turn(
     parent, adds no messages either. It prepares that response's question
     again, and streams under a new stream ID.
 
+    `handed_admission` is the admission that the previous turn handed over
+    when it ended (`ChatTurnAdmission.release`); the turn claims none.
+
     `on_reserved` receives a send's ID packets, a created session first, once
     its question and responses are saved with their content, so a later
     preparation failure can still name the saved turn.
@@ -309,7 +315,7 @@ def prepare_chat_turn(
     server_started = (
         queued_turn is not None or agent_host or resumed_response_id is not None
     )
-    admission = ChatTurnAdmission(
+    admission = handed_admission or ChatTurnAdmission(
         get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     )
     response_ids: list[int] = []
@@ -317,12 +323,24 @@ def prepare_chat_turn(
         with get_session_with_current_tenant() as db_session:
             chat_session = _load_session(new_msg_req, user, db_session)
             # Reserve the session before model setup or changes to its message tree.
-            admission.claim(chat_session.id)
+            if handed_admission is None:
+                admission.claim(chat_session.id)
+            else:
+                admission.check_owner(chat_session.id)
             if server_started and chat_session.tool_selection is not None:
                 # A turn the server starts, or its agent host, uses the chat's
                 # current tools and filters.
                 new_msg_req = SendMessageRequest.model_validate(
                     new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
+                )
+            if resumed_response_id is not None and new_msg_req.llm_override is None:
+                # A parked response continues on its own model.
+                new_msg_req = new_msg_req.model_copy(
+                    update={
+                        "llm_override": parked_response_model(
+                            db_session, resumed_response_id
+                        )
+                    }
                 )
             alternate_model = (
                 (chat_session.current_alternate_model or "").split("__")
@@ -348,8 +366,23 @@ def prepare_chat_turn(
                     }
                 )
             chat_history, parent_message = load_message_branch(
-                chat_session.id, new_msg_req.parent_message_id, db_session
+                chat_session.id,
+                new_msg_req.parent_message_id,
+                db_session,
+                # A parked response, or the branch of a parked agent run, can
+                # be off the selected branch.
+                any_branch=resumed_response_id is not None or agent_host,
             )
+            if (
+                not server_started
+                and parent_message.response_status == RunStatus.SUSPENDED
+            ):
+                # The route checked before the response parked and released
+                # admission; a send does not attach under a parked response.
+                raise OnyxError(
+                    OnyxErrorCode.APPROVAL_PENDING,
+                    "Approve or reject the pending requests before you send a message",
+                )
             stream_id: int | None = None
             if resumed_response_id is not None:
                 if parent_message.id != resumed_response_id or len(chat_history) < 2:
@@ -887,31 +920,48 @@ def dispatch_pending_chat_messages(
     custom_tool_additional_headers: dict[str, str] | None = None,
     *,
     mcp_headers: dict[str, str] | None = None,
+    decided_response_id: int | None = None,
+    admission: ChatTurnAdmission | None = None,
 ) -> None:
     """Start the chat's next queued work through chat admission.
 
     A parked root response whose waits all ended continues first, on any
-    branch; its turn publishes its stream ID before this returns, so a status
-    read right after sees it. Then the selected branch's next root turn
-    starts. Otherwise, parked agent runs whose waits ended and idle agents'
-    work start in an agent host when no running child keeps a run store
-    scanning; the host serves the selected branch, or the branch of a parked
-    run. Started work, and the work that it dispatches when it ends, uses the
+    branch. Admission runs one turn at a time, so the parked responses of a
+    multi-model turn continue one after another: each turn's release
+    dispatches the next. A decision passes its response as
+    `decided_response_id`: that response continues first, and its turn
+    publishes its stream ID before this returns, so the decision can name it;
+    its admission claim, not an earlier processing check, decides whether a
+    turn that is still ending starts it instead. Other callers start work on
+    a thread. A turn that ended with a parked root response that can continue
+    hands its `admission` over, so the chat never shows idle in between.
+
+    Then the selected branch's next root turn starts. Otherwise, parked agent
+    runs whose waits ended and idle agents' work start in an agent host when
+    no running child keeps a run store scanning; the host serves the selected
+    branch, or the branch of a parked run. Started work, and the work that it dispatches when it ends, uses the
     pass-through headers of the request that led to it, such as a decision's
     `mcp_headers`. Work that a status read starts has none.
     """
+    # Released here unless a thread that starts the work takes it over.
+    handed = admission
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
-        if is_chat_session_processing(chat_session_id, cache):
+        if (
+            admission is None
+            and decided_response_id is None
+            and is_chat_session_processing(chat_session_id, cache)
+        ):
             return
         inbox = read_repaired_chat_inbox(chat_session_id, cache)
-        resumable = next(
+        resumable = min(
             (
                 run.response_id
                 for run in inbox.resumable_runs
                 if run.agent_id == str(chat_session_id)
             ),
-            None,
+            key=lambda response_id: response_id != decided_response_id,
+            default=None,
         )
         parked_agent_roots = [
             run.root_response_id
@@ -938,6 +988,8 @@ def dispatch_pending_chat_messages(
         )
 
         def start_pending_work() -> None:
+            # Released unless a preparation takes it over.
+            unused = admission
             # Queued work starts a new root trace while retaining tenant context.
             trace_token = Scope.set_current_trace(None)
             span_token = Scope.set_current_span(None)
@@ -959,6 +1011,7 @@ def dispatch_pending_chat_messages(
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("A suspended response waits for write access")
                         return
+                    unused = None
                     try:
                         setup = prepare_chat_turn(
                             new_msg_req=SendMessageRequest(
@@ -973,6 +1026,7 @@ def dispatch_pending_chat_messages(
                             custom_tool_additional_headers=custom_tool_additional_headers,
                             mcp_headers=mcp_headers,
                             resumed_response_id=resumable,
+                            handed_admission=admission,
                         )
                     except Exception as error:
                         # Another turn holds the chat, the owner's budget is
@@ -996,6 +1050,7 @@ def dispatch_pending_chat_messages(
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("Agent work waits for its owner's write access")
                         return
+                    unused = None
                     try:
                         host_setup = prepare_chat_turn(
                             new_msg_req=SendMessageRequest(
@@ -1009,6 +1064,7 @@ def dispatch_pending_chat_messages(
                             custom_tool_additional_headers=custom_tool_additional_headers,
                             mcp_headers=mcp_headers,
                             agent_host=True,
+                            handed_admission=admission,
                         )
                     except OnyxError as error:
                         if error.error_code is not OnyxErrorCode.RATE_LIMITED:
@@ -1029,6 +1085,7 @@ def dispatch_pending_chat_messages(
                         return
                     host_agent_work(host_setup, user, dispatch)
                     return
+                unused = None
                 setup = prepare_chat_turn(
                     new_msg_req=SendMessageRequest(
                         message=queued_turn.message.message
@@ -1054,6 +1111,7 @@ def dispatch_pending_chat_messages(
                     litellm_additional_headers=litellm_additional_headers,
                     custom_tool_additional_headers=custom_tool_additional_headers,
                     queued_turn=queued_turn,
+                    handed_admission=admission,
                 )
                 stream = start_chat_turn(
                     setup, user, dispatch_pending_messages=dispatch
@@ -1068,10 +1126,16 @@ def dispatch_pending_chat_messages(
             except Exception:
                 logger.exception("Could not start queued chat work")
             finally:
+                try:
+                    if unused is not None:
+                        unused.release()
+                except Exception:
+                    logger.exception("Could not release a handed-over chat admission")
                 Scope.reset_current_span(span_token)
                 Scope.reset_current_trace(trace_token)
 
-        if resumable is not None:
+        if resumable is not None and decided_response_id is not None:
+            handed = None
             start_pending_work()
             return
         chat_turn_work.started()
@@ -1082,9 +1146,16 @@ def dispatch_pending_chat_messages(
         except BaseException:
             chat_turn_work.finished()
             raise
+        handed = None
         worker.add_done_callback(lambda _future: chat_turn_work.finished())
     except Exception:
         logger.exception("Could not dispatch queued chat input")
+    finally:
+        if handed is not None:
+            try:
+                handed.release()
+            except Exception:
+                logger.exception("Could not release a handed-over chat admission")
 
 
 def streaming_error_as_onyx(error: StreamingError) -> OnyxError:

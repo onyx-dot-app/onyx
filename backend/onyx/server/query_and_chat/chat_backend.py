@@ -118,6 +118,7 @@ from onyx.db.chat_inputs import (
     submit_human_message__no_commit,
     withdraw_human_message__no_commit,
 )
+from onyx.db.chat_response import load_chat_approvals
 from onyx.db.chat_search import search_chat_sessions
 from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
 from onyx.db.enums import (
@@ -559,12 +560,20 @@ def get_chat_session(
     # Every assistant message might have a set of tool calls associated with it, these need to be replayed back for the frontend
     # Each list is the set of tool calls for the given assistant message.
     tools_by_id = load_session_tools(session_messages, db_session)
+    responses = [
+        msg for msg in session_messages if msg.message_type == MessageType.ASSISTANT
+    ]
+    chat_approvals = load_chat_approvals(
+        db_session, session_id, [msg.id for msg in responses]
+    )
     replay_packet_lists: list[list[Packet]] = [
         translate_assistant_message_to_packets(
-            chat_message=msg, tools_by_id=tools_by_id, db_session=db_session
+            chat_message=msg,
+            tools_by_id=tools_by_id,
+            chat_approvals=chat_approvals,
+            db_session=db_session,
         )
-        for msg in session_messages
-        if msg.message_type == MessageType.ASSISTANT
+        for msg in responses
     ]
     if is_shared:
         # A shared view shows no skills the owner picked: not on questions and
@@ -815,12 +824,13 @@ def delete_all_chat_sessions(
             OnyxErrorCode.SERVICE_UNAVAILABLE,
             "Some generated files could not be deleted yet. Try again shortly.",
         )
-    parked = [] if HARD_DELETE_CHATS else parked_response_ids(db_session, user.id)
     try:
         delete_all_chat_sessions_for_user(user=user, db_session=db_session)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    _end_parked_responses(parked)
+    # Read after the delete commits: a park either commits first or refuses.
+    if not HARD_DELETE_CHATS:
+        _end_parked_responses(parked_response_ids(db_session, user.id))
     for incognito_id in incognito_session_ids:
         _teardown_incognito_after_delete(incognito_id, user.id, db_session)
 
@@ -864,17 +874,14 @@ def delete_chat_session_by_id(
         actual_hard_delete = (
             hard_delete if hard_delete is not None else HARD_DELETE_CHATS
         )
-        parked = (
-            []
-            if actual_hard_delete
-            else parked_response_ids(db_session, user.id, session_id)
-        )
         delete_chat_session(
             user_id, session_id, db_session, hard_delete=actual_hard_delete
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    _end_parked_responses(parked)
+    # Read after the delete commits: a park either commits first or refuses.
+    if not actual_hard_delete:
+        _end_parked_responses(parked_response_ids(db_session, user.id, session_id))
     if is_incognito:
         _teardown_incognito_after_delete(session_id, user.id, db_session)
 
@@ -1514,11 +1521,15 @@ def get_chat_session_processing_status(
     # input, so a starting turn shows as startable input or as processing.
     cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     stream = get_processing_stream(session_id, cache)
+    resumes_root = any(run.agent_id == str(session_id) for run in inbox.resumable_runs)
+    # Decided agents wait to resume; a parked agent that still waits for the
+    # user does not count.
+    resumes_agents = len(inbox.resumable_runs) > resumes_root
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
-        # A parked agent waits for the user, not for this poll.
         has_active_subagents=any(result.is_running for result in inbox.results)
-        or bool(inbox.child_work),
+        or bool(inbox.child_work)
+        or resumes_agents,
         has_startable_input=inbox.next_turn is not None,
         is_processing=stream is not None
         or is_chat_session_processing(session_id, cache),
@@ -1536,12 +1547,12 @@ def get_chat_session_processing_status(
         and user.id is not None
         and (
             inbox.next_turn is not None
-            # A parked run whose waits all ended continues.
-            or inbox.resumable_runs
+            # A parked root response whose waits all ended continues.
+            or resumes_root
             # Dispatch saves a response whose owner is gone as interrupted.
             or ownerless_response_ids(cache, inbox.unfinished_response_ids)
             # Agent work needs a host when no running child's store scans.
-            or (inbox.child_work and not inbox.running_response_ids)
+            or ((inbox.child_work or resumes_agents) and not inbox.running_response_ids)
         )
     ):
         # Queued work can outlive the process that completed its previous response.
@@ -1909,6 +1920,7 @@ def decide_approval(
         get_relevant_headers(request.headers, LITELLM_PASS_THROUGH_HEADERS),
         get_relevant_headers(request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS),
         mcp_headers=body.mcp_headers,
+        decided_response_id=response_id,
     )
     stream = get_processing_stream(
         chat_session_id,
@@ -1921,7 +1933,7 @@ def decide_approval(
         continuation=CurrentStreamInfo(
             stream_id=stream.stream_id, response_ids=stream.response_ids
         )
-        if stream is not None and response_id in stream.response_ids
+        if stream is not None and stream.resumed and response_id in stream.response_ids
         else None,
     )
 

@@ -302,7 +302,7 @@ def test_a_saved_response_shows_each_request_as_its_stream_ended_it(
 def test_a_suspended_response_replays_as_its_stream_stopped(decided: bool) -> None:
     """Its waiting call stays open after its request, and the response stops
     to wait for the decisions; a stream that continues it gets the call's
-    renderer instead, and the stop and the decision come live."""
+    renderer instead, the saved decision, and no stop."""
     saved = (
         _saved(ApprovalDecision.APPROVED, ApprovalDecidedVia.USER)
         if decided
@@ -338,7 +338,9 @@ def test_a_suspended_response_replays_as_its_stream_stopped(decided: bool) -> No
     )
 
     assert list(open_calls) == [("1", "message", CALL.id)]
-    assert continued[-1].obj == _REQUEST
+    assert [packet.obj for packet in loaded][-3 if decided else -2 : -1] == [
+        packet.obj for packet in continued
+    ][-2 if decided else -1 :]
     assert not any(isinstance(packet.obj, OverallStop) for packet in continued)
 
 

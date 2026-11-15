@@ -214,21 +214,26 @@ ChatRunStore.poll_control   one park pass over every owned run, once a second
   -> ChatRunStore.handoff   persist_checkpoint_files (dumps under unique IDs)
      -> db/chat_checkpoint.py:publish_checkpoint__no_commit   SUSPENDED, with
         child_run_ids and dump_file_ids; dumps of a replaced checkpoint go
-     a failed save deletes its dumps; RunNotTransferable and storage errors
-     keep the run, and a later poll tries again
+     a failed save deletes its dumps; RunNotTransferable and transient storage
+     errors keep the run, and a later poll tries again (_park_retries); a
+     deleted chat parks nothing
   root -> on_root_parked -> chat/execution.py:ChatTurnExecution._root_parked
-     -> stop(awaiting_approval); the turn releases the chat
+     -> drop_response, stop(awaiting_approval); at its end the turn hands its
+     admission to the resume of a parked root that can continue, else releases
 POST /chat/approvals/{id}/decision (public)   db/approval_request.py:record_approval_decision__no_commit
-  -> chat/process_message.py:dispatch_pending_chat_messages(mcp_headers)
-  -> response continuation {stream_id, response_ids} when the decision's
-     response streams after the dispatch
+  -> chat/process_message.py:dispatch_pending_chat_messages(mcp_headers,
+     decided_response_id)   the decided response's resume starts first, inline
+  -> response continuation {stream_id, response_ids} when a resume turn
+     writes the decision's response after the dispatch
 dispatch: ChatInbox.resumable_runs (db/chat_checkpoint.py:resumable_parked_runs)
   root response, any branch -> resume turn (new stream ID) -> ChatRunStore.resume
   agent run -> the store of its branch (_dispatch_messages) -> ChatRunStore.resume
   ChatRunStore.resume: claim, answers from the rows (tool_answer)
      -> Agent.resume(answers) -> input_ended (answer) -> tool_approval_resolved
      (a SESSION_GRANT decision is a standing answer -> "approved_for_chat")
-  a resume turn that fails before its run exists -> fail_suspended_response
+  resume turn: the response's own model (db/chat_checkpoint.py:parked_response_model)
+  a resume turn that fails before its run exists -> fail_suspended_response,
+     except a transient error (RETRYABLE_START_ERRORS): a later dispatch retries
 user Stop: chat/execution.py:ChatTurnExecution._poll_control
   -> ChatRunStore.reject_waiting_approvals   REJECTED by USER where decision IS
      NULL, for the root and its foreground descendants; each run takes its
@@ -403,9 +408,14 @@ calls run with no row unless the policy is now DENY.
     through the store's `on_root_parked` callback
     (`chat/execution.py:ChatTurnExecution._root_parked`), and its stream ends
     with `OverallStop(awaiting_approval)` (`chat/presentation.py:overall_stop`);
-    an agent run's release dispatches. A park that raises `RunNotTransferable`
-    (the run changed) or a storage error keeps the run, and a later poll tries
-    again; another error cancels the run. `ChatRunStore.handoff` saves the
+    an agent run's release dispatches. A parked root leaves its stream's
+    `response_ids` (`ChatTurnAdmission.drop_response`). A park that raises
+    `RunNotTransferable` (the run changed), a transient cache, database or
+    object store error keeps the run, and a later poll tries again
+    (`chat/run_store.py:_park_retries`; AccessDenied or NoSuchBucket do not
+    retry); another error cancels the run. A deleted chat parks nothing
+    (`publish_checkpoint__no_commit` locks the root chat row), and a soft
+    delete ends the parked responses that it reads after its commit. `ChatRunStore.handoff` saves the
     checkpoint with the foreground child runs it waits for and the dumps of its
     parked programs (`db/chat_checkpoint.py:publish_checkpoint__no_commit`,
     columns `child_run_ids` and `dump_file_ids`), sets `SUSPENDED` and releases
@@ -421,8 +431,10 @@ calls run with no row unless the policy is now DENY.
     host that this dispatch starts, and the dispatch that those start when
     they end; a resume that a status read starts has none. The route returns
     `continuation` (`ApprovalDecisionResponse`: the stream ID and its
-    response IDs) when, after the dispatch, a stream writes the request's
-    response. Dispatch reads `db/chat_inputs.py:read_chat_inbox`, whose
+    response IDs) only when, after the dispatch, a resume turn writes the
+    request's response (`ProcessingStream.resumed`); a decision while the
+    response or a multi-model sibling still runs gets null, and the resume
+    follows when that turn ends. Dispatch reads `db/chat_inputs.py:read_chat_inbox`, whose
     `resumable_runs` come from one query,
     `db/chat_checkpoint.py:resumable_parked_runs`, over every branch of the
     chat: a response is parked only while it is `SUSPENDED` with a
@@ -430,8 +442,20 @@ calls run with no row unless the policy is now DENY.
     of the child runs that its checkpoint names is unfinished and, for a
     subagent, none of its delegated runs is unfinished. A leaf resumes first
     and its parent after it ends. A resumable root response, on any branch,
-    continues before any queued turn, synchronously, so the new stream ID
-    (`db/chat.py:reserve_stream_id`) is published before the route returns.
+    continues before any queued turn. For the decision route, the decided
+    response goes first and its turn starts synchronously, so the new stream
+    ID (`db/chat.py:reserve_stream_id`) is published before the route returns;
+    other callers start it on a thread. The decision route skips the
+    processing check and lets the admission claim decide. Admission runs one
+    turn at a time, so the parked responses of a multi-model turn continue one
+    after another, each turn's end dispatching the next. A turn that parked a
+    root hands its admission over when a parked root can continue
+    (`ChatTurnAdmission.release(hand_off=...)`, the check under the admission
+    lock), so the chat shows processing from the park to the resume. A resume
+    turn runs on the model that the response ran: its checkpoint saves the
+    model configuration (`ResponseCheckpoint.model_configuration_id`), and
+    `prepare_chat_turn` resolves it as the turn's `llm_override`, not the
+    chat's current model.
     Resumable agent runs resume in the store of their branch, selected or not
     (`ChatRunStore._dispatch_messages`), with no stream; dispatch starts an
     agent host (`chat/execution.py:host_agent_work`) for the selected branch,
@@ -453,8 +477,10 @@ calls run with no row unless the policy is now DENY.
     resume turn before its run exists, such as a gone model or saved state,
     ends the response through `chat/run_store.py:fail_suspended_response`:
     failed, its rows ended, its checkpoint and its parked programs' dumps
-    deleted, so no retry repeats it; the turn sends the resolutions that its
-    replay withheld. A dispatch that cannot prepare the turn does the same,
+    deleted, so no retry repeats it. A transient error
+    (`RETRYABLE_START_ERRORS`) keeps the response suspended, and the turn
+    dispatches nothing when it ends, so a later dispatch, such as a status
+    read's, retries. A dispatch that cannot prepare the turn does the same,
     except for a conflict, a rate limit or a transient storage error, which a
     later dispatch retries. A user Stop of a live
     turn (the chat's stream Stop key, read by
@@ -470,9 +496,12 @@ calls run with no row unless the policy is now DENY.
     their requests. A suspended response runs nothing, so a Stop finds no
     turn: the stop route only pauses the queue, and the requests still wait.
     "Stop subagents"
-    (`server/query_and_chat/chat_backend.py:stop_chat_subagents`) saves the
-    user's rejection of the active agents' rows, then cancels the live ones
-    and ends the parked ones (`chat/run_store.py:stop_response`). Soft
+    (`server/query_and_chat/chat_backend.py:stop_chat_subagents`) sets each
+    active agent's Stop key, saves the user's rejection of their rows, then
+    cancels the live ones and ends the parked ones
+    (`chat/run_store.py:stop_response`). A store that finds a parked run
+    resumable after those rejections reads its Stop key and ends it instead
+    of resuming it (`ChatRunStore.resume`). Soft
     deleting a chat ends its parked responses the same way
     (`server/query_and_chat/chat_backend.py:_end_parked_responses`); a hard
     delete removes them with the chat. The checkpoint row owns its dumps,
@@ -486,7 +515,11 @@ calls run with no row unless the policy is now DENY.
     `SUSPENDED` one without a checkpoint, with its rows; the inbox lists such
     a selected response for repair. Only a parked selected response blocks sends
     (`server/query_and_chat/chat_backend.py:_reject_while_approval_waits`); a waiting agent does
-    not. An approval of a tool whose current
+    not. A send that the route let through before the response parked fails
+    in `prepare_chat_turn` once it holds admission, since its parent is the
+    parked response. The checkpoint owns only its programs' dumps: a parked
+    program's staged files are its documents' connector files, saved by
+    reference, not copied. An approval of a tool whose current
     policy (`db/action_policy.py:current_action_policy`, also used by the
     session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
@@ -518,8 +551,9 @@ calls run with no row unless the policy is now DENY.
     decidable cards. A running response replays no records; its stream,
     through resume-stream, shows them. A program's request has the program
     call's ID. A stream that continues a suspended response replays its
-    records but withholds the resolutions of its waiting requests, which the
-    run's live events send (`ResponsePresenter.replay`).
+    records, the resolutions of its waiting requests and its background
+    agents' requests included, then `replay_end`; the run's live events send
+    a waiting request's resolution again (`ResponsePresenter.replay`).
 18. `program-call-waits-in-cell` **A program's Ask call parks its
     program.** MCP tools stay program functions in code mode. A gated call
     opens its request through `ToolInvocation.nested_calls`
@@ -610,6 +644,10 @@ Chat: see [[plugins#openapi-enabled-default-chat-only]].
   buffered, so resume-stream ends at the gap or returns 404. A client that
   reconnects then shows the request only after the response parks and a
   reload replays it.
+- During the first rollout of parked background agents, a status poll that
+  an older server answers can end a parked agent as failed: older servers
+  list a SUSPENDED agent as running and repair it as ownerless. Its requests
+  stay undecided and its card cannot resume. Accepted for that rollout.
 
 ---
 

@@ -62,7 +62,7 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
         with pytest.raises(CacheLockLostError):
             old.refresh()
         old.release()
-        assert get_processing_stream(session_id, cache) == (12, [])
+        assert get_processing_stream(session_id, cache) == (12, [], False)
         new.refresh()
         new.release()
         assert not is_chat_session_processing(session_id, cache)
@@ -103,3 +103,63 @@ def test_stop_targets_the_turn_that_holds_admission(cache: CacheBackend) -> None
         second.release()
         cache.delete(preparation_stop)
         cache.delete(f"chatsessionstop_fence_{session_id}_21")
+
+
+def test_the_fence_keeps_the_stream_id_that_every_server_version_reads(
+    cache: CacheBackend,
+) -> None:
+    """During a rolling deploy, older servers read the fence as a bare stream
+    ID; the responses of the stream are kept beside it."""
+    session_id = uuid4()
+    fence = f"chatprocessing_fence_{session_id}"
+    turn = ChatTurnAdmission(cache)
+    try:
+        turn.claim(session_id)
+        turn.publish(31, [5, 6], resumed=True)
+        raw = cache.get(fence)
+        assert raw is not None and int(raw.decode("utf-8")) == 31
+        assert get_processing_stream(session_id, cache) == (31, [5, 6], True)
+        # A response that parks leaves the stream.
+        turn.drop_response(5)
+        assert get_processing_stream(session_id, cache) == (31, [6], True)
+        turn.release()
+        assert get_processing_stream(session_id, cache) is None
+        # An older server's turn publishes no responses.
+        turn.claim(session_id)
+        cache.set(fence, 32, ex=60)
+        assert get_processing_stream(session_id, cache) == (32, [], False)
+    finally:
+        turn.release()
+
+
+def test_a_turn_hands_admission_to_the_next_turn_without_an_idle_gap(
+    cache: CacheBackend,
+) -> None:
+    """A turn that ends with work to continue keeps the chat processing and
+    hands admission to the next turn's preparation; a Stop aimed at the
+    ending turn does not reach the next one."""
+    session_id = uuid4()
+    ending = ChatTurnAdmission(cache)
+    successor: ChatTurnAdmission | None = None
+    try:
+        ending.claim(session_id)
+        ending.publish(41, [7], resumed=False)
+        finished = current_turn_owner(session_id, cache)
+
+        successor = ending.release(hand_off=lambda: True)
+
+        assert successor is not None
+        assert is_chat_session_processing(session_id, cache)
+        assert get_processing_stream(session_id, cache) is None
+        assert current_turn_owner(session_id, cache) not in (None, finished)
+        stop_current_turn(session_id, cache, owner=finished)
+        assert not cache.exists(f"chatprocessing_preparation_stop_{session_id}")
+        successor.check_owner(session_id)
+        successor.publish(42, [7], resumed=True)
+        assert get_processing_stream(session_id, cache) == (42, [7], True)
+        assert successor.release(hand_off=lambda: False) is None
+        assert not is_chat_session_processing(session_id, cache)
+    finally:
+        ending.release()
+        if successor is not None:
+            successor.release()

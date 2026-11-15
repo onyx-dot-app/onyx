@@ -153,13 +153,21 @@ approval waits ends its stream with its requests, then
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved
 response, then the decisions and the rest live
-([[mcp-and-custom-tools#chat-approval-durable-wait]]). The replay withholds the
-resolutions of the requests that the continued run waits for; the run's live
-events send them, or the turn sends the withheld ones when the resume fails
-before its run starts (`chat/presentation.py:ResponsePresenter.replay`). The
-decision route names the new stream in its `continuation` when the decision
-starts it or finds it running, and the session status names it in
-`current_stream` with its `response_ids`. A run that ends publishes
+([[mcp-and-custom-tools#chat-approval-durable-wait]]). A `replay_end` packet
+(`ReplayEnd`, top-level placement) ends the replayed prefix, also when the
+resume fails before its run starts
+(`chat/presentation.py:ResponsePresenter.replay`). The replay sends every saved
+resolution, so a decision that the run then applies sends its resolution again
+live; clients read resolutions by `approval_id`. The replay also shows the
+requests of the background agents that the response started, with their
+resolutions; only a live stream never sends an agent's request. The decision
+route names the new stream in its `continuation` only when the processing
+stream is a resume turn that writes the response
+(`chat/chat_processing_checker.py:ProcessingStream.resumed`); a decision while
+the response still runs, or while a multi-model sibling still runs, gets
+null. A response that parks leaves its stream's `response_ids`
+(`ChatTurnAdmission.drop_response`), so the session status's
+`current_stream` names only the responses that a stream still writes. A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
 `agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
 that the run recorded, such as a Stop's rejection. Every request that the
@@ -367,8 +375,11 @@ its background task end ([[#pure-asgi-middleware]]).
     `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
     Background children can remain active after the root response becomes
     idle. `has_active_subagents` controls the activity indicator, not input
-    availability; it is true while a child on the selected branch runs or its
-    results are about to wake the root. When a running child has no owner, the
+    availability; it is true while a child on the selected branch runs, its
+    results are about to wake the root, or a parked agent run of the chat
+    whose waits all ended waits to resume (`ChatInbox.resumable_runs`). A
+    decision commits before its route returns, so the next status read after
+    it shows the decided agent. When a running child has no owner, the
     endpoint schedules dispatch, which saves the child as failed so its result
     wakes the root. `has_startable_input` is true when queued text or unread
     root results can start a turn now; a queue that Stop or a failure paused
@@ -376,7 +387,7 @@ its background task end ([[#pure-asgi-middleware]]).
     request of the chat opens, is decided or is removed
     (`db/approval_request.py:approvals_version`); the session load returns the
     same value, and clients reload the session when it changes. A parked agent
-    waits for the user, so it does not count as active. `current_stream`
+    that still waits for the user does not count as active. `current_stream`
     carries the stream ID and the `response_ids` the stream writes; a stream
     that continues a parked response has an ID that no message has. The route
     is in the public API (`PUBLIC_API_TAGS`). The

@@ -57,7 +57,7 @@ def test_mcp_client_no_auth_flow(
     )
     tools_response.raise_for_status()
     tool_entries = tools_response.json()["tools"]
-    assert len(tool_entries) == 102
+    assert len(tool_entries) == 104
 
     # Update server status to CONNECTED
     status_response = client.patch(

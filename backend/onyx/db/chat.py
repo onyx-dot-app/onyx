@@ -1645,8 +1645,14 @@ def load_message_branch(
     chat_session_id: UUID,
     parent_id: int | None,
     db_session: Session,
+    *,
+    any_branch: bool = False,
 ) -> tuple[list[ChatMessage], ChatMessage]:
-    """Select the requested branch before adding a user message."""
+    """Select the requested branch before adding a user message.
+
+    The parent must be on the selected branch, unless `any_branch`: then a
+    parent off it, such as the suspended response of another model of a
+    multi-model turn, brings its own ancestry."""
     history = create_chat_history_chain(
         chat_session_id, db_session, prefetch_top_two_level_tool_calls=False
     )
@@ -1660,11 +1666,30 @@ def load_message_branch(
             (index for index, message in enumerate(history) if message.id == parent_id),
             None,
         )
-        if parent_index is None:
-            raise ValueError(
-                "The new message sent is not on the latest mainline of messages"
-            )
-        history = history[: parent_index + 1]
+        if parent_index is not None:
+            history = history[: parent_index + 1]
+        else:
+            parent_message = db_session.get(ChatMessage, parent_id)
+            if (
+                not any_branch
+                or parent_message is None
+                or parent_message.chat_session_id != chat_session_id
+            ):
+                raise ValueError(
+                    "The new message sent is not on the latest mainline of messages"
+                )
+            ancestry = visible_message_ids(db_session, parent_message)[::-1]
+            by_id = {
+                message.id: message
+                for message in db_session.scalars(
+                    select(ChatMessage).where(
+                        ChatMessage.id.in_(ancestry), ChatMessage.id != root.id
+                    )
+                )
+            }
+            history = [
+                by_id[message_id] for message_id in ancestry if message_id in by_id
+            ]
         parent = history[-1]
 
     response_ids = [

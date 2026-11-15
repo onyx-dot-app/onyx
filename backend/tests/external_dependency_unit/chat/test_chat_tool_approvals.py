@@ -15,6 +15,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from botocore.exceptions import ClientError
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import OperationalError
@@ -1134,13 +1135,42 @@ def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
     _reject_while_approval_waits(db_session, chat.chat_session_id)
 
 
+def _storage_error(code: str, status: int) -> ClientError:
+    return ClientError(
+        {
+            "Error": {"Code": code},
+            "ResponseMetadata": {
+                "RequestId": "",
+                "HostId": "",
+                "HTTPStatusCode": status,
+                "HTTPHeaders": {},
+                "RetryAttempts": 0,
+            },
+        },
+        "PutObject",
+    )
+
+
+@pytest.mark.parametrize(
+    "error, retries",
+    [
+        (OperationalError("SELECT 1", {}, Exception("connection lost")), True),
+        (_storage_error("SlowDown", 503), True),
+        (_storage_error("AccessDenied", 403), False),
+    ],
+    ids=["database", "throttled", "access_denied"],
+)
 def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     chat: ApprovalChat,
     owned_runs: list[OwnedRun],
     dumps: Callable[[], list[str]],
+    error: Exception,
+    retries: bool,
 ) -> None:
-    """A storage error while a run parks keeps the run waiting, deletes the
-    dump that the attempt saved, and a later control poll parks it."""
+    """A transient storage error while a run parks keeps the run waiting,
+    deletes the dump that the attempt saved, and a later control poll parks
+    it. A storage error that every attempt gets ends the run instead of
+    retrying each second."""
     owned = _program(chat, owned_runs, [])
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     assert owned.run.wait_for_idle(10)
@@ -1150,20 +1180,75 @@ def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     def flaky_publish(*args: Any, **kwargs: Any) -> list[str]:
         saved_before_publish.append(len(dumps()))
         if len(saved_before_publish) == 1:
-            raise OperationalError("SELECT 1", {}, Exception("connection lost"))
+            raise error
         return publish(*args, **kwargs)
 
     with patch.object(run_store, "publish_checkpoint__no_commit", flaky_publish):
         owned.owner.poll_control()
+        assert not _parked(chat.response_id)
+        assert dumps() == []
+        if not retries:
+            assert owned.run.cancellation_signal.cancelled
+            assert owned.run.wait_until_settled(10).status == RunStatus.CANCELLED
+            assert saved_before_publish == [1]
+            return
         # The run waits, owned and not cancelled, without the saved dump.
         assert owned.run.status == RunStatus.SUSPENDED
         assert not owned.run.cancellation_signal.cancelled
-        assert not _parked(chat.response_id)
-        assert dumps() == []
         until(lambda: _poll(owned) and _parked(chat.response_id))
     # Each attempt saved one dump; the first one's is gone.
     assert saved_before_publish == [1, 1]
     assert len(dumps()) == 1
+
+
+def test_a_response_that_parks_after_its_chat_was_deleted_ends(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    dumps: Callable[[], list[str]],
+) -> None:
+    """A soft delete ends only the responses that are parked. One that still
+    runs, such as a resume turn's, parks nothing afterwards: nobody could
+    decide its requests. It ends, and its dump goes."""
+    owned = _program(chat, owned_runs, [])
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    assert owned.run.wait_for_idle(10)
+
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=False, user=chat.user, db_session=db_session
+    )
+    owned.owner.poll_control()
+
+    assert owned.run.wait_until_settled(10).status == RunStatus.CANCELLED
+    assert owned.run.wait_for_idle(10)
+    assert not _parked(chat.response_id)
+    assert dumps() == []
+    assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
+
+
+def test_a_stopped_run_that_became_resumable_ends_instead_of_resuming(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """Stop subagents sets the Stop key before it commits the rejections that
+    make a parked run resumable; a store that finds the run first ends it
+    instead of running another step."""
+    _hand_off(_direct_call(chat, owned_runs))
+    run_store.request_response_stop(get_cache_backend(), chat.response_id, "user")
+    [row] = chat.rows(db_session)
+    chat.decide(db_session, row.id, ApprovalChoice.REJECT)
+    tool = chat.tool()
+
+    resumed = _resume(
+        chat,
+        owned_runs,
+        reply=_calls(tool, "send"),
+        tools=[_sending(tool)],
+        gated=[tool],
+    )
+
+    assert resumed is None
+    assert _status(chat.response_id) == RunStatus.CANCELLED
+    assert not _parked(chat.response_id)
 
 
 def test_soft_deleting_a_chat_ends_its_parked_response_and_its_dump(

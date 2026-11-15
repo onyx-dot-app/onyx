@@ -69,7 +69,7 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
         patch.object(
             chat_backend,
             "get_processing_stream",
-            return_value=ProcessingStream(42, []),
+            return_value=ProcessingStream(42, [], False),
         ),
         patch.object(chat_backend, "_RESUME_MAX_CHUNKS_PER_READ", 1),
         patch.object(
@@ -113,7 +113,7 @@ def test_resume_rejects_cursor_for_a_different_stream() -> None:
         patch.object(
             chat_backend,
             "get_processing_stream",
-            return_value=ProcessingStream(43, []),
+            return_value=ProcessingStream(43, [], False),
         ),
         patch.object(chat_backend, "read_stream_chunks") as read,
         pytest.raises(OnyxError, match="No resumable stream"),
@@ -147,7 +147,7 @@ def test_resume_is_not_found_when_the_cursor_cannot_be_served(gap: str) -> None:
         patch.object(
             chat_backend,
             "get_processing_stream",
-            return_value=ProcessingStream(42, []),
+            return_value=ProcessingStream(42, [], False),
         ),
         pytest.raises(OnyxError, match="No resumable stream"),
     ):

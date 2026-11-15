@@ -19,6 +19,7 @@ from uuid import uuid4
 
 import pytest
 from litellm.exceptions import ContextWindowExceededError
+from sqlalchemy.exc import OperationalError
 
 from onyx.agents.agent_coordination import AgentCoordinator
 from onyx.agents.events import AgentEvent
@@ -95,6 +96,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     ReasoningStart,
+    ReplayEnd,
     StreamingError,
 )
 from onyx.server.utils import get_json_line
@@ -610,7 +612,7 @@ class TestRunModels:
         setup.new_msg_req.accepts_follow_ups = True
         with patch("onyx.chat.execution.create_chat_agent", side_effect=create):
             reader = start_chat_turn(
-                setup, MagicMock(), dispatch_pending_messages=lambda: None
+                setup, MagicMock(), dispatch_pending_messages=lambda **_: None
             )
             try:
                 list(reader)
@@ -658,7 +660,7 @@ class TestRunModels:
         setup.cache = setup.admission.cache = FakeCache()
         setup.stream_id = 7
         at_publish: list[StreamChunkRead | None] = []
-        setup.admission.publish.side_effect = lambda stream_id, _responses: (
+        setup.admission.publish.side_effect = lambda stream_id, _responses, **_: (
             at_publish.append(
                 read_stream_chunks(setup.cache, setup.chat_session_id, stream_id, 0)
             )
@@ -680,6 +682,53 @@ class TestRunModels:
                 blocks=[], next_cursor=0, chunk_count=0, done=False, gap=False
             )
         ]
+
+    @pytest.mark.parametrize(
+        "error, lasting",
+        [
+            (OperationalError("SELECT 1", {}, Exception("connection lost")), False),
+            (ValueError("The response is not suspended"), True),
+        ],
+        ids=["transient", "lasting"],
+    )
+    def test_a_resume_that_cannot_start_fails_its_response_only_for_good(
+        self, error: Exception, lasting: bool
+    ) -> None:
+        """The stream still ends its (empty) replay. A transient error keeps
+        the response suspended, and the turn dispatches nothing at its end,
+        so a later dispatch tries again; a lasting one fails the response."""
+        setup = _make_setup(n_models=1)
+        setup.resumed_response_id = setup.responses[0].message_id
+        dispatch = MagicMock()
+
+        with (
+            patch_execution(),
+            patch("onyx.chat.execution.construct_tools", return_value={}),
+            patch(
+                "onyx.chat.execution.get_llm_token_counter",
+                return_value=lambda _: 0,
+            ),
+            patch(
+                "onyx.chat.execution.read_suspended_response_replay",
+                side_effect=error,
+            ),
+            patch("onyx.chat.execution.fail_suspended_response") as fail,
+        ):
+            reader = start_chat_turn(
+                setup, MagicMock(), dispatch_pending_messages=dispatch
+            )
+            try:
+                packets = list(reader)
+            finally:
+                reader.close()
+
+        assert [
+            packet
+            for packet in packets
+            if isinstance(packet, Packet) and isinstance(packet.obj, ReplayEnd)
+        ] == [Packet(placement=Placement(turn_index=0, model_index=0), obj=ReplayEnd())]
+        assert fail.called is lasting
+        assert dispatch.called is lasting
 
     def test_idle_gap_emits_chat_heartbeat(self) -> None:
         """Idle gaps in the drain loop emit ChatHeartbeat packets."""
@@ -1702,7 +1751,9 @@ def test_message_ids_match_replay_prefix_before_response_output(
         *, emitter: Emitter, **_kwargs: LLM | Future[ChatResponseOutcome]
     ) -> None:
         setup.admission.publish.assert_called_once_with(
-            setup.stream_id, [response.message_id for response in setup.responses]
+            setup.stream_id,
+            [response.message_id for response in setup.responses],
+            resumed=False,
         )
         emitter.emit(response)
 
@@ -1727,7 +1778,9 @@ def test_message_ids_match_replay_prefix_before_response_output(
         try:
             assert [next(stream) for _ in expected] == expected
             setup.admission.publish.assert_called_once_with(
-                setup.stream_id, [response.message_id for response in setup.responses]
+                setup.stream_id,
+                [response.message_id for response in setup.responses],
+                resumed=False,
             )
             packets = list(stream)
             assert len(packets) == len(setup.responses)

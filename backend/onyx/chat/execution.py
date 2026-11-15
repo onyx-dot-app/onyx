@@ -7,6 +7,7 @@ from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from functools import partial
+from typing import Protocol
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.concurrency import WorkTracker
@@ -22,7 +23,10 @@ from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
-from onyx.chat.chat_processing_checker import PROCESSING_REFRESH_INTERVAL_S
+from onyx.chat.chat_processing_checker import (
+    PROCESSING_REFRESH_INTERVAL_S,
+    ChatTurnAdmission,
+)
 from onyx.chat.emitter import Emitter
 from onyx.chat.errors import chat_error
 from onyx.chat.history_store import get_chat_history_store
@@ -35,6 +39,7 @@ from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
+    RETRYABLE_START_ERRORS,
     ChatRunStore,
     fail_suspended_response,
 )
@@ -45,6 +50,7 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.db.chat_checkpoint import resumable_parked_runs
 from onyx.db.chat_inputs import pause_chat_queue__no_commit
 from onyx.db.chat_response import read_suspended_response_replay
 from onyx.db.chat_subagents import load_chat_branch
@@ -67,6 +73,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
+    ReplayEnd,
     StreamingError,
     ToolApprovalResolved,
 )
@@ -102,13 +109,20 @@ _DEADLINE_BACKSTOP = timedelta(seconds=30)
 chat_turn_work = WorkTracker()
 
 
+class DispatchPendingMessages(Protocol):
+    """Start the chat's queued work (`dispatch_pending_chat_messages`), with
+    the admission that an ending turn hands over, if any."""
+
+    def __call__(self, *, admission: ChatTurnAdmission | None = None) -> None: ...
+
+
 def start_chat_turn(
     setup: ChatTurnSetup,
     user: User,
     response_future: Future[ChatResponseOutcome] | None = None,
     *,
     query_observation: QueryObservation | None = None,
-    dispatch_pending_messages: Callable[[], None] | None = None,
+    dispatch_pending_messages: DispatchPendingMessages | None = None,
 ) -> ChatStream:
     """Publish response identity and launch work that outlives its stream reader."""
     mode = setup.incognito_record_mode
@@ -149,7 +163,9 @@ def start_chat_turn(
             stream_buffer.open()
             # Stop must identify this response before the client receives its IDs.
             setup.admission.publish(
-                setup.stream_id, [response.message_id for response in setup.responses]
+                setup.stream_id,
+                [response.message_id for response in setup.responses],
+                resumed=setup.resumed_response_id is not None,
             )
         except Exception as error:
             startup_error = error
@@ -208,7 +224,7 @@ class ChatTurnExecution:
         stream_buffer: StreamBufferWriter | None = None,
         *,
         query_observation: QueryObservation | None = None,
-        dispatch_pending_messages: Callable[[], None] | None = None,
+        dispatch_pending_messages: DispatchPendingMessages | None = None,
     ) -> None:
         self.setup = setup
         self.user = user
@@ -226,6 +242,9 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._admission_released = False
+        # A resume that storage failed to start defers to a later dispatch.
+        self._resume_deferred = False
+        self._parked_root = False
         self._stopped_by_user = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
@@ -445,6 +464,12 @@ class ChatTurnExecution:
         stops it with `awaiting_approval`, and the decisions resume it on any
         pod."""
         persistence.report_suspended(run)
+        self._parked_root = True
+        try:
+            # Its decisions continue it in a new stream, not in this one.
+            self.setup.admission.drop_response(persistence.message_id)
+        except Exception:
+            logger.exception("Could not remove a parked response from its stream")
         self._publish(
             Packet(
                 placement=Placement(turn_index=0, model_index=persistence.model_index),
@@ -470,19 +495,48 @@ class ChatTurnExecution:
                 session.commit()
 
         try:
-            self.setup.admission.release(settle=save_late_stop)
+            successor = self.setup.admission.release(
+                settle=save_late_stop,
+                # The resume of a response that parked here takes admission
+                # over, so the chat does not show idle in between.
+                hand_off=self._root_resumes
+                if self._parked_root
+                and not self._resume_deferred
+                and self._dispatch_pending_messages is not None
+                else None,
+            )
             self._admission_released = True
         except Exception:
             logger.exception("Failed to clear chat processing status; will retry")
             return
-        self._dispatch_after_release()
+        self._dispatch_after_release(successor)
 
-    def _dispatch_after_release(self) -> None:
-        """Start queued input or a follow-up on child results once the chat is idle."""
-        if not self._admission_released or self._dispatch_pending_messages is None:
+    def _root_resumes(self) -> bool:
+        """Whether a parked root response of the chat waits only to continue."""
+        chat_session_id = self.setup.chat_session_id
+        try:
+            with get_session_with_current_tenant() as session:
+                return any(
+                    run.agent_id == str(chat_session_id)
+                    for run in resumable_parked_runs(session, chat_session_id)
+                )
+        except Exception:
+            logger.exception("Could not read the chat's parked responses")
+            return False
+
+    def _dispatch_after_release(
+        self, admission: ChatTurnAdmission | None = None
+    ) -> None:
+        """Start queued input or a follow-up on child results once the chat is
+        idle, or with the `admission` that this turn handed over."""
+        if (
+            not self._admission_released
+            or self._resume_deferred
+            or self._dispatch_pending_messages is None
+        ):
             return
         try:
-            self._dispatch_pending_messages()
+            self._dispatch_pending_messages(admission=admission)
         except Exception:
             logger.exception("Could not dispatch queued chat input")
 
@@ -496,8 +550,7 @@ class ChatTurnExecution:
         index = persistence.model_index
         resumed_id = self.setup.resumed_response_id
         run: Run | None = None
-        # The resolutions that a continued response's replay leaves to its run.
-        withheld: list[Packet] = []
+        replayed = False
         cancellation = CancellationSignal()
         links = ExitStack()
         links.enter_context(
@@ -591,9 +644,8 @@ class ChatTurnExecution:
                     execution, replay = read_suspended_response_replay(
                         db_session, resumed_id
                     )
-                withheld = presenter.replay(
-                    execution.response, replay, execution.presentation
-                )
+                presenter.replay(execution.response, replay, execution.presentation)
+                replayed = True
                 resumed = store.resume(
                     str(resumed_id),
                     context=AgentState(
@@ -630,13 +682,20 @@ class ChatTurnExecution:
         except BaseException as failure:
             try:
                 if resumed_id is not None and run is None:
-                    # The response ends as failed, so no later dispatch tries
-                    # it again.
-                    fail_suspended_response(
-                        self.setup.cache, get_current_tenant_id(), resumed_id
-                    )
-                    for packet in withheld:
-                        emitter.emit(packet)
+                    if not replayed:
+                        emitter.emit(
+                            Packet(placement=Placement(turn_index=0), obj=ReplayEnd())
+                        )
+                    if isinstance(failure, RETRYABLE_START_ERRORS):
+                        # The response stays suspended for a later dispatch,
+                        # such as a status read's, not this turn's release.
+                        self._resume_deferred = True
+                    else:
+                        # The response ends as failed, so no later dispatch
+                        # tries it again.
+                        fail_suspended_response(
+                            self.setup.cache, get_current_tenant_id(), resumed_id
+                        )
                     persistence.report_worker_failure(
                         failure
                         if isinstance(failure, Exception)
@@ -759,6 +818,7 @@ def bind_run_store(
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
         on_root_parked=on_root_parked,
+        model_configuration_id=llm.config.model_configuration_id,
     )
     view = store.bind(
         coordinator,

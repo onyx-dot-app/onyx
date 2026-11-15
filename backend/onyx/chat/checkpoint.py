@@ -243,6 +243,8 @@ def serialize_checkpoint(
     checkpoint: ExecutionCheckpoint,
     response: ResponseRecord,
     binding: CheckpointBinding,
+    *,
+    model_configuration_id: int | None = None,
 ) -> ResponseCheckpoint:
     """Build resume data for storage alongside the response and verify it can reconstruct the run."""
     snapshot = checkpoint.run_state
@@ -276,6 +278,7 @@ def serialize_checkpoint(
         message_payloads=[payload(message) for message in snapshot.messages],
         input_messages=snapshot.input_messages,
         input_payloads=[payload(message) for message in snapshot.input_messages],
+        model_configuration_id=model_configuration_id,
     )
     restored = _restore_checkpoint_state(
         data, response, checkpoint.agent_state, serializer

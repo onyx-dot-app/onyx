@@ -9,6 +9,11 @@ from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
 from botocore.exceptions import BotoCoreError, ClientError
+from botocore.retries.standard import (
+    RetryContext,
+    ThrottledRetryableChecker,
+    TransientRetryableChecker,
+)
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
@@ -96,6 +101,7 @@ from onyx.db.chat_inputs import (
     withdraw_agent_result__no_commit,
 )
 from onyx.db.chat_response import (
+    CHECKPOINT_DUMP_CLEANUP,
     abort_response_start__no_commit,
     find_response__no_commit,
     finish_checkpoint__no_commit,
@@ -135,8 +141,6 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
-# The context of logs about parked programs' dumps that checkpoints owned.
-_DUMP_CLEANUP = "parked program dumps"
 RESUME_FAILED_MESSAGE = (
     "This response could not continue after the approval. Send the message again."
 )
@@ -160,8 +164,24 @@ _RETRYABLE_PARK_ERRORS = (
     RunNotTransferable,
     *RETRYABLE_START_ERRORS,
     BotoCoreError,
-    ClientError,
 )
+_TRANSIENT_STORAGE_STATUS = frozenset({429, 500, 502, 503, 504})
+
+
+def _park_retries(error: Exception) -> bool:
+    """Whether a later poll tries a failed park again. An object store error
+    retries only when the store throttled or failed for a moment, as
+    botocore's retry checks decide; AccessDenied or NoSuchBucket fail every
+    attempt."""
+    if not isinstance(error, ClientError):
+        return isinstance(error, _RETRYABLE_PARK_ERRORS)
+    context = RetryContext(attempt_number=1, parsed_response=error.response)
+    return (
+        error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+        in _TRANSIENT_STORAGE_STATUS
+        or TransientRetryableChecker().is_retryable(context)
+        or ThrottledRetryableChecker().is_retryable(context)
+    )
 
 
 def _owner_key(response_id: int) -> str:
@@ -189,6 +209,36 @@ def ownerless_response_ids(
     )
 
 
+def _end_ownerless_response(
+    cache: CacheBackend,
+    tenant_id: str,
+    response_id: int,
+    *,
+    cancelled: bool = False,
+    failure: RunFailure | None = None,
+    keep_parked: bool = False,
+) -> bool:
+    """End a response that no owner runs, as `interrupt_response__no_commit`
+    does, then delete the dumps that its checkpoint owned. Returns whether it
+    ended here."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return False
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            dumps = interrupt_response__no_commit(
+                session,
+                response_id,
+                cancelled=cancelled,
+                failure=failure,
+                keep_parked=keep_parked,
+            )
+            session.commit()
+    if dumps is None:
+        return False
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+    return True
+
+
 def interrupt_ownerless_responses(
     cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
 ) -> set[int]:
@@ -197,22 +247,11 @@ def interrupt_ownerless_responses(
     A crashed owner's lease expires without a terminal status. A parked
     response has no owner by design and stays parked.
     """
-    interrupted: set[int] = set()
-    dumps: list[str] = []
-    for response_id in ownerless_response_ids(cache, response_ids):
-        with _ownership_lock(cache, response_id):
-            if cache.exists(_owner_key(response_id)):
-                continue
-            with get_session_with_tenant(tenant_id=tenant_id) as session:
-                ended = interrupt_response__no_commit(
-                    session, response_id, keep_parked=True
-                )
-                session.commit()
-        if ended is not None:
-            interrupted.add(response_id)
-            dumps.extend(ended)
-    delete_files_best_effort(dumps, _DUMP_CLEANUP)
-    return interrupted
+    return {
+        response_id
+        for response_id in ownerless_response_ids(cache, response_ids)
+        if _end_ownerless_response(cache, tenant_id, response_id, keep_parked=True)
+    }
 
 
 def fail_suspended_response(
@@ -221,19 +260,14 @@ def fail_suspended_response(
     """End a suspended response that cannot continue after its approvals, for
     example because its model or saved state is gone: save it as failed, end
     its requests, and delete its checkpoint and its parked programs' dumps."""
-    with _ownership_lock(cache, response_id):
-        if cache.exists(_owner_key(response_id)):
-            return
-        with get_session_with_tenant(tenant_id=tenant_id) as session:
-            dumps = interrupt_response__no_commit(
-                session,
-                response_id,
-                failure=RunFailure(
-                    kind=RunFailureKind.EXECUTION, message=RESUME_FAILED_MESSAGE
-                ),
-            )
-            session.commit()
-    delete_files_best_effort(dumps or [], _DUMP_CLEANUP)
+    _end_ownerless_response(
+        cache,
+        tenant_id,
+        response_id,
+        failure=RunFailure(
+            kind=RunFailureKind.EXECUTION, message=RESUME_FAILED_MESSAGE
+        ),
+    )
 
 
 def _stop_key(response_id: int) -> str:
@@ -256,18 +290,13 @@ def stop_response(
     """Request Stop of a run; save it as cancelled when no owner remains, as
     for a parked run, whose checkpoint and program dumps go."""
     request_response_stop(cache, response_id, reason)
-    with _ownership_lock(cache, response_id):
-        if cache.exists(_owner_key(response_id)):
-            return
-        with get_session_with_tenant(tenant_id=tenant_id) as session:
-            dumps = interrupt_response__no_commit(
-                session,
-                response_id,
-                cancelled=True,
-                failure=cancellation_failure(reason),
-            )
-            session.commit()
-    delete_files_best_effort(dumps or [], _DUMP_CLEANUP)
+    _end_ownerless_response(
+        cache,
+        tenant_id,
+        response_id,
+        cancelled=True,
+        failure=cancellation_failure(reason),
+    )
 
 
 def agent_result_message(completion: AgentCompletion) -> UserMessage:
@@ -351,8 +380,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         tools: Sequence[Tool] = (),
         answers_agent_results: bool = False,
         on_root_parked: Callable[[Run], None] | None = None,
+        model_configuration_id: int | None = None,
     ) -> None:
         self.tenant_id = tenant_id
+        # The model of the branch's runs, which parked runs continue on.
+        self._model_configuration_id = model_configuration_id
         # The root response answers unread agent results under a hidden
         # AGENT_RESULTS question, as a released wait's follow-up does.
         self._answers_agent_results = answers_agent_results
@@ -930,7 +962,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         response_record=record,
                         presentation=display.presentation,
                     )
-        delete_files_best_effort(dumps, _DUMP_CLEANUP)
+        delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
 
     def _claim_reservation(
         self,
@@ -1325,14 +1357,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     continue
                 try:
                     self.handoff(run.id)
-                except _RETRYABLE_PARK_ERRORS:
-                    logger.info(
-                        "Run %s did not park; a later poll tries again",
-                        run.id,
-                        exc_info=True,
-                    )
-                    continue
-                except Exception:
+                except Exception as error:
+                    if _park_retries(error):
+                        logger.info(
+                            "Run %s did not park; a later poll tries again",
+                            run.id,
+                            exc_info=True,
+                        )
+                        continue
                     # The run ends instead, and its requests end with it.
                     logger.exception("Could not park a waiting run")
                     run.cancel()
@@ -1539,13 +1571,18 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
 
         try:
             record = self._record(captured.run_state)
-            data = serialize_checkpoint(captured, record, self._binding(response_id))
+            data = serialize_checkpoint(
+                captured,
+                record,
+                self._binding(response_id),
+                model_configuration_id=self._model_configuration_id,
+            )
             owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
         except BaseException:
             if replaced is None:
-                delete_files_best_effort(dumps, _DUMP_CLEANUP)
+                delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
             raise
-        delete_files_best_effort(replaced or [], _DUMP_CLEANUP)
+        delete_files_best_effort(replaced or [], CHECKPOINT_DUMP_CLEANUP)
 
     def resume(
         self,
@@ -1569,6 +1606,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         build_agent = self._build_agent
         if self._coordinator is None or build_agent is None:
             raise ValueError("Bind feature reconstruction before resuming")
+        requested = self.cache.get(_stop_key(response_id))
+        if requested is not None:
+            # Stop subagents sets the key before it commits its rejections,
+            # which make the run resumable; the run ends instead.
+            stop_response(
+                self.cache,
+                self.tenant_id,
+                response_id,
+                "user" if requested == b"user" else "requested",
+            )
+            return None
         saved = self._load(response_id)
         if saved.agent.parent_id is not None:
             context = self._child_context(saved.agent.id, response_id)

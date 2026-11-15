@@ -150,7 +150,8 @@ document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
 the selection to its owner. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
-send. Pending human submissions run the same hook before queue storage;
+send. A turn that resumes a suspended response runs on that response's own
+model instead (`db/chat_checkpoint.py:parked_response_model`). Pending human submissions run the same hook before queue storage;
 setup reuses that processed text without rewriting it again. Then setup resolves the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,
@@ -253,7 +254,13 @@ dispatches queued input and root results again; that dispatch also ends a root's
 inboxes after a notification and while children run on the branch. It starts
 child work only while its response is on the selected branch, and resumes the
 parked agent runs of its own branch whether or not it is selected. A dispatch
-failure never cancels the turn. When child work or a parked agent run can
+failure never cancels the turn. Only the approval decision route prepares a
+turn on the calling thread; the dispatch after a release, after a child's
+release and after a status read start work on a thread. A turn that parked a
+root response, and ends while a parked root of the chat can continue, hands
+its admission to that resume instead of releasing it
+(`chat/chat_processing_checker.py:ChatTurnAdmission.release`), so the chat
+shows processing throughout. When child work or a parked agent run can
 start but no running child keeps a store scanning, dispatch starts an agent
 host (`chat/execution.py:host_agent_work`): the setup of the selected
 response, or of a parked run's root response, without a root run, which starts
@@ -494,7 +501,11 @@ termination grace period is much shorter, so it ends running turns first
   passed its deadline". A deadline sends `timed_out`; lost admission can end
   the stream with no stop packet ([[#non-user-cancel]]). In the tenant's cache, the
   session owner key is `chatprocessing_owner_<session_id>`, the processing fence
-  is `chatprocessing_fence_<session_id>` (it holds the stream ID), and the stop
+  is `chatprocessing_fence_<session_id>` (it holds the stream ID, in the
+  integer format that every server version reads), the stream's responses
+  are `chatprocessing_responses_<session_id>` (the response IDs that the
+  stream still writes, and whether the turn resumes a suspended response),
+  and the stop
   key is `chatsessionstop_fence_<session_id>_<stream_id>`. Each owned run also
   has `chat_response_owner:<response_id>`, `chat_response_stop:<response_id>`
   and `chat_response_lock:<response_id>`; a child run's owner lease keeps the

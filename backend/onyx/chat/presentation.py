@@ -69,6 +69,7 @@ from onyx.server.query_and_chat.streaming_models import (
     AWAITING_APPROVAL,
     OverallStop,
     Packet,
+    ReplayEnd,
     ToolApprovalRequest,
     ToolApprovalResolved,
     UserMessagePacket,
@@ -439,12 +440,10 @@ class ResponsePresenter:
         response: ResponseRecord,
         replay: ResponseReplayData,
         settings: dict[str, MessageRendering],
-    ) -> list[Packet]:
+    ) -> None:
         """Send the saved output of a suspended response that this stream
-        continues; its calls that wait stay open for their live events.
-        Returns the resolutions of their requests, which those events send;
-        the stream sends them itself when the run does not start."""
-        withheld: list[Packet] = []
+        continues, then `ReplayEnd`; its calls that wait stay open for their
+        live events."""
         for packet in replay_response(
             response,
             replay.tools,
@@ -454,10 +453,9 @@ class ResponsePresenter:
             approvals=replay.approvals,
             agent_approvals=replay.agent_approvals,
             open_calls=self.tools,
-            withheld=withheld,
         ):
             self.emitter.emit(packet)
-        return withheld
+        self.emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReplayEnd()))
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
@@ -580,7 +578,6 @@ def replay_response(
         tuple[str, str], Sequence[AgentToolApproval]
     ] = _NO_AGENT_APPROVALS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
-    withheld: list[Packet] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
@@ -591,8 +588,7 @@ def replay_response(
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
     response: it collects those calls' renderers, by run, message and call ID,
-    for their live events, leaves their decisions to those events (adding them
-    to `withheld`), and sends no stop. The session response carries the saved message error separately.
+    for their live events, and sends no stop. The session response carries the saved message error separately.
     Stop packets close rendering; they do not classify execution success or
     failure.
     """
@@ -670,20 +666,15 @@ def replay_response(
                 )
                 if approval.decision is None:
                     continue
-                resolved = Packet(
-                    placement=tool_placement,
-                    obj=ToolApprovalResolved(
-                        approval_id=approval_id,
-                        outcome=approval_outcome(ended_answer(approval)),
-                    ),
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolApprovalResolved(
+                            approval_id=approval_id,
+                            outcome=approval_outcome(ended_answer(approval)),
+                        ),
+                    )
                 )
-                # A continued stream's own waiting calls get their decisions
-                # from their live events; an agent's request has none.
-                if waits and open_calls is not None and agent_name is None:
-                    if withheld is not None:
-                        withheld.append(resolved)
-                else:
-                    packets.append(resolved)
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (

@@ -248,7 +248,7 @@ def _mock_chat_preparation(
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.load_message_branch",
-        lambda *_args: ([parent], parent),
+        lambda *_args, **_kwargs: ([parent], parent),
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.execute_hook",

@@ -42,11 +42,18 @@ def _get_fence_key(chat_session_id: UUID) -> str:
     return f"{FENCE_PREFIX}_{chat_session_id}"
 
 
+def _responses_key(chat_session_id: UUID) -> str:
+    # Beside the fence, whose integer format every server version reads.
+    return f"{PREFIX}_responses_{chat_session_id}"
+
+
 class ProcessingStream(NamedTuple):
-    """The stream that a session's turn publishes, and the responses it writes."""
+    """The stream that a session's turn publishes, and the responses it still
+    writes; `resumed` when the turn continues a suspended response."""
 
     stream_id: int
     response_ids: list[int]
+    resumed: bool
 
 
 def _preparation_stop_key(chat_session_id: UUID) -> str:
@@ -94,6 +101,7 @@ class ChatTurnAdmission:
                 )
             self._last_refresh = started
             self.cache.set(_get_fence_key(session_id), 0, ex=self._lease_seconds)
+            self.cache.delete(_responses_key(session_id))
             # A Stop for an earlier turn that never published is not this turn's.
             self.cache.delete(_preparation_stop_key(session_id))
         finally:
@@ -133,7 +141,9 @@ class ChatTurnAdmission:
             self._last_refresh = started
             return
 
-    def publish(self, stream_id: int, response_ids: Sequence[int]) -> None:
+    def publish(
+        self, stream_id: int, response_ids: Sequence[int], *, resumed: bool = False
+    ) -> None:
         session_id = self._session_id
         if session_id is None:
             raise RuntimeError("Chat turn has no admission")
@@ -142,9 +152,12 @@ class ChatTurnAdmission:
         try:
             self._renew_owner(session_id, ACTIVE_LEASE_SECONDS)
             self.cache.set(
-                _get_fence_key(session_id),
-                json.dumps([stream_id, list(response_ids)]),
+                _responses_key(session_id),
+                json.dumps({"response_ids": list(response_ids), "resumed": resumed}),
                 ex=self._lease_seconds,
+            )
+            self.cache.set(
+                _get_fence_key(session_id), stream_id, ex=self._lease_seconds
             )
             # A Stop that arrived during preparation applies to this stream.
             if self.cache.exists(_preparation_stop_key(session_id)):
@@ -162,7 +175,31 @@ class ChatTurnAdmission:
         try:
             self._renew_owner(session_id, self._lease_seconds)
             self.cache.expire(_get_fence_key(session_id), self._lease_seconds)
+            self.cache.expire(_responses_key(session_id), self._lease_seconds)
             self.cache.expire(_preparation_stop_key(session_id), self._lease_seconds)
+        finally:
+            lock.release()
+
+    def drop_response(self, response_id: int) -> None:
+        """Stop naming a response that no longer writes to this turn's stream,
+        such as one that parked to wait for people."""
+        session_id = self._session_id
+        if session_id is None:
+            return
+        lock = _admission_lock(self.cache, session_id)
+        try:
+            if self.cache.get(self._owner_key(session_id)) != self._token:
+                return
+            raw = self.cache.get(_responses_key(session_id))
+            if raw is None:
+                return
+            value = json.loads(raw)
+            value["response_ids"] = [
+                item for item in value["response_ids"] if item != response_id
+            ]
+            self.cache.set(
+                _responses_key(session_id), json.dumps(value), ex=self._lease_seconds
+            )
         finally:
             lock.release()
 
@@ -174,23 +211,51 @@ class ChatTurnAdmission:
         if self.cache.get(self._owner_key(session_id)) != self._token:
             raise CacheLockLostError("Chat session admission was lost")
 
-    def release(self, settle: Callable[[], None] | None = None) -> None:
+    def release(
+        self,
+        settle: Callable[[], None] | None = None,
+        *,
+        hand_off: Callable[[], bool] | None = None,
+    ) -> "ChatTurnAdmission | None":
         """Release admission; `settle` runs first while this turn still owns it.
 
         Stop takes the same lock, so `settle` sees every Stop that targeted this
-        turn, and queued work cannot start until `settle` returns.
+        turn, and queued work cannot start until `settle` returns. When
+        `hand_off` then returns True, the chat stays processing without a
+        stream: the returned admission holds it under a new owner, so a Stop
+        of this turn does not reach the next, and `prepare_chat_turn` of the
+        next turn takes it over.
         """
         session_id = self._session_id
         if session_id is None:
-            return
+            return None
         lock = _admission_lock(self.cache, session_id)
         try:
-            if self.cache.get(self._owner_key(session_id)) == self._token:
-                if settle is not None:
-                    settle()
-                self.cache.delete(_get_fence_key(session_id))
-                self.cache.delete(self._owner_key(session_id))
+            if self.cache.get(self._owner_key(session_id)) != self._token:
+                self._session_id = None
+                return None
+            if settle is not None:
+                settle()
+            if hand_off is not None and hand_off():
+                successor = ChatTurnAdmission(self.cache)
+                successor._session_id = session_id
+                self.cache.set(
+                    self._owner_key(session_id),
+                    successor._token,
+                    ex=successor._lease_seconds,
+                )
+                self.cache.set(
+                    _get_fence_key(session_id), 0, ex=successor._lease_seconds
+                )
+                self.cache.delete(_responses_key(session_id))
+                self.cache.delete(_preparation_stop_key(session_id))
+                self._session_id = None
+                return successor
+            self.cache.delete(_get_fence_key(session_id))
+            self.cache.delete(_responses_key(session_id))
+            self.cache.delete(self._owner_key(session_id))
             self._session_id = None
+            return None
         finally:
             lock.release()
 
@@ -245,19 +310,30 @@ def get_processing_stream(
     if raw is None:
         return None
     try:
-        value = json.loads(raw)
-        # A fence that a server without response IDs wrote holds the stream ID.
-        stream = (
-            ProcessingStream(int(value[0]), [int(item) for item in value[1]])
-            if isinstance(value, list)
-            else ProcessingStream(int(value), [])
-        )
-    except (TypeError, ValueError, IndexError):
+        stream_id = int(raw.decode("utf-8") if isinstance(raw, bytes) else str(raw))
+    except (TypeError, ValueError, UnicodeDecodeError):
         logger.warning(
-            "invalid processing stream for session %s: %r", chat_session_id, raw
+            "invalid processing stream ID for session %s: %r", chat_session_id, raw
         )
         return None
-    return stream if stream.stream_id > 0 else None
+    if stream_id <= 0:
+        return None
+    # A server that does not save the responses publishes none.
+    responses = cache.get(_responses_key(chat_session_id))
+    try:
+        value = json.loads(responses) if responses is not None else {}
+        return ProcessingStream(
+            stream_id,
+            [int(item) for item in value.get("response_ids", [])],
+            value.get("resumed") is True,
+        )
+    except (TypeError, ValueError, AttributeError):
+        logger.warning(
+            "invalid processing responses for session %s: %r",
+            chat_session_id,
+            responses,
+        )
+        return ProcessingStream(stream_id, [], False)
 
 
 def is_chat_session_processing(chat_session_id: UUID, cache: CacheBackend) -> bool:

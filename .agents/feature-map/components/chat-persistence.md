@@ -475,7 +475,9 @@ Community downgrade clears it ([[billing]]).
    `latest_child_message_id` chain. A parent of None or the root id starts a
    new top-level branch, and `AUTO_PLACE_AFTER_LATEST_MESSAGE` appends to the
    active tip. A client must persist a branch switch before it sends on that
-   branch. Reservation moves the active pointer to the new answer before the
+   branch. A turn that resumes a suspended response, or hosts a parked agent
+   run's branch, passes `any_branch`: its parent can be off the active branch,
+   such as another model's response, and brings its own ancestry. Reservation moves the active pointer to the new answer before the
    run starts.
 8. `replay-matches-live-stream` **Replay must match the live stream.** Runtime
    replay and the live stream share `chat/renderer.py:MessageRenderer` and

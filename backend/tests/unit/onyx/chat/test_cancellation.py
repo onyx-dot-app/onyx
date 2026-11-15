@@ -276,7 +276,7 @@ def test_concurrent_admission_rejects_one_turn_before_stream_assignment() -> Non
     assert get_processing_stream(session_id, cache) is None
     winner = admissions[results.index(True)]
     winner.publish(17, [])
-    assert get_processing_stream(session_id, cache) == (17, [])
+    assert get_processing_stream(session_id, cache) == (17, [], False)
     winner.release()
     assert not is_chat_session_processing(session_id, cache)
 
@@ -298,7 +298,7 @@ def test_stale_turn_cannot_publish_refresh_or_release_new_admission() -> None:
         old.refresh()
     old.release()
     assert is_chat_session_processing(session_id, cache)
-    assert get_processing_stream(session_id, cache) == (18, [])
+    assert get_processing_stream(session_id, cache) == (18, [], False)
     new.refresh()
     new.release()
     assert not is_chat_session_processing(session_id, cache)
@@ -481,5 +481,5 @@ def test_expired_owner_ignores_stale_marker_and_allows_next_turn() -> None:
     assert get_processing_stream(session_id, cache) is None
     new.publish(18, [])
     old.release()
-    assert get_processing_stream(session_id, cache) == (18, [])
+    assert get_processing_stream(session_id, cache) == (18, [], False)
     new.release()
