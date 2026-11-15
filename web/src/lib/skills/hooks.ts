@@ -181,13 +181,13 @@ export function useEntryPicker({
   const onInput = useCallback(
     (event: SyntheticEvent<HTMLElement>) => {
       if (!hasEntries) return;
-      // A paste, yank or drop is not typing, so it ends the session like a
-      // caret move.
+      // A paste, yank or drop is not typing, so like a caret move it closes
+      // an open picker and keeps an Esc suppression.
       if (
         event.nativeEvent instanceof InputEvent &&
         /^insertFrom(Paste|Yank|Drop)/.test(event.nativeEvent.inputType)
       ) {
-        commit(INITIAL_PICKER_SESSION);
+        if (sessionRef.current.open) commit(INITIAL_PICKER_SESSION);
         return;
       }
       const input = event.currentTarget;

@@ -207,6 +207,10 @@ describe("ScheduleTaskForm app picker", () => {
 
     await user.keyboard("{Escape}p");
     expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.paste("t");
+    await user.keyboard("x");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Backspace}{Backspace}");
     await user.keyboard("{Backspace}{Backspace}{Backspace}/p");
     expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
   });
