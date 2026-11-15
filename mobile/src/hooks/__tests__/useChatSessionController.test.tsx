@@ -1713,6 +1713,95 @@ describe("watchBackgroundAgents", () => {
     expect(status).toHaveBeenCalledTimes(2);
   });
 
+  async function openIdle(version: string) {
+    getSessionMock.mockResolvedValueOnce(
+      saved([historyPacket("asked")], version),
+    );
+    const baseline = await loadChatSession("s1");
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        processRawChatHistory(baseline.messages, baseline.packets),
+      );
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+  }
+
+  // A parked agent does not count as active, so the read that reports its request is the last.
+  it("retries a failed reload before the watch ends", async () => {
+    await openIdle("v1");
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v2",
+    });
+    getSessionMock
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(saved([historyPacket("asked"), agentRequest], "v2"));
+
+    const watch = watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(6000);
+    await watch;
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries a failed reload for a version while the agents run", async () => {
+    await openIdle("v1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v2",
+      })
+      .mockResolvedValue({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v2",
+      });
+    getSessionMock
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(saved([historyPacket("asked"), agentRequest], "v2"));
+
+    void watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(2000);
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    useChatSessionStore.setState({ currentSessionId: null });
+    await jest.advanceTimersByTimeAsync(1000);
+  });
+
+  it("watches the agents of a chat that opens idle while they run", async () => {
+    await openIdle("v1");
+    client.setQueryData(
+      QUERY_KEYS.chatSession(SERVER_URL, "s1"),
+      saved([historyPacket("asked")], "v1"),
+    );
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValue({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v2",
+      });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+
+    const view = renderHook(() => useChatSessionController("s1"), { wrapper });
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    view.unmount();
+  });
+
   it("follows a stream that starts while it watches", async () => {
     seedLiveSession(null);
     jest.mocked(getChatSessionStatus).mockResolvedValueOnce({

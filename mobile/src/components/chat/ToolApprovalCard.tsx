@@ -84,6 +84,8 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
   // the session while the agent runs or waits to resume.
   async function decide(decision: ApprovalDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
+    // The card's chat; the user can open another one while the decision is in flight.
+    const sessionId = useChatSessionStore.getState().currentSessionId;
     setSubmitting(true);
     setError(false);
     let continuation: ChatStream | null = null;
@@ -109,9 +111,13 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
       setSubmitting(false);
     }
     const store = useChatSessionStore.getState();
-    const sessionId = store.currentSessionId;
-    // A reader that already runs follows the server's next stream itself.
-    if (!sessionId || store.sessions.get(sessionId)?.abortController) return;
+    // Reopening the chat recovers it; a reader that already runs follows the server's next stream.
+    if (
+      !sessionId ||
+      store.currentSessionId !== sessionId ||
+      store.sessions.get(sessionId)?.abortController
+    )
+      return;
     // A background agent's later requests and outcomes show only in the saved session.
     if (continuation === null && !gone && request.agent_name) {
       void watchBackgroundAgents(sessionId, serverUrl, queryClient);

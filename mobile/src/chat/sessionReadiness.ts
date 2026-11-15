@@ -16,7 +16,8 @@ export type SessionWait =
 // The last `approvals_version` each session's load or status reported.
 const approvalsVersions = new Map<string, string>();
 
-// Whether approvals changed since the version this device last saw.
+// Whether approvals changed since the version this device last saw. A session that no load
+// established, such as a chat this device created, has no baseline, so its first version counts.
 export function approvalsChangedSince(
   sessionId: string,
   version: string | undefined,
@@ -24,7 +25,7 @@ export function approvalsChangedSince(
   if (version === undefined) return false;
   const seen = approvalsVersions.get(sessionId);
   approvalsVersions.set(sessionId, version);
-  return seen !== undefined && seen !== version;
+  return seen !== version;
 }
 
 // A session load is the baseline that later status reads compare against.

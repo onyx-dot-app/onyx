@@ -1127,6 +1127,28 @@ describe("useChatController", () => {
     expect(renameSessionMock).toHaveBeenCalledTimes(1);
   });
 
+  // A created chat has no approvals baseline, so its first status read also reloads the session.
+  it("auto-names a new session whose first status read reloads it", async () => {
+    createSessionMock.mockResolvedValue("new-session");
+    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    getSessionMock.mockResolvedValue({
+      ...savedTurn([]),
+      approvals_version: "v1",
+    });
+
+    const { result } = renderHook(() => useChatController(null), { wrapper });
+    await act(async () => {
+      await result.current.submit("first message");
+    });
+
+    await waitFor(() =>
+      expect(renameSessionMock).toHaveBeenCalledWith("new-session"),
+    );
+  });
+
   it("does not auto-name a continued (existing) session", async () => {
     useChatSessionStore.getState().ensureSession("s1");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));

@@ -286,6 +286,37 @@ describe("ToolApprovalCard continuation", () => {
     },
   );
 
+  it("leaves the continuation to the chat when the user opens another one meanwhile", async () => {
+    openPausedResponse([request]);
+    useChatSessionStore.getState().hydrateSession("other", new Map());
+    let respond: (
+      value: Awaited<ReturnType<typeof postApprovalDecision>>,
+    ) => void = () => {};
+    postMock.mockReturnValue(
+      new Promise((resolve) => {
+        respond = resolve;
+      }),
+    );
+    const view = render(<ToolApprovalCard approval={approval()} />);
+
+    fireEvent.press(view.getByText("Approve once"));
+    useChatSessionStore.getState().setCurrentSession("other");
+    respond({
+      approval_id: "a1",
+      decision: "APPROVED",
+      decided_via: "USER",
+      continuation,
+    });
+
+    await waitFor(() =>
+      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
+        "approved",
+      ),
+    );
+    expect(recoverMock).not.toHaveBeenCalled();
+    expect(watchBackgroundAgents).not.toHaveBeenCalled();
+  });
+
   it("leaves the next stream to a reader that already runs", async () => {
     openPausedResponse([request]);
     useChatSessionStore

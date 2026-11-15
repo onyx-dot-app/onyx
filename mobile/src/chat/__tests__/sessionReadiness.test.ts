@@ -76,13 +76,14 @@ describe("session readiness", () => {
 
   it("reports approvals that changed since the session's last status read", async () => {
     const status = jest.mocked(getChatSessionStatus);
+    // A chat that no load established, such as one this device created, has no baseline.
     status.mockResolvedValueOnce({
       is_processing: false,
       approvals_version: "v1",
     });
     expect(
       await waitForSessionIdle("versioned", () => true, jest.fn()),
-    ).toEqual({ kind: "idle", approvalsChanged: false, agentsRunning: false });
+    ).toEqual({ kind: "idle", approvalsChanged: true, agentsRunning: false });
 
     status.mockResolvedValueOnce({
       is_processing: false,

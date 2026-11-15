@@ -374,6 +374,8 @@ export async function watchBackgroundAgents(
   }
   const watch = { again: false };
   agentWatches.set(sessionId, watch);
+  // A changed version or the last reload whose load failed; later reads retry it.
+  let reload = false;
   const store = useChatSessionStore;
   // A reader owns a busy session and reloads it when its stream ends.
   const idle = () => {
@@ -414,10 +416,11 @@ export async function watchBackgroundAgents(
         return;
       }
       const settled = status.has_active_subagents !== true && !watch.again;
-      if (
+      reload =
         approvalsChangedSince(sessionId, status.approvals_version) ||
-        settled
-      ) {
+        reload ||
+        settled;
+      if (reload) {
         try {
           const saved = await loadChatSession(sessionId);
           if (!idle()) return;
@@ -431,11 +434,12 @@ export async function watchBackgroundAgents(
             QUERY_KEYS.chatSession(serverUrl, sessionId),
             saved,
           );
+          reload = false;
         } catch (error) {
           console.warn("Could not load background agent requests", error);
         }
       }
-      if (settled && !watch.again) return;
+      if (settled && !reload && !watch.again) return;
     }
   } finally {
     agentWatches.delete(sessionId);
@@ -457,6 +461,38 @@ export function useChatSessionController(sessionId: string | null): void {
 
   // Structural sharing keeps this reference while the stream stays the same.
   const currentStream = data?.current_stream ?? null;
+  const loaded = useChatSessionStore((state) =>
+    sessionId ? state.sessions.has(sessionId) : false,
+  );
+
+  // Background agents that run while the chat opens idle show their requests only through the
+  // saved session. Recovery owns a chat with a stream or unconfirmed readiness, and starts the
+  // watch when its run ends.
+  useEffect(() => {
+    if (sessionId == null || !loaded) return;
+    const saved = queryClient.getQueryData<BackendChatSession>(
+      QUERY_KEYS.chatSession(serverUrl, sessionId),
+    );
+    const session = useChatSessionStore.getState().sessions.get(sessionId);
+    if (
+      saved?.current_stream ||
+      session?.chatState !== "input" ||
+      session.abortController
+    )
+      return;
+    let open = true;
+    getChatSessionStatus(sessionId)
+      .then((status) => {
+        if (open && status.has_active_subagents === true)
+          void watchBackgroundAgents(sessionId, serverUrl, queryClient);
+      })
+      .catch((error: unknown) => {
+        console.warn("Could not read background agent status", error);
+      });
+    return () => {
+      open = false;
+    };
+  }, [sessionId, loaded, serverUrl, queryClient]);
 
   useEffect(() => {
     if (sessionId == null) return;

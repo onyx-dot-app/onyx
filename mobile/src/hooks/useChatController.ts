@@ -302,6 +302,16 @@ async function runChatStream(
       // A Stop the server confirms during the wait ends following.
       (next) => !signal.aborted && (lost || next !== streamId),
     );
+    // name a new session once it streamed output; skip stop/abort and thrown transport failures
+    if (
+      wait.kind === "idle" &&
+      isNewSession &&
+      !signal.aborted &&
+      sawStreaming &&
+      !hadError
+    ) {
+      void nameNewSession(sessionId, server);
+    }
     // An idle server still reloads the saved session when this device lacks what the server
     // saved: a lost send's answer, the requests that refused this send, the outcomes a Stop
     // gave, or approvals that changed since the last status read.
@@ -331,10 +341,6 @@ async function runChatStream(
         server.serverUrl,
         server.queryClient,
       );
-    // name a new session once it streamed output; skip stop/abort and thrown transport failures
-    if (isNewSession && !signal.aborted && sawStreaming && !hadError) {
-      void nameNewSession(sessionId, server);
-    }
   } catch (error) {
     if (!stillOurs()) return;
     console.warn("Could not confirm chat readiness", error);
