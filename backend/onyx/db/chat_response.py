@@ -18,6 +18,7 @@ from onyx.agents.models import (
 )
 from onyx.chat.mention_models import PickedSkillMessage
 from onyx.chat.models import (
+    AgentToolApproval,
     ChatExecutionRecord,
     ChatResponseSnapshot,
     MessageRendering,
@@ -33,7 +34,7 @@ from onyx.chat.models import (
     recorded_mentions,
     skill_message_id,
 )
-from onyx.chat.response import restore_response_sources
+from onyx.chat.response import restore_response_sources, tool_arguments_for_display
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.approval_request import get_response_approval_requests
@@ -63,6 +64,7 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import record_mode_persists_content
 from onyx.db.models import (
     AcceptedChatInput,
+    ApprovalRequest,
     ChatInput,
     ChatMessage,
     ChatResponseCheckpoint,
@@ -78,8 +80,12 @@ from onyx.llm.models import (
     Message,
     UserMessage,
 )
+from onyx.llm.models import (
+    ToolCall as LLMToolCall,
+)
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import ToolCallInfo
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
@@ -1286,17 +1292,35 @@ def read_response_replay_data(
         reference.record_id: reference for reference in execution.tool_records
     }
     accepted: set[tuple[str, str]] = set()
+    # The runs whose records the replay shows: background agents' runs, which
+    # agent tools start, show elsewhere.
     run_ids: list[str] = []
-    pending = [execution.response]
+    pending = [(execution.response, True)]
     while pending:
-        response = pending.pop()
-        run_ids.append(response.run_id)
+        response, shown = pending.pop()
+        agent_calls = {
+            call.id
+            for step in response.steps
+            for call in step.message.tool_calls
+            if call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        }
+        if shown:
+            run_ids.append(response.run_id)
         for step in response.steps:
             if step.message.id is not None:
                 accepted.update(
                     (step.message.id, call.id) for call in step.message.tool_calls
                 )
-        pending.extend(response.child_runs)
+        pending.extend(
+            (child, shown and child.parent_tool_call_id not in agent_calls)
+            for child in response.child_runs
+        )
+    # Only agent tools start background agents.
+    starts_agents = any(
+        call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+        for step in execution.response.steps
+        for call in step.message.tool_calls
+    )
     if len(references) != len(execution.tool_records) or any(
         (reference.message_id, reference.tool_call_id) not in accepted
         for reference in references.values()
@@ -1362,4 +1386,116 @@ def read_response_replay_data(
         tools=tools,
         documents=documents,
         approvals=approvals,
+        # Background agents wait independently of this response's status.
+        agent_approvals=_agent_approvals(db_session, root.id, run_ids)
+        if starts_agents
+        else {},
     )
+
+
+def _agent_approvals(
+    db_session: Session, response_id: int, shown_run_ids: list[str]
+) -> dict[tuple[str, str], list[AgentToolApproval]]:
+    """The requests of the runs that the response's calls started, directly or
+    through the runs they started, by the response's run ID and that call's ID.
+
+    Runs whose records the response shows (`shown_run_ids`) are left out.
+    """
+    question = aliased(ChatMessage)
+    started = (
+        select(
+            ChatMessage.id.label("response_id"),
+            ToolCall.tool_call_id.label("anchor_call_id"),
+        )
+        .join(question, question.id == ChatMessage.parent_message_id)
+        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .where(ToolCall.parent_chat_message_id == response_id)
+        .cte("agent_runs_started", recursive=True)
+    )
+    child = aliased(ChatMessage)
+    child_question = aliased(ChatMessage)
+    child_call = aliased(ToolCall)
+    started = started.union_all(
+        select(child.id, started.c.anchor_call_id)
+        .join(child_question, child_question.id == child.parent_message_id)
+        .join(child_call, child_call.id == child_question.invoking_tool_call_id)
+        .join(started, child_call.parent_chat_message_id == started.c.response_id)
+        .where(child.id > started.c.response_id)
+    )
+    rows = db_session.execute(
+        select(ApprovalRequest, started.c.anchor_call_id, ChatSession.agent_name)
+        .join(started, started.c.response_id == ApprovalRequest.chat_message_id)
+        .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
+        .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+        .where(
+            ApprovalRequest.chat_message_id.not_in(
+                [int(run_id) for run_id in shown_run_ids]
+            )
+        )
+        .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
+    ).all()
+    # The arguments of each request's call, from its run's saved steps; a call
+    # that a program made is not saved.
+    calls: dict[int, dict[str, LLMToolCall]] = {}
+    for request, _, _ in rows:
+        if request.chat_message_id not in calls:
+            message = db_session.get(ChatMessage, request.chat_message_id)
+            execution = read_chat_execution(message) if message else None
+            calls[request.chat_message_id] = {
+                call.id: call
+                for step in (execution.response.steps if execution else [])
+                for call in step.message.tool_calls
+            }
+    approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
+    for request, anchor_call_id, agent_name in rows:
+        call = calls[request.chat_message_id].get(request.tool_call_id)
+        approvals.setdefault((str(response_id), anchor_call_id), []).append(
+            AgentToolApproval(
+                approval=SavedToolApproval.model_validate(request),
+                agent_name=agent_name or "",
+                arguments=tool_arguments_for_display(call)
+                if call is not None and call.name == request.tool_name
+                else {},
+            )
+        )
+    return approvals
+
+
+def agent_approval_anchor(
+    db_session: Session, response_id: int
+) -> tuple[str, str, str] | None:
+    """Where a background agent run's requests show: the run, message and call
+    IDs of the root response's call that started the agent, directly or
+    through its spawners. None for a run that is not a background agent's,
+    which has no result row."""
+    if (
+        db_session.scalar(
+            select(ChatInput.id)
+            .where(
+                ChatInput.source == InputSource.AGENT_RESULT,
+                ChatInput.source_response_id == response_id,
+            )
+            .limit(1)
+        )
+        is None
+    ):
+        return None
+    chain = response_invocation_chain(db_session, response_id)
+    if len(chain) < 2:
+        return None
+    question = aliased(ChatMessage)
+    anchor = db_session.execute(
+        select(ChatResponseItem.id, ToolCall.tool_call_id)
+        .select_from(ChatMessage)
+        .join(question, question.id == ChatMessage.parent_message_id)
+        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .join(
+            ChatResponseItem,
+            (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+            & (ChatResponseItem.step_index == ToolCall.turn_number),
+        )
+        .where(ChatMessage.id == chain[-2].message_id)
+    ).first()
+    if anchor is None:
+        return None
+    return str(chain[-1].message_id), anchor[0], anchor[1]

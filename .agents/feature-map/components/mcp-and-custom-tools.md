@@ -355,15 +355,13 @@ calls run with no row unless the policy is now DENY.
     calls that have no signal keep the existing synchronous behavior. Stopping
     the local request cannot undo work already performed by the remote server.
 15. `chat-approval-needs-waiting-client` **Every client handles approvals;
-    only a signed-in owner's root run can wait.**
-    `chat/run_store.py:ChatRunStore.request_approval` gives
-    `chat/tool_approvals.py:open_tool_approval` an `ApprovalBlocker`:
-    `SIGNED_OUT` for an anonymous user, and `CHILD_RUN` for any run but the
-    response's root run, since only the root's suspension hands off and
-    resumes. A `USAGE_ONLY` incognito turn has no run store, so the runtime's
-    own error applies. Each cause has its own model-facing text in
-    `chat/tool_approvals.py`; nothing about approvals goes into the system
-    prompt or tool descriptions. Turns the server starts (queued messages,
+    any run of a signed-in owner's chat can wait.**
+    `chat/run_store.py:ChatRunStore.request_approval` opens the request for
+    the root run and for agent runs alike; for an anonymous user,
+    `chat/tool_approvals.py:open_tool_approval` (`signed_out`) returns the
+    call's error result instead. A `USAGE_ONLY` incognito turn has no run
+    store, so the runtime's own error applies. Nothing about approvals goes
+    into the system prompt or tool descriptions. Turns the server starts (queued messages,
     agent-result follow-ups) can wait too. The non-streaming API reads the
     whole stream: `chat/process_message.py:gather_stream_full` returns the
     requests that the stream asked and did not resolve when its last stop is
@@ -380,23 +378,38 @@ calls run with no row unless the policy is now DENY.
     route opens no extra session. The client-supplied
     `SendMessageRequest.origin` never changes it.
 16. `chat-approval-durable-wait` **A waiting response is saved, not held.**
-    When the root run suspends with approval requests in `Run.pending_inputs`
-    and nothing else left (no foreground child runs),
-    `chat/execution.py:ChatTurnExecution._hand_off` calls
-    `chat/run_store.py:ChatRunStore.handoff`: the checkpoint is saved, the
-    response is `SUSPENDED`, the lease is released, and the stream ends with
-    `OverallStop(awaiting_approval)` (`chat/presentation.py:overall_stop`).
-    `ChatRunStore.release` keeps the rows of a handed-off run. Requests have
+    A run parks when it is suspended and idle and all of its waits are on
+    people (`chat/run_store.py:ChatRunStore.may_park`): its approval requests
+    in `Run.pending_inputs`, its unfinished foreground children and, for a
+    subagent, its unfinished delegated runs, each of them parked. A wait on a
+    run that still runs keeps the waiter resident. The root parks through
+    `chat/execution.py:ChatTurnExecution._hand_off`, and its stream ends with
+    `OverallStop(awaiting_approval)` (`chat/presentation.py:overall_stop`);
+    an agent run parks in `ChatRunStore.poll_control`, at the inbox poll
+    interval, and its release dispatches. `ChatRunStore.handoff` saves the
+    checkpoint, sets `SUSPENDED` and releases the lease; an agent run's
+    checkpoint binds to its agent's saved runs before it
+    (`ChatRunStore._child_context`), which `ChatRunStore.resume` rebuilds on
+    any pod. `ChatRunStore.release` keeps the rows of a handed-off run. Requests have
     no deadline. `server/query_and_chat/chat_backend.py:decide_approval` saves
     the decision (`db/approval_request.py:record_approval_decision__no_commit`,
     conditional on `decision IS NULL`) and calls
     `chat/process_message.py:dispatch_pending_chat_messages` with the body's
     `mcp_headers`, which are not saved. Dispatch reads
-    `db/chat_inputs.py:read_chat_inbox`: the selected response is
-    `resumable_response_id` when it is `SUSPENDED` and none of its rows is
-    undecided, and it continues before any queued turn, synchronously, so the
-    new stream ID (`db/chat.py:reserve_stream_id`) is published before the
-    route returns. A session grant decides the action's sibling rows, so one
+    `db/chat_inputs.py:read_chat_inbox`, which applies
+    `db/chat_checkpoint.py:resumable_parked_runs`: a parked run continues
+    once none of its rows is undecided and none of its waited-for runs is
+    unfinished, so a leaf resumes first and its parent after it ends. A
+    resumable selected response is `resumable_response_id`, and it continues
+    before any queued turn, synchronously, so the new stream ID
+    (`db/chat.py:reserve_stream_id`) is published before the route returns.
+    Resumable agent runs are `resumable_agent_runs`: a turn's store or an
+    agent host (`chat/execution.py:host_agent_work`, which gets the
+    decision's `mcp_headers`) resumes them in
+    `ChatRunStore._dispatch_messages`, with no stream, and rebuilds each at
+    its depth (`chat/restoration.py:restore_chat_agent`). A resumed root keeps
+    the agent tools only when its client offered them
+    (`ChatFeatureState.agent_tools`). A session grant decides the action's sibling rows, so one
     decision can resume the response. `_dispatch_after_release` and the status
     route's background dispatch catch a decision saved before the handoff
     finished. The continuation is a `ChatTurnExecution` whose setup has
@@ -414,14 +427,24 @@ calls run with no row unless the policy is now DENY.
     turn (the chat's stream Stop key, read by
     `chat/execution.py:ChatTurnExecution._poll_control`) first calls
     `ChatRunStore.reject_waiting_approvals`, which saves `REJECTED` by `USER`
-    under the same `decision IS NULL` condition, so a decision that races the
-    Stop keeps whichever saved first; the runs then end with the saved
-    answers, and a cancelled turn still sends `tool_approval_resolved`
-    (`ChatTurnExecution._publish`). A suspended response runs nothing, so a
-    Stop finds no turn: the stop route only pauses the queue, and the requests
-    still wait. Ownerless repair
-    (`db/chat_checkpoint.py:interrupt_response__no_commit`) ends the rows of
-    the response it saves as interrupted. An approval of a tool whose current
+    for the root run and its foreground descendants, the runs that the Stop
+    cancels, under the same `decision IS NULL` condition, so a decision that
+    races the Stop keeps whichever saved first; the runs then end with the
+    saved answers, and a cancelled turn still sends `tool_approval_resolved`
+    (`ChatTurnExecution._publish`). Background agents keep running and keep
+    their requests. A suspended response runs nothing, so a Stop finds no
+    turn: the stop route only pauses the queue, and the requests still wait.
+    "Stop subagents"
+    (`server/query_and_chat/chat_backend.py:stop_chat_subagents`) saves the
+    user's rejection of the active agents' rows, then cancels the live ones
+    and ends the parked ones (`chat/run_store.py:stop_response`). Ending a
+    parked response (`db/chat_checkpoint.py:interrupt_response__no_commit`)
+    deletes its checkpoint and returns its program dumps, which the caller
+    deletes. Ownerless repair (`chat/run_store.py:interrupt_ownerless_responses`)
+    ends only `RUNNING` responses and their rows; a parked response has no
+    owner by design. Only a parked selected response blocks sends
+    (`server/query_and_chat/chat_backend.py:_reject_while_approval_waits`); a waiting agent does
+    not. An approval of a tool whose current
     policy (`db/action_policy.py:current_action_policy`, also used by the
     session grant) is DENY saves `REJECTED` with `decided_via` `POLICY` and
     returns 200; the model reads that the tool is disabled, and the card's
@@ -432,8 +455,16 @@ calls run with no row unless the policy is now DENY.
     outcome `approved_for_chat` (`HumanToolAnswer.standing`).
 17. `chat-approval-records-replay` **A saved response shows the records its
     stream showed.** `db/chat_response.py:read_response_replay_data` loads the
-    `approval_request` rows of an ended or suspended response and its child
-    runs, and `chat/presentation.py:replay_response` sends a
+    `approval_request` rows of an ended or suspended response and the child
+    runs it shows, and the rows of the background agents that its
+    `spawn_agent` and `send_message` calls started, directly or through
+    their agents, at any status; those show in that call's card, with the
+    agent's name (`ToolApprovalRequest.agent_name`) and the arguments of the
+    agent's saved call. A live turn shows an agent's new request in the same
+    card at once (`ResponsePresenter.agent_approval`,
+    `db/chat_response.py:agent_approval_anchor`); otherwise the client sees
+    `pending_approval_ids` change in the session status and reloads.
+    `chat/presentation.py:replay_response` sends a
     `tool_approval_request` for each, after the start of the card of the row's
     `tool_call_id`, in the order the requests opened, and a
     `tool_approval_resolved` for each decided row. The outcome comes from the

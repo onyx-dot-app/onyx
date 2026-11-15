@@ -568,6 +568,7 @@ def translate_assistant_message_to_packets(
             execution.presentation,
             replay.documents,
             approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
         )
     packet_list: list[Packet] = []
 

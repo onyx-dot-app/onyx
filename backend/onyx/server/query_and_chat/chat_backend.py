@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
-from onyx.agents.models import MessageDelivery
+from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.auth.api_key import get_hashed_api_key_from_request
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import require_permission
@@ -80,9 +80,10 @@ from onyx.configs.model_configs import LITELLM_PASS_THROUGH_HEADERS
 from onyx.configs.tool_configs import CUSTOM_TOOL_PASS_THROUGH_HEADERS
 from onyx.db.action_policy import current_action_policy
 from onyx.db.approval_request import (
+    close_pending_approval_requests__no_commit,
     get_approval_request_for_user,
+    pending_approval_ids,
     record_approval_decision__no_commit,
-    responses_waiting_for_approval,
 )
 from onyx.db.chat import (
     add_chats_to_session_from_slack_thread,
@@ -910,10 +911,11 @@ def end_incognito_session(
 
 
 def _reject_while_approval_waits(db_session: Session, chat_session_id: UUID) -> None:
-    """The user may draft but not send while a request of the selected branch
-    waits for a decision."""
-    _, branch = get_selected_branch(db_session, chat_session_id)
-    if responses_waiting_for_approval(db_session, branch.message_ids):
+    """The user may draft but not send while the selected response is parked:
+    its waits, its own requests or a foreground subtree's, are on the user. A
+    background agent waits independently and does not block."""
+    selected, _ = get_selected_branch(db_session, chat_session_id)
+    if selected is not None and selected.response_status == RunStatus.SUSPENDED:
         raise OnyxError(
             OnyxErrorCode.APPROVAL_PENDING,
             "Approve or reject the pending requests before you send a message",
@@ -1478,6 +1480,19 @@ def get_chat_session_processing_status(
         except ValueError as error:
             raise OnyxError(OnyxErrorCode.SESSION_NOT_FOUND) from error
         inbox = read_chat_inbox(db_session, session_id)
+        # A root request can wait before its response parks; an agent's waits
+        # while its run is active.
+        waiting_ids = [
+            *(
+                [inbox.selected_response_id]
+                if inbox.selected_response_id is not None
+                else []
+            ),
+            *(result.response_id for result in inbox.results if result.is_active),
+        ]
+        approval_ids = (
+            pending_approval_ids(db_session, waiting_ids) if waiting_ids else []
+        )
     # Read admission after input: a turn claims admission before it consumes
     # input, so a starting turn shows as startable input or as processing.
     cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
@@ -1492,6 +1507,7 @@ def get_chat_session_processing_status(
         current_stream=CurrentStreamInfo(stream_id=stream_id)
         if stream_id is not None
         else None,
+        pending_approval_ids=approval_ids,
     )
 
     if (
@@ -1500,8 +1516,9 @@ def get_chat_session_processing_status(
         and user.id is not None
         and (
             inbox.next_turn is not None
-            # A suspended response whose requests are all decided continues.
+            # A parked response whose waits all ended continues.
             or inbox.resumable_response_id is not None
+            or inbox.resumable_agent_runs
             # Dispatch saves a response whose owner is gone as interrupted.
             or ownerless_response_ids(cache, inbox.unfinished_response_ids)
             # Agent work needs a host when no running child's store scans.
@@ -1767,11 +1784,13 @@ def stop_chat_subagents(
     user: User = Depends(require_permission(Permission.WRITE_CHAT)),
     db_session: Session = Depends(get_session),
 ) -> StopSubagentsResponse:
-    """Stop every active background agent on the selected branch.
+    """Stop every active background agent on the selected branch, parked
+    ones included.
 
     The root turn and its foreground workers keep running. Pending work for
-    agents below the root is dropped. A stopped agent's result wakes no agent;
-    the root reads it as a notice at its next step.
+    agents below the root is dropped. The requests that the agents wait on end
+    as the user's rejection. A stopped agent's result wakes no agent; the root
+    reads it as a notice at its next step.
     """
     get_human_input_session(db_session, session_id, user)
     cache = get_cache_backend()
@@ -1779,6 +1798,12 @@ def stop_chat_subagents(
     _, branch = get_selected_branch(db_session, session_id)
     stopped = active_agent_response_ids(db_session, branch.message_ids)
     drop_agent_work__no_commit(db_session, branch)
+    close_pending_approval_requests__no_commit(
+        db_session,
+        ApprovalDecision.REJECTED,
+        ApprovalDecidedVia.USER,
+        chat_message_ids=stopped,
+    )
     # Spawns check their parent's Stop after the chat lock, so the keys go first.
     for response_id in stopped:
         request_response_stop(cache, response_id, "user")

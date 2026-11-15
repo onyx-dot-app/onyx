@@ -1,18 +1,19 @@
 """Open and answer chat tool calls that wait for the user's approval.
 
 Tool construction materializes each tool's action policy: a tool whose policy
-asks carries a `ToolApprovalScope`, and the runtime gates its calls. The run's
-store opens each request here (`ChatRunStore.request_approval`). A run that
-has nothing left but such waits hands off: its checkpoint is saved and the
-turn ends. The user decides through the decision API, which saves the
-decision; once no request of the response waits, the API resumes the run on
-any pod (`ChatRunStore.resume`), which answers each waiting call from its
-saved decision. The user's Stop of a live turn saves a rejection of the
-requests that wait (`ChatRunStore.reject_waiting_approvals`). A saved request
-gives the same answer to its call, and to its record in the saved response.
+asks carries a `ToolApprovalScope`, and the runtime gates its calls. The
+store of the run that calls, the root's or a subagent's, opens each request
+here (`ChatRunStore.request_approval`). A run whose waits are all on people,
+on its requests or on runs that wait the same way, hands off: its checkpoint
+is saved and its pod is free. The user decides through the decision API,
+which saves the decision; once no request of the response waits, dispatch
+resumes the run on any pod (`ChatRunStore.resume`), which answers each
+waiting call from its saved decision. The user's Stop of a live turn saves a
+rejection of the requests that the turn's runs wait on
+(`ChatRunStore.reject_waiting_approvals`). A saved request gives the same
+answer to its call, and to its record in the saved response.
 """
 
-from enum import Enum
 from uuid import UUID
 
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
@@ -39,30 +40,6 @@ from onyx.llm.models import ToolResult
 from onyx.tools.models import ToolApprovalScope
 
 
-class ApprovalBlocker(str, Enum):
-    """Why a call that needs approval cannot wait for the user's decision."""
-
-    # An anonymous user cannot decide.
-    SIGNED_OUT = "signed_out"
-    # Only the response's root run asks; a child agent's run cannot.
-    CHILD_RUN = "child_run"
-
-
-# What the model sees for a call that needs approval and cannot wait for it.
-_CANNOT_ASK_MESSAGES = {
-    ApprovalBlocker.SIGNED_OUT: (
-        "The {name} call needs the user's approval, and the user must sign in "
-        "to Onyx to approve it, so it did not run."
-    ),
-    ApprovalBlocker.CHILD_RUN: (
-        "The {name} call needs the user's approval, and only the agent that "
-        "started you can ask the user for it, so it did not run. Ask that agent "
-        "to handle this request. Do not retry this call until that agent "
-        "confirms that the blocker is resolved."
-    ),
-}
-
-
 def open_tool_approval(
     *,
     tenant_id: str,
@@ -73,7 +50,7 @@ def open_tool_approval(
     tool_name: str,
     display_name: str,
     scope: ToolApprovalScope,
-    blocker: ApprovalBlocker | None,
+    signed_out: bool,
 ) -> PendingToolInput | ToolResult | None:
     """A request for the call to wait for, an error result for a call that
     cannot run or wait, or None when a session grant approves the action.
@@ -98,9 +75,11 @@ def open_tool_approval(
             ):
                 return None
             return _disabled_result(tool_name)
-        if blocker is not None:
+        if signed_out:
+            # An anonymous user cannot decide.
             return ToolResult(
-                content=_CANNOT_ASK_MESSAGES[blocker].format(name=tool_name),
+                content=f"The {tool_name} call needs the user's approval, and the "
+                "user must sign in to Onyx to approve it, so it did not run.",
                 is_error=True,
             )
         approval_id = create_approval_request__no_commit(

@@ -890,11 +890,11 @@ def dispatch_pending_chat_messages(
 ) -> None:
     """Start the selected branch's next queued work through chat admission.
 
-    A suspended response whose approval requests are all decided continues
-    first; its turn publishes its stream ID before this returns, so a status
-    read right after sees it. Then the next root turn starts. Otherwise, idle
-    agents' work starts in an agent host when no running child keeps a run
-    store scanning. Chat turns pass `start_agent_host=False`: their own run
+    A parked root response whose waits all ended continues first; its turn
+    publishes its stream ID before this returns, so a status read right after
+    sees it. Then the next root turn starts. Otherwise, parked agent runs whose
+    waits ended and idle agents' work start in an agent host when no running
+    child keeps a run store scanning. Chat turns pass `start_agent_host=False`: their own run
     stores start that work. Started work uses the pass-through headers of the
     request that led to it.
     """
@@ -909,7 +909,9 @@ def dispatch_pending_chat_messages(
             resumable is None
             and queued_turn is None
             and not (
-                start_agent_host and inbox.child_work and not inbox.running_response_ids
+                start_agent_host
+                and (inbox.child_work or inbox.resumable_agent_runs)
+                and not inbox.running_response_ids
             )
         ):
             return
@@ -980,6 +982,8 @@ def dispatch_pending_chat_messages(
                             llm_overrides=None,
                             litellm_additional_headers=litellm_additional_headers,
                             custom_tool_additional_headers=custom_tool_additional_headers,
+                            # A decision's headers reach a resumed agent's calls.
+                            mcp_headers=mcp_headers,
                             agent_host=True,
                         )
                     except OnyxError as error:

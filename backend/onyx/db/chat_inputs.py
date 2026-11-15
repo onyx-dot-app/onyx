@@ -29,12 +29,12 @@ from onyx.chat.models import (
     AgentWait,
     ChatBranch,
     ChatInbox,
+    ParkedAgentRun,
     PendingChatMessage,
     QueuedChatTurn,
 )
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import MessageType
-from onyx.db.approval_request import responses_waiting_for_approval
 from onyx.db.chat import (
     agent_session_path,
     configure_response_transaction__no_commit,
@@ -45,7 +45,10 @@ from onyx.db.chat import (
     root_response_id,
     session_ancestors,
 )
-from onyx.db.chat_checkpoint import check_checkpoint_owner__no_commit
+from onyx.db.chat_checkpoint import (
+    check_checkpoint_owner__no_commit,
+    resumable_parked_runs,
+)
 from onyx.db.chat_response import reserve_child_response__no_commit
 from onyx.db.chat_subagents import (
     agent_metadata,
@@ -445,21 +448,39 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
-    # A response suspends only while its tool calls wait for approval.
-    if (
-        selected is not None
-        and selected.response_status == RunStatus.SUSPENDED
-        and not responses_waiting_for_approval(session, [selected.id])
-    ):
-        inbox.resumable_response_id = selected.id
-    # Only conversations with inbox rows have queued turns or child work.
-    if not has_chat_inputs(session, chat_session_id):
+    # Only conversations with inbox rows have queued turns or child work. Every
+    # background agent run has its result row until its spawner reads it.
+    has_inputs = has_chat_inputs(session, chat_session_id)
+    if has_inputs:
+        inbox.results = agent_result_states(session, branch.message_ids)
+    # A parked run continues once no request of its response waits and no run
+    # that it waits for is unfinished: its foreground children, and a
+    # subagent's delegated runs; the root does not wait for delegated runs.
+    # Parked foreground children are found through their parents' checkpoints.
+    parked = {
+        result.response_id: str(result.agent_id)
+        for result in inbox.results
+        if result.status == RunStatus.SUSPENDED
+        and not any(
+            other.recipient_id == result.agent_id and other.is_active
+            for other in inbox.results
+        )
+    }
+    if selected is not None and selected.response_status == RunStatus.SUSPENDED:
+        parked[selected.id] = str(chat_session_id)
+    for response_id, agent_id in resumable_parked_runs(session, parked).items():
+        if selected is not None and response_id == selected.id:
+            inbox.resumable_response_id = response_id
+        else:
+            inbox.resumable_agent_runs.append(
+                ParkedAgentRun(agent_id=agent_id, response_id=response_id)
+            )
+    if not has_inputs:
         return inbox
-    inbox.results = agent_result_states(session, branch.message_ids)
     if selected is not None and selected.response_status == RunStatus.RUNNING:
         inbox.running_response_ids.append(selected.id)
     inbox.running_response_ids.extend(
-        result.response_id for result in inbox.results if result.is_active
+        result.response_id for result in inbox.results if result.is_running
     )
     inbox.next_turn = next_queued_turn(
         session, chat_session_id, selected, branch, inbox.results

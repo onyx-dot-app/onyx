@@ -329,8 +329,8 @@ def spawning_root(
     )
 
 
-def never_restore(reason: str) -> Callable[[ExecutionCheckpoint], Agent]:
-    def restore(_: ExecutionCheckpoint) -> Agent:
+def never_restore(reason: str) -> Callable[[ExecutionCheckpoint, int], Agent]:
+    def restore(_: ExecutionCheckpoint, _depth: int) -> Agent:
         raise AssertionError(reason)
 
     return restore
@@ -576,7 +576,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
     if scenario == "permissions":
         tools.append(agent_tool("blocked", execute))
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         if scenario == "permissions":
             progress = checkpoint.run_state.progress
             assert progress is not None
@@ -771,7 +771,7 @@ def _resume_response_in_process(session_id: str, message_id: str, run_id: str) -
     def unexpected_tool(_: ToolInvocation) -> ToolResult:
         raise RuntimeError("Recorded tools must not execute again")
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         return fake_agent(
             answering("done"),
             agent_id=checkpoint.run_state.agent_id,
@@ -972,9 +972,11 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
             )
             rebuilt = restore_chat_agent(
                 restored,
+                0,
                 llm=feature.llm,
                 tools=feature.configured_tools,
                 user_identity=None,
+                subagent_factory=lambda _depth: pytest.fail("No agent tools"),
             )
             assert isinstance(rebuilt, ChatAgent)
             assert [tool.name for tool in rebuilt.tools] == [
@@ -1288,7 +1290,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         ),
     ]
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         return fake_agent(
             replies(calls(call("nested", "delegate")), text("child done")),
             agent_id=checkpoint.run_state.agent_id,

@@ -8,6 +8,7 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
+from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
 from onyx.agents.models import AgentState, ExecutionCheckpoint, RunState
 from onyx.agents.runtime import Agent
 from onyx.chat.agent import ChatAgent, build_chat_agent
@@ -92,13 +93,19 @@ def restore_subagent(
 
 def restore_chat_agent(
     checkpoint: ExecutionCheckpoint,
+    depth: int,
     *,
     llm: LLM,
     tools: list[Tool],
     user_identity: LLMUserIdentity | None,
-    create_subagent: Callable[[], Agent] | None = None,
+    subagent_factory: Callable[[int], Callable[[], Agent]],
 ) -> Agent:
-    """Build feature code and resources; Agent.resume restores saved execution state."""
+    """Build feature code and resources; Agent.resume restores saved execution state.
+
+    `depth` counts the agent's levels below the root. A chat agent gets the
+    agent tools when it had them, with children one level deeper
+    (`subagent_factory`); an agent at `MAX_CHILD_DEPTH` cannot start agents.
+    """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
         raise ValueError("Agent restoration requires saved execution progress")
@@ -131,7 +138,8 @@ def restore_chat_agent(
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
-            create_subagent=create_subagent,
+            create_subagent=subagent_factory(depth + 1) if state.agent_tools else None,
+            can_spawn=depth < MAX_CHILD_DEPTH,
         )
     if isinstance(state, ResearchFeatureState):
         return ResearchAgent(

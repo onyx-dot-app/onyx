@@ -2730,6 +2730,8 @@ def test_stop_after_suspension_retains_root_cancellation_and_saves_once(
             "onyx.chat.execution.ChatRunStore",
             side_effect=lambda **kwargs: MagicMock(
                 has_owned_work=False,
+                # The run waits for a person's answer that is not an approval.
+                may_park=lambda _run: False,
                 bind=lambda *_args, **_kwargs: coordinator.view(
                     store=kwargs["root_response"],
                     ownership=FakeRunOwnership(register=register),

@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from pydantic import ValidationError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
@@ -47,7 +46,6 @@ from onyx.chat.checkpoint import deserialize_checkpoint, serialize_checkpoint
 from onyx.chat.mention_models import AcceptedPicks, PickedMentions
 from onyx.chat.models import (
     ChatBranch,
-    ChatFeatureState,
     ChatInbox,
     CheckpointBinding,
     ResponseOwner,
@@ -59,14 +57,18 @@ from onyx.chat.models import (
     accepted_input_messages,
 )
 from onyx.chat.presentation import project_response
-from onyx.chat.response import response_record, response_snapshot
+from onyx.chat.response import (
+    response_record,
+    response_snapshot,
+    tool_arguments_for_display,
+)
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.tool_approvals import (
-    ApprovalBlocker,
     ended_answer,
     open_tool_approval,
     tool_answer,
 )
+from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
 from onyx.configs.constants import MessageType
 from onyx.db.approval_request import (
     close_pending_approval_requests__no_commit,
@@ -78,7 +80,6 @@ from onyx.db.chat_checkpoint import (
     claim_checkpoint__no_commit,
     interrupt_response__no_commit,
     publish_checkpoint__no_commit,
-    read_checkpoint,
     release_checkpoint_claim__no_commit,
 )
 from onyx.db.chat_inputs import (
@@ -96,6 +97,7 @@ from onyx.db.chat_inputs import (
 )
 from onyx.db.chat_response import (
     abort_response_start__no_commit,
+    agent_approval_anchor,
     find_response__no_commit,
     finish_checkpoint__no_commit,
     read_response__no_commit,
@@ -117,6 +119,7 @@ from onyx.db.skill import list_chat_skills
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
+from onyx.server.query_and_chat.streaming_models import ToolApprovalRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
@@ -178,22 +181,38 @@ def ownerless_response_ids(
     )
 
 
+def _delete_dumps(file_ids: Collection[str]) -> None:
+    """Delete the dumps of the parked programs of responses that ended."""
+    for file_id in file_ids:
+        try:
+            get_default_file_store().delete_file(file_id, error_on_missing=False)
+        except Exception:
+            logger.exception("Could not delete the dump of a parked program")
+
+
 def interrupt_ownerless_responses(
     cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
 ) -> set[int]:
     """Save running responses whose owner is gone as interrupted; return their IDs.
 
-    A crashed owner's lease expires without a terminal status.
+    A crashed owner's lease expires without a terminal status. A parked
+    response has no owner by design and stays parked.
     """
     interrupted: set[int] = set()
+    dumps: list[str] = []
     for response_id in ownerless_response_ids(cache, response_ids):
         with _ownership_lock(cache, response_id):
             if cache.exists(_owner_key(response_id)):
                 continue
             with get_session_with_tenant(tenant_id=tenant_id) as session:
-                interrupt_response__no_commit(session, response_id)
+                ended = interrupt_response__no_commit(
+                    session, response_id, running_only=True
+                )
                 session.commit()
-        interrupted.add(response_id)
+        if ended is not None:
+            interrupted.add(response_id)
+            dumps.extend(ended)
+    _delete_dumps(dumps)
     return interrupted
 
 
@@ -207,26 +226,7 @@ def fail_suspended_response(
         if cache.exists(_owner_key(response_id)):
             return
         with get_session_with_tenant(tenant_id=tenant_id) as session:
-            try:
-                checkpoint = read_checkpoint(session, response_id)
-                feature_state = (
-                    checkpoint.progress.get("feature_state") if checkpoint else None
-                )
-                dumps = (
-                    [
-                        file_id
-                        for cell in ChatFeatureState.model_validate(
-                            feature_state
-                        ).code_cells
-                        if (file_id := cell.program.dump.file_id) is not None
-                    ]
-                    if feature_state is not None
-                    else []
-                )
-            except ValidationError:
-                logger.exception("Could not read the parked programs of a response")
-                dumps = []
-            interrupt_response__no_commit(
+            dumps = interrupt_response__no_commit(
                 session,
                 response_id,
                 failure=RunFailure(
@@ -234,11 +234,7 @@ def fail_suspended_response(
                 ),
             )
             session.commit()
-    for file_id in dumps:
-        try:
-            get_default_file_store().delete_file(file_id, error_on_missing=False)
-        except Exception:
-            logger.exception("Could not delete the dump of a parked program")
+    _delete_dumps(dumps or [])
 
 
 def _stop_key(response_id: int) -> str:
@@ -258,19 +254,21 @@ def stop_response(
     response_id: int,
     reason: CancelReason = "requested",
 ) -> None:
-    """Request Stop of a run; save it as cancelled when no owner remains."""
+    """Request Stop of a run; save it as cancelled when no owner remains, as
+    for a parked run, whose checkpoint and program dumps go."""
     request_response_stop(cache, response_id, reason)
     with _ownership_lock(cache, response_id):
         if cache.exists(_owner_key(response_id)):
             return
         with get_session_with_tenant(tenant_id=tenant_id) as session:
-            interrupt_response__no_commit(
+            dumps = interrupt_response__no_commit(
                 session,
                 response_id,
                 cancelled=True,
                 failure=cancellation_failure(reason),
             )
             session.commit()
+    _delete_dumps(dumps or [])
 
 
 def agent_result_message(completion: AgentCompletion) -> UserMessage:
@@ -353,6 +351,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         on_child_released: Callable[[], None] | None = None,
         tools: Sequence[Tool] = (),
         answers_agent_results: bool = False,
+        on_agent_approval: Callable[[tuple[str, str, str], ToolApprovalRequest], None]
+        | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         # The root response answers unread agent results under a hidden
@@ -377,12 +377,19 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._root_response = root_response
         self._restore_subagent = restore_subagent
         self._on_child_released = on_child_released
+        # Shows a background agent's request at once in the live stream of the
+        # root response that started the agent, at that call's card (by run,
+        # message and call ID).
+        self._on_agent_approval = on_agent_approval
         self._lock = threading.Lock()
         self._owned: dict[int, _OwnedRun] = {}
         self._leases: dict[int, _OwnerLease] = {}
         self._coordinator: AgentCoordinator | None = None
-        self._build_agent: Callable[[ExecutionCheckpoint], Agent] | None = None
+        self._build_agent: Callable[[ExecutionCheckpoint, int], Agent] | None = None
         self._pending_dispatch = False
+        # Child runs that wait on other runs park after a storage read, so the
+        # control poll checks them at the inbox poll interval.
+        self._next_park_poll = 0.0
         # Children still running on the branch can finish in another store. The
         # first poll scans, which also finds inbox work left by earlier turns.
         self._has_running_children = True
@@ -436,8 +443,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self,
         coordinator: AgentCoordinator,
         *,
-        build_agent: Callable[[ExecutionCheckpoint], Agent],
+        build_agent: Callable[[ExecutionCheckpoint, int], Agent],
     ) -> AgentCoordinator:
+        """`build_agent` rebuilds a checkpoint's agent at its depth below the root."""
         if self._coordinator is not None:
             raise ValueError("Response store is already bound")
         self._build_agent = build_agent
@@ -521,6 +529,18 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 load_agent_history(self._input_branch, saved.id), saved.depth
             )
         )
+
+    def _child_context(self, agent_id: str, response_id: int) -> AgentState:
+        """A child run's history: the saved runs of its agent before this one.
+
+        A child's checkpoint binds to it, so any pod rebuilds the same history.
+        """
+        history = self._with_tenant(
+            lambda: load_agent_history(
+                self._input_branch, agent_id, before_response_id=response_id
+            )
+        )
+        return AgentState(messages=history.messages, checkpoint=history.checkpoint)
 
     def submit_message(self, request: AgentMessageRequest) -> AgentMessageReceipt:
         """Any agent in the visible tree can message any other agent, including the root."""
@@ -683,7 +703,8 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         return inbox if self._follow_selected_branch(inbox.branch) else None
 
     def _dispatch_messages(self) -> None:
-        """Start idle children's queued messages and result follow-ups.
+        """Resume parked children whose waits ended, then start idle children's
+        queued messages and result follow-ups.
 
         Scans run after a notification and while children run on the branch,
         while this store's response stays selected. A failure here never stops
@@ -728,11 +749,35 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             with self._lock:
                 # Starting one run per agent can leave more work for the next scan.
                 self._pending_dispatch = (
-                    self._pending_dispatch or bool(inbox.child_work) or waiting
+                    self._pending_dispatch
+                    or bool(inbox.child_work or inbox.resumable_agent_runs)
+                    or waiting
                 )
                 self._has_running_children = any(
                     result.is_active for result in inbox.results
                 )
+            for parked in inbox.resumable_agent_runs:
+                lock = self.cache.lock(
+                    f"chat_agent_dispatch:{parked.agent_id}", timeout=OWNER_LOCK_SECONDS
+                )
+                if not lock.acquire(blocking_timeout=0):
+                    continue
+                try:
+                    # None: another store claimed it first.
+                    self.resume(
+                        str(parked.response_id),
+                        deadline_at=datetime.now(timezone.utc)
+                        + timedelta(seconds=CHAT_EXECUTION_TIMEOUT_S),
+                    )
+                except _RETRYABLE_START_ERRORS:
+                    raise
+                except Exception:
+                    logger.exception("Could not resume a parked agent run")
+                    fail_suspended_response(
+                        self.cache, self.tenant_id, parked.response_id
+                    )
+                finally:
+                    lock.release()
             for work in inbox.child_work:
                 # Stores of several turns on one branch scan the same inbox. This
                 # lock keeps them from restoring one agent twice; the reservation's
@@ -1184,7 +1229,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         session,
                         ApprovalDecision.EXPIRED,
                         None,
-                        chat_message_id=response_id,
+                        chat_message_ids=[response_id],
                     )
                     session.commit()
             except Exception:
@@ -1266,13 +1311,63 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 owned = self._owned.get(response_id)
             if owned is not None:
                 owned.run.cancel(reason)
+        if time.monotonic() >= self._next_park_poll:
+            self._next_park_poll = time.monotonic() + INPUT_POLL_SECONDS
+            with self._lock:
+                children = [
+                    owned.run
+                    for response_id, owned in self._owned.items()
+                    if response_id != self.response_id
+                ]
+            for child in children:
+                # Its release dispatches, as every child release does.
+                if not self.may_park(child):
+                    continue
+                try:
+                    self.handoff(child.id)
+                except RunNotTransferable:
+                    logger.debug("A waiting agent run changed before it parked")
+                except Exception:
+                    # The run ends instead, and its requests end with it.
+                    logger.exception("Could not park a waiting agent run")
+                    child.cancel()
         self._dispatch_messages()
+
+    def may_park(self, run: Run) -> bool:
+        """Whether a suspended, idle run waits, and waits only on people.
+
+        Its waits are its approval requests, its unfinished foreground children
+        and, for a subagent, its unfinished delegated runs. A waited-for run
+        counts when it is parked; one that runs keeps this run resident until
+        it parks or ends.
+        """
+        if run.status != RunStatus.SUSPENDED or not run.wait_for_idle(timeout=0):
+            return False
+        requests = run.pending_inputs
+        if not all(request.approval for request in requests):
+            return False
+        coordination = run.coordination
+        children = coordination.pending_children() if coordination else []
+        if coordination is not None and any(
+            coordination.coordinator.child_run(child_id, run.agent_id) is not None
+            for child_id in children
+        ):
+            # A child that executes here is not parked.
+            return False
+        delegated = coordination.delegated_runs() if coordination else {}
+        waited = [
+            *(self.read_run_status(child_id, run.agent_id) for child_id in children),
+            *(status for status in delegated.values() if not status.is_terminal),
+        ]
+        return bool(requests or waited) and all(
+            status == RunStatus.SUSPENDED or status.is_terminal for status in waited
+        )
 
     def request_approval(
         self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         call = nested_call or tool_call
-        return open_tool_approval(
+        result = open_tool_approval(
             tenant_id=self.tenant_id,
             chat_session_id=self.chat_session_id,
             response_id=int(run.id),
@@ -1281,15 +1376,34 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             tool_name=call.name,
             display_name=self._display_names.get(call.name, call.name),
             scope=self._approval_scopes[call.name],
-            # Only the chat's signed-in owner can decide. Only the root run's
-            # suspension hands off and resumes the response, so a child's
-            # request could never be answered.
-            blocker=ApprovalBlocker.SIGNED_OUT
-            if self._user.is_anonymous
-            else None
-            if run.id == str(self.response_id)
-            else ApprovalBlocker.CHILD_RUN,
+            # Only the chat's signed-in owner can decide.
+            signed_out=self._user.is_anonymous,
         )
+        if (
+            isinstance(result, PendingToolInput)
+            and self._on_agent_approval is not None
+            and run.parent_run_id is not None
+        ):
+            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                anchor = agent_approval_anchor(session, int(run.id))
+            registration = (
+                self._coordinator.registration(run.agent_id)
+                if self._coordinator
+                else None
+            )
+            if anchor is not None and registration is not None:
+                self._on_agent_approval(
+                    anchor,
+                    ToolApprovalRequest(
+                        approval_id=result.request_id,
+                        tool_call_id=anchor[2],
+                        tool_name=call.name,
+                        display_name=self._display_names.get(call.name, call.name),
+                        arguments=tool_arguments_for_display(call),
+                        agent_name=registration.path.rsplit("/", 1)[-1],
+                    ),
+                )
+        return result
 
     def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
         approval_id = UUID(request_id)
@@ -1312,10 +1426,24 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
 
     def reject_waiting_approvals(self) -> None:
         """Save the user's Stop as the rejection of the approval requests that
-        the owned runs wait on. The runs then end, and their requests end with
-        the rejection (`withdraw_approval`). A decision saved first wins."""
+        the root run and its foreground descendants wait on: the runs that the
+        Stop cancels. They then end, and their requests end with the rejection
+        (`withdraw_approval`). A decision saved first wins. Background agents
+        keep running and keep their requests."""
         with self._lock:
-            runs = [owned.run for owned in self._owned.values()]
+            owned = {response_id: item.run for response_id, item in self._owned.items()}
+        runs: list[Run] = []
+        pending = [owned.get(self.response_id)]
+        while pending:
+            run = pending.pop()
+            if run is None:
+                continue
+            runs.append(run)
+            if run.coordination is not None:
+                pending.extend(
+                    owned.get(int(child_id))
+                    for child_id in run.coordination.pending_children()
+                )
         approval_ids = [
             UUID(request.request_id)
             for run in runs
@@ -1337,7 +1465,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             logger.exception("Could not reject the tool approvals of a Stop")
 
     def handoff(self, run_id: str) -> None:
-        """Save a paused run before releasing ownership for another API pod."""
+        """Save a paused run before releasing ownership for another API pod.
+
+        Its foreground children must have ended or parked. A child run's
+        checkpoint binds to its agent's saved history (`_child_context`).
+        """
         response_id = int(run_id)
         with self._lock:
             owned = self._owned[response_id]
@@ -1350,10 +1482,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if progress is None:
             raise RunNotTransferable("Response has no saved execution progress")
         for child_id in progress.child_run_ids:
-            if not self.read_run_status(child_id, owned.run.agent_id).is_terminal:
+            status = self.read_run_status(child_id, owned.run.agent_id)
+            if not status.is_terminal and status != RunStatus.SUSPENDED:
                 raise RunNotTransferable(
-                    "Child responses must be saved before parent release"
+                    "Child responses must end or park before parent release"
                 )
+        if owned.run.parent_run_id is not None:
+            captured = captured.model_copy(
+                update={
+                    "agent_state": self._child_context(owned.run.agent_id, response_id)
+                }
+            )
         self._with_tenant(
             lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
         )
@@ -1395,16 +1534,17 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self,
         run_id: str,
         *,
-        context: AgentState,
+        context: AgentState | None = None,
         deadline_at: datetime | None = None,
         on_event: Callable[[AgentEvent], None] | None = None,
         event_dispatcher: EventDispatcher | None = None,
     ) -> Run | None:
         """Resume with authorized, rehydrated history; never reconstruct a live owner.
 
-        Each approval request that the run waits for gets the answer of its
-        saved decision; one that is still undecided keeps waiting. None when
-        another owner holds the run or no checkpoint waits.
+        The root's `context` is its turn's history; a child's comes from its
+        agent's saved runs. Each approval request that the run waits for gets
+        the answer of its saved decision; one that is still undecided keeps
+        waiting. None when another owner holds the run or no checkpoint waits.
         """
         if not run_id.isdecimal():
             raise LookupError("Response is unavailable")
@@ -1413,6 +1553,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if self._coordinator is None or build_agent is None:
             raise ValueError("Bind feature reconstruction before resuming")
         saved = self._load(response_id)
+        if saved.agent.parent_id is not None:
+            context = self._child_context(saved.agent.id, response_id)
+        if context is None:
+            raise ValueError("A root response resumes with its turn's history")
         with _ownership_lock(self.cache, response_id):
             if self._owner(response_id) is not None:
                 return None
@@ -1466,7 +1610,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     if (row := rows.get(approval_id)) is None
                     or row.decision is not None
                 ]
-            agent = self._with_tenant(lambda: build_agent(captured))
+            agent = self._with_tenant(lambda: build_agent(captured, saved.agent.depth))
             self._coordinator.register(saved.agent)
             for info in self.list_agents():
                 self._coordinator.register(info)

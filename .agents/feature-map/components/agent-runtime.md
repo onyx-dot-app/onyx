@@ -173,19 +173,22 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 agent suspend the parent on `ChildRunWait`, and it continues in the same
 process. Checkpoint transfer is live for chat tool approvals only: the runtime
 gates calls of `AgentTool.approval_required` through the coordinator's
-`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), a root run
-with nothing left but approval waits hands off
-(`chat/execution.py:ChatTurnExecution._hand_off` calls
-`ChatRunStore.handoff`), and a decision resumes it on any pod through chat
-dispatch (`ChatRunStore.resume` with the saved answers)
+`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
+run whose waits are all on people hands off: the root through
+`chat/execution.py:ChatTurnExecution._hand_off`, an agent run through
+`ChatRunStore.poll_control`, both after `ChatRunStore.may_park`. A parent
+hands off after its waiting foreground children hand off
+(`agents/agent_coordination.py:RunCoordination.validate_handoff`). Decisions
+resume each run on any pod through chat dispatch (`ChatRunStore.resume` with
+the saved answers), the leaf first
 ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A code mode program's
 call waits in a saved `NestedInputWait`
 ([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
 `Run.suspend` or `Run.submit`. `chat/run_store.py:ChatRunStore.restore_agent`
 loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
-rebuilds it with the current request's tools and settings; children never hand
-off. Product saves lock the response, check the checkpoint owner and delete
-any row at a terminal status.
+rebuilds it with the current request's tools and settings. Product saves lock
+the response, check the checkpoint owner and delete any row at a terminal
+status.
 To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool `submit` calls and code mode `state.resume`. Expect
@@ -341,7 +344,7 @@ only `chat/execution.py` (`handoff`, `resume`) and
   ([[streaming-protocol]]), update the Live paths paragraph, and update the
   [[core-chat-loop]] and [[chat-persistence]] documents in the same change.
   `ChatRunStore.handoff` accepts only a `SUSPENDED`, idle run whose child runs
-  are all terminal (else `RunNotTransferable`), and it needs the live owner, so
+  have ended or parked (else `RunNotTransferable`), and it needs the live owner, so
   hand off as soon as the run suspends, as chat approvals do. A crash in the
   middle of a tool call leaves no checkpoint, so it cannot resume and needs a
   rerun policy. The trigger must call `ChatRunStore.resume` with a bound

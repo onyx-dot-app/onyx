@@ -137,7 +137,10 @@ citations, one family per tool, tool approval, deep research, and the coding
 agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
 come from the runtime's `input_required` and `input_ended` events
 (`chat/renderer.py:ToolRenderer.consume`) at the call's placement, only for
-requests that `ToolApprovals` opened (`PendingToolInput.approval`).
+requests that `ToolApprovals` opened (`PendingToolInput.approval`). A
+background agent's request shows at the card of the root response's call that
+started the agent, with `agent_name` set
+([[mcp-and-custom-tools#chat-approval-records-replay]]).
 `tool_approval_resolved` carries an `outcome`
 (`chat/renderer.py:approval_outcome`): `approved`,
 `approved_for_chat` (a session grant decided it, from this request or an
@@ -361,7 +364,10 @@ its background task end ([[#pure-asgi-middleware]]).
     endpoint schedules dispatch, which saves the child as failed so its result
     wakes the root. `has_startable_input` is true when queued text or unread
     root results can start a turn now; a queue that Stop or a failure paused
-    reports false. The
+    reports false. `pending_approval_ids` lists the requests on the selected
+    branch that wait for the user, from the root and from background agents;
+    web reloads the session when it changes while the chat is idle. A parked
+    agent counts as active. The
     endpoint always reads the selected branch, and it reads inputs before
     admission. A turn claims admission before it consumes
     input, so a starting turn shows as startable input or as processing. Web

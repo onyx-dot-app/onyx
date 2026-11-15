@@ -414,7 +414,9 @@ Community downgrade clears it ([[billing]]).
    run reads it as a sub-agent. A root response left `RUNNING` is repaired
    only in a conversation with an inbox row: dispatch saves it as `ERROR`
    (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
-   Otherwise a reload replays it as is.
+   Otherwise a reload replays it as is. Repair skips a `SUSPENDED` response:
+   a parked run has no owner by design
+   ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup

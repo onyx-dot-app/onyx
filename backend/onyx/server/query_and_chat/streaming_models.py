@@ -493,6 +493,10 @@ class ToolApprovalRequest(BaseObj):
     tool_name: str
     display_name: str
     arguments: dict[str, JsonValue]
+    # The background agent that asks; its request shows in the reply's call
+    # that started the agent and waits whether or not the reply ended. None for
+    # the reply's own runs.
+    agent_name: str | None = None
 
 
 # How a tool approval request ended: the user's decision, an approval of the

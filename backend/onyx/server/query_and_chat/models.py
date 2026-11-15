@@ -414,6 +414,9 @@ class ChatSessionProcessingStatus(BaseModel):
     # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
+    # The approval requests on the selected branch that wait for the user,
+    # from the root and from background agents.
+    pending_approval_ids: list[UUID] = Field(default_factory=list)
 
 
 class ChatSessionDetailResponse(BaseModel):

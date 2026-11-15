@@ -31,6 +31,7 @@ from onyx.agents.models import (
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
+    AgentToolApproval,
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CitationMode,
@@ -86,6 +87,9 @@ logger = setup_logger()
 
 _NO_APPROVALS: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = MappingProxyType(
     {}
+)
+_NO_AGENT_APPROVALS: Mapping[tuple[str, str], Sequence[AgentToolApproval]] = (
+    MappingProxyType({})
 )
 
 
@@ -449,9 +453,20 @@ class ResponsePresenter:
             replay.documents,
             self.layout,
             approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
             open_calls=self.tools,
         ):
             self.emitter.emit(packet)
+
+    def agent_approval(
+        self, anchor: tuple[str, str, str], request: ToolApprovalRequest
+    ) -> None:
+        """Show a background agent's request in the card of the call that
+        started the agent (by run, message and call ID), when this stream
+        shows that call. Any thread can call it."""
+        tool = self.tools.get(anchor)
+        if tool is not None:
+            self.emitter.emit(Packet(placement=tool.placement, obj=request))
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
@@ -570,12 +585,17 @@ def replay_response(
     default_mode: PresentationMode = PresentationMode.ANSWER,
     *,
     approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
+    agent_approvals: Mapping[
+        tuple[str, str], Sequence[AgentToolApproval]
+    ] = _NO_AGENT_APPROVALS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
     `approvals` holds the response's approval requests by run ID and tool call
-    ID; each shows in its call's card, with its decision once it has one. The
+    ID; each shows in its call's card, with its decision once it has one.
+    `agent_approvals` holds the requests of the background agents that a call
+    started, which show in that call's card the same way. The
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
     response: it collects those calls' renderers, by run, message and call ID,
@@ -634,7 +654,21 @@ def replay_response(
             )
             packets.extend(renderer_of_call.start())
             waits = result is None and response.status == RunStatus.SUSPENDED
-            for approval in approvals.get((response.run_id, call.id), ()):
+            shown = [
+                (
+                    approval,
+                    # A call that a program made is not saved.
+                    tool_arguments_for_display(call)
+                    if approval.tool_name == call.name
+                    else {},
+                    None,
+                )
+                for approval in approvals.get((response.run_id, call.id), ())
+            ] + [
+                (agent.approval, agent.arguments, agent.agent_name)
+                for agent in agent_approvals.get((response.run_id, call.id), ())
+            ]
+            for approval, arguments, agent_name in shown:
                 approval_id = str(approval.id)
                 packets.append(
                     Packet(
@@ -644,15 +678,15 @@ def replay_response(
                             tool_call_id=call.id,
                             tool_name=approval.tool_name,
                             display_name=approval.display_name,
-                            # A call that a program made is not saved.
-                            arguments=tool_arguments_for_display(call)
-                            if approval.tool_name == call.name
-                            else {},
+                            arguments=arguments,
+                            agent_name=agent_name,
                         ),
                     )
                 )
+                # A continued stream's own waiting calls get their decisions
+                # from their live events; an agent's request has none.
                 if approval.decision is not None and not (
-                    waits and open_calls is not None
+                    waits and open_calls is not None and agent_name is None
                 ):
                     packets.append(
                         Packet(

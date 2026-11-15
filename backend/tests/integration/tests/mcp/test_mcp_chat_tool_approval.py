@@ -3,12 +3,14 @@ the turn stops, and the response continues in a new stream after the
 decisions, on any API server."""
 
 import json
+import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from sqlalchemy import select
 
 from onyx.agents.models import RunStatus
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
@@ -25,11 +27,12 @@ from onyx.db.discord_bot import (
     get_or_create_discord_service_api_key,
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import ActionPolicy
+from onyx.db.enums import ActionPolicy, ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
     ChatResponseCheckpoint,
+    ChatSession,
     User,
 )
 from onyx.file_store.file_store import get_default_file_store
@@ -49,6 +52,7 @@ from onyx.server.query_and_chat.streaming_models import (
     ToolApprovalRequest,
     ToolApprovalResolved,
 )
+from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.tool_implementations.code_mode.stubs import function_name
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -1156,3 +1160,509 @@ def test_a_non_streaming_request_returns_when_a_call_waits_for_approval(
     )
     tool_result = mock_llm.requests_in("chat")[-1].tool_result(CALL_ID)
     assert tool_result is not None and f"Hello, {name}!" in tool_result
+
+
+AGENT_CALL_ID = "agent_hello"
+
+
+def _spawn(call_id: str, name: str, instruction: str) -> ToolCall:
+    return ToolCall(
+        id=call_id,
+        name=SPAWN_AGENT_TOOL_NAME,
+        arguments={"name": name, "instruction": instruction},
+    )
+
+
+def _until(condition: Callable[[], bool], description: str) -> None:
+    deadline = time.monotonic() + 60
+    while not condition():
+        assert time.monotonic() < deadline, f"Timed out waiting until {description}"
+        time.sleep(0.25)
+
+
+def _answers(user: DATestUser, chat_session_id: UUID) -> list[str]:
+    detail = client.get(
+        f"{API_SERVER_URL}/chat/get-chat-session/{chat_session_id}",
+        headers=user.headers,
+        cookies=user.cookies,
+    )
+    detail.raise_for_status()
+    return [
+        message["message"]
+        for message in sorted(detail.json()["messages"], key=lambda m: m["message_id"])
+        if message["message_type"] == "assistant"
+    ]
+
+
+def _parked(response_id: int) -> bool:
+    with get_session_with_current_tenant() as db_session:
+        response = db_session.get_one(ChatMessage, response_id)
+        return (
+            response.response_status == RunStatus.SUSPENDED
+            and db_session.get(ChatResponseCheckpoint, response_id) is not None
+            and bool(ownerless_response_ids(get_cache_backend(), [response_id]))
+        )
+
+
+def _agent_requests(
+    user: DATestUser, chat_session_id: UUID
+) -> list[tuple[Placement, PacketObj]]:
+    return [
+        (placement, packet)
+        for placement, packet in _saved_approval_packets(user, chat_session_id)
+        if isinstance(packet, ToolApprovalRequest) and packet.agent_name is not None
+    ]
+
+
+def _waiting_agent_request(user: DATestUser, chat_session_id: UUID) -> str:
+    """The one request that waits once the chat is idle, with its run parked."""
+
+    def parked() -> bool:
+        status = _status(user, chat_session_id)
+        approval_ids = status["pending_approval_ids"]
+        return (
+            isinstance(approval_ids, list)
+            and len(approval_ids) == 1
+            and not status["is_processing"]
+            and _parked(_response_of(str(approval_ids[0])))
+        )
+
+    _until(parked, "the agent's run parks")
+    approval_ids = _status(user, chat_session_id)["pending_approval_ids"]
+    assert isinstance(approval_ids, list)
+    return str(approval_ids[0])
+
+
+@pytest.mark.parametrize(
+    "decision, outcome",
+    [("approve_once", "approved"), ("reject", "rejected")],
+)
+def test_an_agents_call_waits_durably_and_the_root_follows_up(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    decision: str,
+    outcome: ToolApprovalOutcome,
+) -> None:
+    """A background agent's gated call parks the agent's run: no server or
+    chat admission holds it, and sends still work. A reload shows its card in
+    the root's spawn_agent card. After the decision the agent continues on any
+    server, and its result wakes the root."""
+    nonce = uuid4().hex
+    task = f"Greet the team. {uuid4().hex}"
+    hello = _hello(connected_mcp_server, AGENT_CALL_ID, "team")
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[_spawn("spawn-mailer", "mailer", task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        Reply(
+            text="Started the mailer.",
+            conditions=RequestConditions(has_results_for=["spawn-mailer"]),
+        ),
+        Reply(
+            text="The mailer reported.",
+            conditions=RequestConditions(prompt_contains=["Mailer report"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        task,
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        Reply(
+            text="Mailer report.",
+            conditions=RequestConditions(has_results_for=[AGENT_CALL_ID]),
+        ),
+        conditions=RequestConditions(prompt_contains=[task]),
+    )
+    mock_llm.conversation(
+        "second",
+        Reply(text="Second answer."),
+        conditions=RequestConditions(prompt_contains=["Another question."]),
+    )
+    chat_session_id = new_chat()
+    started = ChatSessionManager.send_message(
+        chat_session_id, f"Greet them. {nonce}", admin_user, accepts_follow_ups=True
+    )
+    assert started.error is None and started.full_message == "Started the mailer."
+
+    approval_id = _waiting_agent_request(admin_user, chat_session_id)
+    agent_response_id = _response_of(approval_id)
+    assert agent_response_id != started.assistant_message_id
+    assert _status(admin_user, chat_session_id)["has_active_subagents"]
+    [(_placement, request)] = _agent_requests(admin_user, chat_session_id)
+    assert isinstance(request, ToolApprovalRequest)
+    assert request.model_dump(
+        include={"approval_id", "tool_name", "arguments", "agent_name"}
+    ) == {
+        "approval_id": approval_id,
+        "tool_name": hello.name,
+        "arguments": {"name": "team"},
+        "agent_name": "mailer",
+    }
+    # A waiting agent does not block sends.
+    second = ChatSessionManager.send_message(
+        chat_session_id, "Another question.", admin_user, accepts_follow_ups=True
+    )
+    assert second.error is None and second.full_message == "Second answer."
+
+    _decide(admin_user, approval_id, decision).raise_for_status()
+
+    def followed_up() -> bool:
+        status = _status(admin_user, chat_session_id)
+        return (
+            "The mailer reported." in _answers(admin_user, chat_session_id)
+            and not status["is_processing"]
+            and not status["has_active_subagents"]
+        )
+
+    _until(followed_up, "the root answers the agent's result")
+    tool_result = mock_llm.requests_in(task)[-1].tool_result(AGENT_CALL_ID)
+    assert tool_result is not None
+    if outcome == "approved":
+        assert "Hello, team!" in tool_result
+    else:
+        assert tool_result == (
+            f"The user rejected this {hello.name} call, so it did not run."
+        )
+    with get_session_with_current_tenant() as db_session:
+        assert db_session.get(ChatResponseCheckpoint, agent_response_id) is None
+        assert (
+            db_session.get_one(ChatMessage, agent_response_id).response_status
+            == RunStatus.COMPLETE
+        )
+    assert _status(admin_user, chat_session_id)["pending_approval_ids"] == []
+    assert (
+        _placement,
+        ToolApprovalResolved(approval_id=approval_id, outcome=outcome),
+    ) in _saved_approval_packets(admin_user, chat_session_id)
+
+
+def test_an_agent_of_an_agent_resumes_first_then_its_parent(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    """Root -> planner -> mailer, where the mailer asks: the planner waits for
+    the mailer and parks after it. After the decision the mailer finishes
+    first, then the planner, then the root follows up. The card shows in the
+    root's call that started the planner."""
+    nonce = uuid4().hex
+    planner_task = f"Plan the greeting. {uuid4().hex}"
+    mailer_task = f"Send the greeting. {uuid4().hex}"
+    hello = _hello(connected_mcp_server, AGENT_CALL_ID, "team")
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[_spawn("spawn-planner", "planner", planner_task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        Reply(
+            text="Started the planner.",
+            conditions=RequestConditions(has_results_for=["spawn-planner"]),
+        ),
+        Reply(
+            text="The planner reported.",
+            conditions=RequestConditions(prompt_contains=["Planner report"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        planner_task,
+        Reply(
+            tool_calls=[_spawn("spawn-mailer", "mailer", mailer_task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        # The planner answers, then waits for its agent before it finishes.
+        Reply(
+            text="Waiting for the mailer.",
+            conditions=RequestConditions(has_results_for=["spawn-mailer"]),
+        ),
+        Reply(
+            text="Planner report.",
+            conditions=RequestConditions(prompt_contains=["Mailer report"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[planner_task]),
+    )
+    mock_llm.conversation(
+        mailer_task,
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        Reply(
+            text="Mailer report.",
+            conditions=RequestConditions(has_results_for=[AGENT_CALL_ID]),
+        ),
+        conditions=RequestConditions(prompt_contains=[mailer_task]),
+    )
+    chat_session_id = new_chat()
+    started = ChatSessionManager.send_message(
+        chat_session_id, f"Greet them. {nonce}", admin_user, accepts_follow_ups=True
+    )
+    assert started.full_message == "Started the planner."
+
+    approval_id = _waiting_agent_request(admin_user, chat_session_id)
+    mailer_response_id = _response_of(approval_id)
+    with get_session_with_current_tenant() as db_session:
+        planner_response_id = db_session.scalar(
+            select(ChatMessage.id)
+            .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
+            .where(
+                ChatSession.agent_name == "planner",
+                ChatMessage.response_status.is_not(None),
+            )
+            .order_by(ChatMessage.id.desc())
+            .limit(1)
+        )
+    assert planner_response_id is not None
+    _until(lambda: _parked(planner_response_id), "the planner parks")
+    [(_placement, request)] = _agent_requests(admin_user, chat_session_id)
+    assert isinstance(request, ToolApprovalRequest)
+    assert request.agent_name == "mailer"
+
+    _decide(admin_user, approval_id, "approve_once").raise_for_status()
+
+    def followed_up() -> bool:
+        status = _status(admin_user, chat_session_id)
+        return (
+            "The planner reported." in _answers(admin_user, chat_session_id)
+            and not status["is_processing"]
+            and not status["has_active_subagents"]
+        )
+
+    _until(followed_up, "the root answers the planner's result")
+    with get_session_with_current_tenant() as db_session:
+        mailer = db_session.get_one(ChatMessage, mailer_response_id)
+        planner = db_session.get_one(ChatMessage, planner_response_id)
+        assert mailer.response_status == planner.response_status == RunStatus.COMPLETE
+        # The planner continued in the same run after the mailer ended.
+        assert planner.message == "Planner report."
+    tool_result = mock_llm.requests_in(mailer_task)[-1].tool_result(AGENT_CALL_ID)
+    assert tool_result is not None and "Hello, team!" in tool_result
+
+
+def test_stop_subagents_ends_a_parked_agent_with_the_users_rejection(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+) -> None:
+    nonce = uuid4().hex
+    task = f"Greet the team. {uuid4().hex}"
+    hello = _hello(connected_mcp_server, AGENT_CALL_ID, "team")
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[_spawn("spawn-mailer", "mailer", task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        Reply(
+            text="Started the mailer.",
+            conditions=RequestConditions(has_results_for=["spawn-mailer"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        task,
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        conditions=RequestConditions(prompt_contains=[task]),
+    )
+    chat_session_id = new_chat()
+    ChatSessionManager.send_message(
+        chat_session_id, f"Greet them. {nonce}", admin_user, accepts_follow_ups=True
+    )
+    approval_id = _waiting_agent_request(admin_user, chat_session_id)
+    agent_response_id = _response_of(approval_id)
+
+    stopped = client.post(
+        f"{API_SERVER_URL}/chat/chat-session/{chat_session_id}/stop-subagents",
+        headers=admin_user.headers,
+        cookies=admin_user.cookies,
+    )
+    stopped.raise_for_status()
+    assert stopped.json()["stopped_count"] == 1
+
+    status = _status(admin_user, chat_session_id)
+    assert status["pending_approval_ids"] == []
+    assert not status["has_active_subagents"]
+    with get_session_with_current_tenant() as db_session:
+        row = db_session.get_one(ApprovalRequest, UUID(approval_id))
+        assert (row.decision, row.decided_via) == (
+            ApprovalDecision.REJECTED,
+            ApprovalDecidedVia.USER,
+        )
+        assert (
+            db_session.get_one(ChatMessage, agent_response_id).response_status
+            == RunStatus.CANCELLED
+        )
+        assert db_session.get(ChatResponseCheckpoint, agent_response_id) is None
+    # The call never ran: the agent made no request after its call.
+    assert len(mock_llm.requests_in(task)) == 1
+    assert _decide(admin_user, approval_id, "approve_once").status_code == 409
+
+
+def test_a_root_stop_keeps_its_agents_request_shown_live(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    streaming_api: str,
+) -> None:
+    """An agent that asks while its root still streams shows its card in the
+    stream at once, in the root's spawn_agent card. The user's Stop of the root
+    ends the root only; the agent keeps waiting for its decision."""
+    nonce = uuid4().hex
+    task = f"Greet the team. {uuid4().hex}"
+    hello = _hello(connected_mcp_server, AGENT_CALL_ID, "team")
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[_spawn("spawn-mailer", "mailer", task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        Reply(
+            text="Still working",
+            conditions=RequestConditions(has_results_for=["spawn-mailer"]),
+            pause_after_first_chunk="root",
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        task,
+        Reply(tool_calls=[hello], conditions=RequestConditions(offers=[hello.name])),
+        conditions=RequestConditions(prompt_contains=[task]),
+    )
+    chat_session_id = new_chat()
+    packets: list[Packet] = []
+    request = SendMessageRequest(
+        chat_session_id=chat_session_id,
+        message=f"Greet them. {nonce}",
+        parent_message_id=None,
+        accepts_follow_ups=True,
+    )
+
+    def read_stream() -> None:
+        with httpx.Client(
+            base_url=streaming_api,
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+            timeout=60,
+        ) as http:
+            with http.stream(
+                "POST", "/chat/send-chat-message", json=request.model_dump(mode="json")
+            ) as response:
+                # Appended one by one: the test reads them while they arrive.
+                packets.extend(_packets(response))
+
+    reader = threading.Thread(target=read_stream)
+    reader.start()
+    try:
+        _until(
+            lambda: any(
+                isinstance(packet.obj, ToolApprovalRequest) for packet in packets
+            ),
+            "the stream shows the agent's request",
+        )
+        client.post(
+            f"{API_SERVER_URL}/chat/stop-chat-session/{chat_session_id}",
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        ).raise_for_status()
+    finally:
+        mock_llm.release_gate("root")
+        reader.join(timeout=60)
+    [live] = [
+        packet for packet in packets if isinstance(packet.obj, ToolApprovalRequest)
+    ]
+    assert isinstance(live.obj, ToolApprovalRequest)
+    assert live.obj.agent_name == "mailer"
+    assert live.obj.arguments == {"name": "team"}
+    # The card is in the spawn_agent card: the tool card of the root's call.
+    assert any(
+        packet.placement == live.placement and packet.obj.type != live.obj.type
+        for packet in packets
+    )
+
+    approval_id = _waiting_agent_request(admin_user, chat_session_id)
+    assert approval_id == live.obj.approval_id
+    with get_session_with_current_tenant() as db_session:
+        assert db_session.get_one(ApprovalRequest, UUID(approval_id)).decision is None
+
+
+def test_a_program_in_an_agent_parks_and_continues(
+    connected_mcp_server: ConnectedMCPServer,
+    new_chat: NewChat,
+    admin_user: DATestUser,
+    mock_llm: MockLLMScript,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """In code mode, an agent's program call parks the program with the
+    agent's run; its dump is saved under the root chat's prefix, and after the
+    decision the program continues and the root follows up."""
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", True)
+    nonce = uuid4().hex
+    task = f"Greet the team. {uuid4().hex}"
+    hello_function = function_name(connected_mcp_server.callable_name("hello"))
+    code = (
+        "print('started')\n"
+        f"greeting = await {hello_function}(name='team')\n"
+        "print('greeting', greeting)\n"
+    )
+    mock_llm.conversation(
+        nonce,
+        Reply(
+            tool_calls=[_spawn("spawn-mailer", "mailer", task)],
+            conditions=RequestConditions(offers=[SPAWN_AGENT_TOOL_NAME]),
+        ),
+        Reply(
+            text="Started the mailer.",
+            conditions=RequestConditions(has_results_for=["spawn-mailer"]),
+        ),
+        Reply(
+            text="The mailer reported.",
+            conditions=RequestConditions(prompt_contains=["Mailer report"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[nonce]),
+    )
+    mock_llm.conversation(
+        task,
+        Reply(
+            tool_calls=[
+                ToolCall(id="program", name="execute_code", arguments={"code": code})
+            ],
+            conditions=RequestConditions(offers=["execute_code"]),
+        ),
+        Reply(
+            text="Mailer report.",
+            conditions=RequestConditions(has_results_for=["program"]),
+        ),
+        conditions=RequestConditions(prompt_contains=[task]),
+    )
+    chat_session_id = new_chat()
+    prefix = f"agent-checkpoint/{chat_session_id}/"
+    ChatSessionManager.send_message(
+        chat_session_id, f"Greet them. {nonce}", admin_user, accepts_follow_ups=True
+    )
+    approval_id = _waiting_agent_request(admin_user, chat_session_id)
+    assert len(get_default_file_store().list_files_by_prefix(prefix)) == 1
+    [(_placement, request)] = _agent_requests(admin_user, chat_session_id)
+    assert isinstance(request, ToolApprovalRequest)
+    assert request.agent_name == "mailer" and request.arguments == {}
+
+    _decide(admin_user, approval_id, "approve_once").raise_for_status()
+
+    def followed_up() -> bool:
+        status = _status(admin_user, chat_session_id)
+        return (
+            "The mailer reported." in _answers(admin_user, chat_session_id)
+            and not status["is_processing"]
+            and not status["has_active_subagents"]
+        )
+
+    _until(followed_up, "the root answers the agent's result")
+    result = mock_llm.requests_in(task)[-1].tool_result("program")
+    assert result is not None
+    assert "started" in result and "Hello, team!" in result
+    # The continuation loaded the dump and deleted it.
+    assert get_default_file_store().list_files_by_prefix(prefix) == []

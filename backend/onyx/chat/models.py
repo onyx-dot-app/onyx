@@ -341,8 +341,14 @@ class AgentResultState(BaseModel):
         """An active background agent: an unfinished run that delivers this result.
 
         Only `spawn_agent` runs have result rows, so foreground workers never count.
+        A run that waits for the user without an owner (parked) counts.
         """
         return not self.status.is_terminal
+
+    @property
+    def is_running(self) -> bool:
+        """An active run that has, or had, an owner; a parked run has none."""
+        return self.status == RunStatus.RUNNING
 
 
 class AgentWait(BaseModel):
@@ -372,6 +378,13 @@ class AgentInboxWork(BaseModel):
     parent_tool_call_id: str
 
 
+class ParkedAgentRun(BaseModel):
+    """A background agent's parked run whose waits have all ended."""
+
+    agent_id: str
+    response_id: int
+
+
 class ChatBranch(BaseModel):
     chat_session_id: UUID
     message_ids: list[int]
@@ -382,17 +395,19 @@ class ChatInbox(BaseModel):
 
     branch: ChatBranch
     selected_response_id: int | None
-    # The running selected response and active background agents. Each can have
-    # lost its owner.
+    # The running selected response and running background agents. Each can
+    # have lost its owner; parked runs have none and are not listed.
     running_response_ids: list[int] = Field(default_factory=list)
     results: list[AgentResultState] = Field(default_factory=list)
     next_turn: QueuedChatTurn | None = None
     child_work: list[AgentInboxWork] = Field(default_factory=list)
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
-    # The selected response, suspended while tool calls waited for approval,
-    # once none of its requests waits; it continues before any queued turn.
+    # The selected response, parked while its waits were on people, once none
+    # of them waits; it continues before any queued turn.
     resumable_response_id: int | None = None
+    # Parked background agent runs that can continue; agent stores resume them.
+    resumable_agent_runs: list[ParkedAgentRun] = Field(default_factory=list)
 
     @property
     def unfinished_response_ids(self) -> list[int]:
@@ -834,6 +849,9 @@ class ChatFeatureState(BaseModel):
     search_context: SearchContext
     # Cells whose observations wait for the user's input.
     code_cells: list[SavedCodeCell] = Field(default_factory=list)
+    # Whether the agent has the agent tools: a root only when its client
+    # offered them, every subagent.
+    agent_tools: bool
 
 
 class ReservedChatResponse(BaseModel):
@@ -986,6 +1004,15 @@ class SavedToolApproval(BaseModel):
     decided_at: datetime | None
 
 
+class AgentToolApproval(BaseModel):
+    """A background agent's approval request, shown at the root response's
+    call that started the agent."""
+
+    approval: SavedToolApproval
+    agent_name: str
+    arguments: dict[str, JsonValue]
+
+
 class ResponseReplayData(BaseModel):
     """Detached source documents, tool identities and approval requests for
     response replay."""
@@ -995,3 +1022,8 @@ class ResponseReplayData(BaseModel):
     # The approval requests of an ended or suspended response, in the order
     # they were made, by response run ID and tool call ID.
     approvals: dict[tuple[str, str], list[SavedToolApproval]]
+    # The requests of the background agents that the response started, by its
+    # run ID and the call that started each agent.
+    agent_approvals: dict[tuple[str, str], list[AgentToolApproval]] = Field(
+        default_factory=dict
+    )

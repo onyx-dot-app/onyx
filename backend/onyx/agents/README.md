@@ -775,14 +775,17 @@ When child work can start but no running child keeps a store scanning, `dispatch
 The host prepares the selected response's configuration without a root run, starts the work, and holds the leases until the runs release.
 Any API pod can start it; chat admission keeps hosts and turns from starting the same work.
 `handoff()` requires a suspended, idle run and saves a `ChatResponseCheckpoint` beside its response history.
-Its foreground children must have terminal results before transfer.
+Its foreground children must have ended or parked before transfer.
+Any run whose waits are all on people parks: the root through the turn, an agent run in `poll_control`.
+An agent run's checkpoint binds to its agent's saved runs before it, so any pod rebuilds the same history.
 The checkpoint contains execution progress and callback payloads omitted from normal conversation history.
 It contains no repeated response text, full model requests, history prefix, or nested child transcripts.
 The original step budget and applied-callback boundary survive transfer.
 Before handoff, the adapter verifies that saved history can reconstruct the captured input and output.
 Unsupported input representations fail while the original run still owns execution.
 
-`resume(run_id, context=...)` requires authorized history reconstructed by the application.
+`resume(run_id, context=...)` requires authorized history reconstructed by the application; an agent run's comes from its agent's saved runs.
+Dispatch resumes a parked run once its waits end, the leaf first; stores and agent hosts resume agent runs.
 The adapter validates its history digest and compaction boundary, then restores the snapshot from saved messages and operation outcomes.
 Only one process can claim a checkpoint. Conditional revision checks reject stale writers.
 Reconstruction failure before execution releases the claim for retry.
@@ -795,9 +798,9 @@ Coding's temporary sandbox has no cross-process reconstruction factory.
 ### Delivery and failure boundaries
 
 There is no durable generic control ledger. Human messages sent to a running response are stored in `chat_input`, as described above.
-Tool approval decisions are saved in `approval_request` before the decision API returns, which then sets a wake key for the response.
-The response owner's control poll reads the wake key with the Stop key, reads the decisions of the requests that its runs wait on (`Run.pending_inputs`), and submits the answers to its runs. A slower periodic read covers a lost wake key and expires overdue requests, up to that interval late.
-When a run ends, or a program's call stops waiting, chat expires its open requests. The user's Stop first saves the user's rejection of the requests that the turn's runs wait on, so they end rejected, as with Reject. When the API server starts to shut down, runs that wait stop and their requests expire, and new calls do not ask.
+Tool approval decisions are saved in `approval_request` before the decision API returns, which then dispatches.
+A run that waits for them has handed off, so the resumed run reads the saved decisions; requests have no deadline.
+When a run ends, or a program's call stops waiting, chat expires its open requests. The user's Stop first saves the user's rejection of the requests that the root run and its foreground descendants wait on, so they end rejected, as with Reject.
 The existing chat Stop route keeps its cache signal; child Stop requests also use tenant-scoped cache state.
 An expired owner is reported as interrupted when its response is inspected. Uncertain external work is never automatically replayed.
 

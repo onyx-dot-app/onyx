@@ -64,6 +64,7 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     StreamingError,
+    ToolApprovalRequest,
     ToolApprovalResolved,
 )
 from onyx.server.settings.store import load_settings
@@ -438,21 +439,16 @@ class ChatTurnExecution:
             del self._response_workers[worker]
 
     def _hand_off(self, run: Run, persistence: ChatResponsePersistence) -> bool:
-        """Save a suspended run that has nothing left but approval waits and
-        release it, so the turn ends with `awaiting_approval`; a decision
-        resumes it on any pod. True once it handed off."""
+        """Save a suspended run whose waits are all on people and release it,
+        so the turn ends with `awaiting_approval`; the decisions resume it on
+        any pod. True once it handed off."""
         store = self._response_stores.get(persistence.model_index)
-        if (
-            store is None
-            or run.status != RunStatus.SUSPENDED
-            or not run.wait_for_idle(timeout=0)
-            or not any(request.approval for request in run.pending_inputs)
-        ):
+        if store is None or not store.may_park(run):
             return False
         try:
             store.handoff(run.id)
         except RunNotTransferable:
-            # A foreground child still runs; the run hands off after it ends.
+            # The run changed before it parked; a later poll checks again.
             return False
         persistence.report_suspended(run)
         self._publish(
@@ -547,6 +543,13 @@ class ChatTurnExecution:
             else:
                 configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
+            presenter = ResponsePresenter(
+                emitter,
+                tool_ids=tool_ids,
+                display_names={
+                    tool.name: tool.display_name for tool in configured_tools
+                },
+            )
             store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
                 store, coordinator = bind_run_store(
@@ -557,9 +560,9 @@ class ChatTurnExecution:
                     tools=configured_tools,
                     coordinator=persistence.coordinator,
                     follow_up_steps=chat_agent.max_steps,
-                    with_subagents=with_subagents,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
+                    on_agent_approval=presenter.agent_approval,
                 )
                 with self._lock:
                     self._stores.append(store)
@@ -568,13 +571,6 @@ class ChatTurnExecution:
                 # Incognito chats have no child agents to find, restore, or own,
                 # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
-            presenter = ResponsePresenter(
-                emitter,
-                tool_ids=tool_ids,
-                display_names={
-                    tool.name: tool.display_name for tool in configured_tools
-                },
-            )
             resumed_id = self.setup.resumed_response_id
             if resumed_id is None:
                 coordinator.register(
@@ -735,9 +731,10 @@ def bind_run_store(
     tools: list[Tool],
     coordinator: AgentCoordinator,
     follow_up_steps: int,
-    with_subagents: bool,
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
+    on_agent_approval: Callable[[tuple[str, str, str], ToolApprovalRequest], None]
+    | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
     """Bind the run store of a response's branch and register the visible agents."""
     branch = load_chat_branch(response_id)
@@ -763,6 +760,7 @@ def bind_run_store(
         tools=tools,
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
+        on_agent_approval=on_agent_approval,
     )
     view = store.bind(
         coordinator,
@@ -771,15 +769,13 @@ def bind_run_store(
             llm=llm,
             tools=tools,
             user_identity=setup.user_identity,
-            create_subagent=chat_subagent_factory(
+            subagent_factory=lambda depth: chat_subagent_factory(
                 setup=setup,
                 llm=llm,
                 tools=tools,
                 inject_memories=user.use_memories,
-                depth=1,
-            )
-            if with_subagents
-            else None,
+                depth=depth,
+            ),
         ),
     )
     for info in store.list_agents():
@@ -825,7 +821,6 @@ def host_agent_work(
                 tools=chat_agent.configured_tools,
                 coordinator=AgentCoordinator(),
                 follow_up_steps=chat_agent.max_steps,
-                with_subagents=True,
                 root_response=None,
                 on_child_released=dispatch_pending_messages,
             )

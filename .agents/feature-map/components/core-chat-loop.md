@@ -252,7 +252,10 @@ while its response is on the selected branch. A dispatch failure never cancels
 the turn. When child work can start but no running child keeps a store
 scanning, dispatch from `/status` or a pending-message route starts an agent
 host (`chat/execution.py:host_agent_work`): the selected response's setup
-without a root run, which starts the work and keeps the leases. Only
+without a root run, which starts the work and keeps the leases. Stores and
+hosts also resume parked agent runs whose waits ended
+(`ChatInbox.resumable_agent_runs`), and a store parks its agent runs that wait
+only on people ([[mcp-and-custom-tools#chat-approval-durable-wait]]). Only
 callers that deliver follow-ups (`delivers_follow_ups`, false for
 `run_chat_turn`), for a client that shows them (`SendMessageRequest.accepts_follow_ups`,
 which the web chat and server-started turns set), offer agent tools in a

@@ -25,6 +25,8 @@ from onyx.agents.tools import (
     AgentLifetime,
     AgentTool,
     ChildRunWait,
+    InputMode,
+    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
@@ -32,6 +34,7 @@ from onyx.chat import run_store
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
     AnswerStreamPart,
+    ChatInbox,
     ChatResponseOutcome,
     ChatResponseSnapshot,
     PersistenceStatus,
@@ -48,6 +51,7 @@ from onyx.db.action_policy import replace_workspace_action_policies
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
+from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -102,9 +106,14 @@ from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     WaitCodeTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.chat.test_run_store import chat_agent
+from tests.external_dependency_unit.chat.test_run_store import (
+    calls,
+    chat_agent,
+    replies,
+)
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import LIMITS, FakeMCPTool, until
@@ -143,12 +152,13 @@ class ApprovalChat(BaseModel):
         )
 
     def rows(self, db_session: Session) -> list[ApprovalRequest]:
-        db_session.expire_all()
+        # Refreshes only these rows: runs read the chat's user on their threads.
         return list(
             db_session.scalars(
                 select(ApprovalRequest)
                 .where(ApprovalRequest.chat_session_id == self.chat_session_id)
                 .order_by(ApprovalRequest.created_at)
+                .execution_options(populate_existing=True)
             )
         )
 
@@ -308,7 +318,7 @@ def _start(
     owner = _store(chat, gated)
     agent = _agent(chat, reply, tools)
     coordinator = AgentCoordinator()
-    view = owner.bind(coordinator, build_agent=lambda _checkpoint: agent)
+    view = owner.bind(coordinator, build_agent=lambda _checkpoint, _depth: agent)
     run = agent.start(
         messages=[chat.question], max_steps=3, coordinator=view, on_event=on_event
     )
@@ -330,7 +340,7 @@ def _resume(
     owner = _store(chat, gated)
     coordinator = AgentCoordinator()
 
-    def rebuild(checkpoint: ExecutionCheckpoint) -> Agent:
+    def rebuild(checkpoint: ExecutionCheckpoint, _depth: int) -> Agent:
         return _agent(chat, reply, tools, checkpoint.agent_state)
 
     owner.bind(coordinator, build_agent=rebuild)
@@ -612,35 +622,60 @@ def test_a_request_creates_the_missing_app_identity(
     )
 
 
-@pytest.mark.parametrize("lifetime", list(AgentLifetime))
-def test_a_child_run_cannot_ask(
-    db_session: Session,
+def _agent_runs(
     chat: ApprovalChat,
     owned_runs: list[OwnedRun],
     lifetime: AgentLifetime,
-) -> None:
-    """Only the response's root run hands off and resumes, so only it asks."""
+    sent: list[str],
+    *,
+    root_reply: Callable[..., AssistantMessage] | None = None,
+) -> OwnedRun:
+    """A root whose agent calls the gated tool. A background agent comes from
+    `spawn_agent`, and the root answers; a foreground agent's root waits for
+    it and answers with its answer."""
     tool = chat.tool()
-    child_ids: list[str] = []
+
+    def child() -> Agent:
+        return Agent(
+            FakeModelClient(_calls(tool, "send")),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            tools=[_recording(tool, sent)],
+        )
+
+    if lifetime == AgentLifetime.BACKGROUND:
+        return _start(
+            chat,
+            owned_runs,
+            reply=root_reply
+            or _replies(
+                AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="spawn",
+                            name=SpawnAgentTool.name,
+                            arguments={"name": "mailer", "instruction": "Email"},
+                        )
+                    ]
+                )
+            ),
+            tools=[SpawnAgentTool(child, max_steps=3).bind(ToolContext), _hold()],
+            gated=[tool],
+        )
 
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
-        child_ids.append(
-            invocation.agents.spawn_agent(
-                Agent(
-                    FakeModelClient(_calls(tool, "send")),
-                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-                    tools=[_sending(tool)],
-                ),
-                name="child",
-                description="child",
-                messages=[UserMessage(content="Email the team")],
-                max_steps=2,
-                lifetime=lifetime,
-            ).run_id
+        return ChildRunWait(
+            run_ids=[
+                invocation.agents.spawn_agent(
+                    child(),
+                    name="mailer",
+                    description="Email",
+                    messages=[UserMessage(content="Email the team")],
+                    max_steps=3,
+                ).run_id
+            ]
         )
-        return ChildRunWait(run_ids=child_ids)
 
-    owned = _start(
+    return _start(
         chat,
         owned_runs,
         reply=_replies(
@@ -655,18 +690,194 @@ def test_a_child_run_cannot_ask(
                 ),
                 execute=delegate,
                 result_from_children=lambda _invocation, states: ToolResult(
-                    content=states[0].steps[0].tools["send"].result.text
-                    if states[0].steps[0].tools["send"].result
-                    else ""
+                    content=states[0].messages[-1].text
                 ),
             )
         ],
         gated=[tool],
     )
 
-    until(lambda: _poll(owned) and owned.run.status.is_terminal)
-    assert "only the agent that started you can ask" in owned.first_result("delegate")
-    assert chat.rows(db_session) == []
+
+def _hold() -> AgentTool:
+    """A call that waits for a person's answer that is not an approval, so
+    its root stays live and owned."""
+    return AgentTool(
+        definition=ToolDefinition(name="hold", description="", parameters={}),
+        execute=lambda _invocation: PendingToolInput(
+            request_id="hold", prompt="Hold", mode=InputMode.RESULT
+        ),
+    )
+
+
+# These reads use their own sessions: expiring the test's session would
+# reload the chat's user while runs read it on their threads.
+
+
+def _status(response_id: int) -> RunStatus | None:
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        response = session.get(ChatMessage, response_id)
+        return response.response_status if response is not None else None
+
+
+def _parked(response_id: int) -> bool:
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        saved = session.get(ChatResponseCheckpoint, response_id) is not None
+    return (
+        _status(response_id) == RunStatus.SUSPENDED
+        and saved
+        and not get_cache_backend().exists(run_store._owner_key(response_id))
+    )
+
+
+def _inbox(chat: ApprovalChat) -> ChatInbox:
+    with get_session_with_tenant(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+    ) as session:
+        return read_chat_inbox(session, chat.chat_session_id)
+
+
+@pytest.mark.parametrize("lifetime", list(AgentLifetime))
+def test_an_agent_run_asks_parks_and_resumes_in_a_fresh_store(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    lifetime: AgentLifetime,
+) -> None:
+    """An agent's call waits durably: the agent's run parks, and a foreground
+    agent's parent parks after it. After the decision, a fresh store resumes
+    the agent at its depth, then the parent once the agent ended."""
+    sent: list[str] = []
+    owned = _agent_runs(chat, owned_runs, lifetime, sent)
+    until(lambda: _poll(owned) and len(chat.rows(db_session)) == 1)
+    [row] = chat.rows(db_session)
+    child_id = row.chat_message_id
+    assert child_id != chat.response_id
+    until(lambda: _poll(owned) and _parked(child_id))
+    if lifetime == AgentLifetime.FOREGROUND:
+        until(lambda: owned.owner.may_park(owned.run))
+        owned.owner.handoff(owned.run.id)
+        assert _parked(chat.response_id)
+    else:
+        assert owned.run.result(timeout=10).output.text == "done"
+    inbox = _inbox(chat)
+    assert inbox.resumable_agent_runs == []
+    assert inbox.resumable_response_id is None
+
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    assert [run.response_id for run in _inbox(chat).resumable_agent_runs] == [child_id]
+
+    tool = chat.tool()
+    depths: dict[str, int] = {}
+
+    def rebuild(checkpoint: ExecutionCheckpoint, depth: int) -> Agent:
+        agent_id = checkpoint.run_state.agent_id
+        assert agent_id is not None
+        depths[agent_id] = depth
+        return Agent(
+            FakeModelClient(_calls(tool, "send")),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id=agent_id,
+            state=checkpoint.agent_state,
+            tools=[_recording(tool, sent)],
+        )
+
+    fresh = _store(chat, [tool])
+    coordinator = AgentCoordinator()
+    fresh.bind(coordinator, build_agent=rebuild)
+    try:
+        until(
+            lambda: (
+                fresh.poll_control() is None
+                and _status(child_id) == RunStatus.COMPLETE
+                and not fresh.has_owned_work
+            )
+        )
+    finally:
+        assert coordinator.close(timeout=10)
+    assert sent == ["send"]
+    assert list(depths.values()) == [1]
+    assert db_session.get(ChatResponseCheckpoint, child_id) is None
+    if lifetime == AgentLifetime.FOREGROUND:
+        assert _inbox(chat).resumable_response_id == chat.response_id
+        resumed = _resume(
+            chat,
+            owned_runs,
+            reply=_replies(AssistantMessage(content=[TextContent(text="done")])),
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="delegate", description="", parameters={}
+                    ),
+                    execute=lambda _invocation: pytest.fail("The agent started once"),
+                    result_from_children=lambda _invocation, states: ToolResult(
+                        content=states[0].messages[-1].text
+                    ),
+                )
+            ],
+            gated=[tool],
+        )
+        assert resumed is not None
+        assert resumed.run.result(timeout=10).output.text == "done"
+        assert resumed.first_result("delegate") == "done"
+
+
+def test_root_stop_keeps_a_background_agents_request(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """The user's Stop of a live turn rejects only the requests of the runs it
+    cancels; a background agent keeps running and keeps its request."""
+    sent: list[str] = []
+    owned = _agent_runs(
+        chat,
+        owned_runs,
+        AgentLifetime.BACKGROUND,
+        sent,
+        root_reply=replies(
+            calls(
+                ToolCall(
+                    id="spawn",
+                    name=SpawnAgentTool.name,
+                    arguments={"name": "mailer", "instruction": "Email"},
+                )
+            ),
+            calls(ToolCall(id="hold", name="hold", arguments={})),
+        ),
+    )
+    # The agent asks and stays owned: no control poll parks it.
+    until(lambda: len(chat.rows(db_session)) == 1)
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+
+    owned.owner.reject_waiting_approvals()
+    owned.run.cancel("user")
+    assert owned.run.wait_for_idle(10)
+
+    [row] = chat.rows(db_session)
+    assert row.chat_message_id != chat.response_id
+    assert row.decision is None
+
+
+def test_ownerless_repair_keeps_a_parked_response(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A parked response has no owner by design; repair leaves it waiting."""
+    owned = _direct_call(chat, owned_runs)
+    _hand_off(owned)
+
+    assert (
+        run_store.interrupt_ownerless_responses(
+            get_cache_backend(),
+            POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            [chat.response_id],
+        )
+        == set()
+    )
+
+    assert _parked(chat.response_id)
+    assert [row.decision for row in chat.rows(db_session)] == [None]
 
 
 def _poll(owned: OwnedRun) -> bool:
@@ -789,7 +1000,7 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
         tools=[tool],
         code_mode=True,
     )
-    view = owner.bind(coordinator, build_agent=lambda _checkpoint: agent)
+    view = owner.bind(coordinator, build_agent=lambda _checkpoint, _depth: agent)
     owned = OwnedRun(
         owner=owner,
         coordinator=coordinator,

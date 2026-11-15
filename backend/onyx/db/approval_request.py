@@ -143,11 +143,11 @@ def close_pending_approval_requests__no_commit(
     decided_via: ApprovalDecidedVia | None,
     *,
     approval_ids: Collection[UUID] | None = None,
-    chat_message_id: int | None = None,
+    chat_message_ids: Collection[int] | None = None,
 ) -> list[UUID]:
-    """Decide the given requests, or a response's requests, that are still
+    """Decide the given requests, or the responses' requests, that are still
     pending: EXPIRED when nothing waits for them anymore, or the user's
-    rejection when the user stops the response. Returns the decided IDs."""
+    rejection when the user stops the responses. Returns the decided IDs."""
     return list(
         db_session.scalars(
             update(ApprovalRequest)
@@ -155,7 +155,7 @@ def close_pending_approval_requests__no_commit(
                 ApprovalRequest.decision.is_(None),
                 ApprovalRequest.id.in_(approval_ids)
                 if approval_ids is not None
-                else ApprovalRequest.chat_message_id == chat_message_id,
+                else ApprovalRequest.chat_message_id.in_(chat_message_ids or []),
             )
             .values(decision=decision, decided_via=decided_via, decided_at=func.now())
             .returning(ApprovalRequest.id)
@@ -171,6 +171,22 @@ def get_response_approval_requests(
         db_session.scalars(
             select(ApprovalRequest)
             .where(ApprovalRequest.chat_message_id.in_(chat_message_ids))
+            .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
+        )
+    )
+
+
+def pending_approval_ids(
+    db_session: Session, chat_message_ids: Collection[int]
+) -> list[UUID]:
+    """The pending requests of these responses, in the order they were made."""
+    return list(
+        db_session.scalars(
+            select(ApprovalRequest.id)
+            .where(
+                ApprovalRequest.chat_message_id.in_(chat_message_ids),
+                ApprovalRequest.decision.is_(None),
+            )
             .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
         )
     )
