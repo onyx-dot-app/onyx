@@ -12,6 +12,7 @@ import {
 import {
   createSkill,
   deleteSkill,
+  skillMessage,
   uniqueSkillName,
 } from "@tests/e2e/utils/skills";
 
@@ -148,9 +149,7 @@ test.describe("Message Edit and Regenerate Tests @code-mode", () => {
         .map((message) => message.content)
         .join("\n");
       expect(text).toContain("Review again");
-      expect(text).toContain(
-        `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`
-      );
+      expect(text).toContain(skillMessage(name, instructions));
     } finally {
       await deleteSkill(page.request, skill.id);
     }

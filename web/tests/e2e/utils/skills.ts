@@ -14,6 +14,10 @@ export function uniqueSkillName(prefix: string): string {
     .slice(2, 6)}`;
 }
 
+function skillDescription(name: string): string {
+  return `E2E skill ${name}`;
+}
+
 export async function createSkill(
   request: APIRequestContext,
   name: string,
@@ -23,7 +27,7 @@ export async function createSkill(
   const res = await request.post("/api/skills/custom/editor", {
     multipart: {
       name,
-      description: `E2E skill ${name}`,
+      description: skillDescription(name),
       instructions_markdown: instructions,
       auto_enable: "true",
       ...(options.publish
@@ -33,6 +37,15 @@ export async function createSkill(
   });
   expect(res.ok(), await res.text()).toBeTruthy();
   return res.json();
+}
+
+/** The `<skill>` message that a pick of a `createSkill` skill gives the model:
+ * its whole SKILL.md, frontmatter included. */
+export function skillMessage(name: string, instructions: string): string {
+  const skillMd = `---\nname: ${name}\ndescription: ${skillDescription(
+    name
+  )}\n---\n\n${instructions}\n`;
+  return `<skill>\n<name>${name}</name>\n${skillMd}\n</skill>`;
 }
 
 export async function deleteSkill(

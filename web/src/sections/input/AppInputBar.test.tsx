@@ -1,10 +1,13 @@
 import {
+  deferred,
   fireEvent,
   render,
+  renderHook,
   screen,
   setupUser,
   waitFor,
 } from "@tests/setup/test-utils";
+import { SWRConfig } from "swr";
 import { act, createRef } from "react";
 import AppInputBar, {
   type AppInputBarHandle,
@@ -26,6 +29,7 @@ import {
 import { SEARCH_TOOL_ID } from "@/lib/tools/constants";
 import type { ChatState } from "@/app/app/types";
 import type { PickerSections } from "@/lib/skills/picker";
+import { useChatSkills } from "@/lib/skills/hooks";
 import type { ChatSkill } from "@/lib/skills/types";
 import { draftKey } from "@/hooks/useDraft";
 import type MicrophoneButton from "@/sections/input/MicrophoneButton";
@@ -443,8 +447,21 @@ describe("`@` skill mentions", () => {
       });
       expect(skillFetches()).toBe(1);
 
-      // The input took focus on mount, while the first fetch ran.
+      // The composer takes focus after each send, so a focus within a minute
+      // of the last fetch does not fetch.
+      const firstFetchAt = Date.now();
+      const nowSpy = jest
+        .spyOn(Date, "now")
+        .mockReturnValue(firstFetchAt + 59_000);
       const input = screen.getByRole("textbox");
+      act(() => {
+        input.blur();
+        input.focus();
+      });
+      await act(async () => {});
+      expect(skillFetches()).toBe(1);
+
+      nowSpy.mockReturnValue(firstFetchAt + 61_000);
       act(() => {
         input.blur();
         input.focus();
@@ -455,14 +472,31 @@ describe("`@` skill mentions", () => {
       expect(
         await screen.findByTestId("skill-picker-row-code-review")
       ).toBeVisible();
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
 
-      // Focus fetches are throttled like SWR's window focus fetches.
-      act(() => {
-        input.blur();
-        input.focus();
+  test("keeps the input focus handler while the chat skills fetch", async () => {
+    mockChatSkills = null;
+    const response = deferred<Response>();
+    const fetchSpy = jest
+      .spyOn(global, "fetch")
+      .mockImplementation(() => response.promise);
+    try {
+      const { result } = renderHook(() => useChatSkills(), {
+        wrapper: ({ children }) => (
+          <SWRConfig value={{ provider: () => new Map() }}>
+            {children}
+          </SWRConfig>
+        ),
       });
-      await act(async () => {});
-      expect(skillFetches()).toBe(2);
+      const { onInputFocus } = result.current;
+      await act(async () => {
+        response.resolve(new Response(JSON.stringify([])));
+      });
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+      expect(result.current.onInputFocus).toBe(onInputFocus);
     } finally {
       fetchSpy.mockRestore();
     }

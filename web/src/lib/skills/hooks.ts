@@ -6,7 +6,7 @@ import {
   useState,
   type SyntheticEvent,
 } from "react";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { getTextAroundCursor, type CaretText } from "@/lib/contentEditable";
 import {
@@ -41,11 +41,16 @@ export function usePublishAction(): PublishAction {
   return "publish";
 }
 
+/** The composer takes focus again after each send, so a short interval would
+ * fetch the chat skills on almost every turn. */
+const CHAT_SKILLS_FOCUS_THROTTLE_MS = 60_000;
+
 export interface ChatSkillEntries {
   /** The skills as `@` picker sections, sorted by name. */
   entries: PickerSections;
   /** Call when the chat input gains focus. Fetches the skills again unless a
-   * fetch is running or this fetched within SWR's focus throttle interval. */
+   * fetch started within `CHAT_SKILLS_FOCUS_THROTTLE_MS`. Its identity is
+   * stable. */
   onInputFocus: () => void;
 }
 
@@ -55,20 +60,21 @@ export interface ChatSkillEntries {
  * focus does not fetch them. */
 export function useChatSkills(): ChatSkillEntries {
   const { user } = useUser();
-  const { focusThrottleInterval } = useSWRConfig();
-  const { data, mutate, isValidating } = useSWR<ChatSkill[]>(
+  // When the last fetch started, from any trigger.
+  const lastFetchRef = useRef(0);
+  const { data, mutate } = useSWR<ChatSkill[]>(
     user ? SWR_KEYS.chatSkills : null,
-    errorHandlingFetcher,
+    (url: string) => {
+      lastFetchRef.current = Date.now();
+      return errorHandlingFetcher<ChatSkill[]>(url);
+    },
     { revalidateOnFocus: false }
   );
-  const lastFocusFetchRef = useRef(0);
   const onInputFocus = useCallback(() => {
-    const now = Date.now();
-    if (isValidating || now - lastFocusFetchRef.current < focusThrottleInterval)
+    if (Date.now() - lastFetchRef.current < CHAT_SKILLS_FOCUS_THROTTLE_MS)
       return;
-    lastFocusFetchRef.current = now;
     void mutate();
-  }, [isValidating, focusThrottleInterval, mutate]);
+  }, [mutate]);
   const entries = useMemo(
     (): PickerSections => ({
       skills: (data ?? []).map(

@@ -8,6 +8,7 @@ import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import {
   createSkill,
   deleteSkill,
+  skillMessage,
   uniqueSkillName,
 } from "@tests/e2e/utils/skills";
 import {
@@ -744,8 +745,8 @@ test.describe("Skill Mentions", () => {
       await addMockLlmConversation({
         name: nonce,
         conditions: {
-          prompt_contains: [first, second].map(
-            (name) => `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`
+          prompt_contains: [first, second].map((name) =>
+            skillMessage(name, instructions)
           ),
         },
         replies: [{ text: `Answered with the skills. ${nonce}` }],
@@ -803,9 +804,7 @@ test.describe("Skill Mentions", () => {
       await addMockLlmConversation({
         name: nonce,
         conditions: {
-          prompt_contains: [
-            `<skill>\n<name>${name}</name>\n${instructions}\n</skill>`,
-          ],
+          prompt_contains: [skillMessage(name, instructions)],
         },
         replies: [{ text: `Answered with the skill. ${nonce}` }],
       });

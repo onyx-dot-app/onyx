@@ -66,8 +66,8 @@
   library, the skill editor, a plugin's Skills tab or a Craft app connection
   fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
   changes, such as one from another tab or user, show after the chat input
-  gains focus, at most once per SWR focus throttle interval; a window focus
-  does not fetch the list. A message mentions at most 20 skills: at that
+  gains focus, unless a fetch of the list started in the last minute; a
+  window focus does not fetch the list. A message mentions at most 20 skills: at that
   limit, the picker offers only the skills already picked, and each request
   sends only the first 20 (`lib/chat/mentions.ts:requestMentions`). The query
   is the whole word, from the `@` through the caret to the next whitespace.
