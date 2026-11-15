@@ -132,7 +132,7 @@ const IDLE_STATUS: ChatSessionStatus = {
   current_stream: null,
   has_active_subagents: false,
   has_startable_input: false,
-  pending_approval_ids: [],
+  approvals_version: "1",
   latest_response_id: 2,
 };
 let chatStatus = IDLE_STATUS;
@@ -519,51 +519,64 @@ function awaitToolApproval() {
     ],
   });
   store.updateSessionMessageTree("session", tree);
-  chatStatus = { ...IDLE_STATUS, pending_approval_ids: ["approval-1"] };
 }
 
-test.each(["input", "streaming"] as const)(
-  "a waiting tool approval keeps the %s draft and points at its card",
-  async (chatState) => {
-    useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
-    const warning = jest.spyOn(toast, "warning");
-    awaitToolApproval();
-    const user = setupUser();
-    const inputProps = props(chatState);
-    render(<ChatInput {...inputProps} />);
-    const textbox = screen.getByRole("textbox", { name: "Message input" });
+/** The server refuses new input while a reply waits for an approval. */
+function refuseForApproval(url: RequestInfo | URL, init?: RequestInit) {
+  return init?.method === "POST"
+    ? new Response(
+        JSON.stringify({
+          error_code: APPROVAL_PENDING_ERROR_CODE,
+          detail: "Approve or reject the pending tool calls",
+        }),
+        { status: 409 }
+      )
+    : readResponse(url);
+}
 
-    await user.click(textbox);
-    await user.keyboard("{Enter}");
+test("a waiting card leaves the send to the server", async () => {
+  awaitToolApproval();
+  const user = setupUser();
+  const inputProps = props("input");
+  render(<ChatInput {...inputProps} />);
 
-    expect(inputProps.onSubmit).not.toHaveBeenCalled();
-    expect(textbox).toHaveTextContent("Keep this draft");
-    expect(mockClearDraft).not.toHaveBeenCalled();
-    expect(
-      fetchSpy.mock.calls.some(([, init]) => init?.method === "POST")
-    ).toBe(false);
-    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
-    expect(warning).toHaveBeenCalledWith(
-      "Approve or reject the pending tool calls first."
-    );
-  }
-);
+  await user.click(screen.getByRole("textbox", { name: "Message input" }));
+  await user.keyboard("{Enter}");
 
-test("a server refusal for a waiting approval returns the text to the composer", async () => {
+  expect(inputProps.onSubmit).toHaveBeenCalledWith("Keep this draft");
+});
+
+test("a server refusal for a waiting approval keeps the draft and points at its card", async () => {
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  const warning = jest.spyOn(toast, "warning");
+  awaitToolApproval();
+  fetchSpy.mockImplementation(async (url, init) =>
+    refuseForApproval(url, init)
+  );
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} />);
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+
+  await user.click(textbox);
+  await user.keyboard("{Enter}");
+
+  await waitFor(() =>
+    expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1")
+  );
+  expect(textbox).toHaveTextContent("Keep this draft");
+  expect(warning).toHaveBeenCalledWith(
+    "Approve or reject the pending tool calls first."
+  );
+  expect(fetchSettledChatSession).not.toHaveBeenCalled();
+});
+
+test("a server refusal for an approval this tab does not show loads the server's cards", async () => {
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const warning = jest.spyOn(toast, "warning");
   const error = jest.spyOn(toast, "error");
   const user = setupUser();
   fetchSpy.mockImplementation(async (url, init) =>
-    init?.method === "POST"
-      ? new Response(
-          JSON.stringify({
-            error_code: APPROVAL_PENDING_ERROR_CODE,
-            detail: "Approve or reject the pending tool calls",
-          }),
-          { status: 409 }
-        )
-      : readResponse(url)
+    refuseForApproval(url, init)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -576,8 +589,9 @@ test("a server refusal for a waiting approval returns the text to the composer",
     "Approve or reject the pending tool calls first."
   );
   expect(error).not.toHaveBeenCalled();
-  // This tab has no card for the other tab's turn.
+  // This tab has no card for the other tab's turn, so it loads the session.
   expect(useToolApprovalUi.getState().nudge).toBeNull();
+  await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
 });
 
 test("a queued message waits for the chat's tool selection to save", async () => {
@@ -675,7 +689,7 @@ test.each([true, false])(
                 current_stream: null,
                 has_active_subagents: false,
                 has_startable_input: startable,
-                pending_approval_ids: [],
+                approvals_version: "1",
                 latest_response_id: 2,
               })
             )
@@ -736,7 +750,7 @@ test("a turn found by a readiness check during completion loads once the chat is
             current_stream: null,
             has_active_subagents: false,
             has_startable_input: false,
-            pending_approval_ids: [],
+            approvals_version: "1",
             latest_response_id: latestResponseId,
           })
         )
@@ -1151,7 +1165,7 @@ test("Stop subagents interrupts background work and refreshes the status", async
           current_stream: null,
           has_active_subagents: active,
           has_startable_input: false,
-          pending_approval_ids: [],
+          approvals_version: "1",
           latest_response_id: 2,
         })
       );
@@ -1175,24 +1189,33 @@ test("Stop subagents interrupts background work and refreshes the status", async
   ).toHaveLength(1);
 });
 
-describe("open approval requests in the status", () => {
-  test("an idle chat loads a background agent's request that it does not show", async () => {
-    chatStatus = { ...IDLE_STATUS, pending_approval_ids: ["agent-approval"] };
-    render(<ChatInput {...props("input")} initialMessage="" />);
+describe("approvals version in the status", () => {
+  test("an idle chat reloads only when the version changes after its first read", async () => {
+    await act(async () => {
+      await mutate(() => true, undefined, { revalidate: false });
+    });
+    const statusReads = () =>
+      fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/status"))
+        .length;
+    render(<ChatInput {...props("input")} initialMessage="" />, {
+      swrConfig: { provider: undefined },
+    });
+    await waitFor(() => expect(statusReads()).toBe(1));
 
-    await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
-  });
-
-  test("an idle chat that shows every open request does not reload", async () => {
-    awaitToolApproval();
-    render(<ChatInput {...props("input")} initialMessage="" />);
-
-    await waitFor(() =>
-      expect(
-        fetchSpy.mock.calls.some(([url]) => String(url).endsWith("/status"))
-      ).toBe(true)
-    );
-    await act(async () => {});
+    // The same version again: the chat already shows every request.
+    await act(async () => {
+      await mutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    expect(statusReads()).toBe(2);
     expect(fetchSettledChatSession).not.toHaveBeenCalled();
+
+    // A background agent opened or resolved a request.
+    chatStatus = { ...IDLE_STATUS, approvals_version: "2" };
+    await act(async () => {
+      await mutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    await waitFor(() =>
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(1)
+    );
   });
 });

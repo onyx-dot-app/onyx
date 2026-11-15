@@ -8,7 +8,9 @@ import { getModelIcon } from "@/lib/languageModels/utils";
 import type { MultiModelResponse } from "@/app/app/message/types";
 import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
-import { followApprovalContinuation } from "@/lib/chat/settleChatSession";
+import { followChatStream } from "@/lib/chat/settleChatSession";
+import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
+import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
@@ -52,19 +54,19 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
     requestAnimationFrame(() => setShaking(true));
   }, [nudge]);
 
-  // The decided status shows at once; the resolution packet then confirms it.
-  // The last decision of a stopped wait starts the response's continuation. A
-  // background subagent resumes on its own, so its decision starts none.
+  // The decided status shows until the resolution packet confirms it. The
+  // client follows the stream that the server names as the continuation.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
+    let continuation: ChatStream | null = null;
     try {
-      recordStatus(
+      const response = await postChatApprovalDecision(
         request.approval_id,
-        decidedStatus(
-          await postChatApprovalDecision(request.approval_id, decision)
-        )
+        decision
       );
+      recordStatus(request.approval_id, decidedStatus(response));
+      continuation = response.continuation;
     } catch (cause) {
       // 409 or 404: the request no longer waits for a decision.
       if (
@@ -74,9 +76,14 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
         throw cause;
       }
       recordStatus(request.approval_id, "closed");
+      // Another decision can have started the continuation.
+      if (sessionId !== null) {
+        const status = await readChatSessionStatus(sessionId);
+        if (status.is_processing) continuation = status.current_stream;
+      }
     }
-    if (sessionId !== null && request.agent_name === null)
-      followApprovalContinuation(sessionId, tReadiness("checkFailed"));
+    if (sessionId !== null && continuation)
+      followChatStream(sessionId, continuation, tReadiness("checkFailed"));
   }
 
   const agentRequest =

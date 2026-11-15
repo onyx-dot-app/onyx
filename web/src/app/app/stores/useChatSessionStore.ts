@@ -5,6 +5,7 @@ import {
   Message,
   ChatSessionSharedStatus,
   BackendChatSession,
+  ChatStream,
   FeedbackType,
 } from "@/app/app/types";
 import {
@@ -36,7 +37,7 @@ interface ChatSessionData {
   chatSessionSharedStatus: ChatSessionSharedStatus;
   selectedNodeIdForDocDisplay: number | null; // should be the node ID, not the message ID
   abortController: AbortController;
-  sendAcknowledged?: Promise<number | null>;
+  sendAcknowledged?: Promise<ChatStream | null>;
   // Resolves after the reader applies its final packets and message state.
   readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;

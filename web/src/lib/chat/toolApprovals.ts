@@ -8,7 +8,6 @@ import {
 } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
-  getLatestTurn,
   type MessageTreeState,
 } from "@/app/app/services/messageTree";
 import { getMultiModelChildren } from "@/app/app/message/multiModel";
@@ -152,7 +151,7 @@ export function toolApprovalStatus(
 }
 
 /** A request that waits for a decision, and the response that holds it. */
-export interface WaitingToolApproval {
+interface WaitingToolApproval {
   turnIndex: number;
   request: ToolApprovalRequest;
   response: Message;
@@ -197,7 +196,7 @@ export function readWaitingToolApprovals(
   return waiting;
 }
 
-export type SectionEntry =
+type SectionEntry =
   | { kind: "display"; turnIndex: number; group: GroupedPacket }
   | { kind: "approval"; turnIndex: number; approval: ToolApproval };
 
@@ -279,28 +278,3 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   clearNudge: (seq) =>
     set((state) => (state.nudge?.seq === seq ? { nudge: null } : {})),
 }));
-
-/**
- * The first request of the latest turn that still waits for this user and
- * blocks a send. A background subagent's request does not block one.
- */
-export function findPendingToolApprovalId(
-  tree: MessageTreeState | undefined
-): string | null {
-  if (!tree) return null;
-  const { localStatuses } = useToolApprovalUi.getState();
-  for (const response of getLatestTurn(tree)) {
-    const { entries, stopped } = readToolApprovals(response.packets);
-    const pending = entries.find(
-      (entry) =>
-        entry.request.agent_name === null &&
-        toolApprovalStatus(
-          entry,
-          localStatuses.get(entry.request.approval_id),
-          stopped
-        ) === "pending"
-    );
-    if (pending) return pending.request.approval_id;
-  }
-  return null;
-}

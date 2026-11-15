@@ -2,6 +2,7 @@ import { ChatSessionSharedStatus } from "@/app/app/types";
 import type {
   BackendChatSession,
   BackendMessage,
+  ChatStream,
   Message,
 } from "@/app/app/types";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
@@ -9,14 +10,14 @@ import { processRawChatHistory, resumeStream } from "@/app/app/services/lib";
 import { type Packet, StopReason } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
-  followApprovalContinuation,
   followChatSession,
+  followChatStream,
   preserveFailedMessages,
   refreshChatSession,
   settleChatSession,
 } from "@/lib/chat/settleChatSession";
 import {
-  findPendingToolApprovalId,
+  readWaitingToolApprovals,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
 import {
@@ -43,6 +44,33 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
 }));
 
 const errorMessage = "Check again";
+
+function stream(streamId: number, responseIds = [streamId]): ChatStream {
+  return { stream_id: streamId, response_ids: responseIds };
+}
+
+/**
+ * Retries an assertion until it passes, like Testing Library's `waitFor`,
+ * which needs a DOM. This suite runs in Node for its streaming fetch.
+ */
+async function waitFor(assertion: () => void, timeoutMs = 3000) {
+  const deadline = Date.now() + timeoutMs;
+  while (true) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      if (Date.now() > deadline) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
+function waitingApprovalIds(): string[] {
+  return readWaitingToolApprovals(
+    useChatSessionStore.getState().sessions.get("session")!.messageTree
+  ).map(({ request }) => request.approval_id);
+}
 
 function approvalRequest(approvalId: string, modelIndex?: number): Packet {
   return {
@@ -106,7 +134,7 @@ function savedMessage(
 
 function savedSession(
   messages: BackendMessage[],
-  active: number | null
+  active: ChatStream | null
 ): BackendChatSession {
   return {
     chat_session_id: "session",
@@ -127,7 +155,7 @@ function savedSession(
       .filter((message) => message.message_type === "assistant")
       .map(() => []),
     is_processing: active !== null,
-    current_stream: active === null ? null : { stream_id: active },
+    current_stream: active,
   };
 }
 
@@ -213,7 +241,7 @@ describe("with stubbed server checks", () => {
   });
 
   test("explicit recovery still waits for a pending send acknowledgement", async () => {
-    const acknowledgement = Promise.withResolvers<number | null>();
+    const acknowledgement = Promise.withResolvers<ChatStream | null>();
     useChatSessionStore.getState().updateSessionData("session", {
       chatState: "unconfirmed",
       sendAcknowledged: acknowledgement.promise,
@@ -221,7 +249,7 @@ describe("with stubbed server checks", () => {
     const recovery = settle("recovery");
     await Promise.resolve();
     expect(waitForChatResponseEnd).not.toHaveBeenCalled();
-    acknowledgement.resolve(42);
+    acknowledgement.resolve(stream(42));
     await recovery;
     expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", 42);
     expect(fetchSettledChatSession).toHaveBeenCalledWith("session");
@@ -491,7 +519,6 @@ describe("with stubbed server checks", () => {
       errorMessage: "network error",
       streamLost: true,
       packets: [
-        approvalRequest(`approval-${nodeId}`),
         { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },
       ],
     });
@@ -511,7 +538,6 @@ describe("with stubbed server checks", () => {
       incognito: true,
       messageTree: tree,
     });
-    expect(findPendingToolApprovalId(tree)).toBe("approval-2");
 
     await settle();
 
@@ -519,8 +545,6 @@ describe("with stubbed server checks", () => {
     expect(settled.chatState).toBe("input");
     expect(settled.messageTree.get(2)?.streamLost).toBeUndefined();
     expect(settled.messageTree.get(3)?.streamLost).toBeUndefined();
-    // The server can still wait for a decision; only its own stop closes cards.
-    expect(findPendingToolApprovalId(settled.messageTree)).toBe("approval-2");
   });
 
   test("an old rejected attempt does not hide the latest saved answer", async () => {
@@ -654,7 +678,7 @@ describe("with a scripted fetch", () => {
     const tree = processRawChatHistory(raw, [[]]);
     const live: Message = {
       ...tree.get(2)!,
-      replayCursor: 7,
+      replay: { streamId: 2, cursor: 7 },
       packets: [
         {
           placement: { turn_index: 0 },
@@ -678,7 +702,7 @@ describe("with a scripted fetch", () => {
     });
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("get-chat-session"))
-        return Response.json(savedSession(raw, 2));
+        return Response.json(savedSession(raw, stream(2)));
       // Leave replay pending; this test covers the tree written before it.
       return new Promise<Response>(() => {});
     });
@@ -688,7 +712,7 @@ describe("with a scripted fetch", () => {
       .sessions.get("session")
       ?.messageTree.get(2);
     expect(refreshed?.packets).toBe(live.packets);
-    expect(refreshed?.replayCursor).toBe(7);
+    expect(refreshed?.replay).toEqual({ streamId: 2, cursor: 7 });
   });
 
   test("refresh replays a running multi-model turn into each answer", async () => {
@@ -701,7 +725,8 @@ describe("with a scripted fetch", () => {
         model_display_name: "Second",
       },
     ];
-    const session = savedSession(raw, 1);
+    // The stream ID is not a message ID; the answers come from its rows.
+    const session = savedSession(raw, stream(901, [2, 3]));
     session.messages[0] = { ...session.messages[0]!, latest_child_message: 3 };
     useChatSessionStore.getState().updateSessionData("session", {
       chatState: "streaming",
@@ -731,21 +756,22 @@ describe("with a scripted fetch", () => {
     jest.mocked(resumeStream).mockImplementation(async function* () {
       yield approvalRequest(1);
       yield approvalRequest(0);
-      yield { stream_id: 1, next_cursor: 2, replay_complete: true };
+      yield { stream_id: 901, next_cursor: 2, replay_complete: true };
       yield stop;
-      yield { stream_id: 1, next_cursor: 3, replay_complete: true };
+      yield { stream_id: 901, next_cursor: 3, replay_complete: true };
     });
 
     await refreshChatSession("session", errorMessage);
 
     const tree = () =>
       useChatSessionStore.getState().sessions.get("session")!.messageTree;
-    for (let tick = 0; tick < 50 && tree().get(1)?.replayCursor !== 3; tick++)
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(tree().get(1)?.replayCursor).toBe(3);
+    await waitFor(() =>
+      expect(tree().get(3)?.replay).toEqual({ streamId: 901, cursor: 3 })
+    );
+    expect(tree().get(2)?.replay).toEqual({ streamId: 901, cursor: 3 });
     expect(resumeStream).toHaveBeenCalledWith(
       "session",
-      1,
+      901,
       0,
       expect.anything()
     );
@@ -765,9 +791,7 @@ describe("with a scripted fetch", () => {
       chatState: "streaming",
       messageTree: tree,
     });
-    const statuses = [
-      { is_processing: true, current_stream: { stream_id: 22 } },
-    ];
+    const statuses = [{ is_processing: true, current_stream: stream(22) }];
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       const status = statuses.shift();
       if (String(input).endsWith("/status") && status)
@@ -802,7 +826,7 @@ describe("with a scripted fetch", () => {
       sessionId: "session",
       controller,
       errorMessage,
-      streamId: 22,
+      stream: stream(22),
       messageMap: tree,
     });
 
@@ -811,8 +835,7 @@ describe("with a scripted fetch", () => {
         .getState()
         .sessions.get("session")!
         .messageTree.get(22);
-    for (let tick = 0; tick < 300 && answer()?.replayCursor !== 3; tick++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(3));
     log.mockRestore();
     expect(resumeStream).toHaveBeenCalledTimes(2);
     expect(resumeStream).toHaveBeenLastCalledWith(
@@ -826,11 +849,7 @@ describe("with a scripted fetch", () => {
       delta("Not acknowledged"),
       approvalRequest("approval"),
     ]);
-    expect(
-      findPendingToolApprovalId(
-        useChatSessionStore.getState().sessions.get("session")!.messageTree
-      )
-    ).toBe("approval");
+    expect(waitingApprovalIds()).toEqual(["approval"]);
   });
 
   test("a lost send stream replays its running response into a reset row", async () => {
@@ -858,12 +877,10 @@ describe("with a scripted fetch", () => {
     store.updateSessionData("session", {
       chatState: "streaming",
       messageTree: tree,
-      sendAcknowledged: Promise.resolve(42),
+      sendAcknowledged: Promise.resolve(stream(42)),
       readerFinished: Promise.resolve(),
     });
-    const statuses = [
-      { is_processing: true, current_stream: { stream_id: 42 } },
-    ];
+    const statuses = [{ is_processing: true, current_stream: stream(42) }];
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       const status = statuses.shift();
       if (String(input).endsWith("/status") && status)
@@ -884,8 +901,7 @@ describe("with a scripted fetch", () => {
         .getState()
         .sessions.get("session")!
         .messageTree.get(42);
-    for (let tick = 0; tick < 300 && answer()?.replayCursor !== 2; tick++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(answer()?.replay?.cursor).toBe(2));
     expect(resumeStream).toHaveBeenCalledWith(
       "session",
       42,
@@ -898,14 +914,10 @@ describe("with a scripted fetch", () => {
       streamLost: undefined,
       packets: [partial, approvalRequest("approval")],
     });
-    expect(
-      findPendingToolApprovalId(
-        useChatSessionStore.getState().sessions.get("session")!.messageTree
-      )
-    ).toBe("approval");
+    expect(waitingApprovalIds()).toEqual(["approval"]);
   });
 
-  describe("after the last approval decision", () => {
+  describe("a continuation the server names", () => {
     const awaitingStop: Packet = {
       placement: { turn_index: 0 },
       obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
@@ -919,38 +931,26 @@ describe("with a scripted fetch", () => {
       },
     };
 
-    /** A response whose stream stopped at an approval wait. */
-    function waitingChat(packets: Packet[]) {
+    test("replays its new stream from cursor 0 into the rows it names", async () => {
       const raw = [
         { ...savedMessage(81, "user", "Question"), latest_child_message: 82 },
         savedMessage(82, "assistant", ""),
       ];
       const tree = processRawChatHistory(raw, [[]]);
-      // The cursor of the stream that stopped never applies to its continuation.
-      tree.set(82, { ...tree.get(82)!, replayCursor: 9, packets });
+      // The cursor of the stream that stopped never applies to another stream.
+      tree.set(82, {
+        ...tree.get(82)!,
+        replay: { streamId: 82, cursor: 9 },
+        packets: [approvalRequest("approval"), awaitingStop],
+      });
       useChatSessionStore.getState().updateSessionData("session", {
         chatState: "input",
         messageTree: tree,
       });
-    }
-
-    test("follows the continuation stream from cursor 0", async () => {
-      waitingChat([approvalRequest("approval"), awaitingStop]);
-      useToolApprovalUi.setState({
-        localStatuses: new Map([["approval", "approved"]]),
-      });
-      const statuses = [
-        { is_processing: true, current_stream: { stream_id: 82 } },
-      ];
       const fetchMock = jest
         .spyOn(global, "fetch")
-        .mockImplementation(async (input) => {
-          const status = statuses.shift();
-          if (String(input).endsWith("/status") && status)
-            return Response.json(status);
-          // Leave later checks pending; this test covers the continuation.
-          return new Promise<Response>(() => {});
-        });
+        // Leave later checks pending; this test covers the continuation.
+        .mockImplementation(() => new Promise<Response>(() => {}));
       const answerText: Packet = {
         placement: { turn_index: 2 },
         obj: { type: "message_delta", content: "Created the issue." },
@@ -958,29 +958,28 @@ describe("with a scripted fetch", () => {
       jest.mocked(resumeStream).mockImplementation(async function* () {
         yield approvalRequest("approval");
         yield resolved;
-        yield { stream_id: 82, next_cursor: 2, replay_complete: true };
+        yield { stream_id: 900, next_cursor: 2, replay_complete: true };
         yield answerText;
-        yield { stream_id: 82, next_cursor: 3, replay_complete: true };
+        yield { stream_id: 900, next_cursor: 3, replay_complete: true };
         await new Promise<never>(() => {});
       });
 
-      followApprovalContinuation("session", errorMessage);
+      // A continuation stream ID is not a message ID.
+      followChatStream("session", stream(900, [82]), errorMessage);
 
       const session = () =>
         useChatSessionStore.getState().sessions.get("session")!;
       expect(session().chatState).toBe("streaming");
-      for (
-        let tick = 0;
-        tick < 300 && session().messageTree.get(82)?.replayCursor !== 3;
-        tick++
-      )
-        await new Promise((resolve) => setTimeout(resolve, 10));
-      expect(fetchMock.mock.calls[0]?.[0]).toEqual(
-        expect.stringContaining("/status")
+      await waitFor(() =>
+        expect(session().messageTree.get(82)?.replay).toEqual({
+          streamId: 900,
+          cursor: 3,
+        })
       );
+      expect(fetchMock).not.toHaveBeenCalled();
       expect(resumeStream).toHaveBeenCalledWith(
         "session",
-        82,
+        900,
         0,
         expect.anything()
       );
@@ -989,27 +988,6 @@ describe("with a scripted fetch", () => {
         resolved,
         answerText,
       ]);
-    });
-
-    test.each([
-      [
-        "another request still waits",
-        [approvalRequest("approval"), approvalRequest("other"), awaitingStop],
-      ],
-      ["the stream still runs", [approvalRequest("approval")]],
-    ])("does nothing while %s", (_, packets) => {
-      waitingChat(packets);
-      useToolApprovalUi.setState({
-        localStatuses: new Map([["approval", "approved"]]),
-      });
-      const fetchMock = jest.spyOn(global, "fetch");
-
-      followApprovalContinuation("session", errorMessage);
-
-      expect(fetchMock).not.toHaveBeenCalled();
-      expect(
-        useChatSessionStore.getState().sessions.get("session")!.chatState
-      ).toBe("input");
     });
   });
 
@@ -1025,7 +1003,7 @@ describe("with a scripted fetch", () => {
       messageTree: tree,
     });
     const statuses = [
-      { is_processing: true, current_stream: { stream_id: 32 } },
+      { is_processing: true, current_stream: stream(32) },
       { is_processing: false, current_stream: null },
     ];
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -1046,14 +1024,13 @@ describe("with a scripted fetch", () => {
       sessionId: "session",
       controller,
       errorMessage,
-      streamId: 32,
+      stream: stream(32),
       messageMap: tree,
     });
 
     const chatState = () =>
       useChatSessionStore.getState().sessions.get("session")!.chatState;
-    for (let tick = 0; tick < 300 && chatState() !== "input"; tick++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(chatState()).toBe("input"));
     log.mockRestore();
     expect(chatState()).toBe("input");
     expect(statuses).toEqual([]);
@@ -1104,7 +1081,7 @@ describe("with a scripted fetch", () => {
         if (url.endsWith("/status"))
           return Response.json({
             is_processing: true,
-            current_stream: { stream_id: streamId },
+            current_stream: stream(streamId),
           });
         const resume = url.includes("resume-stream") && resumes.shift();
         return resume || new Promise<Response>(() => {});
@@ -1117,7 +1094,7 @@ describe("with a scripted fetch", () => {
         sessionId: "session",
         controller,
         errorMessage,
-        streamId,
+        stream: stream(streamId),
         messageMap: tree,
       });
 
@@ -1126,15 +1103,10 @@ describe("with a scripted fetch", () => {
           .getState()
           .sessions.get("session")!
           .messageTree.get(streamId);
-      for (let tick = 0; tick < 300 && answer()?.replayCursor !== 1; tick++)
-        await new Promise((resolve) => setTimeout(resolve, 10));
+      await waitFor(() => expect(answer()?.replay?.cursor).toBe(1));
       log.mockRestore();
       expect(resumes).toEqual([]);
-      expect(
-        findPendingToolApprovalId(
-          useChatSessionStore.getState().sessions.get("session")!.messageTree
-        )
-      ).toBe("approval");
+      expect(waitingApprovalIds()).toEqual(["approval"]);
     }
   );
 
@@ -1160,18 +1132,13 @@ describe("with a scripted fetch", () => {
       sessionId: "session",
       controller,
       errorMessage,
-      streamId: 62,
+      stream: stream(62),
       messageMap: tree,
     });
 
     const session = () =>
       useChatSessionStore.getState().sessions.get("session")!;
-    for (
-      let tick = 0;
-      tick < 300 && session().chatState !== "unconfirmed";
-      tick++
-    )
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(session().chatState).toBe("unconfirmed"));
     log.mockRestore();
     expect(session().chatState).toBe("unconfirmed");
     expect(session().uncaughtError).toEqual({ error: errorMessage });
@@ -1212,11 +1179,11 @@ describe("with a scripted fetch", () => {
       incognito: true,
       chatState: "streaming",
       messageTree: tree,
-      sendAcknowledged: Promise.resolve(72),
+      sendAcknowledged: Promise.resolve(stream(72)),
       readerFinished: Promise.resolve(),
     });
     const statuses = [
-      { is_processing: true, current_stream: { stream_id: 72 } },
+      { is_processing: true, current_stream: stream(72) },
       { is_processing: false, current_stream: null },
     ];
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
@@ -1232,10 +1199,8 @@ describe("with a scripted fetch", () => {
 
     const session = () =>
       useChatSessionStore.getState().sessions.get("session")!;
-    for (let tick = 0; tick < 300 && session().chatState !== "input"; tick++)
-      await new Promise((resolve) => setTimeout(resolve, 10));
+    await waitFor(() => expect(session().chatState).toBe("input"));
     log.mockRestore();
-    expect(session().chatState).toBe("input");
     expect(session().messageTree.get(72)).toMatchObject({
       message: "Partial",
       packets: [partial, localStop],
@@ -1318,7 +1283,7 @@ describe("with a scripted fetch", () => {
         messageTree: local,
         hasOlderMessages: false,
         chatState: "streaming",
-        sendAcknowledged: Promise.resolve(40),
+        sendAcknowledged: Promise.resolve(stream(40)),
         readerFinished: Promise.resolve(),
       });
       jest
@@ -1459,7 +1424,7 @@ describe("with a scripted fetch", () => {
                 savedMessage(1, "user", "Saved"),
                 savedMessage(2, "assistant", ""),
               ],
-              2
+              stream(2)
             )
           )
         );

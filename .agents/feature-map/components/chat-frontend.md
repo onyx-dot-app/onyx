@@ -71,26 +71,30 @@
   server stop with another reason closes the reply's own unresolved cards
   (`lib/chat/toolApprovals.ts:awaitsDecision`) but not a subagent's, which
   waits on its own; a stop that the client adds has no reason and never
-  does. After the last decision on the reply's own cards,
-  `lib/chat/settleChatSession.ts:followApprovalContinuation` follows the new
-  stream that continues the answer, from cursor 0 into the same rows. A
-  subagent's decision starts no stream: the subagent resumes in the
-  background. A subagent's requests and resolutions arrive in the root reply
-  that started it, at its `spawn_agent` or `send_message` card. In an idle
-  chat they arrive through a refresh: `useChatSessionQueue` compares the
-  status's `pending_approval_ids` with the requests the chat shows
-  (`readWaitingToolApprovals`) and calls `refreshChatSession` once for each
-  open set that differs. A suspended turn has no Stop: the user decides each
-  card. Stop shows only while the turn is live; the server then rejects every
+  does. The decision response names the stream that continues the answer
+  in `continuation` (`ToolApprovalCard`). The client does not decide which
+  decision was the last: "Approve for this chat" can also approve sibling
+  requests on the server. When `continuation` is set,
+  `lib/chat/settleChatSession.ts:followChatStream` follows that stream from
+  cursor 0 into the rows that its `response_ids` name. After a 409 or 404
+  decision, the card reads the status once and follows `current_stream`
+  while the server processes it. A subagent's requests and resolutions
+  arrive in the root reply that started it, at its `spawn_agent` or
+  `send_message` card. In an idle chat they arrive through a refresh:
+  `useChatSessionQueue` calls `refreshChatSession` once each time the
+  status's `approvals_version` changes after the first version that the chat
+  reads. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
   open request of the reply, and the record reads "Not approved". A reload
   replays the request and the stop the same way.
   While a reply's own card waits, the timeline header reads "Waiting for your
-  approval", also after a preamble and for parallel tool calls, and the user
-  can type but not send: the composer keeps the draft, scrolls to the card
-  in the region, shakes it and shows a toast
-  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). A subagent's card blocks no
-  send. A 409 `APPROVAL_PENDING` from the server, for example for a turn that
-  another tab started, gets the same treatment.
+  approval", also after a preamble and for parallel tool calls. The server
+  refuses new input with a 409 `APPROVAL_PENDING`; the client does not check
+  first. On that 409 the composer keeps the draft, scrolls to the reply's
+  first waiting card in the region, shakes it and shows a toast
+  (`lib/chat/hooks.ts:useShowPendingApproval`). When the chat shows no such
+  card, for example for a turn that another tab started, the saved session
+  supplies it: a refused send's settlement loads it, and an idle chat
+  refreshes. A subagent's card blocks no send.
   What each decision does is in [[mcp-and-custom-tools]].
 - **A user edits or regenerates** an earlier message. A switcher then moves
   between the versions, and the rest of the chat follows the chosen one. A
@@ -181,7 +185,7 @@ AppInputBar -> useChatController.onSubmit           web/src/hooks/useChatControl
   optimistic user + assistant nodes in the tree
   updateCurrentMessageFIFO                          app/app/services/currentMessageFIFO.ts
     sendMessage -> handleSSEStream -> withoutHeartbeats   app/app/services/lib.tsx
-    FIFO.acknowledged resolves with the stream ID from the ID line
+    FIFO.acknowledged resolves with the stream and its rows from the ID line
   drain loop, one store update per animation frame
     updateSessionMessageTree(frozenSessionId, ...)
   settleChatSession                                 web/src/lib/chat/settleChatSession.ts
@@ -343,17 +347,20 @@ its tests mirror the web cases. Mobile processes all packets again on each
 flush, so it does not reuse call or step objects.
 
 **Resume.** `web/src/hooks/useChatSessionController.ts` loads the session.
-When the response has `current_stream`, Stop can target that stream ID at
-once. `lib/chat/settleChatSession.ts:prepareSavedChat` turns the saved page and
-the local tree into the tree to show and the stream to replay; load and
-`refreshChatSession` both use it. The ID names an assistant node, or the
-user node of a multi-model turn. `lib/chat/settleChatSession.ts:followChatSession`
-calls `resumeStream` with the stream ID and that node's `replayCursor` (0 on a
-fresh page). `prepareSavedChat` keeps a cursor only while the stream's answers
-have no stop: a continuation after approvals can reuse the stream ID, and its
-new stream starts at cursor 0. In a multi-model turn it routes each packet to the answer at
-`placement.model_index`, in `getMultiModelChildren` order, and gives the
-overall stop to every answer. It publishes packets only at each `StreamCursor` line, so the cursor
+When the response has `current_stream`, Stop can target that stream at
+once. `current_stream` is a `ChatStream`: the stream ID and the
+`response_ids` of the rows it writes, in model-index order. The stream ID is
+not a message ID; a continuation after approvals gets a new one. A send's
+acknowledgement gives the same shape. `lib/chat/settleChatSession.ts:prepareSavedChat`
+turns the saved page and the local tree into the tree to show and the stream
+to replay; load, `refreshChatSession` and `followChatStream` use it. Each row
+keeps its `replay` position with the stream ID it belongs to.
+`prepareSavedChat` keeps the local rows only when their `replay` belongs to
+the same stream; other rows reset, and the stream replays from cursor 0.
+`lib/chat/settleChatSession.ts:followChatSession` calls `resumeStream` with
+the stream ID and that cursor. In a multi-model turn it routes each packet to
+the row at `placement.model_index` in `response_ids`, and gives the overall
+stop to every answer. It publishes packets only at each `StreamCursor` line, so the cursor
 and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
@@ -375,13 +382,11 @@ in one of these states, or it stays busy.
 **Settlement.** `web/src/lib/chat/settleChatSession.ts:settleChatSession` is
 the only path back to the `input` state after a send, a Stop or a resume
 ([[#settle-before-input]]). It waits for the send acknowledgement and the
-reader. If the reader ended without a stop, marked its answers
-`streamLost`, or follows an approval continuation, settlement waits one poll
-interval and reads `/status`. When the
-same stream still runs, it attaches a new reader to it through
-`prepareSavedChat` and `followChatSession`: from the stream node's
-`replayCursor`, or from cursor 0 into reset rows when the send stream had no
-cursor. The store keeps the received rows until the replay publishes its first
+reader. If the reader ended without a stop or marked its answers
+`streamLost`, settlement waits one poll interval and reads `/status`. When
+the same stream still runs, it attaches a new reader to it through
+`prepareSavedChat` and `followChatSession`: from the rows' `replay` cursor,
+or from cursor 0 into reset rows when the send stream had no cursor. The store keeps the received rows until the replay publishes its first
 batch, so an unavailable replay loses no output. Only a 404 from
 `resume-stream` passes `streamUnavailable`; settlement then does not reattach
 to that stream, because it has no buffer. A network error, a 5xx, a 429 or an
@@ -592,8 +597,8 @@ up its own branding.
     session's `abortController` and `readerFinished` are still the ones it
     started with, so a late settlement cannot overwrite a newer request;
     session load makes the same check after each await. The send
-    acknowledgement decides what is safe. It resolves with the stream ID on
-    the ID line, or with `null` when the request ends without one (a 4xx
+    acknowledgement decides what is safe. It resolves with the stream (its ID
+    and response rows) on the ID line, or with `null` when the request ends without one (a 4xx
     other than 408, which `app/app/services/lib.tsx:sendMessage` throws as
     `ChatSendRejectedError`, or the usage-limit packet). It rejects only for a
     5xx, 408 or network failure before the ID line; after that only a

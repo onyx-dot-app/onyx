@@ -29,7 +29,6 @@ import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
-import { useToolApprovalSendGuard } from "@/lib/chat/hooks";
 import type {
   ChatSessionQueue,
   ComposedMessage,
@@ -394,15 +393,9 @@ const AppInputBar = React.memo(
       setIsRecording(nextIsRecording);
     }, []);
 
-    const approvalGuard = useToolApprovalSendGuard();
-
     const submitMessage = useCallback(
       (submitted: ComposedMessage) => {
-        if (
-          chatState !== "input" ||
-          !submitted.message.trim() ||
-          approvalGuard.blocksSend()
-        ) {
+        if (chatState !== "input" || !submitted.message.trim()) {
           return;
         }
         // Stop TTS first to prevent overlapping voices.
@@ -410,7 +403,7 @@ const AppInputBar = React.memo(
         onSubmit(submitted);
         clearChatDraft();
       },
-      [chatState, stopTTS, onSubmit, clearChatDraft, approvalGuard]
+      [chatState, stopTTS, onSubmit, clearChatDraft]
     );
 
     const { currentMessageFiles, setCurrentMessageFiles } =
@@ -540,13 +533,7 @@ const AppInputBar = React.memo(
     async function submitPendingMessage(
       delivery: PendingChatMessage["delivery"]
     ) {
-      if (
-        !canSubmitPending ||
-        !hasPendingInput ||
-        disabled ||
-        isClassifying ||
-        approvalGuard.blocksSend()
-      )
+      if (!canSubmitPending || !hasPendingInput || disabled || isClassifying)
         return;
       const sessionId = currentSessionId;
       if (sessionId === null) return;
@@ -600,7 +587,7 @@ const AppInputBar = React.memo(
 
     function interruptWithQueuedMessage(index: number) {
       const pending = queue.messages[index];
-      if (!pending || disabled || approvalGuard.blocksSend()) return;
+      if (!pending || disabled) return;
       stopTTS({ manual: true });
       void queue.interrupt(pending.id);
     }

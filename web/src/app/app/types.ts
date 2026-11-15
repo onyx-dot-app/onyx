@@ -195,8 +195,9 @@ export interface Message {
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
-  // Retained only with this response's packet prefix; never persisted alone.
-  replayCursor?: number;
+  // The replay position in the stream that writes this row. Retained only
+  // with the packet prefix it covers; never persisted alone.
+  replay?: { streamId: number; cursor: number };
   /** This client lost the response's stream; the server may still run it. */
   streamLost?: boolean;
   restoredPacketCount?: number;
@@ -210,6 +211,13 @@ export interface Message {
 
   // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
+}
+
+/** A live stream and the response rows it writes. A multi-model turn lists
+ * its answers in model-index order. The stream ID is not a message ID. */
+export interface ChatStream {
+  stream_id: number;
+  response_ids: number[];
 }
 
 export interface BackendChatSession {
@@ -228,7 +236,7 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
-  current_stream?: { stream_id: number } | null;
+  current_stream?: ChatStream | null;
   is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;

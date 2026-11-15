@@ -46,7 +46,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   awaitsDecision,
-  findPendingToolApprovalId,
   readToolApprovals,
   readWaitingToolApprovals,
   type ToolApproval,
@@ -132,43 +131,29 @@ export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
   }, [entries, localStatuses, stopped]);
 }
 
-export interface ToolApprovalSendGuard {
-  /** Shows the waiting approval and returns true when the open chat has one. */
-  blocksSend: () => boolean;
-  /** Shows the waiting approval after the server refused input. */
-  showPendingApproval: () => void;
-}
-
 /**
- * While a turn waits for a tool approval the user may draft but not send.
- * Callers keep the draft; the guard brings the waiting card into view.
+ * Shows why the server refused input: a reply waits for a tool approval.
+ * Callers keep the draft. The reply's first waiting card comes into view. An
+ * idle chat that shows no such card loads the server's cards; a busy chat
+ * gets them from its reader or its settlement.
  */
-export function useToolApprovalSendGuard(): ToolApprovalSendGuard {
+export function useShowPendingApproval(): () => void {
   const t = useTranslations("chat.input.pendingToolApproval");
-  return useMemo(() => {
-    function pendingApprovalId(): string | null {
-      const { currentSessionId, sessions } = useChatSessionStore.getState();
-      return findPendingToolApprovalId(
-        currentSessionId
-          ? sessions.get(currentSessionId)?.messageTree
-          : undefined
-      );
-    }
-    function show(approvalId: string | null) {
-      if (approvalId !== null)
-        useToolApprovalUi.getState().nudgeApproval(approvalId);
-      toast.warning(t("toast"));
-    }
-    return {
-      blocksSend: () => {
-        const approvalId = pendingApprovalId();
-        if (approvalId === null) return false;
-        show(approvalId);
-        return true;
-      },
-      showPendingApproval: () => show(pendingApprovalId()),
-    };
-  }, [t]);
+  const tReadiness = useTranslations("chat.readiness");
+  return useCallback(() => {
+    toast.warning(t("toast"));
+    const { currentSessionId, sessions } = useChatSessionStore.getState();
+    const session = currentSessionId ? sessions.get(currentSessionId) : null;
+    if (!currentSessionId || !session) return;
+    // A background subagent's request does not block input.
+    const waiting = readWaitingToolApprovals(session.messageTree).find(
+      ({ request }) => request.agent_name === null
+    );
+    if (waiting)
+      useToolApprovalUi.getState().nudgeApproval(waiting.request.approval_id);
+    else if (session.chatState === "input")
+      void refreshChatSession(currentSessionId, tReadiness("checkFailed"));
+  }, [t, tReadiness]);
 }
 
 /**
@@ -232,36 +217,22 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   }, [sessionId, status, idle, checkFailed]);
 
   // An idle chat streams nothing, so a background subagent's request and its
-  // resolution arrive through a refresh. Refresh once per open set that
-  // differs from the requests the chat shows.
-  const openApprovals = useMemo(
-    () => status && [...status.pending_approval_ids].sort().join(" "),
-    [status]
-  );
-  const handledApprovals = useRef<{
+  // resolution arrive through a refresh. The first version a chat reads
+  // matches its load; each later change refreshes once.
+  const approvalsVersion = status?.approvals_version;
+  const seenApprovals = useRef<{
     sessionId: string | null;
-    openApprovals: string | undefined;
-  }>({ sessionId: null, openApprovals: undefined });
+    version: string | undefined;
+  }>({ sessionId: null, version: undefined });
   useEffect(() => {
-    if (!sessionId || openApprovals === undefined || !idle) return;
-    const handled = handledApprovals.current;
-    if (
-      handled.sessionId === sessionId &&
-      handled.openApprovals === openApprovals
-    )
+    if (!sessionId || approvalsVersion === undefined || !idle) return;
+    const seen = seenApprovals.current;
+    if (seen.sessionId === sessionId && seen.version === approvalsVersion)
       return;
-    handledApprovals.current = { sessionId, openApprovals };
-    const tree = useChatSessionStore
-      .getState()
-      .sessions.get(sessionId)?.messageTree;
-    if (!tree) return;
-    const shown = readWaitingToolApprovals(tree)
-      .map((approval) => approval.request.approval_id)
-      .sort()
-      .join(" ");
-    if (shown !== openApprovals)
+    seenApprovals.current = { sessionId, version: approvalsVersion };
+    if (seen.sessionId === sessionId)
       void refreshChatSession(sessionId, checkFailed);
-  }, [sessionId, openApprovals, idle, checkFailed]);
+  }, [sessionId, approvalsVersion, idle, checkFailed]);
 
   // Every turn saves a new response, so a new latest response means a turn
   // may have taken pending input, whoever started it and whether or not this
@@ -288,13 +259,13 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const busy = busyKey !== null && busyKey === pendingKey;
   const hasActiveSubagents = status?.has_active_subagents ?? false;
-  const approvalGuard = useToolApprovalSendGuard();
+  const showPendingApproval = useShowPendingApproval();
 
   return useMemo(() => {
     // Any other 409 means the server already accepted the message.
     function toastPendingFailure(error: unknown, fallback: string) {
       if (isApprovalPendingError(error)) {
-        approvalGuard.showPendingApproval();
+        showPendingApproval();
         return;
       }
       toast.error(
@@ -360,8 +331,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
             ]);
             return true;
           } catch (failure) {
-            if (isApprovalPendingError(failure))
-              approvalGuard.showPendingApproval();
+            if (isApprovalPendingError(failure)) showPendingApproval();
             else toast.error(fetchErrorDetail(failure) ?? t("submitFailed"));
             return false;
           }
@@ -427,7 +397,7 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     mutate,
     t,
-    approvalGuard,
+    showPendingApproval,
   ]);
 }
 

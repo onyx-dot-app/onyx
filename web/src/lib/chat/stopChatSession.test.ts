@@ -132,7 +132,7 @@ test("a rejected send finishes without stopping another session turn", async () 
   await stopChatSession("session", errorMessage);
   await sending;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", null);
+  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
 });
 
 test("a connection failure before admission cannot release input through either completion path", async () => {
@@ -195,7 +195,7 @@ test("a failed Stop can be sent again before the reader finishes", async () => {
   const reader = Promise.withResolvers<void>();
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: reader.promise,
   });
   fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable"));
@@ -226,7 +226,7 @@ test("Stop after the accepted stream ended stops the queued turn that followed i
   // seen that turn yet, so the session still shows the finished stream.
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: Promise.resolve(),
   });
   jest.mocked(waitForChatResponseEnd).mockResolvedValue(43);

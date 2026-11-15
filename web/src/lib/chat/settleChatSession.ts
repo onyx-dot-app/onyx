@@ -1,4 +1,4 @@
-import type { BackendChatSession, Message } from "@/app/app/types";
+import type { BackendChatSession, ChatStream, Message } from "@/app/app/types";
 import { resumeStream } from "@/app/app/services/lib";
 import {
   getLatestMessageChain,
@@ -7,14 +7,8 @@ import {
 } from "@/app/app/services/messageTree";
 import { FetchError } from "@/lib/fetcher";
 import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
-import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { ChatHistoryPage } from "@/lib/chat/types";
-import {
-  type Packet,
-  PacketType,
-  StopReason,
-} from "@/app/app/services/streamingModels";
-import { findPendingToolApprovalId } from "@/lib/chat/toolApprovals";
+import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   CHAT_STATUS_POLL_MS,
@@ -31,22 +25,21 @@ interface SettleChatSessionOptions {
   refreshHistory?: boolean;
   /** Resume returned 404: the stream has no buffer, so it cannot reattach. */
   streamUnavailable?: boolean;
-  /** The stream ended at an approval wait that now has every decision, so
-   * the server continues the response in a new stream. */
-  continuation?: boolean;
 }
 
-/** The answers a live stream writes: its response, or each answer of a
- * multi-model question. */
+/** The rows a stream writes, in model-index order; null when one is missing. */
 function streamResponses(
   tree: Map<number, Message>,
-  streamId: number
+  stream: ChatStream
 ): Message[] | null {
-  const target = getMessageByMessageId(tree, streamId);
-  if (target?.type === "user") return getMultiModelChildren(target, tree);
-  return target?.type === "assistant" || target?.type === "error"
-    ? [target]
-    : null;
+  const responses: Message[] = [];
+  for (const responseId of stream.response_ids) {
+    const response = getMessageByMessageId(tree, responseId);
+    if (response?.type !== "assistant" && response?.type !== "error")
+      return null;
+    responses.push(response);
+  }
+  return responses.length > 0 ? responses : null;
 }
 
 export function preserveFailedMessages(
@@ -96,50 +89,34 @@ export function preserveFailedMessages(
 }
 
 /**
- * Saved history ready to display, with the live response a reader should replay.
- * A retained replay cursor keeps output this browser already received.
+ * Saved history ready to display, with the live stream a reader should replay.
+ * Rows that hold a replay cursor of the same stream keep the output this
+ * browser already received; other rows replay from the stream's start.
  */
 export function prepareSavedChat(
   saved: Map<number, Message>,
   local: Map<number, Message> | undefined,
-  streamId: number | undefined
-) {
-  const target =
-    streamId === undefined ? undefined : getMessageByMessageId(saved, streamId);
-  // A multi-model turn streams under its question; its answers take the output.
-  const responses =
-    streamId === undefined ? null : streamResponses(saved, streamId);
-  if (streamId === undefined || !target || !responses)
-    return { messageTree: saved, replayStreamId: null };
-  // A cursor resumes only a stream that still runs. After a stop, the
-  // response can continue only in a new stream, from cursor 0.
-  const retainedTree =
-    local &&
-    getMessageByMessageId(local, streamId)?.replayCursor !== undefined &&
-    !streamResponses(local, streamId)?.some((response) =>
-      response.packets.some((packet) => packet.obj.type === "stop")
-    )
-      ? local
-      : undefined;
+  stream: ChatStream | null | undefined
+): { messageTree: Map<number, Message>; replayStream: ChatStream | null } {
+  const responses = stream ? streamResponses(saved, stream) : null;
+  if (!stream || !responses) return { messageTree: saved, replayStream: null };
+  const localResponses = local ? streamResponses(local, stream) : null;
+  const retained = localResponses?.every(
+    (response) => response.replay?.streamId === stream.stream_id
+  )
+    ? localResponses
+    : undefined;
   const messageTree = new Map(saved);
-  for (const node of target.type === "user"
-    ? [target, ...responses]
-    : responses) {
-    const retained =
-      retainedTree && node.messageId !== undefined
-        ? getMessageByMessageId(retainedTree, node.messageId)
-        : undefined;
-    if (retained)
+  responses.forEach((node, index) => {
+    const kept = retained?.[index];
+    if (kept)
       messageTree.set(node.nodeId, {
-        ...retained,
+        ...kept,
         nodeId: node.nodeId,
         parentNodeId: node.parentNodeId,
         childrenNodeIds: node.childrenNodeIds,
         latestChildNodeId: node.latestChildNodeId,
       });
-    else if (node === target && target.type === "user")
-      // The question holds the cursor of a multi-model stream.
-      messageTree.set(node.nodeId, { ...node, replayCursor: undefined });
     else
       messageTree.set(node.nodeId, {
         ...node,
@@ -156,10 +133,10 @@ export function prepareSavedChat(
         message: "",
         packets: [],
         packetCount: 0,
-        replayCursor: undefined,
+        replay: undefined,
       });
-  }
-  return { messageTree, replayStreamId: streamId };
+  });
+  return { messageTree, replayStream: stream };
 }
 
 /**
@@ -221,11 +198,11 @@ export function refreshChatSession(
       const current = store.sessions.get(sessionId);
       if (!current || !ownsRefresh()) return;
       const merged = mergeSavedHistory(saved, current);
-      const streamId = saved.current_stream?.stream_id;
-      const { messageTree, replayStreamId } = prepareSavedChat(
+      const stream = saved.current_stream ?? null;
+      const { messageTree, replayStream } = prepareSavedChat(
         merged.messageTree,
         current.messageTree,
-        streamId
+        stream
       );
       const busy = Boolean(saved.is_processing || saved.current_stream);
       store.updateSessionData(sessionId, {
@@ -233,8 +210,7 @@ export function refreshChatSession(
         hasOlderMessages: merged.hasOlderMessages,
         selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
         chatState: busy ? "streaming" : "input",
-        sendAcknowledged:
-          streamId === undefined ? undefined : Promise.resolve(streamId),
+        sendAcknowledged: stream ? Promise.resolve(stream) : undefined,
         readerFinished: undefined,
         regenerationState: null,
         streamingStartTime: busy ? Date.now() : undefined,
@@ -248,7 +224,7 @@ export function refreshChatSession(
           sessionId,
           controller,
           errorMessage,
-          streamId: replayStreamId,
+          stream: replayStream,
           messageMap: messageTree,
         });
     } catch (error) {
@@ -272,7 +248,6 @@ export async function settleChatSession({
   mode = "completion",
   refreshHistory = true,
   streamUnavailable = false,
-  continuation = false,
 }: SettleChatSessionOptions): Promise<void> {
   const session = useChatSessionStore.getState().sessions.get(sessionId);
   const sendAcknowledged = session?.sendAcknowledged;
@@ -287,10 +262,10 @@ export async function settleChatSession({
   };
   if (!ownsSettlement()) return;
   try {
-    let streamId: number | null | undefined;
+    let stream: ChatStream | null | undefined;
     if (sendAcknowledged) {
       try {
-        streamId = await sendAcknowledged;
+        stream = await sendAcknowledged;
       } catch (error) {
         // Explicit recovery checks server state after the original send failed.
         if (mode !== "recovery") throw error;
@@ -302,21 +277,19 @@ export async function settleChatSession({
       if (!ownsSettlement()) return;
     }
     // A reader that lost a running stream reattaches: from its saved cursor,
-    // or from the start into reset rows. A continuation after approvals
-    // replays from the start. The received rows stay on screen until the
-    // replay delivers its first batch.
+    // or from the start into reset rows. The received rows stay on screen
+    // until the replay delivers its first batch.
     const local = useChatSessionStore.getState().sessions.get(sessionId);
     if (
-      typeof streamId === "number" &&
+      stream &&
       !streamUnavailable &&
       local &&
       local.chatState !== "cancelling" &&
-      (continuation ||
-        streamResponses(local.messageTree, streamId)?.some(
-          (response) =>
-            response.streamLost ||
-            !response.packets.some((packet) => packet.obj.type === "stop")
-        ))
+      streamResponses(local.messageTree, stream)?.some(
+        (response) =>
+          response.streamLost ||
+          !response.packets.some((packet) => packet.obj.type === "stop")
+      )
     ) {
       await new Promise<void>((resolve) =>
         setTimeout(resolve, CHAT_STATUS_POLL_MS)
@@ -326,15 +299,15 @@ export async function settleChatSession({
       if (!current || !ownsSettlement()) return;
       if (
         status.is_processing &&
-        status.current_stream?.stream_id === streamId &&
+        status.current_stream?.stream_id === stream.stream_id &&
         current.chatState !== "cancelling"
       ) {
-        const { messageTree, replayStreamId } = prepareSavedChat(
+        const { messageTree, replayStream } = prepareSavedChat(
           current.messageTree,
           current.messageTree,
-          streamId
+          stream
         );
-        if (replayStreamId !== null) {
+        if (replayStream) {
           useChatSessionStore.getState().updateSessionData(sessionId, {
             chatState: "streaming",
             uncaughtError:
@@ -347,14 +320,17 @@ export async function settleChatSession({
             controller,
             errorMessage,
             mode,
-            streamId: replayStreamId,
+            stream: replayStream,
             messageMap: messageTree,
           });
           return;
         }
       }
     }
-    let nextStreamId = await waitForChatResponseEnd(sessionId, streamId);
+    let nextStreamId = await waitForChatResponseEnd(
+      sessionId,
+      stream?.stream_id
+    );
     if (!ownsSettlement()) return;
     // Incognito keeps output locally, so follow execution without replaying history.
     while (nextStreamId != null && session?.incognito) {
@@ -446,91 +422,79 @@ export async function settleChatSession({
   }
 }
 
+// A stream has one replay reader even if navigation and refresh overlap.
+const resumingStreams = new Set<number>();
+
 /**
- * After the last decision on a response that waits for approval, follows the
- * stream that continues it. A reader that still runs needs nothing: its own
- * stream delivers the continuation.
+ * Follows a stream that the server named, such as the continuation of a
+ * response after its approval decisions, from its start into its rows.
  */
-export function followApprovalContinuation(
+export function followChatStream(
   sessionId: string,
+  stream: ChatStream,
   errorMessage: string
 ): void {
   const store = useChatSessionStore.getState();
   const session = store.sessions.get(sessionId);
-  if (!session || session.chatState === "cancelling") return;
-  const tree = session.messageTree;
-  const latest = getLatestMessageChain(tree).at(-1);
-  const question =
-    latest?.parentNodeId == null ? undefined : tree.get(latest.parentNodeId);
-  const streamId =
-    question && getMultiModelChildren(question, tree)
-      ? question.messageId
-      : latest?.messageId;
   if (
-    streamId === undefined ||
-    findPendingToolApprovalId(tree) !== null ||
-    !streamResponses(tree, streamId)?.some((response) => {
-      const last = response.packets.at(-1)?.obj;
-      return (
-        last?.type === PacketType.STOP &&
-        last.stop_reason === StopReason.AWAITING_APPROVAL
-      );
-    })
+    !session ||
+    session.chatState === "cancelling" ||
+    resumingStreams.has(stream.stream_id)
   )
     return;
+  const { messageTree, replayStream } = prepareSavedChat(
+    session.messageTree,
+    session.messageTree,
+    stream
+  );
   // A new reader promise ends the ownership of a settlement that still runs.
   store.updateSessionData(sessionId, {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(streamId),
+    sendAcknowledged: Promise.resolve(stream),
     readerFinished: Promise.resolve(),
     streamingStartTime: Date.now(),
   });
-  void settleChatSession({
+  void followChatSession({
     sessionId,
     controller: session.abortController,
     errorMessage,
-    continuation: true,
+    stream: replayStream,
+    messageMap: messageTree,
   });
 }
-
-// A stream has one replay reader even if navigation and refresh overlap.
-const resumingStreams = new Set<number>();
 
 interface FollowChatSessionOptions {
   sessionId: string;
   controller: AbortController;
   errorMessage: string;
   mode?: "completion" | "recovery";
-  /** The live stream to replay: a response, or the question of a multi-model
-   * turn. Null waits for the server without output. */
-  streamId: number | null;
+  /** The live stream to replay. Null waits for the server without output. */
+  stream: ChatStream | null;
   messageMap: Map<number, Message>;
 }
 
 /** Attach to a turn that runs without this browser's original send request. */
 export async function followChatSession({
   sessionId,
-  streamId,
+  stream,
   messageMap,
   controller,
   errorMessage,
   mode = "completion",
 }: FollowChatSessionOptions): Promise<void> {
-  if (streamId === null) {
+  if (stream === null) {
     await settleChatSession({ sessionId, controller, errorMessage, mode });
     return;
   }
-  const retained = getMessageByMessageId(messageMap, streamId);
-  const responses = streamResponses(messageMap, streamId)?.map((response) => ({
+  const streamId = stream.stream_id;
+  const responses = streamResponses(messageMap, stream)?.map((response) => ({
     ...response,
   }));
-  if (!retained || !responses || resumingStreams.has(streamId)) {
+  if (!responses || resumingStreams.has(streamId)) {
     return;
   }
-  // A multi-model turn streams under its question; packets name their answer.
-  const multiModel = retained.type === "user";
-  // The stream's own row holds the replay cursor.
-  const streamNode = multiModel ? { ...retained } : responses[0]!;
+  // Each answer of a multi-model turn has its model index in the packets.
+  const multiModel = responses.length > 1;
   // Added and deleted in this function only, so an entry can never
   // outlive its tail.
   resumingStreams.add(streamId);
@@ -540,7 +504,7 @@ export async function followChatSession({
   });
   useChatSessionStore.getState().updateSessionData(sessionId, {
     readerFinished,
-    sendAcknowledged: Promise.resolve(streamId),
+    sendAcknowledged: Promise.resolve(stream),
   });
   const accumulated: Packet[][] = responses.map((response) => [
     ...response.packets,
@@ -570,7 +534,9 @@ export async function followChatSession({
     for await (const rawPacket of resumeStream(
       sessionId,
       streamId,
-      streamNode.replayCursor ?? 0,
+      responses[0]!.replay?.streamId === streamId
+        ? responses[0]!.replay.cursor
+        : 0,
       abortController.signal
     )) {
       if (!ownsStream()) {
@@ -587,13 +553,13 @@ export async function followChatSession({
           restoring = !rawPacket.replay_complete;
         }
         // Store content and cursor together, only after a complete batch.
-        streamNode.replayCursor = rawPacket.next_cursor;
+        const replay = { streamId, cursor: rawPacket.next_cursor };
         const nodes: Message[] = responses.map((response, index) => ({
           ...response,
           packets: [...accumulated[index]!],
           packetCount: accumulated[index]!.length,
+          replay,
         }));
-        if (multiModel) nodes.push({ ...streamNode });
         if (restoring) {
           pendingRestore = nodes;
           continue;

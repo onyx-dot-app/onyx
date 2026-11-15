@@ -4,12 +4,9 @@ import {
   StopReason,
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
-import type { Message } from "@/app/app/types";
-import type { MessageTreeState } from "@/app/app/services/messageTree";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import {
   decidedStatus,
-  findPendingToolApprovalId,
   orderApprovalsByTurn,
   readToolApprovals,
   type ToolApproval,
@@ -56,37 +53,6 @@ function stopPacket(stopReason?: StopReason): Packet {
 }
 
 const stop = stopPacket(StopReason.FINISHED);
-
-/** A user question and one response per packet list, as a multi-model turn. */
-function chat(...responses: Packet[][]): MessageTreeState {
-  const responseIds = responses.map((_, index) => index + 2);
-  const question: Message = {
-    nodeId: 1,
-    type: "user",
-    message: "Question",
-    files: [],
-    packets: [],
-    toolCall: null,
-    parentNodeId: null,
-    latestChildNodeId: responseIds[0],
-    childrenNodeIds: responseIds,
-  };
-  return new Map<number, Message>([
-    [1, question],
-    ...responses.map((packets, index): [number, Message] => [
-      index + 2,
-      {
-        nodeId: index + 2,
-        type: "assistant",
-        message: "",
-        files: [],
-        packets,
-        toolCall: null,
-        parentNodeId: 1,
-      },
-    ]),
-  ]);
-}
 
 /** Each request's status in one response, with these local statuses. */
 function statuses(
@@ -171,34 +137,6 @@ describe("toolApprovalStatus", () => {
   });
 });
 
-describe("findPendingToolApprovalId", () => {
-  it("finds a waiting request in any response of the latest turn", () => {
-    expect(
-      findPendingToolApprovalId(
-        chat([request("done"), resolved("done", "approved")], [request("b")])
-      )
-    ).toBe("b");
-  });
-
-  it.each([
-    ["resolved", [request("a"), resolved("a", "rejected")]],
-    ["stopped", [request("a"), stop]],
-  ])("ignores a %s request", (_, packets) => {
-    expect(findPendingToolApprovalId(chat(packets))).toBeNull();
-  });
-
-  it("ignores a background agent's request, which does not block a send", () => {
-    expect(
-      findPendingToolApprovalId(chat([request("a", "Researcher")]))
-    ).toBeNull();
-  });
-
-  it("ignores a request this client decided before its resolution arrived", () => {
-    useToolApprovalUi.setState({ localStatuses: new Map([["a", "approved"]]) });
-    expect(findPendingToolApprovalId(chat([request("a")]))).toBeNull();
-  });
-});
-
 describe("decidedStatus", () => {
   it.each([
     ["APPROVED", "USER", "approved"],
@@ -210,6 +148,7 @@ describe("decidedStatus", () => {
       approval_id: "a",
       decision,
       decided_via: decidedVia,
+      continuation: null,
     };
     expect(decidedStatus(response)).toBe(status);
   });

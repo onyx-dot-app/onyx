@@ -14,12 +14,31 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { followApprovalContinuation } from "@/lib/chat/settleChatSession";
+import { followChatStream } from "@/lib/chat/settleChatSession";
+import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
+import type { ChatSessionStatus } from "@/lib/chat/types";
+import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
 
 jest.mock("@/lib/chat/settleChatSession", () => ({
-  followApprovalContinuation: jest.fn(),
+  followChatStream: jest.fn(),
 }));
+jest.mock("@/lib/chat/sessionReadiness", () => ({
+  readChatSessionStatus: jest.fn(),
+}));
+
+const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
+
+function status(processing: boolean): ChatSessionStatus {
+  return {
+    is_processing: processing,
+    current_stream: processing ? continuation : null,
+    has_active_subagents: false,
+    has_startable_input: false,
+    latest_response_id: 82,
+    approvals_version: "2",
+  };
+}
 
 const copy = messages.common.approvalCard;
 
@@ -64,9 +83,15 @@ function respond(status: number, body: unknown) {
 
 function decided(
   decision: ApprovalDecisionResponse["decision"],
-  decidedVia: ApprovalDecisionResponse["decided_via"] = "USER"
+  decidedVia: ApprovalDecisionResponse["decided_via"] = "USER",
+  next: ChatStream | null = null
 ): ApprovalDecisionResponse {
-  return { approval_id: "approval-1", decision, decided_via: decidedVia };
+  return {
+    approval_id: "approval-1",
+    decision,
+    decided_via: decidedVia,
+    continuation: next,
+  };
 }
 
 async function clickApprove() {
@@ -78,6 +103,8 @@ async function clickApprove() {
 beforeEach(() => {
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   useChatSessionStore.setState({ currentSessionId: "session" });
+  jest.mocked(followChatStream).mockReset();
+  jest.mocked(readChatSessionStatus).mockReset();
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -103,22 +130,61 @@ describe("Background agent request", () => {
       screen.getByText("Researcher wants to run Create issue")
     ).toBeVisible();
   });
+});
+
+describe("Continuation", () => {
+  it.each([
+    ["follows the stream the server names", continuation],
+    ["follows nothing while the server names no stream", null],
+  ] as const)("after a decision, %s", async (_, next) => {
+    respond(200, decided("APPROVED", "USER", next));
+    render(<Harness />);
+
+    await clickApprove();
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(record("approved"))
+    );
+    if (next)
+      expect(followChatStream).toHaveBeenCalledWith(
+        "session",
+        next,
+        expect.any(String)
+      );
+    else expect(followChatStream).not.toHaveBeenCalled();
+    expect(readChatSessionStatus).not.toHaveBeenCalled();
+  });
 
   it.each([
-    ["the reply's own request follows", null, 1],
-    ["a background agent's request does not follow", "Researcher", 0],
+    ["follows the running stream", true],
+    ["follows nothing while the chat is idle", false],
   ] as const)(
-    "after a decision, %s the continuation stream",
-    async (_, agentName, calls) => {
-      respond(200, decided("APPROVED"));
-      render(<Harness agentName={agentName} />);
+    "after a refused decision, reads the status once and %s",
+    async (_, processing) => {
+      jest.mocked(readChatSessionStatus).mockResolvedValue(status(processing));
+      respond(409, { detail: "already decided" });
+      render(<Harness />);
 
       await clickApprove();
 
       await waitFor(() =>
-        expect(screen.getByRole("status")).toHaveTextContent(record("approved"))
+        expect(screen.getByRole("status")).toHaveTextContent(record("closed"))
       );
-      expect(followApprovalContinuation).toHaveBeenCalledTimes(calls);
+      await waitFor(() =>
+        expect(readChatSessionStatus).toHaveBeenCalledWith("session")
+      );
+      expect(readChatSessionStatus).toHaveBeenCalledTimes(1);
+      // Lets the decision handler finish after the status read.
+      await act(async () => {});
+      if (processing)
+        await waitFor(() =>
+          expect(followChatStream).toHaveBeenCalledWith(
+            "session",
+            continuation,
+            expect.any(String)
+          )
+        );
+      else expect(followChatStream).not.toHaveBeenCalled();
     }
   );
 });
@@ -159,8 +225,9 @@ describe("Decision outcomes", () => {
 
   it.each([409, 404])(
     "closes the request without the raw detail for a %s response",
-    async (status) => {
-      respond(status, { detail: "raw backend detail" });
+    async (code) => {
+      jest.mocked(readChatSessionStatus).mockResolvedValue(status(false));
+      respond(code, { detail: "raw backend detail" });
       render(<Harness />);
 
       await clickApprove();
