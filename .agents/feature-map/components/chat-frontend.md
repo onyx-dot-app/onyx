@@ -429,9 +429,10 @@ settlement merge saved pages through one function that keeps local failed
 turns and remaps the selected response.
 After a resume, a Stop, an error or a failed save it also reloads saved
 history. `preserveFailedMessages` keeps a local error unless the saved row's
-`response_status` is `complete`, `limit` or `cancelled` (text or files when
-the field is absent). It keeps the local `streamLost` mark only while the
-saved row is `running` or `suspended`. After a clean send, the streamed tree stays. Settlement
+`response_status` is `complete`, `limit`, `cancelled` or `suspended` (text
+or files when the field is absent), so a parked answer shows its saved
+waiting requests. It keeps the local `streamLost` mark only while the saved
+row is `running`. After a clean send, the streamed tree stays. Settlement
 never reloads history for an incognito session, in either record mode; on a
 reload or recovery it only adds a stop packet to each answer of the latest
 turn (`getLatestTurn`) that has none, and clears their `streamLost` marks. A failed or timed-out (10 s) readiness request sets `unconfirmed`.

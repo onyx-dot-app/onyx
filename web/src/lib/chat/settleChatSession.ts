@@ -56,14 +56,16 @@ export function preserveFailedMessages(
       if (node.nodeId === latest?.nodeId) return local;
       continue;
     }
-    // A reserved row can contain fallback text without a saved execution outcome.
+    // A reserved row can contain fallback text without a saved execution
+    // outcome. A parked answer's saved packets hold its waiting requests.
     const hasSavedAnswer =
       savedNode.type === "assistant" &&
       (savedNode.responseStatus === undefined
         ? Boolean(savedNode.message || savedNode.files.length > 0)
         : savedNode.responseStatus === "complete" ||
           savedNode.responseStatus === "limit" ||
-          savedNode.responseStatus === "cancelled");
+          savedNode.responseStatus === "cancelled" ||
+          savedNode.responseStatus === "suspended");
     if (savedNode.type === "error" || hasSavedAnswer) {
       continue;
     }
@@ -79,10 +81,7 @@ export function preserveFailedMessages(
       packets: node.packets,
       packetCount: node.packetCount,
       // A finished run waits for nothing, so its local stop is real.
-      streamLost:
-        node.streamLost &&
-        (savedNode.responseStatus === "running" ||
-          savedNode.responseStatus === "suspended"),
+      streamLost: node.streamLost && savedNode.responseStatus === "running",
     });
   }
   return saved;

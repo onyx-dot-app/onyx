@@ -370,7 +370,10 @@ describe("with stubbed server checks", () => {
       text: "Response was terminated prior to completion, try regenerating.",
       status,
       recover:
-        status === "complete" || status === "limit" || status === "cancelled",
+        status === "complete" ||
+        status === "limit" ||
+        status === "cancelled" ||
+        status === "suspended",
     })),
   ] as const)(
     "recovery prefers successful saved answers and retains unresolved errors ($code, $savedType, $status, '$text')",
@@ -1439,8 +1442,37 @@ describe("with a scripted fetch", () => {
     };
 
     expect(merged("running").get(2)?.streamLost).toBe(true);
-    expect(merged("suspended").get(2)?.streamLost).toBe(true);
     expect(merged("error").get(2)?.streamLost).toBe(false);
+  });
+
+  test("a parked answer's saved waiting request replaces a failed local prefix", () => {
+    const raw = [
+      { ...savedMessage(1, "user", "Question"), latest_child_message: 2 },
+      savedMessage(2, "assistant", ""),
+    ];
+    // The send stream dropped before the request arrived.
+    const local = processRawChatHistory(raw, [[]]);
+    local.set(2, {
+      ...local.get(2)!,
+      type: "error",
+      errorMessage: "network error",
+      streamLost: true,
+      packets: [],
+    });
+    const saved = processRawChatHistory(raw, [[]]);
+    saved.set(2, {
+      ...saved.get(2)!,
+      responseStatus: "suspended",
+      packets: [approvalRequest("approval")],
+    });
+
+    const merged = preserveFailedMessages(saved, local);
+
+    expect(merged.get(2)).toMatchObject({
+      type: "assistant",
+      packets: [approvalRequest("approval")],
+    });
+    expect(readWaitingToolApprovals(merged)).toHaveLength(1);
   });
 
   test.each(["completion", "refresh"])(
