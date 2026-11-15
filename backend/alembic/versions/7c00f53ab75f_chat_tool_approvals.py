@@ -12,7 +12,7 @@ show it. Tools of Craft servers in a tenant that uses Craft keep their Craft
 policies. Existing workspace policies are kept.
 
 Revision ID: 7c00f53ab75f
-Revises: 414dfccc5e24
+Revises: c4e8a1f2b7d9
 Create Date: 2026-11-12 22:26:46.202126
 
 """
@@ -30,7 +30,7 @@ logger = logging.getLogger("alembic.runtime.migration")
 
 # revision identifiers, used by Alembic.
 revision = "7c00f53ab75f"
-down_revision = "414dfccc5e24"
+down_revision = "c4e8a1f2b7d9"
 branch_labels = None
 depends_on = None
 

@@ -18,7 +18,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
 from tests.integration.common_utils.reset import downgrade_postgres, upgrade_postgres
 
-PREVIOUS_REVISION = "414dfccc5e24"
+PREVIOUS_REVISION = "c4e8a1f2b7d9"
 
 
 @pytest.fixture(scope="module")
