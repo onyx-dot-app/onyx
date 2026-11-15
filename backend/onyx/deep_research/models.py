@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from onyx.context.search.models import SearchDoc
 from onyx.file_store.models import FileToolMetadata
 from onyx.llm.models import ReasoningEffort
+from onyx.tools.file_snapshot import SavedContextFiles
 from onyx.tools.tool_implementations.search.models import SearchContext
 
 
@@ -49,6 +50,8 @@ class DeepResearchFeatureState(BaseModel):
     reasoning_effort: ReasoningEffort
     file_metadata: dict[str, FileToolMetadata] | None
     skip_clarification: bool
+    request_context: str | None = None
+    context_files: SavedContextFiles | None = None
     elapsed_seconds: float
     citation_mapping: dict[int, SearchDoc]
 

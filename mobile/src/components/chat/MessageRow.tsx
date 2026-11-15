@@ -87,6 +87,7 @@ function AssistantMessage({
   const {
     processed,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
@@ -154,6 +155,7 @@ function AssistantMessage({
         generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
+        codeModeWorking={codeModeWorking}
       />
       {/* Images from every image generation step lead the answer. */}
       {generatedImages.length > 0 ? (
@@ -246,6 +248,8 @@ function MessageRowComponent({
 }) {
   if (node.type === "user") return <UserMessage node={node} />;
   if (node.type === "error") return <ErrorMessage node={node} />;
+  // The follow-up answer after it renders the agents' results.
+  if (node.type === "agent_results") return null;
   return <AssistantMessage node={node} agent={agent} />;
 }
 

@@ -118,3 +118,79 @@ def test_citation_results_do_not_change_prompt_prefix(
         assert REQUIRE_CITATION_GUIDANCE.strip() not in prompts[1].custom_prompt.text
     assert prompts[1].reminder is not None
     assert prompts[1].reminder.text.count(REQUIRE_CITATION_GUIDANCE.strip()) == 1
+
+
+def test_followup_preserves_complete_prefix_with_project_text_and_images() -> None:
+    from onyx.file_store.models import ChatFileType, ChatLoadedFile
+    from onyx.llm.interfaces import LLMConfig
+    from onyx.llm.models import ImageContentPart, TextContent
+
+    image = ChatLoadedFile(
+        file_id="project-image",
+        filename="project.png",
+        content=(
+            b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        ),
+        file_type=ChatFileType.IMAGE,
+        content_text=None,
+        token_count=100,
+    )
+    files = ExtractedContextFiles(
+        file_texts=["Project evidence"],
+        image_files=[image],
+        use_as_search_filter=False,
+        total_token_count=116,
+        uncapped_token_count=116,
+        file_metadata=[],
+    )
+    config = LLMConfig(
+        model_provider="anthropic",
+        model_name="claude-haiku-4-5",
+        temperature=0,
+        max_input_tokens=200_000,
+        supports_images=True,
+    )
+    history: list[Message] = [
+        UserMessage(content="First question"),
+        AssistantMessage(content=[TextContent(text="Checking evidence")]),
+        ToolResultMessage(
+            tool_call_id="search", tool_name="search", content="Original evidence"
+        ),
+    ]
+
+    def assemble(messages: list[Message], request_context: str) -> list[Message]:
+        return prepare_prompt(
+            messages,
+            system_prompt=SystemMessage(content="System"),
+            user_info_prompt=SystemMessage(content="User info"),
+            custom_agent_prompt=UserMessage(content="Agent instructions"),
+            context_files=files,
+            request_context_message=UserMessage(
+                content=request_context,
+                cacheable=True,
+                metadata=PromptMetadata(should_cache=True),
+            ),
+            reminder_message=None,
+            token_counter=len,
+            llm_config=config,
+        )
+
+    first = assemble(history, "First request context")
+    followup = assemble(
+        [
+            *history,
+            AssistantMessage(content=[TextContent(text="Answer")]),
+            UserMessage(content="Follow-up question"),
+        ],
+        "Changed request context",
+    )
+    assert first[:-1] == followup[: len(first) - 1]
+    assert all(message.cacheable for message in first[:-1])
+    assert not first[-1].cacheable
+    assert not followup[-1].cacheable
+    assert first[-1].text == "First request context"
+    project = first[3]
+    assert isinstance(project, UserMessage) and isinstance(project.content, list)
+    assert sum(isinstance(part, ImageContentPart) for part in project.content) == 1
+    assert any(message.text == "Original evidence" for message in followup)
+    assert prompt_metadata(history[0]).image_files is None

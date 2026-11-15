@@ -1082,6 +1082,8 @@ class OpencodeServeClient:
     # Cold-pod retry tunables — short window, total worst-case ~1.5s.
     _COLD_POD_RETRIES = 3
     _COLD_POD_BASE_DELAY = 0.25
+    # Each read-timeout retry costs a full read timeout, so allow only one.
+    _READ_TIMEOUT_RETRIES = 1
 
     def _http_with_cold_pod_retry(
         self,
@@ -1089,6 +1091,7 @@ class OpencodeServeClient:
         path: str,
         *,
         idempotent: bool = False,
+        retry_read_timeout: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
         """``self._http.request`` with bounded retries for transient
@@ -1106,6 +1109,10 @@ class OpencodeServeClient:
         (e.g. ``POST /session``) can create duplicate state — exactly the
         orphan-session bug this transport was designed to avoid.
 
+        ``ReadTimeout`` is retried once, only when both ``idempotent`` and
+        ``retry_read_timeout`` are set: the server may still complete the
+        first request, and each retry costs a full read timeout.
+
         Never retries HTTP error responses — those are application-level
         signals the caller must handle.
         """
@@ -1114,7 +1121,10 @@ class OpencodeServeClient:
             if idempotent
             else (httpx.ConnectError,)
         )
+        if idempotent and retry_read_timeout:
+            retryable = (*retryable, httpx.ReadTimeout)
         last_exc: BaseException | None = None
+        read_timeout_retries = 0
         for attempt in range(self._COLD_POD_RETRIES + 1):
             try:
                 return self._http.request(method, path, **kwargs)
@@ -1122,6 +1132,10 @@ class OpencodeServeClient:
                 last_exc = e
                 if attempt == self._COLD_POD_RETRIES:
                     break
+                if isinstance(e, httpx.ReadTimeout):
+                    if read_timeout_retries >= self._READ_TIMEOUT_RETRIES:
+                        break
+                    read_timeout_retries += 1
                 delay = self._COLD_POD_BASE_DELAY * (attempt + 1)
                 logger.info(
                     "[SESSION-LIFECYCLE] cold-pod retry %d/%d for %s %s after %s: %s",
@@ -1142,6 +1156,7 @@ class OpencodeServeClient:
         path: str,
         *,
         idempotent: bool = False,
+        retry_read_timeout: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
         """Unary request with cold-pod retry plus a one-shot password reload
@@ -1150,7 +1165,11 @@ class OpencodeServeClient:
         processing, so the server never saw the body. An unchanged reload is a
         genuine auth failure — return it for the caller to surface."""
         r = self._http_with_cold_pod_retry(
-            method, path, idempotent=idempotent, **kwargs
+            method,
+            path,
+            idempotent=idempotent,
+            retry_read_timeout=retry_read_timeout,
+            **kwargs,
         )
         if r.status_code != 401 or self._reload_password is None:
             return r
@@ -1165,7 +1184,11 @@ class OpencodeServeClient:
         )
         self._apply_password(new_password)
         return self._http_with_cold_pod_retry(
-            method, path, idempotent=idempotent, **kwargs
+            method,
+            path,
+            idempotent=idempotent,
+            retry_read_timeout=retry_read_timeout,
+            **kwargs,
         )
 
     def ensure_session(
@@ -1299,6 +1322,7 @@ class OpencodeServeClient:
             "/instance/dispose",
             params={"directory": directory},
             idempotent=True,
+            retry_read_timeout=True,
         )
         _raise_for_status(r, "instance dispose")
 

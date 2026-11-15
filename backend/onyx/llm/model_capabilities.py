@@ -75,6 +75,20 @@ def get_model_map() -> dict:
     return starting_map
 
 
+def model_requires_auto_tool_choice(model_names: Sequence[str]) -> bool:
+    """Qwen and GLM deployments can reject explicit tool-choice constraints."""
+    return any(
+        family in name.lower() for name in model_names for family in ("qwen", "glm")
+    )
+
+
+def model_prefers_auto_tool_choice(model_names: Sequence[str]) -> bool:
+    """Keep reasoning enabled on Claude and avoid unsupported forced choices."""
+    return model_requires_auto_tool_choice(model_names) or any(
+        "claude" in name.lower() for name in model_names
+    )
+
+
 def _strip_extra_provider_from_model_name(model_name: str) -> str:
     return model_name.split("/")[1] if "/" in model_name else model_name
 

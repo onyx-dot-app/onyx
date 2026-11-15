@@ -3,7 +3,10 @@ import collections.abc
 import concurrent.futures
 import contextvars
 import copy
+import heapq
+import itertools
 import threading
+import time
 import uuid
 from collections import deque
 from collections.abc import Callable, Coroutine, Iterator, MutableMapping, Sequence
@@ -386,6 +389,63 @@ def run_functions_tuples_in_parallel(
     return [result for index, result in results]
 
 
+class BoundedParallelRunner(Generic[R]):
+    """Runs calls on a thread pool with at most ``max_in_flight`` pending, and
+    hands back their results as they finish.
+
+    ``submit`` waits while the window is full and returns the results that
+    freed it. A producer that submits as it reads therefore overlaps its own
+    work with the calls, and holds at most ``max_in_flight`` results. The
+    caller's contextvars (tenant id, log prefix) ride along, as in the rest of
+    this module. Leaving the ``with`` block cancels the calls that have not
+    started and waits for the running ones.
+    """
+
+    def __init__(self, max_workers: int, max_in_flight: int | None = None) -> None:
+        if max_workers < 1:
+            raise ValueError("max_workers must be at least 1")
+        self._executor = ThreadPoolExecutor(max_workers=max_workers)
+        self._max_in_flight = max(max_in_flight or max_workers, 1)
+        self._pending: set[Future[R]] = set()
+
+    def __enter__(self) -> "BoundedParallelRunner[R]":
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        self._executor.shutdown(wait=True, cancel_futures=True)
+
+    def submit(self, func: Callable[..., R], *args: Any) -> list[R]:
+        results: list[R] = []
+        while len(self._pending) >= self._max_in_flight:
+            results.extend(self._collect(block=True))
+        future = cast(
+            Future[R],
+            self._executor.submit(contextvars.copy_context().run, func, *args),
+        )
+        self._pending.add(future)
+        return results
+
+    def ready(self) -> list[R]:
+        """The results of the calls that already finished."""
+        return self._collect(block=False)
+
+    def drain(self) -> Iterator[R]:
+        """Every remaining result, as each call finishes."""
+        while self._pending:
+            yield from self._collect(block=True)
+
+    def _collect(self, block: bool) -> list[R]:
+        if not self._pending:
+            return []
+        done, pending = wait(
+            self._pending,
+            timeout=None if block else 0,
+            return_when=FIRST_COMPLETED,
+        )
+        self._pending = pending
+        return [future.result() for future in done]
+
+
 class FunctionCall(Generic[R]):
     """
     Container for run_functions_in_parallel, fetch the results from the output of
@@ -551,6 +611,65 @@ def start_thread_future[T](
 
     start_thread_with_context(run, name=name, daemon=daemon)
     return result
+
+
+class _Timers:
+    """Callbacks due at a time, run on one daemon thread for the whole process."""
+
+    def __init__(self) -> None:
+        self._ready = threading.Condition()
+        # (due time, id) in due order; a cancelled id has no callback left.
+        self._due: list[tuple[float, int]] = []
+        self._callbacks: dict[int, Callable[[], None]] = {}
+        self._ids = itertools.count()
+        self._thread: threading.Thread | None = None
+
+    def call_later(
+        self, delay: float, callback: Callable[[], None]
+    ) -> Callable[[], None]:
+        """Run `callback` with the caller's context after `delay` seconds; returns
+        a function that cancels it.
+
+        All callbacks share one daemon thread, so a timer costs no thread of its
+        own. Use it for short callbacks such as a watchdog; they run one at a
+        time, and an exception is logged.
+        """
+        context = contextvars.copy_context()
+        with self._ready:
+            timer_id = next(self._ids)
+            self._callbacks[timer_id] = lambda: context.run(callback)
+            heapq.heappush(self._due, (time.monotonic() + delay, timer_id))
+            # A forked child has the parent's thread object, but not the thread.
+            if self._thread is None or not self._thread.is_alive():
+                self._thread = start_thread_with_context(
+                    self._run, name="call-later", daemon=True
+                )
+            self._ready.notify()
+
+        def cancel() -> None:
+            with self._ready:
+                self._callbacks.pop(timer_id, None)
+
+        return cancel
+
+    def _run(self) -> None:
+        while True:
+            with self._ready:
+                while not self._due or self._due[0][0] > time.monotonic():
+                    self._ready.wait(
+                        self._due[0][0] - time.monotonic() if self._due else None
+                    )
+                _, timer_id = heapq.heappop(self._due)
+                callback = self._callbacks.pop(timer_id, None)
+            if callback is None:
+                continue
+            try:
+                callback()
+            except Exception:
+                logger.exception("Scheduled callback failed")
+
+
+call_later = _Timers().call_later
 
 
 class TimeoutThread(threading.Thread, Generic[R]):

@@ -84,26 +84,9 @@ html.onyx-desktop .opal-toast-viewport {
   top: calc(var(--onyx-titlebar-height) + 0.5rem) !important;
 }
 
-html.onyx-desktop .opal-modal-positioner[data-position="center"] {
-  --opal-modal-available-height: calc(
-    100dvh - var(--onyx-titlebar-height) - 2rem
+/* Offset the modal's top below the title bar; the height limit follows. */
+html.onyx-desktop .opal-modal-positioner {
+  --opal-modal-top: calc(
+    var(--onyx-titlebar-height) + var(--opal-modal-gap)
   ) !important;
-}
-
-html.onyx-desktop
-  .opal-modal-positioner[data-position="center"][data-viewport-centered] {
-  top: calc(
-    var(--onyx-titlebar-height) + (100dvh - var(--onyx-titlebar-height)) / 2
-  ) !important;
-}
-
-html.onyx-desktop .opal-modal-positioner[data-position="top"] {
-  --opal-modal-available-height: calc(
-    100dvh - var(--onyx-titlebar-height) - 72px - 1rem
-  ) !important;
-}
-
-html.onyx-desktop
-  .opal-modal-positioner[data-position="top"][data-viewport-centered] {
-  top: calc(var(--onyx-titlebar-height) + 72px) !important;
 }

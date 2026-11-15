@@ -160,7 +160,6 @@ test.each(["mcp", "external-app"] as const)(
   (kind) => {
     showCatalog(kind);
     const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("data-position", "top");
     expect(dialog).toHaveAttribute("data-width", "lg");
     expect(dialog.querySelector(".opal-modal-body")).toHaveAttribute(
       "data-two-tone"

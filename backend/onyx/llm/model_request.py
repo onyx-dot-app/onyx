@@ -6,7 +6,7 @@ import json
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, Field, JsonValue
 
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
@@ -42,6 +42,10 @@ class ToolCall(BaseModel):
 class CacheableMessage(BaseModel):
     # Some providers support prompt caching controls at the message level (passed through via LiteLLM).
     cache_control: dict[str, JsonValue] | None = None
+    # Where a provider that places its own markers (OpenAI's
+    # prompt_cache_breakpoint) ends a cached prefix. Excluded from model_dump;
+    # the LiteLLM wrapper carries it on the serialized message.
+    cache_breakpoint: bool = Field(default=False, exclude=True)
 
 
 class SystemMessage(CacheableMessage):
@@ -130,6 +134,23 @@ def serialize_request(
                 )
                 break
     return messages, cacheable_prefix
+
+
+def merge_leading_system_messages(
+    messages: list[ChatCompletionMessage], cacheable_prefix: int
+) -> tuple[list[ChatCompletionMessage], int]:
+    """Join the leading system messages into one and return the new cacheable
+    prefix length. The prefix is empty when it ended inside the merged block."""
+    contents: list[str] = []
+    for message in messages:
+        if not isinstance(message, SystemMessage):
+            break
+        contents.append(message.content)
+    leading = len(contents)
+    if leading < 2:
+        return messages, cacheable_prefix
+    prefix = cacheable_prefix - (leading - 1) if cacheable_prefix >= leading else 0
+    return [SystemMessage(content="\n\n".join(contents)), *messages[leading:]], prefix
 
 
 def format_provider_message(message: app.Message) -> ChatCompletionMessage:

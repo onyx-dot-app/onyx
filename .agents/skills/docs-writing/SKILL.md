@@ -1,6 +1,6 @@
 ---
 name: "docs-writing"
-description: "Write, rewrite, audit, or review a page of the Onyx customer docs (the Mintlify site in `documentation/`). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
+description: "Write, rewrite, audit, or review a page of the Onyx customer docs (the Mintlify site in `documentation/`). Use for new pages, release refreshes, screenshot updates, connector and provider guides, API guides, docs edits in a feature PR, and docs quality reviews. Covers audience, source-of-truth checks against the onyx repo, ASD-STE100 prose rules, Mintlify page patterns, screenshot capture, and the checks to run before a PR."
 ---
 
 # Onyx docs writing
@@ -15,6 +15,48 @@ or developer who wants to do one thing with the product. Write for that reader, 
 Pick one dominant reader for the page: end user, admin, developer, or operator who deploys Onyx.
 Pick one Diataxis type per page: tutorial, how-to, reference, or explanation. If two readers or two types compete,
 split the page or link out.
+
+### Decide what to include
+
+Use these rules when you add, keep, or cut text. They apply to new pages, feature-PR edits, and audits.
+
+1. **Name the reader and the task first.** Good docs give the knowledge the reader needs for the task, minus what
+   the reader already knows ([Google: Audience](https://developers.google.com/tech-writing/one/audience)).
+2. **Give each section the content its type needs**
+   ([Diataxis](https://diataxis.fr/), [Microsoft: Reference](https://learn.microsoft.com/en-us/style-guide/developer-content/reference-documentation)):
+   - Reference (API, hooks, MCP, env vars, connector fields): the complete contract. This is inputs, outputs, auth,
+     order and timing guarantees, limits, permissions, defaults, and error and failure behavior.
+   - How-to (setup, deployment, configuration): all that the reader needs to complete and verify the task:
+     prerequisites, required permissions and scopes, steps, and checks.
+   - Explanation (overviews, connector behavior): the behavior that sets what the reader expects or decides,
+     for example freshness, deletion and pruning, permission sync, and limits.
+3. **Behavior that the reader can see is not internal.** Freshness, deletion, permissions, limits, retries, and
+   failure handling are part of the product. Only names and steps that the reader cannot see or configure are internal:
+   module names, database tables, queue names
+   ([Microsoft: Reference](https://learn.microsoft.com/en-us/style-guide/developer-content/reference-documentation)).
+4. **Put information where the reader needs it.** Put prerequisites before steps, auth next to the endpoints, and
+   error recovery next to the step that can fail ([Write the Docs: Cumulative](https://www.writethedocs.org/guide/writing/docs-principles/),
+   [minimalism](https://www.instructionaldesign.org/theories/minimalism/)).
+5. **Information that prevents errors comes first.** Keep warnings about data loss, security, and wrong results,
+   and how to recognize and recover from errors ([minimalism](https://www.instructionaldesign.org/theories/minimalism/)).
+6. **Some repetition is correct** ([Write the Docs: ARID](https://www.writethedocs.org/guide/writing/docs-principles/)).
+   Cut a duplicate only if the reader finds the same text at the same point of need. When you merge copies, keep one
+   shared section and link to it. Never delete all copies.
+7. **Keep names consistent and correct** ([Write the Docs: Consistent, Current](https://www.writethedocs.org/guide/writing/docs-principles/)).
+   Do not rename products, editions, or plans (Onyx Cloud, Enterprise Edition). Change the existing edition wording
+   only if the code shows that it is wrong.
+
+Cut a sentence only if it is one of these:
+
+- (a) a duplicate that the reader still finds at the same point of need,
+- (b) wrong, as the code shows,
+- (c) a code-level name (module, table, queue) that the reader does not configure,
+- (d) on an end-user page, a restatement of a visible UI label or tooltip,
+- (e) multi-tenant or test-only material that customers cannot use.
+
+In a feature PR, check the whole page and match its detail. Edit the sentence that the change makes wrong.
+Add the contract, behavior, or error recovery that rules 2 to 5 require, even if the page has none yet.
+Do not add a parallel note. Put a new section where its importance puts it among its siblings.
 
 ### Ground every claim in source truth
 
@@ -78,8 +120,7 @@ Avoid:
 - meta-commentary about the docs or about AI,
 - em dashes (use a period, comma, colon, or parentheses),
 - vague references ("this", "it", "the above") where a section can be read alone,
-- internal implementation detail (module names, Celery queues, tables) unless an admin needs
-  it to operate the product.
+- code-level names (module names, Celery queues, database tables) unless the reader configures them.
 
 Write so that a section quoted alone still answers the reader's question. Name the feature and the page in the sentence,
 not only in the heading.
@@ -136,8 +177,8 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
   `<video className="rounded-image" src="/assets/.../name.mp4" autoPlay muted loop playsInline aria-label="..." />`.
 - Keep the existing path and filename when you replace a screenshot so the MDX does not
   change. Delete the asset file when you delete the image.
-- When a PR changes UI, recapture its screenshots in the same PR. Agents can use Playwright against
-  `http://localhost:3000` with the admin login in the root `AGENTS.md`.
+- When a PR changes UI that a screenshot shows, recapture that screenshot in the same PR.
+  Agents can use Playwright against `http://localhost:3000` with the admin login in the root `AGENTS.md`.
 - Capture Onyx UI shots on a local stack: light theme, 1440x900 viewport at 2x device scale,
   admin user, seeded data that looks real (a connector, an agent, a chat), no personal data.
   Admin forms scroll in an inner container, so grow the viewport instead of `fullPage`.
@@ -146,8 +187,9 @@ Every page must be in `docs.json` or reachable by a `redirects` entry. Removed p
   **Admin Panel → Billing**; never commit it.
 - Vendor-console screenshots (Google Cloud, Atlassian, Slack) stay unless the vendor flow
   changed.
-- Add media only when text cannot show the flow. Every image has alt text that says what it
-  shows.
+- Add a new image only when text cannot show the flow. It shows the full surface at the same
+  framing and scale as the other images on the page, not a cropped control. Every image has alt
+  text that says what it shows.
 
 ## 5. Checks before you open a PR
 
@@ -171,7 +213,7 @@ Also confirm:
 
 ## 6. Review rubric
 
-Score 0 to 2 per row. Publish at 16/20 or higher with no zero.
+Score 0 to 2 per row. Publish at 18/22 or higher with no zero.
 
 | Dimension | 2 means |
 | --- | --- |
@@ -185,6 +227,7 @@ Score 0 to 2 per row. Publish at 16/20 or higher with no zero.
 | Retrievability | Each section stands alone |
 | Maintenance | Evergreen wording; volatile facts (versions, dates) are explicit |
 | Style | STE: short, active, reader-centred, no filler |
+| Fit | Content matches the reader, task, and Diataxis type; contracts, behavior, and error recovery are complete; placement matches the point of need |
 
 ## 7. Full-site audits
 

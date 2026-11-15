@@ -109,7 +109,7 @@ test("shows Skills only to full admins when Craft is available", () => {
     )
   ).toContain("/admin/skills");
   expect(
-    buildItems([Permission.MANAGE_SKILLS], craftFlags, null).map(
+    buildItems([Permission.MANAGE_PLUGINS], craftFlags, null).map(
       (item) => item.link
     )
   ).not.toContain("/admin/skills");

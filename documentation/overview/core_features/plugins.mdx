@@ -93,6 +93,10 @@ Click the actions button in the message bar, then select **Plugins**. Turn a plu
 The agent decides when to call a plugin tool. To guide it, name the plugin or the service in your message. For example:
 "Use DeepWiki to explain how the `onyx-dot-app/onyx` repository handles authentication."
 
+If Chat shows **Tools need credentials**, connect the listed MCP plugins before using them.
+Onyx excludes their tools from the agent until the required credentials are available.
+You can continue chatting with other tools.
+
 In Chat, the agent calls plugin tools without an approval prompt. Check the result in the service after a change.
 
 <Note>

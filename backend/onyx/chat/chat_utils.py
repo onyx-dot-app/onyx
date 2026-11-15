@@ -3,7 +3,6 @@
 import json
 from collections.abc import Callable
 from itertools import groupby
-from typing import TypedDict
 
 from pydantic import JsonValue
 from sqlalchemy.orm import Session
@@ -21,8 +20,9 @@ from onyx.chat.models import (
     ChatHistoryResult,
     MessageRendering,
     PromptMetadata,
+    picked_skill_messages,
 )
-from onyx.chat.prompt_formatting import count_message_tokens, prompt_metadata
+from onyx.chat.prompt_formatting import count_message_tokens
 from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType
 from onyx.db.chat import (
@@ -51,36 +51,17 @@ from onyx.llm.models import (
 )
 from onyx.llm.models import ToolCall as AgentToolCall
 from onyx.prompts.chat_prompts import (
-    ADDITIONAL_CONTEXT_PROMPT,
     TOOL_CALL_RESPONSE_CROSS_MESSAGE,
 )
 from onyx.server.query_and_chat.models import (
     ChatSessionCreationRequest,
 )
+from onyx.tools.tool_implementations.images.models import ImageResult
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 IMAGE_GENERATION_TOOL_NAME = "generate_image"
-
-
-def omit_prior_tool_result_content(messages: list[Message]) -> list[Message]:
-    """Keep saved tool content intact while omitting it from later chat prompts."""
-    return [
-        message.model_copy(
-            update={
-                "metadata": prompt_metadata(message).model_copy(
-                    update={
-                        "omit_tool_result_content": message.tool_name
-                        != IMAGE_GENERATION_TOOL_NAME
-                    }
-                )
-            }
-        )
-        if isinstance(message, ToolResultMessage)
-        else message
-        for message in messages
-    ]
 
 
 def create_chat_session_from_request(
@@ -219,21 +200,13 @@ def convert_chat_history_basic(
     return list(reversed(trimmed_reversed))
 
 
-class _ImageReplay(TypedDict):
-    file_id: str
-    revised_prompt: str
-
-
 def _build_tool_call_response_history_message(
     tool_name: str,
     generated_images: list[dict[str, JsonValue]] | None,
     tool_call_response: str | None,
 ) -> str:
-    if tool_name != IMAGE_GENERATION_TOOL_NAME:
-        return TOOL_CALL_RESPONSE_CROSS_MESSAGE
-
-    if generated_images:
-        llm_image_context: list[_ImageReplay] = []
+    if tool_name == IMAGE_GENERATION_TOOL_NAME and generated_images:
+        llm_image_context: list[dict[str, str]] = []
         for image in generated_images:
             file_id = image.get("file_id")
             revised_prompt = image.get("revised_prompt")
@@ -242,12 +215,12 @@ def _build_tool_call_response_history_message(
                 continue
 
             llm_image_context.append(
-                {
-                    "file_id": file_id,
-                    "revised_prompt": (
+                ImageResult(
+                    file_id=file_id,
+                    revised_prompt=(
                         revised_prompt if isinstance(revised_prompt, str) else ""
                     ),
-                }
+                ).model_dump()
             )
 
         if llm_image_context:
@@ -266,8 +239,10 @@ def _legacy_tool_messages(
 ) -> list[Message]:
     """Reconstruct tool steps for responses saved without response items."""
     messages: list[Message] = []
+    # Saved call order; a call that no tool row ran has no tool_id.
     calls = sorted(
-        message.tool_calls or [], key=lambda call: (call.turn_number, call.tool_id)
+        message.tool_calls or [],
+        key=lambda call: (call.turn_number, call.tab_index, call.id),
     )
     for turn_number, turn in groupby(calls, key=lambda call: call.turn_number):
         records = list(turn)
@@ -301,7 +276,7 @@ def _legacy_tool_messages(
                     id=f"chat:{message.id}:step:{turn_number}:result:{call.tool_call_id}",
                     content=text,
                     tool_call_id=call.tool_call_id,
-                    tool_name="",
+                    tool_name=tool_names.get(call.tool_id, "unknown"),
                     metadata=PromptMetadata(token_count=token_counter(text)),
                 )
             )
@@ -314,7 +289,10 @@ def capture_chat_history(
     token_counter: Callable[[str], int],
     checkpoint: CompactionCheckpoint | None = None,
 ) -> list[ChatHistoryMessage]:
-    """Copy replay data while ORM relationships are available; the caller owns the session."""
+    """Copy replay data while ORM relationships are available; the caller owns the session.
+
+    A question's saved skill messages are read here; `load_message_branch`
+    loads them with the branch."""
     history: list[ChatHistoryMessage] = []
     for message in messages:
         response_messages: list[Message] = []
@@ -340,7 +318,6 @@ def capture_chat_history(
                         if item.rendering is not None
                     },
                 )
-                response_messages = omit_prior_tool_result_content(response_messages)
             else:
                 response_messages = _legacy_tool_messages(
                     message, tool_names, token_counter
@@ -360,6 +337,16 @@ def capture_chat_history(
                 token_count=message.token_count,
                 files=message.files or [],
                 is_clarification=message.is_clarification,
+                # A row that keeps no conversation content keeps no skill
+                # messages; temporary history holds them.
+                skill_messages=picked_skill_messages(
+                    f"chat:{message.id}", message.mentions, message.skill_messages
+                )
+                if message.mentions
+                and record_mode_persists_content(
+                    message.chat_session.incognito_record_mode
+                )
+                else [],
                 response_messages=response_messages,
             )
         )
@@ -374,9 +361,6 @@ def capture_chat_history(
 def convert_chat_history(
     chat_history: list[ChatHistoryMessage],
     files: list[ChatLoadedFile],
-    context_image_files: list[ChatLoadedFile],
-    additional_context: str | None,
-    token_counter: Callable[[str], int],
 ) -> ChatHistoryResult:
     """Load canonical assistant output and attach user files to message history."""
     messages: list[Message] = []
@@ -386,17 +370,7 @@ def convert_chat_history(
     # Create a mapping of file IDs to loaded files for quick lookup
     file_map = {str(f.file_id): f for f in files}
 
-    # Find the index of the last USER message
-    last_user_message_idx = next(
-        (
-            index
-            for index in range(len(chat_history) - 1, -1, -1)
-            if chat_history[index].message_type == MessageType.USER
-        ),
-        None,
-    )
-
-    for idx, chat_message in enumerate(chat_history):
+    for chat_message in chat_history:
         if chat_message.message_type == MessageType.USER:
             input_start = len(messages)
             # Process files attached to this message
@@ -434,33 +408,12 @@ def convert_chat_history(
                 messages.append(ctx.message)
                 all_injected_file_metadata[tool_id] = ctx.tool_metadata
 
-            # Sum token counts from image files (excluding project image files)
+            # Count the images attached to this user message.
             image_token_count = (
                 sum(img.token_count for img in image_files) if image_files else 0
             )
 
-            # Add the user message with image files attached
-            # If this is the last USER message, also include context_image_files
-            # Note: context image file tokens are NOT counted in the token count
-            if idx == last_user_message_idx:
-                if context_image_files:
-                    image_files.extend(context_image_files)
-
-                if additional_context:
-                    messages.append(
-                        UserMessage(
-                            id=f"chat:{chat_message.id}:context",
-                            content=ADDITIONAL_CONTEXT_PROMPT.format(
-                                additional_context=additional_context
-                            ),
-                            metadata=PromptMetadata(
-                                token_count=token_counter(additional_context),
-                                image_files=None,
-                                allow_compaction_cutoff=False,
-                            ),
-                        )
-                    )
-
+            # User attachments remain attached to their original message.
             messages.append(
                 UserMessage(
                     id=f"chat:{chat_message.id}",
@@ -472,9 +425,14 @@ def convert_chat_history(
                     ),
                 )
             )
+            # The SKILL.md of each picked skill follows its question.
+            messages.extend(chat_message.skill_messages)
 
         elif chat_message.message_type == MessageType.ASSISTANT:
             messages.extend(chat_message.response_messages)
+        elif chat_message.message_type == MessageType.AGENT_RESULTS:
+            # Results reach the model as the next response's accepted step inputs.
+            input_start = len(messages)
         else:
             raise ValueError(
                 f"Invalid message type when constructing simple history: {chat_message.message_type}"

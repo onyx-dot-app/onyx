@@ -518,6 +518,27 @@ export class McpOAuthFlow {
     await tryConfirmConnected(false);
   }
 
+  /** Runs an action that opens OAuth in a new tab, signs in there, and waits for the tab to close. */
+  async completeFlowInNewTab(action: () => Promise<void>): Promise<void> {
+    const tabPromise = this.page
+      .context()
+      .waitForEvent("page", { timeout: 15_000 });
+    await action();
+    const tab = await tabPromise;
+    try {
+      await tab.waitForURL(
+        (url) => url.protocol === "https:" || url.protocol === "http:",
+        { timeout: 10_000 }
+      );
+      if (!tab.isClosed() && !this.isOnAppHost(tab.url())) {
+        await new McpOAuthFlow(tab, this.config).performIdpLogin();
+      }
+    } catch (error) {
+      if (!tab.isClosed()) throw error;
+    }
+    if (!tab.isClosed()) await tab.waitForEvent("close", { timeout: 60_000 });
+  }
+
   async connectFromChat(
     plugins: ChatPluginsPopover,
     serverName: string

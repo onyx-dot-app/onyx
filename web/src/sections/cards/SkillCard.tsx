@@ -21,12 +21,15 @@ import {
   SvgUser,
 } from "@opal/icons";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 import { useSettings } from "@/lib/settings/hooks";
 import type {
   CustomSkill,
   SkillExternalAppDependency,
 } from "@/lib/skills/types";
 import { cn } from "@opal/utils";
+import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 
 export type SkillCardSource = "builtin" | "custom";
 
@@ -94,8 +97,16 @@ export default function SkillCard({
   }, [onClick, item]);
 
   const { isAdmin } = useUser();
+  const { isGlobalHolder: canManageOrgSkills } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const isRequired =
     item.source === "custom" && item.skill.installation_policy === "REQUIRED";
+  // Only an organization-wide skill manager can delete a published skill.
+  const canDelete =
+    item.source === "custom" &&
+    (!isRequired || isAdmin) &&
+    (item.skill.public_permission === null || canManageOrgSkills);
 
   const authorTitle =
     item.source === "builtin" ? appName : item.author_email || appName;
@@ -165,6 +176,7 @@ export default function SkillCard({
   return (
     <Tooltip tooltip={tooltip} side="top">
       <Card
+        data-testid="SkillCard"
         onClick={handleClick}
         className="group/SkillCard cursor-pointer"
         disabled={
@@ -260,7 +272,7 @@ export default function SkillCard({
                   aria-label={t("skill.edit.tooltip")}
                   onClick={handleEditClick}
                 />
-                {onDelete && (!isRequired || isAdmin) && (
+                {onDelete && canDelete && (
                   <Button
                     prominence="secondary"
                     variant="danger"
@@ -354,6 +366,15 @@ export default function SkillCard({
             ) : dependency ? (
               <Badge title={t("skill.tags.appSkill.label")} color="info" />
             ) : null}
+            {canEdit && hasUnpublishedChanges(item.skill) && (
+              <Badge
+                title={t("skill.tags.unpublished.label")}
+                color="warning"
+                tooltip={t("skill.tags.unpublished.tooltip", {
+                  number: item.skill.published_version_number ?? 0,
+                })}
+              />
+            )}
             {item.source === "custom" && (
               <Badge
                 title={t(

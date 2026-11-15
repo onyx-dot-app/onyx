@@ -42,9 +42,16 @@ describe("BulkSkillSharingModal", () => {
       screen.getByRole("button", { name: "Apply to 80 skills" })
     ).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Who can access" }));
+    // Publishing is one-way: bulk cannot make skills private.
+    expect(
+      screen.queryByRole("option", { name: "Invited people and groups" })
+    ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("option", { name: "Everyone in the organization" })
     );
+    expect(
+      await screen.findByText("Publishing cannot be undone")
+    ).toBeInTheDocument();
     await user.click(
       screen.getByRole("button", { name: "Apply to 80 skills" })
     );

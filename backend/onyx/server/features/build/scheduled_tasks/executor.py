@@ -638,6 +638,13 @@ def _drive_agent(
                 try:
                     event_stream.close()
                 finally:
-                    # Do not clear a successor's deadline after losing the slot.
-                    if not slot.lost:
-                        session_manager.clear_turn_deadline(sandbox_id, session_id)
+                    try:
+                        # Do not clear a successor's deadline after losing the slot.
+                        if not slot.lost:
+                            session_manager.clear_turn_deadline(sandbox_id, session_id)
+                    finally:
+                        # This worker never deletes the session or terminates the
+                        # sandbox, so nothing else closes this bus. Left open, each
+                        # run keeps an /event stream to opencode serve until the
+                        # worker restarts.
+                        session_manager.close_session_event_bus(sandbox_id, session_id)

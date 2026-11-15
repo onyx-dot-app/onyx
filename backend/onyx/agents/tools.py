@@ -1,6 +1,6 @@
 """Executable tools and their invocation-scoped services."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
@@ -8,17 +8,27 @@ from typing import TYPE_CHECKING, Literal, Protocol
 from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
 
 from onyx.llm.cancellation import CancellationSignal
-from onyx.llm.models import Message, ToolDefinition, ToolResult
+from onyx.llm.models import (
+    Message,
+    ToolCall,
+    ToolDefinition,
+    ToolResult,
+    ToolResultMessage,
+)
 
 if TYPE_CHECKING:
-    from onyx.agents.models import AgentInfo, RunResult, RunState
+    from onyx.agents.models import (
+        AgentInfo,
+        AgentMessageReceipt,
+        MessageDelivery,
+        RunState,
+    )
     from onyx.agents.runtime import Agent
 
 
-DEFAULT_AGENT_WAIT_SECONDS = 60.0
-
-
 class AgentLifetime(str, Enum):
+    """Foreground children share parent cancellation and completion ownership."""
+
     FOREGROUND = "foreground"
     BACKGROUND = "background"
 
@@ -75,10 +85,6 @@ class SpawnResult(BaseModel):
     run_id: str
 
 
-class ChildRunCancelled(RuntimeError):
-    """The awaited child was cancelled; its parent can continue."""
-
-
 class AgentControl(Protocol):
     """Start and observe authorized agent executions."""
 
@@ -95,28 +101,35 @@ class AgentControl(Protocol):
         lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
     ) -> SpawnResult: ...
 
-    def start_run(
+    def send_message(
         self,
         agent_id: str,
         *,
+        message: str,
+        delivery: "Literal[MessageDelivery.SEND, MessageDelivery.QUEUE]" = ...,
         max_steps: int,
-        messages: Sequence[Message],
-        lifetime: AgentLifetime = AgentLifetime.FOREGROUND,
-    ) -> str: ...
-
-    def wait_run(
-        self, run_id: str, *, timeout: float = DEFAULT_AGENT_WAIT_SECONDS
-    ) -> "RunResult | None":
-        """Return completed output, or raise ChildRunCancelled for a cancelled child."""
-        ...
-
-    def cancel_run(self, run_id: str) -> None: ...
+        total_timeout_s: float | None = None,
+    ) -> "AgentMessageReceipt": ...
 
     def add_completion_cleanup(
         self, run_id: str, callback: Callable[[], None]
     ) -> Future[None]: ...
 
-    def discover_children(self) -> list["AgentInfo"]: ...
+    @property
+    def agent_id(self) -> str:
+        """The calling agent."""
+        ...
+
+    def discover_agents(self) -> list["AgentInfo"]:
+        """The visible agent tree, including the root and the caller."""
+        ...
+
+    def interrupt_agent(self, agent_id: str) -> "AgentInfo | None":
+        """Cancel one agent's active run; the run reports no result.
+
+        Returns None for the caller, the root, or an agent that is not visible.
+        """
+        ...
 
 
 class ToolProgress(BaseModel):
@@ -127,6 +140,20 @@ class ToolProgress(BaseModel):
 
 
 ToolUpdate = Callable[[ToolProgress], None]
+
+
+class BeforeToolCallFailed(BaseException):
+    """The run's before_tool_call hook raised for a call that a tool made for the
+    model, such as a program's tool call.
+
+    A BaseException, so that neither the tool's own error handling nor a program
+    can catch it and go on. The tool lets it leave `execute`, and the run fails
+    with `error`, as it does when the hook raises for a direct call.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__(str(error))
+        self.error = error
 
 
 class ToolInvocation:
@@ -145,14 +172,31 @@ class ToolInvocation:
         cancellation: CancellationSignal,
         update: ToolUpdate,
         messages: Sequence[Message] = (),
+        recorded_results: Sequence[ToolResultMessage] = (),
         agents: AgentControl | None = None,
+        trace_metadata: Mapping[str, JsonValue] | None = None,
+        before_call: Callable[[ToolCall], ToolResult | PendingToolInput | None]
+        | None = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
         self.arguments = arguments
         self.cancellation = cancellation
         self.update = update
+        # The model's view of the conversation, after compaction, without result
+        # details. Read only.
         self.messages = messages
+        # Every recorded tool result of the conversation before this call, with
+        # details and without compaction, oldest first: earlier steps, then this
+        # step's completed results in call order. For state derived from the
+        # whole conversation. Read only.
+        self.recorded_results = recorded_results
+        # Attributes of the call's tracing span.
+        self.trace_metadata = trace_metadata
+        # The run's before_tool_call hook, for calls that the tool makes for the
+        # model, such as a program's tool calls; None when the run has no hook.
+        # It raises BeforeToolCallFailed when the hook raises.
+        self.before_call = before_call
         self._agents = agents
 
     @property
@@ -174,6 +218,10 @@ class AgentTool:
 
     Optional merge_arguments combines compatible calls into one execution. Such tools
     must return ToolResult; each original call receives the pooled result.
+
+    A call that a lost execution owner left running runs again on restore, unless
+    interrupted_result is set; then that result is saved as the call's result
+    instead, with status error when it is an error.
     """
 
     def __init__(
@@ -188,12 +236,16 @@ class AgentTool:
             [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
         ]
         | None = None,
+        interrupted_result: ToolResult | None = None,
+        display_name: str | None = None,
     ) -> None:
         self.definition = definition
         self.execute = execute
         self.result_from_children = result_from_children
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
+        self.interrupted_result = interrupted_result
+        self.display_name = display_name
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -203,6 +255,8 @@ class AgentTool:
             result_from_children=self.result_from_children,
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
+            interrupted_result=self.interrupted_result,
+            display_name=self.display_name,
         )
 
     @property

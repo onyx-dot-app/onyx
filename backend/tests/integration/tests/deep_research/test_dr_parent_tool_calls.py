@@ -95,7 +95,9 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
         "intermediate_report",
         Reply(text="Intermediate zebra-linkage findings."),
         conditions=RequestConditions(
-            has_tools=False, has_results_for=[_CHILD_SEARCH_CALL_ID]
+            offers=[SearchTool.NAME, GENERATE_REPORT_TOOL_NAME],
+            tool_choice="none",
+            has_results_for=[_CHILD_SEARCH_CALL_ID],
         ),
     )
     mock_llm.conversation(

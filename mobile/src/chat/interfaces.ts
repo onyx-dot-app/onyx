@@ -1,6 +1,8 @@
 import { Packet } from "./streamingModels";
 
-export type MessageType = "user" | "assistant" | "system" | "error";
+// agent_results is the hidden question node of an automatic follow-up response.
+export type MessageType =
+  "user" | "assistant" | "agent_results" | "system" | "error";
 
 export type ChatState =
   "input" | "loading" | "streaming" | "uploading" | "settling" | "unconfirmed";

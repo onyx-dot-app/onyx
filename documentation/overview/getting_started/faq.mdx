@@ -43,6 +43,12 @@ icon: "comments-question"
     Shared context and image messages can also be reused when the provider supports caching.
     Cache reuse depends on the provider and model.
 
+    Onyx retains earlier action results so follow-up questions can use the same evidence.
+    As a conversation approaches the model’s context limit, Onyx tries to summarize older history to make room.
+    If the summary fails or does not fit, Onyx removes older history from the model’s context instead.
+    This changes the cached prefix, but the new prefix can be reused on later calls.
+    Cached input still occupies space in the model’s context window.
+
     Onyx keeps prompt caching enabled to reduce the total cost of conversations and agents that repeatedly use the same
     context. A tool step usually sends earlier context back to the model along with new results.
     Caching lets those repeated input tokens cost less.

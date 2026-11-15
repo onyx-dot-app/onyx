@@ -6,6 +6,7 @@ from concurrent.futures import Future
 import pytest
 
 from onyx.utils.threadpool_concurrency import (
+    BoundedParallelRunner,
     FunctionCall,
     run_functions_in_parallel,
     run_functions_tuples_in_parallel,
@@ -251,3 +252,12 @@ def test_thread_future_preserves_base_exception() -> None:
     with pytest.raises(BaseException) as caught:
         future.result(timeout=2)
     assert caught.value is error
+
+
+def test_bounded_parallel_runner_preserves_contextvar() -> None:
+    test_var.set("runner_value")
+    with BoundedParallelRunner[str](max_workers=2) as runner:
+        results = runner.submit(get_contextvar_value)
+        results += runner.submit(get_contextvar_value)
+        results += list(runner.drain())
+    assert results == ["runner_value", "runner_value"]

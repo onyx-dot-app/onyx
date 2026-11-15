@@ -38,7 +38,9 @@ policy.
 default model. Instructions appear in each new session's `AGENTS.md` under an
 "Organization instructions" heading. A read-only preview shows the base
 template the text is added to. With no Craft default model, sessions use the
-workspace chat default, and the page shows that model as inherited.
+workspace chat default, and the page shows that model as inherited. The
+**Skill Publishing** select sets `Settings.plugin_publishing` (Open,
+Requires review, Off); [[skills#publishing-review]] owns what it does.
 
 In this document "workspace" always means the tenant-wide scope (workspace
 default, workspace policy). The sandbox directory of a session is the "session
@@ -170,8 +172,9 @@ then the chat default.
    live. A new write route must pick one of these on purpose.
 6. `unset-action-is-catalog-default` **An unset action is not "no policy".**
    It resolves to the catalog `default_policy` at read time, and an override
-   equal to the default is not stored. Every MCP tool has the default `ASK`
-   (`db/action_policy.py:_catalog_defaults`). A change to a catalog default changes
+   equal to the default is not stored. An MCP tool defaults to `ASK`, or to
+   `ALWAYS` when the last sync stored `Tool.mcp_read_only` true
+   (`db/action_policy.py:mcp_tool_default_policy`). A change to a catalog default changes
    behaviour for every app that kept the default, with no migration and no
    row change.
 7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH

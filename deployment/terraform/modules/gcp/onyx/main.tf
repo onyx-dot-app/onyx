@@ -41,6 +41,8 @@ locals {
     ],
     var.enable_l7_ingress ? ["certificatemanager.googleapis.com"] : [],
     var.enable_sandbox_archive_bucket ? ["cloudkms.googleapis.com"] : [],
+    # GCS signed URLs without a key file sign through the IAM Credentials API.
+    var.enable_sandbox_node_pool && var.craft_sandbox_runtime == "firecracker" ? ["iamcredentials.googleapis.com"] : [],
   ) : toset([])
 
   # T-shirt size defaults, chosen so each tier lands on the GCP machine closest
@@ -203,11 +205,12 @@ module "gke" {
   master_authorized_networks           = var.master_authorized_networks
   allow_unrestricted_api_server_access = var.allow_unrestricted_api_server_access
 
-  node_pools               = local.node_pools
-  index_node_pool_enabled  = var.index_node_pool_enabled
-  enable_gpu_node_pool     = var.enable_gpu_node_pool
-  enable_sandbox_node_pool = var.enable_sandbox_node_pool
-  craft_sandbox_runtime    = var.craft_sandbox_runtime
+  node_pools                         = local.node_pools
+  index_node_pool_enabled            = var.index_node_pool_enabled
+  enable_gpu_node_pool               = var.enable_gpu_node_pool
+  enable_sandbox_node_pool           = var.enable_sandbox_node_pool
+  craft_sandbox_runtime              = var.craft_sandbox_runtime
+  enable_craft_pod_sandbox_node_pool = var.enable_craft_pod_sandbox_node_pool
 
   create_workload_namespace     = var.create_workload_namespace
   workload_namespace            = var.workload_namespace

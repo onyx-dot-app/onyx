@@ -11,13 +11,26 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.web_search import fetch_active_web_search_provider
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import WEB_SEARCH_TOOL_NAME
-from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    SearchResults,
+    ToolCallException,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.utils import (
+    SEARCH_RESULTS_CODE_MODE_RESULT,
     convert_inference_sections_to_llm_string,
 )
 from onyx.tools.tool_implementations.web_search.models import (
     DEFAULT_MAX_RESULTS,
+    WebSearchArguments,
     WebSearchResult,
 )
 from onyx.tools.tool_implementations.web_search.providers import (
@@ -34,47 +47,9 @@ from shared_configs.enums import WebSearchProviderType
 
 logger = setup_logger()
 
-QUERIES_FIELD = "queries"
-
-
-def _sanitize_query(query: str) -> str:
-    """Remove control characters and normalize whitespace in a query.
-
-    LLMs sometimes produce queries with null characters or other control
-    characters that need to be stripped before sending to search providers.
-    """
-    # Remove control characters (ASCII 0-31 and 127 DEL)
-    sanitized = "".join(c for c in query if ord(c) >= 32 and ord(c) != 127)
-    # Collapse multiple whitespace characters into single space and strip
-    return " ".join(sanitized.split())
-
-
-def _normalize_queries_input(raw: Any) -> list[str]:
-    """Coerce LLM output to a list of sanitized query strings.
-
-    Accepts a bare string or a list (possibly with non-string elements).
-    Sanitizes each query (strip control chars, normalize whitespace) and
-    drops empty or whitespace-only entries.
-    """
-    if isinstance(raw, str):
-        raw = raw.strip()
-        if not raw:
-            return []
-        raw = [raw]
-    elif not isinstance(raw, list):
-        return []
-    result: list[str] = []
-    for q in raw:
-        if q is None:
-            continue
-        sanitized = _sanitize_query(str(q))
-        if sanitized:
-            result.append(sanitized)
-    return result
-
 
 class WebSearchTool(Tool):
-    merge_list_argument = QUERIES_FIELD
+    merge_list_argument = "queries"
 
     NAME = WEB_SEARCH_TOOL_NAME
     DESCRIPTION = "Search the web for information."
@@ -112,6 +87,10 @@ class WebSearchTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -122,6 +101,10 @@ class WebSearchTool(Tool):
     @property
     def display_name(self) -> str:
         return self.DISPLAY_NAME
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
 
     @property
     def supports_site_filter(self) -> bool:
@@ -137,22 +120,11 @@ class WebSearchTool(Tool):
             return provider is not None
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description="Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+        return tool_definition_from_arguments(
+            self.name,
+            "Search the web for information. Returns a list of search results with titles, metadata, and snippets.",
+            WebSearchArguments,
             strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    QUERIES_FIELD: {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": "One or more queries to look up on the web. Must contain only printable characters",
-                    },
-                },
-                "required": [QUERIES_FIELD],
-            },
         )
 
     def _safe_execute_single_search(
@@ -179,26 +151,7 @@ class WebSearchTool(Tool):
             return (None, error_msg)
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        if QUERIES_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{QUERIES_FIELD}' parameter in web_search tool call",
-                llm_facing_message=(
-                    f"The web_search tool requires a '{QUERIES_FIELD}' parameter "
-                    f"containing an array of search queries. Please provide the queries "
-                    f'like: {{"queries": ["your search query here"]}}'
-                ),
-            )
-        queries = _normalize_queries_input(invocation.arguments[QUERIES_FIELD])
-        if not queries:
-            raise ToolCallException(
-                message=(
-                    "No valid web search queries provided; all queries were empty or whitespace-only after trimming."
-                ),
-                llm_facing_message=(
-                    "No valid web search queries were provided (they were empty or "
-                    "whitespace-only). Please provide a real search query."
-                ),
-            )
+        queries = parse_tool_arguments(WebSearchArguments, invocation.arguments).queries
 
         invocation.update(
             ToolProgress(
@@ -310,12 +263,10 @@ class WebSearchTool(Tool):
 
         # Format for LLM
         if not all_search_results:
-            docs_str = json.dumps(
-                {
-                    "results": [],
-                    "message": "The web search completed but returned no results for any of the queries. Do not search again.",
-                }
-            )
+            docs_str = SearchResults(
+                results=[],
+                message="The web search completed but returned no results for any of the queries. Do not search again.",
+            ).model_dump_json()
             citation_mapping: dict[int, str] = {}
         else:
             docs_str, citation_mapping = convert_inference_sections_to_llm_string(

@@ -377,6 +377,7 @@ class LangfuseTracingProcessor(TracingProcessor):
                 langfuse_span.update(
                     input=self._mask_if_enabled(input_data),
                     output=self._mask_if_enabled(output_data),
+                    metadata=dict(data.metadata) if data.metadata else None,
                 )
 
             elif isinstance(data, AgentSpanData):

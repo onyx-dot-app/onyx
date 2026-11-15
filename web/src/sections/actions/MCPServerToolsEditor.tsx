@@ -129,11 +129,12 @@ export default function MCPServerToolsEditor({
         const currentPolicies = Object.fromEntries(
           Object.entries(policies).filter(([name]) => toolNames.has(name))
         );
-        await updateMCPServer(server.id, {
+        const updated = await updateMCPServer(server.id, {
           action_policies: currentPolicies,
         });
-        setPolicies(currentPolicies);
-        setSavedPolicies(currentPolicies);
+        const storedPolicies = updated.action_policies ?? currentPolicies;
+        setPolicies(storedPolicies);
+        setSavedPolicies(storedPolicies);
       }
       await onSaved();
     } catch (cause) {
@@ -166,7 +167,7 @@ export default function MCPServerToolsEditor({
   const enabledCount = tools.filter(isEnabled).length;
   const enabledTools = tools.filter(isEnabled);
   const effectivePolicies = enabledTools.map(
-    (tool) => policies[tool.name] ?? "ASK"
+    (tool) => policies[tool.name] ?? tool.default_action_policy ?? "ASK"
   );
   const bulkPolicy =
     effectivePolicies.every((policy) => policy === "ALWAYS") &&
@@ -324,7 +325,11 @@ export default function MCPServerToolsEditor({
                   showPolicies ? (
                     <PolicyToggle
                       label={tool.display_name || tool.name}
-                      value={policies[tool.name] ?? "ASK"}
+                      value={
+                        policies[tool.name] ??
+                        tool.default_action_policy ??
+                        "ASK"
+                      }
                       disabled={policyDisabled}
                       onChange={(value) =>
                         setPolicies((current) => ({

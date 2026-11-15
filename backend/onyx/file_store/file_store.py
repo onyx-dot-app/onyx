@@ -435,6 +435,9 @@ class PresignableFileStore(FileStore):
     presigned URLs. The hooks take the bucket, so a store for another bucket can
     reuse the signer."""
 
+    # The largest object one presigned PUT can write.
+    _presign_max_upload_bytes = FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES
+
     @abstractmethod
     def _presign_bucket_name(self) -> str:
         raise NotImplementedError
@@ -505,9 +508,9 @@ class PresignableFileStore(FileStore):
         writes no file_record row until finalize_presigned_upload. sha256 is
         the hex digest of the content to upload."""
         ttl_seconds = presign_ttl_seconds(ttl)
-        if not 0 <= size <= FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES:
+        if not 0 <= size <= self._presign_max_upload_bytes:
             raise ValueError(
-                f"A presigned upload size must be 0 to {FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES} bytes"
+                f"A presigned upload size must be 0 to {self._presign_max_upload_bytes} bytes"
             )
         sha256 = sha256.lower()
         if not _SHA256_HEX.fullmatch(sha256):

@@ -134,7 +134,9 @@ def _script_deep_research(mock_llm: MockLLMScript) -> None:
         Reply(
             text="The launch timeline is not in the internal docs.",
             conditions=RequestConditions(
-                has_tools=False, has_results_for=[_SEARCH_CALL_ID]
+                offers=[SearchTool.NAME, GENERATE_REPORT_TOOL_NAME],
+                tool_choice="none",
+                has_results_for=[_SEARCH_CALL_ID],
             ),
         ),
     )

@@ -168,14 +168,7 @@ Use this schema to add a plugin that creates and gets agents in Onyx. Replace th
                     "type": "array",
                     "items": { "type": "integer" }
                   },
-                  "num_chunks": { "type": "number" },
                   "is_public": { "type": "boolean" },
-                  "recency_bias": {
-                    "type": "string",
-                    "enum": ["favor_recent", "base_decay", "no_decay", "auto"]
-                  },
-                  "llm_filter_extraction": { "type": "boolean" },
-                  "llm_relevance_filter": { "type": "boolean" },
                   "tool_ids": {
                     "type": "array",
                     "items": { "type": "integer" }
@@ -188,11 +181,7 @@ Use this schema to add a plugin that creates and gets agents in Onyx. Replace th
                   "name",
                   "description",
                   "document_set_ids",
-                  "num_chunks",
                   "is_public",
-                  "recency_bias",
-                  "llm_filter_extraction",
-                  "llm_relevance_filter",
                   "tool_ids",
                   "system_prompt",
                   "task_prompt",

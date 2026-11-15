@@ -1,5 +1,7 @@
 // Priority-ordered renderer dispatch, mirroring web `renderMessageComponent`. First match wins.
 //
+// It reads a group's own packets (GroupedPacket.packets); nested calls do not decide the renderer.
+//
 // Only chat and reasoning are wired; the tool slots between them return null on purpose. Reasoning
 // sits last and matches section_end/error, which in web are already claimed by whichever tool group
 // they close — delete the intervening predicates and reasoning inherits every closed tool group,

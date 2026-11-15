@@ -17,7 +17,7 @@ The connector signs in to nothing. It reads only what a signed-out visitor can r
 | Links      | In **recursive** mode, Onyx follows the links it finds in each page it renders, and keeps following them until it runs out of pages that are in scope.                         |
 | Scope      | Only pages on the same site and under the same path as the base URL. See [Crawl scope](#crawl-scope).                                                                          |
 | Duplicates | Pages that produce the same title and text as a page already indexed this run are skipped. A URL that redirects is stored under the address it ends at.                        |
-| Permissions | **Sync with Web** is not available. A crawled page carries no per-user access list, so [Document Access](/admins/connectors/overview#document-access-controls) can only be **Everyone in Your Organization** or **Specific Groups**. |
+| Permissions | **Sync with Web** is not available. A crawled page carries no per-user access list, so [Document Access](/admins/connectors/overview#document-access-controls) can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 Every refresh re-crawls the whole site; there is no incremental mode.
 Onyx deliberately ignores the `Last-Modified` header,
@@ -53,7 +53,7 @@ You need:
   </Step>
 
   <Step title="Choose the document access">
-    Under **Connector Settings**, set **Document Access**. **Specific Groups** is a paid feature:
+    Under **Connector Settings**, set **Document Access**. **Specific Groups** and **Only Me** are paid features:
     the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
 
     See [Document Access Controls](/admins/connectors/overview#document-access-controls)

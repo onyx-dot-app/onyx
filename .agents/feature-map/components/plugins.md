@@ -78,19 +78,36 @@ tools whose `Tool.enabled` is false. Its `mcpConnection` and `openAPIConnection`
 each plugin as connected (with an owner: user, workspace, session or none),
 needing OAuth, needing credentials, unconfigured, checking or unavailable.
 
-**Member OAuth.** `lib/plugins/memberConnection.ts:runMemberPluginOAuth` opens
-a new tab and waits for `/app/plugins/oauth/complete` to report back by
-`postMessage` or by a `BroadcastChannel` named for the attempt. A closed opener
-link is not taken as cancellation, because a provider's opener policy can sever
-it while sign-in continues. The attempt ends on completion, on cancel, or after
-five minutes. The completion page and the caller each check the saved
-connection before they report success.
+**Member OAuth.** `lib/plugins/memberConnection.ts:runMemberPluginOAuth` runs
+the flow through `lib/oauth/launch.ts:launchOAuth`: a new tab on the web, the
+system browser in the desktop app. It waits for the provider callback page to
+report the OAuth `state`. The attempt ends on completion, on cancel, or after
+ten minutes. The caller then checks the saved connection before it reports
+success. `/app/plugins/oauth/complete` is only the landing page for a callback
+that no waiting page closed; it checks the saved connection and shows the
+result.
 
 **Default Chat at turn time.** `tools/tool_constructor.py:_construct_tools_impl`
 loads the user's preferences only for the default assistant and skips a tool
 whose preference has `enabled_in_chat` false. On the web,
-`lib/plugins/chat.ts:effectiveChatForcedToolId` drops a forced plugin tool in
+`lib/plugins/chat.ts:effectiveChatPreferredToolId` drops an unavailable preferred plugin tool in
 Default Chat when the user's preference turns it off.
+
+**Tool selection of an existing chat.** The server owns it.
+`lib/tools/hooks.ts:useToolConfiguration` reads it from the chat-session detail
+(`tool_selection`, held in the chat session store). When a signed-in user
+changes tools or filters in an existing chat, the store keeps the change as
+an unconfirmed edit, and the chat's save loop PATCHes
+`/api/chat/chat-session/{id}/tool-selection` at once with only the changed
+part: the tool fields or `internal_search_filters`. One request runs at a time
+per chat; later edits go out together in the next one. The server merges the
+fields that the body sets. The response is the stored selection, or null for a
+chat that stores no content, whose only copy stays in the tab. A chat load that
+started before a save was confirmed does not replace the saved copy.
+`flushToolSelection` resolves when the chat's save loop ends, so a caller can
+wait for the saved choice. A send that creates a chat hands its selection to that chat's
+composer, which saves it. Session storage keeps only the selection of a chat
+that does not exist yet.
 
 ---
 

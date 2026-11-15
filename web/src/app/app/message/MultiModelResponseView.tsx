@@ -21,8 +21,9 @@ import {
 } from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import useScreenSize from "@/hooks/useScreenSize";
-import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { cn } from "@opal/utils";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 export interface MultiModelResponseViewProps {
   responses: MultiModelResponse[];
@@ -140,41 +141,6 @@ export default function MultiModelResponseView({
   }, []);
   const parentNodeId = parentMessage?.nodeId;
   const [hiddenPanels, setHiddenPanels] = useState<Set<number>>(new Set());
-  const sessionIdAtMount = useRef(
-    useChatSessionStore.getState().currentSessionId
-  );
-  const [completedResponses, setCompletedResponses] = useState<Set<number>>(
-    new Set()
-  );
-  const handleResponseComplete = useCallback((nodeId: number) => {
-    setCompletedResponses((completed) =>
-      completed.has(nodeId) ? completed : new Set([...completed, nodeId])
-    );
-  }, []);
-  useEffect(() => {
-    if (readOnly || responses.length === 0) return;
-    // Hidden and failed responses do not block input on display animation.
-    if (
-      !responses.every(
-        (response) =>
-          !response.isGenerating &&
-          (response.errorMessage ||
-            hiddenPanels.has(response.modelIndex) ||
-            completedResponses.has(response.nodeId))
-      )
-    )
-      return;
-    const sessionId = sessionIdAtMount.current;
-    if (!sessionId) return;
-    const store = useChatSessionStore.getState();
-    const session = store.sessions.get(sessionId);
-    if (!session || session.chatState === "loading") return;
-    const latest = getLatestMessageChain(session.messageTree).at(-1);
-    if (!responses.some((response) => response.nodeId === latest?.nodeId))
-      return;
-    store.setLatestMessageRenderComplete(sessionId, true);
-  }, [responses, completedResponses, hiddenPanels, readOnly]);
-
   // Controls animation: false = panels at start position, true = panels at peek position
   const [selectionEntered, setSelectionEntered] = useState(
     () => preferredIndex !== null
@@ -329,6 +295,7 @@ export default function MultiModelResponseView({
     [responses.length, onHiddenPanelsChange]
   );
 
+  const { mutate: mutateCache } = useSWRConfig();
   const updateSessionMessageTree = useChatSessionStore(
     (state) => state.updateSessionMessageTree
   );
@@ -378,9 +345,18 @@ export default function MultiModelResponseView({
       if (!response) return;
 
       if (parentMessage?.messageId && response.messageId && currentSessionId) {
-        setPreferredResponse(parentMessage.messageId, response.messageId).catch(
-          (err) => console.error("Failed to persist preferred response:", err)
-        );
+        void setPreferredResponse(parentMessage.messageId, response.messageId)
+          .then((saved) => {
+            if (!saved.ok) {
+              throw new Error(
+                `Preferred response selection failed: ${saved.status}`
+              );
+            }
+            return mutateCache(SWR_KEYS.chatSessionStatus(currentSessionId));
+          })
+          .catch((err) =>
+            console.error("Failed to persist preferred response:", err)
+          );
 
         const tree = useChatSessionStore
           .getState()
@@ -401,6 +377,7 @@ export default function MultiModelResponseView({
       parentMessage,
       currentSessionId,
       updateSessionMessageTree,
+      mutateCache,
     ]
   );
 
@@ -636,7 +613,6 @@ export default function MultiModelResponseView({
         onMessageSelection,
         onRegenerate,
         parentMessage,
-        onComplete: handleResponseComplete,
       },
       errorMessage: response.errorMessage,
       errorCode: response.errorCode,
@@ -661,7 +637,6 @@ export default function MultiModelResponseView({
       onRegenerate,
       parentMessage,
       isGenerating,
-      handleResponseComplete,
     ]
   );
 

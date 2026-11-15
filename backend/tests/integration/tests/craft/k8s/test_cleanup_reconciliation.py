@@ -101,7 +101,7 @@ def test_worker_collects_orphans_and_abandoned_provisioning_without_running_rows
                 lease.release()
 
         try:
-            run_cleanup(k8s_client, expected_state="FAILURE")
+            run_cleanup(k8s_client, sweep="FAILURE", reconcile="FAILURE")
             for owner in owners:
                 assert not cluster.absent("pod", f"sandbox-{str(owner)[:8]}")
         finally:

@@ -181,7 +181,7 @@ def custom_skill_permissions(
     ``manage_access`` (group grants) are the managed-scope editable decision the write
     guard enforces. ``delete`` is FULL_ADMIN only (its route requires
     FULL_ADMIN_PANEL_ACCESS, no ``allow_scope``); ``publish`` (make org-wide public)
-    needs global MANAGE_SKILLS — a scoped manager fails the guard's non-public check when
+    needs global MANAGE_PLUGINS — a scoped manager fails the guard's non-public check when
     flipping a skill public."""
     result: CustomSkillPermissions = {
         "edit": can_edit,

@@ -5,6 +5,7 @@ import { createInitialState, processPackets } from "@/chat/messageProcessor";
 import {
   makeCitationPacket,
   makeMessageStartPacket,
+  makePacket,
   makeSearchDoc,
   makeSearchDocsPacket,
   makeStopPacket,
@@ -44,6 +45,22 @@ describe("messageProcessor", () => {
     expect(state.isComplete).toBe(false);
     state = processPackets(state, [makeStopPacket()]);
     expect(state.isComplete).toBe(true);
+  });
+
+  it("shows text whose step also called a tool once the response stops", () => {
+    let state = createInitialState(1);
+    state = processPackets(state, [
+      makeMessageStartPacket(),
+      makePacket({ type: "custom_tool_start", tool_name: "wait_agents" }, 1),
+    ]);
+    expect(state.finalAnswerComing).toBe(false);
+    state = processPackets(state, [
+      makeMessageStartPacket(),
+      makePacket({ type: "custom_tool_start", tool_name: "wait_agents" }, 1),
+      makeStopPacket(),
+    ]);
+    expect(state.finalAnswerComing).toBe(true);
+    expect(state.potentialDisplayGroups).toHaveLength(1);
   });
 
   it("processes only new packets across flushes (no double count)", () => {

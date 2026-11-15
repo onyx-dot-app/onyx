@@ -69,11 +69,14 @@ Example test case:
 
 ### Per-Test Configuration
 
-Configure tool forcing, assertions, and model settings per-test by adding optional fields to each test case.
+Configure tool preference, assertions, and model settings per-test by adding optional fields to each test case.
 
 #### Tool Configuration
 
-- `force_tools`: List of tool type names to force for this specific test
+- `preferred_tool`: Tool type to prefer for this test. Invocation is optional.
+
+Nonempty `force_tools` inputs are rejected. Use `preferred_tool` for model guidance and
+`expected_tools` to fail an evaluation when a required tool was not called.
 - `expected_tools`: List of tool type names expected to be called
 - `require_all_tools`: If true, all expected tools must be called (default: false)
 
@@ -91,7 +94,7 @@ Example with tool and model configuration:
       "message": "Find information about Python programming"
     },
     "expected_tools": ["SearchTool"],
-    "force_tools": ["SearchTool"],
+    "preferred_tool": "SearchTool",
     "model": "gpt-6-sol"
   },
   {
@@ -137,11 +140,15 @@ For testing realistic multi-turn conversations where each turn may require diffe
 }
 ```
 
+Case-level tool, assertion, and model settings provide defaults for every turn.
+Settings beside `input` override settings inside `input`. Explicit per-message settings
+override these defaults, including `null`, `false`, and empty lists.
+
 Each message in the `messages` array can have its own configuration:
 - `message`: The user message text (required)
 - `expected_tools`: List of tool types expected to be called for this turn
 - `require_all_tools`: If true, all expected tools must be called (default: false)
-- `force_tools`: List of tool types to force for this turn
+- `preferred_tool`: Tool type to prefer for this turn. Invocation is optional.
 - `model`: Model version override for this turn
 - `model_provider`: Model provider override for this turn
 - `temperature`: Temperature override for this turn

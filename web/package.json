@@ -105,7 +105,7 @@
   "devDependencies": {
     "@formatjs/icu-messageformat-parser": "^3.5.17",
     "@oxlint/plugins": "^1.71.0",
-    "@playwright/test": "^1.39.0",
+    "@playwright/test": "1.64.1",
     "@swc/core": "^1.15.43",
     "@swc/jest": "^0.2.39",
     "@tailwindcss/postcss": "^4.3.3",

@@ -28,6 +28,9 @@ export interface TimelineUIStateInput {
   parallelActiveStepSupportsCollapsedStreaming: boolean;
   parallelActiveStepHasCollapsedContent: boolean;
   finalAnswerComing: boolean;
+  // A code mode program runs between tool calls; it is the current activity even when the last
+  // turn group is parallel.
+  codeModeWorking: boolean;
 }
 
 export interface TimelineUIStateResult {
@@ -63,6 +66,7 @@ export function useTimelineUIState(
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
+      codeModeWorking,
     } = input;
 
     let uiState: TimelineUIState;
@@ -71,9 +75,10 @@ export function useTimelineUIState(
     } else if (hasDisplayContent && !hasPackets) {
       uiState = TimelineUIState.DISPLAY_CONTENT_ONLY;
     } else if (!stopPacketSeen && !hasDisplayContent) {
-      uiState = lastTurnGroup?.isParallel
-        ? TimelineUIState.STREAMING_PARALLEL
-        : TimelineUIState.STREAMING_SEQUENTIAL;
+      uiState =
+        lastTurnGroup?.isParallel && !codeModeWorking
+          ? TimelineUIState.STREAMING_PARALLEL
+          : TimelineUIState.STREAMING_SEQUENTIAL;
     } else if (userStopped) {
       uiState = TimelineUIState.STOPPED;
     } else if (isExpanded) {

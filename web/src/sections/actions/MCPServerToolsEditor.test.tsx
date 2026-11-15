@@ -512,3 +512,61 @@ it("keeps user management out of the tool permissions tab", async () => {
     screen.queryByRole("switch", { name: "Let users manage approval settings" })
   ).not.toBeInTheDocument();
 });
+
+it("shows the server default for a tool without a stored policy", async () => {
+  const user = setupUser();
+  snapshots = [{ ...tool, default_action_policy: "ALWAYS" }];
+  render(<Harness value={{ ...server, action_policies: {} }} />);
+  await screen.findByRole("switch", { name: "tool-toggle-Display tool" });
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
+  );
+  const row = screen.getByRole("group", { name: "Display tool" });
+  expect(
+    within(row).getByRole("button", { name: "Auto-approve" })
+  ).toHaveAttribute("aria-pressed", "true");
+  expect(within(row).getByRole("button", { name: "Ask" })).toHaveAttribute(
+    "aria-pressed",
+    "false"
+  );
+});
+
+it("shows a refreshed default after the server drops a saved default choice", async () => {
+  const user = setupUser();
+  snapshots = [{ ...tool, default_action_policy: "ALWAYS" }];
+  jest
+    .mocked(updateMCPServer)
+    .mockResolvedValue({ ...server, action_policies: {} });
+  jest
+    .mocked(refreshMCPServerTools)
+    .mockResolvedValue([{ ...tool, default_action_policy: "ASK" }]);
+  render(<Harness value={{ ...server, action_policies: {} }} />);
+  await screen.findByRole("switch", { name: "tool-toggle-Display tool" });
+  await user.click(
+    screen.getByRole("tab", { name: messages.actions.mcpTools.policiesTab })
+  );
+  const row = () => screen.getByRole("group", { name: "Display tool" });
+  await user.click(within(row()).getByRole("button", { name: "Ask" }));
+  await user.click(within(row()).getByRole("button", { name: "Auto-approve" }));
+  await user.click(
+    screen.getByRole("button", {
+      name: messages.actions.addMcpModal.submitButton.saveLabel,
+    })
+  );
+  await waitFor(() =>
+    expect(updateMCPServer).toHaveBeenCalledWith(7, {
+      action_policies: { raw_tool: "ALWAYS" },
+    })
+  );
+  await user.click(
+    await screen.findByRole("button", {
+      name: messages.actions.mcpTools.refresh,
+    })
+  );
+  await waitFor(() =>
+    expect(within(row()).getByRole("button", { name: "Ask" })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+  );
+});

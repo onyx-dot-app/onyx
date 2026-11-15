@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.span_data import FunctionSpanData, GenerationSpanData
 from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
 
 
@@ -161,3 +161,19 @@ def test_on_span_end_exports_cache_metadata_from_optional_mapping(
     else:
         assert update["metadata"] == metadata
     observation.end.assert_called_once()
+
+
+def test_on_span_end_exports_function_span_metadata() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    span.span_data = FunctionSpanData(
+        name="echo", input="{}", output="ok", metadata={"code_mode.index": 1}
+    )
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    update: dict[str, Any] = observation.update.call_args.kwargs
+    assert update["metadata"] == {"code_mode.index": 1}

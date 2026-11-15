@@ -3,7 +3,9 @@ from typing import Any, Literal, TypedDict, cast
 from uuid import UUID
 
 import httpx
+from pydantic import TypeAdapter
 
+from onyx.chat.mention_models import Mention, RecordedMention
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.override_models import LLMOverride
@@ -69,6 +71,7 @@ class StreamPacketData(TypedDict, total=False):
     """Structure for streaming response packets."""
 
     reserved_assistant_message_id: int
+    mentions: list[dict[str, str]]
     error: str
     stack_trace: str
     error_code: str | None
@@ -109,10 +112,12 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
+        preferred_tool_id: int | None = None,
         chat_session: DATestChatSession | None = None,
         deep_research: bool = False,
+        accepts_follow_ups: bool = False,
         llm_override: LLMOverride | None = None,
+        mentions: list[Mention] | None = None,
     ) -> StreamedResponse:
         chat_message_req = SendMessageRequest(
             message=message,
@@ -124,9 +129,11 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
+            accepts_follow_ups=accepts_follow_ups,
             llm_override=llm_override,
+            mentions=mentions or [],
         )
 
         with client.stream(
@@ -167,7 +174,7 @@ class ChatSessionManager:
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
         allowed_tool_ids: list[int] | None = None,
-        forced_tool_ids: list[int] | None = None,
+        preferred_tool_id: int | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> None:
@@ -196,7 +203,7 @@ class ChatSessionManager:
             ),
             file_descriptors=file_descriptors or [],
             allowed_tool_ids=allowed_tool_ids,
-            forced_tool_id=forced_tool_ids[0] if forced_tool_ids else None,
+            preferred_tool_id=preferred_tool_id,
             deep_research=deep_research,
             llm_override=llm_override,
         )
@@ -232,11 +239,15 @@ class ChatSessionManager:
         heartbeat_packets: list[StreamPacketData] = []
         full_message = ""
         assistant_message_id: int | None = None
+        mentions: list[RecordedMention] = []
         error = None
         ind: int
         for data in response_data:
             if reserved_id := data.get("reserved_assistant_message_id"):
                 assistant_message_id = reserved_id
+                mentions = TypeAdapter(list[RecordedMention]).validate_python(
+                    data["mentions"]
+                )
             elif data.get("error"):
                 error = ErrorResponse(
                     error=str(data["error"]),
@@ -335,6 +346,7 @@ class ChatSessionManager:
         return StreamedResponse(
             full_message=full_message,
             assistant_message_id=assistant_message_id or -1,  # Use -1 for error cases
+            mentions=mentions,
             top_documents=top_documents,
             used_tools=list(ind_to_tool_use.values()),
             tool_call_debug=tool_call_debug,
@@ -366,6 +378,7 @@ class ChatSessionManager:
                 message=msg["message"],
                 message_type=msg.get("message_type"),
                 files=msg.get("files"),
+                mentions=msg.get("mentions", []),
                 reasoning_tokens=msg.get("reasoning_tokens"),
             )
             for msg in response.json()["messages"]

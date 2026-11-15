@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Autenticar"
       },
+      "codingAgentIncognito": {
+        "tooltip": "El agente de código no está disponible en modo incógnito"
+      },
       "configure": {
         "tooltip": "Configurar"
       },
@@ -139,6 +142,9 @@
       },
       "selectSearchSources": {
         "label": "Seleccionar fuentes de búsqueda"
+      },
+      "preference": {
+        "tooltip": "{description}\nPreferir esta herramienta para este chat. El agente puede responder sin usarla."
       }
     },
     "addMcpModal": {
@@ -350,7 +356,7 @@
         "clientMetadataRejected": "El proveedor no pudo usar el documento de metadatos del cliente. Si esta instancia no es accesible desde internet, desactiva «Usar el documento de metadatos del cliente» y vuelve a conectar.",
         "discoveryFailed": "No se encontraron los ajustes de inicio de sesión OAuth. Comprueba la URL del servidor o introduce los endpoints de tu proveedor.",
         "connectionFailed": "No se pudo acceder al servidor. Comprueba la URL del servidor e inténtalo de nuevo.",
-        "oauthFailed": "No se pudo iniciar la sesión OAuth. Comprueba los ajustes de tu cliente e inténtalo de nuevo.",
+        "oauthFailed": "No se pudo iniciar sesión con OAuth. Inténtalo de nuevo o revisa la configuración de OAuth del servidor.",
         "oauthInitFailed": "No se pudo iniciar OAuth: {detail}"
       },
       "header": {
@@ -814,6 +820,7 @@
       "search": {
         "placeholder": "Buscar acciones..."
       },
+      "selectionSaveFailed": "No se pudo guardar la selección de herramientas de este chat.",
       "serverFallback": {
         "label": "servidor"
       },
@@ -2618,8 +2625,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Todos conservan el acceso sincronizado desde el origen.",
-          "title": "Sin restricción hasta que se añadan grupos"
+          "description": "Restringir requiere un grupo. Desactiva la restricción para mantener el acceso sincronizado desde la fuente.",
+          "title": "Elige al menos un grupo"
         },
         "loadError": "No se pudieron cargar los grupos. Vuelve a cargar la página para intentarlo de nuevo.",
         "memberCount": "{count, plural, one {# miembro} other {# miembros}}",
@@ -2965,6 +2972,7 @@
           "sync": "Acceso a documentos **sincronizado con {source}**",
           "managedByAdmins": "Gestionado por **administradores**",
           "managedByGroups": "Gestionado por **{count, plural, one {# grupo} other {# grupos}}**",
+          "onlyMe": "Documentos visibles a través de este conector **solo para su propietario**",
           "syncRestricted": "Acceso a documentos **sincronizado con {source}**, restringido a **{count, plural, one {# grupo} other {# grupos}}**",
           "groupsPending": "Documentos compartidos con **grupos específicos**",
           "syncRestrictedPending": "Acceso a documentos **sincronizado con {source}**, restringido a **grupos específicos**"
@@ -3748,15 +3756,19 @@
             "description": "Los documentos indexados por este conector están disponibles para todos en tu organización.",
             "title": "Todos en tu organización"
           },
+          "onlyMe": {
+            "description": "Solo el propietario de la credencial de este conector obtiene acceso a través de él; para una fuente sin credencial, solo la persona que lo creó.",
+            "title": "Solo yo"
+          },
           "specificGroups": {
             "description": "Indica los grupos que pueden acceder a los documentos de este conector.",
-            "required": "Elige al menos un grupo.",
             "title": "Grupos específicos"
           },
           "sync": {
             "description": "{appName} sincroniza los permisos con la fuente. Los usuarios solo pueden buscar lo que pueden ver en la fuente.",
             "disabledReason": "El método de autenticación de la credencial actual no admite la sincronización automática de permisos. Cambia el método de autenticación de la credencial a uno compatible.",
-            "title": "Sincronizar con {source}"
+            "title": "Sincronizar con {source}",
+            "restrictionRequired": "Elige al menos un grupo o desactiva la restricción."
           },
           "title": "Acceso a documentos"
         },
@@ -5173,6 +5185,27 @@
       "unavailable": {
         "description": "Onyx activa Craft en cada instalación. Contacta con tu representante de Onyx para obtener acceso.",
         "title": "Craft no está disponible en esta instalación"
+      },
+      "publishing": {
+        "title": "Publicación de habilidades",
+        "open": {
+          "label": "Abierta",
+          "description": "Los autores publican en la organización al instante."
+        },
+        "requiresReview": {
+          "label": "Requiere revisión",
+          "description": "Un administrador aprueba cada publicación y cada actualización."
+        },
+        "off": {
+          "label": "Desactivada",
+          "description": "Solo los administradores publican habilidades en la organización."
+        },
+        "saveSuccess": {
+          "message": "Se guardó la configuración de publicación."
+        },
+        "saveError": {
+          "message": "No se pudo guardar la configuración de publicación."
+        }
       }
     },
     "credentials": {
@@ -7493,7 +7526,8 @@
           "public": "Público para tu organización",
           "private": "{count, plural, =0 {Privado} one {Compartido con # grupo} other {Compartido con # grupos}}",
           "sync": "Sincronización automática de permisos",
-          "sync_restricted": "Sincronización automática de permisos"
+          "sync_restricted": "Sincronización automática de permisos",
+          "personal": "Solo yo"
         },
         "detail": {
           "queued": "{position, selectordinal, other {#.º}} en la cola",
@@ -7620,7 +7654,7 @@
             "targetUriParseFailed": "No se pudo analizar el URI de destino — se usan los valores originales."
           },
           "validation": {
-            "targetUriInvalid": "El URI de destino debe ser una URL válida con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
+            "targetUriInvalid": "El URI de destino debe ser una URL válida: una URL /openai/v1/ o una URL con el parámetro de consulta api-version y, o bien un nombre de implementación en la ruta, o bien /openai/responses",
             "targetUriRequired": "El URI de destino es obligatorio"
           }
         },
@@ -7834,7 +7868,6 @@
           "row": {
             "defaultLabel": "Modelo predeterminado",
             "decisionTag": {
-              "label": "Decisión",
               "decisionOnly": "Modelo de decisiones. No está disponible en el selector de modelos de chat.",
               "chatAndDecision": "Admite tareas de chat y de decisiones."
             },
@@ -7843,9 +7876,6 @@
             },
             "setDefaultButton": {
               "label": "Establecer como predeterminado"
-            },
-            "visionMarker": {
-              "title": "Visión"
             }
           },
           "selectAllButton": {
@@ -12138,6 +12168,10 @@
         },
         "organization": {
           "label": "Organización"
+        },
+        "unpublished": {
+          "label": "Cambios sin publicar",
+          "tooltip": "La organización todavía usa la versión {number}."
         }
       },
       "toggle": {
@@ -12419,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagentes trabajando",
         "attachFilesButton": {
           "tooltip": "Adjuntar archivos"
         },
@@ -12427,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "La investigación profunda está deshabilitada en el modo multimodelo",
+          "incognitoTooltip": "La investigación profunda no está disponible en modo incógnito",
           "label": "Investigación profunda"
         },
         "incognitoNotice": {
@@ -12455,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Configurar voz",
           "tooltip": "La voz no está configurada. Actívala en la configuración de administración."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter para enviar · Ctrl o Command + Enter para poner en cola",
+          "multiModelHint": "No se pueden poner mensajes en cola al comparar modelos. Elige un modelo para usar la cola.",
+          "attachmentsHint": "Envía los archivos adjuntos cuando termine esta respuesta.",
+          "chooseResponseHint": "Elige una respuesta antes de poner un mensaje en cola.",
+          "incognitoHint": "Espera a que termine la respuesta en el chat de incógnito.",
+          "sendHint": "Enviar en el siguiente paso de esta respuesta",
+          "interruptHint": "Interrumpir el trabajo actual y enviar este mensaje",
+          "sendLabel": "Enviar",
+          "queueLabel": "En cola",
+          "interruptKeyboardHint": "Enter para interrumpir · Ctrl o Command + Enter para poner en cola",
+          "interruptLabel": "Interrumpir",
+          "waitHint": "Espera a que termine la respuesta.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Detener subagentes"
         }
       },
       "baseInputBar": {
@@ -12504,9 +12558,6 @@
         "content": {
           "ariaLabel": "Selector de habilidades"
         },
-        "empty": {
-          "text": "No hay habilidades que coincidan"
-        },
         "mcpServersGroup": {
           "label": "Servidores MCP"
         },
@@ -12545,6 +12596,19 @@
           "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Quitar {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texto pegado: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Quitar texto pegado"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Abrir el menú de añadir",
@@ -12553,16 +12617,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Quitar mensaje en cola"
+          "tooltip": "Quitar mensaje en cola",
+          "ariaLabel": "Quitar mensaje en cola: {message}"
         },
         "editHint": {
           "label": "editar ·"
         },
-        "item": {
-          "ariaLabel": "Alternar mensaje en cola"
-        },
         "removeHint": {
           "label": "quitar"
+        },
+        "editButton": {
+          "tooltip": "Editar mensaje en cola",
+          "clearDraftTooltip": "Borra tu borrador para editar un mensaje en cola",
+          "ariaLabel": "Editar mensaje en cola: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrumpir el trabajo actual y enviar este mensaje",
+          "ariaLabel": "Enviar ahora: {message}"
+        },
+        "sendHint": {
+          "label": "enviar ahora ·"
         }
       },
       "sharedAppInputBar": {
@@ -12572,6 +12646,14 @@
         "startSessionButton": {
           "label": "Iniciar nueva sesión"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "No se pudo enviar el mensaje.",
+        "withdrawFailed": "No se pudo eliminar el mensaje pendiente.",
+        "loadFailed": "No se pudieron cargar los mensajes pendientes.",
+        "alreadyAccepted": "Este mensaje ya fue aceptado y ya no está pendiente.",
+        "interruptFailed": "No se pudo enviar este mensaje ahora. Sigue pendiente.",
+        "stopSubagentsFailed": "No se pudieron detener los subagentes."
       }
     },
     "mcpApiKey": {
@@ -12667,6 +12749,9 @@
         "timedOut": {
           "text": "La respuesta se detuvo porque alcanzó su límite de tiempo."
         }
+      },
+      "agentResults": {
+        "received": "Resultados de subagentes recibidos"
       },
       "codeBlock": {
         "copyButton": {
@@ -12902,6 +12987,9 @@
           "bashExit": {
             "header": "Bash · salida {exitCode}"
           },
+          "bashFailed": {
+            "header": "Bash · falló"
+          },
           "bashRequest": {
             "label": "Solicitud"
           },
@@ -13005,6 +13093,9 @@
           },
           "updatingMemory": {
             "label": "Actualizando memoria..."
+          },
+          "working": {
+            "label": "Trabajando"
           }
         },
         "internalSearch": {
@@ -14232,6 +14323,11 @@
       "completeFailed": {
         "message": "No se pudo completar la autorización"
       },
+      "desktopHandoff": {
+        "button": "Abrir Onyx",
+        "description": "Tu navegador abre la aplicación de escritorio de Onyx para terminar la conexión. Puedes cerrar esta pestaña cuando se abra la aplicación.",
+        "title": "Volver a Onyx"
+      },
       "genericError": {
         "description": "Se produjo un error durante el proceso de OAuth. Inténtalo de nuevo.",
         "title": "Algo salió mal"
@@ -14349,6 +14445,10 @@
       },
       "labels": {
         "default": "Predeterminado"
+      },
+      "modelTypes": {
+        "decision": "Decisión",
+        "vision": "Visión"
       }
     }
   },
@@ -14457,7 +14557,7 @@
         "promote": {
           "cancelButton": "Cancelar",
           "confirmButton": "Hacer para toda la organización",
-          "description": "Las habilidades asociadas a una app deben estar disponibles para todos. Este cambio se aplica al guardar la app.",
+          "description": "Las habilidades asociadas a una app deben estar disponibles para todos. Al guardar la app, la habilidad se publica en la organización. La publicación no se puede deshacer.",
           "title": "¿Hacer que «{name}» sea para toda la organización?"
         },
         "search": {
@@ -16393,6 +16493,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "No se pudieron guardar las preferencias"
+      },
+      "sendBehavior": {
+        "title": "Comportamiento de Envío Durante el Trabajo",
+        "description": "Elige qué hacen Enter y el botón de envío durante una respuesta. Ctrl/Cmd+Enter siempre pone el mensaje en cola.",
+        "afterStep": "Después del paso actual",
+        "interrupt": "Interrumpir el trabajo actual"
       }
     },
     "connectors": {
@@ -17105,6 +17211,13 @@
         "savingChanges": "Guardando los cambios...",
         "savingSkill": "Guardando la habilidad..."
       },
+      "staleVersion": {
+        "description": "Alguien guardó una versión más reciente. Recarga para obtenerla. Se perderán los cambios no guardados.",
+        "reload": {
+          "label": "Recargar"
+        },
+        "title": "Esta habilidad cambió desde que la abriste"
+      },
       "toasts": {
         "created": "Se creó \"{name}\"",
         "deleteFailed": "No se pudo eliminar la habilidad",
@@ -17305,9 +17418,6 @@
           "message": "Cargando los detalles de uso compartido..."
         },
         "noOwnerTitle": "Sin propietario activo",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Cambiar el permiso de la organización"
-        },
         "ownerLabel": "Propietario",
         "permissionMenu": {
           "ariaLabel": "Actualizar el acceso de {name}"
@@ -17348,14 +17458,77 @@
         "peopleTitle": "Personas con acceso",
         "manageIndividualAccess": "Gestionar acceso individual",
         "individualAccessTitle": "Acceso individual",
-        "ownershipTitle": "Propiedad"
+        "ownershipTitle": "Propiedad",
+        "published": {
+          "title": "Organización",
+          "description": "Publicada. Todos en la organización pueden usar esta habilidad."
+        },
+        "publishWarning": {
+          "title": "La publicación no se puede deshacer",
+          "description": "Después de guardar, todos en la organización pueden usar esta habilidad. No podrás volver a hacerla privada. Solo un administrador puede eliminarla.",
+          "reviewDescription": "La habilidad sigue privada hasta que un administrador apruebe la solicitud. Después de la aprobación, no podrás volver a hacerla privada."
+        },
+        "reviewRequestedToast": {
+          "message": "Tu solicitud de publicación se envió a un administrador para revisión."
+        },
+        "publishOff": {
+          "title": "La publicación está desactivada",
+          "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique esta habilidad."
+        }
       },
       "placeholders": {
         "githubRepository": "propietario/repositorio o https://github.com/propietario/repositorio"
       },
       "tabs": {
         "details": "Detalles",
-        "sharing": "Compartir"
+        "sharing": "Compartir",
+        "versions": "Versiones"
+      },
+      "versions": {
+        "tableLabel": "Versiones de la habilidad",
+        "columns": {
+          "version": "Versión",
+          "madeBy": "Creada por",
+          "date": "Fecha"
+        },
+        "versionLabel": "Versión {number}",
+        "currentBadge": "Actual",
+        "unknownAuthor": "Desconocido",
+        "previewRow": {
+          "ariaLabel": "Vista previa de la versión {number}"
+        },
+        "restore": {
+          "label": "Restaurar",
+          "ariaLabel": "Restaurar la versión {number}",
+          "successToast": "Se restauró la versión {number} como versión {newNumber}.",
+          "unchangedToast": "La versión {number} tiene los mismos archivos que la versión actual.",
+          "failedToast": "No se pudo restaurar esta versión.",
+          "unsavedChanges": {
+            "title": "Guarda primero tus cambios",
+            "description": "Guarda o descarta los cambios del editor antes de restaurar una versión."
+          }
+        },
+        "loadError": {
+          "title": "No se pudieron cargar las versiones",
+          "description": "Inténtalo de nuevo más tarde."
+        },
+        "preview": {
+          "back": "Todas las versiones",
+          "loadError": {
+            "title": "No se pudo cargar esta versión"
+          }
+        },
+        "status": {
+          "pending": "Revisión pendiente",
+          "published": "Publicada"
+        },
+        "publishUpdate": {
+          "label": "Publicar actualización",
+          "successToast": "Se publicó la versión {number} para la organización.",
+          "failedToast": "No se pudo publicar esta actualización.",
+          "sentForReviewToast": "La versión {number} se envió a un administrador para revisión.",
+          "offNotice": "La publicación está desactivada. Pide a un administrador que publique esta actualización."
+        }
       }
     },
     "page": {
@@ -17508,10 +17681,41 @@
       "shareDescription": "Aplica estos cambios a cada habilidad seleccionada. Los ajustes que no cambies conservan sus valores actuales.",
       "unchanged": "Mantener sin cambios",
       "everyone": "Todos en la organización",
-      "invitedOnly": "Personas y grupos invitados",
       "addAccessDescription": "Añade estas personas y grupos a cada habilidad seleccionada. Las personas y grupos que indiques reciben el permiso elegido. El resto conserva su acceso actual.",
       "apply": "{count, plural, one {Aplicar a # habilidad} other {Aplicar a # habilidades}}",
-      "moreActions": "Más acciones"
+      "moreActions": "Más acciones",
+      "publishWarning": {
+        "title": "La publicación no se puede deshacer",
+        "description": "Después de aplicar, todos en la organización pueden usar las habilidades seleccionadas. Las habilidades publicadas no se pueden volver a hacer privadas. Solo un administrador puede eliminarlas."
+      }
+    },
+    "reviewRequests": {
+      "title": "Solicitudes de publicación",
+      "description": "Aprueba o rechaza solicitudes para publicar habilidades en la organización.",
+      "columns": {
+        "skill": "Habilidad",
+        "version": "Versión",
+        "author": "Autor",
+        "saved": "Guardada"
+      },
+      "unnamedSkill": "Habilidad sin nombre",
+      "review": {
+        "label": "Revisar",
+        "ariaLabel": "Revisar {name}"
+      },
+      "approve": {
+        "label": "Aprobar"
+      },
+      "deny": {
+        "label": "Rechazar"
+      },
+      "approvedToast": "Se publicó la versión {number} de {name}.",
+      "deniedToast": "Se rechazó la versión {number} de {name}.",
+      "failedToast": "No se pudo actualizar esta solicitud.",
+      "version": {
+        "firstPublish": "v{number} · Primera publicación",
+        "update": "v{number} · Actualización de v{published}"
+      }
     }
   },
   "opensearchHealth": {

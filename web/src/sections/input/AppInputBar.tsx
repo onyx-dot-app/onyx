@@ -1,5 +1,8 @@
 "use client";
 
+import Keycap from "@/refresh-components/Keycap";
+import useBrowserInfo from "@/hooks/useBrowserInfo";
+
 import { useNavigation } from "@opal/navigation";
 import { Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
@@ -19,16 +22,32 @@ import { useContentEditable } from "@/hooks/useContentEditable";
 import useFilter from "@/hooks/useFilter";
 import { useAvailableSources } from "@/lib/connectors/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
-import { ChatState, MAX_QUEUED_MESSAGES } from "@/app/app/types";
+import { ChatState } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatForcedToolId } from "@/lib/plugins/chat";
+import { effectiveChatPreferredToolId } from "@/lib/plugins/chat";
 import type { MemberPlugin } from "@/lib/plugins/member";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
-import { useDraft, draftKey } from "@/hooks/useDraft";
+import type {
+  ChatSessionQueue,
+  ComposedMessage,
+  PendingChatMessage,
+  UnsentMessage,
+} from "@/lib/chat/types";
+import { MAX_MENTIONS_PER_MESSAGE } from "@/lib/chat/types";
+import { useDraft, draftKey, readDraft, writeDraft } from "@/hooks/useDraft";
 import { getPastedFilesIfNoText } from "@/lib/clipboard";
 import PasteTilePopover from "@/sections/input/PasteTilePopover";
+import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
+import type { PickerEntry } from "@/lib/skills/picker";
+import type { CaretText } from "@/lib/contentEditable";
+import {
+  filterMentionEntries,
+  MENTION_TRIGGER,
+  placeMentions,
+} from "@/lib/chat/mentions";
 import { cn } from "@opal/utils";
 import { firstStrongTextDir } from "@/lib/rehypeDirection";
 import { Disabled } from "@opal/core";
@@ -73,24 +92,23 @@ import Waveform from "@/components/voice/Waveform";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import {
-  useCurrentQueuedMessages,
-  useCurrentLatestMessageRenderComplete,
   useChatSessionStore,
+  useCurrentResponseStopped,
 } from "@/app/app/stores/useChatSessionStore";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
 
 export interface AppInputBarHandle {
   reset: () => void;
-  /** Puts back a message and files that failed to send, unless a newer draft exists. */
-  restore: (message: string, files: ProjectFile[]) => void;
+  /** Puts back a question that failed to send, unless a newer draft exists. */
+  restore: (unsent: UnsentMessage) => void;
   focus: () => void;
 }
 
 export interface AppInputBarProps {
   initialMessage?: string;
   stopGenerating: () => void;
-  onSubmit: (message: string) => void;
+  onSubmit: (composed: ComposedMessage) => void;
   llmManager: LlmManager;
   chatState: ChatState;
 
@@ -114,6 +132,19 @@ export interface AppInputBarProps {
   tabReadingEnabled?: boolean;
   currentTabUrl?: string | null;
   onToggleTabReading?: () => void;
+  /** Pending input of the current chat; a disabled queue makes input wait for the response. */
+  queue: ChatSessionQueue;
+}
+
+// Older drafts are plain text, or have mentions without an `index`.
+type StoredChatDraft = ComposedMessage | string;
+
+function toChatDraft(draft: StoredChatDraft): ComposedMessage {
+  return typeof draft === "string" ? { message: draft, mentions: [] } : draft;
+}
+
+function isChatDraftEmpty(draft: StoredChatDraft): boolean {
+  return !toChatDraft(draft).message.trim();
 }
 
 const AppInputBar = React.memo(
@@ -136,6 +167,7 @@ const AppInputBar = React.memo(
     tabReadingEnabled,
     currentTabUrl,
     onToggleTabReading,
+    queue,
   }: AppInputBarProps) => {
     const t = useTranslations("chat.input");
     const { incognitoEnabled } = useIncognito();
@@ -147,7 +179,6 @@ const AppInputBar = React.memo(
       null
     );
     const setMutedRef = useRef<((muted: boolean) => void) | null>(null);
-    const queuedMessages = useCurrentQueuedMessages();
     const currentSessionId = useChatSessionStore(
       (state) => state.currentSessionId
     );
@@ -156,29 +187,32 @@ const AppInputBar = React.memo(
     );
     const isCheckingCompletion =
       currentSessionId !== null && checkingSessions.has(currentSessionId);
-    const canStopGeneration =
-      chatState === "loading" || chatState === "streaming";
+    const responding = chatState === "loading" || chatState === "streaming";
+    // Once the stop packet arrives, Stop would reach a finished stream.
+    const responseStopped = useCurrentResponseStopped();
+    const canStopGeneration = responding && !responseStopped;
     const tReadiness = useTranslations("chat.readiness");
-    const queuedMessagesPaused = useChatSessionStore(
-      (state) =>
-        state.sessions.get(state.currentSessionId ?? "")
-          ?.queuedMessagesPaused ?? false
-    );
-    const latestMessageRenderComplete = useCurrentLatestMessageRenderComplete();
-    const enqueueCurrentMessage = useChatSessionStore(
-      (state) => state.enqueueCurrentMessage
-    );
-    const removeCurrentQueuedMessage = useChatSessionStore(
-      (state) => state.removeCurrentQueuedMessage
-    );
+    const queuedMessages = queue.messages;
+    // Typing during an edit's withdrawal would collide with the returned text.
+    const [editWithdrawalSession, setEditWithdrawalSession] = useState<
+      string | null
+    >(null);
+    const withdrawingForEdit =
+      editWithdrawalSession !== null &&
+      editWithdrawalSession === currentSessionId;
     const { user, isAdmin } = useUser();
-    const isAutoSending = useRef(false);
+    const { isMac } = useBrowserInfo();
+    const sendDelivery = user?.preferences.interrupt_on_send
+      ? "interrupt"
+      : "send";
     const inputWrapperRef = useRef<HTMLDivElement>(null);
     const {
       ref: inputRef,
       message,
+      mentions,
       setMessage,
       clearMessage,
+      insertMentionTile,
       handleInput,
       handleCompositionStart,
       handleCompositionEnd,
@@ -199,14 +233,47 @@ const AppInputBar = React.memo(
       pasteTilesEnabled: user?.preferences?.paste_as_tile ?? false,
     });
 
-    // Keyboard navigation + highlight state for the queued-message bar
-    // (shared with the Craft input bar).
-    const queueNav = useQueuedMessageNavigation({
-      messages: queuedMessages,
-      inputIsEmpty: !message,
-      onRemove: removeCurrentQueuedMessage,
-      onEdit: setMessage,
+    // Something is mentioned only when picked from the `@` menu, which puts a
+    // mention tile in the input. The tiles are the mentions: undo, cut and
+    // code that replaces the text all change them with the text.
+    const composed = useMemo(
+      (): ComposedMessage => ({ message, mentions }),
+      [message, mentions]
+    );
+    const chatSkills = useChatSkills();
+    // At the limit of distinct mentions, the `@` menu offers only the skills
+    // already picked; a menu with no match stays closed.
+    const mentionEntries = useMemo(() => {
+      const picked = new Set(mentions.map((mention) => mention.name));
+      return picked.size < MAX_MENTIONS_PER_MESSAGE
+        ? chatSkills.entries
+        : {
+            ...chatSkills.entries,
+            skills: chatSkills.entries.skills.filter((skill) =>
+              picked.has(skill.name)
+            ),
+          };
+    }, [chatSkills.entries, mentions]);
+    const insertMention = useCallback(
+      (entry: PickerEntry, token: CaretText) => {
+        // Each mention kind maps its picker entry kind; chat mentions skills.
+        if (entry.kind === "skill")
+          insertMentionTile({ type: "skill", name: entry.slug }, token);
+      },
+      [insertMentionTile]
+    );
+    // While open, the mention picker wins over the `/` prompt shortcuts popover.
+    const mentionPicker = useEntryPicker({
+      trigger: MENTION_TRIGGER,
+      entries: mentionEntries,
+      filter: filterMentionEntries,
+      onSelect: insertMention,
     });
+
+    // Clearing or replacing the input in code fires no input event.
+    useEffect(() => {
+      if (!message) mentionPicker.reset();
+    }, [message, mentionPicker.reset]);
 
     const filesWrapperRef = useRef<HTMLDivElement>(null);
     const filesContentRef = useRef<HTMLDivElement>(null);
@@ -260,18 +327,29 @@ const AppInputBar = React.memo(
       loaded: chatDraftLoaded,
       save: saveChatDraft,
       clear: clearChatDraft,
-    } = useDraft<string>({ key: chatDraftStorageKey });
+    } = useDraft<StoredChatDraft>({
+      key: chatDraftStorageKey,
+      isEmpty: isChatDraftEmpty,
+    });
     const draftSeededRef = useRef(false);
     const skipNextDraftSaveRef = useRef(false);
     const prevDraftKeyRef = useRef(chatDraftStorageKey);
-    // Snapshot of message, read non-reactively in the restore effect so seeding
-    // doesn't re-run on every keystroke.
-    const messageRef = useRef(message);
+    // Snapshot of the input, read non-reactively in the restore effect so
+    // seeding doesn't re-run on every keystroke, and after awaits.
+    const composedRef = useRef(composed);
     const isRecordingRef = useRef(isRecording);
+    // Text returned after an unmount goes to the chat's draft instead.
+    const mountedRef = useRef(true);
+    useEffect(() => {
+      mountedRef.current = true;
+      return () => {
+        mountedRef.current = false;
+      };
+    }, []);
 
     useEffect(() => {
-      messageRef.current = message;
-    }, [message]);
+      composedRef.current = composed;
+    }, [composed]);
 
     useEffect(() => {
       draftSeededRef.current = false;
@@ -288,11 +366,12 @@ const AppInputBar = React.memo(
     useEffect(() => {
       if (!chatDraftLoaded || draftSeededRef.current) return;
       draftSeededRef.current = true;
-      if (chatDraft && !initialMessage && !messageRef.current) {
+      if (chatDraft && !initialMessage && !composedRef.current.message) {
         // Skip the save effect's next run; it would fire with the stale empty
         // message and wipe what we just seeded.
         skipNextDraftSaveRef.current = true;
-        setMessage(chatDraft);
+        const draft = toChatDraft(chatDraft);
+        setMessage(draft.message, draft.mentions);
       }
     }, [chatDraftLoaded, chatDraft, initialMessage, setMessage]);
 
@@ -302,8 +381,8 @@ const AppInputBar = React.memo(
         skipNextDraftSaveRef.current = false;
         return;
       }
-      saveChatDraft(message);
-    }, [message, chatDraftLoaded, saveChatDraft]);
+      saveChatDraft(composed);
+    }, [composed, chatDraftLoaded, saveChatDraft]);
 
     const handleRecordingChange = useCallback((nextIsRecording: boolean) => {
       const wasRecording = isRecordingRef.current;
@@ -314,23 +393,17 @@ const AppInputBar = React.memo(
       setIsRecording(nextIsRecording);
     }, []);
 
-    // Wrapper for onSubmit that stops TTS first to prevent overlapping voices
-    const handleSubmit = useCallback(
-      (text: string) => {
-        stopTTS();
-        onSubmit(text);
-      },
-      [stopTTS, onSubmit]
-    );
     const submitMessage = useCallback(
-      (text: string) => {
-        if (chatState !== "input" || !text.trim()) {
+      (submitted: ComposedMessage) => {
+        if (chatState !== "input" || !submitted.message.trim()) {
           return;
         }
-        handleSubmit(text);
+        // Stop TTS first to prevent overlapping voices.
+        stopTTS();
+        onSubmit(submitted);
         clearChatDraft();
       },
-      [chatState, handleSubmit, clearChatDraft]
+      [chatState, stopTTS, onSubmit, clearChatDraft]
     );
 
     const { currentMessageFiles, setCurrentMessageFiles } =
@@ -339,16 +412,14 @@ const AppInputBar = React.memo(
     // Expose reset and focus methods to parent via ref
     React.useImperativeHandle(ref, () => ({
       reset: () => {
-        if (!isAutoSending.current) {
-          clearMessage();
-          clearChatDraft();
-        }
+        clearMessage();
+        clearChatDraft();
       },
-      restore: (text: string, files: ProjectFile[]) => {
+      restore: (unsent: UnsentMessage) => {
         // Keep a draft the user started while the failed send was pending.
         if (message.trim() || currentMessageFiles.length > 0) return;
-        setMessage(text);
-        setCurrentMessageFiles(files);
+        setMessage(unsent.message, unsent.mentions);
+        setCurrentMessageFiles(unsent.files);
         setCursorToEnd();
       },
       focus: () => {
@@ -376,11 +447,12 @@ const AppInputBar = React.memo(
       }
     }, [isNewSession, initialMessage]);
 
-    const { clearForcedTool } = toolConfiguration;
-    const forcedToolId = effectiveChatForcedToolId({
-      requestedToolId: toolConfiguration.forcedToolId,
+    const { clearPreferredTool } = toolConfiguration;
+    const preferredToolId = effectiveChatPreferredToolId({
+      requestedToolId: toolConfiguration.preferredToolId,
       agent: activeAgent,
       plugins: memberPlugins ?? [],
+      incognito: incognitoEnabled,
     });
     const { isLoading: isLoadingProjects } = useProjects();
     const activeProject = useActiveProject();
@@ -390,6 +462,143 @@ const AppInputBar = React.memo(
       () => currentMessageFiles.some((file) => isFilePending(file.status)),
       [currentMessageFiles]
     );
+
+    // The composer sends a normal message; tests read this as idle.
+    const acceptsSend =
+      chatState === "input" && !disabled && !isClassifying && !hasPendingFiles;
+
+    // Text typed while Onyx responds becomes pending input.
+    const hasPendingInput = responding && Boolean(message.trim());
+    const canSubmitPending =
+      queue.enabled &&
+      !queue.busy &&
+      responding &&
+      !isSearchMode &&
+      !queue.needsResponseSelection &&
+      // A queued message keeps one model; a comparison has none to keep.
+      !isMultiModelActive &&
+      currentMessageFiles.length === 0;
+
+    const pendingMessageHint = t(
+      incognitoEnabled
+        ? "appInputBar.pendingMessages.incognitoHint"
+        : !queue.enabled
+          ? "appInputBar.pendingMessages.waitHint"
+          : currentMessageFiles.length > 0
+            ? "appInputBar.pendingMessages.attachmentsHint"
+            : queue.needsResponseSelection
+              ? "appInputBar.pendingMessages.chooseResponseHint"
+              : isMultiModelActive
+                ? "appInputBar.pendingMessages.multiModelHint"
+                : sendDelivery === "interrupt"
+                  ? "appInputBar.pendingMessages.interruptHint"
+                  : "appInputBar.pendingMessages.sendHint"
+    );
+
+    // Returned text goes before any newer text, in the composer or, for a chat
+    // that is no longer open, in that chat's own draft.
+    function returnText(sessionId: string, returned: ComposedMessage) {
+      const isOpen =
+        mountedRef.current &&
+        useChatSessionStore.getState().currentSessionId === sessionId;
+      const key = draftKey("chat", sessionId);
+      const newer = isOpen
+        ? composedRef.current
+        : toChatDraft(readDraft<StoredChatDraft>(key) ?? "");
+      const offset = returned.message.length + 2;
+      const combined: ComposedMessage = newer.message.trim()
+        ? {
+            message: `${returned.message}\n\n${newer.message}`,
+            mentions: [
+              ...returned.mentions,
+              ...newer.mentions.map((mention) =>
+                mention.index === undefined
+                  ? mention
+                  : { ...mention, index: mention.index + offset }
+              ),
+            ],
+          }
+        : returned;
+      if (!isOpen) {
+        writeDraft(key, combined, isChatDraftEmpty);
+        return;
+      }
+      // The composer saves its draft after a delay that a chat switch cancels;
+      // the server no longer holds this text, so it is saved at once.
+      writeDraft(chatDraftStorageKey, combined, isChatDraftEmpty);
+      setMessage(combined.message, combined.mentions);
+      setCursorToEnd();
+    }
+
+    async function submitPendingMessage(
+      delivery: PendingChatMessage["delivery"]
+    ) {
+      if (!canSubmitPending || !hasPendingInput || disabled || isClassifying)
+        return;
+      const sessionId = currentSessionId;
+      if (sessionId === null) return;
+      if (delivery === "interrupt") stopTTS({ manual: true });
+      clearMessage();
+      clearChatDraft();
+      if (
+        await queue.submit(
+          { ...composed, message: composed.message.trim() },
+          delivery,
+          {
+            deepResearch: deepResearchEnabled && showDeepResearch,
+            // The turn uses the model the picker shows, as a normal send does.
+            llmOverride: {
+              model_provider: llmManager.currentLlm.name,
+              model_version: llmManager.currentLlm.modelName,
+              model_configuration_id:
+                llmManager.currentLlm.modelConfigurationId ?? null,
+              temperature: llmManager.hasTemperatureOverride
+                ? llmManager.temperature
+                : undefined,
+            },
+          }
+        )
+      )
+        return;
+      returnText(sessionId, composed);
+    }
+
+    async function withdrawPendingMessage(index: number, edit: boolean) {
+      const pending = queue.messages[index];
+      const sessionId = currentSessionId;
+      if (
+        !pending ||
+        sessionId === null ||
+        (edit && composedRef.current.message.trim())
+      )
+        return;
+      if (edit) setEditWithdrawalSession(sessionId);
+      const withdrawn = await queue.withdraw(pending.id);
+      if (edit)
+        setEditWithdrawalSession((current) =>
+          current === sessionId ? null : current
+        );
+      if (edit && withdrawn)
+        returnText(sessionId, {
+          message: withdrawn.message,
+          mentions: withdrawn.mentions,
+        });
+    }
+
+    function interruptWithQueuedMessage(index: number) {
+      const pending = queue.messages[index];
+      if (!pending || disabled) return;
+      stopTTS({ manual: true });
+      void queue.interrupt(pending.id);
+    }
+
+    const queueNav = useQueuedMessageNavigation({
+      messages: queuedMessages,
+      inputIsEmpty: !message,
+      onRemove: (index) => void withdrawPendingMessage(index, false),
+      onEdit: (index) => void withdrawPendingMessage(index, true),
+      onSendNow: interruptWithQueuedMessage,
+    });
 
     // Convert ProjectFile to MinimalOnyxDocument format for viewing
     const handleFileClick = useCallback(
@@ -415,42 +624,6 @@ const AppInputBar = React.memo(
       },
       [handleFileUpload]
     );
-
-    const prevChatStateRef = useRef(chatState);
-    const prevRenderCompleteRef = useRef(latestMessageRenderComplete);
-
-    useEffect(() => {
-      // "Ready" requires the backend to be idle AND the previous answer
-      // to have finished drawing on screen. Without the render-complete
-      // gate, a queued follow-up fires while the smooth-streaming
-      // typewriter is still flushing the prior answer.
-      const wasReady =
-        prevChatStateRef.current === "input" && prevRenderCompleteRef.current;
-      const isReady =
-        chatState === "input" &&
-        latestMessageRenderComplete &&
-        !queuedMessagesPaused;
-
-      prevChatStateRef.current = chatState;
-      prevRenderCompleteRef.current = latestMessageRenderComplete;
-
-      if (!wasReady && isReady && queuedMessages.length > 0) {
-        const nextMessage = queuedMessages[0]!.text;
-        isAutoSending.current = true;
-        stopTTS();
-        onSubmit(nextMessage);
-        isAutoSending.current = false;
-        removeCurrentQueuedMessage(0);
-      }
-    }, [
-      chatState,
-      latestMessageRenderComplete,
-      queuedMessages,
-      queuedMessagesPaused,
-      removeCurrentQueuedMessage,
-      stopTTS,
-      onSubmit,
-    ]);
 
     // Animate attached files wrapper to its content height so CSS transitions
     // can interpolate between concrete pixel values (0px ↔ Npx).
@@ -533,6 +706,7 @@ const AppInputBar = React.memo(
     const handleContentEditableInput = useCallback(
       (event: React.SyntheticEvent<HTMLDivElement>) => {
         const text = handleInput(event);
+        mentionPicker.onInput(event);
         if (text.startsWith("/")) {
           setShowPrompts(true);
           setPromptFilterQuery(text.slice(1));
@@ -541,7 +715,7 @@ const AppInputBar = React.memo(
           setPromptFilterQuery("");
         }
       },
-      [handleInput, hidePrompts, setPromptFilterQuery]
+      [handleInput, mentionPicker.onInput, hidePrompts, setPromptFilterQuery]
     );
 
     const shouldCompactImages = useMemo(() => {
@@ -580,7 +754,12 @@ const AppInputBar = React.memo(
     function handleKeyDownForPromptShortcuts(
       e: React.KeyboardEvent<HTMLDivElement>
     ) {
-      if (!user?.preferences?.shortcut_enabled || !showPrompts) return;
+      if (
+        !user?.preferences?.shortcut_enabled ||
+        !showPrompts ||
+        mentionPicker.open
+      )
+        return;
 
       if (e.key === "Enter") {
         e.preventDefault();
@@ -618,7 +797,7 @@ const AppInputBar = React.memo(
       <div
         {...(isSearchMode ? { inert: true } : {})}
         className={cn(
-          "flex justify-between items-center w-full",
+          "relative flex justify-between items-center w-full",
           isSearchMode
             ? "opacity-0 p-0 h-0 overflow-hidden pointer-events-none"
             : "opacity-100 p-1 h-11 pointer-events-auto",
@@ -700,16 +879,18 @@ const AppInputBar = React.memo(
             ) : (
               showDeepResearch && (
                 <SelectButton
-                  disabled={disabled || isMultiModelActive}
+                  disabled={disabled || isMultiModelActive || incognitoEnabled}
                   variant="select-light"
                   icon={SvgHourglass}
                   onClick={toggleDeepResearch}
                   state={deepResearchEnabled ? "selected" : "empty"}
                   foldable={!deepResearchEnabled}
                   tooltip={
-                    isMultiModelActive
-                      ? t("appInputBar.deepResearchButton.disabledTooltip")
-                      : undefined
+                    incognitoEnabled
+                      ? t("appInputBar.deepResearchButton.incognitoTooltip")
+                      : isMultiModelActive
+                        ? t("appInputBar.deepResearchButton.disabledTooltip")
+                        : undefined
                   }
                 >
                   {t("appInputBar.deepResearchButton.label")}
@@ -729,9 +910,9 @@ const AppInputBar = React.memo(
             )}
 
             {(() => {
-              if (!activeAgent || forcedToolId === null) return null;
+              if (!activeAgent || preferredToolId === null) return null;
               const tool = activeAgent.tools.find(
-                (tool) => tool.id === forcedToolId
+                (tool) => tool.id === preferredToolId
               );
               if (!tool) return null;
               return (
@@ -739,7 +920,7 @@ const AppInputBar = React.memo(
                   <SelectButton
                     variant="select-light"
                     icon={getIconForAction(tool)}
-                    onClick={clearForcedTool}
+                    onClick={clearPreferredTool}
                     state="selected"
                   >
                     {tool.display_name}
@@ -750,12 +931,116 @@ const AppInputBar = React.memo(
           </div>
         </div>
 
+        {/* One row, so the activity and the hint cannot overlap. */}
+        {((queue.hasActiveSubagents && !isSearchMode) || hasPendingInput) && (
+          <Section
+            flexDirection="row"
+            justifyContent="end"
+            width="auto"
+            height="fit"
+            gap={1}
+            padding={1}
+            className="min-w-0 flex-1"
+          >
+            {queue.hasActiveSubagents && !isSearchMode && (
+              <Section
+                flexDirection="row"
+                justifyContent="start"
+                width="auto"
+                height="fit"
+                gap={1}
+                data-testid="subagent-activity"
+                className="shrink-0"
+              >
+                {/* The live region holds only the status text, not the Stop control. */}
+                <Section
+                  flexDirection="row"
+                  justifyContent="start"
+                  width="auto"
+                  height="fit"
+                  gap={1}
+                  role="status"
+                >
+                  <span
+                    aria-hidden
+                    className="size-1.5 shrink-0 rounded-full bg-status-info-05 motion-safe:animate-pulse"
+                  />
+                  <Text font="secondary-body" color="text-03" maxLines={1}>
+                    {t("appInputBar.subagentsWorking")}
+                  </Text>
+                </Section>
+                <Button
+                  icon={SvgStop}
+                  prominence="tertiary"
+                  size="xs"
+                  aria-label={t("appInputBar.stopSubagentsButton.label")}
+                  tooltip={t("appInputBar.stopSubagentsButton.label")}
+                  onClick={() => void queue.stopSubagents()}
+                />
+              </Section>
+            )}
+            {hasPendingInput && (
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                width="auto"
+                height="fit"
+                gap={1}
+                data-testid="pending-message-hint"
+                role="note"
+                aria-label={
+                  !canSubmitPending
+                    ? pendingMessageHint
+                    : sendDelivery === "interrupt"
+                      ? t("appInputBar.pendingMessages.interruptKeyboardHint")
+                      : t("appInputBar.pendingMessages.keyboardHint")
+                }
+                className="min-w-0"
+              >
+                {canSubmitPending ? (
+                  <>
+                    <Keycap>↵</Keycap>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
+                      {t(
+                        sendDelivery === "interrupt"
+                          ? "appInputBar.pendingMessages.interruptLabel"
+                          : "appInputBar.pendingMessages.sendLabel"
+                      )}
+                    </Text>
+                    <Keycap>
+                      {isMac ? "⌘" : t("appInputBar.pendingMessages.ctrlKey")}
+                    </Keycap>
+                    <Keycap>↵</Keycap>
+                    <Text font="secondary-body" color="text-03" maxLines={1}>
+                      {t("appInputBar.pendingMessages.queueLabel")}
+                    </Text>
+                  </>
+                ) : (
+                  <Text
+                    font="secondary-body"
+                    color="text-03"
+                    maxLines={1}
+                    overflowTooltip
+                  >
+                    {pendingMessageHint}
+                  </Text>
+                )}
+              </Section>
+            )}
+          </Section>
+        )}
+
         {/* Bottom right controls */}
         <div className="flex flex-row items-center gap-1">
           {showMicButton &&
             (sttEnabled ? (
               <MicrophoneButton
-                onTranscription={(text) => setMessage(text)}
+                // The transcript follows the text that was there when
+                // recording started, so the tiles in that text keep their
+                // places.
+                onTranscription={(text) =>
+                  setMessage(text, composedRef.current.mentions)
+                }
                 disabled={disabled || chatState === "streaming"}
                 autoSend={user?.preferences?.voice_auto_send ?? false}
                 autoListen={user?.preferences?.voice_auto_playback ?? false}
@@ -765,9 +1050,14 @@ const AppInputBar = React.memo(
                 stopRecordingRef={stopRecordingRef}
                 currentMessage={message}
                 onRecordingStart={() => {}}
-                onAutoSend={(text) => {
-                  submitMessage(text);
-                }}
+                // Like `setMessage`, keep only the mentions whose `@name`
+                // is still in the text.
+                onAutoSend={(text) =>
+                  submitMessage({
+                    message: text,
+                    mentions: placeMentions(text, composedRef.current.mentions),
+                  })
+                }
                 onMuteChange={setIsMuted}
                 setMutedRef={setMutedRef}
                 onAudioLevel={setAudioLevel}
@@ -782,22 +1072,45 @@ const AppInputBar = React.memo(
               />
             ))}
 
+          {canStopGeneration && hasPendingInput && (
+            <Button
+              prominence="tertiary"
+              icon={SvgStop}
+              aria-label={t("baseInputBar.stopButton.ariaLabel")}
+              tooltip={t("baseInputBar.stopButton.ariaLabel")}
+              onClick={() => {
+                stopTTS({ manual: true });
+                stopGenerating();
+              }}
+            />
+          )}
           <Button
             disabled={
               chatState === "cancelling" ||
               (isCheckingCompletion && chatState === "unconfirmed") ||
-              (chatState === "input" &&
+              ((chatState === "input" || responding) &&
+                !canStopGeneration &&
                 !isVoicePlaybackControllable &&
                 !message) ||
               hasPendingFiles ||
-              isClassifying
+              isClassifying ||
+              (hasPendingInput && !canSubmitPending)
             }
             tooltip={
               chatState === "cancelling"
                 ? t("appInputBar.sendButton.stoppingLabel")
                 : hasPendingFiles
                   ? t("appInputBar.sendButton.processingFilesTooltip")
-                  : undefined
+                  : hasPendingInput
+                    ? pendingMessageHint
+                    : undefined
+            }
+            aria-label={
+              !hasPendingInput
+                ? undefined
+                : sendDelivery === "interrupt"
+                  ? t("appInputBar.pendingMessages.interruptLabel")
+                  : t("baseInputBar.sendButton.sendLabel")
             }
             id="onyx-chat-input-send-button"
             icon={
@@ -840,20 +1153,14 @@ const AppInputBar = React.memo(
               }
               const canSubmitNormally = chatState === "input";
               if (!canSubmitNormally && message.trim()) {
-                if (queuedMessages.length < MAX_QUEUED_MESSAGES) {
-                  enqueueCurrentMessage(message.trim());
-                  clearMessage();
-                  // Drop the draft now; a reload could outrace the debounced
-                  // empty-save.
-                  clearChatDraft();
-                }
+                void submitPendingMessage(sendDelivery);
               } else if (canStopGeneration) {
                 stopTTS({ manual: true });
                 stopGenerating();
               } else if (isVoicePlaybackControllable) {
                 stopTTS({ manual: true });
               } else if (message) {
-                submitMessage(message);
+                submitMessage(composed);
               }
             }}
           >
@@ -871,14 +1178,26 @@ const AppInputBar = React.memo(
       <>
         <QueuedMessageBar
           messages={queuedMessages}
-          highlightedIndex={queueNav.highlightedIndex}
-          onDiscard={removeCurrentQueuedMessage}
-          onHighlight={queueNav.setHighlightedIndex}
+          highlightedId={queueNav.highlightedId}
+          onDiscard={(index) => void withdrawPendingMessage(index, false)}
+          onEdit={(index) => void withdrawPendingMessage(index, true)}
+          onSendNow={interruptWithQueuedMessage}
+          disabled={queue.busy || disabled}
+          canEdit={!message.trim()}
         />
+        {queue.error && (
+          <Section padding={1} width="full" height="fit">
+            <Text font="secondary-body" color="text-03">
+              {queue.error}
+            </Text>
+          </Section>
+        )}
         <Disabled disabled={disabled} allowClick>
           <div
             ref={containerRef}
             id="onyx-chat-input"
+            data-chat-state={chatState}
+            data-accepts-send={acceptsSend}
             className={cn(
               "relative w-full flex flex-col shadow-box-01 bg-background-neutral-00 rounded-16"
               // # Note (from @raunakab):
@@ -945,7 +1264,11 @@ const AppInputBar = React.memo(
 
             <div className="flex flex-row items-center w-full">
               <Popover
-                open={user?.preferences?.shortcut_enabled && showPrompts}
+                open={
+                  user?.preferences?.shortcut_enabled &&
+                  showPrompts &&
+                  !mentionPicker.open
+                }
                 onOpenChange={setShowPrompts}
               >
                 <Popover.Anchor asChild>
@@ -958,7 +1281,7 @@ const AppInputBar = React.memo(
                       id="onyx-chat-input-textbox"
                       role="textbox"
                       aria-label={t("appInputBar.input.ariaLabel")}
-                      contentEditable={!disabled}
+                      contentEditable={!disabled && !withdrawingForEdit}
                       // Direction follows what the user types. While empty
                       // it follows the placeholder so its punctuation sits
                       // on the correct side in every locale.
@@ -973,7 +1296,8 @@ const AppInputBar = React.memo(
                       onCut={handleCut}
                       onMouseDown={handleTileMouseDown}
                       onClick={handleTileClick}
-                      onBlur={() => queueNav.setHighlightedIndex(null)}
+                      onFocus={chatSkills.onInputFocus}
+                      onBlur={() => queueNav.setHighlightedId(null)}
                       onKeyDownCapture={handleKeyDownForPromptShortcuts}
                       onInput={handleContentEditableInput}
                       onCompositionStart={handleCompositionStart}
@@ -1000,34 +1324,21 @@ const AppInputBar = React.memo(
                         if (
                           event.key === "Enter" &&
                           !showPrompts &&
+                          !mentionPicker.open &&
                           !event.shiftKey &&
                           !event.nativeEvent.isComposing
                         ) {
                           event.preventDefault();
-                          const canSubmitNormally = chatState === "input";
-                          if (canSubmitNormally) {
-                            if (
-                              message &&
-                              !disabled &&
-                              !isClassifying &&
-                              !hasPendingFiles
-                            ) {
-                              submitMessage(message);
+                          if (chatState === "input") {
+                            if (message && acceptsSend) {
+                              submitMessage(composed);
                             }
-                          } else if (
-                            chatState !== "cancelling" &&
-                            chatState !== "unconfirmed" &&
-                            message.trim() &&
-                            !disabled &&
-                            !isClassifying &&
-                            !hasPendingFiles &&
-                            queuedMessages.length < MAX_QUEUED_MESSAGES
-                          ) {
-                            enqueueCurrentMessage(message.trim());
-                            clearMessage();
-                            // Drop the draft now; a reload could outrace the
-                            // debounced empty-save.
-                            clearChatDraft();
+                          } else if (canSubmitPending) {
+                            void submitPendingMessage(
+                              event.ctrlKey || event.metaKey
+                                ? "queue"
+                                : sendDelivery
+                            );
                           }
                         }
                       }}
@@ -1107,7 +1418,7 @@ const AppInputBar = React.memo(
                       if (chatState == "streaming") {
                         stopGenerating();
                       } else if (message) {
-                        submitMessage(message);
+                        submitMessage(composed);
                       }
                     }}
                     prominence="tertiary"
@@ -1142,6 +1453,16 @@ const AppInputBar = React.memo(
                 onExpand={() => expandTile(tilePopover.tile)}
               />
             )}
+            <EntryPickerPopover
+              open={mentionPicker.open}
+              anchorRect={mentionPicker.anchorRect}
+              query={mentionPicker.query}
+              sections={mentionPicker.sections}
+              onSelect={mentionPicker.onSelect}
+              onEscape={mentionPicker.onEscape}
+              onDismiss={mentionPicker.reset}
+              trigger={MENTION_TRIGGER}
+            />
           </div>
         </Disabled>
         {/* Stays for the whole session: the warning is most relevant

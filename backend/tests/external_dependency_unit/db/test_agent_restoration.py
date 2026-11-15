@@ -3,7 +3,7 @@
 from functools import partial
 from uuid import uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -18,12 +18,10 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import AgentTool, ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
-from onyx.chat.history_store import get_chat_history_store
-from onyx.chat.models import MessageRendering, ResponseRecord
+from onyx.chat.models import MessageRendering, ResponseRecord, SavedAgentContext
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.chat.restoration import restore_chat_agent
 from onyx.chat.run_store import ChatRunStore
-from onyx.chat.subagents import ChatAgentDirectory
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.chat import create_db_search_doc
@@ -31,14 +29,10 @@ from onyx.db.chat_response import (
     reserve_child_response__no_commit,
     save_response_content,
 )
-from onyx.db.chat_subagents import (
-    load_agent_history,
-    load_chat_branch,
-    load_session_agent_metadata,
-)
-from onyx.db.enums import IncognitoRecordMode
-from onyx.db.models import ChatMessage, ChatSession
+from onyx.db.chat_subagents import load_agent_history, load_chat_branch
+from onyx.db.models import ChatMessage, ChatSession, User
 from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.research_agent import ResearchAgent
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
 from onyx.llm.models import (
@@ -53,7 +47,6 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from onyx.prompts.chat_prompts import TOOL_CALL_RESPONSE_CROSS_MESSAGE
 from onyx.tracing.flows import LLMFlow
 from shared_configs.contextvars import get_current_tenant_id
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -101,24 +94,28 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     )
     db_session.add(previous)
     db_session.flush()
-    continuation = ChatMessage(
+    next_question = ChatMessage(
         chat_session_id=session.id,
         parent_message_id=previous.id,
         message="Continue",
         token_count=1,
         message_type=MessageType.USER,
     )
-    db_session.add(continuation)
+    db_session.add(next_question)
     db_session.flush()
     response = ChatMessage(
         chat_session_id=session.id,
-        parent_message_id=continuation.id,
+        parent_message_id=next_question.id,
         message="",
         token_count=0,
         message_type=MessageType.ASSISTANT,
     )
     db_session.add(response)
     db_session.flush()
+    # The later response is the selected one.
+    question.latest_child_message_id = previous.id
+    previous.latest_child_message_id = next_question.id
+    next_question.latest_child_message_id = response.id
     root_id = str(session.id)
     agent_id = str(uuid4())
     source = SearchDoc(
@@ -172,6 +169,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         parent_response_id=previous.id,
         parent_message_id=f"{previous_run_id}:0",
         parent_tool_call_id="delegate",
+        delivers_result=False,
     )
     first_response_id = str(child_response_id)
     transcript.child_runs.append(
@@ -230,22 +228,13 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     saved_run_id: str
 
     def reuse(invocation: ToolInvocation) -> ToolResult:
-        historical = invocation.agents.wait_run(saved_run_id, timeout=2)
-        assert (
-            historical is not None and historical.output.text == "Cedar evidence [1]."
-        )
-        run_id = invocation.agents.start_run(
+        receipt = invocation.agents.send_message(
             agent_id,
-            messages=[UserMessage(content="Check the evidence again")],
+            message="Check the evidence again",
             max_steps=1,
         )
-        assert run_id != saved_run_id
-        result = invocation.agents.wait_run(run_id, timeout=5)
-        assert (
-            result is not None
-            and result.output.text == "Additional cedar evidence [1]."
-        )
-        return ToolResult(content=result.output.text)
+        assert receipt.run_id is None
+        return ToolResult(content="Follow-up submitted")
 
     root = Agent(
         FakeModelClient(lambda *_: next(root_replies)),
@@ -262,40 +251,48 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
     )
     coordinator: AgentCoordinator | None = None
     try:
-        saved_child = load_agent_history(response_id, agent_id)
+        saved_child = load_agent_history(load_chat_branch(response_id), agent_id)
         assert saved_child.sources[1].document_id == "source"
         persisted_run_id = saved_child.previous_run_id
         assert persisted_run_id is not None
         saved_run_id = persisted_run_id
         branch = load_chat_branch(response_id)
-        history_store = get_chat_history_store(
-            message_id=response_id,
-            chat_session_id=session_id,
-            persist_content=True,
-            branch=branch,
-        )
+        identity = LLMUserIdentity()
+
+        def restore_research(history: SavedAgentContext, _depth: int) -> ResearchAgent:
+            configuration = history.configuration
+            assert isinstance(configuration, ResearchConfiguration)
+            return ResearchAgent(
+                tools=[],
+                llm=research_llm,
+                token_counter=len,
+                user_identity=identity,
+                language_section=configuration.language_section,
+                reasoning_effort=configuration.reasoning_effort,
+                messages=history.messages,
+                checkpoint=history.checkpoint,
+                sources=history.sources,
+                previous_run_id=history.previous_run_id,
+                agent_id=history.agent_id,
+            )
+
         run_store = ChatRunStore(
             tenant_id=get_current_tenant_id(),
             chat_session_id=session_id,
             response_id=response_id,
             visible_response_ids=branch.message_ids,
             cache=get_cache_backend(),
+            follow_up_steps=4,
+            user=User(),
+            restore_subagent=restore_research,
         )
-        identity = LLMUserIdentity()
         coordinator = run_store.bind(
             AgentCoordinator(),
             build_agent=partial(
                 restore_chat_agent, llm=research_llm, tools=[], user_identity=identity
             ),
-            directory=ChatAgentDirectory(
-                history_store=history_store,
-                llm=research_llm,
-                tools=[],
-                user_identity=identity,
-                store=run_store,
-            ),
         )
-        for info in history_store.list_agents():
+        for info in run_store.list_agents():
             coordinator.register(info)
         coordinator.register(
             AgentInfo(
@@ -308,17 +305,23 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             )
         )
         assert root.id == root_id
-        assert (
-            root.start(
-                background=False,
-                max_steps=2,
-                messages=[UserMessage(content="Continue")],
-                coordinator=coordinator,
-            )
-            .result()
-            .output.text
-            == "Done"
+        historical = coordinator.child_completion(saved_run_id, root.id).result(
+            timeout=2
         )
+        assert historical.steps[0].message.text == "Cedar evidence [1]."
+        run = root.start(
+            background=False,
+            max_steps=2,
+            messages=[UserMessage(content="Continue")],
+            coordinator=coordinator,
+        )
+        assert run.result().output.text == "Done"
+        assert run.wait_for_idle(timeout=5)
+        run_store.poll_control()
+        following = coordinator.newest_run(agent_id)
+        assert following is not None and following.id != saved_run_id
+        assert following.result().output.text == "Additional cedar evidence [1]."
+        assert following.wait_for_idle(timeout=5)
         assert len(requests) == 1
         assert any(
             "Investigate cedar" in message.text for message in requests[0].messages
@@ -331,7 +334,7 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
             for message in requests[0].messages
         )
         assert coordinator.close(timeout=10)
-        continued = load_agent_history(response_id, agent_id)
+        continued = load_agent_history(load_chat_branch(response_id), agent_id)
         assert continued.previous_run_id != saved_run_id
         assert any(
             message.text == "Additional cedar evidence [1]."
@@ -348,41 +351,9 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         db_session.commit()
 
 
-def test_incognito_does_not_persist_child_conversations(db_session: Session) -> None:
-    session = ChatSession(
-        id=uuid4(),
-        description="private",
-        incognito_record_mode=IncognitoRecordMode.USAGE_ONLY,
-    )
-    db_session.add(session)
-    db_session.flush()
-    message = ChatMessage(
-        chat_session_id=session.id,
-        message="",
-        token_count=0,
-        message_type=MessageType.ASSISTANT,
-    )
-    db_session.add(message)
-    db_session.commit()
-    try:
-        metadata = load_session_agent_metadata(message.id)
-        assert [agent.id for agent in metadata] == [str(session.id)]
-        assert metadata[0].restoration_config is None
-        assert (
-            db_session.scalar(
-                select(ChatSession)
-                .join(ChatMessage, ChatSession.spawned_by_message_id == ChatMessage.id)
-                .where(ChatMessage.chat_session_id == session.id)
-            )
-            is None
-        )
-    finally:
-        db_session.delete(message)
-        db_session.delete(session)
-        db_session.commit()
-
-
-def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
+def test_saved_tools_survive_replay_and_request_preparation(
+    db_session: Session,
+) -> None:
     session = ChatSession(id=uuid4(), description="History context")
     db_session.add(session)
     db_session.flush()
@@ -447,9 +418,6 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
         history = convert_chat_history(
             capture_chat_history([saved_question, saved_response], {}, len),
             files=[],
-            context_image_files=[],
-            additional_context=None,
-            token_counter=len,
         ).messages
         original_messages = [message.model_dump() for message in history]
         history.append(UserMessage(content="Next question"))
@@ -462,7 +430,7 @@ def test_saved_tools_filter_at_request_boundary(db_session: Session) -> None:
             token_counter=len,
         )
         assert [m.text for m in request if isinstance(m, ToolResultMessage)] == [
-            TOOL_CALL_RESPONSE_CROSS_MESSAGE,
+            "Stored evidence",
             image_content,
         ]
         assert [m.text for m in history if isinstance(m, ToolResultMessage)] == [

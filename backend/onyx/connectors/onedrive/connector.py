@@ -75,8 +75,7 @@ from onyx.connectors.onedrive.source_operations import (
     OneDriveSourceOperations,
 )
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -509,10 +508,7 @@ class OneDriveConnector(
         start_at: datetime | None,
         end_at: datetime | None,
     ) -> bool:
-        if (
-            get_file_ext(item.name or "")
-            not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
-        ):
+        if not is_indexable_file_type(item.name or "", None, allow_images=True):
             return False
         graph_json = item.to_graph_json()
         if not drive_item_in_time_window(graph_json, start_at, end_at):

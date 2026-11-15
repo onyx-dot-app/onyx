@@ -16,9 +16,9 @@ class PathSpec(BaseModel):
 
 
 class MethodSpec(BaseModel):
-    # Sanitized, LLM-safe name; used in tool definitions and dispatch.
+    # Sanitized operationId used in the parsed operation schema.
     name: str
-    # Original operationId, retained for user-visible display only.
+    # Original operationId used for display and stable tool identity.
     raw_name: str
     summary: str
     path: str

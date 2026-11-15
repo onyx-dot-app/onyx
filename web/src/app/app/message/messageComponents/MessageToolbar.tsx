@@ -109,7 +109,7 @@ export interface MessageToolbarProps {
 
   // Copy functionality
   rawPackets: Packet[];
-  finalAnswerRef: RefObject<HTMLDivElement | null>;
+  answerRefs: RefObject<(HTMLDivElement | null)[]>;
 
   // Feedback
   currentFeedback?: FeedbackType | null;
@@ -138,7 +138,7 @@ export default function MessageToolbar({
   getNextMessage,
   onMessageSelection,
   rawPackets,
-  finalAnswerRef,
+  answerRefs,
   currentFeedback,
   onRegenerate,
   parentMessage,
@@ -157,6 +157,13 @@ export default function MessageToolbar({
     return msg ? (messageModelName(msg) ?? undefined) : undefined;
   }, [messageTree, nodeId]);
   const distinctModelsUsed = useDistinctModelsUsed();
+  // A follow-up to agent results has no prompt to regenerate from.
+  const isFollowUp = parentMessage?.type === "agent_results";
+  const readOnlyModelName = !llmManager
+    ? currentModelName
+    : isFollowUp
+      ? (ownModelName ?? currentModelName)
+      : undefined;
 
   // Incognito responses take no feedback: votes would persist reviewable
   // signal tied to a chat hidden from the owner's surfaces. The session's
@@ -289,7 +296,11 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 )
               }
-              getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
+              getHtmlContent={() =>
+                answerRefs.current
+                  .map((element) => element?.innerHTML || "")
+                  .join("\n")
+              }
               data-testid="AgentMessage/copy-button"
             />
             {!incognitoEnabled && (
@@ -328,24 +339,25 @@ export default function MessageToolbar({
               />
             )}
 
-            {/* Read-only model label for the shared view: no llmManager to
-                power the interactive selector, so surface which model answered. */}
-            {!llmManager && currentModelName && (
+            {/* Read-only model label where the regenerate selector is not
+                available, so the answer still shows which model answered. */}
+            {readOnlyModelName && (
               <SelectButton
                 chevron
                 disabled
                 icon={getModelIcon(
                   currentModelProvider ?? "",
-                  currentModelName
+                  readOnlyModelName
                 )}
               >
-                {currentModelName}
+                {readOnlyModelName}
               </SelectButton>
             )}
 
             {onRegenerate &&
               messageId !== undefined &&
               parentMessage &&
+              !isFollowUp &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector

@@ -64,7 +64,10 @@ verification ([[auth-and-identity]]), or the acting-user rules for the widget
 registers shortcuts, the tray and a navigation plugin. `desktop/src/index.html`
 is the fallback page for a missing or unreachable server. It calls the Tauri
 commands `get_bootstrap_state`, `check_server_reachable` and `set_server_url`
-(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server. On
+(`desktop/src-tauri/src/commands.rs`), then sends the webview to the server.
+**File → Settings** sends the focused window back to this page at the
+platform app origin (`desktop/src-tauri/src/window.rs:settings_url`):
+`tauri://localhost`, but `http://tauri.localhost` on Windows. On
 macOS, `desktop/src-tauri/src/window.rs:eval_titlebar_script` injects
 `desktop/src/titlebar.js` on every page load. It reserves the titlebar strip and
 keeps the root layout, toasts and modals below it, so installed apps stay
@@ -138,13 +141,30 @@ panel picks up the new session when the user returns.
    a chat.** `should_open_in_external_browser` returns true only when the
    current URL is a chat session (`is_chat_session_url`: `/app` with a
    `chatId`), and then only for `mailto`, `tel` or an `http(s)` link to another
-   origin. This keeps the settings and login flows inside the app.
+   origin. This keeps the settings and login flows inside the app. The app
+   origin (`desktop/src-tauri/src/window.rs:is_app_origin_url`) is exempt, because on Windows the
+   bundled Settings page is an `http://tauri.localhost` URL.
 4. `desktop-popup-routing` **Script popups stay in the app; plain links go to
    the browser.** `desktop/src-tauri/src/window.rs:classify_new_window` opens
    `about:blank`, same-origin pages and popups with size features in an app
-   window that keeps the session cookies and `window.opener`. OAuth flows
-   depend on this: they open `about:blank` inside the click, then navigate it
-   and wait for a `postMessage`. Other `http(s)` popups go to the browser.
+   window that keeps the session cookies and `window.opener`. Other `http(s)`
+   popups go to the browser. OAuth flows that use
+   `web/src/lib/oauth/launch.ts:launchOAuth` do not use a popup in the app.
+   They open the provider in the system browser with a `.desktop` state
+   suffix. The browser-side callback page opens
+   `onyx://oauth-callback?path=...&origin=...`. The browser often has no Onyx
+   session, so `web/src/proxy.ts` serves `.desktop` callbacks from
+   `/oauth/desktop-handoff` before any auth gate
+   (`web/src/lib/oauth/desktopCallback.ts` holds the path allowlist). Then
+   `desktop/src-tauri/src/oauth_handoff.rs` accepts only allowlisted callback
+   paths on the configured server. When the main window is on that server, it
+   first offers the callback to it (`__ONYX_DESKTOP__.claimOAuthCallback`): a
+   page still waiting on that state runs it in a hidden same-origin iframe. If
+   no page claims it within 2s, the shell loads it in an app window. Either
+   way the callback reports completion through `BroadcastChannel`.
+   Two cases still open `about:blank` inside the click, navigate it, and wait
+   for a `postMessage`: desktop builds without the `oauthInBrowser` flag, and
+   flows that do not use `launchOAuth`, such as the Craft setup card.
    `desktop/tests/webdriver_smoke.py` drives the real binary through these
    rules, `confirm()` and downloads. Add a check there when the web app starts
    to depend on a new browser behaviour.

@@ -170,7 +170,7 @@ def test_fenced_deletion_reports_its_start(
     submitted: datetime = datetime.now(timezone.utc) - timedelta(minutes=5)
     redis_connector = RedisConnector(get_current_tenant_id(), cc_pair.id)
     redis_connector.delete.set_fence(
-        RedisConnectorDeletePayload(num_tasks=3, submitted=submitted)
+        RedisConnectorDeletePayload(num_docs_queued=3, submitted=submitted)
     )
     try:
         info = get_cc_pair_full_info(cc_pair.id, user=admin, db_session=db_session)

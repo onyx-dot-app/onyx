@@ -1,10 +1,10 @@
 import abc
 import traceback
 from collections.abc import Callable
-from functools import partial
+from functools import cache, partial
 from typing import TYPE_CHECKING, final
 
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
@@ -12,7 +12,11 @@ from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
+    DEFAULT_CODE_MODE_RESULT,
     ChatMinimalTextMessage,
+    CodeModeExposure,
+    CodeModeFunctionName,
+    CodeModeResultSpec,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
@@ -52,14 +56,38 @@ def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage
     ]
 
 
+@cache
+def _accepts_null(annotation: object) -> bool:
+    try:
+        TypeAdapter(annotation).validate_python(None)
+    except ValidationError:
+        return False
+    return True
+
+
 def parse_tool_arguments[T: BaseModel](
     model: type[T], arguments: dict[str, JsonValue]
 ) -> T:
+    """Validate a call with the model of `tool_definition_from_arguments`. Null
+    for a defaulted argument whose type does not accept null selects the
+    default, as strict definitions ask."""
     try:
-        return model.model_validate(arguments)
+        return model.model_validate(
+            {
+                key: value
+                for key, value in arguments.items()
+                if value is not None
+                or (field := model.model_fields.get(key)) is None
+                or field.is_required()
+                or _accepts_null(field.annotation)
+            }
+        )
     except ValidationError as error:
         message = "; ".join(
-            item["msg"] for item in error.errors(include_input=False, include_url=False)
+            f"{'.'.join(map(str, item['loc']))}: {item['msg']}"
+            if item["loc"]
+            else item["msg"]
+            for item in error.errors(include_input=False, include_url=False)
         )
         raise ToolCallException(
             message=f"Invalid tool arguments: {message}",
@@ -113,7 +141,7 @@ def _invoke_tool[T: ToolOutcome](
 ) -> T | ToolResult:
     """Apply application tracing, error conversion, and cancellation to a callback."""
     invocation.cancellation.check()
-    with function_span(name) as span:
+    with function_span(name, metadata=invocation.trace_metadata) as span:
         span.span_data.input = str(invocation.arguments)
         try:
             result = execute()
@@ -147,6 +175,9 @@ class Tool(abc.ABC):
     """An application tool with context, tracing, and an SDK binding."""
 
     result_from_children: ToolResultFromChildren | None = None
+    # Set by tools that must not run twice: the saved result of a call that
+    # stopped before it finished. See AgentTool.
+    interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
 
@@ -155,8 +186,34 @@ class Tool(abc.ABC):
         return ToolExecutionMode.PARALLEL
 
     @property
+    def inner_tools(self) -> list["Tool"]:
+        """Tools that run inside this tool's calls, such as code mode functions."""
+        return []
+
+    def operation_names(self, tool_id: int) -> list[str]:
+        """How the model calls the configured tool `tool_id` through this tool."""
+        return [self.name] if self.id == tool_id else []
+
+    @property
     @abc.abstractmethod
-    def id(self) -> int:
+    def code_mode_exposure(self) -> CodeModeExposure:
+        """How code mode offers the tool. Tools that wait for child runs
+        (`result_from_children`) must be DIRECT."""
+        raise NotImplementedError
+
+    @property
+    def code_mode_function_name(self) -> CodeModeFunctionName:
+        return CodeModeFunctionName(name=self.name)
+
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        """The value and stub type a code mode program receives from the tool."""
+        return DEFAULT_CODE_MODE_RESULT
+
+    @property
+    @abc.abstractmethod
+    def id(self) -> int | None:
+        """The tool row; None for a tool built per response without a row."""
         raise NotImplementedError
 
     @property
@@ -230,4 +287,62 @@ class Tool(abc.ABC):
             if self.merge_list_argument is not None
             else None,
             result_from_children=result_from_children,
+            interrupted_result=self.interrupted_result,
+            display_name=self.display_name,
         )
+
+
+def tool_definition_from_arguments(
+    name: str,
+    description: str,
+    arguments: type[BaseModel],
+    *,
+    strict: bool = False,
+) -> ToolDefinition:
+    """A tool definition whose parameters are the JSON schema of the Pydantic
+    model that `parse_tool_arguments` validates the call with.
+
+    A strict definition is closed and requires every argument, as OpenAI strict
+    mode does: an argument with a default accepts null, which
+    `parse_tool_arguments` reads as the default. Its argument types must be
+    inline, so a nested model or an enum, which Pydantic emits as a `$defs`
+    reference, is an error; use a `Literal` for an enum. An object argument,
+    such as a mapping, is an error too, because strict mode requires every
+    object to be closed."""
+    schema = arguments.model_json_schema()
+    # Titles repeat the property names; leave them out of every request.
+    schema.pop("title", None)
+    properties = schema["properties"]
+    for field_schema in properties.values():
+        field_schema.pop("title", None)
+    if strict:
+        if "$defs" in schema:
+            raise ValueError(
+                f"{arguments.__name__} has referenced types; a strict definition "
+                "supports only inline argument types"
+            )
+        pending: list[object] = list(properties.values())
+        while pending:
+            node = pending.pop()
+            if isinstance(node, dict):
+                if node.get("type") == "object":
+                    raise ValueError(
+                        f"{arguments.__name__} has an object argument; a strict "
+                        "definition supports only closed objects"
+                    )
+                pending.extend(node.values())
+            elif isinstance(node, list):
+                pending.extend(node)
+        schema["additionalProperties"] = False
+        for field_name in set(properties) - set(schema.get("required", [])):
+            field_schema = properties[field_name]
+            field_schema.pop("default", None)
+            if {"type": "null"} not in field_schema.get("anyOf", []):
+                nullable = {"anyOf": [field_schema, {"type": "null"}]}
+                if "description" in field_schema:
+                    nullable["description"] = field_schema.pop("description")
+                properties[field_name] = nullable
+        schema["required"] = list(properties)
+    return ToolDefinition(
+        name=name, description=description, parameters=schema, strict=strict
+    )

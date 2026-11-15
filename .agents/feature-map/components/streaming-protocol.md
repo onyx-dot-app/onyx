@@ -90,15 +90,33 @@ It turns a failure in setup or start into one `StreamingError` line.
 
 **Line kinds.** `chat/models.py:AnswerStreamPart` lists what the backend
 writes: `Packet`, `MessageResponseIDInfo`, `MultiModelMessageResponseIDInfo`,
-`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement. A
+`CreateChatSessionID` and `StreamingError`. Only `Packet` has a placement.
+The two ID lines also carry `mentions`, what the saved question tagged with
+`@` as its turn recorded it ([[skills]]). Each mention has a `type`; `skill`
+is the only kind. A queued or interrupting turn sends them in the first line
+of its own stream. Session history returns the
+same field on the question. A shared view empties `mentions` on question
+details and on replayed `user_message` packets. Packets and ID lines carry
+only the record of a pick (type, name and version id), never its skill text. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
 is never buffered. When the send route itself fails
-(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes a
-bare `{"error": ...}` object with no newline, which is not a `StreamingError`.
-A request that fails before `start_chat_turn` gets one `StreamingError` and no
-ID lines.
+(`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes
+one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
+`OnyxError` detail reaches the client. Other exceptions get a generic message
+with code `INTERNAL_ERROR`, and the full exception goes to the server log.
+A request that fails before it saves its question gets one `StreamingError`
+and no ID lines. A send whose preparation fails after it saved the question
+and reserved its responses gets their ID lines first
+(`chat/process_message.py:prepare_chat_turn` `on_reserved`):
+`CreateChatSessionID` when the request created its session, then the
+message IDs, then the `StreamingError`. The same holds when
+`start_chat_turn` fails before it returns its reader. A usage-only incognito
+question saves no text, so its failure has no ID lines. ID lines mean a saved turn. A stream that ends with an
+error and no ID lines means a rejected send. If the connection fails before
+the client reads the ID lines, the client cannot know whether the turn was
+saved. A non-streaming caller still gets the error as an HTTP status.
 
 **`Placement`.** `turn_index` is the rendering block. `tab_index` separates
 parallel tool calls in one block. `sub_turn_index` is set for packets from a
@@ -112,9 +130,39 @@ sub-turn indexes.
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
 citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams the Python tool's code while the
-model writes it; the configured reasoning tool streams as reasoning packets
-instead (`chat/renderer.py:MessageRenderer.consume`). Other tools show their
+bash tool. `ToolCallArgumentDelta` streams the code of the tools in
+`chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
+model writes it, with the tool name as `tool_type`; the configured reasoning
+tool streams as reasoning packets instead
+(`chat/renderer.py:MessageRenderer.consume`). Code mode (`code_mode_start`,
+`code_mode_delta`) renders each tool call its program makes with that tool's
+own packets at `sub_turn_index` = call index, inside the code mode tab. A
+call that runs across observations keeps its `sub_turn_index` in each tab, so
+clients identify it by `cell_id` and `sub_turn_index` and show its latest
+report. A
+final `code_mode_delta` with `replace_stdout` replaces live output that stopped
+at the output limit, so live output matches replay. The final delta also
+lists `stored_keys`, the keys the program saved with `store()`, and
+`tool_call_count`, the calls the cell started so far (the model's text reports
+the same count). Each `execute_code` and `wait_code` call is its own code
+mode tab. `code_mode_start` carries `cell_id` and `observation` from the call
+arguments (`None` and 0 for `execute_code`, the cell id and 1 for
+`wait_code`, whose `code` is empty), so live and replay send the same start.
+The final delta of a saved observation carries the exact `cell_id` and
+`observation`; a call that failed or was cancelled before it saved one leaves
+them `None`. Its `status` adds `running` (the cell still runs; the final delta
+does not complete its open nested calls) and `terminated`. A cell's closing record goes to the tab of its last
+observation: the nested calls after the observation, a `code_mode_delta` with
+the new stdout when there is any, then a final delta with `result`, `error`, `status`,
+`tool_call_count`, `stored_keys` and `response_ended=True` (`chat/renderer.py:tool_renderer`
+picks `CodeModeRenderer` by tool name). It follows that tab's `section_end`,
+live and on replay: `ToolRenderer.complete` renders the part of a result that
+an amendment added (`_amendment_packets`) after the section end, and
+`ToolRenderer.amend` of an ended tab renders only that part. Live, it comes from
+`ToolResultAmendedEvent` after the answer, before the stop. The client adds
+packets of an ended tab to that tab. When the observation was recorded
+before a restore, the live stream has no tab for it, so the closing record
+follows the observation's packets and section end in a new tab. Other tools show their
 arguments when they start. `chat/renderer.py:ToolRenderer.start` emits
 `ToolCallDebug` before the start packet, only with `INTEGRATION_TESTS_MODE`.
 
@@ -198,7 +246,11 @@ its background task end ([[#pure-asgi-middleware]]).
    a new block at tab 0. A call in a later model step always opens a new
    block. Calls under a parent tool always take a new
    `sub_turn_index`. Saved-session replay uses the same renderer, so a change
-   here changes reloads too.
+   here changes reloads too. An accepted human instruction gets a `user_message`
+   packet in its own section before the next model step. The packet carries
+   the `mentions` that the instruction's acceptance recorded, live and on
+   replay, empty in a shared view. Its placement orders
+   the user bubble relative to assistant and tool output, both live and on replay.
 8. `no-answer-end-packet` **The answer stream has no end packet, and errors are
    separate lines.** `AgentResponseDelta` ends at `OverallStop`. Each model's
    presenter sends one `OverallStop` with `stop_reason` `finished`, tagged with
@@ -255,10 +307,29 @@ its background task end ([[#pure-asgi-middleware]]).
     buffer flush and `chat/chat_processing_checker.py:ChatTurnAdmission.release`
     finish. A streamed send in that window gets HTTP 200 with one
     `StreamingError` (`error_code` `CONFLICT`, not retryable) and no ID lines,
-    not an HTTP 409. Every client polls
+    not an HTTP 409. Clients poll
     `server/query_and_chat/chat_backend.py:get_chat_session_processing_status`
-    before it releases input or sends a queued message:
-    `web/src/lib/chat/sessionReadiness.ts:waitForChatSessionIdle`,
+    before releasing input. Web also follows `current_stream` when a queued
+    turn starts, through
+    `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
+    Background children can remain active after the root response becomes
+    idle. `has_active_subagents` controls the activity indicator, not input
+    availability; it is true while a child on the selected branch runs or its
+    results are about to wake the root. When a running child has no owner, the
+    endpoint schedules dispatch, which saves the child as failed so its result
+    wakes the root. `has_startable_input` is true when queued text or unread
+    root results can start a turn now; a queue that Stop or a failure paused
+    reports false. The
+    endpoint always reads the selected branch, and it reads inputs before
+    admission. A turn claims admission before it consumes
+    input, so a starting turn shows as startable input or as processing. Web
+    polls while `has_startable_input` or `has_active_subagents` is true, and
+    checks `current_stream` and `latest_response_id` (the newest response on
+    the selected branch) to follow automatic replies, including replies that
+    finish between polls. An automatic reply's
+    `MessageResponseIDInfo` has no `user_message_id`; session history returns
+    its hidden parent with `message_type: "agent_results"`.
+    Other clients wait for the session to become idle:
     `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
     `cli/internal/api/client.go:IsChatSessionProcessing` and
     `widget/src/services/api-service.ts`. The CLI and widget stop with an error
@@ -358,9 +429,6 @@ its background task end ([[#pure-asgi-middleware]]).
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
      decide whether the snapshot needs the new data.
-     `chat/process_message.py:gather_stream` ([[slack-bot]]) builds its answer
-     from root answer and citation packets and skips packets with a
-     `sub_turn_index`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A

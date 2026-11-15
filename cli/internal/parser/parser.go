@@ -172,7 +172,11 @@ func parsePacketObj(obj map[string]any, placement *models.Placement) models.Stre
 		return models.ToolStartEvent{Placement: placement, Type: objType, ToolName: toolName}
 
 	case "custom_tool_start":
-		toolName := jsonString(obj["tool_name"])
+		// tool_name is a qualified identifier; servers that predate display_name send only it.
+		toolName := jsonString(obj["display_name"])
+		if toolName == "" {
+			toolName = jsonString(obj["tool_name"])
+		}
 		if toolName == "" {
 			toolName = "Custom Tool"
 		}

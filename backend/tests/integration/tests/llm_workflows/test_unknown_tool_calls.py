@@ -7,7 +7,10 @@ from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    requires_code_mode,
+)
 from tests.integration.common_utils.test_models import DATestUser
 from tests.integration.mock_services.mock_llm_server.models import (
     RecordedRequest,
@@ -49,6 +52,7 @@ def _replayed_packet_types(chat_session_id: UUID, user: DATestUser) -> list[str]
     return [packet["obj"]["type"] for packet in packet_lists[0]]
 
 
+@requires_code_mode(False)
 def test_unknown_call_in_mixed_batch_gets_failure_response(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:

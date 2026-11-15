@@ -57,6 +57,8 @@ export interface AgentTimelineProps {
   // Epoch ms this node's stream started. Absent on history, where the timer falls back to the
   // backend duration.
   streamingStartTime?: number;
+  // A code mode program works between tool calls; it has no step.
+  codeModeWorking?: boolean;
 }
 
 function TimelineContainer({
@@ -96,7 +98,8 @@ function areAgentTimelinePropsEqual(
     prev.chatState === next.chatState &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
-    prev.streamingStartTime === next.streamingStartTime
+    prev.streamingStartTime === next.streamingStartTime &&
+    prev.codeModeWorking === next.codeModeWorking
   );
 }
 
@@ -113,10 +116,12 @@ export const AgentTimeline = memo(function AgentTimeline({
   generatedImageCount = 0,
   toolProcessingDuration,
   streamingStartTime,
+  codeModeWorking = false,
 }: AgentTimelineProps) {
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
+    codeModeWorking,
   );
 
   const {
@@ -194,6 +199,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
+      codeModeWorking,
     }),
     [
       stopPacketSeen,
@@ -209,6 +215,7 @@ export const AgentTimeline = memo(function AgentTimeline({
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
       finalAnswerComing,
+      codeModeWorking,
     ],
   );
 

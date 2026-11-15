@@ -263,7 +263,7 @@ export default function MemoriesModal({
 
   return (
     <Modal open onOpenChange={(open) => !open && close?.()}>
-      <Modal.Content width="sm" height="lg" position="top">
+      <Modal.Content width="sm" height="lg">
         <Modal.Header
           icon={SvgAddLines}
           title={t("title")}

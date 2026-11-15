@@ -16,6 +16,7 @@ from ee.onyx.db.query_history import (
     get_total_filtered_chat_sessions_count,
 )
 from ee.onyx.server.query_history.models import (
+    HIDDEN_MESSAGE_TYPES,
     ChatSessionMinimal,
     ChatSessionSnapshot,
     MessageSnapshot,
@@ -29,7 +30,6 @@ from onyx.configs.constants import (
     PUBLIC_API_TAGS,
     FileOrigin,
     FileType,
-    MessageType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -145,7 +145,7 @@ def snapshot_from_chat_session(
         messages=[
             MessageSnapshot.build(message)
             for message in messages
-            if message.message_type != MessageType.SYSTEM
+            if message.message_type not in HIDDEN_MESSAGE_TYPES
         ],
         assistant_id=chat_session.persona_id,
         assistant_name=chat_session.persona.name if chat_session.persona else None,

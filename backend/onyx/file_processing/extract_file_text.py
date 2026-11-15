@@ -10,7 +10,6 @@ import zipfile
 from collections.abc import Callable, Iterator, Sequence
 from email.parser import Parser as EmailParser
 from io import BytesIO
-from pathlib import Path
 from typing import IO, TYPE_CHECKING, Any, NamedTuple, Optional, cast
 from zipfile import BadZipFile
 
@@ -32,6 +31,7 @@ from onyx.file_processing.file_types import (
     WORD_PROCESSING_MIME_TYPE,
     OnyxFileExtensions,
     OnyxMimeTypes,
+    get_file_ext,
 )
 from onyx.file_processing.html_utils import parse_html_page_basic
 from onyx.file_processing.pdf_image_utils import iter_pdf_extracted_images
@@ -95,11 +95,6 @@ def get_markitdown_converter() -> "MarkItDown":
         )
         _MARKITDOWN_CONVERTER = MarkItDown(enable_plugins=False)
     return _MARKITDOWN_CONVERTER
-
-
-def get_file_ext(file_path_or_name: str | Path) -> str:
-    _, extension = os.path.splitext(file_path_or_name)
-    return extension.lower()
 
 
 def is_text_file(file: IO[bytes]) -> bool:

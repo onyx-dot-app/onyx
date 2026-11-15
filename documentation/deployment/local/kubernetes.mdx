@@ -76,9 +76,9 @@ for advanced options such as running as non-root and testing with Kind.
 
 ## Onyx Lite
 
-Onyx Lite runs the core chat experience with only PostgreSQL. It disables the vector database, Redis, the model servers,
-and the background workers. Connectors and search over indexed documents are disabled. Chat, user file uploads,
-Projects, and Agent knowledge still work.
+Onyx Lite runs the core chat experience and needs only PostgreSQL. The Lite values file disables vector database access,
+Redis, the indexing model server, and the background workers. Connectors and search over indexed documents are disabled.
+Chat, user file uploads, Projects, and Agent knowledge still work.
 
 Install with the chart's Lite values file, then your own overrides:
 
@@ -87,6 +87,9 @@ helm install onyx onyx/onyx -n onyx \
   -f https://raw.githubusercontent.com/onyx-dot-app/onyx/main/deployment/helm/charts/onyx/values-lite.yaml \
   -f onyx-values.yaml
 ```
+
+OpenSearch, the object store, and the inference model server still start unless you turn them off.
+See [Deploying Onyx Lite with Helm](/deployment/configuration/configuration#deploying-onyx-lite-with-helm).
 
 ## Production
 

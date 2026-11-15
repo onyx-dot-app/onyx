@@ -1,6 +1,7 @@
 import { render, screen } from "@tests/setup/test-utils";
 import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
 import { RenderType } from "@/app/app/message/messageComponents/types";
+import { isNestedPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import {
   CodingAgentPacket,
   PacketType,
@@ -9,7 +10,9 @@ import {
 function CodingOutput({ packets }: { packets: CodingAgentPacket[] }) {
   return (
     <CodingAgentRenderer
-      packets={packets}
+      packets={packets.filter((packet) => !isNestedPacket(packet))}
+      nestedCalls={[]}
+      streamPackets={packets}
       state={{}}
       onComplete={() => {}}
       renderType={RenderType.FULL}
@@ -101,4 +104,29 @@ test("saved sequential commands can reuse the same section", () => {
   ).toHaveTextContent(
     /first-command.*first-output.*second-command.*second-output/
   );
+});
+
+test("a nested error fails only its own command", () => {
+  const packets: CodingAgentPacket[] = [1, 2].flatMap((section) => [
+    {
+      placement: { turn_index: 0, sub_turn_index: section },
+      obj: { type: PacketType.BASH_TOOL_START, cmd: `command-${section}` },
+    },
+  ]);
+  render(
+    <CodingOutput
+      packets={[
+        ...packets,
+        {
+          placement: { turn_index: 0, sub_turn_index: 1 },
+          obj: { type: PacketType.ERROR, message: "sandbox unavailable" },
+        },
+      ]}
+    />
+  );
+
+  expect(screen.getByText("Bash · failed")).toBeInTheDocument();
+  expect(screen.getByText("sandbox unavailable")).toBeInTheDocument();
+  expect(screen.getByText("Bash · running…")).toBeInTheDocument();
+  expect(screen.queryByText("Bash · exit 0")).not.toBeInTheDocument();
 });

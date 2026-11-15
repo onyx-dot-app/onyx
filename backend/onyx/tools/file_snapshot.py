@@ -2,7 +2,6 @@
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.tools.models import ChatFile
 
@@ -76,16 +75,18 @@ class SavedContextFiles(BaseModel):
     @classmethod
     def capture(cls, files: ExtractedContextFiles) -> "SavedContextFiles":
         return cls(
-            context=files.model_copy(update={"image_files": []}, deep=True),
+            context=files.model_copy(update={"image_files": []}).model_copy(deep=True),
             images=[SavedLoadedFile.capture(file) for file in files.image_files],
         )
 
     def restore(self) -> ExtractedContextFiles:
-        return self.context.model_copy(
-            update={"image_files": [file.restore() for file in self.images]}, deep=True
+        return self.context.model_copy(deep=True).model_copy(
+            update={"image_files": [file.restore() for file in self.images]}
         )
 
 
 def read_checkpoint_file(file_id: str) -> bytes:
+    from onyx.file_store.file_store import get_default_file_store
+
     with get_default_file_store().read_file(file_id, mode="b") as content:
         return content.read()

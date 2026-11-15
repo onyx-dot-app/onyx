@@ -25,11 +25,14 @@ export class ChatPage {
   // Message collections. Only messages near the viewport are mounted, so
   // these hold the rendered ones, not the whole chat.
   readonly humanMessages: Locator;
+  readonly humanMessageBubbles: Locator;
   readonly aiMessages: Locator;
+  readonly agentResultsDividers: Locator;
   /** One row per message; far from the viewport, an empty placeholder. */
   readonly messageRows: Locator;
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
+  readonly errorBanners: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -48,12 +51,18 @@ export class ChatPage {
     this.container = page.locator("[data-main-container]");
     this.scrollContainer = page.getByTestId("chat-scroll-container");
     this.humanMessages = page.locator("#onyx-human-message");
+    this.humanMessageBubbles = page.getByTestId("human-message-bubble");
     this.aiMessages = page.getByTestId("onyx-ai-message");
+    this.agentResultsDividers = this.scrollContainer.getByText(
+      "Subagent results received",
+      { exact: true }
+    );
     this.messageRows = this.scrollContainer.locator('[id^="message-"]');
     this.scrollToBottomButton = page.getByRole("button", {
       name: "Scroll to bottom",
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
+    this.errorBanners = page.getByTestId("chat-error-banner");
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -90,15 +99,33 @@ export class ChatPage {
     return this.aiMessage(index).getByText(text, { exact: true });
   }
 
-  async goto(sessionId?: string): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
-    await this.page.waitForLoadState("networkidle");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skills) await this.waitForChatSkills();
   }
 
-  async reload(): Promise<void> {
+  /** With `skills`, also waits until the composer has the user's chat
+   * skills, so that `@` opens the picker at once. */
+  async reload({ skills = false } = {}): Promise<void> {
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
+    if (skills) await this.waitForChatSkills();
+  }
+
+  /** The picker reads the skills only on input, so `@` is typed again until
+   * it opens. The input is left empty. */
+  private async waitForChatSkills(): Promise<void> {
+    await expect(async () => {
+      await this.inputBar.clear();
+      await this.inputBar.typeText("@");
+      await expect(this.inputBar.skillPicker).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
+    await this.inputBar.clear();
+    await expect(this.inputBar.skillPicker).toBeHidden();
+    await expect(this.inputBar.textbox).toHaveText("");
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {
@@ -160,6 +187,32 @@ export class ChatPage {
     ).toHaveCount(1);
   }
 
+  async copyAnswerHtml(): Promise<string> {
+    // Capture the clipboard boundary without depending on the host clipboard.
+    await this.page.evaluate(() => {
+      sessionStorage.removeItem("test:copied-answer");
+      navigator.clipboard.write = async (items) => {
+        const [item] = items;
+        if (!item) throw new Error("Answer was not copied");
+        sessionStorage.setItem(
+          "test:copied-answer",
+          await (await item.getType("text/html")).text()
+        );
+      };
+    });
+    await this.aiMessage().getByTestId("AgentMessage/copy-button").click();
+    let html = "";
+    await expect
+      .poll(async () => {
+        html = await this.page.evaluate(
+          () => sessionStorage.getItem("test:copied-answer") || ""
+        );
+        return html;
+      })
+      .not.toBe("");
+    return html;
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")
@@ -190,6 +243,27 @@ export class ChatPage {
     }
   }
 
+  /**
+   * Checks a failed answer at message row `row`: it keeps its partial text and
+   * shows an error banner, with Regenerate only while it is the latest answer.
+   */
+  async expectFailedAnswer(
+    row: number,
+    partialText: string,
+    canRegenerate: boolean
+  ): Promise<void> {
+    const failedRow = this.messageRows.nth(row);
+    await expect(failedRow).toContainText(partialText);
+    await expect(failedRow.getByTestId("chat-error-banner")).toBeVisible();
+    await expect(
+      failedRow.getByRole("button", { name: "Regenerate", exact: true })
+    ).toHaveCount(canRegenerate ? 1 : 0);
+  }
+
+  async expectRowText(row: number, text: string): Promise<void> {
+    await expect(this.messageRows.nth(row)).toContainText(text);
+  }
+
   async expectAnswerAbsent(text: string): Promise<void> {
     await expect(this.scrollContainer).not.toContainText(text);
   }
@@ -201,6 +275,8 @@ export class ChatPage {
     await expect(
       this.messageRows.last().getByTestId("onyx-ai-message").first()
     ).toBeVisible({ timeout });
+    // Text sent before the turn settles joins it as pending input.
+    await this.inputBar.expectIdle(timeout);
   }
 
   /**
@@ -239,7 +315,10 @@ export class ChatPage {
     await expect(this.inputBar.sendButton).toBeDisabled();
   }
 
-  async expectCustomToolResult(name: string, json: string): Promise<void> {
+  /** Expands the timeline and checks one completed step of the tool that
+   * shows `output`. A JSON response renders as a `code` block; a text
+   * response renders as an inline code span. */
+  async expectCustomToolResult(name: string, output: string): Promise<void> {
     await this.page
       .getByRole("button", { name: "Expand timeline", exact: true })
       .click();
@@ -249,7 +328,10 @@ export class ChatPage {
     await expect(status).toBeVisible();
     await status.click();
     await expect(
-      this.scrollContainer.getByRole("code").filter({ hasText: json })
+      this.scrollContainer
+        .getByRole("code")
+        .or(this.scrollContainer.getByTestId("code-block"))
+        .filter({ hasText: output })
     ).toBeVisible();
   }
 
@@ -365,6 +447,14 @@ export class ChatPage {
     await this.page.keyboard.press("Escape");
   }
 
+  async selectPreviousHumanMessage(index = 0): Promise<void> {
+    await this.humanMessage(index)
+      .getByTestId("MessageSwitcher/container")
+      .getByRole("button")
+      .first()
+      .click();
+  }
+
   async editHumanMessage(text: string, index = 0): Promise<void> {
     const message = this.humanMessage(index);
     await message.hover();
@@ -386,6 +476,14 @@ export class ChatPage {
 
   async expectHumanMessage(text: string, index = 0): Promise<void> {
     await expect(this.humanMessage(index)).toContainText(text);
+  }
+
+  /** The skill chips of question bubble `index`, counting the bubbles of
+   * messages that a running response accepted. */
+  skillMentionChips(index = 0): Locator {
+    return this.humanMessageBubbles
+      .nth(index)
+      .locator('[data-testid="mention-chip"][data-mention-type="skill"]');
   }
 
   async expectNoHumanMessages(): Promise<void> {

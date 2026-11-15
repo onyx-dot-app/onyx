@@ -10,7 +10,12 @@ if TYPE_CHECKING:
 
 
 from onyx.agents.execution_records import completed_tool_call_ids
-from onyx.agents.models import CompactionCheckpoint, CompactionMetadata, ContextBudget
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    CompactionMetadata,
+    ContextBudget,
+    InputMessageMetadata,
+)
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -56,6 +61,30 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     if cached_counts is not None and (count := cached_counts.get(text)) is not None:
         return count
     return len(_encoder().encode(text, disallowed_special=()))
+
+
+def head_and_tail_tokens(text: str, max_tokens: int) -> tuple[str, str, int]:
+    """The head and tail of `text`, decoded, that together hold `max_tokens`
+    tokens, and the token count of `text`. A text that fits is the head."""
+    tokens = _encoder().encode(text, disallowed_special=())
+    if len(tokens) <= max_tokens:
+        return text, "", len(tokens)
+    # Token boundaries can split a UTF-8 character; the parts keep whole ones.
+    head_end = max_tokens // 2
+    while (head := _strict_decode(tokens[:head_end])) is None:
+        head_end -= 1
+    tail_start = len(tokens) - (max_tokens - max_tokens // 2)
+    while (tail := _strict_decode(tokens[tail_start:])) is None:
+        tail_start += 1
+    return head, tail, len(tokens)
+
+
+def _strict_decode(tokens: list[int]) -> str | None:
+    """The text of `tokens`, or None when they start or end inside a character."""
+    try:
+        return _encoder().decode_bytes(tokens).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
 
 
 def message_tokens(
@@ -141,17 +170,35 @@ def working_messages(
     if checkpoint is None:
         return list(messages)
     boundary = checkpoint_boundary(messages, checkpoint, input_start=input_start)
+    return messages_after_compaction(messages, boundary, summary=checkpoint.summary)
+
+
+def is_input_context(message: Message) -> bool:
+    """Whether a message is context of the user message before it, such as a
+    picked skill, and not a user turn."""
+    return (
+        isinstance(message.metadata, CompactionMetadata)
+        and message.metadata.is_input_context
+    )
+
+
+def messages_after_compaction(
+    messages: list[Message], boundary: int, *, summary: str
+) -> list[Message]:
+    """Apply a validated cutoff while preserving system messages and the user's task."""
     prefix = messages[:boundary]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
-    if checkpoint.summary:
-        retained.append(
-            SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
-        )
+    if summary:
+        retained.append(SystemMessage(content=f"Conversation summary:\n{summary}"))
+    # Between-step input and input context do not replace the question that
+    # started this task. A retained question keeps no context messages.
     latest_user = next(
         (
             index
             for index in range(len(messages) - 1, -1, -1)
             if isinstance(messages[index], UserMessage)
+            and not isinstance(messages[index].metadata, InputMessageMetadata)
+            and not is_input_context(messages[index])
         ),
         None,
     )
@@ -163,7 +210,8 @@ def working_messages(
 def history_boundaries(
     messages: list[Message], *, input_start: int | None = None
 ) -> list[int]:
-    """Preserve tool exchanges and unanswered input from input_start onward.
+    """Preserve tool exchanges, input context and unanswered input from
+    input_start onward.
 
     Without a run boundary, retain the whole trailing unanswered input group.
     """
@@ -184,7 +232,9 @@ def history_boundaries(
             and (input_start is None or index >= input_start)
         ):
             unanswered_input_start = index
-        if not pending:
+        if not pending and not (
+            index + 1 < len(messages) and is_input_context(messages[index + 1])
+        ):
             boundaries.append(index + 1)
     # Files and request context can precede the question as separate user messages.
     if unanswered_input_start is not None:
@@ -230,18 +280,9 @@ class _SummaryInput:
             if available <= 0:
                 break
             end = min(len(self.tokens), self.offset + available)
-            text = ""
             # A token boundary can split a UTF-8 character.
-            while end > self.offset:
-                try:
-                    text = (
-                        _encoder()
-                        .decode_bytes(self.tokens[self.offset : end])
-                        .decode("utf-8")
-                    )
-                    break
-                except UnicodeDecodeError:
-                    end -= 1
+            while (text := _strict_decode(self.tokens[self.offset : end])) is None:
+                end -= 1
             if end == self.offset and self.tokens:
                 break
             parts.append(header + text)

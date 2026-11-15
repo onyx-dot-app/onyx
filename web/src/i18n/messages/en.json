@@ -122,6 +122,9 @@
       "authenticate": {
         "label": "Authenticate"
       },
+      "codingAgentIncognito": {
+        "tooltip": "Coding agent isn't available in incognito mode"
+      },
       "configure": {
         "tooltip": "Configure"
       },
@@ -139,6 +142,9 @@
       },
       "selectSearchSources": {
         "label": "Select Search Sources"
+      },
+      "preference": {
+        "tooltip": "{description}\nPrefer this tool for this chat. The agent may answer without using it."
       }
     },
     "addMcpModal": {
@@ -350,7 +356,7 @@
         "clientMetadataRejected": "The provider could not use the client metadata document. If this instance is not reachable from the public internet, turn off “Use client metadata document” and connect again.",
         "discoveryFailed": "OAuth sign-in settings could not be found. Check the server URL or enter the endpoints from your provider.",
         "connectionFailed": "The server could not be reached. Check the server URL and try again.",
-        "oauthFailed": "OAuth sign-in could not start. Check your client settings and try again.",
+        "oauthFailed": "OAuth sign-in failed. Try again, or check the server's OAuth settings.",
         "oauthInitFailed": "Failed to initiate OAuth: {detail}"
       },
       "header": {
@@ -814,6 +820,7 @@
       "search": {
         "placeholder": "Search actions..."
       },
+      "selectionSaveFailed": "Could not save the tool selection for this chat.",
       "serverFallback": {
         "label": "server"
       },
@@ -2618,8 +2625,8 @@
       },
       "groupRestriction": {
         "empty": {
-          "description": "Everyone keeps the access synced from the source.",
-          "title": "No restriction until groups are added"
+          "description": "Restricting needs a group. Turn the restriction off to keep the access synced from the source.",
+          "title": "Pick at least one group"
         },
         "loadError": "Could not load groups. Reload the page to try again.",
         "memberCount": "{count, plural, one {# member} other {# members}}",
@@ -2965,6 +2972,7 @@
           "sync": "Document access **synced with {source}**",
           "managedByAdmins": "Managed by **admins**",
           "managedByGroups": "Managed by **{count, plural, one {# group} other {# groups}}**",
+          "onlyMe": "Documents visible through this connector to **only its owner**",
           "syncRestricted": "Document access **synced with {source}**, restricted to **{count, plural, one {# group} other {# groups}}**",
           "groupsPending": "Documents shared with **specific groups**",
           "syncRestrictedPending": "Document access **synced with {source}**, restricted to **specific groups**"
@@ -3748,15 +3756,19 @@
             "description": "Documents indexed by this connector are available to everyone in your organization.",
             "title": "Everyone in Your Organization"
           },
+          "onlyMe": {
+            "description": "Only the owner of this connector's credential gets access through it; for a source without a credential, only the person who created it.",
+            "title": "Only Me"
+          },
           "specificGroups": {
             "description": "Name groups who can access documents from this connector.",
-            "required": "Pick at least one group.",
             "title": "Specific Groups"
           },
           "sync": {
             "description": "{appName} syncs permissions with the source. Users can search only what they can see in the source.",
             "disabledReason": "Current credential auth method doesn't support Auto Sync Permissions. Please change the credential auth method to a supported one.",
-            "title": "Sync with {source}"
+            "title": "Sync with {source}",
+            "restrictionRequired": "Pick at least one group, or turn off the restriction."
           },
           "title": "Document Access"
         },
@@ -5173,6 +5185,27 @@
       "unavailable": {
         "description": "Craft is enabled per deployment by Onyx. Contact your Onyx representative to get access.",
         "title": "Craft isn't available on this deployment"
+      },
+      "publishing": {
+        "title": "Skill Publishing",
+        "open": {
+          "label": "Open",
+          "description": "Skill authors publish to the organization at once."
+        },
+        "requiresReview": {
+          "label": "Requires review",
+          "description": "An admin approves each publish and each publish update."
+        },
+        "off": {
+          "label": "Off",
+          "description": "Only admins publish skills to the organization."
+        },
+        "saveSuccess": {
+          "message": "Publishing setting saved."
+        },
+        "saveError": {
+          "message": "Couldn't save the Publishing setting."
+        }
       }
     },
     "credentials": {
@@ -7493,7 +7526,8 @@
           "public": "Public to your organization",
           "private": "{count, plural, =0 {Private} one {Shared with # group} other {Shared with # groups}}",
           "sync": "Auto-sync permissions",
-          "sync_restricted": "Auto-sync permissions"
+          "sync_restricted": "Auto-sync permissions",
+          "personal": "Only me"
         },
         "detail": {
           "queued": "{position, selectordinal, one {#st} two {#nd} few {#rd} other {#th}} in queue",
@@ -7620,7 +7654,7 @@
             "targetUriParseFailed": "Failed to parse target URI — using original values."
           },
           "validation": {
-            "targetUriInvalid": "Target URI must be a valid URL with api-version query parameter and either a deployment name in the path or /openai/responses",
+            "targetUriInvalid": "Target URI must be a valid URL: an /openai/v1/ URL, or a URL with the api-version query parameter and either a deployment name in the path or /openai/responses",
             "targetUriRequired": "Target URI is required"
           }
         },
@@ -7834,7 +7868,6 @@
           "row": {
             "defaultLabel": "Default Model",
             "decisionTag": {
-              "label": "Decision",
               "decisionOnly": "Decision model. Not available in the chat model picker.",
               "chatAndDecision": "Supports both chat and decision tasks."
             },
@@ -7843,9 +7876,6 @@
             },
             "setDefaultButton": {
               "label": "Set as Default"
-            },
-            "visionMarker": {
-              "title": "Vision"
             }
           },
           "selectAllButton": {
@@ -12138,6 +12168,10 @@
         },
         "organization": {
           "label": "Organization"
+        },
+        "unpublished": {
+          "label": "Unpublished changes",
+          "tooltip": "The organization still runs version {number}."
         }
       },
       "toggle": {
@@ -12419,6 +12453,7 @@
     },
     "input": {
       "appInputBar": {
+        "subagentsWorking": "Subagents working",
         "attachFilesButton": {
           "tooltip": "Attach Files"
         },
@@ -12427,6 +12462,7 @@
         },
         "deepResearchButton": {
           "disabledTooltip": "Deep Research is disabled in multi-model mode",
+          "incognitoTooltip": "Deep Research isn't available in incognito mode",
           "label": "Deep Research"
         },
         "incognitoNotice": {
@@ -12455,6 +12491,24 @@
         "voiceSetupButton": {
           "ariaLabel": "Set up voice",
           "tooltip": "Voice not configured. Set up in admin settings."
+        },
+        "pendingMessages": {
+          "keyboardHint": "Enter to send · Ctrl or Command + Enter to queue",
+          "multiModelHint": "Queueing is unavailable while comparing models. Choose one model to queue messages.",
+          "attachmentsHint": "Send attached files after this response finishes.",
+          "chooseResponseHint": "Choose a response before queueing a message.",
+          "incognitoHint": "Wait for the response to finish in incognito chat.",
+          "sendHint": "Send at the next step of this response",
+          "interruptHint": "Interrupt current work and send this message",
+          "sendLabel": "Send",
+          "queueLabel": "Queue",
+          "interruptKeyboardHint": "Enter to interrupt · Ctrl or Command + Enter to queue",
+          "interruptLabel": "Interrupt",
+          "waitHint": "Wait for the response to finish.",
+          "ctrlKey": "Ctrl"
+        },
+        "stopSubagentsButton": {
+          "label": "Stop subagents"
         }
       },
       "baseInputBar": {
@@ -12504,9 +12558,6 @@
         "content": {
           "ariaLabel": "Skill picker"
         },
-        "empty": {
-          "text": "No matching skills"
-        },
         "mcpServersGroup": {
           "label": "MCP servers"
         },
@@ -12545,6 +12596,19 @@
           "tooltip": "Replace this tile with its full text inline"
         }
       },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Remove {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Pasted text: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Remove pasted text"
+          }
+        }
+      },
       "plusMenuButton": {
         "trigger": {
           "ariaLabel": "Open add menu",
@@ -12553,16 +12617,26 @@
       },
       "queuedMessageBar": {
         "discardButton": {
-          "tooltip": "Remove queued message"
+          "tooltip": "Remove queued message",
+          "ariaLabel": "Remove queued message: {message}"
         },
         "editHint": {
           "label": "edit ·"
         },
-        "item": {
-          "ariaLabel": "Toggle queued message"
-        },
         "removeHint": {
           "label": "remove"
+        },
+        "editButton": {
+          "tooltip": "Edit queued message",
+          "clearDraftTooltip": "Clear your draft to edit a queued message",
+          "ariaLabel": "Edit queued message: {message}"
+        },
+        "sendButton": {
+          "tooltip": "Interrupt current work and send this message",
+          "ariaLabel": "Send now: {message}"
+        },
+        "sendHint": {
+          "label": "send now ·"
         }
       },
       "sharedAppInputBar": {
@@ -12572,6 +12646,14 @@
         "startSessionButton": {
           "label": "Start New Session"
         }
+      },
+      "pendingMessages": {
+        "submitFailed": "Could not submit the message.",
+        "withdrawFailed": "Could not remove the pending message.",
+        "loadFailed": "Could not load pending messages.",
+        "alreadyAccepted": "This message was already accepted and is no longer pending.",
+        "interruptFailed": "Could not send this message now. It remains pending.",
+        "stopSubagentsFailed": "Could not stop the subagents."
       }
     },
     "mcpApiKey": {
@@ -12667,6 +12749,9 @@
         "timedOut": {
           "text": "The response stopped because it reached its time limit."
         }
+      },
+      "agentResults": {
+        "received": "Subagent results received"
       },
       "codeBlock": {
         "copyButton": {
@@ -12902,6 +12987,9 @@
           "bashExit": {
             "header": "Bash · exit {exitCode}"
           },
+          "bashFailed": {
+            "header": "Bash · failed"
+          },
           "bashRequest": {
             "label": "Request"
           },
@@ -13005,6 +13093,9 @@
           },
           "updatingMemory": {
             "label": "Updating memory..."
+          },
+          "working": {
+            "label": "Working"
           }
         },
         "internalSearch": {
@@ -14232,6 +14323,11 @@
       "completeFailed": {
         "message": "Failed to complete authorization"
       },
+      "desktopHandoff": {
+        "button": "Open Onyx",
+        "description": "Your browser opens the Onyx desktop app to finish connecting. You can close this tab after the app opens.",
+        "title": "Return to Onyx"
+      },
       "genericError": {
         "description": "An error occurred during the OAuth process. Please try again.",
         "title": "Something Went Wrong"
@@ -14349,6 +14445,10 @@
       },
       "labels": {
         "default": "Default"
+      },
+      "modelTypes": {
+        "decision": "Decision",
+        "vision": "Vision"
       }
     }
   },
@@ -14457,7 +14557,7 @@
         "promote": {
           "cancelButton": "Cancel",
           "confirmButton": "Make organization-wide",
-          "description": "App-associated skills must be available to everyone. This change is applied when you save the app.",
+          "description": "App-associated skills must be available to everyone. When you save the app, the skill is published to the organization. Publishing cannot be undone.",
           "title": "Make “{name}” organization-wide?"
         },
         "search": {
@@ -16393,6 +16493,12 @@
       "title": "Chats",
       "toasts": {
         "saveFailed": "Failed to save preferences"
+      },
+      "sendBehavior": {
+        "title": "Send Behavior While Working",
+        "description": "Choose what Enter and the send button do while an answer is in progress. Ctrl/Cmd+Enter always queues a follow-up.",
+        "afterStep": "After the current step",
+        "interrupt": "Interrupt current work"
       }
     },
     "connectors": {
@@ -17105,6 +17211,13 @@
         "savingChanges": "Saving changes...",
         "savingSkill": "Saving skill..."
       },
+      "staleVersion": {
+        "description": "Someone saved a newer version. Reload to get it. Your unsaved changes will be lost.",
+        "reload": {
+          "label": "Reload"
+        },
+        "title": "This skill changed since you opened it"
+      },
       "toasts": {
         "created": "Created \"{name}\"",
         "deleteFailed": "Failed to delete skill",
@@ -17305,9 +17418,6 @@
           "message": "Loading sharing details..."
         },
         "noOwnerTitle": "No active owner",
-        "organizationPermissionMenu": {
-          "ariaLabel": "Change organization permission"
-        },
         "ownerLabel": "Owner",
         "permissionMenu": {
           "ariaLabel": "Update access for {name}"
@@ -17348,14 +17458,77 @@
         "peopleTitle": "People with access",
         "manageIndividualAccess": "Manage individual access",
         "individualAccessTitle": "Individual access",
-        "ownershipTitle": "Ownership"
+        "ownershipTitle": "Ownership",
+        "published": {
+          "title": "Organization",
+          "description": "Published. Everyone in the organization can use this skill."
+        },
+        "publishWarning": {
+          "title": "Publishing cannot be undone",
+          "description": "After you save, everyone in the organization can use this skill. You cannot make it private again. Only an admin can delete it.",
+          "reviewDescription": "The skill stays private until an admin approves the request. After approval, you cannot make it private again."
+        },
+        "reviewRequestedToast": {
+          "message": "Your publish request went to an admin for review."
+        },
+        "publishOff": {
+          "title": "Publishing is turned off",
+          "description": "An admin turned off publishing to the organization. Ask an admin to publish this skill."
+        }
       },
       "placeholders": {
         "githubRepository": "owner/repository or https://github.com/owner/repository"
       },
       "tabs": {
         "details": "Details",
-        "sharing": "Sharing"
+        "sharing": "Sharing",
+        "versions": "Versions"
+      },
+      "versions": {
+        "tableLabel": "Skill versions",
+        "columns": {
+          "version": "Version",
+          "madeBy": "Made by",
+          "date": "Date"
+        },
+        "versionLabel": "Version {number}",
+        "currentBadge": "Current",
+        "unknownAuthor": "Unknown",
+        "previewRow": {
+          "ariaLabel": "Preview version {number}"
+        },
+        "restore": {
+          "label": "Restore",
+          "ariaLabel": "Restore version {number}",
+          "successToast": "Restored version {number} as version {newNumber}.",
+          "unchangedToast": "Version {number} has the same files as the current version.",
+          "failedToast": "Couldn't restore this version.",
+          "unsavedChanges": {
+            "title": "Save your changes first",
+            "description": "Save or discard the changes in the editor before you restore a version."
+          }
+        },
+        "loadError": {
+          "title": "Couldn't load versions",
+          "description": "Try again later."
+        },
+        "preview": {
+          "back": "All versions",
+          "loadError": {
+            "title": "Couldn't load this version"
+          }
+        },
+        "status": {
+          "pending": "Pending review",
+          "published": "Published"
+        },
+        "publishUpdate": {
+          "label": "Publish update",
+          "successToast": "Published version {number} to the organization.",
+          "failedToast": "Couldn't publish this update.",
+          "sentForReviewToast": "Version {number} went to an admin for review.",
+          "offNotice": "Publishing is turned off. Ask an admin to publish this update."
+        }
       }
     },
     "page": {
@@ -17508,10 +17681,41 @@
       "shareDescription": "Apply these changes to every selected skill. Settings left unchanged keep their current values.",
       "unchanged": "Keep unchanged",
       "everyone": "Everyone in the organization",
-      "invitedOnly": "Invited people and groups",
       "addAccessDescription": "Add these people and groups to every selected skill. People and groups you list get the chosen permission. Everyone else keeps their current access.",
       "apply": "{count, plural, one {Apply to # skill} other {Apply to # skills}}",
-      "moreActions": "More actions"
+      "moreActions": "More actions",
+      "publishWarning": {
+        "title": "Publishing cannot be undone",
+        "description": "After you apply, everyone in the organization can use the selected skills. Published skills cannot be made private again. Only an admin can delete them."
+      }
+    },
+    "reviewRequests": {
+      "title": "Publish Requests",
+      "description": "Approve or deny requests to publish skills to the organization.",
+      "columns": {
+        "skill": "Skill",
+        "version": "Version",
+        "author": "Author",
+        "saved": "Saved"
+      },
+      "unnamedSkill": "Unnamed skill",
+      "review": {
+        "label": "Review",
+        "ariaLabel": "Review {name}"
+      },
+      "approve": {
+        "label": "Approve"
+      },
+      "deny": {
+        "label": "Deny"
+      },
+      "approvedToast": "Published version {number} of {name}.",
+      "deniedToast": "Denied version {number} of {name}.",
+      "failedToast": "Couldn't update this request.",
+      "version": {
+        "firstPublish": "v{number} · First publish",
+        "update": "v{number} · Update from v{published}"
+      }
     }
   },
   "opensearchHealth": {

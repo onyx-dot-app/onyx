@@ -28,7 +28,7 @@ for (const recovery of [
   "reload after network loss",
 ] as const) {
   recoveryTest(
-    `${recovery} preserves the answer and accepts another turn`,
+    `${recovery} preserves the answer and accepts another turn @code-mode`,
     async ({ page, chatPage, sessionId }) => {
       const nonce = mockLlmNonce();
       const followup = "The next turn also completed.";
@@ -106,7 +106,7 @@ for (const recovery of [
 }
 
 recoveryTest(
-  "stop settles the interrupted answer before accepting another turn",
+  "stop settles the interrupted answer before accepting another turn @code-mode",
   async ({ page, chatPage, sessionId }) => {
     const nonce = mockLlmNonce();
     const followup = "The replacement turn completed without old output.";

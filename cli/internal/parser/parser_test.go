@@ -335,6 +335,22 @@ func TestCustomToolStart(t *testing.T) {
 	}
 }
 
+func TestCustomToolStartUsesDisplayName(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":         "custom_tool_start",
+		"tool_name":    "mcp__3__my__srv__create_issue",
+		"display_name": "create_issue",
+	}, 0, 0)
+	event := ParseStreamLine(line)
+	e, ok := event.(models.ToolStartEvent)
+	if !ok {
+		t.Fatalf("expected ToolStartEvent, got %T", event)
+	}
+	if e.ToolName != "create_issue" {
+		t.Errorf("got %s", e.ToolName)
+	}
+}
+
 func TestDeepResearchPlanDelta(t *testing.T) {
 	line := makePacket(map[string]interface{}{
 		"type": "deep_research_plan_delta", "content": "Step 1: ...",

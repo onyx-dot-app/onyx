@@ -56,7 +56,7 @@ from onyx.connectors.models import (
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -464,11 +464,8 @@ class BoxConnector(
                 self.size_threshold,
             )
             return False
-        extension = get_file_ext(file_name)
-        if extension in OnyxFileExtensions.IMAGE_EXTENSIONS and self.allow_images:
-            return self.allow_images
-        if extension not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS:
-            logger.debug("Skipping %s: unsupported extension %s", file_name, extension)
+        if not is_indexable_file_type(file_name, None, allow_images=self.allow_images):
+            logger.debug("Skipping %s: file type is not indexed", file_name)
             return False
         return True
 

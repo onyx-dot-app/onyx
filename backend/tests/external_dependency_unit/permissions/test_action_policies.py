@@ -343,6 +343,56 @@ def test_mcp_uses_same_settings_and_access_rules(
         )
 
 
+def test_mcp_read_only_tool_defaults_to_always_until_an_admin_asks(
+    db_session: Session, owner_and_app: tuple[User, int]
+) -> None:
+    from onyx.db.action_policy import get_mcp_tool_default_policies
+    from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
+    from onyx.db.models import Tool
+
+    user, _ = owner_and_app
+    server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name="Read-only MCP",
+        description=None,
+        server_url="https://read-only.example.com/mcp",
+        auth_type=None,
+        transport=None,
+        auth_performer=None,
+        db_session=db_session,
+        is_public=True,
+    )
+    update_mcp_server__no_commit(
+        server_id=server.id, db_session=db_session, available_in_craft=True
+    )
+    db_session.add_all(
+        Tool(name=name, description=name, mcp_server_id=server.id, mcp_read_only=hint)
+        for name, hint in (("read", True), ("write", False), ("plain", None))
+    )
+    db_session.flush()
+    app_id = get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
+
+    def resolved() -> dict[str, ActionPolicy]:
+        return resolve_action_policies(
+            db_session,
+            user_id=user.id,
+            gated_app_id=app_id,
+            catalog_policies=get_mcp_tool_default_policies(db_session, server.id),
+        )
+
+    def admin_view() -> dict[str, ActionPolicy]:
+        (app,) = list_action_policies(db_session, user, gated_app_id=app_id, admin=True)
+        return {a.action_id: a.workspace_policy for a in app.actions}
+
+    defaults = {"read": ALLOW, "write": ASK, "plain": ASK}
+    assert resolved() == defaults
+    assert admin_view() == defaults
+
+    replace_workspace_action_policies(db_session, app_id, {"read": ASK})
+    assert resolved() == {"read": ASK, "write": ASK, "plain": ASK}
+    assert admin_view() == {"read": ASK, "write": ASK, "plain": ASK}
+
+
 def test_reviewed_disabled_choice_is_copied_and_stays_independent(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:

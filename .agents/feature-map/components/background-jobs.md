@@ -102,7 +102,7 @@ check_for_pruning (beat, primary)          takes lock_beat; finds due pairs
                                            set fence; send generator task
 connector_pruning_generator_task (heavy)   slim listing of live IDs, diff against
                                            Postgres, send one cleanup task per
-                                           missing ID, record progress
+                                           batch of missing IDs, record progress
 monitor_ccpair_pruning_taskset             called by check_for_pruning per fence
                                            in ACTIVE_FENCES; clears the fence and
                                            SyncRecord when the taskset drains
@@ -135,22 +135,27 @@ active (it also asks the port to cancel), a prune is fenced, or a doc
 permission sync is open. On the first refusal the beat revokes those tasks and
 sets the pair's stop signal. After the stop timeout it resets the prune and
 cancels the open doc and group sync attempts. Then it
-sends cleanup tasks in batches of `DOCUMENT_INDEX_SYNC_MAX_TASKS`, and
-`monitor_connector_deletion_taskset` sends the next batch when one drains. It
-fails the deletion when a batch does not lower the linked count.
+queues cleanup for up to `DOCUMENT_INDEX_SYNC_MAX_TASKS` documents per pass,
+in tasks of `DOCUMENT_CLEANUP_BATCH_SIZE` documents. When a pass drains,
+`monitor_connector_deletion_taskset` queues the next one. It fails the deletion
+when a pass does not lower the linked count. The fence and the sync record
+count documents, not tasks.
 For a File connector, the route that starts the deletion
 (`server/manage/administrative.py:create_deletion_attempt_for_connector_id`)
 deletes the uploaded files from the file store after it sends
 `CHECK_FOR_CONNECTOR_DELETION`. The two are not ordered, so cleanup can start
 before the files are gone.
 
-**The cleanup task.** `background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`
-serves both flows. If this pair is the document's last owner and no other
-source keeps it, it deletes the chunks from both index generations and the
-`Document` row. Otherwise it removes this pair's link, bumps `last_modified`,
-and updates the chunks' ACL and cc-pair IDs. On its last retry it removes the
-link anyway and marks the document modified, so the metadata sync corrects
-the index.
+**The cleanup task.** `background/celery/tasks/shared/tasks.py:document_batch_by_cc_pair_cleanup_task`
+serves both flows and takes a batch of documents. It locks the batch rows in id
+order. For a document that only this pair links, it deletes the chunks from both
+index generations with one `terms` delete per index, then the `Document` row.
+For a document another pair still links, it removes this pair's link, bumps
+`last_modified`, and updates the chunks' ACL and cc-pair IDs. It skips ids that
+are already gone. On its last retry it removes the link of every remaining
+document in the batch and marks them modified, so the metadata sync corrects
+the index. The per-document `document_by_cc_pair_cleanup_task` only drains
+messages queued before an upgrade.
 
 **Other periodic flows.** Each owner documents its flow; this list says where
 it runs.
@@ -172,8 +177,8 @@ it runs.
 
 **Signals.** `on_before_task_publish` stamps the enqueue time. `task_prerun`
 clears the per-task log context. `task_postrun` removes a finished task from its
-Redis taskset by task-ID prefix. Only the light worker also drains the
-document-sync taskset on `task_revoked`, because an expired task never reaches
+Redis taskset by task-ID prefix. Only the light worker also drains the taskset
+on `task_revoked`, by the same prefixes, because an expired task never reaches
 `task_postrun` (`background/celery/apps/app_base.py:on_task_revoked`).
 
 ## Contracts and traps

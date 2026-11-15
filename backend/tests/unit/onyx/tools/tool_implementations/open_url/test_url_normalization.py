@@ -37,7 +37,8 @@ def test_google_drive_candidates_include_native_doc_form(url: str) -> None:
 
 
 def test_google_drive_candidates_cover_all_type_forms() -> None:
-    """A type-ambiguous file/d URL should offer doc, sheet, slide, and file forms."""
+    """A type-ambiguous file/d URL should offer doc, sheet, slide, Google Form,
+    and file forms."""
     candidates = normalize_url_candidates(
         f"https://drive.google.com/file/d/{_GDRIVE_ID}",
         source_type=DocumentSource.GOOGLE_DRIVE,
@@ -46,6 +47,7 @@ def test_google_drive_candidates_cover_all_type_forms() -> None:
         _GDRIVE_DOC_ID,
         f"https://docs.google.com/spreadsheets/d/{_GDRIVE_ID}",
         f"https://docs.google.com/presentation/d/{_GDRIVE_ID}",
+        f"https://docs.google.com/forms/d/{_GDRIVE_ID}",
         f"https://drive.google.com/file/d/{_GDRIVE_ID}",
     }
 

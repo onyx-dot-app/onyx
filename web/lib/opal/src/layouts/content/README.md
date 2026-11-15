@@ -34,48 +34,48 @@ root            0.25rem gap inline; no gap stacked or with a secondary-* / figur
 
 ## Props
 
-| Prop                  | Type                                       | Default            | Description                                                                                         |
-| --------------------- | ------------------------------------------ | ------------------ | --------------------------------------------------------------------------------------------------- |
-| `font`                | `TextFont`                                 | `"main-ui-action"` | The title's font; sets every size                                                                   |
-| `orientation`         | `"inline" \| "stacked"`                  | `"inline"`         | Icon before the title, or above it. For an icon after the title, use [`ReverseContent`](../reverse-content/README.md) |
-| `icon`                | `IconFunctionComponent`                    | —                  | Leading icon                                                                                        |
-| `enlargedIcon`        | `boolean`                                  | `false`            | Drop the icon box's 2px padding, so `icon` and `moreIcon2` are as tall as the title line. The box keeps its size. Use it where a page wants larger icons, such as the connector catalog's logos |
-| `title`               | `string \| RichStr`                        | **(required)**     | The title                                                                                           |
-| `description`         | `string \| RichStr`                        | —                  | Text below the title                                                                                |
-| `titleMaxLines`       | `number`                                   | —                  | Clamp the title; a cut title shows in full in a tooltip                                             |
-| `titleTooltip`        | `string \| RichStr`                        | —                  | Shown on every hover of the title, in place of the full title                                       |
-| `titleOverflowTooltip` | `boolean`                                 | `true`             | With `titleMaxLines`: show a cut title in full in a tooltip. Turn it off when a host wraps the content in its own tooltip |
-| `descriptionMaxLines` | `number`                                   | —                  | Clamp the description; a cut one shows in full in a tooltip                                         |
-| `strikethrough`       | `boolean`                                  | `false`            | Strike the title through, for an option that is switched off                                        |
-| `suffix`              | `"optional" \| string`                     | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)" |
-| `auxIcon`             | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —        | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line |
-| `badge`               | `BadgeProps`                               | —                  | A badge beside the title                                                                            |
-| `role`                | `string`                                   | —                  | ARIA role on the title element                                                                      |
-| `moreIcon1`           | `IconFunctionComponent`                    | —                  | Stacked only: a connector icon after the icon, in `text-03`; its box is 12px smaller than the icon box (2px padding) |
-| `moreIcon2`           | `IconFunctionComponent`                    | —                  | Stacked only: a peer of the icon, the same size                                                     |
-| `editable`            | `boolean`                                  | `false`            | Edit the title in place. Clicks on the title, pencil and field stay inside, so a clickable parent does not also fire. An empty edit keeps the old title |
-| `onTitleChange`       | `(newTitle: string) => void`               | —                  | Called with the new title when an edit is committed                                                 |
-| `editTooltip`         | `string`                                   | `"Edit"`           | Tooltip and accessible name of the pencil                                                           |
-| `editButton`          | `"hover" \| "rest"`                        | `"hover"`          | When the pencil shows: on hover of the content, or at rest too                                      |
-| `editHandle`          | `Ref<ContentEditHandle>`                   | —                  | Starts an edit from an outside control; hides the built-in pencil                                   |
-| `width`               | `"fit" \| "full"`                          | `"full"`           | Shrink-wrap or fill the parent                                                                      |
-| `color`               | `StatusColor \| "interactive"`            | `"default"`        | The content's colour (see Colours below). A status tints the title and the icon; `"interactive"` follows the surrounding interactive surface |
-| `titleColor`          | `Exclude<TextColor, "inherit">`            | per `color`        | Overrides the title colour only; the icon keeps `color`'s, except on `"default"`, where it follows. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
+| Prop                   | Type                                                 | Default            | Description                                                                                                                                                                                            |
+| ---------------------- | ---------------------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `font`                 | `TextFont`                                           | `"main-ui-action"` | The title's font; sets every size                                                                                                                                                                      |
+| `orientation`          | `"inline" \| "stacked"`                              | `"inline"`         | Icon before the title, or above it. For an icon after the title, use [`ReverseContent`](../reverse-content/README.md)                                                                                  |
+| `icon`                 | `IconFunctionComponent`                              | —                  | Leading icon                                                                                                                                                                                           |
+| `enlargedIcon`         | `boolean`                                            | `false`            | Drop the icon box's 2px padding, so `icon` and `moreIcon2` are as tall as the title line. The box keeps its size. Use it where a page wants larger icons, such as the connector catalog's logos        |
+| `title`                | `string \| RichStr`                                  | **(required)**     | The title                                                                                                                                                                                              |
+| `description`          | `string \| RichStr`                                  | —                  | Text below the title                                                                                                                                                                                   |
+| `titleMaxLines`        | `number`                                             | —                  | Clamp the title; a cut title shows in full in a tooltip                                                                                                                                                |
+| `titleTooltip`         | `string \| RichStr`                                  | —                  | Shown on every hover of the title, in place of the full title                                                                                                                                          |
+| `titleOverflowTooltip` | `boolean`                                            | `true`             | With `titleMaxLines`: show a cut title in full in a tooltip. Turn it off when a host wraps the content in its own tooltip                                                                              |
+| `descriptionMaxLines`  | `number`                                             | —                  | Clamp the description; a cut one shows in full in a tooltip                                                                                                                                            |
+| `strikethrough`        | `boolean`                                            | `false`            | Strike the title through, for an option that is switched off                                                                                                                                           |
+| `suffix`               | `"optional" \| string`                               | —                  | Muted text beside the title, in the title's size and lighter weight; `"optional"` is the translated "(Optional)"                                                                                       |
+| `auxIcon`              | `"info-gray" \| "info-blue" \| "warning" \| "error"` | —                  | A status icon beside the title: a 16px box with a 12px glyph at every title size, centred on the title line                                                                                            |
+| `badge`                | `BadgeProps \| BadgeProps[]`                         | —                  | One badge, or a list of badges in order, beside the title                                                                                                                                              |
+| `role`                 | `string`                                             | —                  | ARIA role on the title element                                                                                                                                                                         |
+| `moreIcon1`            | `IconFunctionComponent`                              | —                  | Stacked only: a connector icon after the icon, in `text-03`; its box is 12px smaller than the icon box (2px padding)                                                                                   |
+| `moreIcon2`            | `IconFunctionComponent`                              | —                  | Stacked only: a peer of the icon, the same size                                                                                                                                                        |
+| `editable`             | `boolean`                                            | `false`            | Edit the title in place. Clicks on the title, pencil and field stay inside, so a clickable parent does not also fire.                                                                                  |
+| `onTitleChange`        | `(newTitle: string) => void`                         | —                  | Called with the new, trimmed title when an edit is committed. An empty title is passed on; the caller decides whether it resets or is ignored                                                          |
+| `editTooltip`          | `string`                                             | `"Edit"`           | Tooltip and accessible name of the pencil                                                                                                                                                              |
+| `editButton`           | `"hover" \| "rest"`                                  | `"hover"`          | When the pencil shows: on hover of the content, or at rest too                                                                                                                                         |
+| `editHandle`           | `Ref<ContentEditHandle>`                             | —                  | Starts an edit from an outside control; hides the built-in pencil                                                                                                                                      |
+| `width`                | `"fit" \| "full"`                                    | `"full"`           | Shrink-wrap or fill the parent                                                                                                                                                                         |
+| `color`                | `StatusColor \| "interactive"`                       | `"default"`        | The content's colour (see Colours below). A status tints the title and the icon; `"interactive"` follows the surrounding interactive surface                                                           |
+| `titleColor`           | `Exclude<TextColor, "inherit">`                      | per `color`        | Overrides the title colour only; the icon keeps `color`'s, except on `"default"`, where it follows. Inside an interactive surface it holds at rest and yields to hover, pressed, selected and disabled |
 
 ## Colours
 
 `Content` owns the status text colours (`CONTENT_STATUS_COLORS` in `content/colors.ts`); `Badge`
 and `Tag` take theirs from it.
 
-| `color`       | Title and icon                              |
-| ------------- | ------------------------------------------- |
-| `default`     | `text-04`; the icon follows `titleColor`    |
-| `info`        | `theme-blue-05`                             |
-| `success`     | `theme-green-05`                            |
-| `warning`     | `status-warning-05`                         |
-| `pending`     | `theme-amber-05`                            |
-| `queued`      | `theme-purple-05`                           |
-| `error`       | `status-error-05`                           |
+| `color`       | Title and icon                                |
+| ------------- | --------------------------------------------- |
+| `default`     | `text-04`; the icon follows `titleColor`      |
+| `info`        | `theme-blue-05`                               |
+| `success`     | `theme-green-05`                              |
+| `warning`     | `status-warning-05`                           |
+| `pending`     | `theme-amber-05`                              |
+| `queued`      | `theme-purple-05`                             |
+| `error`       | `status-error-05`                             |
 | `interactive` | the surrounding interactive surface's colours |
 
 - A muted row: `titleColor="text-03"` (the default's icon follows).

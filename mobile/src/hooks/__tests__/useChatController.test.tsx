@@ -13,7 +13,11 @@ import {
   renameChatSession,
   stopChatSession,
 } from "@/api/chat/sessions";
-import { streamChatMessage, type StreamEvent } from "@/api/chat/stream";
+import {
+  streamChatMessage,
+  StreamHttpError,
+  type StreamEvent,
+} from "@/api/chat/stream";
 import { ChatFileType, type FileDescriptor } from "@/chat/interfaces";
 import { PacketType, StopReason } from "@/chat/streamingModels";
 import { useChatController } from "@/hooks/useChatController";
@@ -37,6 +41,13 @@ jest.mock("@/api/chat/stream", () => ({
     "user_message_id" in event,
   isStreamError: (event: { error?: unknown }) =>
     "error" in event && typeof event.error === "string",
+  StreamHttpError: class StreamHttpError extends Error {
+    status: number;
+    constructor(message: string, status: number) {
+      super(message);
+      this.status = status;
+    }
+  },
 }));
 jest.mock("@/api/chat/sessions", () => ({
   createChatSession: jest.fn(),
@@ -233,6 +244,7 @@ describe("useChatController", () => {
     useChatSessionStore.getState().ensureSession("s1");
     streamMock.mockReturnValue(
       scripted([
+        idInfo,
         startPacket("Partial "),
         streamError("The model exploded.", "RATE_LIMIT"),
       ]),
@@ -249,21 +261,117 @@ describe("useChatController", () => {
     expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
     expect(messages[1]!.message).toBe("The model exploded.");
     expect(messages[1]!.errorCode).toBe("RATE_LIMIT");
+    // The partial answer stays with the error.
+    expect(accumulated(messages[1]!.packets)).toBe("Partial ");
   });
 
-  it("surfaces a bare backend error that arrives before any content", async () => {
+  it.each(["error packet", "HTTP 400"] as const)(
+    "drops a send the server rejects before saving (%s)",
+    async (kind) => {
+      let now = Date.now();
+      const clock = jest
+        .spyOn(Date, "now")
+        .mockImplementation(() => (now += 10));
+      useChatSessionStore.getState().ensureSession("s1");
+      streamMock
+        .mockReturnValueOnce(scripted([idInfo, startPacket("Hi"), endPacket()]))
+        .mockReturnValueOnce(
+          kind === "error packet"
+            ? scripted([streamError("Rejected.")])
+            : (async function* (): AsyncGenerator<StreamEvent> {
+                throw new StreamHttpError("Rejected.", 400);
+              })(),
+        )
+        .mockReturnValueOnce(
+          scripted([
+            { user_message_id: 12, reserved_assistant_message_id: 13 },
+            endPacket(),
+          ] as StreamEvent[]),
+        );
+      const onAccepted = jest.fn();
+
+      const { result } = renderHook(() => useChatController("s1"), {
+        wrapper,
+      });
+      await act(async () => {
+        await result.current.submit("Question");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      const treeBefore = useChatSessionStore
+        .getState()
+        .sessions.get("s1")!.messageTree;
+      await act(async () => {
+        await result.current.submit("Rejected question", [], onAccepted);
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+      expect(
+        useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+      ).toEqual(treeBefore);
+      expect(toast.error).toHaveBeenCalledWith("Rejected.");
+      // The composer keeps the draft until the server accepts a send.
+      expect(onAccepted).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await result.current.submit("Next");
+      });
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
+      expect(
+        (
+          streamMock.mock.calls[2]![0] as unknown as {
+            parent_message_id: number | null;
+          }
+        ).parent_message_id,
+      ).toBe(11);
+      expect(result.current.messages.map((m) => m.messageId)).toEqual([
+        10, 11, 12, 13,
+      ]);
+      clock.mockRestore();
+    },
+  );
+
+  it("continues the conversation after a failed turn", async () => {
+    // Node ids come from the clock; keep the two turns' ids distinct.
+    let now = Date.now();
+    const clock = jest.spyOn(Date, "now").mockImplementation(() => (now += 10));
     useChatSessionStore.getState().ensureSession("s1");
-    streamMock.mockReturnValue(scripted([streamError("Boom.")]));
+    streamMock
+      .mockReturnValueOnce(
+        scripted([idInfo, startPacket("Partial "), streamError("Boom.")]),
+      )
+      .mockReturnValueOnce(
+        scripted([
+          { user_message_id: 12, reserved_assistant_message_id: 13 },
+          startPacket("Done"),
+          endPacket(),
+        ] as StreamEvent[]),
+      );
 
     const { result } = renderHook(() => useChatController("s1"), { wrapper });
     await act(async () => {
-      await result.current.submit("hi");
+      await result.current.submit("Question");
     });
-
     await waitFor(() => expect(result.current.chatState).toBe("input"));
+    await act(async () => {
+      await result.current.submit("try again");
+    });
+    await waitFor(() => expect(result.current.chatState).toBe("input"));
+
+    expect(
+      (
+        streamMock.mock.calls[1]![0] as unknown as {
+          parent_message_id: number | null;
+        }
+      ).parent_message_id,
+    ).toBe(11);
     const messages = result.current.messages;
-    expect(messages.map((m) => m.type)).toEqual(["user", "error"]);
-    expect(messages[1]!.message).toBe("Boom.");
+    expect(messages.map((m) => [m.type, m.messageId])).toEqual([
+      ["user", 10],
+      ["error", 11],
+      ["user", 12],
+      ["assistant", 13],
+    ]);
+    clock.mockRestore();
   });
 
   it("does not auto-name a new session whose first run errors", async () => {
@@ -312,46 +420,49 @@ describe("useChatController", () => {
     expect(result.current.messages[0]!.files).toEqual(files);
   });
 
-  it("threads toolOptions onto the send body (deep research / tools / sources)", async () => {
-    useChatSessionStore.getState().ensureSession("s-tools");
-    streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
+  it.each([false, true])(
+    "threads valid toolOptions onto the send body (deep research: %s)",
+    async (deepResearch) => {
+      useChatSessionStore.getState().ensureSession("s-tools");
+      streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));
 
-    const { result } = renderHook(() => useChatController("s-tools"), {
-      wrapper,
-    });
-    await act(async () => {
-      await result.current.submit("hi", [], undefined, {
-        deepResearch: true,
-        allowedToolIds: [1, 3],
-        forcedToolId: 3,
-        internalSearchFilters: { source_type: ["web"] },
-        llmOverride: {
-          model_configuration_id: 7,
-          model_provider: "OpenAI Prod",
-          model_version: "gpt-6-sol",
-        },
+      const { result } = renderHook(() => useChatController("s-tools"), {
+        wrapper,
       });
-    });
+      await act(async () => {
+        await result.current.submit("hi", [], undefined, {
+          deepResearch,
+          allowedToolIds: [1, 3],
+          preferredToolId: deepResearch ? null : 3,
+          internalSearchFilters: { source_type: ["web"] },
+          llmOverride: {
+            model_configuration_id: 7,
+            model_provider: "OpenAI Prod",
+            model_version: "gpt-6-sol",
+          },
+        });
+      });
 
-    await waitFor(() => expect(result.current.chatState).toBe("input"));
+      await waitFor(() => expect(result.current.chatState).toBe("input"));
 
-    const body = streamMock.mock.calls[0]![0] as unknown as {
-      deep_research: boolean;
-      allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
-      internal_search_filters: { source_type: string[] | null } | null;
-      llm_override: { model_configuration_id: number } | null;
-    };
-    expect(body.deep_research).toBe(true);
-    expect(body.allowed_tool_ids).toEqual([1, 3]);
-    expect(body.forced_tool_id).toBe(3);
-    expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
-    expect(body.llm_override).toEqual({
-      model_configuration_id: 7,
-      model_provider: "OpenAI Prod",
-      model_version: "gpt-6-sol",
-    });
-  });
+      const body = streamMock.mock.calls[0]![0] as unknown as {
+        deep_research: boolean;
+        allowed_tool_ids: number[] | null;
+        preferred_tool_id: number | null;
+        internal_search_filters: { source_type: string[] | null } | null;
+        llm_override: { model_configuration_id: number } | null;
+      };
+      expect(body.deep_research).toBe(deepResearch);
+      expect(body.allowed_tool_ids).toEqual([1, 3]);
+      expect(body.preferred_tool_id).toBe(deepResearch ? null : 3);
+      expect(body.internal_search_filters).toEqual({ source_type: ["web"] });
+      expect(body.llm_override).toEqual({
+        model_configuration_id: 7,
+        model_provider: "OpenAI Prod",
+        model_version: "gpt-6-sol",
+      });
+    },
+  );
 
   it("defaults the tool fields when no toolOptions are passed (backwards compatible)", async () => {
     useChatSessionStore.getState().ensureSession("s-defaults");
@@ -369,13 +480,13 @@ describe("useChatController", () => {
     const body = streamMock.mock.calls[0]![0] as unknown as {
       deep_research: boolean;
       allowed_tool_ids: number[] | null;
-      forced_tool_id: number | null;
+      preferred_tool_id: number | null;
       internal_search_filters: unknown;
       llm_override: unknown;
     };
     expect(body.deep_research).toBe(false);
     expect(body.allowed_tool_ids).toBeNull();
-    expect(body.forced_tool_id).toBeNull();
+    expect(body.preferred_tool_id).toBeNull();
     expect(body.internal_search_filters).toBeNull();
     // Null, not omitted: the backend then runs the agent's own default model.
     expect(body.llm_override).toBeNull();

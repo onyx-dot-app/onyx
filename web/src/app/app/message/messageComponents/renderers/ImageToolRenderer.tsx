@@ -11,6 +11,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
+import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
 
@@ -56,15 +57,12 @@ export const ImageToolRenderer: MessageRenderer<
   const hasResult = packets.some(
     (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
   );
-  const isComplete = packets.some(
-    (packet) =>
-      packet.obj.type === PacketType.SECTION_END ||
-      packet.obj.type === PacketType.ERROR
-  );
+  const isComplete = packets.some(isGroupEndPacket);
   const failed = packets.some((p) => p.obj.type === PacketType.ERROR);
   const isRunning = !isComplete && !stopPacketSeen;
 
-  // A final result can be empty. A stopped call has no result packet.
+  // A final result can be empty. A call with no result packet was stopped, by
+  // Stop or by an interrupted code mode program.
   const status = failed
     ? t("imageTool.failedStatus.text")
     : isRunning

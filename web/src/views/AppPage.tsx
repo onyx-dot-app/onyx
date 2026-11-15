@@ -77,7 +77,8 @@ import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
-import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
+import { useProjectsContext } from "@/lib/projects/providers";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
@@ -281,6 +282,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in
@@ -360,12 +362,9 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setCurrentMessageFiles([]);
   }, [setCurrentMessageFiles]);
 
-  const restoreInputBar = useCallback(
-    (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message, files);
-    },
-    []
-  );
+  const restoreInputBar = useCallback((unsent: UnsentMessage) => {
+    chatInputBarRef.current?.restore(unsent);
+  }, []);
 
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
@@ -529,20 +528,21 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     restoreInputBar,
   });
 
-  const { onMessageSelection, sessionFetchError } = useChatSessionController({
-    existingChatSessionId: currentChatSessionId,
-    searchParams,
-    firstMessage,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    chatInputBarRef,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, sessionFetchError, queue } =
+    useChatSessionController({
+      existingChatSessionId: currentChatSessionId,
+      searchParams,
+      firstMessage,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      chatInputBarRef,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   // A link can arrive carrying both a prompt and a search scope. Declared here
   // because it submits, so it needs `onSubmit` above it.
@@ -601,6 +601,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // We call onSubmit, passing a `messageOverride`
     onSubmit({
       message: lastUserMsg.message,
+      mentions: lastUserMsg.mentions ?? [],
       currentMessageFiles: currentMessageFiles,
       deepResearch:
         deepResearchEnabledForCurrentWorkflow && !multiModel.isMultiModelActive,
@@ -623,13 +624,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const onChat = useCallback(
-    (message: string) => {
+    (composed: ComposedMessage) => {
       if (multiModel.isMultiModelActive) {
         foldSidebarForMultiModel();
       }
       resetInputBar();
       onSubmit({
-        message,
+        ...composed,
         currentMessageFiles,
         deepResearch:
           deepResearchEnabledForCurrentWorkflow &&
@@ -685,13 +686,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
 
   const handleAppInputBarSubmit = useCallback(
-    async (message: string) => {
+    async (composed: ComposedMessage) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
         resetInputBar();
         onSubmit({
-          message,
+          ...composed,
           currentMessageFiles,
           deepResearch:
             deepResearchEnabledForCurrentWorkflow &&
@@ -708,18 +709,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
         return;
       }
 
-      // Incognito always routes to chat: the search path runs its own
-      // persistence and none of the incognito safeguards.
-      if (incognitoEnabledRef.current) {
-        onChat(message);
-        return;
-      }
-
       // For new sessions, let the query controller handle routing.
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
-      await submitQuery(message, onChat);
+      // Incognito always routes to chat: the search path runs its own
+      // persistence and none of the incognito safeguards. Search cannot use
+      // mentions, so a message with mentions routes to chat too.
+      await submitQuery(composed.message, () => onChat(composed), {
+        chatOnly: incognitoEnabledRef.current || composed.mentions.length > 0,
+      });
     },
     [
       currentChatSessionId,
@@ -1197,6 +1196,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        queue={queue}
                         toolConfiguration={toolConfiguration}
                         memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}

@@ -77,7 +77,22 @@ export class AdminOpenApiPluginPage {
       name: "Save Changes",
       exact: true,
     });
+    // The save writes the OAuth config, then points the tool at it; a reload
+    // before both requests finish cancels them.
+    const configSaved = this.page.waitForResponse(
+      (response) =>
+        new URL(response.url()).pathname === "/api/admin/oauth-config/create" &&
+        response.request().method() === "POST"
+    );
+    const toolSaved = this.page.waitForResponse(
+      (response) =>
+        /^\/api\/admin\/tool\/custom\/\d+$/.test(
+          new URL(response.url()).pathname
+        ) && response.request().method() === "PUT"
+    );
     await save.click();
+    expect((await configSaved).ok()).toBeTruthy();
+    expect((await toolSaved).ok()).toBeTruthy();
     await expect(save).toBeDisabled();
     await expect(dialog).toBeVisible();
   }

@@ -96,6 +96,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	retried := map[string][]string{}
 	announced := map[int]bool{}
 	count := 0
+	severities := map[Severity]int{}
 	for _, a := range opts.Failing {
 		var fresh []Advisory
 		firstTS := ""
@@ -121,6 +122,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 		}
 		count += len(fresh)
 		for _, adv := range fresh {
+			severities[cmp.Or(adv.Severity, SeverityCritical)]++
 			lines = append(lines, fmt.Sprintf("• %s in *%s*: %s (%s) %s%s", advisoryLink(adv), imageLabel(adv.Images),
 				a.Package, a.Ecosystem, versionLabel(a.Versions), issueLink(a)))
 		}
@@ -138,11 +140,7 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	}
 
 	if count > 0 {
-		noun := "critical CVEs"
-		if count == 1 {
-			noun = "critical CVE"
-		}
-		text := []string{fmt.Sprintf("*🚨 Audit failed on %s: %d %s* %s", opts.Branch, count, noun, opts.Owner)}
+		text := []string{fmt.Sprintf("*🚨 Audit failed on %s: %s* %s", opts.Branch, cveCount(count, severities), opts.Owner)}
 		if opts.AuditURL != "" {
 			text = append(text, fmt.Sprintf("*Audit:* <%s|failed run>", opts.AuditURL))
 		}
@@ -167,6 +165,30 @@ func PlanAnnouncement(opts AnnounceOptions) AnnouncePlan {
 	}
 	sort.Ints(plan.Issues)
 	return plan
+}
+
+// cveCount names the count with its severities, e.g. "2 critical CVEs" or
+// "3 CVEs (1 critical, 2 high)". An advisory with no severity counts as
+// critical, the default gate.
+func cveCount(count int, severities map[Severity]int) string {
+	noun := "CVEs"
+	if count == 1 {
+		noun = "CVE"
+	}
+	var present []Severity
+	for _, sev := range []Severity{SeverityCritical, SeverityHigh, SeverityModerate, SeverityLow, SeverityUnknown} {
+		if severities[sev] > 0 {
+			present = append(present, sev)
+		}
+	}
+	if len(present) == 1 {
+		return fmt.Sprintf("%d %s %s", count, present[0], noun)
+	}
+	parts := make([]string, len(present))
+	for i, sev := range present {
+		parts[i] = fmt.Sprintf("%d %s", severities[sev], sev)
+	}
+	return fmt.Sprintf("%d %s (%s)", count, noun, strings.Join(parts, ", "))
 }
 
 func threadOf(adv Advisory, threads map[string]string) string {

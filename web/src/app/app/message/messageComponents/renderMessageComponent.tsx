@@ -19,7 +19,10 @@ import { MessageTextRenderer } from "@/app/app/message/messageComponents/rendere
 import { ImageToolRenderer } from "@/app/app/message/messageComponents/renderers/ImageToolRenderer";
 import { PythonToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/PythonToolRenderer";
 import { CodingAgentRenderer } from "@/app/app/message/messageComponents/timeline/renderers/code/CodingAgentRenderer";
-import { isCodingAgentPackets } from "@/app/app/message/messageComponents/timeline/packetHelpers";
+import {
+  isCodingAgentPackets,
+  NestedCall,
+} from "@/app/app/message/messageComponents/timeline/packetHelpers";
 import { ReasoningRenderer } from "@/app/app/message/messageComponents/timeline/renderers/reasoning/ReasoningRenderer";
 import CustomToolRenderer from "@/app/app/message/messageComponents/renderers/CustomToolRenderer";
 import { FileReaderToolRenderer } from "@/app/app/message/messageComponents/timeline/renderers/filereader/FileReaderToolRenderer";
@@ -115,51 +118,47 @@ function isResearchAgentPacket(packet: Packet) {
 export function findRenderer(
   groupedPackets: GroupedPackets
 ): MessageRenderer<any, any> | null {
-  // Check for chat messages first
-  if (groupedPackets.packets.some((packet) => isChatPacket(packet))) {
+  const { packets } = groupedPackets;
+
+  if (packets.some(isChatPacket)) {
     return MessageTextRenderer;
   }
-
-  // Check for deep research packets EARLY - these have priority over other tools
-  // because deep research groups may contain multiple packet types (plan + reasoning + fetch)
-  if (
-    groupedPackets.packets.some((packet) => isDeepResearchPlanPacket(packet))
-  ) {
+  // Deep research groups can also hold reasoning and fetch packets.
+  if (packets.some(isDeepResearchPlanPacket)) {
     return DeepResearchPlanRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isResearchAgentPacket(packet))) {
+  if (packets.some(isResearchAgentPacket)) {
     return ResearchAgentRenderer;
   }
-  if (isCodingAgentPackets(groupedPackets.packets)) {
+  if (isCodingAgentPackets(packets)) {
     return CodingAgentRenderer;
   }
-
-  // Standard tool checks
-  if (groupedPackets.packets.some((packet) => isWebSearchPacket(packet))) {
+  if (packets.some(isWebSearchPacket)) {
     return WebSearchToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isInternalSearchPacket(packet))) {
+  if (packets.some(isInternalSearchPacket)) {
     return InternalSearchToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isImageToolPacket(packet))) {
+  if (packets.some(isImageToolPacket)) {
     return ImageToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isPythonToolPacket(packet))) {
+  if (packets.some(isPythonToolPacket)) {
     return PythonToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isFileReaderToolPacket(packet))) {
+  if (packets.some(isFileReaderToolPacket)) {
     return FileReaderToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isCustomToolPacket(packet))) {
+  if (packets.some(isCustomToolPacket)) {
     return CustomToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isFetchToolPacket(packet))) {
+  if (packets.some(isFetchToolPacket)) {
     return FetchToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isMemoryToolPacket(packet))) {
+  if (packets.some(isMemoryToolPacket)) {
     return MemoryToolRenderer;
   }
-  if (groupedPackets.packets.some((packet) => isReasoningPacket(packet))) {
+  // SECTION_END and ERROR match here, so this check must stay last.
+  if (packets.some(isReasoningPacket)) {
     return ReasoningRenderer;
   }
   return null;
@@ -168,6 +167,8 @@ export function findRenderer(
 // Props interface for RendererComponent
 interface RendererComponentProps {
   packets: Packet[];
+  nestedCalls: NestedCall[];
+  streamPackets: Packet[];
   chatState: FullChatState;
   messageNodeId?: number;
   hasTimelineThinking?: boolean;
@@ -186,6 +187,8 @@ function areRendererPropsEqual(
 ): boolean {
   return (
     prev.packets === next.packets &&
+    prev.nestedCalls === next.nestedCalls &&
+    prev.streamPackets === next.streamPackets &&
     prev.stopPacketSeen === next.stopPacketSeen &&
     prev.stopReason === next.stopReason &&
     prev.animate === next.animate &&
@@ -199,6 +202,8 @@ function areRendererPropsEqual(
 // React component wrapper that directly uses renderer components
 export const RendererComponent = memo(function RendererComponent({
   packets,
+  nestedCalls,
+  streamPackets,
   chatState,
   messageNodeId,
   hasTimelineThinking,
@@ -218,6 +223,8 @@ export const RendererComponent = memo(function RendererComponent({
   return (
     <RendererFn
       packets={packets}
+      nestedCalls={nestedCalls}
+      streamPackets={streamPackets}
       state={chatState}
       messageNodeId={messageNodeId}
       hasTimelineThinking={hasTimelineThinking}

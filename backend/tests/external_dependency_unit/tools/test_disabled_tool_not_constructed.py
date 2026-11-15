@@ -11,6 +11,7 @@ from onyx.db.models import Persona, Tool, User
 from onyx.db.tools import capture_persona_tool_configuration
 from onyx.llm.factory import get_default_llm
 from onyx.tools.tool_constructor import construct_tools
+from onyx.tools.tool_name import normalize_external_tool_name
 from tests.external_dependency_unit.conftest import (
     create_test_user,
     delete_test_user,
@@ -167,4 +168,6 @@ def test_prepared_configuration_survives_persona_edits(db_session: Session) -> N
     )
 
     assert tool_id in tools
-    assert tools[tool_id][0].name == "test_operation"
+    assert tools[tool_id][0].name == normalize_external_tool_name(
+        f"custom__{tool_id}__test_operation"
+    )

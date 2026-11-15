@@ -5,9 +5,18 @@ import SkillCard, {
 } from "@/sections/cards/SkillCard";
 import type { CustomSkill } from "@/lib/skills/types";
 
+let mockPermissions: string[] = [];
 jest.mock("@/providers/UserProvider", () => ({
-  useUser: () => ({ isAdmin: false }),
+  useUser: () => ({
+    isAdmin: false,
+    permissions: mockPermissions,
+    adminCapabilities: mockPermissions,
+  }),
 }));
+
+beforeEach(() => {
+  mockPermissions = [];
+});
 
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ appName: "Onyx" }),
@@ -53,6 +62,10 @@ function custom(overrides: Partial<CustomSkill> = {}): CustomSkillCardItem {
     public_permission: null,
     user_permission: "OWNER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
     ...overrides,
   };
   return {
@@ -218,6 +231,43 @@ describe("SkillCard", () => {
     await user.click(screen.getByRole("button", { name: "Edit sharing" }));
     expect(onShare).toHaveBeenCalledWith(item);
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it("shows Unpublished changes when the current version is newer than the published one", () => {
+    const { rerender } = render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.getByText("Unpublished changes")).toBeInTheDocument();
+    rerender(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 3,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
+  });
+
+  it("hides Unpublished changes from viewers, who run the published version", () => {
+    render(
+      <SkillCard
+        item={custom({
+          public_permission: "VIEWER",
+          user_permission: "VIEWER",
+          current_version_number: 3,
+          published_version_number: 2,
+        })}
+      />
+    );
+    expect(screen.queryByText("Unpublished changes")).not.toBeInTheDocument();
   });
 
   it("hides sharing controls from viewers", () => {
@@ -443,3 +493,22 @@ test("built-in skills never expose Delete", () => {
     screen.queryByRole("button", { name: "Delete skill" })
   ).not.toBeInTheDocument();
 });
+
+test.each([
+  { permissions: [], visible: false },
+  { permissions: ["manage:plugins"], visible: true },
+])(
+  "only an organization-wide manager sees Delete on a published skill ($permissions)",
+  ({ permissions, visible }) => {
+    mockPermissions = permissions;
+    render(
+      <SkillCard
+        item={custom({ is_personal: false, public_permission: "VIEWER" })}
+        onDelete={jest.fn()}
+      />
+    );
+    const button = screen.queryByRole("button", { name: "Delete skill" });
+    if (visible) expect(button).toBeInTheDocument();
+    else expect(button).not.toBeInTheDocument();
+  }
+);

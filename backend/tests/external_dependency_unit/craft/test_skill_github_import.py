@@ -301,7 +301,7 @@ def test_import_with_policy_keeps_first_skill_when_a_name_repeats(
         "onyx.server.features.skill.api.push_skills_for_users", lambda *_args: None
     )
     monkeypatch.setattr(
-        "onyx.db.skill.has_global_permission",
+        "onyx.db.plugin.has_global_permission",
         lambda *_args, **_kwargs: True,
     )
 

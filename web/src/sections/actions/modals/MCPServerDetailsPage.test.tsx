@@ -185,7 +185,7 @@ beforeEach(() => {
         })
       );
     if (url === "/api/enterprise-settings") return new Response("{}");
-    if (url === "/api/manage/admin/user-group")
+    if (url === "/api/manage/admin/user-group?include_users=false")
       return new Response(JSON.stringify(availableGroups));
     throw new Error(`Unexpected request: ${url}`);
   });

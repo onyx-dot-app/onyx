@@ -476,7 +476,7 @@ def test_agent_reuse_waits_for_cancelled_provider_read(
             with pytest.raises(TimeoutError):
                 old.result(timeout=0.05)
             assert not old.wait_for_idle(timeout=0)
-            assert coordinator.active_run(agent.id) is old
+            assert coordinator.newest_run(agent.id) is old
             with pytest.raises(RuntimeError, match="already running or draining"):
                 agent.start(
                     messages=[UserMessage(content="Second")],

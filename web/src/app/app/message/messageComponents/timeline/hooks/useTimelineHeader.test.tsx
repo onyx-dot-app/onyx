@@ -24,7 +24,18 @@ function group(packets: Packet[]): TurnGroup[] {
     {
       turnIndex: 0,
       isParallel: false,
-      steps: [{ key: "0-0", turnIndex: 0, tabIndex: 0, packets }],
+      steps: [
+        {
+          key: "0-0",
+          groupKey: "0-0",
+          turnIndex: 0,
+          tabIndex: 0,
+          packets,
+          nestedCalls: [],
+          streamPackets: packets,
+          codeMode: null,
+        },
+      ],
     },
   ];
 }
@@ -37,7 +48,11 @@ describe("useTimelineHeader", () => {
           debug,
           {
             placement: { turn_index: 0 },
-            obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "Lookup" },
+            obj: {
+              type: PacketType.CUSTOM_TOOL_START,
+              tool_name: "Lookup",
+              display_name: "Lookup",
+            },
           },
         ])
       )
@@ -47,8 +62,62 @@ describe("useTimelineHeader", () => {
     );
   });
 
+  it("names a qualified external tool by its display name", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.CUSTOM_TOOL_START,
+              tool_name: "mcp__3__my__srv__create_issue",
+              display_name: "create_issue",
+            },
+          },
+        ])
+      )
+    );
+    expect(result.current.headerText).toBe(
+      "header.executingNamedTool.label:create_issue"
+    );
+  });
+
   it("keeps the pending header until a rendered packet arrives", () => {
     const { result } = renderHook(() => useTimelineHeader(group([debug])));
     expect(result.current.headerText).toBe("header.thinkingEllipsis.label");
+  });
+
+  it("shows image generation as an ordinary step", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.IMAGE_GENERATION_TOOL_START },
+          },
+        ])
+      )
+    );
+    expect(result.current.headerText).toBe("header.generatingImages.label");
+  });
+
+  it("reads work without a step as working", () => {
+    const { result } = renderHook(() =>
+      useTimelineHeader(
+        group([
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.SEARCH_TOOL_START },
+          },
+          {
+            placement: { turn_index: 0 },
+            obj: { type: PacketType.SECTION_END },
+          },
+        ]),
+        undefined,
+        true
+      )
+    );
+    expect(result.current.headerText).toBe("header.working.label");
   });
 });

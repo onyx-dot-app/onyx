@@ -8,8 +8,10 @@ import React, {
   useRef,
 } from "react";
 import { Message } from "@/app/app/types";
+import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -63,20 +65,19 @@ export interface ChatUIProps {
   stopGenerating: () => void;
 
   // Submit handlers
-  onSubmit: (args: {
-    message: string;
-    messageIdToResend?: number;
-    currentMessageFiles: any[];
-    deepResearch: boolean;
-    modelOverride?: LlmDescriptor;
-    regenerationRequest?: {
-      messageId: number;
-      parentMessage: Message;
-      forceSearch?: boolean;
-    };
-    forceSearch?: boolean;
-    selectedModels?: SelectedModel[];
-  }) => Promise<void>;
+  onSubmit: (
+    args: ComposedMessage & {
+      messageIdToResend?: number;
+      currentMessageFiles: any[];
+      deepResearch: boolean;
+      modelOverride?: LlmDescriptor;
+      regenerationRequest?: {
+        messageId: number;
+        parentMessage: Message;
+      };
+      selectedModels?: SelectedModel[];
+    }
+  ) => Promise<void>;
   deepResearchEnabled: boolean;
   currentMessageFiles: any[];
 
@@ -191,20 +192,16 @@ const ChatUI = React.memo(
     }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
-      (regenerationRequest: {
-        messageId: number;
-        parentMessage: Message;
-        forceSearch?: boolean;
-      }) => {
+      (regenerationRequest: { messageId: number; parentMessage: Message }) => {
         return async function (modelOverride: LlmDescriptor) {
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
+            mentions: regenerationRequest.parentMessage.mentions ?? [],
             currentMessageFiles: currentMessageFilesRef.current,
             deepResearch: deepResearchEnabledRef.current,
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,
             regenerationRequest,
-            forceSearch: regenerationRequest.forceSearch,
           });
         };
       },
@@ -212,10 +209,10 @@ const ChatUI = React.memo(
     );
 
     const handleEditWithMessageId = useCallback(
-      (editedContent: string, msgId: number) => {
+      (edited: ComposedMessage, msgId: number) => {
         const models = selectedModelsRef.current;
         onSubmitRef.current({
-          message: editedContent,
+          ...edited,
           messageIdToResend: msgId,
           currentMessageFiles: [],
           deepResearch: deepResearchEnabledRef.current,
@@ -287,6 +284,7 @@ const ChatUI = React.memo(
                       stopGenerating={stopGenerating}
                       content={message.message}
                       files={message.files}
+                      mentions={message.mentions}
                       messageId={message.messageId}
                       nodeId={message.nodeId}
                       onEdit={handleEditWithMessageId}
@@ -318,6 +316,19 @@ const ChatUI = React.memo(
                       selectionDisabled={chatState !== "input"}
                     />
                   )}
+                </WindowedRow>
+              );
+            } else if (message.type === "agent_results") {
+              return (
+                <WindowedRow
+                  id={messageReactComponentKey}
+                  key={messageReactComponentKey}
+                  className={cn("w-full self-center", msgWidth)}
+                  pinned={pinned}
+                  initiallyMounted={initiallyMounted}
+                  heightCache={rowHeightCache}
+                >
+                  <AgentResultsDivider />
                 </WindowedRow>
               );
             } else if (
@@ -379,7 +390,9 @@ const ChatUI = React.memo(
                   {message.type === "error" && (
                     <ErrorBanner
                       resubmit={
-                        chatState === "input" && i === messages.length - 1
+                        chatState === "input" &&
+                        previousMessage?.type === "user" &&
+                        i === messages.length - 1
                           ? onResubmit
                           : undefined
                       }
@@ -396,11 +409,17 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {(error || loadError) && (
+          {error && (
+            <div className={cn("p-4 w-full self-center", msgWidth)}>
+              {/* A session error has no saved question to resend. */}
+              <ErrorBanner {...error} />
+            </div>
+          )}
+          {!error && loadError && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>
               <ErrorBanner
                 resubmit={chatState === "input" ? onResubmit : undefined}
-                error={error || loadError || ""}
+                error={loadError}
               />
             </div>
           )}

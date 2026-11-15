@@ -22,6 +22,18 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: {{ $sandboxNs }}
+        {{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" }}
+        {{- /* Firecracker VM egress arrives from the host agent relay, signed
+        per connection. The proxy has no separate relay port, and pod sandboxes
+        can still run, so the sandbox namespace keeps its access. */}}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "onyx.craftHostAgentNamespace" . }}
+          podSelector:
+            matchLabels:
+              {{- include "onyx.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: craft-fc-host-agent
+        {{- end }}
       ports:
         - protocol: TCP
           port: {{ include "onyx.sandboxProxyPort" . }}

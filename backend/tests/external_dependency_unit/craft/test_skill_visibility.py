@@ -13,6 +13,7 @@ from onyx.db.skill import (
     list_skills,
     set_skill_public_permission,
 )
+from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
@@ -78,7 +79,7 @@ class TestSkillVisibility:
 
         assert (result is not None) is is_editable
 
-    def test_public_permission_null_controls_org_visibility(
+    def test_public_permission_controls_org_visibility(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
@@ -97,22 +98,44 @@ class TestSkillVisibility:
 
         set_skill_public_permission(
             skill=skill,
-            public_permission=SkillSharePermission.EDITOR,
+            public_permission=SkillSharePermission.VIEWER,
             db_session=db_session,
         )
-        editor_result = fetch_skill(
-            skill.id,
-            policy=SkillManagementPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-        assert editor_result is not None
-        assert editor_result.id == skill.id
+        for policy, visible in (
+            (SkillManagementPolicy.VIEW, True),
+            (SkillManagementPolicy.EDIT, False),
+        ):
+            result = fetch_skill(
+                skill.id, policy=policy, user=user, db_session=db_session
+            )
+            assert (result is not None) is visible
 
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=None,
-            db_session=db_session,
+        # The organization cannot edit, and publishing is one-way.
+        with pytest.raises(OnyxError, match="edit access"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=SkillSharePermission.EDITOR,
+                db_session=db_session,
+            )
+        with pytest.raises(OnyxError, match="cannot be made private"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=None,
+                db_session=db_session,
+            )
+
+        # An organization EDITOR row written before plugins gives the
+        # organization view access only.
+        skill.public_permission = SkillSharePermission.EDITOR
+        db_session.flush()
+        assert (
+            fetch_skill(
+                skill.id,
+                policy=SkillManagementPolicy.EDIT,
+                user=user,
+                db_session=db_session,
+            )
+            is None
         )
         assert (
             fetch_skill(
@@ -121,7 +144,7 @@ class TestSkillVisibility:
                 user=user,
                 db_session=db_session,
             )
-            is None
+            is not None
         )
 
     def test_user_loses_skill_after_group_removal(
@@ -150,7 +173,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Current behavior pinned: ONLY a global MANAGE_SKILLS holder bypasses the visibility
+        # Current behavior pinned: ONLY a global MANAGE_PLUGINS holder bypasses the visibility
         # filter. Curators (and global curators) walk the same path as
         # regular users — no admin-style "see every row" override.
         curator = make_user(db_session, is_group_manager=True)

@@ -19,7 +19,10 @@ from tests.integration.common_utils.cimd_oauth import (
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.test_models import DATestPersona, DATestUser
 from tests.integration.mock_services.mock_llm_server.models import (
@@ -283,19 +286,16 @@ def test_mcp_oauth_cimd_only_flow(
             force_reauthentication=True,
         )
 
+        callable_name = f"mcp__{server_id}__{MCP_SERVER_NAME}__{MCP_TOOL_NAME}"
         mock_llm.conversation(
             "chat",
-            Reply(
-                tool_calls=[
-                    ToolCall(
-                        id=MCP_TOOL_CALL_ID,
-                        name=MCP_TOOL_NAME,
-                        arguments={"name": "integration-test"},
-                    )
-                ],
-                conditions=RequestConditions(
-                    offers=[MCP_TOOL_NAME], tool_choice="required"
+            tool_call_reply(
+                ToolCall(
+                    id=MCP_TOOL_CALL_ID,
+                    name=callable_name,
+                    arguments={"name": "integration-test"},
                 ),
+                tool_choice="auto",
             ),
             Reply(
                 text="The MCP tool ran.",
@@ -310,11 +310,11 @@ def test_mcp_oauth_cimd_only_flow(
             chat_session_id=chat_session.id,
             message="Invoke the CIMD MCP tool.",
             user_performing_action=admin_user,
-            forced_tool_ids=[tool_id],
+            preferred_tool_id=tool_id,
         )
         assert chat_response.error is None
         assert any(
-            tool_call.tool_name == MCP_TOOL_NAME
+            tool_call.tool_name == callable_name
             and tool_call.tool_args == {"name": "integration-test"}
             for tool_call in chat_response.tool_call_debug
         )

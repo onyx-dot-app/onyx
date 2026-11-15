@@ -47,7 +47,10 @@ from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchCycle, SearchDoc
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.research_agent import ResearchAgent
-from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
+from onyx.deep_research.tool_definitions import (
+    GENERATE_PLAN_TOOL_NAME,
+    GENERATE_REPORT_TOOL_NAME,
+)
 from onyx.file_store.models import ChatFileType, ChatLoadedFile, ExtractedContextFiles
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
@@ -146,6 +149,7 @@ def test_chat_json_restores_tool_context_from_feature_state() -> None:
         status=RunStatus.SUSPENDED,
         steps=[],
         progress=RunProgress(
+            tool_configuration_digest="test-tool-configuration",
             step_limit=3,
             feature_state=original.capture_state().model_dump(mode="json"),
         ),
@@ -219,10 +223,14 @@ def test_deep_research_restores_citations_and_control_tools() -> None:
     encoded = original.capture_state().model_dump_json()
     restored = feature()
     restored.restore_state(TypeAdapter(dict[str, JsonValue]).validate_json(encoded))
-    names = {tool.name for tool in prepared.tools}
-    tools = [tool for tool in restored.tools if tool.name in names]
+    assert prepared.tool_phase == "clarification"
+    tools = [tool for tool in restored.tools if tool.name == GENERATE_PLAN_TOOL_NAME]
     assert restored.citation_mapping[4].document_id == "reference"
-    assert tools[0].definition == prepared.tools[0].definition
+    assert tools[0].definition == next(
+        tool.definition
+        for tool in original.tools
+        if tool.name == GENERATE_PLAN_TOOL_NAME
+    )
     result = tools[0].execute(
         ToolInvocation(
             call_id="call",
@@ -573,7 +581,7 @@ def test_coding_delegation_releases_parent_worker_without_deleting_waiting_works
     try:
         assert run.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(timeout=5)
-        child = coordinator.active_run(children[0].id)
+        child = coordinator.newest_run(children[0].id)
         assert child is not None
         assert child.wait_until_settled(timeout=5).status == RunStatus.SUSPENDED
         assert child.wait_for_idle(timeout=5)
@@ -599,6 +607,7 @@ def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:
             run_id="file-checkpoint",
             status=RunStatus.SUSPENDED,
             progress=RunProgress(
+                tool_configuration_digest="test-tool-configuration",
                 step_limit=2,
                 feature_state=original.capture_state().model_dump(mode="json"),
             ),
@@ -617,7 +626,7 @@ def test_checkpoint_file_storage_preserves_binary_feature_data() -> None:
     assert saved_file.filename == "result.bin"
     assert saved_file.content is None
     assert saved_file.file_id is not None
-    with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
+    with patch("onyx.file_store.file_store.get_default_file_store") as file_store:
         file_store.return_value.read_file.return_value = BytesIO(payload)
         assert saved_file.restore().content == payload
 
@@ -680,7 +689,9 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
             )
         ],
         progress=RunProgress(
-            step_limit=2, feature_state=original.capture_state().model_dump(mode="json")
+            tool_configuration_digest="test-tool-configuration",
+            step_limit=2,
+            feature_state=original.capture_state().model_dump(mode="json"),
         ),
     )
     codec = CheckpointStorage(CHECKPOINT_PAYLOAD_TYPES)
@@ -697,7 +708,7 @@ def test_chat_checkpoint_preserves_lazy_file_references() -> None:
     assert restored.progress is not None
     saved = ChatFeatureState.model_validate(restored.progress.feature_state)
     assert loads == []
-    with patch("onyx.tools.file_snapshot.get_default_file_store") as file_store:
+    with patch("onyx.file_store.file_store.get_default_file_store") as file_store:
         file_store.return_value.read_file.side_effect = lambda *_args, **_kwargs: (
             BytesIO(payload)
         )

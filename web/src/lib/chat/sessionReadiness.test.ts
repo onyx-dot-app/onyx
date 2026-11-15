@@ -1,4 +1,4 @@
-import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
+import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 
 function sessionResponse(
   isProcessing: boolean,
@@ -28,8 +28,8 @@ test("waits through setup, generation, and storage before releasing all callers"
     .mockResolvedValueOnce(sessionResponse(true))
     .mockResolvedValueOnce(sessionResponse(true, 42))
     .mockResolvedValueOnce(sessionResponse(false));
-  const check = waitForChatSessionIdle("session");
-  expect(waitForChatSessionIdle("session")).toBe(check);
+  const check = waitForChatResponseEnd("session", 42);
+  expect(waitForChatResponseEnd("session", 42)).toBe(check);
   const completed = jest.fn();
   void check.then(completed);
 
@@ -46,10 +46,8 @@ test("a failed status request never reports idle and can be retried", async () =
     .spyOn(global, "fetch")
     .mockResolvedValueOnce({ ok: false, status: 503 } as Response)
     .mockResolvedValueOnce(sessionResponse(false));
-  await expect(waitForChatSessionIdle("failed-session")).rejects.toThrow("503");
-  await expect(
-    waitForChatSessionIdle("failed-session")
-  ).resolves.toBeUndefined();
+  await expect(waitForChatResponseEnd("failed-session")).rejects.toThrow("503");
+  await expect(waitForChatResponseEnd("failed-session")).resolves.toBeNull();
   expect(fetchSpy).toHaveBeenCalledTimes(2);
 });
 
@@ -58,7 +56,7 @@ test("healthy long-running work stays busy beyond two minutes", async () => {
     .spyOn(global, "fetch")
     .mockResolvedValue(sessionResponse(true));
   const completed = jest.fn();
-  const check = waitForChatSessionIdle("research-session");
+  const check = waitForChatResponseEnd("research-session");
   void check.then(completed);
   await jest.advanceTimersByTimeAsync(180_000);
   expect(completed).not.toHaveBeenCalled();
@@ -73,7 +71,7 @@ test("a response without a valid processing state never reports idle", async () 
     ok: true,
     json: async () => ({}),
   } as Response);
-  await expect(waitForChatSessionIdle("invalid-session")).rejects.toThrow(
+  await expect(waitForChatResponseEnd("invalid-session")).rejects.toThrow(
     "Session readiness response is invalid"
   );
 });

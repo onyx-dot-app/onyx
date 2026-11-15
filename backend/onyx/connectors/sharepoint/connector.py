@@ -81,7 +81,7 @@ from onyx.connectors.sharepoint.source_operations import (
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 
@@ -1558,7 +1558,7 @@ class SharepointConnector(
             return
 
         driveitem_extension = get_file_ext(driveitem.name)
-        if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+        if not is_indexable_file_type(driveitem.name, None, allow_images=True):
             logger.warning(
                 "Skipping %s as it is not a supported file type",
                 driveitem.web_url,

@@ -81,8 +81,20 @@ class RedisCacheBackend(CacheBackend):
     ) -> bool:
         return bool(self._r.set(key, value, ex=ex, nx=True))
 
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        return self._r.replace_if_value(key, expected, value, ex)
+
     def delete(self, key: str) -> None:
         self._r.delete(key)
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        return self._r.delete_if_value(key, expected)
 
     def delete_prefix(self, prefix: str) -> None:
         if not prefix:

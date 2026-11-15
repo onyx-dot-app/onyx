@@ -47,7 +47,7 @@ class ChatResponsePersistence(RunStore):
         self.llm = llm
         self.delivery = delivery
         self.outcome = outcome
-        self.tool_ids: dict[str, int] = {}
+        self.tool_ids: dict[str, int | None] = {}
         self.initial_citations: CitationMapping = {}
         self.coordinator = coordinator
         self._lock = threading.Lock()

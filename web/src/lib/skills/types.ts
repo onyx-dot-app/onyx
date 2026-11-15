@@ -59,6 +59,14 @@ export interface Skill {
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
   external_app: SkillExternalAppDependency | null;
+  /** Newest plugin version of a custom skill. Edits send it back as
+   * `base_version_id`, so a save over a newer version gets a 409. */
+  current_version_id: string | null;
+  current_version_number: number | null;
+  /** The version the organization runs. Null while the skill is private. */
+  published_version_number: number | null;
+  /** The version that waits for an admin's review. */
+  pending_version_number: number | null;
 }
 
 export type BuiltinSkill = Skill & {
@@ -69,6 +77,15 @@ export type BuiltinSkill = Skill & {
 export type CustomSkill = Skill & {
   source: "custom";
 };
+
+/** A custom skill that chat agents get, at the version the user runs. */
+export interface ChatSkill {
+  name: string;
+  description: string;
+  /** `metadata.short-description` in the SKILL.md frontmatter. */
+  short_description: string | null;
+  version_id: string;
+}
 
 export interface SkillsList {
   builtins: Skill[];
@@ -89,6 +106,34 @@ export type SkillEditableDetail = CustomSkill & {
   instructions_markdown: string;
   files: SkillBundleFile[];
 };
+
+export type SkillVersionReviewStatus = "draft" | "pending" | "published";
+
+export interface SkillVersion {
+  id: string;
+  version_number: number;
+  created_at: string;
+  created_by_email: string | null;
+  is_current: boolean;
+  review_status: SkillVersionReviewStatus;
+}
+
+export interface SkillVersionPreview {
+  description: string;
+  instructions_markdown: string;
+}
+
+export interface SkillReviewRequest {
+  skill_id: string;
+  name: string | null;
+  version_id: string;
+  version_number: number;
+  /** Null for a first publish. */
+  published_version_number: number | null;
+  author_email: string | null;
+  /** When the version was saved. */
+  version_created_at: string;
+}
 
 export interface SkillBundleFile {
   path: string;

@@ -8,6 +8,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
@@ -138,6 +139,19 @@ jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
     ) : null,
 }));
 
+let mockIsManager = false;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockIsManager,
+    isScopedManager: false,
+  }),
+}));
+
+jest.mock("@/sections/skills/SkillReviewRequests", () => ({
+  __esModule: true,
+  default: () => <div>Publish requests list</div>,
+}));
+
 jest.mock("@/sections/modals/SkillPreviewModal", () => ({
   __esModule: true,
   default: ({ open }: { open: boolean }) =>
@@ -168,6 +182,10 @@ function customSkill(id: string, name: string): CustomSkill {
     public_permission: "VIEWER",
     user_permission: "VIEWER",
     external_app: null,
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
   };
 }
 
@@ -193,6 +211,7 @@ describe("SkillsPage preference toggles", () => {
   }
 
   beforeEach(() => {
+    mockIsManager = false;
     skillsData = {
       builtins: [],
       customs: [
@@ -272,6 +291,17 @@ describe("SkillsPage preference toggles", () => {
     expect(
       screen.getByRole("button", { name: "Expand Built-in skills (1)" })
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("shows publish requests in the library to a non-admin skill manager", () => {
+    mockIsManager = true;
+    render(<SkillsPage />);
+    expect(screen.getByText("Publish requests list")).toBeInTheDocument();
+  });
+
+  it("hides publish requests from a user who does not manage skills", () => {
+    render(<SkillsPage />);
+    expect(screen.queryByText("Publish requests list")).not.toBeInTheDocument();
   });
 
   it("does not include built-in skills on the admin page", () => {
@@ -465,6 +495,7 @@ describe("SkillsPage preference toggles", () => {
     ];
     skillsData.customs = names.map((name, index) => ({
       ...customSkill(`skill-${index}`, name),
+      public_permission: null,
       user_permission: "OWNER",
     }));
     render(<SkillsPage />);
@@ -486,6 +517,23 @@ describe("SkillsPage preference toggles", () => {
     ).not.toBeInTheDocument();
     await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
+  });
+
+  it("does not let an owner who is not a manager delete a published skill", async () => {
+    skillsData.customs = [
+      { ...customSkill("private", "private-skill"), public_permission: null },
+      customSkill("published", "published-skill"),
+    ].map((skill) => ({ ...skill, user_permission: "OWNER" as const }));
+    render(<SkillsPage />);
+    const user = setupUser();
+    for (const name of ["private-skill", "published-skill"]) {
+      await user.click(
+        screen.getByRole("checkbox", { name: `Select ${name}` })
+      );
+    }
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByText("Delete", { exact: true }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("clears selection when search changes so hidden skills are not changed", async () => {
@@ -528,6 +576,7 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByRole("switch", { name: "invalid-skill" })
       ).not.toBeInTheDocument()
     );
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
@@ -662,6 +711,8 @@ describe("SkillsPage preference toggles", () => {
       await mutation.promise;
     });
     await waitFor(() => expect(firstSwitch).toBeEnabled());
+    // The `@` menu in chat offers only enabled skills.
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("does not flash an unchanged same-named skill while enabling another", async () => {
@@ -751,14 +802,7 @@ describe("SkillsPage preference toggles", () => {
     const user = setupUser();
     const updated = enabledCustomAt(0);
     mockSetSkillEnabled.mockResolvedValueOnce(updated);
-    mockRefresh
-      .mockImplementationOnce(
-        async (updater: (value: SkillsList) => SkillsList) => {
-          skillsData = updater(skillsData);
-          return skillsData;
-        }
-      )
-      .mockRejectedValueOnce(new Error("Refresh failed"));
+    mockMutate.mockRejectedValue(new Error("Refresh failed"));
     render(<SkillsPage />);
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
