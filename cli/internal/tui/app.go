@@ -62,6 +62,9 @@ type Model struct {
 	// followCancel ends the status reads that wait for a decided response
 	// to continue.
 	followCancel context.CancelFunc
+	// follow numbers the status reads that wait for a decided response; a
+	// newer read or a followed continuation replaces an older read.
+	follow int
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool
@@ -255,9 +258,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.reloading = true
 			return cmdResume(m, msg.sessionID, m.streamCh)
 		}
-		var finish tea.Cmd
+		var finish, poll tea.Cmd
 		m, finish = m.finishStream(nil)
-		return m, tea.Batch(load, finish)
+		if msg.err == nil && msg.status.HasActiveSubagents {
+			// Background agents' requests show only in a session load.
+			m.approvalsPoll++
+			poll = pollApprovals(m.client, msg.sessionID, m.approvalsPoll, api.StatusPollInterval)
+		}
+		return m, tea.Batch(load, finish, poll)
 
 	case AgentsLoadedMsg:
 		return m.handleAgentsLoaded(msg)
@@ -1013,6 +1021,11 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 			streamID = &msg.Status.CurrentStream.StreamID
 		}
 		return m.followRunningResponse(streamID)
+	}
+	if msg.Status.HasActiveSubagents {
+		// Background agents' requests show only in a session load.
+		m.approvalsPoll++
+		return m, pollApprovals(m.client, detail.ChatSessionID, m.approvalsPoll, api.StatusPollInterval)
 	}
 	return m, nil
 }

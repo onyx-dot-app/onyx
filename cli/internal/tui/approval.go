@@ -233,6 +233,7 @@ func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd
 // nil once the session is idle.
 type continuationMsg struct {
 	sessionID string
+	follow    int
 	stream    *models.ChatStream
 	err       error
 }
@@ -240,7 +241,7 @@ type continuationMsg struct {
 // handleContinuation follows the stream that continues a decided response.
 // When none does, the saved session shows how the response went on.
 func (m Model) handleContinuation(msg continuationMsg) (tea.Model, tea.Cmd) {
-	if m.chatSessionID == nil || msg.sessionID != *m.chatSessionID || errors.Is(msg.err, context.Canceled) {
+	if msg.follow != m.follow || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID || errors.Is(msg.err, context.Canceled) {
 		return m, nil
 	}
 	switch {
@@ -372,19 +373,26 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	m.followCancel = cancel
+	m.follow++
+	follow := m.follow
 	client, sessionID, responseID, streamID := m.client, msg.sessionID, msg.responseID, 0
 	if m.isStreaming && m.streamID != nil {
 		streamID = *m.streamID
 	}
 	return m, func() tea.Msg {
 		stream, err := api.FollowResponse(ctx, client, sessionID, responseID, streamID)
-		return continuationMsg{sessionID, stream, err}
+		return continuationMsg{sessionID, follow, stream, err}
 	}
 }
 
 // followContinuation shows the response from the start of the stream that
 // continues it, in place of its earlier display.
 func (m Model) followContinuation(stream models.ChatStream) (Model, tea.Cmd) {
+	// An earlier decision's status read can no longer replace this stream.
+	if m.followCancel != nil {
+		m.followCancel()
+	}
+	m.follow++
 	if m.isStreaming && m.streamID != nil && *m.streamID == stream.StreamID {
 		return m, nil
 	}

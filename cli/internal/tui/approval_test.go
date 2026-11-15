@@ -969,6 +969,84 @@ func TestFailedApprovalsLoadIsRetried(t *testing.T) {
 	}
 }
 
+// feedApprovalLoads feeds cmd's messages to m, and the session loads that
+// they start, but not the status reads that follow them.
+func feedApprovalLoads(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
+	for _, msg := range messages(t, cmd) {
+		updated, next := m.Update(msg)
+		m = updated.(Model)
+		if _, poll := msg.(approvalsPollMsg); !poll {
+			continue
+		}
+		for _, loaded := range messages(t, next) {
+			if _, ok := loaded.(approvalsLoadedMsg); ok {
+				updated, _ = m.Update(loaded)
+				m = updated.(Model)
+			}
+		}
+	}
+	return m
+}
+
+// agentWaitingClient reports a background agent whose request waits in
+// approvals version v2.
+func agentWaitingClient(t *testing.T) *resumingClient {
+	t.Helper()
+	saved := waitingSession(t)
+	saved.Packets[0] = []json.RawMessage{savedPacket(t, map[string]any{"type": "tool_approval_request", "approval_id": "b1", "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"})}
+	saved.ApprovalsVersion = "v2"
+	return &resumingClient{saved: saved, status: &models.ChatSessionStatus{ApprovalsVersion: "v2", HasActiveSubagents: true}}
+}
+
+func TestAnswerThatEndsWithARunningAgentWatchesItsRequests(t *testing.T) {
+	m, ch := streamingModel(agentWaitingClient(t))
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.StopEvent{})
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{HasActiveSubagents: true}})
+	m = feedApprovalLoads(t, updated.(Model), cmd)
+	if m.isStreaming || !strings.Contains(approvalEntry(t, m, "b1"), "triage wants to run Create issue") {
+		t.Fatal("the running agent's later request does not show")
+	}
+}
+
+func TestResumingAnIdleSessionWithARunningAgentWatchesItsRequests(t *testing.T) {
+	client := agentWaitingClient(t)
+	resumed := waitingSession(t)
+	resumed.Packets[0] = resumed.Packets[0][:1]
+	m := NewModel(config.DefaultConfig(), client)
+	updated, cmd := m.Update(SessionResumedMsg{Detail: resumed, Status: models.ChatSessionStatus{HasActiveSubagents: true}})
+	m = feedApprovalLoads(t, updated.(Model), cmd)
+	if !strings.Contains(approvalEntry(t, m, "b1"), "triage wants to run Create issue") {
+		t.Fatal("the running agent's later request does not show")
+	}
+}
+
+func TestEarlierFollowCannotReplaceALaterContinuation(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8), stops: make(chan int, 1)}
+	m := stoppedForDecisions(t, client)
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, follow := run(t, m, cmd)
+	// The first decision's status read finds the session idle, but its
+	// result arrives after the second decision continued the response.
+	stale := follow()
+	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
+	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
+	m, _ = run(t, m, cmd)
+	updated, next := m.Update(stale)
+	m = updated.(Model)
+	if next != nil || m.reloading || !m.isStreaming || m.streamID == nil || *m.streamID != 3 {
+		t.Fatalf("an earlier status read replaced the continuation: reloading=%v streaming=%v", m.reloading, m.isStreaming)
+	}
+	select {
+	case stream := <-client.stops:
+		t.Fatalf("stopped stream %d", stream)
+	default:
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)
