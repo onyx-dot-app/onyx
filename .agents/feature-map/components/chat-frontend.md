@@ -84,7 +84,9 @@
   replay reader claim their stream, `claimStreamReader`) or those rows are
   not loaded. Without a `continuation`, an incognito chat, which has no
   status subscriber, waits for the next stream (`waitForChatResponseEnd`)
-  and follows it. A stream that ends
+  and follows it. When none comes because the continuation already ended,
+  the card replaces the answer that holds the request with its saved copy.
+  Only a chat that saves content can ask for approval. A stream that ends
   with `stop(awaiting_approval)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`

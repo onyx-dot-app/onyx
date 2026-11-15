@@ -11,15 +11,19 @@ import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
 import { followChatStream } from "@/lib/chat/settleChatSession";
 import {
+  fetchSettledChatSession,
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
   decidedStatus,
+  readToolApprovals,
   type ToolApproval,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
@@ -66,7 +70,9 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   // or an agent continues in the background: a status read hands the chat to
   // its status subscriber, which follows server turns until the chat is idle
   // and then loads the saved session. Incognito has no status subscriber: it
-  // waits for the next stream and follows it when it writes its answers.
+  // waits for the next stream and follows it when it writes its answers. A
+  // continuation that already ended is read from the saved answer: only a
+  // chat that saves content can ask for approval.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
@@ -106,7 +112,37 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
       useChatSessionStore.getState().sessions.get(sessionId)?.incognito
     ) {
       const next = await waitForChatResponseEnd(sessionId);
-      if (next) followChatStream(sessionId, next, tReadiness("checkFailed"));
+      if (next) {
+        followChatStream(sessionId, next, tReadiness("checkFailed"));
+        return;
+      }
+      const saved = await fetchSettledChatSession(sessionId);
+      const store = useChatSessionStore.getState();
+      const tree = store.sessions.get(sessionId)?.messageTree;
+      // Only the answer that holds this request takes its saved copy.
+      const local = [...(tree?.values() ?? [])].find((message) =>
+        readToolApprovals(message.packets).entries.some(
+          (entry) => entry.request.approval_id === request.approval_id
+        )
+      );
+      const savedAnswer =
+        local?.messageId == null
+          ? undefined
+          : getMessageByMessageId(
+              processRawChatHistory(saved.messages, saved.packets),
+              local.messageId
+            );
+      if (!tree || !local || !savedAnswer) return;
+      store.updateSessionMessageTree(
+        sessionId,
+        new Map(tree).set(local.nodeId, {
+          ...savedAnswer,
+          nodeId: local.nodeId,
+          parentNodeId: local.parentNodeId,
+          childrenNodeIds: local.childrenNodeIds,
+          latestChildNodeId: local.latestChildNodeId,
+        })
+      );
     } else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 

@@ -16,9 +16,12 @@ import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { followChatStream } from "@/lib/chat/settleChatSession";
 import {
+  fetchSettledChatSession,
   readChatSessionStatus,
   waitForChatResponseEnd,
 } from "@/lib/chat/sessionReadiness";
+import { processRawChatHistory } from "@/app/app/services/lib";
+import type { BackendChatSession, Message } from "@/app/app/types";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
@@ -29,8 +32,13 @@ jest.mock("@/lib/chat/settleChatSession", () => ({
   followChatStream: jest.fn(),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
+  fetchSettledChatSession: jest.fn(),
   readChatSessionStatus: jest.fn(),
   waitForChatResponseEnd: jest.fn(),
+}));
+jest.mock("@/app/app/services/lib", () => ({
+  ...jest.requireActual("@/app/app/services/lib"),
+  processRawChatHistory: jest.fn(),
 }));
 
 const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
@@ -194,6 +202,59 @@ describe("Continuation", () => {
     );
     expect(waitForChatResponseEnd).toHaveBeenCalledWith("session");
     expect(statusReads).not.toHaveBeenCalled();
+  });
+
+  it("in incognito, reads a continuation that already ended from the saved answer", async () => {
+    const answer = (packets: Message["packets"]): Message => ({
+      nodeId: 2,
+      messageId: 82,
+      type: "assistant",
+      message: "",
+      files: [],
+      packets,
+      toolCall: null,
+      parentNodeId: 1,
+    });
+    const asked = { placement: { turn_index: 1, tab_index: 0 }, obj: request };
+    const finalText = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta" as const, content: "Created the issue." },
+    };
+    useChatSessionStore.getState().createSession("session", {
+      incognito: true,
+      chatState: "input",
+      messageTree: new Map([[2, answer([asked])]]),
+    });
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
+    jest.mocked(fetchSettledChatSession).mockResolvedValue({
+      messages: [],
+      packets: [],
+    } as unknown as BackendChatSession);
+    jest
+      .mocked(processRawChatHistory)
+      .mockReturnValue(
+        new Map([
+          [7, { ...answer([asked, finalText]), nodeId: 7, parentNodeId: 6 }],
+        ])
+      );
+    respond(200, decided("APPROVED", "USER", null));
+    render(<Harness />);
+
+    await clickApprove();
+
+    await waitFor(() =>
+      expect(
+        useChatSessionStore
+          .getState()
+          .sessions.get("session")
+          ?.messageTree.get(2)
+      ).toMatchObject({
+        nodeId: 2,
+        parentNodeId: 1,
+        packets: [asked, finalText],
+      })
+    );
+    expect(followChatStream).not.toHaveBeenCalled();
   });
 
   it.each([
