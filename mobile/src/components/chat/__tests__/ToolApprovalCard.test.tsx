@@ -25,12 +25,16 @@ import {
 } from "@/chat/toolApprovals";
 import { MessageRow } from "@/components/chat/MessageRow";
 import { ToolApprovalCard } from "@/components/chat/ToolApprovalCard";
-import { recoverChatSession } from "@/hooks/useChatSessionController";
+import {
+  recoverChatSession,
+  watchBackgroundAgents,
+} from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
 jest.mock("@/api/chat/approvals", () => ({ postApprovalDecision: jest.fn() }));
 jest.mock("@/hooks/useChatSessionController", () => ({
   recoverChatSession: jest.fn(),
+  watchBackgroundAgents: jest.fn(),
 }));
 // These reach native modules that jest cannot load.
 jest.mock("@/state/storage");
@@ -249,6 +253,30 @@ describe("ToolApprovalCard continuation", () => {
         "approved",
       ),
     );
+    expect(recoverMock).not.toHaveBeenCalled();
+    expect(watchBackgroundAgents).not.toHaveBeenCalled();
+  });
+
+  it("watches the background agents after deciding an agent's request", async () => {
+    const agentRequest = { ...request, agent_name: "Researcher" };
+    openPausedResponse([agentRequest]);
+    postMock.mockResolvedValue({
+      decision: "APPROVED",
+      decided_via: "USER",
+      continuation: null,
+    });
+    const view = render(
+      <ToolApprovalCard
+        approval={{ turnIndex: 0, request: agentRequest, status: "pending" }}
+      />,
+    );
+
+    fireEvent.press(view.getByText("Approve once"));
+
+    await waitFor(() => expect(watchBackgroundAgents).toHaveBeenCalled());
+    const [sessionId, , , running] =
+      jest.mocked(watchBackgroundAgents).mock.calls[0] ?? [];
+    expect([sessionId, running]).toEqual(["s", false]);
     expect(recoverMock).not.toHaveBeenCalled();
   });
 

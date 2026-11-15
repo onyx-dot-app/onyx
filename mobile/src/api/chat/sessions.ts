@@ -37,7 +37,10 @@ export interface ChatSessionStatus {
   is_processing: boolean;
   // The running response's stream, once it has one.
   current_stream?: ChatStream | null;
-  // Changes when a tool approval request of the session opens or resolves.
+  // Background agents run, or their queued work waits. A parked agent waits for the user, so it
+  // does not count.
+  has_active_subagents?: boolean;
+  // Changes when a tool approval request of the session opens, is decided or is removed.
   approvals_version?: string;
 }
 

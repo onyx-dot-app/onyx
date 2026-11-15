@@ -7,7 +7,6 @@ import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { QUERY_KEYS } from "@/api/query-keys";
 import {
   createChatSession,
-  getChatSession,
   getChatSessionStatus,
   renameChatSession,
   stopChatSession,
@@ -21,7 +20,7 @@ import {
   streamChatMessage,
   StreamHttpError,
 } from "@/api/chat/stream";
-import { waitForSessionIdle } from "@/chat/sessionReadiness";
+import { loadChatSession, waitForSessionIdle } from "@/chat/sessionReadiness";
 import { DEFAULT_AGENT_ID } from "@/chat/agents";
 import { FLUSH_INTERVAL_MS } from "@/chat/constants";
 import { processRawChatHistory } from "@/chat/chatHistory";
@@ -47,7 +46,10 @@ import {
 } from "@/chat/toolApprovals";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 import { useSession } from "@/state/session";
-import { recoverChatSession } from "@/hooks/useChatSessionController";
+import {
+  recoverChatSession,
+  watchBackgroundAgents,
+} from "@/hooks/useChatSessionController";
 import { toast } from "@/hooks/useToast";
 
 // the run can finish before the ChatSession row is committed; let it settle before naming (web too)
@@ -323,6 +325,13 @@ async function runChatStream(
     }
     if (wait.kind !== "idle" || !stillOurs()) return;
     store.getState().updateChatState(sessionId, "input");
+    if (wait.agentsRunning)
+      void watchBackgroundAgents(
+        sessionId,
+        server.serverUrl,
+        server.queryClient,
+        true,
+      );
     // name a new session once it streamed output; skip stop/abort and thrown transport failures
     if (isNewSession && !signal.aborted && sawStreaming && !hadError) {
       void nameNewSession(sessionId, server);
@@ -390,7 +399,7 @@ export function useChatController(
     queryKey: QUERY_KEYS.chatSession(serverUrl, sessionId ?? "new"),
     enabled: needsHydration && serverUrl != null,
     queryFn: async () => {
-      const backend = await getChatSession(sessionId!);
+      const backend = await loadChatSession(sessionId!);
       // A live stream may have filled the store meanwhile — don't clobber it.
       if (!useChatSessionStore.getState().sessions.has(sessionId!)) {
         useChatSessionStore

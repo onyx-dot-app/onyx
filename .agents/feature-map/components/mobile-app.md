@@ -138,9 +138,12 @@ buffer; recovery then waits for a new stream id or for idle. A lost send
 whose first poll is already idle still reloads the saved session before it
 returns to `input`. So does a send that the server refuses with
 `APPROVAL_PENDING`, and any send whose polls saw `approvals_version` change.
-`waitForSessionIdle` keeps the last version per session and reports a change
-as `approvalsChanged`; the app reads status only in its existing waits, with
-no idle poll. Recovery follows a stream into the response that
+`chat/sessionReadiness.ts` keeps the last version per session. A session
+load (`loadChatSession`) sets it, and `waitForSessionIdle` reports a change
+from it as `approvalsChanged`. An idle chat polls only while background agents
+run: `mobile/src/hooks/useChatSessionController.ts:watchBackgroundAgents` reads status,
+reloads the saved session when the version changes, follows a stream that
+starts, and ends once `has_active_subagents` is false. Recovery follows a stream into the response that
 `current_stream.response_ids` names, never into a message with the stream id.
 A multi-model stream names several responses; recovery does not stream it and
 settles from the saved session. A retained cursor belongs to one stream id;
@@ -164,8 +167,11 @@ After a decision, `components/chat/ToolApprovalCard.tsx` follows the
 reader runs. A 404 or 409 decision starts `recoverChatSession` with no
 stream, which reads status once and follows `current_stream` or reloads the
 saved session. A subagent's request (`agent_name`) shows the label "{agent}
-wants to run {tool}". The server never resolves it in a packet, and it never
-blocks a send.
+wants to run {tool}". It and its outcome arrive only in the session replay,
+never live in the answer's stream, and it never blocks a send. A parked agent
+does not count in `has_active_subagents`, so a decision on an agent's card,
+which names no `continuation`, starts `watchBackgroundAgents`; a newer watch replaces the older one. It gives the
+agent a few reads to start and then shows its later requests.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

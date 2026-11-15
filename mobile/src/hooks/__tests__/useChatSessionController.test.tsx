@@ -1,4 +1,11 @@
-import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  jest,
+} from "@jest/globals";
 import type { Mock } from "jest-mock";
 import * as React from "react";
 import { act, renderHook, waitFor } from "@testing-library/react-native";
@@ -25,9 +32,11 @@ import {
   toolApprovalStatus,
   useToolApprovalUi,
 } from "@/chat/toolApprovals";
+import { loadChatSession } from "@/chat/sessionReadiness";
 import {
   recoverChatSession,
   useChatSessionController,
+  watchBackgroundAgents,
 } from "@/hooks/useChatSessionController";
 import { useChatSessionStore } from "@/state/chatSessionStore";
 
@@ -1391,5 +1400,170 @@ describe("useChatSessionController", () => {
     expect(node?.packets).toHaveLength(2);
 
     act(() => releaseTail());
+  });
+});
+
+describe("watchBackgroundAgents", () => {
+  const agentRequest: Packet = {
+    placement: { turn_index: 0 },
+    obj: {
+      type: PacketType.TOOL_APPROVAL_REQUEST,
+      approval_id: "agent-2",
+      tool_call_id: "c2",
+      tool_name: "lookup",
+      display_name: "Lookup",
+      arguments: {},
+      agent_name: "Researcher",
+    },
+  };
+  function saved(packets: Packet[], version: string): BackendChatSession {
+    return {
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: backendMessages("asked"),
+      packets: [packets],
+      time_created: "",
+      current_stream: null,
+      approvals_version: version,
+    };
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+    client = new QueryClient();
+    useChatSessionStore.setState({
+      currentSessionId: null,
+      sessions: new Map(),
+    });
+    useToolApprovalUi.setState({ localStatuses: new Map(), nudgeSeq: 0 });
+  });
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  // A decided agent card resumes the agent without a stream, and a parked agent does not count
+  // as running, so its next request shows only once the version changes.
+  it("loads an agent's later request after a decision resumes it, then stops once agents settle", async () => {
+    getSessionMock.mockResolvedValueOnce(saved([historyPacket("asked")], "v1"));
+    const baseline = await loadChatSession("s1");
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        processRawChatHistory(baseline.messages, baseline.packets),
+      );
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v2",
+      });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+
+    const watch = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    await jest.advanceTimersByTimeAsync(3000);
+    await watch;
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
+    // The baseline load and one reload for the changed version.
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(3000);
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
+  });
+
+  // A later decision replaces the watch, so the first agent settling does not end it.
+  it("keeps reading for a second agent that a later decision resumes", async () => {
+    getSessionMock.mockResolvedValueOnce(saved([historyPacket("asked")], "v1"));
+    const baseline = await loadChatSession("s1");
+    useChatSessionStore
+      .getState()
+      .hydrateSession(
+        "s1",
+        processRawChatHistory(baseline.messages, baseline.packets),
+      );
+    useChatSessionStore.setState({ currentSessionId: "s1" });
+    const status = jest.mocked(getChatSessionStatus);
+    status.mockResolvedValueOnce({
+      is_processing: false,
+      has_active_subagents: true,
+      approvals_version: "v1",
+    });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+
+    // Agent A's decision: its watch sees A run.
+    const first = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    await jest.advanceTimersByTimeAsync(1000);
+    expect(status).toHaveBeenCalledTimes(1);
+
+    // Agent B's decision before A settles. A has stopped; B starts two reads later.
+    status
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v2",
+      });
+    const second = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    await jest.advanceTimersByTimeAsync(5000);
+    await Promise.all([first, second]);
+
+    expect(status).toHaveBeenCalledTimes(5);
+    expect(waitingIds()).toEqual(["agent-2"]);
+    await jest.advanceTimersByTimeAsync(3000);
+    expect(status).toHaveBeenCalledTimes(5);
+  });
+
+  it("follows a stream that starts while it watches", async () => {
+    seedLiveSession(null);
+    jest.mocked(getChatSessionStatus).mockResolvedValueOnce({
+      is_processing: true,
+      has_active_subagents: false,
+      current_stream: { stream_id: 9, response_ids: [2] },
+    });
+    resumeMock.mockReturnValueOnce(
+      scripted([startPacket("done"), stopPacket(), cursor(2)]),
+    );
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValue({ is_processing: false });
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
+
+    void watchBackgroundAgents("s1", SERVER_URL, client, true);
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
   });
 });

@@ -1,9 +1,13 @@
 import { afterEach, describe, expect, it, jest } from "@jest/globals";
 import { ApiError } from "@/api/errors";
-import { getChatSessionStatus } from "@/api/chat/sessions";
-import { waitForSessionIdle } from "@/chat/sessionReadiness";
+import { getChatSession, getChatSessionStatus } from "@/api/chat/sessions";
+import type { BackendChatSession } from "@/chat/interfaces";
+import { loadChatSession, waitForSessionIdle } from "@/chat/sessionReadiness";
 
-jest.mock("@/api/chat/sessions", () => ({ getChatSessionStatus: jest.fn() }));
+jest.mock("@/api/chat/sessions", () => ({
+  getChatSession: jest.fn(),
+  getChatSessionStatus: jest.fn(),
+}));
 afterEach(() => {
   jest.useRealTimers();
   jest.resetAllMocks();
@@ -78,7 +82,7 @@ describe("session readiness", () => {
     });
     expect(
       await waitForSessionIdle("versioned", () => true, jest.fn()),
-    ).toEqual({ kind: "idle", approvalsChanged: false });
+    ).toEqual({ kind: "idle", approvalsChanged: false, agentsRunning: false });
 
     status.mockResolvedValueOnce({
       is_processing: false,
@@ -86,7 +90,7 @@ describe("session readiness", () => {
     });
     expect(
       await waitForSessionIdle("versioned", () => true, jest.fn()),
-    ).toEqual({ kind: "idle", approvalsChanged: false });
+    ).toEqual({ kind: "idle", approvalsChanged: false, agentsRunning: false });
 
     status.mockResolvedValueOnce({
       is_processing: false,
@@ -94,7 +98,22 @@ describe("session readiness", () => {
     });
     expect(
       await waitForSessionIdle("versioned", () => true, jest.fn()),
-    ).toEqual({ kind: "idle", approvalsChanged: true });
+    ).toEqual({ kind: "idle", approvalsChanged: true, agentsRunning: false });
+  });
+
+  it("compares the first status read with the session load", async () => {
+    jest.mocked(getChatSession).mockResolvedValueOnce({
+      approvals_version: "loaded",
+    } as BackendChatSession);
+    await loadChatSession("baseline");
+    jest.mocked(getChatSessionStatus).mockResolvedValueOnce({
+      is_processing: false,
+      has_active_subagents: true,
+      approvals_version: "opened",
+    });
+    expect(await waitForSessionIdle("baseline", () => true, jest.fn())).toEqual(
+      { kind: "idle", approvalsChanged: true, agentsRunning: true },
+    );
   });
 });
 

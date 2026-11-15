@@ -83,4 +83,6 @@ export interface BackendChatSession {
   time_created: string;
   time_updated?: string;
   current_stream?: ChatStream | null; // set while a run is in flight
+  // The status route's `approvals_version` for the requests this load shows.
+  approvals_version?: string;
 }

@@ -19,7 +19,10 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Text } from "@/components/ui/text";
-import { recoverChatSession } from "@/hooks/useChatSessionController";
+import {
+  recoverChatSession,
+  watchBackgroundAgents,
+} from "@/hooks/useChatSessionController";
 import { useReducedMotion } from "@/hooks/useReducedMotion";
 import SvgCheckSquare from "@/icons/check-square";
 import SvgChevronDown from "@/icons/chevron-down";
@@ -75,7 +78,8 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
 
   // The decided status shows at once; the resolution packet then confirms it. The server names
   // the stream that continues the response. When the request no longer waits, recovery reads the
-  // session status for that stream instead, or reloads the saved outcome.
+  // session status for that stream instead, or reloads the saved outcome. A background agent's
+  // decision has no stream, so a watch reloads the session as the agent goes on.
   async function decide(decision: ApprovalDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     setSubmitting(true);
@@ -105,12 +109,14 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
     const store = useChatSessionStore.getState();
     const sessionId = store.currentSessionId;
     // A reader that already runs follows the server's next stream itself.
-    if (
-      !sessionId ||
-      store.sessions.get(sessionId)?.abortController ||
-      (continuation === null && !gone)
-    )
+    if (!sessionId || store.sessions.get(sessionId)?.abortController) return;
+    // A background agent's decided request resumes the agent without a stream; its later requests
+    // and outcomes show only in the saved session.
+    if (continuation === null && !gone && request.agent_name) {
+      void watchBackgroundAgents(sessionId, serverUrl, queryClient, false);
       return;
+    }
+    if (continuation === null && !gone) return;
     if (continuation === null) store.updateChatState(sessionId, "settling");
     void recoverChatSession(
       sessionId,

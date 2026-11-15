@@ -8,7 +8,8 @@ import {
 } from "@tanstack/react-query";
 
 import { QUERY_KEYS } from "@/api/query-keys";
-import { getChatSession } from "@/api/chat/sessions";
+import { getChatSessionStatus } from "@/api/chat/sessions";
+import { isApiError, isAuthError } from "@/api/errors";
 import {
   isHeartbeat,
   isPacket,
@@ -18,6 +19,8 @@ import {
   StreamHttpError,
 } from "@/api/chat/stream";
 import {
+  approvalsChangedSince,
+  loadChatSession,
   SESSION_POLL_INTERVAL_MS,
   waitForSessionIdle,
 } from "@/chat/sessionReadiness";
@@ -81,6 +84,7 @@ export async function recoverChatSession(
   // existed when it began, so a replay that fails partway keeps what this device shows.
   let restored = false;
   let replay: Packet[] = [];
+  let agentsRunning = false;
   try {
     while (true) {
       // "lost": delivery ended before the run's stop, so a paced reattach follows. "noBuffer":
@@ -98,7 +102,7 @@ export async function recoverChatSession(
         if (!target) {
           // A response this device has not seen: load it, so its output and requests show.
           try {
-            const saved = await getChatSession(sessionId);
+            const saved = await loadChatSession(sessionId);
             if (stillCurrent()) {
               const messages = processRawChatHistory(
                 saved.messages,
@@ -255,7 +259,10 @@ export async function recoverChatSession(
           !controller.signal.aborted && (end === "lost" || next !== followed),
       );
       if (wait.kind === "released") return;
-      if (wait.kind === "idle") break;
+      if (wait.kind === "idle") {
+        agentsRunning = wait.agentsRunning;
+        break;
+      }
       if (wait.stream.stream_id === followed) {
         // Paces reattaching to a stream whose connection keeps failing.
         await new Promise((resolve) =>
@@ -272,7 +279,7 @@ export async function recoverChatSession(
     if (!stillOpen()) return;
 
     try {
-      const settled = await getChatSession(sessionId);
+      const settled = await loadChatSession(sessionId);
       if (!stillOpen()) return;
       const current = node
         ? store.getState().sessions.get(sessionId)?.messageTree.get(node.nodeId)
@@ -325,6 +332,8 @@ export async function recoverChatSession(
     void queryClient.invalidateQueries({
       queryKey: QUERY_KEYS.chatSessions(serverUrl),
     });
+    if (agentsRunning)
+      void watchBackgroundAgents(sessionId, serverUrl, queryClient, true);
   } catch (error) {
     if (!stillOpen()) return;
     console.warn("Could not confirm chat readiness", error);
@@ -339,6 +348,99 @@ export async function recoverChatSession(
   }
 }
 
+// Reads a background agent needs before it counts as started; a decision resumes it on any pod.
+const AGENT_START_READS = 5;
+// The newest watch of each session; an older watch sees a different token and exits.
+const watchTokens = new Map<string, symbol>();
+
+// Background agents' requests and outcomes arrive only through the saved session, and a parked
+// agent does not count as running. So, while the chat stays open and idle, this polls status: a
+// changed `approvals_version` reloads the session, and a stream that starts, such as the root
+// answer that an agent's result continues, is followed. It ends once the agents stop running.
+// `running`: the caller saw the agents run; otherwise they get a few reads to start. A newer call
+// replaces a running watch, so a later decision restarts the reads.
+export async function watchBackgroundAgents(
+  sessionId: string,
+  serverUrl: string | null,
+  queryClient: QueryClient,
+  running: boolean,
+): Promise<void> {
+  const token = Symbol(sessionId);
+  watchTokens.set(sessionId, token);
+  const store = useChatSessionStore;
+  // A reader owns a busy session and reloads it when its stream ends.
+  const idle = () => {
+    if (watchTokens.get(sessionId) !== token) return false;
+    const state = store.getState();
+    const data = state.sessions.get(sessionId);
+    return (
+      state.currentSessionId === sessionId &&
+      !!data &&
+      !data.abortController &&
+      data.chatState === "input"
+    );
+  };
+  let sawRunning = running;
+  let reads = 0;
+  try {
+    // The caller may still own the session; the first read waits a poll interval.
+    while (true) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, SESSION_POLL_INTERVAL_MS),
+      );
+      if (!idle()) return;
+      let status;
+      try {
+        status = await getChatSessionStatus(sessionId);
+      } catch (error) {
+        if (isAuthError(error) || (isApiError(error) && error.status === 404))
+          return;
+        continue;
+      }
+      if (!idle()) return;
+      reads += 1;
+      if (status.is_processing && status.current_stream) {
+        void recoverChatSession(
+          sessionId,
+          status.current_stream,
+          serverUrl,
+          queryClient,
+          new AbortController(),
+        );
+        return;
+      }
+      const agentsRunning = status.has_active_subagents === true;
+      sawRunning ||= agentsRunning;
+      const settled =
+        !agentsRunning && (sawRunning || reads >= AGENT_START_READS);
+      if (
+        approvalsChangedSince(sessionId, status.approvals_version) ||
+        settled
+      ) {
+        try {
+          const saved = await loadChatSession(sessionId);
+          if (!idle()) return;
+          store
+            .getState()
+            .hydrateSession(
+              sessionId,
+              processRawChatHistory(saved.messages, saved.packets),
+            );
+          queryClient.setQueryData(
+            QUERY_KEYS.chatSession(serverUrl, sessionId),
+            saved,
+          );
+        } catch (error) {
+          console.warn("Could not load background agent requests", error);
+        }
+      }
+      if (settled) return;
+    }
+  } finally {
+    if (watchTokens.get(sessionId) === token) watchTokens.delete(sessionId);
+  }
+}
+
 // Reopening retries unresolved readiness even when the server has no stream left to replay.
 export function useChatSessionController(sessionId: string | null): void {
   const serverUrl = useSession((state) => state.serverUrl);
@@ -348,7 +450,7 @@ export function useChatSessionController(sessionId: string | null): void {
     queryKey: QUERY_KEYS.chatSession(serverUrl, sessionId ?? "new"),
     // read-only observer: useChatController owns the fetch + hydration. skipToken keeps this
     // type-safe (no non-null assertion) when there's no session.
-    queryFn: sessionId ? () => getChatSession(sessionId) : skipToken,
+    queryFn: sessionId ? () => loadChatSession(sessionId) : skipToken,
     enabled: false,
   });
 
