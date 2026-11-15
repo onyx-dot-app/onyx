@@ -394,8 +394,9 @@ export function useChatController(
     sessionId ? state.sessions.get(sessionId) : undefined,
   );
 
+  // No open chat on other screens ends the readers and watches of the last one.
   useEffect(() => {
-    if (sessionId) useChatSessionStore.getState().setCurrentSession(sessionId);
+    useChatSessionStore.getState().setCurrentSession(sessionId);
   }, [sessionId]);
 
   // Hydrate a session opened but not yet in the store (sidebar / relaunch).

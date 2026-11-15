@@ -1112,6 +1112,19 @@ describe("useChatController", () => {
     expect(streamMock).not.toHaveBeenCalled();
   });
 
+  // The chat surface stays mounted on other screens, where no chat is open.
+  it("leaves no chat open when the surface shows no chat", () => {
+    const view = renderHook(
+      ({ id }: { id: string | null }) => useChatController(id),
+      { wrapper, initialProps: { id: "s1" as string | null } },
+    );
+    expect(useChatSessionStore.getState().currentSessionId).toBe("s1");
+
+    view.rerender({ id: null });
+
+    expect(useChatSessionStore.getState().currentSessionId).toBeNull();
+  });
+
   it("auto-names a new session once its first answer completes", async () => {
     createSessionMock.mockResolvedValue("new-session");
     streamMock.mockReturnValue(scripted([startPacket("Hi"), endPacket()]));

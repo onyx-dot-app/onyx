@@ -1858,6 +1858,57 @@ describe("watchBackgroundAgents", () => {
     view.unmount();
   });
 
+  it("watches an agent that parked after the chat opened idle", async () => {
+    await openIdle("v1");
+    client.setQueryData(
+      QUERY_KEYS.chatSession(SERVER_URL, "s1"),
+      saved([historyPacket("asked")], "v1"),
+    );
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v2",
+    });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+
+    const view = renderHook(() => useChatSessionController("s1"), { wrapper });
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    view.unmount();
+  });
+
+  // An agent's result wakes the root, which processes before it publishes its stream.
+  it("follows a root continuation whose stream starts after a processing read", async () => {
+    await openIdle("v1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: true,
+        has_active_subagents: false,
+        current_stream: null,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        has_active_subagents: false,
+        current_stream: { stream_id: 9, response_ids: [2] },
+        approvals_version: "v1",
+      })
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    resumeMock.mockReturnValueOnce(
+      scripted([startPacket("done"), stopPacket(), cursor(2)]),
+    );
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
+
+    void watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
+  });
+
   it("follows a stream that starts while it watches", async () => {
     seedLiveSession(null);
     jest.mocked(getChatSessionStatus).mockResolvedValueOnce({

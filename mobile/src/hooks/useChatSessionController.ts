@@ -355,10 +355,10 @@ export async function recoverChatSession(
 }
 
 // Background agents' requests and outcomes arrive only through the saved session. While the chat
-// stays open and idle, this reads status until no background agent runs or waits to resume: a
-// changed `approvals_version` reloads the session, and a stream that starts, such as the root
-// answer that an agent's result continues, is followed. When the agents stop, a last reload shows
-// their outcomes.
+// stays open and idle, this reads status until the server is idle and no background agent runs or
+// waits to resume: a changed `approvals_version` reloads the session, and a stream that starts,
+// such as the root answer that an agent's result continues, is followed. When the agents stop, a
+// last reload shows their outcomes.
 
 // The running watch of each session. A later call only marks it `again`, so a decision made while
 // a read or reload is in flight gets one more read before the watch can end.
@@ -417,7 +417,11 @@ export async function watchBackgroundAgents(
         );
         return;
       }
-      const settled = status.has_active_subagents !== true && !watch.again;
+      // A root that an agent's result continues processes before it publishes its stream.
+      const settled =
+        status.is_processing !== true &&
+        status.has_active_subagents !== true &&
+        !watch.again;
       reload =
         approvalsChangedSince(sessionId, status.approvals_version) ||
         reload ||
@@ -468,8 +472,8 @@ export function useChatSessionController(sessionId: string | null): void {
   );
 
   // Background agents that run while the chat opens idle show their requests only through the
-  // saved session. Recovery owns a chat with a stream or unconfirmed readiness, and starts the
-  // watch when its run ends.
+  // saved session, as does an agent that parked after the load. Recovery owns a chat with a stream
+  // or unconfirmed readiness, and starts the watch when its run ends.
   useEffect(() => {
     if (sessionId == null || !loaded) return;
     const saved = queryClient.getQueryData<BackendChatSession>(
@@ -485,7 +489,12 @@ export function useChatSessionController(sessionId: string | null): void {
     let open = true;
     getChatSessionStatus(sessionId)
       .then((status) => {
-        if (open && status.has_active_subagents === true)
+        if (
+          open &&
+          (status.has_active_subagents === true ||
+            status.is_processing === true ||
+            approvalsChangedSince(sessionId, status.approvals_version))
+        )
           void watchBackgroundAgents(sessionId, serverUrl, queryClient);
       })
       .catch((error: unknown) => {
