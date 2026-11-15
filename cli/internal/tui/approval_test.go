@@ -1260,6 +1260,25 @@ func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
 	}
 }
 
+func TestOlderSessionLoadDoesNotReopenAResolvedCard(t *testing.T) {
+	m, ch := streamingModel(&resumingClient{})
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.viewport.startAgent()
+	m = receive(t, m, ch, models.MessageIDEvent{ReservedAgentMessageID: 2})
+	m = receive(t, m, ch, approvalRequest("a1"))
+	m = receive(t, m, ch, models.ToolApprovalResolvedEvent{ApprovalID: "a1", Outcome: "approved"})
+	// A load that read the session before the resolution arrives late.
+	updated, _ := m.Update(approvalsLoadedMsg{detail: waitingSession(t)})
+	m = updated.(Model)
+	if len(m.approvals) != 0 {
+		t.Fatalf("an older load reopened the resolved card: %+v", m.approvals)
+	}
+	if got := approvalEntry(t, m, "a1"); got != "● Approved: Create issue" {
+		t.Fatalf("a1 = %q, want the live outcome", got)
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)

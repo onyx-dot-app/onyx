@@ -50,6 +50,9 @@ type Model struct {
 	// approvals holds the tool approval requests whose outcome the server has
 	// not reported yet, oldest first.
 	approvals []approvalCard
+	// resolvedApprovals holds the requests of the chat whose outcome showed;
+	// an older session load cannot reopen them.
+	resolvedApprovals map[string]bool
 	// approvalsVersion is the session's approvals version that the cards
 	// reflect.
 	approvalsVersion string
@@ -1006,8 +1009,11 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		m, _ = m.finishStream(nil)
 	}
 
-	if m.followCancel != nil && (m.chatSessionID == nil || *m.chatSessionID != msg.Detail.ChatSessionID) {
-		m.followCancel()
+	if m.chatSessionID == nil || *m.chatSessionID != msg.Detail.ChatSessionID {
+		if m.followCancel != nil {
+			m.followCancel()
+		}
+		m.resolvedApprovals = nil
 	}
 	detail := msg.Detail
 	m.chatSessionID = &detail.ChatSessionID

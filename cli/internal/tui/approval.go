@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -191,7 +192,7 @@ func (m Model) showSavedApprovals(detail *models.ChatSessionDetailResponse) Mode
 		switch {
 		case resolved && index >= 0:
 			m = m.resolveApproval(index, approval.OutcomeLabel(outcome))
-		case !resolved && index < 0:
+		case !resolved && index < 0 && !m.resolvedApprovals[card.request.ApprovalID]:
 			m.approvals = append(m.approvals, card)
 		}
 	}
@@ -353,7 +354,14 @@ func (m Model) reloadUnseenResponse(sessionID string, status models.ChatSessionS
 
 // resolveApproval replaces a card with a one-line record of how it ended.
 func (m Model) resolveApproval(index int, label string) Model {
-	m.viewport.setApproval(m.approvals[index].request.ApprovalID, approvalRecord(m.approvals[index].request, label))
+	id := m.approvals[index].request.ApprovalID
+	resolved := maps.Clone(m.resolvedApprovals)
+	if resolved == nil {
+		resolved = map[string]bool{}
+	}
+	resolved[id] = true
+	m.resolvedApprovals = resolved
+	m.viewport.setApproval(id, approvalRecord(m.approvals[index].request, label))
 	m.approvals = append(m.approvals[:index:index], m.approvals[index+1:]...)
 	m.renderApprovals()
 	return m
