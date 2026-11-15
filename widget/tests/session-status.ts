@@ -11,6 +11,7 @@ export const idle = (
 ): ChatSessionStatus => ({
   is_processing: false,
   has_active_subagents: false,
+  has_startable_input: false,
   current_stream: null,
   approvals_version: null,
   ...fields,

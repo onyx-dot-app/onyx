@@ -747,8 +747,9 @@ export class OnyxChatWidget extends LitElement {
       let reservedAssistantId = sent?.assistantMessageId ?? null;
       // The saved session can show what the streams of this pass did not
       let recover = true;
-      // Background agents run, so the status is read again
-      let agentsRun = start === null;
+      // Server work waits, so the status is read again: background agents
+      // run, or queued input or unread agent results can start a turn
+      let workWaits = start === null;
       // A follow that starts at the status reads it without a pause.
       let pausesFirst = start !== null;
       for (;;) {
@@ -838,7 +839,8 @@ export class OnyxChatWidget extends LitElement {
           }
           if (!stillOurs()) return;
           this.noteApprovalsVersion(status);
-          agentsRun = status.has_active_subagents;
+          workWaits =
+            status.has_active_subagents || status.has_startable_input;
           lastStreamId = current.streamId;
           const next = status.is_processing ? status.current_stream : null;
           if (next === null) {
@@ -1012,11 +1014,11 @@ export class OnyxChatWidget extends LitElement {
         // agent and an older approvals version.
         if (this.statusRecheck) {
           this.statusRecheck = false;
-          agentsRun = true;
+          workWaits = true;
         }
-        if (!agentsRun) return;
-        // Agents never hold the chat: a send can end this poll. The poll
-        // leaves the streaming state alone until it follows a stream.
+        if (!workWaits) return;
+        // Waiting work never holds the chat: a send can end this poll. The
+        // poll leaves the streaming state alone until it follows a stream.
         this.isStreaming = false;
         this.streamingStatus = "";
         if (pausesFirst)
@@ -1032,7 +1034,7 @@ export class OnyxChatWidget extends LitElement {
         );
         if (!stillOurs()) return;
         this.noteApprovalsVersion(status);
-        agentsRun = status.has_active_subagents;
+        workWaits = status.has_active_subagents || status.has_startable_input;
         const next = status.is_processing ? status.current_stream : null;
         if (next !== null) {
           this.isStreaming = true;

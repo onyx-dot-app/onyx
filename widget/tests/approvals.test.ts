@@ -1183,6 +1183,37 @@ describe("widget while a request waits", () => {
     expect(status(widget, "d")).toBe("pending");
   });
 
+  it("follows the root turn that a finished agent's unread result starts", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [{ ...streamingMessage([]), isStreaming: false }];
+    // The agent finished; its unread result starts the root's turn later.
+    const statuses = [
+      idle({ has_startable_input: true }),
+      runs(chatStream(12, [9])),
+      idle(),
+    ];
+    api.waitForSessionIdle = mock(async () => statuses.shift() ?? idle());
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor
+    > {
+      yield { stream_id: 12, next_cursor: 0, replay_complete: false };
+      yield {
+        obj: { user_message_id: null, reserved_assistant_message_id: 9 },
+      };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Agent done." } };
+      yield { obj: { type: "stop" } };
+    });
+
+    await widget["resumeStream"]("session", null);
+
+    expect(api.resumeStream).toHaveBeenCalledTimes(1);
+    expect(widget["messages"].at(-1)).toMatchObject({
+      id: 9,
+      content: "Agent done.",
+    });
+  });
+
   it("refreshes the saved session after approving for the chat with no continuation", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => ({

@@ -245,6 +245,9 @@ export interface ChatSessionStatus {
   // Background agents run, their queued work waits, or a decided agent
   // waits to resume; an agent that waits for a decision does not count
   has_active_subagents: boolean;
+  // Queued input or unread root results can start a turn; a paused queue
+  // cannot
+  has_startable_input: boolean;
   current_stream: ChatStream | null;
   // Changes when a request of the chat opens, is decided or is removed
   approvals_version: string | null;
