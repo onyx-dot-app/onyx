@@ -24,6 +24,8 @@ const SHARED_SERVER_URL = process.env.MCP_API_KEY_TEST_URL
   : null;
 const TOOL_NAME = "tool_0";
 const TOOL_OUTPUT = "Secret value 200!";
+// Auto-approved; sleeps until the call is cancelled, so its turn stays live.
+const SLOW_TOOL_NAME = "slow_tool";
 
 /**
  * An MCP tool on the default (ASK) policy pauses the chat run until the user
@@ -38,6 +40,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   let agentId: number;
   let agentName: string;
   let qualifiedToolName: string;
+  let qualifiedSlowToolName: string;
   let toolDisplayName: string;
 
   test.beforeAll(async ({ browser }, workerInfo) => {
@@ -74,8 +77,23 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     );
     toolDisplayName = tool?.display_name || TOOL_NAME;
     qualifiedToolName = qualifiedMcpToolName(serverId, serverName, TOOL_NAME);
+    const slowToolId = await adminClient.findMcpToolId(
+      serverId,
+      SLOW_TOOL_NAME
+    );
+    await adminClient.setMcpActionPolicies(serverId, {
+      [SLOW_TOOL_NAME]: "ALWAYS",
+    });
+    qualifiedSlowToolName = qualifiedMcpToolName(
+      serverId,
+      serverName,
+      SLOW_TOOL_NAME
+    );
     agentName = `PW Approval Agent ${Date.now()}`;
-    agentId = await adminClient.createAgentWithMcpTools(agentName, [toolId]);
+    agentId = await adminClient.createAgentWithMcpTools(agentName, [
+      toolId,
+      slowToolId,
+    ]);
     await adminContext.close();
   });
 
@@ -92,24 +110,41 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
   /**
    * Script a turn that calls the tool, then, unless the test stops the turn,
-   * answers once it has a result. Starts a new chat unless `sameChat`.
+   * answers once it has a result. With `slowSibling`, the turn also calls the
+   * slow tool at the same time, so it stays live while the card waits.
+   * Starts a new chat unless `sameChat`.
    */
   async function askForToolCall(
     page: Page,
-    { sameChat = false, answers = true } = {}
+    { sameChat = false, answers = true, slowSibling = false } = {}
   ): Promise<{ nonce: string; answer: string; conversation: string }> {
     const nonce = mockLlmNonce();
     const callId = `call-${nonce}`;
     const answer = `Finished ${nonce}`;
     const conversation = `approval-${nonce}`;
+    const gatedCall = {
+      id: callId,
+      name: qualifiedToolName,
+      arguments: { name: nonce },
+    };
     await addMockLlmConversation({
       name: conversation,
       conditions: { prompt_contains: [nonce] },
       replies: [
-        // Code mode calls the tool from an execute_code program.
-        mockLlmToolCallReply([
-          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
-        ]),
+        // Code mode calls the tools from an execute_code program.
+        slowSibling
+          ? mockLlmToolCallReply(
+              [
+                gatedCall,
+                {
+                  id: `slow-${nonce}`,
+                  name: qualifiedSlowToolName,
+                  arguments: { seconds: 60 },
+                },
+              ],
+              { concurrent: true }
+            )
+          : mockLlmToolCallReply([gatedCall]),
         ...(answers
           ? [{ text: answer, conditions: { has_results_for: [callId] } }]
           : []),
@@ -241,14 +276,13 @@ test.describe("MCP tool approval in chat @code-mode", () => {
   });
 
   // Stop shows only while the turn is live. A lone gated call suspends the turn
-  // as soon as its card opens, so this needs a sibling call that still runs
-  // then: an auto-approved slow tool on the mock MCP server, called in parallel.
-  test.fixme("Stop during a live turn rejects its open card and the chat takes new messages", async ({
+  // as soon as its card opens, so the slow tool runs beside it.
+  test("Stop during a live turn rejects its open card and the chat takes new messages", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    await askForToolCall(page, { answers: false });
+    await askForToolCall(page, { answers: false, slowSibling: true });
 
     const card = new ToolApprovalCard(page);
     await card.expectPending(toolDisplayName);
