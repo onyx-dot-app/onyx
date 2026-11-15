@@ -53,6 +53,9 @@ type Model struct {
 	// approvalsVersion is the session's approvals version that the cards
 	// reflect.
 	approvalsVersion string
+	// approvalsLoadVersion is the approvals version of the session load in
+	// flight, or "".
+	approvalsLoadVersion string
 	// approvalsPoll numbers the status polls that follow a background
 	// agent's decision; a newer poll replaces an older one.
 	approvalsPoll int
@@ -962,6 +965,7 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	m.chatSessionID = &detail.ChatSessionID
 	m.approvals = nil
 	m.approvalsVersion = detail.ApprovalsVersion
+	m.approvalsLoadVersion = ""
 	m.viewport.clearDisplay()
 	m.status.setSession(detail.ChatSessionID)
 

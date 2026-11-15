@@ -28,6 +28,8 @@ type approvalRun struct {
 	stops chan string
 	// sent closes when the server finished the stream of the message.
 	sent chan struct{}
+	// decideElsewhere decides a request as another client does.
+	decideElsewhere func(id, outcome string)
 }
 
 // within receives from ch, or fails the test after five seconds.
@@ -63,6 +65,12 @@ type approvalServerOptions struct {
 	// decision names stream 4, which has no buffer, so the saved session
 	// finishes the answer.
 	asksAgain bool
+	// The continuation closes after its replay without a stop; a resume
+	// from its cursor finishes the answer.
+	interrupted bool
+	// Another client decides; the status names the continuation and a new
+	// approvals version.
+	decidedElsewhere bool
 }
 
 // newApprovalServer streams some text and the response's tool approval
@@ -95,6 +103,12 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	// The outcome of each decided request, by approval id.
 	outcomes := map[string]string{}
 	continuing := false
+	run.decideElsewhere = func(id, outcome string) {
+		mu.Lock()
+		defer mu.Unlock()
+		outcomes[id] = outcome
+		continuing = len(outcomes) == len(all)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/chat/send-chat-message", func(w http.ResponseWriter, r *http.Request) {
 		defer close(run.sent)
@@ -149,8 +163,8 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		mu.Lock()
 		defer mu.Unlock()
 		// Only another client's decision leaves the stream to the status.
-		if continuing && opts.decisionStatus != http.StatusOK && !opts.unbuffered {
-			fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":3,"response_ids":[2]}}`)
+		if continuing && (opts.decisionStatus != http.StatusOK || opts.decidedElsewhere) && !opts.unbuffered {
+			fmt.Fprint(w, `{"is_processing":true,"current_stream":{"stream_id":3,"response_ids":[2]},"approvals_version":"v2"}`)
 			return
 		}
 		fmt.Fprint(w, `{"is_processing":false}`)
@@ -158,8 +172,23 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	mux.HandleFunc("/api/chat/chat-session/"+testSessionID+"/resume-stream", func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
-		if opts.unbuffered || !continuing || r.URL.Query().Get("stream_id") != "3" || r.URL.Query().Get("cursor") != "0" {
+		// The cursor after the replay of an interrupted continuation.
+		const restCursor = "100"
+		cursor := r.URL.Query().Get("cursor")
+		rest := opts.interrupted && cursor == restCursor
+		if opts.unbuffered || !continuing || r.URL.Query().Get("stream_id") != "3" || (cursor != "0" && !rest) {
 			http.NotFound(w, r)
+			return
+		}
+		if rest {
+			for _, request := range requests {
+				id := request["approval_id"]
+				fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
+			}
+			fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "done"}))
+			fmt.Fprintln(w, streamLine("stop", nil))
+			fmt.Fprintln(w, `{"stream_id":3,"next_cursor":120,"replay_complete":true}`)
+			continuing = false
 			return
 		}
 		fmt.Fprintln(w, `{"stream_id":3,"next_cursor":0,"replay_complete":false}`)
@@ -176,6 +205,11 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
 		}
 		fmt.Fprintln(w, streamLine("replay_end", nil))
+		if opts.interrupted {
+			// The buffer breaks after this batch.
+			fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%s,\"replay_complete\":true}\n", restCursor)
+			return
+		}
 		if opts.resumeFails {
 			fmt.Fprintln(w, streamLine("error", map[string]any{"exception": "resume failed"}))
 			fmt.Fprintln(w, streamLine("stop", nil))
@@ -443,6 +477,42 @@ func TestAsk_SavedAnswerAfterAContinuationShowsOnlyItsRest(t *testing.T) {
 	}
 	if strings.Count(errOut.String(), "Approved: Tool a9") != 1 {
 		t.Errorf("the saved outcome does not show once: %q", errOut.String())
+	}
+}
+
+func TestAsk_InterruptedContinuationResumesFromItsCursor(t *testing.T) {
+	newApprovalServer(t, approvalServerOptions{interrupted: true})
+	ios, out, errOut := pipedIOS()
+	if err := runApprovalAsk(t, ios, "--approve=once"); err != nil {
+		t.Fatalf("Execute: %v; stderr = %q", err, errOut.String())
+	}
+	if out.String() != "Filing. done\n" {
+		t.Errorf("stdout = %q, want the rest of the answer", out.String())
+	}
+	if strings.Count(errOut.String(), "Approved: Create issue") != 1 {
+		t.Errorf("the outcome does not show once: %q", errOut.String())
+	}
+}
+
+func TestAsk_PromptEndsWhenAnotherClientDecides(t *testing.T) {
+	run := newApprovalServer(t, approvalServerOptions{decidedElsewhere: true})
+	ios, _, errOut := interactiveIOS(t)
+	done := make(chan error, 1)
+	go func() { done <- runApprovalAsk(t, ios) }()
+
+	waitForPrompts(t, errOut, 1)
+	within(t, run.sent)
+	run.decideElsewhere("a1", "approved")
+
+	if err := within(t, done); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	noDecision(t, run)
+	if got := ios.Out.(*syncBuffer).String(); got != "Filing. done\n" {
+		t.Errorf("stdout = %q", got)
+	}
+	if strings.Count(errOut.String(), "Approved: Create issue") != 1 {
+		t.Errorf("the other client's decision does not show once: %q", errOut.String())
 	}
 }
 

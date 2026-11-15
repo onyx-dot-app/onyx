@@ -935,6 +935,40 @@ func TestApprovalsVersionChangeLoadsTheSessionCards(t *testing.T) {
 	}
 }
 
+func TestFailedApprovalsLoadIsRetried(t *testing.T) {
+	saved := waitingSession(t)
+	request := map[string]any{"type": "tool_approval_request", "approval_id": "b1", "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
+	saved.Packets[0] = []json.RawMessage{savedPacket(t, request)}
+	saved.ApprovalsVersion = "v2"
+	m, _ := streamingModel(&resumingClient{saved: saved})
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m.approvalsVersion = "v1"
+	status := models.ChatSessionStatus{ApprovalsVersion: "v2"}
+
+	m, load := m.noteApprovalsVersion(status)
+	if load == nil {
+		t.Fatal("a new version did not load the session")
+	}
+	if _, again := m.noteApprovalsVersion(status); again != nil {
+		t.Fatal("a status read loaded the session while its load ran")
+	}
+	updated, retry := m.Update(approvalsLoadedMsg{err: errors.New("offline")})
+	m = updated.(Model)
+	if retry == nil {
+		t.Fatal("a failed load scheduled no status read")
+	}
+	m, load = m.noteApprovalsVersion(status)
+	if load == nil {
+		t.Fatal("a failed load kept the status read from loading the session again")
+	}
+	updated, _ = m.Update(load())
+	m = updated.(Model)
+	if !strings.Contains(approvalEntry(t, m, "b1"), "triage wants to run Create issue") || m.approvalsVersion != "v2" {
+		t.Fatalf("the agent's request does not show; version = %q", m.approvalsVersion)
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -147,6 +148,9 @@ waiting for another client.`,
 			var responseID int
 			// The stream that ch reads.
 			var streamID int
+			// The cursor after the last complete batch of streamID, and the
+			// cursor that ch resumed it from.
+			cursor, resumedFrom := 0, 0
 			var lastErr error
 			gotStop := false
 			// The stream stopped while the response waits for decisions.
@@ -247,6 +251,11 @@ waiting for another client.`,
 					const promptText = "[y] approve once / [a] approve for session / [d] show all arguments / [N] reject: "
 					fmt.Fprint(ios.ErrOut, promptText)
 					events := ch
+					// After the stream stops, the saved session reports a
+					// decision that another client sends.
+					var decided chan models.ToolApprovalResolvedEvent
+					watchCtx, stopWatch := context.WithCancel(ctx)
+					defer stopWatch()
 				prompt:
 					for {
 						if !reading {
@@ -263,6 +272,38 @@ waiting for another client.`,
 							if !ok {
 								// The stream stopped for the decisions; the prompt still waits.
 								events = nil
+								decided = make(chan models.ToolApprovalResolvedEvent, 1)
+								go func() {
+									// The approvals version of the last session load.
+									version := ""
+									for {
+										select {
+										case <-watchCtx.Done():
+											return
+										case <-time.After(api.StatusPollInterval):
+										}
+										status, err := client.ChatSessionStatus(watchCtx, sessionID)
+										if err != nil || status.ApprovalsVersion == version {
+											continue
+										}
+										detail, err := client.GetChatSession(watchCtx, sessionID)
+										if err != nil {
+											continue
+										}
+										version = detail.ApprovalsVersion
+										for _, packets := range detail.Packets {
+											for _, packet := range packets {
+												if !bytes.Contains(packet, []byte("tool_approval_resolved")) {
+													continue
+												}
+												if e, ok := parser.ParseStreamLine(string(packet)).(models.ToolApprovalResolvedEvent); ok && e.ApprovalID == req.ApprovalID {
+													decided <- e
+													return
+												}
+											}
+										}
+									}
+								}()
 								continue
 							}
 							deferred = append(deferred, event)
@@ -274,6 +315,11 @@ waiting for another client.`,
 								fmt.Fprintln(ios.ErrOut)
 								return
 							}
+						case resolved := <-decided:
+							deferred = append(deferred, resolved)
+							ended[req.ApprovalID] = true
+							fmt.Fprintln(ios.ErrOut)
+							return
 						case line := <-promptLines:
 							reading = false
 							if line.approvalID != req.ApprovalID {
@@ -340,6 +386,10 @@ waiting for another client.`,
 						}
 						continue
 					}
+					if e, ok := event.(models.StreamCursorEvent); ok {
+						streamID, cursor = e.StreamID, e.NextCursor
+						continue
+					}
 					if replaying {
 						switch e := event.(type) {
 						case models.ReplayEndEvent:
@@ -367,9 +417,6 @@ waiting for another client.`,
 					case models.MessageIDEvent:
 						streamID = e.ReservedAgentMessageID
 						responseID = e.ReservedAgentMessageID
-					case models.StreamCursorEvent:
-						streamID = e.StreamID
-						continue
 					case models.StreamUnavailableEvent:
 						unavailable = true
 						continue
@@ -460,7 +507,10 @@ waiting for another client.`,
 						return exitcodes.New(exitcodes.General, sanitize.Terminal(e.Error))
 					}
 				}
-				if (!awaiting && !unavailable) || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
+				// The stream closed before its stop, for example when the
+				// server's buffer for it ended.
+				interrupted := !gotStop && !unavailable && responseID != 0
+				if (!awaiting && !unavailable && !interrupted) || approvalErr != nil || lastErr != nil || ctx.Err() != nil {
 					break
 				}
 				// The response continues on the stream that a decision named.
@@ -470,6 +520,12 @@ waiting for another client.`,
 				continuation = nil
 				if next != nil && next.StreamID == streamID {
 					next = nil
+				}
+				if next == nil && interrupted && !fromSaved && cursor > resumedFrom {
+					// The stream continues after its last complete batch.
+					resumedFrom = cursor
+					ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, cursor)
+					continue
 				}
 				if next == nil {
 					followed, err := api.FollowResponse(ctx, client, sessionID, responseID, streamID)
@@ -484,6 +540,7 @@ waiting for another client.`,
 				if next != nil {
 					streamID = next.StreamID
 					ch = client.ResumeChatStream(streamCtx, sessionID, &streamID, 0)
+					cursor, resumedFrom = 0, 0
 					replaying, fromSaved = true, false
 					gotStop, awaiting, unavailable = false, false, false
 					continue

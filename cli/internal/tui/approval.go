@@ -213,7 +213,17 @@ func loadApprovals(client api.ClientAPI, sessionID string) tea.Cmd {
 }
 
 func (m Model) handleApprovalsLoaded(msg approvalsLoadedMsg) (tea.Model, tea.Cmd) {
-	if msg.err != nil || m.chatSessionID == nil || msg.detail.ChatSessionID != *m.chatSessionID {
+	if m.chatSessionID == nil || (msg.err == nil && msg.detail.ChatSessionID != *m.chatSessionID) {
+		return m, nil
+	}
+	m.approvalsLoadVersion = ""
+	if msg.err != nil {
+		// The cards keep their version, so a later status read loads again;
+		// a status read follows a transient failure even when no agent runs.
+		if api.IsRetryableReadinessError(msg.err) {
+			m.approvalsPoll++
+			return m, pollApprovals(m.client, *m.chatSessionID, m.approvalsPoll, api.StatusPollInterval)
+		}
 		return m, nil
 	}
 	return m.showSavedApprovals(msg.detail), nil
@@ -246,12 +256,13 @@ func (m Model) handleContinuation(msg continuationMsg) (tea.Model, tea.Cmd) {
 }
 
 // noteApprovalsVersion loads the session's approval requests when a status
-// reports a version that the shown cards do not reflect.
+// reports a version that the shown cards do not reflect and no load of it
+// runs. A successful load records its version.
 func (m Model) noteApprovalsVersion(status models.ChatSessionStatus) (Model, tea.Cmd) {
-	if status.ApprovalsVersion == m.approvalsVersion || m.chatSessionID == nil {
+	if status.ApprovalsVersion == m.approvalsVersion || status.ApprovalsVersion == m.approvalsLoadVersion || m.chatSessionID == nil {
 		return m, nil
 	}
-	m.approvalsVersion = status.ApprovalsVersion
+	m.approvalsLoadVersion = status.ApprovalsVersion
 	return m, loadApprovals(m.client, *m.chatSessionID)
 }
 
