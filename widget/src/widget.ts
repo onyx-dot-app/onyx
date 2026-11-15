@@ -513,6 +513,9 @@ export class OnyxChatWidget extends LitElement {
     // request that no longer waits (404 or 409) follows the session's status,
     // and the saved session shows its outcome. A background agent continues
     // without a stream, so its later requests come from the saved session.
+    // The last root decision with no continuation landed while another turn
+    // held the chat: the follow reads the current stream, then each stream
+    // the status reports, and the saved session when the session is idle.
     const continuation = result === "closed" ? null : result.continuation;
     if (this.chatSessionId && !this.abortController) {
       if (continuation) {
@@ -521,6 +524,8 @@ export class OnyxChatWidget extends LitElement {
         });
       } else if (result === "closed" || request.agent_name) {
         void this.resumeStream(this.chatSessionId, null);
+      } else if (this.pendingApproval === null) {
+        void this.resumeStream(this.chatSessionId, { streamId: null });
       }
     } else if (continuation) {
       this.continuationStreamId = continuation.stream_id;
@@ -789,7 +794,9 @@ export class OnyxChatWidget extends LitElement {
                 responseId !== null &&
                 stream.response_ids.includes(responseId)
             );
-            waitsForDecisions = !status.is_processing;
+            // After the last decision, an idle session finished the response.
+            waitsForDecisions =
+              !status.is_processing && this.pendingApproval !== null;
           } else if (current.ended) {
             // The server can still save the turn after its stream ends, and
             // another client can start a new response meanwhile.
@@ -936,7 +943,8 @@ export class OnyxChatWidget extends LitElement {
         }
         reservedAssistantId = null;
         if (!agentsRun) return;
-        // Agents never hold the chat: a send can end this poll.
+        // Agents never hold the chat: a send can end this poll. The poll
+        // leaves the streaming state alone until it follows a stream.
         this.isStreaming = false;
         this.streamingStatus = "";
         if (pausesFirst)
@@ -951,11 +959,11 @@ export class OnyxChatWidget extends LitElement {
             stream.stream_id !== lastStreamId
         );
         if (!stillOurs()) return;
-        this.isStreaming = true;
         this.noteApprovalsVersion(status);
         agentsRun = status.has_active_subagents;
         const next = status.is_processing ? status.current_stream : null;
         if (next !== null) {
+          this.isStreaming = true;
           follow = newFollow(next.stream_id);
           if (this.continuationStreamId === next.stream_id)
             this.continuationStreamId = null;

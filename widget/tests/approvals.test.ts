@@ -637,6 +637,120 @@ describe("widget while a request waits", () => {
     expect(widget["pendingApproval"]?.request.approval_id).toBe("b");
   });
 
+  it("follows the resume stream that the status reports after the last decision names no continuation", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [
+      {
+        ...streamingMessage([entry("a")]),
+        isStreaming: false,
+        awaitingApproval: true,
+      },
+    ];
+    // Another turn held the chat when the decision landed.
+    api.submitApprovalDecision = mock(async () => ({
+      decision: "APPROVED" as const,
+      decided_via: "USER",
+      continuation: null,
+    }));
+    let reads = 0;
+    api.waitForSessionIdle = mock(
+      async (
+        _session: string,
+        _signal: AbortSignal,
+        _onUnconfirmed: () => void,
+        attachable: (stream: ChatStream) => boolean = () => false
+      ) => {
+        reads += 1;
+        return reads === 1 ? offer(attachable, 9) : idle();
+      }
+    );
+    api.resumeStream = mock(async function* (
+      _session: string,
+      _signal: AbortSignal,
+      from: { streamId: number; cursor: number } | null = null
+    ): AsyncGenerator<Packet | StreamCursor, ResumeEnd> {
+      if (from === null) return "noBuffer";
+      yield { stream_id: 9, next_cursor: 0, replay_complete: false };
+      yield { obj: { user_message_id: 6, reserved_assistant_message_id: 7 } };
+      yield { obj: request("a") };
+      yield {
+        obj: {
+          type: "tool_approval_resolved",
+          approval_id: "a",
+          outcome: "approved",
+        },
+      };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Sent." } };
+      yield { obj: { type: "stop" } };
+      return "ended";
+    });
+
+    await widget["decideApproval"](request("a"), "approve_once");
+    await waitUntil(() => widget["abortController"] === undefined);
+
+    expect(api.resumeStream).toHaveBeenLastCalledWith(
+      "session",
+      expect.anything(),
+      { streamId: 9, cursor: 0 }
+    );
+    expect(widget["messages"][0]?.content).toBe("Sent.");
+    expect(status(widget, "a")).toBe("approved");
+  });
+
+  it("shows the saved answer when the session goes idle after the last decision of a followed stop", async () => {
+    let decided!: () => void;
+    const decisionDone = new Promise<void>((done) => (decided = done));
+    const { widget, api } = sendingWidget();
+    api.submitApprovalDecision = mock(async () => ({
+      decision: "APPROVED" as const,
+      decided_via: "USER",
+      continuation: null,
+    }));
+    let reads = 0;
+    // The read after the stop sees another turn until the decision, then an
+    // idle session: the resume ran and saved its answer.
+    api.waitForSessionIdle = mock(async () => {
+      reads += 1;
+      if (reads === 2) await decisionDone;
+      return idle();
+    });
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 1, message_type: "user" },
+        { message_id: 2, message_type: "assistant", parent_message: 1 },
+      ],
+      packets: [
+        [
+          { obj: request("a") },
+          {
+            obj: {
+              type: "tool_approval_resolved",
+              approval_id: "a",
+              outcome: "approved",
+            },
+          },
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "Sent." } },
+          { obj: { type: "stop" } },
+        ],
+      ],
+    }));
+
+    const sending = widget["sendMessage"]();
+    await waitUntil(() => reads === 2);
+    await widget["decideApproval"](request("a"), "approve_once");
+    decided();
+    await sending;
+
+    expect(api.getChatSession).toHaveBeenCalledTimes(1);
+    expect(widget["messages"].map((m) => [m.id, m.content])).toEqual([
+      [1, "send it"],
+      [2, "Sent."],
+    ]);
+    expect(status(widget, "a")).toBe("approved");
+  });
+
   it("shows the saved outcome and reads the status when the request no longer waits", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => "closed" as const);
@@ -1082,6 +1196,36 @@ describe("widget while a request waits", () => {
       { request: { approval_id: "d" }, outcome: null },
     ]);
     expect(widget["approvalsVersion"]).toBe("v2");
+  });
+
+  it("polls for running agents without changing the streaming state on each read", async () => {
+    const { restore } = fakeSessionStorage();
+    const { widget, count } = agentWidget([
+      agentStatus(true, "v1"),
+      agentStatus(true, "v1"),
+      agentStatus(true, "v1"),
+      agentStatus(false, "v1"),
+    ]);
+    const changes: boolean[] = [];
+    let streaming = false;
+    Object.defineProperty(widget, "isStreaming", {
+      configurable: true,
+      get: () => streaming,
+      set: (value: boolean) => {
+        if (value !== streaming) changes.push(value);
+        streaming = value;
+      },
+    });
+
+    try {
+      await widget["decideApproval"](agentRequest("c"), "approve_once");
+      await waitUntil(() => widget["abortController"] === undefined);
+    } finally {
+      restore();
+    }
+
+    expect(count("/status")).toBe(4);
+    expect(changes).toEqual([true, false]);
   });
 
   it("sends while it polls for running agents, and the send's follow polls on", async () => {
