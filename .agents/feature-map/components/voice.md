@@ -201,8 +201,11 @@ rolls back everything, including the linked row, on failure.
   providers with `ls backend/onyx/voice/providers/`. Implement
   `VoiceProviderInterface`, add the class to `get_voice_provider`, and add its
   admin form under `web/src/views/admin/VoicePage/`. Wrap each call in
-  `traced_llm_call`. Override `session_policy()` if the vendor caps concurrent
-  sessions, and return `STREAM_FAILED_ERROR` on stream failures.
+  `traced_llm_call`. Decorate `synthesize_stream` with
+  `llm/cancellation.py:isolated_async_context`: it yields inside that span,
+  and `POST /voice/synthesize` steps it from two tasks. Override
+  `session_policy()` if the vendor caps concurrent sessions, and return
+  `STREAM_FAILED_ERROR` on stream failures.
 - `investigate-no-microphone` **Investigate "the microphone does not appear".** Call
   `GET /api/voice/status` as that user. A direction is off when no provider is
   the default for it, or the default has no key ([[#status-gates-controls]]).

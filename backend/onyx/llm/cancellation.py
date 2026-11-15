@@ -1,7 +1,8 @@
 """Cancellation signals and execution scopes for model generation."""
 
+import asyncio
 import threading
-from collections.abc import Callable, Generator, Iterator
+from collections.abc import AsyncGenerator, Callable, Generator, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar, copy_context
 from functools import wraps
@@ -127,6 +128,47 @@ def isolated_context(
                     yield value
             finally:
                 execution.run(source.close)
+
+        return iterate()
+
+    return start
+
+
+def isolated_async_context(
+    generate: Callable[_P, AsyncGenerator[_T, None]],
+) -> Callable[_P, AsyncGenerator[_T, None]]:
+    """Async counterpart of ``isolated_context``.
+
+    ``Context.run`` cannot drive an async generator, so each step and the close
+    run as a task bound to one context copy. A span opened inside the generator
+    then starts and ends in that copy, even when callers step it from different
+    tasks, as Starlette's ``StreamingResponse`` does.
+    """
+
+    @wraps(generate)
+    def start(*args: _P.args, **kwargs: _P.kwargs) -> AsyncGenerator[_T, None]:
+        execution = copy_context()
+        source = execution.run(generate, *args, **kwargs)
+
+        async def advance() -> tuple[_T] | None:
+            try:
+                return (await source.__anext__(),)
+            except StopAsyncIteration:
+                return None
+
+        async def close() -> None:
+            await source.aclose()
+
+        async def iterate() -> AsyncGenerator[_T, None]:
+            try:
+                while (
+                    step := await asyncio.create_task(advance(), context=execution)
+                ) is not None:
+                    yield step[0]
+            finally:
+                # Shielded so a cancelled caller still closes the source in its
+                # own context.
+                await asyncio.shield(asyncio.create_task(close(), context=execution))
 
         return iterate()
 
