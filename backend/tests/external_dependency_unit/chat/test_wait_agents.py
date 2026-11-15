@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution, run_store
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
@@ -399,12 +400,15 @@ def _drop_dispatches(monkeypatch: pytest.MonkeyPatch) -> _DroppedDispatches:
     dropped = _DroppedDispatches()
     dispatch = execution.ChatTurnExecution._dispatch_after_release
 
-    def dispatch_unless_dropped(self: execution.ChatTurnExecution) -> None:
+    def dispatch_unless_dropped(
+        self: execution.ChatTurnExecution,
+        admission: ChatTurnAdmission | None = None,
+    ) -> None:
         try:
             if dropped.dropping.is_set():
                 dropped.dropped += 1
                 return
-            dispatch(self)
+            dispatch(self, admission)
         finally:
             dropped.callbacks += 1
 
