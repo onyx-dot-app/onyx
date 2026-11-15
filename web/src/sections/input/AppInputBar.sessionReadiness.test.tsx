@@ -549,7 +549,10 @@ test("a waiting card leaves the send to the server", async () => {
   await user.click(screen.getByRole("textbox", { name: "Message input" }));
   await user.keyboard("{Enter}");
 
-  expect(inputProps.onSubmit).toHaveBeenCalledWith("Keep this draft");
+  expect(inputProps.onSubmit).toHaveBeenCalledWith({
+    message: "Keep this draft",
+    mentions: [],
+  });
 });
 
 test("a server refusal for a waiting approval keeps the draft and points at its card", async () => {

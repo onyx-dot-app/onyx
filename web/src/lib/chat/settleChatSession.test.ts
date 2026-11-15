@@ -1434,7 +1434,7 @@ describe("with a scripted fetch", () => {
     });
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       if (String(input).includes("get-chat-session"))
-        return Response.json(savedSession(raw, 4));
+        return Response.json(savedSession(raw, stream(4)));
       // Leave replay pending; this test covers the tree written before it.
       return new Promise<Response>(() => {});
     });

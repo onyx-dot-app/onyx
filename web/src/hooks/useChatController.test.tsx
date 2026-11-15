@@ -491,6 +491,7 @@ test("a lost stream keeps its waiting approval open after the server is idle", a
   act(() => {
     sending = result.current.onSubmit({
       message: "Open an issue",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });
@@ -555,6 +556,7 @@ test("a continuation that names the send's own stream keeps the send as its only
   act(() => {
     sending = result.current.onSubmit({
       message: "Open an issue",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });
@@ -647,12 +649,17 @@ test("a send refused for a waiting approval restores the draft and points at the
   await act(async () =>
     result.current.onSubmit({
       message: "Another question",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
   );
 
-  expect(restoreInputBar).toHaveBeenCalledWith("Another question", []);
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
   expect(toast.warning).toHaveBeenCalledWith("toast");
   expect(toast.error).not.toHaveBeenCalled();
   expect(useToolApprovalUi.getState().nudge?.approvalId).toBe("approval-1");
@@ -687,12 +694,17 @@ test("a send refused for an approval this chat does not show settles with the sa
   await act(async () =>
     result.current.onSubmit({
       message: "Another question",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
   );
 
-  expect(restoreInputBar).toHaveBeenCalledWith("Another question", []);
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Another question",
+    mentions: [],
+    files: [],
+  });
   expect(toast.warning).toHaveBeenCalledWith("toast");
   expect(useToolApprovalUi.getState().nudge).toBeNull();
   // Settlement loads the saved session, which replays the server's cards.
