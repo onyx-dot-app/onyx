@@ -184,7 +184,8 @@ With `strict=True` the function makes a closed OpenAI strict schema: every
 argument is required, and a defaulted argument accepts null. For a defaulted
 argument whose type does not accept null, `parse_tool_arguments` reads null as
 the default. A strict model has only inline argument types (a `Literal`, not an
-enum or a nested model). Parsing ignores unknown arguments unless the model
+enum or a nested model) and no object argument such as a mapping, because
+strict mode requires every object to be closed. Parsing ignores unknown arguments unless the model
 sets `extra="forbid"`, because not every provider enforces the schema. A
 validation error names the argument and returns to the model as a tool error.
 The skill, subagent, memory, file reader and knowledge graph tools use it.

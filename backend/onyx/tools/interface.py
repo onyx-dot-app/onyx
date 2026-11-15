@@ -298,7 +298,9 @@ def tool_definition_from_arguments(
     mode does: an argument with a default accepts null, which
     `parse_tool_arguments` reads as the default. Its argument types must be
     inline, so a nested model or an enum, which Pydantic emits as a `$defs`
-    reference, is an error; use a `Literal` for an enum."""
+    reference, is an error; use a `Literal` for an enum. An object argument,
+    such as a mapping, is an error too, because strict mode requires every
+    object to be closed."""
     schema = arguments.model_json_schema()
     # Titles repeat the property names; leave them out of every request.
     schema.pop("title", None)
@@ -311,6 +313,18 @@ def tool_definition_from_arguments(
                 f"{arguments.__name__} has referenced types; a strict definition "
                 "supports only inline argument types"
             )
+        pending: list[object] = list(properties.values())
+        while pending:
+            node = pending.pop()
+            if isinstance(node, dict):
+                if node.get("type") == "object":
+                    raise ValueError(
+                        f"{arguments.__name__} has an object argument; a strict "
+                        "definition supports only closed objects"
+                    )
+                pending.extend(node.values())
+            elif isinstance(node, list):
+                pending.extend(node)
         schema["additionalProperties"] = False
         for field_name in set(properties) - set(schema.get("required", [])):
             field_schema = properties[field_name]

@@ -59,3 +59,17 @@ class _WithEnum(BaseModel):
 def test_strict_definition_rejects_referenced_types(model: type[BaseModel]) -> None:
     with pytest.raises(ValueError, match="inline argument types"):
         tool_definition_from_arguments("t", "d", model, strict=True)
+
+
+class _WithMapping(BaseModel):
+    labels: dict[str, str]
+
+
+class _WithOptionalMappings(BaseModel):
+    labels: list[dict[str, str]] | None = None
+
+
+@pytest.mark.parametrize("model", [_WithMapping, _WithOptionalMappings])
+def test_strict_definition_rejects_object_arguments(model: type[BaseModel]) -> None:
+    with pytest.raises(ValueError, match="object argument"):
+        tool_definition_from_arguments("t", "d", model, strict=True)
