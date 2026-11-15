@@ -246,6 +246,7 @@ def serialize_checkpoint(
     binding: CheckpointBinding,
     *,
     model_configuration_id: int | None = None,
+    temperature: float | None = None,
     tool_selection: ChatToolSelection | None = None,
 ) -> ResponseCheckpoint:
     """Build resume data for storage alongside the response and verify it can reconstruct the run."""
@@ -281,6 +282,7 @@ def serialize_checkpoint(
         input_messages=snapshot.input_messages,
         input_payloads=[payload(message) for message in snapshot.input_messages],
         model_configuration_id=model_configuration_id,
+        temperature=temperature,
         tool_selection=tool_selection,
     )
     restored = _restore_checkpoint_state(

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import ApprovalRequest, ChatSession
+from onyx.utils.postgres_sanitization import sanitize_json_like, sanitize_string
 
 
 def lock_session_grants__no_commit(db_session: Session, chat_session_id: UUID) -> None:
@@ -43,8 +44,10 @@ def create_approval_request__no_commit(
             action_id=action_id,
             tool_call_id=tool_call_id,
             tool_name=tool_name,
-            display_name=display_name,
-            arguments=arguments,
+            # The card's copy of the call; PostgreSQL stores no NUL or
+            # surrogate characters.
+            display_name=sanitize_string(display_name),
+            arguments=sanitize_json_like(arguments),
         )
         .returning(ApprovalRequest.id)
     ).scalar_one()

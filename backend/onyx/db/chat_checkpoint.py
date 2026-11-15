@@ -106,12 +106,13 @@ def publish_checkpoint__no_commit(
 def parked_response_settings(
     session: Session, message_id: int
 ) -> tuple[LLMOverride | None, ChatToolSelection | None]:
-    """The model that a parked response ran, by its saved configuration and
-    with its display name, and the tools and search filters of its request;
-    each is None when its checkpoint names none."""
+    """The model that a parked response ran, by its saved configuration,
+    with its display name and temperature, and the tools and search filters
+    of its request; each is None when its checkpoint names none."""
     row = session.execute(
         select(
             ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
+            ChatResponseCheckpoint.state["temperature"].as_float(),
             ChatResponseCheckpoint.state["tool_selection"],
             ChatMessage.model_display_name,
         )
@@ -120,9 +121,13 @@ def parked_response_settings(
     ).one_or_none()
     if row is None:
         return None, None
-    configuration_id, tool_selection, display_name = row
+    configuration_id, temperature, tool_selection, display_name = row
     return (
-        LLMOverride(model_configuration_id=configuration_id, display_name=display_name)
+        LLMOverride(
+            model_configuration_id=configuration_id,
+            display_name=display_name,
+            temperature=temperature,
+        )
         if configuration_id is not None
         else None,
         ChatToolSelection.model_validate(tool_selection)
@@ -269,6 +274,7 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
             ChatMessage.id,
             ChatMessage.chat_session_id,
             ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
+            ChatResponseCheckpoint.state["temperature"].as_float(),
             ChatResponseCheckpoint.state["tool_selection"],
         )
         .join(
@@ -293,11 +299,12 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
             if agent_id == chat_session_id
             else response_invocation_chain(session, response_id)[-1].message_id,
             model_configuration_id=configuration_id,
+            temperature=temperature,
             tool_selection=ChatToolSelection.model_validate(tool_selection)
             if tool_selection is not None
             else None,
         )
-        for response_id, agent_id, configuration_id, tool_selection in rows
+        for response_id, agent_id, configuration_id, temperature, tool_selection in rows
     ]
 
 

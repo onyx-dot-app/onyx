@@ -389,9 +389,10 @@ class ParkedRun(BaseModel):
     response_id: int
     # The root response whose branch the run belongs to.
     root_response_id: int
-    # The model and the request's tools and search filters that the run's
-    # checkpoint saved, which it continues with.
+    # The model, temperature, and the request's tools and search filters that
+    # the run's checkpoint saved, which it continues with.
     model_configuration_id: int | None = None
+    temperature: float | None = None
     tool_selection: ChatToolSelection | None = None
 
     @property
@@ -983,9 +984,11 @@ class ResponseCheckpoint(BaseModel):
     message_payloads: list[MessagePayload]
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
-    # The saved model configuration that the response runs, and the tools and
-    # search filters of its request; a parked response continues with them.
+    # The saved model configuration that the response runs, its sampling
+    # temperature, and the tools and search filters of its request; a parked
+    # response continues with them.
     model_configuration_id: int | None = None
+    temperature: float | None = None
     tool_selection: ChatToolSelection | None = None
 
 

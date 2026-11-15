@@ -356,12 +356,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         answers_agent_results: bool = False,
         on_root_parked: Callable[[Run], None] | None = None,
         model_configuration_id: int | None = None,
+        temperature: float | None = None,
         tool_selection: ChatToolSelection | None = None,
     ) -> None:
         self.tenant_id = tenant_id
-        # The model, tools and search filters of the branch's runs, which
-        # parked runs continue with.
+        # The model, temperature, tools and search filters of the branch's
+        # runs, which parked runs continue with.
         self._model_configuration_id = model_configuration_id
+        self._temperature = temperature
         self._tool_selection = tool_selection
         # The root response answers unread agent results under a hidden
         # AGENT_RESULTS question, as a released wait's follow-up does.
@@ -711,7 +713,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
 
     def _dispatch_messages(self) -> None:
         """Resume parked agent runs of this store's branch whose waits ended
-        and that saved this store's model and tools, then start idle children's
+        and that saved this store's model settings and tools, then start idle children's
         queued messages and result follow-ups.
 
         Scans run after a notification and while children run on the branch.
@@ -735,14 +737,15 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
         try:
             inbox, selected = self._read_inbox()
-            # A run saved with another model or tool selection waits for an
-            # agent host, which continues it with them.
+            # A run saved with another model, temperature or tool selection
+            # waits for an agent host, which continues it with them.
             parked = [
                 run
                 for run in inbox.resumable_runs
                 if not run.is_root
                 and run.root_response_id in self.visible_response_ids
                 and run.model_configuration_id == self._model_configuration_id
+                and run.temperature == self._temperature
                 and run.tool_selection == self._tool_selection
             ]
             for run in parked:
@@ -1568,6 +1571,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 record,
                 self._binding(response_id),
                 model_configuration_id=self._model_configuration_id,
+                temperature=self._temperature,
                 tool_selection=self._tool_selection,
             )
             owned.run.handoff(expected_revision=captured.run_state.revision, save=save)

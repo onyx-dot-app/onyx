@@ -674,6 +674,33 @@ def test_a_request_creates_the_missing_app_identity(
     )
 
 
+def test_a_request_stores_its_arguments_without_nul_characters(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """PostgreSQL stores no NUL character, so the request's copy of the call
+    for its card leaves it out, and the call still waits for approval."""
+    tool = chat.tool()
+    owned = _start(
+        chat,
+        owned_runs,
+        reply=_replies(
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="send", name=tool.name, arguments={"value": "team\x00mail"}
+                    )
+                ]
+            )
+        ),
+        tools=[_sending(tool)],
+        gated=[tool],
+    )
+
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    [row] = chat.rows(db_session)
+    assert row.arguments == {"value": "teammail"}
+
+
 def _foreground_agent(
     chat: ApprovalChat,
     owned_runs: list[OwnedRun],

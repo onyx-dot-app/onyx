@@ -821,6 +821,7 @@ def bind_run_store(
         answers_agent_results=setup.user_message_id is None,
         on_root_parked=on_root_parked,
         model_configuration_id=llm.config.model_configuration_id,
+        temperature=llm.config.temperature,
         tool_selection=ChatToolSelection(
             allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
             preferred_tool_id=setup.new_msg_req.preferred_tool_id,

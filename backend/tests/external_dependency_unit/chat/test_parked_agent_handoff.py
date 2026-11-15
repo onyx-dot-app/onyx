@@ -279,9 +279,10 @@ def test_a_parked_agent_resumes_in_another_process(
 def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
     db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
-    """A store of a turn that runs on another model leaves a decided agent
-    parked, so an agent host continues it with its saved model and tools
-    instead of the turn's. A store with the saved ones resumes it."""
+    """A store of a turn that runs on another model or temperature leaves a
+    decided agent parked, so an agent host continues it with its saved model
+    settings and tools instead of the turn's. A store with the saved ones
+    resumes it."""
     sent: list[str] = []
     agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
     [row] = chat.rows(db_session)
@@ -299,7 +300,9 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
         ) as session:
             return session.get_one(ChatMessage, agent_response_id).response_status
 
-    def bound_store(model_configuration_id: int | None) -> ChatRunStore:
+    def bound_store(
+        model_configuration_id: int | None, temperature: float | None
+    ) -> ChatRunStore:
         store = ChatRunStore(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
             chat_session_id=chat.chat_session_id,
@@ -310,6 +313,7 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
             user=chat.user,
             tools=[tool],
             model_configuration_id=model_configuration_id,
+            temperature=temperature,
         )
         coordinator = AgentCoordinator()
         store.bind(coordinator, build_agent=rebuild)
@@ -318,19 +322,20 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
 
     coordinators: list[AgentCoordinator] = []
     try:
-        other = bound_store(4242)
+        others = [bound_store(4242, None), bound_store(None, 0.9)]
         # Polls through several dispatch scans.
         deadline = time.monotonic() + 3 * INPUT_POLL_SECONDS
 
         def polled_past_scans() -> bool:
-            other.poll_control()
+            for other in others:
+                other.poll_control()
             return time.monotonic() > deadline
 
         until(polled_past_scans)
         assert rebuilt == []
         assert agent_status() == RunStatus.SUSPENDED
 
-        same = bound_store(None)
+        same = bound_store(None, None)
         until(
             lambda: (
                 same.poll_control() is None
@@ -393,7 +398,11 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
             tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
         ) as session:
             checkpoint = session.get_one(ChatResponseCheckpoint, agent_response_id)
-            checkpoint.state = {**checkpoint.state, "model_configuration_id": 4242}
+            checkpoint.state = {
+                **checkpoint.state,
+                "model_configuration_id": 4242,
+                "temperature": 0.3,
+            }
             session.commit()
         [row] = chat.rows(db_session)
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
@@ -410,8 +419,9 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
         until(lambda: agent_status() == RunStatus.ERROR, timeout=30)
         assert chat_turn_work.wait_idle(timeout=30)
         assert [
-            override and override.model_configuration_id for override in requested
-        ] == [4242]
+            override and (override.model_configuration_id, override.temperature)
+            for override in requested
+        ] == [(4242, 0.3)]
         [error] = host_errors
         if unavailable == "raises":
             assert isinstance(error, ValueError)
