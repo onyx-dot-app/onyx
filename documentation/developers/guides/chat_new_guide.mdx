@@ -209,6 +209,10 @@ so take the first value from the session load.
 The chat session returns each agent request in the answer that started the agent, with its resolution if it has one.
 After the decision, the agent continues in the background, with no new stream for the answer.
 Its record and its result arrive with the chat session, as for any background agent.
+An agent that waits for approval does not count in `has_active_subagents`,
+and it can start again a few seconds after the decision. To show its later requests,
+read the status about once a second after the decision. Stop when `has_active_subagents` changes from `true` to `false`,
+or after a few reads where it stays `false`. Read the chat session again each time `approvals_version` changes.
 
 ### Approvals in saved answers
 

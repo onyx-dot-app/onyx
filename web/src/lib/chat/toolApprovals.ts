@@ -2,7 +2,6 @@ import { create } from "zustand";
 import {
   Packet,
   PacketType,
-  StopReason,
   ToolApprovalRequest,
   ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
@@ -14,7 +13,10 @@ import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
-import type { ApprovalDecisionResponse } from "@/lib/chat/types";
+import type {
+  ApprovalDecisionResponse,
+  ChatSessionStatus,
+} from "@/lib/chat/types";
 
 /** What one response's packets say about an approval request. */
 export interface ToolApprovalEntry {
@@ -40,8 +42,6 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
 
 export interface ToolApprovalRead {
   entries: ToolApprovalEntry[];
-  /** The server ended the response. */
-  stopped: boolean;
 }
 
 // Streams append to a response's packet array and a replay replaces it, so a
@@ -52,12 +52,10 @@ const approvalReads = new WeakMap<
 >();
 
 /**
- * The requests in one response's packets, and whether the server ended the
- * response. A resolution without a known outcome counts as no resolution.
- * Only a server stop has a reason. A stop that this client adds does not
- * count, and neither does an approval wait's stop, because the server still
- * waits for a decision. Packets that cannot change the result keep the same
- * read object.
+ * The requests in one response's packets and their outcomes. A resolution
+ * without a known outcome counts as no resolution. A stop changes nothing:
+ * the server resolves every request that it ends, also as "cancelled".
+ * Packets that cannot change the result keep the same read object.
  */
 export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
   const cached = approvalReads.get(packets);
@@ -71,8 +69,7 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
       const type = packets[index]?.obj.type;
       changed =
         type === PacketType.TOOL_APPROVAL_REQUEST ||
-        type === PacketType.TOOL_APPROVAL_RESOLVED ||
-        type === PacketType.STOP;
+        type === PacketType.TOOL_APPROVAL_RESOLVED;
     }
     if (!changed) {
       cached.count = packets.length;
@@ -81,7 +78,6 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
   }
   const entries = new Map<string, ToolApprovalEntry>();
   const outcomes = new Map<string, ToolApprovalResolved["outcome"]>();
-  let stopped = false;
   for (const packet of packets) {
     if (packet.obj.type === PacketType.TOOL_APPROVAL_REQUEST) {
       entries.set(packet.obj.approval_id, {
@@ -94,12 +90,6 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
       OUTCOMES.has(packet.obj.outcome)
     ) {
       outcomes.set(packet.obj.approval_id, packet.obj.outcome);
-    } else if (
-      packet.obj.type === PacketType.STOP &&
-      packet.obj.stop_reason !== undefined &&
-      packet.obj.stop_reason !== StopReason.AWAITING_APPROVAL
-    ) {
-      stopped = true;
     }
   }
   const read: ToolApprovalRead = {
@@ -107,40 +97,27 @@ export function readToolApprovals(packets: Packet[]): ToolApprovalRead {
       ...entry,
       outcome: outcomes.get(entry.request.approval_id) ?? null,
     })),
-    stopped,
   };
   approvalReads.set(packets, { count: packets.length, read });
   return read;
 }
 
-/**
- * Whether the server still waits for a decision on the request. A stop of the
- * response closes the response's own requests, but not a background
- * subagent's, which waits on its own.
- */
-export function awaitsDecision(
-  entry: ToolApprovalEntry,
-  stopped: boolean
-): boolean {
-  return (
-    entry.outcome === null && !(stopped && entry.request.agent_name === null)
-  );
+/** Whether the server still waits for a decision on the request. */
+export function awaitsDecision(entry: ToolApprovalEntry): boolean {
+  return entry.outcome === null;
 }
 
 /**
  * The resolution packet decides the status. Before it arrives, a decision this
- * client made decides it; a stop that closed the request makes it "closed".
+ * client made decides it.
  */
 export function toolApprovalStatus(
   entry: ToolApprovalEntry,
-  localStatus: ApprovalStatus | undefined,
-  stopped: boolean
+  localStatus: ApprovalStatus | undefined
 ): ApprovalStatus {
   switch (entry.outcome) {
     case null:
-      return (
-        localStatus ?? (awaitsDecision(entry, stopped) ? "pending" : "closed")
-      );
+      return localStatus ?? "pending";
     case "approved_for_chat":
       return "approvedForSession";
     case "cancelled":
@@ -169,9 +146,8 @@ export function readWaitingToolApprovals(
 ): WaitingToolApproval[] {
   const waiting: WaitingToolApproval[] = [];
   function collect(response: Message, multiModel: boolean) {
-    const { entries, stopped } = readToolApprovals(response.packets);
-    for (const entry of entries) {
-      if (awaitsDecision(entry, stopped))
+    for (const entry of readToolApprovals(response.packets).entries) {
+      if (awaitsDecision(entry))
         waiting.push({
           turnIndex: entry.turnIndex,
           request: entry.request,
@@ -237,6 +213,35 @@ export function decidedStatus(
     : "approved";
 }
 
+/**
+ * Status reads after a decision on a background agent's request. The decision
+ * starts no stream, and the agent resumes in an agent host that starts after
+ * the decision returns, so its later requests show only after a reload.
+ */
+export interface AgentWatch {
+  sessionId: string;
+  reads: number;
+  /** A read saw the chat's background agents run. */
+  sawRunning: boolean;
+}
+
+/** Reads that end a watch whose agents never showed as running. */
+export const AGENT_WATCH_GRACE_READS = 5;
+
+/**
+ * The watch after one status read, or null once it ends: the agents ran and
+ * settled, or they never ran within the grace reads.
+ */
+export function nextAgentWatch(
+  watch: AgentWatch,
+  status: Pick<ChatSessionStatus, "has_active_subagents">
+): AgentWatch | null {
+  const reads = watch.reads + 1;
+  if (status.has_active_subagents) return { ...watch, reads, sawRunning: true };
+  if (watch.sawRunning || reads >= AGENT_WATCH_GRACE_READS) return null;
+  return { ...watch, reads };
+}
+
 // A nudge whose card is not on screen is dropped instead of firing later.
 const NUDGE_TTL_MS = 2000;
 let lastNudgeSeq = 0;
@@ -246,6 +251,7 @@ interface ToolApprovalUiState {
   localStatuses: ReadonlyMap<string, ApprovalStatus>;
   /** The card to bring into view; `seq` repeats the nudge for the same card. */
   nudge: { approvalId: string; seq: number } | null;
+  agentWatch: AgentWatch | null;
   /** Records the status a decision produced until its resolution arrives. */
   recordStatus: (approvalId: string, status: ApprovalStatus) => void;
   /** Drops statuses that resolution packets now report. */
@@ -253,11 +259,19 @@ interface ToolApprovalUiState {
   nudgeApproval: (approvalId: string) => void;
   /** Called once the card handled the nudge, so a remount does not repeat it. */
   clearNudge: (seq: number) => void;
+  /** Starts a watch, which replaces any earlier one. */
+  watchAgents: (sessionId: string) => void;
+  /** Applies a status read of the chat to its watch. */
+  noteAgentStatus: (
+    sessionId: string,
+    status: Pick<ChatSessionStatus, "has_active_subagents">
+  ) => void;
 }
 
 export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   localStatuses: new Map(),
   nudge: null,
+  agentWatch: null,
   recordStatus: (approvalId, status) =>
     set((state) => ({
       localStatuses: new Map(state.localStatuses).set(approvalId, status),
@@ -277,4 +291,12 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   },
   clearNudge: (seq) =>
     set((state) => (state.nudge?.seq === seq ? { nudge: null } : {})),
+  watchAgents: (sessionId) =>
+    set({ agentWatch: { sessionId, reads: 0, sawRunning: false } }),
+  noteAgentStatus: (sessionId, status) =>
+    set((state) =>
+      state.agentWatch?.sessionId === sessionId
+        ? { agentWatch: nextAgentWatch(state.agentWatch, status) }
+        : {}
+    ),
 }));

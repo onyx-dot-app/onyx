@@ -57,6 +57,7 @@ import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
+const AGENT_WATCH_POLL_MS = 1000;
 
 /** The response new input continues. Without a saved ID the server targets the running one. */
 function pendingInputTarget(tree: MessageTreeState | undefined) {
@@ -98,7 +99,7 @@ export interface ResponseToolApprovals {
  * that wait for a decision show in the transcript's trailing region.
  */
 export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
-  const { entries, stopped } = readToolApprovals(rawPackets);
+  const { entries } = readToolApprovals(rawPackets);
   // Only this response's statuses, so other decisions do not re-render it.
   const localStatuses = useToolApprovalUi(
     useShallow((state) =>
@@ -117,8 +118,8 @@ export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
     const records: ToolApproval[] = [];
     let awaitingApproval = false;
     entries.forEach((entry, index) => {
-      const status = toolApprovalStatus(entry, localStatuses[index], stopped);
-      if (!awaitsDecision(entry, stopped))
+      const status = toolApprovalStatus(entry, localStatuses[index]);
+      if (!awaitsDecision(entry))
         records.push({
           turnIndex: entry.turnIndex,
           request: entry.request,
@@ -128,7 +129,7 @@ export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
         awaitingApproval = true;
     });
     return { records, awaitingApproval };
-  }, [entries, localStatuses, stopped]);
+  }, [entries, localStatuses]);
 }
 
 /**
@@ -164,18 +165,24 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
   const t = useTranslations("chat.input.pendingMessages");
   const tReadiness = useTranslations("chat.readiness");
   // Primitives only: the message tree changes on every streamed frame.
-  const { sessionId, idle, needsResponseSelection } = useChatSessionStore(
-    useShallow((state) => {
-      const session = state.currentSessionId
-        ? state.sessions.get(state.currentSessionId)
-        : undefined;
-      const target = pendingInputTarget(session?.messageTree);
-      return {
-        sessionId: state.currentSessionId,
-        idle: session?.chatState === "input" && !session.isFetchingChatMessages,
-        needsResponseSelection: target.needsResponseSelection,
-      };
-    })
+  const { sessionId, idle, needsResponseSelection, loadedApprovalsVersion } =
+    useChatSessionStore(
+      useShallow((state) => {
+        const session = state.currentSessionId
+          ? state.sessions.get(state.currentSessionId)
+          : undefined;
+        const target = pendingInputTarget(session?.messageTree);
+        return {
+          sessionId: state.currentSessionId,
+          idle:
+            session?.chatState === "input" && !session.isFetchingChatMessages,
+          needsResponseSelection: target.needsResponseSelection,
+          loadedApprovalsVersion: session?.approvalsVersion,
+        };
+      })
+    );
+  const watchingAgents = useToolApprovalUi(
+    (state) => sessionId !== null && state.agentWatch?.sessionId === sessionId
   );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
@@ -193,14 +200,26 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     statusKey,
     errorHandlingFetcher,
     {
-      // Pending input and background work can start a turn this client did not send.
+      // Pending input and background work can start a turn this client did
+      // not send. A decided agent request resumes its agent after the
+      // decision returns.
       refreshInterval: (current) =>
-        current?.has_startable_input || current?.has_active_subagents
-          ? SERVER_WORK_POLL_MS
-          : 0,
+        watchingAgents
+          ? AGENT_WATCH_POLL_MS
+          : current?.has_startable_input || current?.has_active_subagents
+            ? SERVER_WORK_POLL_MS
+            : 0,
+      onSuccess: (current) => {
+        if (sessionId)
+          useToolApprovalUi.getState().noteAgentStatus(sessionId, current);
+      },
       onErrorRetry: skipRetryOnAuthError,
     }
   );
+
+  useEffect(() => {
+    if (watchingAgents && statusKey) void mutate(statusKey);
+  }, [watchingAgents, statusKey, mutate]);
 
   // A reader owns a busy session; an idle one attaches to turns the server
   // started, whichever status read found them.
@@ -216,23 +235,14 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
       void refreshChatSession(sessionId, checkFailed);
   }, [sessionId, status, idle, checkFailed]);
 
-  // An idle chat streams nothing, so a background subagent's request and its
-  // resolution arrive through a refresh. The first version a chat reads
-  // matches its load; each later change refreshes once.
+  // Background agents' requests and their resolutions arrive only through a
+  // load. A status version that differs from the loaded one refreshes.
   const approvalsVersion = status?.approvals_version;
-  const seenApprovals = useRef<{
-    sessionId: string | null;
-    version: string | undefined;
-  }>({ sessionId: null, version: undefined });
   useEffect(() => {
     if (!sessionId || approvalsVersion === undefined || !idle) return;
-    const seen = seenApprovals.current;
-    if (seen.sessionId === sessionId && seen.version === approvalsVersion)
-      return;
-    seenApprovals.current = { sessionId, version: approvalsVersion };
-    if (seen.sessionId === sessionId)
+    if (approvalsVersion !== loadedApprovalsVersion)
       void refreshChatSession(sessionId, checkFailed);
-  }, [sessionId, approvalsVersion, idle, checkFailed]);
+  }, [sessionId, approvalsVersion, loadedApprovalsVersion, idle, checkFailed]);
 
   // Every turn saves a new response, so a new latest response means a turn
   // may have taken pending input, whoever started it and whether or not this

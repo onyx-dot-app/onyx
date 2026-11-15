@@ -6,7 +6,10 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import {
+  AGENT_WATCH_GRACE_READS,
+  type AgentWatch,
   decidedStatus,
+  nextAgentWatch,
   orderApprovalsByTurn,
   readToolApprovals,
   type ToolApproval,
@@ -52,21 +55,22 @@ function stopPacket(stopReason?: StopReason): Packet {
   };
 }
 
-const stop = stopPacket(StopReason.FINISHED);
-
 /** Each request's status in one response, with these local statuses. */
 function statuses(
   packets: Packet[],
   local = new Map<string, ApprovalStatus>()
 ) {
-  const { entries, stopped } = readToolApprovals(packets);
-  return entries.map((entry) =>
-    toolApprovalStatus(entry, local.get(entry.request.approval_id), stopped)
+  return readToolApprovals(packets).entries.map((entry) =>
+    toolApprovalStatus(entry, local.get(entry.request.approval_id))
   );
 }
 
 beforeEach(() =>
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null })
+  useToolApprovalUi.setState({
+    localStatuses: new Map(),
+    nudge: null,
+    agentWatch: null,
+  })
 );
 
 describe("readToolApprovals", () => {
@@ -119,21 +123,61 @@ describe("toolApprovalStatus", () => {
     expect(statuses([request("a"), unknown])).toEqual(["pending"]);
   });
 
-  it("closes an unresolved request once the server ends the response", () => {
-    expect(statuses([request("a"), stop])).toEqual(["closed"]);
-  });
-
-  it("keeps a background agent's request pending after the server ends the response", () => {
-    expect(statuses([request("a", "Researcher"), stop])).toEqual(["pending"]);
-  });
-
   it.each([
-    ["the approval wait's stop", StopReason.AWAITING_APPROVAL],
-    ["a stop this client added", undefined],
-  ])("keeps a request pending after %s", (_, stopReason) => {
-    expect(statuses([request("a"), stopPacket(stopReason)])).toEqual([
-      "pending",
-    ]);
+    ["a server stop for another reason", StopReason.FINISHED, null],
+    ["a server stop for another reason", StopReason.FINISHED, "Researcher"],
+    ["the approval wait's stop", StopReason.AWAITING_APPROVAL, null],
+    ["a stop this client added", undefined, null],
+  ])(
+    "keeps a request pending after %s (agent %s) until its outcome arrives",
+    (_, stopReason, agent) => {
+      const packets = [request("a", agent), stopPacket(stopReason)];
+      expect(statuses(packets)).toEqual(["pending"]);
+      expect(statuses([...packets, resolved("a", "cancelled")])).toEqual([
+        "closed",
+      ]);
+    }
+  );
+
+  it("keeps a local decision after a stop until the outcome arrives", () => {
+    const local = new Map([["a", "rejected" as const]]);
+    expect(
+      statuses([request("a"), stopPacket(StopReason.FINISHED)], local)
+    ).toEqual(["rejected"]);
+  });
+});
+
+describe("nextAgentWatch", () => {
+  const start: AgentWatch = { sessionId: "s", reads: 0, sawRunning: false };
+  const read = (watch: AgentWatch | null, running: boolean) =>
+    watch && nextAgentWatch(watch, { has_active_subagents: running });
+
+  it("waits for the resumed agent, then ends once it settles", () => {
+    let watch: AgentWatch | null = start;
+    // The decision returns before the agent host starts.
+    watch = read(watch, false);
+    watch = read(watch, false);
+    watch = read(watch, true);
+    watch = read(watch, true);
+    expect(watch).toEqual({ sessionId: "s", reads: 4, sawRunning: true });
+    expect(read(watch, false)).toBeNull();
+  });
+
+  it("ends after the grace reads when the agent never runs", () => {
+    let watch: AgentWatch | null = start;
+    for (let index = 1; index < AGENT_WATCH_GRACE_READS; index++) {
+      watch = read(watch, false);
+      expect(watch?.reads).toBe(index);
+    }
+    expect(read(watch, false)).toBeNull();
+  });
+
+  it("applies a status read only to the watched chat", () => {
+    useToolApprovalUi.getState().watchAgents("s");
+    useToolApprovalUi
+      .getState()
+      .noteAgentStatus("other", { has_active_subagents: true });
+    expect(useToolApprovalUi.getState().agentWatch).toEqual(start);
   });
 });
 

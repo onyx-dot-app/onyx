@@ -173,6 +173,7 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
     );
     store.updateSessionData(sessionId, {
       hasOlderMessages: page.has_older_messages ?? false,
+      approvalsVersion: page.approvals_version,
     });
   } catch (error) {
     console.error("Failed to reload the chat", { sessionId, error });

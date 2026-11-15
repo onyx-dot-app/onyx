@@ -4,6 +4,7 @@ import {
   Packet,
   PacketType,
   StopReason,
+  type ToolApprovalResolved,
 } from "@/app/app/services/streamingModels";
 import type { Message } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -24,13 +25,16 @@ function request(tool: string, agentName: string | null = null): Packet {
   };
 }
 
-function resolved(tool: string): Packet {
+function resolved(
+  tool: string,
+  outcome: ToolApprovalResolved["outcome"] = "approved"
+): Packet {
   return {
     placement: { turn_index: 1, tab_index: 0 },
     obj: {
       type: PacketType.TOOL_APPROVAL_RESOLVED,
       approval_id: tool,
-      outcome: "approved",
+      outcome,
     },
   };
 }
@@ -105,12 +109,15 @@ beforeEach(() => {
 test("shows every waiting card of the branch, oldest response first", () => {
   showChat([
     question(1, null, [2]),
-    // The reply ended; its agent still waits, its own requests do not.
+    // The reply ended: the server resolved its own requests and its agent
+    // still waits. A request without an outcome still waits after the stop.
     answer(2, 1, [
       request("agent_tool", "Researcher"),
       request("decided_tool"),
       resolved("decided_tool"),
-      request("closed_tool"),
+      request("cancelled_tool"),
+      resolved("cancelled_tool", "cancelled"),
+      request("unresolved_tool"),
       serverStop,
     ]),
     question(3, 2, [4]),
@@ -119,7 +126,12 @@ test("shows every waiting card of the branch, oldest response first", () => {
 
   render(<ToolApprovalsRegion modelProviderLookup={new Map()} />);
 
-  expect(waitingTools()).toEqual(["agent_tool", "first_tool", "second_tool"]);
+  expect(waitingTools()).toEqual([
+    "agent_tool",
+    "unresolved_tool",
+    "first_tool",
+    "second_tool",
+  ]);
   expect(screen.getByText("Researcher wants to run agent_tool")).toBeVisible();
 });
 

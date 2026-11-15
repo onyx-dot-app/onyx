@@ -344,6 +344,7 @@ export default function useChatSessionController({
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
             hasOlderMessages: chatSession.has_older_messages ?? false,
+            approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;
       }

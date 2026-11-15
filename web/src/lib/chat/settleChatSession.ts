@@ -209,6 +209,7 @@ export function refreshChatSession(
         messageTree,
         hasOlderMessages: merged.hasOlderMessages,
         selectedNodeIdForDocDisplay: merged.selectedNodeIdForDocDisplay,
+        approvalsVersion: saved.approvals_version,
         chatState: busy ? "streaming" : "input",
         sendAcknowledged: stream ? Promise.resolve(stream) : undefined,
         readerFinished: undefined,
@@ -361,6 +362,7 @@ export async function settleChatSession({
         )?.type;
         store.updateSessionData(sessionId, {
           ...merged,
+          approvalsVersion: settled.approvals_version,
           uncaughtError:
             latestType === "assistant" || latestType === "error"
               ? null

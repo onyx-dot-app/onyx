@@ -101,7 +101,11 @@ async function clickApprove() {
 }
 
 beforeEach(() => {
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolApprovalUi.setState({
+    localStatuses: new Map(),
+    nudge: null,
+    agentWatch: null,
+  });
   useChatSessionStore.setState({ currentSessionId: "session" });
   jest.mocked(followChatStream).mockReset();
   jest.mocked(readChatSessionStatus).mockReset();
@@ -153,6 +157,26 @@ describe("Continuation", () => {
       );
     else expect(followChatStream).not.toHaveBeenCalled();
     expect(readChatSessionStatus).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["watches the chat for the resumed agent", "Researcher", null],
+    ["leaves a root request to its continuation", null, null],
+    ["follows the agent's named stream instead", "Researcher", continuation],
+  ] as const)("after a decision, %s", async (_, agentName, next) => {
+    respond(200, decided("APPROVED", "USER", next));
+    render(<Harness agentName={agentName} />);
+
+    await clickApprove();
+
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(record("approved"))
+    );
+    expect(useToolApprovalUi.getState().agentWatch).toEqual(
+      agentName !== null && next === null
+        ? { sessionId: "session", reads: 0, sawRunning: false }
+        : null
+    );
   });
 
   it.each([

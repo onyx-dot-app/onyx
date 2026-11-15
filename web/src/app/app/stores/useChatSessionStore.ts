@@ -48,6 +48,8 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // The `approvals_version` of the load whose approval requests the chat shows.
+  approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
   uncaughtError: SessionError | null;
   loadingError: string | null;

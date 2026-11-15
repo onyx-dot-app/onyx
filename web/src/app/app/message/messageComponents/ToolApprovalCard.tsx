@@ -55,9 +55,11 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   }, [nudge]);
 
   // The decided status shows until the resolution packet confirms it. The
-  // client follows the stream that the server names as the continuation.
+  // client follows the stream that the server names as the continuation. A
+  // background agent's request continues without a stream, so the chat
+  // watches its status for the agent's outcome and later requests.
   async function submit(decision: ApprovalSubmitDecision) {
-    const { recordStatus } = useToolApprovalUi.getState();
+    const { recordStatus, watchAgents } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
     let continuation: ChatStream | null = null;
     try {
@@ -82,8 +84,10 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
         if (status.is_processing) continuation = status.current_stream;
       }
     }
-    if (sessionId !== null && continuation)
+    if (sessionId === null) return;
+    if (continuation)
       followChatStream(sessionId, continuation, tReadiness("checkFailed"));
+    else if (request.agent_name !== null) watchAgents(sessionId);
   }
 
   const agentRequest =

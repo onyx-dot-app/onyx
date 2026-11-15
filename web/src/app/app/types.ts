@@ -244,6 +244,8 @@ export interface BackendChatSession {
   has_older_messages?: boolean;
   // The owner's saved tools and search filters; null means the agent's tools.
   tool_selection?: ChatToolSelection | null;
+  // The status route's `approvals_version` for the requests this load shows.
+  approvals_version?: string;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {

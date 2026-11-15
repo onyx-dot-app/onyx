@@ -67,11 +67,11 @@
   shows it next to its tool call (`AgentMessage`, `orderApprovalsByTurn`), and
   a reload replays it there. While the turn waits, its stream ends with
   `stop(awaiting_approval)` and the chat goes idle. That stop pauses the
-  answer: `processPackets` does not count it, and it never closes a card. A
-  server stop with another reason closes the reply's own unresolved cards
-  (`lib/chat/toolApprovals.ts:awaitsDecision`) but not a subagent's, which
-  waits on its own; a stop that the client adds has no reason and never
-  does. The decision response names the stream that continues the answer
+  answer: `processPackets` does not count it. No stop changes a card: the
+  server sends `tool_approval_resolved` for every request that it ends, live
+  and in replay, with `cancelled` when there is no decision. A card's status
+  comes only from that outcome, or from this client's decision until the
+  outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The decision response names the stream that continues the answer
   in `continuation` (`ToolApprovalCard`). The client does not decide which
   decision was the last: "Approve for this chat" can also approve sibling
   requests on the server. When `continuation` is set,
@@ -80,10 +80,15 @@
   decision, the card reads the status once and follows `current_stream`
   while the server processes it. A subagent's requests and resolutions
   arrive in the root reply that started it, at its `spawn_agent` or
-  `send_message` card. In an idle chat they arrive through a refresh:
-  `useChatSessionQueue` calls `refreshChatSession` once each time the
-  status's `approvals_version` changes after the first version that the chat
-  reads. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
+  `send_message` card, and only through a load, never in a live stream. Each
+  load records its `approvals_version` in the session store; in an idle chat
+  `useChatSessionQueue` calls `refreshChatSession` when the status's version
+  differs from the loaded one. A parked agent does not set
+  `has_active_subagents`, so a decision on a subagent's card that names no
+  continuation starts an agent watch (`useToolApprovalUi.watchAgents`,
+  `nextAgentWatch`): the status is read every second until the agents ran
+  and settled, or for 5 reads that never saw them run, and each version
+  change refreshes the chat with the agent's later cards. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
   open request of the reply, and the record reads "Not approved". A reload
   replays the request and the stop the same way.
   While a reply's own card waits, the timeline header reads "Waiting for your

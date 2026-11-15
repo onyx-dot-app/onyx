@@ -230,7 +230,7 @@ beforeEach(() => {
     });
   mockClearDraft.mockClear();
   mockWriteDraft.mockClear();
-  jest.mocked(fetchSettledChatSession).mockResolvedValue({
+  jest.mocked(fetchSettledChatSession).mockImplementation(async () => ({
     chat_session_id: "session",
     description: "Existing chat",
     persona_id: 0,
@@ -245,10 +245,13 @@ beforeEach(() => {
     packets: [],
     is_processing: false,
     current_stream: null,
-  });
+    approvals_version: chatStatus.approvals_version,
+  }));
+  useToolApprovalUi.setState({ agentWatch: null });
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   const store = useChatSessionStore.getState();
-  store.createSession("session");
+  // The chat's load showed the requests of the status's version.
+  store.createSession("session", { approvalsVersion: "1" });
   store.setCurrentSession("session");
   const history = new Map<number, Message>([
     [
@@ -1190,7 +1193,7 @@ test("Stop subagents interrupts background work and refreshes the status", async
 });
 
 describe("approvals version in the status", () => {
-  test("an idle chat reloads only when the version changes after its first read", async () => {
+  test("an idle chat reloads only when the version differs from its load", async () => {
     await act(async () => {
       await mutate(() => true, undefined, { revalidate: false });
     });
@@ -1217,5 +1220,68 @@ describe("approvals version in the status", () => {
     await waitFor(() =>
       expect(fetchSettledChatSession).toHaveBeenCalledTimes(1)
     );
+    // The reload's version is the chat's new baseline.
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.approvalsVersion
+      ).toBe("2")
+    );
+    await act(async () => {
+      await mutate(SWR_KEYS.chatSessionStatus("session"));
+    });
+    expect(fetchSettledChatSession).toHaveBeenCalledTimes(1);
+  });
+
+  test("a status read that finds a version the load did not show reloads", async () => {
+    await act(async () => {
+      await mutate(() => true, undefined, { revalidate: false });
+    });
+    chatStatus = { ...IDLE_STATUS, approvals_version: "2" };
+    render(<ChatInput {...props("input")} initialMessage="" />, {
+      swrConfig: { provider: undefined },
+    });
+    await waitFor(() =>
+      expect(fetchSettledChatSession).toHaveBeenCalledTimes(1)
+    );
+  });
+
+  test("a decided agent request reads the status until the resumed agent settles", async () => {
+    await act(async () => {
+      await mutate(() => true, undefined, { revalidate: false });
+    });
+    // The decision changed the version; the agent host has not started yet,
+    // then the agent runs, opens a new request and parks.
+    const statuses: ChatSessionStatus[] = [
+      { ...IDLE_STATUS, approvals_version: "2" },
+      { ...IDLE_STATUS, approvals_version: "2", has_active_subagents: true },
+      { ...IDLE_STATUS, approvals_version: "3" },
+    ];
+    let reads = 0;
+    fetchSpy.mockImplementation(async (url) => {
+      if (String(url).endsWith("/status")) {
+        chatStatus = statuses[Math.min(reads, statuses.length - 1)]!;
+        reads++;
+      }
+      return readResponse(url);
+    });
+    render(<ChatInput {...props("input")} initialMessage="" />, {
+      swrConfig: { provider: undefined },
+    });
+    await waitFor(() => expect(reads).toBe(1));
+    expect(fetchSettledChatSession).toHaveBeenCalledTimes(1);
+
+    act(() => useToolApprovalUi.getState().watchAgents("session"));
+
+    await waitFor(() => expect(reads).toBe(3), { timeout: 5000 });
+    // The agent's later request shows from a reload of the new version.
+    await waitFor(() =>
+      expect(
+        useChatSessionStore.getState().sessions.get("session")?.approvalsVersion
+      ).toBe("3")
+    );
+    expect(useToolApprovalUi.getState().agentWatch).toBeNull();
+    // A settled agent ends the reads.
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    expect(reads).toBe(3);
   });
 });
