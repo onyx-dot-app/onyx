@@ -4969,7 +4969,7 @@
             },
             "everything": {
               "label": "索引该账号有权读取的所有服务台工单",
-              "description": "Onyx 会索引所选账号可以读取的服务台工单。如需索引其他项目类型的工单，请选择其他选项卡。"
+              "description": "Onyx 会索引所选账号可以读取的服务台工单。当 Jira 省略 projectTypeKey 时，非服务台项目的工单也可能被索引。如需索引其他项目类型的工单，请选择其他选项卡。"
             },
             "project_key": {
               "label": "项目键",

@@ -363,6 +363,77 @@ def test_everything_scope_skips_non_service_desk_projects(
     mock_source_operations.get_service_desk_sla.assert_not_called()
 
 
+def test_everything_scope_resolves_and_caches_omitted_project_type_service_desk(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """When projectTypeKey is omitted, resolve via get_project and cache it."""
+    jsm_connector.jira_project = None  # Everything scope
+    issue1 = _make_issue("HELP-10", project_key="RESOLVED_DESK")
+    del issue1["fields"]["project"]["projectTypeKey"]
+    issue2 = _make_issue("HELP-11", project_key="RESOLVED_DESK")
+    del issue2["fields"]["project"]["projectTypeKey"]
+
+    mock_source_operations.get_project.return_value = {
+        "key": "RESOLVED_DESK",
+        "projectTypeKey": "service_desk",
+    }
+
+    docs1 = _documents(jsm_connector, issue1)
+    assert len(docs1) == 1
+    assert docs1[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+
+    docs2 = _documents(jsm_connector, issue2)
+    assert len(docs2) == 1
+
+    # Verify cached: get_project called only once for RESOLVED_DESK
+    mock_source_operations.get_project.assert_called_once_with(
+        project_key="RESOLVED_DESK", fast=True
+    )
+
+
+def test_everything_scope_resolves_and_drops_omitted_project_type_software(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """When projectTypeKey is omitted but resolves to software, drop the issue."""
+    jsm_connector.jira_project = None
+    issue = _make_issue("ENG-10", project_key="RESOLVED_SW")
+    del issue["fields"]["project"]["projectTypeKey"]
+
+    mock_source_operations.get_project.return_value = {
+        "key": "RESOLVED_SW",
+        "projectTypeKey": "software",
+    }
+
+    assert _documents(jsm_connector, issue) == []
+    assert jsm_connector._include_issue_in_slim_listing(issue) is False
+
+
+def test_everything_scope_drops_unresolvable_project_type(
+    jsm_connector: JiraServiceManagementConnector,
+    mock_source_operations: MagicMock,
+) -> None:
+    """When project type remains unknown/unresolvable, do not admit under
+    Everything scope; admit under explicit scope."""
+    jsm_connector.jira_project = None
+    issue = _make_issue("UNK-1", project_key="UNKNOWN")
+    del issue["fields"]["project"]["projectTypeKey"]
+
+    mock_source_operations.get_project.side_effect = Exception("Not found")
+
+    # Dropped under Everything scope
+    assert _documents(jsm_connector, issue) == []
+    assert jsm_connector._include_issue_in_slim_listing(issue) is False
+
+    # Admitted under explicit project scope
+    jsm_connector.jira_project = "UNKNOWN"
+    docs = _documents(jsm_connector, issue)
+    assert len(docs) == 1
+    assert docs[0].source is DocumentSource.JIRA_SERVICE_MANAGEMENT
+    assert jsm_connector._include_issue_in_slim_listing(issue) is True
+
+
 def test_project_scope_indexes_non_service_desk_without_enrichment(
     jsm_connector: JiraServiceManagementConnector,
     mock_source_operations: MagicMock,

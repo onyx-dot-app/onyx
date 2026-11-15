@@ -76,6 +76,10 @@ class JiraServiceManagementConnector(JiraConnector):
 
     connector_source: ClassVar[DocumentSource] = DocumentSource.JIRA_SERVICE_MANAGEMENT
 
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._project_type_cache: dict[str, str | None] = {}
+
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         """Bind Jira credentials using the JSM source identifier."""
         self._source_operations = JiraSourceOperations(
@@ -90,27 +94,53 @@ class JiraServiceManagementConnector(JiraConnector):
         return None
 
     def _issue_project_type(self, issue: dict[str, Any]) -> str | None:
-        """Return the raw Jira projectTypeKey for an issue, if present."""
+        """Return the raw Jira projectTypeKey for an issue, resolving and
+        caching via project lookup when the issue payload omits it."""
         project = get_issue_field(issue, _FIELD_PROJECT)
-        return project.get(_FIELD_PROJECT_TYPE_KEY) if project else None
+        if not project or not isinstance(project, dict):
+            return None
+        project_type = project.get(_FIELD_PROJECT_TYPE_KEY)
+        if project_type is not None:
+            return project_type
+
+        project_key = project.get(_FIELD_KEY)
+        if not project_key or not isinstance(project_key, str):
+            return None
+
+        if not hasattr(self, "_project_type_cache"):
+            self._project_type_cache = {}
+
+        if project_key in self._project_type_cache:
+            return self._project_type_cache[project_key]
+
+        try:
+            if self._source_operations is not None:
+                proj_data = self.source_operations.get_project(
+                    project_key=project_key, fast=True
+                )
+                resolved_type = (proj_data or {}).get(_FIELD_PROJECT_TYPE_KEY)
+            else:
+                resolved_type = None
+        except Exception:
+            resolved_type = None
+
+        self._project_type_cache[project_key] = resolved_type
+        return resolved_type
 
     def _drops_issue(self, issue: dict[str, Any]) -> bool:
         """Everything-scope gate. With the default "Everything" scope the
         inherited JQL matches every project the credential can browse,
         including software projects. Ordinary Jira issues must not index
-        under the JSM source, so drop issues whose project is known not to
-        be a service desk. JQL-only configurations also leave jira_project
-        unset, but their scope is the user's explicit query, so the gate
-        applies to Everything only. When the payload omits projectTypeKey
-        (some Data Center versions) the issue indexes and enrichment stays
-        best effort, as documented."""
+        under the JSM source, so drop issues whose project cannot be confirmed
+        as a service desk. JQL-only and Project configurations define an explicit
+        scope, so the gate applies to Everything only. If Jira omits
+        projectTypeKey, the connector attempts to resolve it via project
+        lookup. If it still remains unknown, the issue is not admitted under
+        Everything scope (requiring an explicit scope to index)."""
+        if self.jira_project or self.jql_query:
+            return False
         project_type = self._issue_project_type(issue)
-        return (
-            not self.jira_project
-            and not self.jql_query
-            and project_type is not None
-            and project_type != _PROJECT_TYPE_SERVICE_DESK
-        )
+        return project_type != _PROJECT_TYPE_SERVICE_DESK
 
     def _include_issue_in_slim_listing(self, issue: dict[str, Any]) -> bool:
         """Applies the Everything-scope gate to slim-document listing too.

@@ -4969,7 +4969,7 @@
             },
             "everything": {
               "label": "Indexes every service desk ticket the account can read",
-              "description": "Onyx indexes the service desk tickets the selected account can read. To index tickets from other project types, choose another tab."
+              "description": "Onyx indexes the service desk tickets the selected account can read. When Jira omits projectTypeKey, issues from non-service-desk projects may also be indexed. To index tickets from other project types, choose another tab."
             },
             "project_key": {
               "label": "Project Key",

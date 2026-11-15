@@ -4969,7 +4969,7 @@
             },
             "everything": {
               "label": "Indexa todos os chamados de service desk que a conta pode ler",
-              "description": "O Onyx indexa os chamados de service desk que a conta selecionada pode ler. Para indexar chamados de outros tipos de projeto, escolha outra aba."
+              "description": "O Onyx indexa os chamados de service desk que a conta selecionada pode ler. Quando o Jira omite o projectTypeKey, problemas de projetos que não são de service desk também podem ser indexados. Para indexar chamados de outros tipos de projeto, escolha outra aba."
             },
             "project_key": {
               "label": "Chave do projeto",

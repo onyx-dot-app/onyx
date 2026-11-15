@@ -4969,7 +4969,7 @@
             },
             "everything": {
               "label": "Indiziert jedes Service-Desk-Ticket, das das Konto lesen kann",
-              "description": "Onyx indiziert die Service-Desk-Tickets, die das ausgewählte Konto lesen kann. Um Tickets aus anderen Projekttypen zu indizieren, wählen Sie einen anderen Tab."
+              "description": "Onyx indiziert die Service-Desk-Tickets, die das ausgewählte Konto lesen kann. Wenn Jira projectTypeKey auslässt, können auch Vorgänge aus Nicht-Service-Desk-Projekten indiziert werden. Um Tickets aus anderen Projekttypen zu indizieren, wählen Sie einen anderen Tab."
             },
             "project_key": {
               "label": "Projektschlüssel",

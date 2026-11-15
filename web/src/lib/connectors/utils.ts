@@ -21,6 +21,7 @@ import {
   ConnectorCredentialPairStatus,
   FileTypeCategory,
   OneDriveScope,
+  TabOption,
 } from "@/lib/connectors/types";
 import type {
   ConnectionConfiguration,
@@ -143,9 +144,45 @@ export function connectorFormControlFieldNames(
 }
 
 /**
+ * Names of scope-selecting fields that belong to inactive tabs. Supporting
+ * controls, like checkboxes (e.g. Confluence's `index_recursively`), are
+ * retained under any tab.
+ */
+export function inactiveTabScopeFieldNames(
+  configuration: ConnectionConfiguration,
+  values: Readonly<Record<string, unknown>>
+): Set<string> {
+  const inactive = new Set<string>();
+  const tabFields = [
+    ...configuration.values,
+    ...configuration.advanced_values,
+  ].filter((field): field is TabOption => field.type === "tab");
+
+  for (const tabField of tabFields) {
+    const activeTab =
+      (typeof values[tabField.name] === "string" && values[tabField.name]) ||
+      tabField.defaultTab ||
+      tabField.tabs[0]?.value;
+
+    for (const tab of tabField.tabs) {
+      if (tab.value !== activeTab) {
+        for (const field of tab.fields) {
+          if (field.type !== "checkbox") {
+            inactive.add(field.name);
+          }
+        }
+      }
+    }
+  }
+
+  return inactive;
+}
+
+/**
  * The `connector_specific_config` that Create sends for the form's config
  * values: without form controls and form-only fields, without blank list
- * entries, and with each field's `transform` applied.
+ * entries, without scope fields belonging to inactive tabs, and with each
+ * field's `transform` applied.
  */
 export function connectorConfigFromForm(
   source: ValidSources,
@@ -153,9 +190,12 @@ export function connectorConfigFromForm(
   values: Readonly<Record<string, unknown>>,
   formControlFieldNames: ReadonlySet<string>
 ): Record<string, unknown> {
+  const inactiveScopeFields = inactiveTabScopeFieldNames(configuration, values);
   const config: Record<string, unknown> = {};
   for (const [key, raw] of Object.entries(values)) {
-    if (formControlFieldNames.has(key)) continue;
+    if (formControlFieldNames.has(key) || inactiveScopeFields.has(key)) {
+      continue;
+    }
     const value: unknown = Array.isArray(raw) ? withoutBlankEntries(raw) : raw;
     config[key] =
       Array.isArray(value) &&

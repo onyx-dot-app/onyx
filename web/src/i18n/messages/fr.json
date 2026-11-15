@@ -4969,7 +4969,7 @@
             },
             "everything": {
               "label": "Indexe tous les tickets de centre de services accessibles au compte",
-              "description": "Onyx indexe les tickets de centre de services que le compte sélectionné peut lire. Pour indexer des tickets d'autres types de projet, choisissez un autre onglet."
+              "description": "Onyx indexe les tickets de centre de services que le compte sélectionné peut lire. Lorsque Jira omet projectTypeKey, les tickets de projets qui ne sont pas des centres de services peuvent également être indexés. Pour indexer des tickets d'autres types de projet, choisissez un autre onglet."
             },
             "project_key": {
               "label": "Clé du projet",

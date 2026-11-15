@@ -3,6 +3,7 @@ import {
   editInitialValues,
   type ConnectorFormValues,
 } from "@/lib/connectors/edit/prefill";
+import { connectorConfigFromForm } from "@/lib/connectors/utils";
 import { connectorConfigs } from "@/lib/connectors/connectors";
 import {
   ConnectorCredentialPairStatus,
@@ -252,5 +253,148 @@ describe("editInitialValues", () => {
     );
 
     expect(values.gitlab_url).toBe("https://gitlab.acme.com");
+  });
+
+  it("restores indexing_scope tab from the stored scope field and preserves legacy behavior", () => {
+    const ccPair = githubPair({});
+
+    // 1. Only project_key stored -> project tab
+    const jsmProjectPair: CCPairFullInfo = {
+      ...ccPair,
+      connector: {
+        ...ccPair.connector,
+        source: ValidSources.JiraServiceManagement,
+        connector_specific_config: {
+          jira_base_url: "https://acme.atlassian.net",
+          project_key: "HELP",
+        },
+      },
+    };
+    expect(
+      editInitialValues(
+        ValidSources.JiraServiceManagement,
+        connectorConfigs[ValidSources.JiraServiceManagement],
+        jsmProjectPair,
+        []
+      ).indexing_scope
+    ).toBe("project");
+
+    // 2. Only jql_query stored -> jql tab
+    const jsmJqlPair: CCPairFullInfo = {
+      ...ccPair,
+      connector: {
+        ...ccPair.connector,
+        source: ValidSources.JiraServiceManagement,
+        connector_specific_config: {
+          jira_base_url: "https://acme.atlassian.net",
+          jql_query: "project = HELP",
+        },
+      },
+    };
+    expect(
+      editInitialValues(
+        ValidSources.JiraServiceManagement,
+        connectorConfigs[ValidSources.JiraServiceManagement],
+        jsmJqlPair,
+        []
+      ).indexing_scope
+    ).toBe("jql");
+
+    // 3. Both stored (legacy) -> preserves current restoration of project tab
+    const legacyPair: CCPairFullInfo = {
+      ...ccPair,
+      connector: {
+        ...ccPair.connector,
+        source: ValidSources.JiraServiceManagement,
+        connector_specific_config: {
+          jira_base_url: "https://acme.atlassian.net",
+          project_key: "HELP",
+          jql_query: "project = HELP",
+        },
+      },
+    };
+    expect(
+      editInitialValues(
+        ValidSources.JiraServiceManagement,
+        connectorConfigs[ValidSources.JiraServiceManagement],
+        legacyPair,
+        []
+      ).indexing_scope
+    ).toBe("project");
+  });
+
+  it("omits inactive scope tab fields while retaining supporting controls in connectorConfigFromForm", () => {
+    const jsmConfig = connectorConfigs[ValidSources.JiraServiceManagement];
+
+    // Everything tab: omits project_key and jql_query
+    const everythingSubmitted = connectorConfigFromForm(
+      ValidSources.JiraServiceManagement,
+      jsmConfig,
+      {
+        jira_base_url: "https://acme.atlassian.net",
+        indexing_scope: "everything",
+        project_key: "STALE_PROJ",
+        jql_query: "STALE_JQL",
+      },
+      new Set(["indexing_scope"])
+    );
+    expect(everythingSubmitted).toEqual({
+      jira_base_url: "https://acme.atlassian.net",
+    });
+
+    // Project tab: retains project_key, omits jql_query
+    const projectSubmitted = connectorConfigFromForm(
+      ValidSources.JiraServiceManagement,
+      jsmConfig,
+      {
+        jira_base_url: "https://acme.atlassian.net",
+        indexing_scope: "project",
+        project_key: "HELP",
+        jql_query: "STALE_JQL",
+      },
+      new Set(["indexing_scope"])
+    );
+    expect(projectSubmitted).toEqual({
+      jira_base_url: "https://acme.atlassian.net",
+      project_key: "HELP",
+    });
+
+    // JQL tab: retains jql_query, omits project_key
+    const jqlSubmitted = connectorConfigFromForm(
+      ValidSources.JiraServiceManagement,
+      jsmConfig,
+      {
+        jira_base_url: "https://acme.atlassian.net",
+        indexing_scope: "jql",
+        project_key: "STALE_PROJ",
+        jql_query: "labels = portal",
+      },
+      new Set(["indexing_scope"])
+    );
+    expect(jqlSubmitted).toEqual({
+      jira_base_url: "https://acme.atlassian.net",
+      jql_query: "labels = portal",
+    });
+
+    // Confluence: cql tab omits space/page_id but preserves index_recursively checkbox
+    const confConfig = connectorConfigs[ValidSources.Confluence];
+    const confluenceSubmitted = connectorConfigFromForm(
+      ValidSources.Confluence,
+      confConfig,
+      {
+        wiki_base: "https://acme.atlassian.net/wiki",
+        indexing_scope: "cql",
+        space: ["STALE_SPACE"],
+        page_id: ["12345"],
+        cql_query: "type = page",
+        index_recursively: true,
+      },
+      new Set(["indexing_scope"])
+    );
+    expect(confluenceSubmitted).toEqual({
+      wiki_base: "https://acme.atlassian.net/wiki",
+      cql_query: "type = page",
+      index_recursively: true,
+    });
   });
 });
