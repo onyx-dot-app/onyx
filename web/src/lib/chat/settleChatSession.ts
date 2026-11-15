@@ -10,6 +10,7 @@ import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { readToolApprovals } from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
   fetchSettledChatSession,
@@ -406,31 +407,47 @@ export async function settleChatSession({
         });
       } else {
         // Content-free history cannot close a lost stream. Confirmed idle can.
-        // A parked answer, which only a chat that saves content has, takes
-        // its saved copy with its waiting requests.
+        // Only a chat that saves content parks an answer or asks for
+        // approval, so a parked answer, and an answer that asked, take their
+        // saved copies: the answers of a lost stream, or of a named stream
+        // that ended before this browser could read it.
         const lost = getLatestTurn(current.messageTree).filter(
           (response) =>
             (response.type === "assistant" || response.type === "error") &&
             (response.streamLost ||
               !response.packets.some((packet) => packet.obj.type === "stop"))
         );
+        const unread =
+          streamUnavailable && stream
+            ? (streamResponses(current.messageTree, stream) ?? []).filter(
+                (response) => !lost.includes(response)
+              )
+            : [];
+        const candidates = [...lost, ...unread];
         const saved =
-          lost.length > 0
-            ? await savedAnswers(sessionId, lost)
+          candidates.length > 0
+            ? await savedAnswers(sessionId, candidates)
             : new Map<number, Message>();
         if (!ownsSettlement()) return;
         const latest = useChatSessionStore.getState().sessions.get(sessionId);
         if (!latest) return;
         const messageTree = new Map(latest.messageTree);
         let closed = false;
-        for (const response of lost) {
-          const parked = saved.get(response.nodeId);
-          if (parked?.responseStatus === "suspended") {
-            messageTree.set(response.nodeId, parked);
+        for (const response of candidates) {
+          const copy = saved.get(response.nodeId);
+          if (
+            copy &&
+            (copy.responseStatus === "suspended" ||
+              readToolApprovals(response.packets).entries.length > 0)
+          ) {
+            messageTree.set(response.nodeId, copy);
             closed = true;
             continue;
           }
-          if (response.type === "error" && response.packets.length === 0)
+          if (
+            !lost.includes(response) ||
+            (response.type === "error" && response.packets.length === 0)
+          )
             continue;
           const stopped = response.packets.some(
             (packet) => packet.obj.type === "stop"

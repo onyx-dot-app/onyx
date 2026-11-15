@@ -701,6 +701,73 @@ describe("with stubbed server checks", () => {
     expect(waitingApprovalIds()).toEqual(["parked"]);
   });
 
+  test("incognito reads the saved answer of a named continuation that ended before it could be read", async () => {
+    const asked = approvalRequest("approval");
+    const waited: Packet = {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+    };
+    const finalText: Packet = {
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: "message_delta", content: "Created the issue." },
+    };
+    const store = useChatSessionStore.getState();
+    const controller = store.sessions.get("session")!.abortController;
+    store.updateSessionData("session", {
+      chatState: "streaming",
+      incognito: true,
+      sendAcknowledged: Promise.resolve(stream(990, [77])),
+      readerFinished: Promise.resolve(),
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [
+          2,
+          {
+            ...message(2, "assistant", ""),
+            messageId: 77,
+            parentNodeId: 1,
+            packets: [asked, waited],
+          },
+        ],
+      ]),
+    });
+    jest.mocked(processRawChatHistory).mockReturnValue(
+      new Map([
+        [
+          9,
+          {
+            ...message(9, "assistant", "Created the issue."),
+            messageId: 77,
+            responseStatus: "complete" as const,
+            packets: [asked, finalText],
+          },
+        ],
+      ])
+    );
+
+    await settleChatSession({
+      sessionId: "session",
+      controller,
+      errorMessage,
+      streamUnavailable: true,
+    });
+
+    const settled = useChatSessionStore.getState().sessions.get("session")!;
+    expect(settled.chatState).toBe("input");
+    expect(settled.messageTree.get(2)).toMatchObject({
+      nodeId: 2,
+      parentNodeId: 1,
+      packets: [asked, finalText],
+    });
+  });
+
   test("incognito closes a lost answer that the server did not park", async () => {
     const lost: Message = {
       ...message(2, "assistant", "Partial"),

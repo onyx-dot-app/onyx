@@ -437,8 +437,10 @@ waiting requests. It keeps the local `streamLost` mark only while the saved
 row is `running`. After a clean send, the streamed tree stays. Settlement
 never reloads the whole history of an incognito session, in either record
 mode. On a reload or recovery, each answer of the latest turn
-(`getLatestTurn`) that lost its stream takes its saved copy if the server
-parked it (`savedAnswers`; only a chat that saves content parks an answer).
+(`getLatestTurn`) that lost its stream, and each answer of a named stream
+that ended before this browser could read it, takes its saved copy if the
+server parked it or the answer asked for approval (`savedAnswers`; only a
+chat that saves content parks an answer or asks).
 Each other lost answer gets a stop packet if it has none, and loses its
 `streamLost` mark. A failed or timed-out (10 s) readiness request sets `unconfirmed`.
 A newly active stream during reload transfers to the same replay reader. Recovery comes
