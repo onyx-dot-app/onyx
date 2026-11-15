@@ -6,6 +6,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import UUID
 
@@ -18,6 +19,7 @@ from onyx.agents.models import ExecutionCheckpoint, RunStatus
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
+from onyx.chat import process_message
 from onyx.chat.agent import ChatAgent
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
@@ -56,6 +58,7 @@ from tests.external_dependency_unit.chat.test_chat_tool_approvals import (
     owned_runs,
 )
 from tests.external_dependency_unit.chat.test_run_store import chat_agent
+from tests.external_dependency_unit.chat.test_wait_agents import ScriptedLLM
 from tests.unit.onyx.agents.fakes import FakeModelClient
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool, until
 
@@ -343,27 +346,46 @@ def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
             assert coordinator.close(timeout=10)
 
 
+@pytest.mark.parametrize("unavailable", ["raises", "falls_back"])
 def test_a_decided_agent_whose_host_cannot_start_ends(
     db_session: Session,
     chat: ApprovalChat,
     owned_runs: list[OwnedRun],
     monkeypatch: pytest.MonkeyPatch,
+    unavailable: str,
 ) -> None:
     """The agent host asks for the model that the decided agent ran. When it
     fails to start for a reason that every attempt meets, such as that model
     being gone, it ends the agents that it would resume, as a root
-    continuation that cannot start ends its response. The chat then has no
-    active agents, so status reads stop dispatching."""
+    continuation that cannot start ends its response. Model selection that
+    falls back to another model counts as the model being gone. The chat then
+    has no active agents, so status reads stop dispatching."""
     sent: list[str] = []
     file_store = get_default_file_store()
     prefix = f"agent-checkpoint/{chat.chat_session_id}/"
     requested: list[LLMOverride | None] = []
 
-    def model_gone(*, llm_override: LLMOverride | None, **_kwargs: object) -> None:
+    def model_gone(
+        *, llm_override: LLMOverride | None, **_kwargs: object
+    ) -> ScriptedLLM:
         requested.append(llm_override)
-        raise ValueError("The model is no longer available")
+        if unavailable == "raises":
+            raise ValueError("The model is no longer available")
+        return ScriptedLLM(lambda *_args: pytest.fail("The agent ran on another model"))
 
     monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", model_gone)
+    prepare = process_message.prepare_chat_turn
+    host_errors: list[Exception] = []
+
+    def recorded_prepare(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return prepare(*args, **kwargs)
+        except Exception as error:
+            if kwargs.get("agent_host"):
+                host_errors.append(error)
+            raise
+
+    monkeypatch.setattr(process_message, "prepare_chat_turn", recorded_prepare)
     try:
         agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
         # The agent ran on a model other than the chat's current one.
@@ -390,6 +412,12 @@ def test_a_decided_agent_whose_host_cannot_start_ends(
         assert [
             override and override.model_configuration_id for override in requested
         ] == [4242]
+        [error] = host_errors
+        if unavailable == "raises":
+            assert isinstance(error, ValueError)
+        else:
+            assert isinstance(error, OnyxError)
+            assert error.error_code == OnyxErrorCode.NOT_FOUND
         assert not _has_active_subagents(chat)
         assert sent == []
         # Its checkpoint and its program's dump go with it.

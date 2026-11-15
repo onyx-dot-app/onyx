@@ -358,7 +358,10 @@ def prepare_chat_turn(
                 require_document_set_access(
                     db_session, filters.document_set if filters else None, user
                 )
-            if new_msg_req.llm_override is None and parked_model is not None:
+            runs_parked_model = (
+                new_msg_req.llm_override is None and parked_model is not None
+            )
+            if runs_parked_model:
                 new_msg_req = new_msg_req.model_copy(
                     update={"llm_override": parked_model}
                 )
@@ -484,6 +487,19 @@ def prepare_chat_turn(
                 litellm_additional_headers,
                 db_session,
             )
+            if (
+                runs_parked_model
+                and parked_model is not None
+                and selected_models[0][0].config.model_configuration_id
+                != parked_model.model_configuration_id
+            ):
+                # Selection falls back to the default model when the saved one
+                # is gone or its provider is no longer available to the user;
+                # a parked run continues only on its own model.
+                raise OnyxError(
+                    OnyxErrorCode.NOT_FOUND,
+                    "The model that this response ran on is no longer available",
+                )
             if new_msg_req.deep_research:
                 # Validate before the user message is saved.
                 if chat_session.incognito_record_mode is not None:
