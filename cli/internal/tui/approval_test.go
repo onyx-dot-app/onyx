@@ -1049,6 +1049,32 @@ func TestEarlierFollowCannotReplaceALaterContinuation(t *testing.T) {
 	}
 }
 
+func TestEarlierFollowCannotReplaceANewMessage(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8), sent: make(chan models.StreamEvent, 8), stops: make(chan int, 1)}
+	m := stoppedForDecisions(t, client)
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, _ = run(t, m, cmd)
+	m, cmd = press(t, m, tea.KeyPressMsg{Code: 'n', Text: "n"})
+	m, follow := run(t, m, cmd)
+	// The last decision's status read finds the session idle, but its
+	// result arrives after the user sent another message.
+	stale := follow()
+	m, _ = m.sendMessage("next question")
+	if !m.isStreaming || m.streamCh != client.sent {
+		t.Fatal("the next message did not start")
+	}
+	updated, next := m.Update(stale)
+	m = updated.(Model)
+	if next != nil || m.reloading || !m.isStreaming || m.streamCh != client.sent {
+		t.Fatalf("an earlier status read replaced the new message: reloading=%v streaming=%v", m.reloading, m.isStreaming)
+	}
+	select {
+	case stream := <-client.stops:
+		t.Fatalf("stopped stream %d", stream)
+	default:
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)

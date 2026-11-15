@@ -543,6 +543,11 @@ func (m Model) sendMessage(message string) (Model, tea.Cmd) {
 // startStream follows a response stream, either a new message or a running
 // response of this session.
 func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent) (Model, tea.Cmd) {
+	// An earlier decision's status read can no longer replace this stream.
+	if m.followCancel != nil {
+		m.followCancel()
+	}
+	m.follow++
 	if m.streamCancel != nil {
 		m.streamCancel()
 	}

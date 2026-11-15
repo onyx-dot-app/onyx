@@ -412,12 +412,12 @@ func (m Model) followResponse(sessionID string, responseID int) (Model, tea.Cmd)
 // followContinuation shows the response from the start of the stream that
 // continues it, in place of its earlier display.
 func (m Model) followContinuation(stream models.ChatStream) (Model, tea.Cmd) {
-	// An earlier decision's status read can no longer replace this stream.
-	if m.followCancel != nil {
-		m.followCancel()
-	}
-	m.follow++
 	if m.isStreaming && m.streamID != nil && *m.streamID == stream.StreamID {
+		// An earlier decision's status read can no longer replace this stream.
+		if m.followCancel != nil {
+			m.followCancel()
+		}
+		m.follow++
 		return m, nil
 	}
 	if m.isStreaming {
