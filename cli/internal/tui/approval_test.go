@@ -1101,17 +1101,39 @@ func TestRootTurnThatAgentResultsStartIsFollowed(t *testing.T) {
 	}
 }
 
-func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
+// flakyLoadClient fails its first session loads.
+type flakyLoadClient struct {
+	*pollingClient
+	failures int
+}
+
+func (c *flakyLoadClient) GetChatSession(ctx context.Context, sessionID string) (*models.ChatSessionDetailResponse, error) {
+	if c.failures > 0 {
+		c.failures--
+		return nil, errors.New("offline")
+	}
+	return c.pollingClient.GetChatSession(ctx, sessionID)
+}
+
+// finishedReplyClient reports that an agent ran and that its follow-up
+// reply, response 9, ended before the next status read.
+func finishedReplyClient(t *testing.T) *pollingClient {
+	t.Helper()
 	latest := 9
 	saved := waitingSession(t)
 	saved.Messages = append(saved.Messages, models.ChatMessageDetail{MessageID: latest, MessageType: "assistant", Message: "The agent filed ENG-1."})
 	saved.Packets = [][]json.RawMessage{saved.Packets[0][:1], {}}
-	client := &pollingClient{
-		resumingClient: &resumingClient{},
-		// The agent ran, and its follow-up reply ended before the next read.
-		statuses: []models.ChatSessionStatus{{LatestResponseID: &latest}},
-		sessions: map[string]*models.ChatSessionDetailResponse{"": saved},
+	return &pollingClient{
+		resumingClient: &resumingClient{sent: make(chan models.StreamEvent, 8)},
+		statuses:       []models.ChatSessionStatus{{LatestResponseID: &latest}},
+		sessions:       map[string]*models.ChatSessionDetailResponse{"": saved},
 	}
+}
+
+// answerEndsWhileAnAgentRuns ends an answer while an agent runs and
+// returns the status read that follows.
+func answerEndsWhileAnAgentRuns(t *testing.T, client api.ClientAPI) (Model, tea.Cmd) {
+	t.Helper()
 	m, ch := streamingModel(client)
 	session := waitingSessionID
 	m.chatSessionID = &session
@@ -1121,7 +1143,13 @@ func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
 	m = receive(t, m, ch, models.StopEvent{})
 	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
 	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{HasActiveSubagents: true}})
-	m = updated.(Model)
+	return updated.(Model), cmd
+}
+
+// runAll feeds cmd's messages, and the commands they start, until none is
+// left.
+func runAll(t *testing.T, m Model, cmd tea.Cmd) Model {
+	t.Helper()
 	pending := []tea.Cmd{cmd}
 	for len(pending) > 0 {
 		next := pending[0]
@@ -1134,6 +1162,62 @@ func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
 			}
 		}
 	}
+	return m
+}
+
+func TestAutomaticReloadIsDroppedAfterTheUserLeavesTheChat(t *testing.T) {
+	m, cmd := answerEndsWhileAnAgentRuns(t, finishedReplyClient(t))
+	// The status read starts the reload; the user opens a new chat first.
+	read := messages(t, cmd)
+	if len(read) != 1 {
+		t.Fatalf("messages = %+v, want one status read", read)
+	}
+	updated, reload := m.Update(read[0])
+	m = updated.(Model)
+	result := messages(t, reload)
+	m, _ = cmdNew(m)
+	for _, msg := range result {
+		updated, _ = m.Update(msg)
+		m = updated.(Model)
+	}
+	if m.chatSessionID != nil || strings.Contains(stripANSI(m.viewport.view(60)), "The agent filed ENG-1.") {
+		t.Fatalf("the old chat's reload replaced the new chat: session = %v", m.chatSessionID)
+	}
+}
+
+func TestFailedAutomaticReloadIsRetried(t *testing.T) {
+	client := &flakyLoadClient{pollingClient: finishedReplyClient(t), failures: 1}
+	m, cmd := answerEndsWhileAnAgentRuns(t, client)
+	m = runAll(t, m, cmd)
+	if view := stripANSI(m.viewport.view(60)); !strings.Contains(view, "The agent filed ENG-1.") {
+		t.Fatalf("a failed reload was not retried:\n%s", view)
+	}
+}
+
+func TestDecisionResultIsIgnoredAfterANewerStreamStarted(t *testing.T) {
+	client := &resumingClient{running: make(chan models.StreamEvent, 8), sent: make(chan models.StreamEvent, 8), stops: make(chan int, 1)}
+	m := stoppedForDecisions(t, client)
+	client.continuation = &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'a', Text: "a"})
+	// The decision's result is late; the user sends the next message first.
+	decided := cmd()
+	m, _ = m.sendMessage("next question")
+	updated, _ := m.Update(decided)
+	m = updated.(Model)
+	if len(client.requests) != 0 || m.streamCh != client.sent {
+		t.Fatalf("a late decision replaced the new message: requests = %+v", client.requests)
+	}
+	select {
+	case stream := <-client.stops:
+		t.Fatalf("stopped stream %d", stream)
+	default:
+	}
+}
+
+func TestReplyThatEndsBetweenStatusReadsShows(t *testing.T) {
+	client := finishedReplyClient(t)
+	m, cmd := answerEndsWhileAnAgentRuns(t, client)
+	m = runAll(t, m, cmd)
 	if view := stripANSI(m.viewport.view(60)); !strings.Contains(view, "The agent filed ENG-1.") {
 		t.Fatalf("the finished reply does not show:\n%s", view)
 	}

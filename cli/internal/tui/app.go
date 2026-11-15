@@ -66,8 +66,13 @@ type Model struct {
 	// newer read or a followed continuation replaces an older read.
 	follow int
 	// reloadedResponseID is the newest response that a status read last
-	// reloaded the session to show.
-	reloadedResponseID int
+	// reloaded the session to show, and reloadingResponseID the one whose
+	// reload runs.
+	reloadedResponseID  int
+	reloadingResponseID int
+	// streams numbers the streams that the TUI starts; a decision's result
+	// no longer applies after a newer stream started.
+	streams int
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool
@@ -551,6 +556,7 @@ func (m Model) startStream(open func(context.Context) <-chan models.StreamEvent)
 		m.followCancel()
 	}
 	m.follow++
+	m.streams++
 	if m.streamCancel != nil {
 		m.streamCancel()
 	}
@@ -943,6 +949,28 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	if msg.Origin != nil && (!m.reloading || msg.Origin != m.streamCh) {
 		// The chat moved on from the stream that asked for this reload.
 		return m, nil
+	}
+	if reload := msg.Reload; reload != nil {
+		if m.reloadingResponseID == reload.responseID {
+			m.reloadingResponseID = 0
+		}
+		if m.chatSessionID == nil || *m.chatSessionID != reload.sessionID || m.isStreaming {
+			// The user left the chat, or a stream now shows it.
+			return m, nil
+		}
+		if msg.Err != nil {
+			if api.IsRetryableReadinessError(msg.Err) {
+				// The next status read loads the session again.
+				m.approvalsPoll++
+				return m, pollApprovals(m.client, reload.sessionID, m.approvalsPoll, api.StatusPollInterval)
+			}
+			m.reloadedResponseID = reload.responseID
+			m.viewport.addError("Could not load session: " + msg.Err.Error())
+			return m, nil
+		}
+		if reload.responseID != 0 {
+			m.reloadedResponseID = reload.responseID
+		}
 	}
 	if msg.Err != nil {
 		if msg.Origin != nil && api.IsRetryableReadinessError(msg.Err) {

@@ -53,9 +53,11 @@ type approvalDecidedMsg struct {
 	// responseID is the response that waits for the request.
 	responseID int
 	// agent marks a background agent's request.
-	agent  bool
-	result models.ApprovalDecisionResult
-	err    error
+	agent bool
+	// streams is the model's stream count when the decision was sent.
+	streams int
+	result  models.ApprovalDecisionResult
+	err     error
 }
 
 // renderApprovalCard renders a request. Only the active card, the oldest
@@ -269,9 +271,12 @@ func (m Model) handleContinuation(msg continuationMsg) (tea.Model, tea.Cmd) {
 	case msg.stream != nil:
 		return m.followContinuation(*msg.stream)
 	}
-	// The idle session ended any stream that this client still reads.
-	m.reloading = m.isStreaming
-	return cmdResume(m, msg.sessionID, m.streamCh)
+	if m.isStreaming {
+		// The idle session ended the stream that this client still reads.
+		m.reloading = true
+		return cmdResume(m, msg.sessionID, m.streamCh)
+	}
+	return cmdReload(m, sessionReload{sessionID: msg.sessionID})
 }
 
 // noteApprovalsVersion loads the session's approval requests when a status
@@ -326,11 +331,11 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	case m.isStreaming:
 	case msg.status.CurrentStream != nil:
 		m, follow = m.followContinuation(*msg.status.CurrentStream)
-	case latest != nil && *latest != m.reloadedResponseID &&
+	case latest != nil && *latest != m.reloadedResponseID && *latest != m.reloadingResponseID &&
 		!slices.ContainsFunc(m.viewport.entries, func(entry chatEntry) bool { return entry.responseID == *latest }):
 		// A response that ended between reads shows in the saved session.
-		m.reloadedResponseID = *latest
-		m, follow = cmdResume(m, msg.sessionID, nil)
+		m.reloadingResponseID = *latest
+		m, follow = cmdReload(m, sessionReload{sessionID: msg.sessionID, responseID: *latest})
 	}
 	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
 	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable {
@@ -353,6 +358,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 	client, approvalID := m.client, m.approvals[index].request.ApprovalID
 	agent := m.approvals[index].request.AgentName != ""
 	responseID := m.approvals[index].responseID
+	streams := m.streams
 	sessionID := ""
 	if m.chatSessionID != nil {
 		sessionID = *m.chatSessionID
@@ -361,7 +367,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := client.DecideApproval(ctx, approvalID, decision)
-		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, responseID: responseID, agent: agent, result: result, err: err}
+		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, responseID: responseID, agent: agent, streams: streams, result: result, err: err}
 	}
 }
 
@@ -382,6 +388,11 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 	}
 	if m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
 		// The user left the chat that showed the request.
+		return m, nil
+	}
+	if msg.streams != m.streams {
+		// A newer stream started, for example the continuation that a status
+		// read followed, or the user's next message.
 		return m, nil
 	}
 	switch {

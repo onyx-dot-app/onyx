@@ -346,6 +346,16 @@ func cmdResume(m Model, sessionIDStr string, origin <-chan models.StreamEvent) (
 	}
 }
 
+// cmdReload loads the open chat's saved session for a status read.
+func cmdReload(m Model, reload sessionReload) (Model, tea.Cmd) {
+	m, load := cmdResume(m, reload.sessionID, nil)
+	return m, func() tea.Msg {
+		msg := load().(SessionResumedMsg)
+		msg.Reload = &reload
+		return msg
+	}
+}
+
 // loadAgentsCmd returns a tea.Cmd that loads agents from the API.
 func loadAgentsCmd(client api.ClientAPI) tea.Cmd {
 	return func() tea.Msg {
