@@ -26,6 +26,7 @@ from onyx.db.models import (
 )
 from onyx.llm.override_models import LLMOverride
 from onyx.tools.models import ChatToolSelection
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
@@ -95,7 +96,11 @@ def publish_checkpoint__no_commit(
     replaced = [
         file_id for file_id in row.dump_file_ids if file_id not in dump_file_ids
     ]
-    row.state = _JSON_OBJECT.validate_python(data.model_dump(mode="json"))
+    # PostgreSQL stores no NUL or surrogate characters; the digests hash the
+    # same sanitized form.
+    row.state = _JSON_OBJECT.validate_python(
+        sanitize_json_like(data.model_dump(mode="json"))
+    )
     row.child_run_ids = list(child_run_ids)
     row.dump_file_ids = list(dump_file_ids)
     response.response_status = RunStatus.SUSPENDED
