@@ -98,9 +98,6 @@ MAX_SUSPENDED_BYTES = 256 * 1024 * 1024
 # the worker is then lost and the program fails with DUMP_MEMORY_MESSAGE. Monty
 # reports no heap size. The check catches written data, such as tool results.
 MAX_DUMP_MEMORY_SHARE = 1 / 4
-# Bytes of the dump of a program that waits for the user's input, which the
-# caller saves until the user decides. MAX_DUMP_MEMORY_SHARE applies first.
-MAX_PARKED_PROGRAM_BYTES = 64 * 1024 * 1024
 # Callers (users and tenants) do not trust each other, so each worker serves one
 # session and the pool then replaces it, as Monty's security model expects. A
 # dumped program resumes on a new worker too.
@@ -1338,11 +1335,7 @@ def _offered(
 ) -> ParkedProgram | None:
     """Offer a parkable program to `park`; None when it does not park. Then its
     calls that wait for input run again, and the handler answers them."""
-    parked = (
-        run.parked(snapshot)
-        if snapshot is not None and len(snapshot) <= MAX_PARKED_PROGRAM_BYTES
-        else None
-    )
+    parked = run.parked(snapshot) if snapshot is not None else None
     if park(parked) and parked is not None:
         metrics.count_suspension("parked")
         return parked
@@ -1456,8 +1449,7 @@ def execute_program(
     dumped and offered to `park`, on the driver thread. When `park` accepts
     it, the worker is returned and the parked program is returned, to continue
     with `resume_program`. When `park` refuses it, or the dump is not possible
-    or over MAX_PARKED_PROGRAM_BYTES (`park(None)`, which refuses), those calls
-    run again through the handler. Without `park`, such calls wait until the
+    (`park(None)`, which refuses), those calls run again through the handler. Without `park`, such calls wait until the
     program ends.
     """
     run = _Run(

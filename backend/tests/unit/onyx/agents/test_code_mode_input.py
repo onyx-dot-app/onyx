@@ -275,7 +275,8 @@ def test_a_background_cell_shows_its_request_before_the_model_waits() -> None:
 def test_a_program_too_large_to_park_continues_without_the_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(sandbox, "MAX_PARKED_PROGRAM_BYTES", 0)
+    # Any growth of the worker is over this share, so the dump is refused.
+    monkeypatch.setattr(sandbox, "MAX_DUMP_MEMORY_SHARE", -1)
     agents = Agents(
         _execute(
             "program",

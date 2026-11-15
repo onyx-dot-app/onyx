@@ -447,8 +447,8 @@ health calls are not retried.
     worker, and the cell gives back its running-cell slot (`CodeCell._park`).
     An observation that sees the park ends with `NestedInputWait`, which the
     run saves; its stdout and calls so far stay in the cell's window. A dump
-    that the memory share forbids, or one over `MAX_PARKED_PROGRAM_BYTES`
-    (64 MB), is refused: each waiting call ends its request and fails with
+    that the memory share forbids (`MAX_DUMP_MEMORY_SHARE`, about 34 MB of
+    heap with the default limits) is refused: each waiting call ends its request and fails with
     `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. When the run
     suspends, a parked cell whose observation waits is saved; other cells close.
     After the answers, the observation's continuation takes a running-cell slot,
