@@ -32,9 +32,9 @@ The interface is `tools/interface.py:Tool`, which returns
   gives the tools to `chat/agent.py:ChatAgent` or
   `deep_research/agent.py:DeepResearchAgent`. `ChatAgent` binds them with its
   own `ToolContext`.
-- **The sub-agents** run on the same runtime. `DeepResearchAgent` binds only
-  `skills_read`, in its research phase, so it can read the rest of a picked
-  skill. It passes the tools to each
+- **The sub-agents** run on the same runtime. `DeepResearchAgent` binds
+  `skills_list` and `skills_read` in its research phase, and gets the skills
+  catalog ([[skills]]). It passes the tools to each
   `deep_research/research_agent.py:ResearchAgent` child, which binds them with
   its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
   `AgentTool`, so `Tool.run` error handling applies but no construction gate
@@ -159,6 +159,28 @@ result. On Stop or a run failure, a running call ends with no result (status
 result that finishes after cancellation. Side effects that the tool already
 made are not undone, so check `invocation.cancellation` before irreversible
 work.
+
+**Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
+and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
+chat agent's configured tools when the turn's user has a chat skill
+([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
+remove them. Restored and child agents receive them with the other configured
+tools. The tools hold only the user and read the user's current chat skills
+on each call; `skills_read` checks that the user can still see the skill and
+returns its SKILL.md, frontmatter included, up to 32,000 characters per call
+(`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
+`start_char` offset of the next call. The Deep Research orchestrator binds
+both in its research phase, its research agents bind both, and each gets the
+skills catalog. The two tools have no
+tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
+a short JSON summary, not the SKILL.md text.
+
+**Argument models.** A tool declares its arguments as one Pydantic
+`*Arguments` model. `parse_tool_arguments` validates calls with it, and
+`tools/interface.py:tool_definition_from_arguments` makes the tool's
+definition from its JSON schema without titles. The skill and subagent tools
+use it, so their schema and parser cannot drift. Other tools, such as
+`SearchTool`, write their schema by hand.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.
@@ -465,7 +487,7 @@ Their control functions, such as `think_tool`, `generate_report` and
      `mobile/src/chat/tools.ts`.
   8. Deep research uses only the tools whose names are in the allowed set of
      `deep_research/research_agent.py:ResearchAgent.__init__`, which includes
-     `skills_read`. Add a search tool there if deep research must use it.
+     `skills_list` and `skills_read`. Add a search tool there if deep research must use it.
      Nothing reports a tool that is left out.
 - `gate-a-tool` **Gate a tool.** Pick the narrowest gate that matches who decides:
 

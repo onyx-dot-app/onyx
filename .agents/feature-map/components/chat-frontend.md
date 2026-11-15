@@ -39,8 +39,10 @@
   time; text sent meanwhile stays in the input. Editing withdraws the pending
   message before its text returns to the input; accepted messages cannot be
   withdrawn. Stop and failed responses pause the queue; a step limit does not.
-  Pending submission is text-only and unavailable in incognito and for
-  anonymous users. Craft keeps its own queue; only the queue display and
+  A pending message carries the skills picked in it with `@`
+  ([[skills]]): sent into the running response, they apply to that response.
+  Pending submission takes no attached files and is unavailable in incognito
+  and for anonymous users. Craft keeps its own queue; only the queue display and
   keyboard navigation are shared.
 - **Subagents can continue after the answer ends.** A small activity indicator
   stays visible while background work remains. It shares a row with the

@@ -78,6 +78,15 @@ export type CustomSkill = Skill & {
   source: "custom";
 };
 
+/** A custom skill that chat agents get, at the version the user runs. */
+export interface ChatSkill {
+  name: string;
+  description: string;
+  /** `metadata.short-description` in the SKILL.md frontmatter. */
+  short_description: string | null;
+  version_id: string;
+}
+
 export interface SkillsList {
   builtins: Skill[];
   customs: Skill[];

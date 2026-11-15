@@ -1,4 +1,5 @@
 import { OnyxDocument } from "@/lib/search/types";
+import type { RecordedMention } from "@/lib/chat/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -97,6 +98,7 @@ export interface UserMessage extends BaseObj {
   type: "user_message";
   id: string;
   message: string;
+  mentions: RecordedMention[];
 }
 
 export interface MessageStart extends BaseObj {

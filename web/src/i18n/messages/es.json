@@ -12558,9 +12558,6 @@
         "content": {
           "ariaLabel": "Selector de habilidades"
         },
-        "empty": {
-          "text": "No hay habilidades que coincidan"
-        },
         "mcpServersGroup": {
           "label": "Servidores MCP"
         },
@@ -12597,6 +12594,19 @@
         "expandButton": {
           "label": "Expandir en la barra de entrada",
           "tooltip": "Reemplazar esta tarjeta por su texto completo en línea"
+        }
+      },
+      "richTile": {
+        "mentionTile": {
+          "removeButton": {
+            "ariaLabel": "Quitar {name}"
+          }
+        },
+        "pasteTile": {
+          "ariaLabel": "Texto pegado: {preview}, {meta}",
+          "removeButton": {
+            "ariaLabel": "Quitar texto pegado"
+          }
         }
       },
       "plusMenuButton": {

@@ -174,7 +174,8 @@ test.each([
     let pendingSend: Promise<void> | undefined;
     act(() => {
       pendingSend = result.current.onSubmit({
-        message: "Do not send this after Stop",
+        message: "Do not send this after Stop @code-review",
+        mentions: [{ type: "skill", name: "code-review" }],
         currentMessageFiles: [],
         deepResearch: false,
       });
@@ -192,10 +193,11 @@ test.each([
     ).toBe("loading");
     if (stop) {
       await act(async () => result.current.stopGenerating());
-      expect(restoreInputBar).toHaveBeenCalledWith(
-        "Do not send this after Stop",
-        []
-      );
+      expect(restoreInputBar).toHaveBeenCalledWith({
+        message: "Do not send this after Stop @code-review",
+        mentions: [{ type: "skill", name: "code-review" }],
+        files: [],
+      });
     } else {
       useChatSessionStore
         .getState()
@@ -272,6 +274,7 @@ test("Stop drains multi-model packets and finishes every panel before releasing 
   act(() => {
     sending = result.current.onSubmit({
       message: "Compare answers",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
       selectedModels: ["First", "Second"].map((name) => ({
@@ -372,6 +375,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
         selectedModels: multiModel
@@ -440,6 +444,7 @@ test("abort releases a reader with packets queued before its first paint", async
   act(() => {
     sending = result.current.onSubmit({
       message: "Question",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     });
@@ -523,6 +528,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -535,6 +541,7 @@ test.each([false, true])(
     await act(async () =>
       result.current.onSubmit({
         message: "Follow-up",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -590,6 +597,7 @@ test("a send after a failed turn continues after the failed response", async () 
     await act(async () =>
       result.current.onSubmit({
         message,
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -627,6 +635,69 @@ function renderChatController(restoreInputBar = jest.fn()) {
     })
   );
 }
+
+test("a sent question shows its picks until the server records its skills", async () => {
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const saved = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementationOnce(async function* () {
+    await saved.promise;
+    // The user can no longer use `gone`, so the server ignored it.
+    yield {
+      user_message_id: 11,
+      reserved_assistant_message_id: 12,
+      mentions: [
+        { type: "skill", name: "code-review", version_id: "v-code-review" },
+      ],
+    };
+    yield { placement: { turn_index: 0 }, obj: { type: "stop" } };
+  });
+  const { result } = renderChatController();
+  const question = () => {
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get("session")?.messageTree;
+    return tree && getLatestMessageChain(tree)[0];
+  };
+
+  let sent: Promise<void> | undefined;
+  act(() => {
+    sent = result.current.onSubmit({
+      message: "@code-review and @gone",
+      mentions: [
+        { type: "skill", name: "code-review" },
+        { type: "skill", name: "gone" },
+      ],
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() =>
+    expect(question()?.mentions).toEqual([
+      { type: "skill", name: "code-review" },
+      { type: "skill", name: "gone" },
+    ])
+  );
+  expect(sendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({
+      mentions: [
+        { type: "skill", name: "code-review" },
+        { type: "skill", name: "gone" },
+      ],
+    })
+  );
+
+  await act(async () => {
+    saved.resolve();
+    await sent;
+  });
+  expect(question()?.mentions).toEqual([
+    { type: "skill", name: "code-review", version_id: "v-code-review" },
+  ]);
+});
 
 // A setup failure, such as a rejected query hook, ends the stream with no IDs.
 async function* rejectedSend() {
@@ -668,6 +739,7 @@ test.each(["send", "regenerate"] as const)(
     await act(async () =>
       result.current.onSubmit({
         message: "Question",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -679,12 +751,14 @@ test.each(["send", "regenerate"] as const)(
       result.current.onSubmit(
         kind === "send"
           ? {
-              message: "Rejected question",
+              message: "Rejected @code-review question",
+              mentions: [{ type: "skill", name: "code-review" }],
               currentMessageFiles: [],
               deepResearch: false,
             }
           : {
               message: "Question",
+              mentions: [],
               currentMessageFiles: [],
               deepResearch: false,
               messageIdToResend: 11,
@@ -699,7 +773,11 @@ test.each(["send", "regenerate"] as const)(
       isRetryable: false,
     });
     if (kind === "send") {
-      expect(restoreInputBar).toHaveBeenCalledWith("Rejected question", []);
+      expect(restoreInputBar).toHaveBeenCalledWith({
+        message: "Rejected @code-review question",
+        mentions: [{ type: "skill", name: "code-review" }],
+        files: [],
+      });
     } else {
       expect(restoreInputBar).not.toHaveBeenCalled();
     }
@@ -707,6 +785,7 @@ test.each(["send", "regenerate"] as const)(
     await act(async () =>
       result.current.onSubmit({
         message: "Next",
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -794,6 +873,7 @@ test("saved history keeps a failed turn and drops a rejected send", async () => 
     await act(async () =>
       result.current.onSubmit({
         message,
+        mentions: [],
         currentMessageFiles: [],
         deepResearch: false,
       })
@@ -811,6 +891,7 @@ test("saved history keeps a failed turn and drops a rejected send", async () => 
   await act(async () =>
     result.current.onSubmit({
       message: "try again",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
@@ -865,6 +946,7 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Compare answers",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
       selectedModels: ["First", "Second"].map((name) => ({
@@ -881,12 +963,17 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Follow-up",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })
   );
   expect(sendMessage).toHaveBeenCalledTimes(1);
-  expect(restoreInputBar).toHaveBeenCalledWith("Follow-up", []);
+  expect(restoreInputBar).toHaveBeenCalledWith({
+    message: "Follow-up",
+    mentions: [],
+    files: [],
+  });
   expect(session().uncaughtError?.error).toBe("Not saved");
   expect(
     getLatestMessageChain(session().messageTree).map(
@@ -900,6 +987,7 @@ test("a failed preference write drops the send and the next send retries it", as
   await act(async () =>
     result.current.onSubmit({
       message: "Follow-up",
+      mentions: [],
       currentMessageFiles: [],
       deepResearch: false,
     })

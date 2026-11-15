@@ -85,6 +85,14 @@ jest.mock("@/lib/projects/hooks", () => ({
 jest.mock("@/lib/connectors/hooks", () => ({
   useAvailableSources: () => ({ isLoading: false }),
 }));
+const mockNoChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual("@/lib/skills/hooks"),
+  useChatSkills: () => mockNoChatSkills,
+}));
 jest.mock("@/hooks/usePromptShortcuts", () => ({
   __esModule: true,
   default: () => ({ activePromptShortcuts: [] }),
@@ -162,6 +170,7 @@ beforeEach(() => {
       target_response_id: 2,
       deep_research: false,
       llm_override: null,
+      mentions: [],
     },
   ];
   jest.mocked(waitForChatResponseEnd).mockReset();
@@ -552,6 +561,7 @@ test("a successful queue request keeps text typed while it was pending", async (
       target_response_id: 2,
       deep_research: false,
       llm_override: null,
+      mentions: [],
     };
     pending.push(item);
     submission.resolve(new Response(JSON.stringify(item)));
@@ -842,6 +852,7 @@ test("Enter on a highlighted message that left the queue does not reach the next
     target_response_id: 2,
     deep_research: false,
     llm_override: null,
+    mentions: [],
   });
   await act(async () => {
     await mutate(() => true, undefined, { revalidate: false });
@@ -899,8 +910,41 @@ test("an edited queued message is saved as the draft before the composer shows i
   // A chat switch cancels the composer's delayed save, so the text is saved now.
   expect(mockWriteDraft).toHaveBeenCalledWith(
     "chat:session",
-    "Queued follow-up"
+    { message: "Queued follow-up", mentions: [] },
+    expect.any(Function)
   );
+});
+
+test("an edited queued message keeps its picks, and a send carries them into the running response", async () => {
+  pending = [
+    {
+      ...pending[0]!,
+      message: "@code-review queued",
+      mentions: [{ type: "skill", name: "code-review" }],
+    },
+  ];
+  const user = setupUser();
+  render(<ChatInput {...props("streaming")} initialMessage="" />);
+  await user.click(
+    await screen.findByRole("button", {
+      name: "Edit queued message: @code-review queued",
+    })
+  );
+  const textbox = screen.getByRole("textbox", { name: "Message input" });
+  await waitFor(() =>
+    expect(textbox).toHaveTextContent(/^@code-review queued$/)
+  );
+  expect(textbox.querySelectorAll('[data-mention-type="skill"]')).toHaveLength(
+    1
+  );
+
+  await user.type(textbox, "{Enter}");
+  await waitFor(() => expect(pending).toHaveLength(1));
+  expect(pending[0]).toMatchObject({
+    message: "@code-review queued",
+    delivery: "send",
+    mentions: [{ type: "skill", name: "code-review" }],
+  });
 });
 
 test("an edit that finishes after a chat switch returns its text to its own chat", async () => {
@@ -930,7 +974,8 @@ test("an edit that finishes after a chat switch returns its text to its own chat
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      "Queued follow-up"
+      { message: "Queued follow-up", mentions: [] },
+      expect.any(Function)
     )
   );
   expect(textbox).toHaveTextContent(/^$/);
@@ -961,7 +1006,8 @@ test.each([
     await waitFor(() =>
       expect(mockWriteDraft).toHaveBeenCalledWith(
         "chat:session",
-        "Keep this draft"
+        { message: "Keep this draft", mentions: [] },
+        expect.any(Function)
       )
     );
     expect(mockWriteDraft).not.toHaveBeenCalledWith(
@@ -996,7 +1042,8 @@ test("a failed submission that ends after the composer closes goes to the chat's
   await waitFor(() =>
     expect(mockWriteDraft).toHaveBeenCalledWith(
       "chat:session",
-      "Keep this draft"
+      { message: "Keep this draft", mentions: [] },
+      expect.any(Function)
     )
   );
 });

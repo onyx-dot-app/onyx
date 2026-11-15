@@ -30,6 +30,52 @@ export function setCursorBeforeNode(node: Node): void {
   selection.addRange(range);
 }
 
+// Stands in for an atomic tile, so a tile's text never reads as typed text.
+const TILE_PLACEHOLDER = "\uFFFC";
+
+/** Text split at the caret: `before` ends at the caret, `after` starts there. */
+export interface CaretText {
+  before: string;
+  after: string;
+}
+
+/** The plain text of `element` split at the caret, with each rich tile as one
+ * placeholder character, or null without a caret inside it. `after` stops at
+ * the first whitespace after the caret. */
+export function getTextAroundCursor(element: HTMLElement): CaretText | null {
+  const selection = window.getSelection();
+  if (!selection || selection.rangeCount === 0) return null;
+  const { startContainer: node, startOffset: offset } = selection.getRangeAt(0);
+  if (!element.contains(node)) return null;
+  const read = (clipAtCaret: (range: Range) => void): string => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    clipAtCaret(range);
+    const container = document.createElement("div");
+    container.appendChild(range.cloneContents());
+    container
+      .querySelectorAll("[data-rich-tile]")
+      .forEach((tile) => tile.replaceWith(TILE_PLACEHOLDER));
+    return getTextContent(container);
+  };
+  // The caret's word usually ends inside its own text node, so `after` copies
+  // the rest of the input only when it does not.
+  const tail =
+    node.nodeType === Node.TEXT_NODE
+      ? (node.textContent ?? "").slice(offset)
+      : "";
+  const wordEnd = tail.search(/\s/);
+  let after = tail.slice(0, wordEnd);
+  if (wordEnd === -1) {
+    const rest = read((range) => range.setStart(node, offset));
+    after = rest.slice(0, rest.search(/\s|$/));
+  }
+  return {
+    before: read((range) => range.setEnd(node, offset)),
+    after,
+  };
+}
+
 // ─── Text Insertion ─────────────────────────────────────────────────────────
 
 export function insertTextAtCursor(element: HTMLElement, text: string): string {
@@ -265,28 +311,46 @@ const BLOCK_TAGS = new Set([
   "H6",
 ]);
 
-export function getTextContent(element: HTMLElement): string {
-  const parts: string[] = [];
-  const nodes = Array.from(element.childNodes);
-  for (let i = 0; i < nodes.length; i++) {
-    const node = nodes[i]!;
-    if (node.nodeType === Node.TEXT_NODE) {
-      parts.push(node.textContent ?? "");
-    } else if (node.nodeType === Node.ELEMENT_NODE) {
-      const el = node as HTMLElement;
-      if (el.hasAttribute("data-rich-tile")) {
-        parts.push(el.getAttribute("data-text") ?? "");
-      } else if (el.tagName === "BR") {
-        parts.push("\n");
-      } else {
-        if (i > 0 && BLOCK_TAGS.has(el.tagName)) {
-          parts.push("\n");
+/** A rich tile and where its text starts in the input's text. */
+export interface TextTile {
+  tile: HTMLElement;
+  index: number;
+}
+
+/** The input's text, where each rich tile reads as its `data-text`, and the
+ * tiles in text order. */
+export function readContent(element: HTMLElement): {
+  text: string;
+  tiles: TextTile[];
+} {
+  let text = "";
+  const tiles: TextTile[] = [];
+  function walk(parent: HTMLElement) {
+    const nodes = parent.childNodes;
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i]!;
+      if (node.nodeType === Node.TEXT_NODE) {
+        text += node.textContent ?? "";
+      } else if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node as HTMLElement;
+        if (el.hasAttribute("data-rich-tile")) {
+          tiles.push({ tile: el, index: text.length });
+          text += el.getAttribute("data-text") ?? "";
+        } else if (el.tagName === "BR") {
+          text += "\n";
+        } else {
+          if (i > 0 && BLOCK_TAGS.has(el.tagName)) text += "\n";
+          walk(el);
         }
-        parts.push(getTextContent(el));
       }
     }
   }
-  return parts.join("");
+  walk(element);
+  return { text, tiles };
+}
+
+export function getTextContent(element: HTMLElement): string {
+  return readContent(element).text;
 }
 
 /**
@@ -312,41 +376,44 @@ export function stripLeadingBr(el: HTMLElement): boolean {
 // ─── Token Deletion (rich-tile insertion) ───────────────────────────────────
 
 /**
- * Delete `token` immediately before the collapsed cursor, but only after
- * verifying the characters to remove equal it (else bail + restore the caret).
- * Returns whether the token was removed.
+ * Delete `token` around the collapsed cursor: `token.before` ends at the caret
+ * and `token.after` starts there. Verifies that the characters to remove equal
+ * it first, else bails and restores the caret. Returns whether it was removed.
  */
-export function deleteTokenBeforeCursor(
+export function deleteTokenAtCursor(
   el: HTMLElement,
-  token: string
+  token: CaretText
 ): boolean {
-  const n = token.length;
-  if (n <= 0) return false;
+  if (!token.before) return false;
+  const text = token.before + token.after;
   const sel = window.getSelection();
   if (!sel || sel.rangeCount === 0) return false;
   const range = sel.getRangeAt(0);
   if (!range.collapsed || !el.contains(range.startContainer)) return false;
 
   const { startContainer, startOffset } = range;
+  const start = startOffset - token.before.length;
 
   // Fast path: the token lives entirely within the caret's text node.
   if (
     startContainer.nodeType === Node.TEXT_NODE &&
-    startOffset >= n &&
-    startContainer.textContent?.slice(startOffset - n, startOffset) === token
+    start >= 0 &&
+    startContainer.textContent?.slice(start, start + text.length) === text
   ) {
-    range.setStart(startContainer, startOffset - n);
+    range.setStart(startContainer, start);
+    range.setEnd(startContainer, start + text.length);
     range.deleteContents();
     sel.removeAllRanges();
     sel.addRange(range);
     return true;
   }
 
-  // Fallback for node-spanning tokens; modify is absent in jsdom.
+  // Fallback for node-spanning tokens; modify is absent in jsdom. Steps count
+  // code points, not UTF-16 units.
   if (typeof sel.modify !== "function") return false;
-  const steps = Array.from(token).length; // code points, not UTF-16 units
-  for (let i = 0; i < steps; i++) sel.modify("extend", "backward", "character");
-  if (sel.toString() === token) {
+  for (const _ of token.after) sel.modify("move", "forward", "character");
+  for (const _ of text) sel.modify("extend", "backward", "character");
+  if (sel.toString() === text) {
     sel.deleteFromDocument();
     return true;
   }

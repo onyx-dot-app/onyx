@@ -134,7 +134,12 @@ describe("exportChatSession", () => {
     ]);
     const accepted: Packet = {
       placement: { turn_index: 1 },
-      obj: { type: "user_message", id: "accepted", message: "Avoid flights" },
+      obj: {
+        type: "user_message",
+        id: "accepted",
+        message: "Avoid flights",
+        mentions: [],
+      },
     };
     session.packets = [[accepted]];
 
