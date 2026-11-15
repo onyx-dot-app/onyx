@@ -246,13 +246,21 @@ class AgentCoordinator:
             if info.parent_id is not None:
                 self._state.agents[agent.id] = _LoadedAgent(agent, self._view_id)
 
-    def release_execution(self, run: Run) -> None:
-        """Forget local execution; dependencies retain only its ID and completion."""
+    def release_execution(
+        self, run: Run, *, watched_run_ids: Collection[str] = ()
+    ) -> None:
+        """Forget local execution; dependencies retain only its ID and completion.
+
+        Remote observation of the runs that it waited for (`watched_run_ids`
+        and its foreground children) stops unless another local run waits too.
+        """
         snapshot = run.snapshot()
         with self._state.lock:
             tracked = self._state.tracked_runs[run.id]
             binding = tracked.coordination
             completion = tracked.completion
+        # The released run no longer changes its children.
+        waited = {*watched_run_ids, *(binding.children if binding else ())}
         # Reserve the local execution until its ownership cleanup finishes.
         try:
             if binding is not None:
@@ -268,11 +276,19 @@ class AgentCoordinator:
                 tracked.execution = None
                 self._state.agents.pop(run.agent_id, None)
                 self._state.latest[run.agent_id] = snapshot
-                has_waiters = any(
-                    run.id in entry.coordination.children
+                still_waited = {
+                    run_id
                     for entry in self._state.tracked_runs.values()
                     if entry.coordination is not None
-                )
+                    for run_id in entry.coordination.children
+                }
+                has_waiters = run.id in still_waited
+                for run_id in waited - still_waited:
+                    observed = self._state.tracked_runs.get(run_id)
+                    if observed is not None and observed.observer_stop is not None:
+                        # A later waiter starts a new observation.
+                        observed.observer_stop.set()
+                        observed.observer_stop = None
         if has_waiters:
             self.observe_completion(run.id, agent_id=run.agent_id)
 
@@ -1213,13 +1229,19 @@ class RunCoordination:
             ]
 
     def validate_handoff(self) -> None:
+        """A parent transfers while its pending foreground children execute
+        elsewhere; the application decides whether a released child is durable."""
         try:
             self.coordinator.check_open()
         except RuntimeError as error:
             raise RunNotTransferable("Coordinator is closing") from error
-        if self.pending_children():
+        if any(
+            self.coordinator.child_run(run_id, self.run.agent_id) is not None
+            for run_id in self.pending_children()
+        ):
             raise RunNotTransferable(
-                "Foreground child runs must finish before parent transfer"
+                "Foreground child runs that execute here must finish or hand off "
+                "before parent transfer"
             )
 
     def finish(self, cancel: bool) -> list[RunState]:

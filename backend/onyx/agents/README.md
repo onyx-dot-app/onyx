@@ -416,7 +416,9 @@ Parent dependencies use run IDs and completion records. Local resource cleanup w
 A coordinator rejects competing local owners, including while ownership release is in progress.
 The application uses an atomic storage claim to exclude other API pods.
 A new coordinator can load terminal child states through `read_run`.
-Foreground children must finish before the parent can transfer. Rejected transfers leave the local owner intact.
+A parent transfers while each pending foreground child executes elsewhere, for example after the child handed off; the application decides whether that child is durable.
+A foreground child that still executes locally blocks transfer. Rejected transfers leave the local owner intact.
+A released parent stops observing the runs it waited for, unless another local run waits for them.
 
 `close()` cancels all owned runs and waits for execution, terminal handling, and resource cleanup.
 A timeout leaves unfinished work owned. The coordinator is process-local; storage and cross-pod control belong to the application.

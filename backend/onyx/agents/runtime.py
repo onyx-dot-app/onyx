@@ -1636,7 +1636,9 @@ class Run:
             if delivery is not None:
                 delivery.close()
             if coordination is not None:
-                coordination.coordinator.release_execution(self)
+                coordination.coordinator.release_execution(
+                    self, watched_run_ids=list(self._watched_children)
+                )
         except BaseException as error:
             self._reusable.set_exception(error)
             self._completed.set_exception(error)
