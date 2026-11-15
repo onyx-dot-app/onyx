@@ -44,7 +44,11 @@ import {
   readOutcome,
 } from "./services/approvals";
 import { renderApprovalCard } from "./services/approval-card";
-import { MessageIDs, processPacket } from "./services/stream-parser";
+import {
+  MessageIDs,
+  processPacket,
+  StreamErrorPacket,
+} from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
 
@@ -126,12 +130,23 @@ export class OnyxChatWidget extends LitElement {
   // A decision with no continuation landed while a follow ran; the follow
   // reads the status again before it ends
   private statusRecheck = false;
+  // Answers that a status read named as the latest and the transcript
+  // lacks: they can start and finish between two reads. The next session
+  // load shows them.
+  private unseenAnswerIds = new Set<number>();
   // The `approvals_version` of the requests the transcript shows, from the
   // last session load or the new chat's first status read; a change replays
   // the saved session, the one source of background agent requests and
   // their outcomes
   private approvalsVersion: string | null = null;
   private approvalsChanged = false;
+
+  /** Notes a status read's latest answer when the transcript lacks it. */
+  private noteLatestAnswer(status: ChatSessionStatus) {
+    const latest = status.latest_response_id;
+    if (latest !== null && !this.messages.some((m) => m.id === latest))
+      this.unseenAnswerIds.add(latest);
+  }
 
   /** Notes a status read's version when it differs from the baseline. */
   private noteApprovalsVersion(status: ChatSessionStatus) {
@@ -322,6 +337,7 @@ export class OnyxChatWidget extends LitElement {
     this.expandedArguments = new Set();
     this.continuationStreamId = null;
     this.statusRecheck = false;
+    this.unseenAnswerIds = new Set();
     this.approvalsVersion = null;
     this.approvalsChanged = false;
     this.documentMap.clear();
@@ -609,11 +625,29 @@ export class OnyxChatWidget extends LitElement {
       if (!stillOurs()) return;
       if (created) this.approvalsVersion = status.approvals_version;
       else this.noteApprovalsVersion(status);
+      this.noteLatestAnswer(status);
 
       // Resolved once per send, so every persisted transcript is tagged with
       // the user who actually produced it.
       const identity = await this.currentIdentity();
       if (!stillOurs()) return;
+      // The latest saved answer can have finished after this widget's last
+      // status read, for example an answer to an agent's result; the send
+      // goes under it, so the transcript shows it first.
+      if (
+        [...this.unseenAnswerIds].some(
+          (answerId) => !this.messages.some((m) => m.id === answerId)
+        ) &&
+        !(await this.recoverFromSavedSession(
+          this.chatSessionId,
+          identity,
+          stillOurs,
+          controller.signal,
+          null,
+          true
+        ))
+      )
+        return;
       this.inputValue = "";
       this.error = undefined;
       this.streamingStatus = "";
@@ -743,20 +777,8 @@ export class OnyxChatWidget extends LitElement {
       let streamWithoutBuffer: number | null = null;
       // The last stream followed; it does not run again
       let lastStreamId: number | null = null;
-      // An answer that the saved session shows when no stream did: the sent
-      // answer, or the latest answer a status read names, which can start
-      // and finish between two reads
-      let unseenAnswerId = sent?.assistantMessageId ?? null;
-      const noteLatestAnswer = (status: ChatSessionStatus) => {
-        const latest = status.latest_response_id;
-        if (
-          latest !== null &&
-          !this.messages.some((message) => message.id === latest) &&
-          (unseenAnswerId === null ||
-            this.messages.some((message) => message.id === unseenAnswerId))
-        )
-          unseenAnswerId = latest;
-      };
+      // The sent answer, which the saved session shows when no stream did
+      let sentAnswerId = sent?.assistantMessageId ?? null;
       // The saved session can show what the streams of this pass did not
       let recover = true;
       // Server work waits, so the status is read again: background agents
@@ -792,11 +814,14 @@ export class OnyxChatWidget extends LitElement {
             } catch (err: unknown) {
               if (
                 !stillOurs() ||
-                current.ended ||
+                err instanceof StreamErrorPacket ||
                 (err instanceof Error && err.name === "AbortError")
               )
                 throw err;
-              console.warn("The response stream ended early:", err);
+              // A transport failure after the stop loses nothing: the status
+              // check after the stop runs as usual.
+              if (!current.ended)
+                console.warn("The response stream ended early:", err);
             }
           }
           applied = false;
@@ -851,7 +876,7 @@ export class OnyxChatWidget extends LitElement {
           }
           if (!stillOurs()) return;
           this.noteApprovalsVersion(status);
-          noteLatestAnswer(status);
+          this.noteLatestAnswer(status);
           workWaits =
             status.has_active_subagents || status.has_startable_input;
           lastStreamId = current.streamId;
@@ -866,155 +891,18 @@ export class OnyxChatWidget extends LitElement {
               this.continuationStreamId = null;
           }
         }
-        // The response ended or stopped for decisions before this widget saw
-        // it: there was no replay (a 404, e.g. the run finished while the page
-        // was closed), or the replay buffer ended early. The server's saved
-        // copy finishes the response or shows its waiting requests, and
-        // answers or removes a saved question with no answer after it. A
-        // changed approvals version replays every saved answer that holds an
-        // approval request or that the transcript lacks. On a failure the
-        // snapshot stays unfinished and the version change stays pending, so
-        // the next load tries again.
-        const approvalsChanged = this.approvalsChanged;
-        const unanswered = this.messages
-          .filter(
-            (message, index) =>
-              message.role === "user" &&
-              this.messages[index + 1]?.role !== "assistant"
-          )
-          .map((message) => message.id)
-          .filter((id): id is number => typeof id === "number");
-        const recoverIds = this.messages
-          .filter(
-            (message) =>
-              message.isStreaming || message.awaitingApproval
-          )
-          .map((message) => message.id)
-          .filter((id): id is number => typeof id === "number");
         if (
-          unseenAnswerId !== null &&
-          !this.messages.some((message) => message.id === unseenAnswerId)
-        ) {
-          recoverIds.push(unseenAnswerId);
-        }
-        if (
-          approvalsChanged ||
-          (recover &&
-            !waitsForDecisions &&
-            (recoverIds.length > 0 ||
-              unanswered.length > 0 ||
-              this.messages.some((message) => message.isStreaming)))
-        ) {
-          const session = await this.apiService.getChatSession(
+          !(await this.recoverFromSavedSession(
             sessionId,
-            controller.signal
-          );
-          if (!stillOurs()) return;
-          // The load's version is the baseline for the requests it shows.
-          if (session.approvals_version !== undefined)
-            this.approvalsVersion = session.approvals_version;
-          // Packet lists follow every assistant message, on every branch.
-          const assistants = session.messages.filter(
-            (message) => message.message_type === "assistant"
-          );
-          // The selected branch runs from the root along each latest child;
-          // a message's position on it is its place in the conversation.
-          const byId = new Map(
-            session.messages.map((message) => [message.message_id, message])
-          );
-          const savedOrder = new Map<number, number>();
-          let onBranch = session.messages.find(
-            (message) =>
-              message.parent_message == null ||
-              !byId.has(message.parent_message)
-          );
-          while (onBranch && !savedOrder.has(onBranch.message_id)) {
-            savedOrder.set(onBranch.message_id, savedOrder.size);
-            const child = onBranch.latest_child_message;
-            onBranch = child == null ? undefined : byId.get(child);
-          }
-          for (const questionId of unanswered) {
-            const answer = assistants.find(
-              (message) =>
-                message.parent_message === questionId &&
-                savedOrder.has(message.message_id)
-            );
-            if (!answer) {
-              this.messages = this.messages.filter(
-                (message) => message.id !== questionId
-              );
-            } else if (!recoverIds.includes(answer.message_id)) {
-              recoverIds.push(answer.message_id);
-            }
-          }
-          if (approvalsChanged) {
-            // A background agent's request is saved under the answer that
-            // started the agent, which can be any earlier answer. A turn
-            // accepted after the transcript was saved is missing from it.
-            assistants.forEach((message, index) => {
-              if (
-                savedOrder.has(message.message_id) &&
-                !recoverIds.includes(message.message_id) &&
-                (!this.messages.some(
-                  (shown) => shown.id === message.message_id
-                ) ||
-                  session.packets[index]?.some(
-                    (packet) =>
-                      "type" in packet.obj &&
-                      packet.obj.type === "tool_approval_request"
-                  ))
-              ) {
-                recoverIds.push(message.message_id);
-              }
-            });
-          }
-          for (const assistantMessageId of recoverIds) {
-            const index = assistants.findIndex(
-              (message) => message.message_id === assistantMessageId
-            );
-            const replay = session.packets[index];
-            if (!replay) continue;
-            const userMessageId = assistants[index]?.parent_message ?? null;
-            await this.followStream(
-              (async function* (): AsyncGenerator<Packet, void, unknown> {
-                yield {
-                  obj: {
-                    user_message_id: userMessageId,
-                    reserved_assistant_message_id: assistantMessageId,
-                  },
-                };
-                yield* replay;
-              })(),
-              sessionId,
-              identity,
-              stillOurs,
-              newFollow(null),
-              () => {}
-            );
-            if (!stillOurs()) return;
-          }
-          this.approvalsChanged = false;
-          // Recovered turns take their saved place in the conversation, so a
-          // later send answers the latest saved turn. A message off the
-          // selected branch stays after the message before it.
-          let position = -1;
-          this.messages = this.messages
-            .map((message) => {
-              const saved =
-                typeof message.id === "number"
-                  ? savedOrder.get(message.id)
-                  : undefined;
-              if (saved !== undefined) position = saved;
-              return { message, position };
-            })
-            .sort((a, b) => a.position - b.position)
-            .map(({ message }) =>
-              // A response the server has no saved copy of keeps its snapshot.
-              message.isStreaming ? { ...message, isStreaming: false } : message
-            );
-          saveSession(sessionId, this.messages, identity);
-        }
-        unseenAnswerId = null;
+            identity,
+            stillOurs,
+            controller.signal,
+            sentAnswerId,
+            recover && !waitsForDecisions
+          ))
+        )
+          return;
+        sentAnswerId = null;
         // A decision made during this pass, for example while the saved
         // session loaded, names a continuation that no stream followed.
         const queued = this.continuationStreamId;
@@ -1047,7 +935,7 @@ export class OnyxChatWidget extends LitElement {
         );
         if (!stillOurs()) return;
         this.noteApprovalsVersion(status);
-        noteLatestAnswer(status);
+        this.noteLatestAnswer(status);
         workWaits = status.has_active_subagents || status.has_startable_input;
         const next = status.is_processing ? status.current_stream : null;
         if (next !== null) {
@@ -1056,7 +944,7 @@ export class OnyxChatWidget extends LitElement {
           if (this.continuationStreamId === next.stream_id)
             this.continuationStreamId = null;
         }
-        recover = next !== null || unseenAnswerId !== null;
+        recover = next !== null || this.unseenAnswerIds.size > 0;
       }
     } catch (err: unknown) {
       if (stillOurs() && !(err instanceof Error && err.name === "AbortError")) {
@@ -1073,6 +961,175 @@ export class OnyxChatWidget extends LitElement {
         this.statusRecheck = false;
       }
     }
+  }
+
+  /**
+   * Shows from the saved session what this widget's streams did not: a
+   * response that ended or stopped for decisions with no replay (a 404,
+   * e.g. the run finished while the page was closed) or after its replay
+   * buffer ended early, and an answer that started and finished between
+   * two status reads. The saved copy finishes the response or shows its
+   * waiting requests, and answers or removes a saved question with no
+   * answer after it. A
+   * changed approvals version replays every saved answer that holds an
+   * approval request or that the transcript lacks. On a failure the
+   * snapshot stays unfinished and the version change stays pending, so
+   * the next load tries again.
+   *
+   * `recover` lets unfinished or waiting responses, unanswered questions,
+   * `sentAnswerId` and answers a status read named load the session; a
+   * changed approvals version always does. False when another follow or
+   * send took over.
+   */
+  private async recoverFromSavedSession(
+    sessionId: string,
+    identity: string,
+    stillOurs: () => boolean,
+    signal: AbortSignal,
+    sentAnswerId: number | null,
+    recover: boolean
+  ): Promise<boolean> {
+    const approvalsChanged = this.approvalsChanged;
+    const unanswered = this.messages
+      .filter(
+        (message, index) =>
+          message.role === "user" &&
+          this.messages[index + 1]?.role !== "assistant"
+      )
+      .map((message) => message.id)
+      .filter((id): id is number => typeof id === "number");
+    const recoverIds = this.messages
+      .filter((message) => message.isStreaming || message.awaitingApproval)
+      .map((message) => message.id)
+      .filter((id): id is number => typeof id === "number");
+    for (const answerId of [sentAnswerId, ...this.unseenAnswerIds]) {
+      if (
+        answerId !== null &&
+        !recoverIds.includes(answerId) &&
+        !this.messages.some((message) => message.id === answerId)
+      )
+        recoverIds.push(answerId);
+    }
+    if (
+      !approvalsChanged &&
+      !(
+        recover &&
+        (recoverIds.length > 0 ||
+          unanswered.length > 0 ||
+          this.messages.some((message) => message.isStreaming))
+      )
+    )
+      return true;
+    const session = await this.apiService.getChatSession(
+      sessionId,
+      signal
+    );
+    if (!stillOurs()) return false;
+    // The load's version is the baseline for the requests it shows.
+    if (session.approvals_version !== undefined)
+      this.approvalsVersion = session.approvals_version;
+    // Packet lists follow every assistant message, on every branch.
+    const assistants = session.messages.filter(
+      (message) => message.message_type === "assistant"
+    );
+    // The selected branch runs from the root along each latest child;
+    // a message's position on it is its place in the conversation.
+    const byId = new Map(
+      session.messages.map((message) => [message.message_id, message])
+    );
+    const savedOrder = new Map<number, number>();
+    let onBranch = session.messages.find(
+      (message) =>
+        message.parent_message == null ||
+        !byId.has(message.parent_message)
+    );
+    while (onBranch && !savedOrder.has(onBranch.message_id)) {
+      savedOrder.set(onBranch.message_id, savedOrder.size);
+      const child = onBranch.latest_child_message;
+      onBranch = child == null ? undefined : byId.get(child);
+    }
+    for (const questionId of unanswered) {
+      const answer = assistants.find(
+        (message) =>
+          message.parent_message === questionId &&
+          savedOrder.has(message.message_id)
+      );
+      if (!answer) {
+        this.messages = this.messages.filter(
+          (message) => message.id !== questionId
+        );
+      } else if (!recoverIds.includes(answer.message_id)) {
+        recoverIds.push(answer.message_id);
+      }
+    }
+    if (approvalsChanged) {
+      // A background agent's request is saved under the answer that
+      // started the agent, which can be any earlier answer. A turn
+      // accepted after the transcript was saved is missing from it.
+      assistants.forEach((message, index) => {
+        if (
+          savedOrder.has(message.message_id) &&
+          !recoverIds.includes(message.message_id) &&
+          (!this.messages.some(
+            (shown) => shown.id === message.message_id
+          ) ||
+            session.packets[index]?.some(
+              (packet) =>
+                "type" in packet.obj &&
+                packet.obj.type === "tool_approval_request"
+            ))
+        ) {
+          recoverIds.push(message.message_id);
+        }
+      });
+    }
+    for (const assistantMessageId of recoverIds) {
+      const index = assistants.findIndex(
+        (message) => message.message_id === assistantMessageId
+      );
+      const replay = session.packets[index];
+      if (!replay) continue;
+      const userMessageId = assistants[index]?.parent_message ?? null;
+      await this.followStream(
+        (async function* (): AsyncGenerator<Packet, void, unknown> {
+          yield {
+            obj: {
+              user_message_id: userMessageId,
+              reserved_assistant_message_id: assistantMessageId,
+            },
+          };
+          yield* replay;
+        })(),
+        sessionId,
+        identity,
+        stillOurs,
+        newFollow(null),
+        () => {}
+      );
+      if (!stillOurs()) return false;
+    }
+    this.approvalsChanged = false;
+    this.unseenAnswerIds = new Set();
+    // Recovered turns take their saved place in the conversation, so a
+    // later send answers the latest saved turn. A message off the
+    // selected branch stays after the message before it.
+    let position = -1;
+    this.messages = this.messages
+      .map((message) => {
+        const saved =
+          typeof message.id === "number"
+            ? savedOrder.get(message.id)
+            : undefined;
+        if (saved !== undefined) position = saved;
+        return { message, position };
+      })
+      .sort((a, b) => a.position - b.position)
+      .map(({ message }) =>
+        // A response the server has no saved copy of keeps its snapshot.
+        message.isStreaming ? { ...message, isStreaming: false } : message
+      );
+    saveSession(sessionId, this.messages, identity);
+    return true;
   }
 
   /** Applies a response stream to the transcript and persists it. */

@@ -9,6 +9,9 @@ import {
   readOutcome,
 } from "@/services/approvals";
 
+/** The server ended the turn with an error packet. */
+export class StreamErrorPacket extends Error {}
+
 export interface ParsedMessage {
   message: ChatMessage;
   isComplete: boolean;
@@ -257,7 +260,7 @@ export function processPacket(
 
     case "error":
       // Error occurred during streaming - throw to fail fast
-      throw new Error(`Stream error: ${obj.exception}`);
+      throw new StreamErrorPacket(`Stream error: ${obj.exception}`);
 
     default:
       // Unknown packet type

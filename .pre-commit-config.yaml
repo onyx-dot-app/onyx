@@ -449,10 +449,10 @@ repos:
       # tsgo from @typescript/native-preview in the root workspace.
       - id: widget-typescript-check
         name: widget TypeScript type check
-        entry: bash -c 'cd widget && bun run tsgo --noEmit'
+        entry: bash -c 'cd widget && bun run tsgo --noEmit && bun run tsgo --noEmit -p tsconfig.test.json'
         language: system
         pass_filenames: false
-        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig\.json))$
+        files: ^(bun\.lock|widget/(.*\.(ts|tsx)|package\.json|tsconfig(\.test)?\.json))$
 
       - id: examples-widget-typescript-check
         name: examples/widget TypeScript type check

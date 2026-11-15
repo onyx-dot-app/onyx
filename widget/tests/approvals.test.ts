@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, mock, spyOn } from "bun:test";
+import { afterEach, describe, expect, it, mock } from "bun:test";
 import {
   ApiError,
   ApiService,
@@ -20,11 +20,13 @@ import {
 } from "../src/services/approval-card";
 import { processPacket } from "../src/services/stream-parser";
 import type {
+  ChatSessionDetail,
   ChatStream,
   Packet,
   StreamCursor,
   ToolApprovalRequest,
 } from "../src/types/api-types";
+import { mockFetch, mockTimeouts } from "./mocks";
 import { chatStream, idle, offer, runs } from "./session-status";
 import type { ChatMessage } from "../src/types/widget-types";
 import { OnyxChatWidget } from "../src/widget";
@@ -191,7 +193,9 @@ describe("approval status", () => {
   ] as const)(
     "shows the decision %s via %s as %s",
     (decision, decidedVia, status) => {
-      expect(decidedStatus({ decision, decided_via: decidedVia })).toBe(status);
+      expect(
+        decidedStatus({ decision, decided_via: decidedVia, continuation: null })
+      ).toBe(status);
     }
   );
 
@@ -319,7 +323,7 @@ describe("approval arguments from the model", () => {
 describe("approval decisions", () => {
   it("posts the decision with the widget credential", async () => {
     const calls: { url: string; init?: RequestInit }[] = [];
-    globalThis.fetch = mock(
+    mockFetch(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         calls.push({ url: String(input), init });
         return Response.json({
@@ -329,7 +333,7 @@ describe("approval decisions", () => {
           continuation: { stream_id: 9, response_ids: [7] },
         });
       }
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     expect(await api.submitApprovalDecision("a/b", "approve_session")).toEqual(
       {
@@ -352,13 +356,13 @@ describe("approval decisions", () => {
   });
 
   it("reads a decision that resumed nothing as no continuation", async () => {
-    globalThis.fetch = mock(async () =>
+    mockFetch(async () =>
       Response.json({
         decision: "REJECTED",
         decided_via: "USER",
         continuation: null,
       })
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     expect(await api.submitApprovalDecision("a", "reject")).toEqual({
       decision: "REJECTED",
@@ -368,24 +372,24 @@ describe("approval decisions", () => {
   });
 
   it.each([404, 409])("reports a request that no longer waits (%s)", async (status) => {
-    globalThis.fetch = mock(
+    mockFetch(
       async () => new Response("gone", { status })
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     expect(await api.submitApprovalDecision("a", "reject")).toBe("closed");
   });
 
   it("throws other failures so the card can show an error", async () => {
-    globalThis.fetch = mock(
+    mockFetch(
       async () => new Response("boom", { status: 500 })
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     await expect(api.submitApprovalDecision("a", "reject")).rejects.toThrow();
   });
 
   it("replays a running response with its cursors", async () => {
     const urls: string[] = [];
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       urls.push(String(input));
       return new Response(
         [
@@ -394,7 +398,7 @@ describe("approval decisions", () => {
           "",
         ].join("\n")
       );
-    }) as typeof fetch;
+    });
     const api = new ApiService("https://onyx.test/api", async () => "key");
     const packets: (Packet | StreamCursor)[] = [];
     for await (const packet of api.resumeStream(
@@ -420,7 +424,7 @@ describe("approval decisions", () => {
   });
 
   it("passes over the end of a continuation's replayed prefix", async () => {
-    globalThis.fetch = mock(
+    mockFetch(
       async () =>
         new Response(
           [
@@ -432,7 +436,7 @@ describe("approval decisions", () => {
             JSON.stringify({ obj: { type: "message_start" } }),
           ].join("\n")
         )
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     let message: ChatMessage | null = null;
     for await (const packet of api.resumeStream(
@@ -451,9 +455,9 @@ describe("approval decisions", () => {
 
   it("ends a resume with noBuffer only on a 404, and ended on a body end", async () => {
     const statuses = [404, 200];
-    globalThis.fetch = mock(
+    mockFetch(
       async () => new Response("", { status: statuses.shift() })
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     const signal = new AbortController().signal;
     expect(await api.resumeStream("s", signal).next()).toEqual({
@@ -469,9 +473,9 @@ describe("approval decisions", () => {
   it.each([401, 403, 429])(
     "throws a resume failure the widget can retry (%s)",
     async (status) => {
-      globalThis.fetch = mock(
+      mockFetch(
         async () => new Response("denied", { status })
-      ) as typeof fetch;
+      );
       const api = new ApiService("https://onyx.test/api", async () => "key");
       const error = await api
         .resumeStream("s", new AbortController().signal)
@@ -484,12 +488,12 @@ describe("approval decisions", () => {
   );
 
   it("surfaces the pending-approval code of a blocked send", async () => {
-    globalThis.fetch = mock(async () =>
+    mockFetch(async () =>
       Response.json(
         { error_code: APPROVAL_PENDING_ERROR_CODE, detail: "waiting" },
         { status: 409 }
       )
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () => "key");
     const stream = api.streamMessage({ message: "hi", chatSessionId: "s" });
     const error = await stream.next().catch((e: unknown) => e);
@@ -510,11 +514,7 @@ async function waitUntil(condition: () => boolean, timeoutMs = 2_000) {
 
 /** Ends the pauses of the poll interval at once. */
 function skipPollPauses() {
-  const setTimer = globalThis.setTimeout;
-  spyOn(globalThis, "setTimeout").mockImplementation(
-    (callback, delay, ...args) =>
-      setTimer(callback, delay === 1_000 ? 0 : delay, ...args)
-  );
+  mockTimeouts((ms) => (ms === 1_000 ? 0 : ms));
 }
 
 /** A sessionStorage stand-in; returns its contents and a cleanup. */
@@ -564,7 +564,9 @@ describe("widget while a request waits", () => {
       return "noBuffer";
     });
     api.waitForSessionIdle = mock(async () => idle());
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    api.getChatSession = mock(
+      async (): Promise<ChatSessionDetail> => ({ messages: [], packets: [] })
+    );
     return { widget, api };
   }
 
@@ -715,7 +717,7 @@ describe("widget while a request waits", () => {
       if (reads === 2) await decisionDone;
       return idle();
     });
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
@@ -754,7 +756,7 @@ describe("widget while a request waits", () => {
   it("shows the saved outcome and reads the status when the request no longer waits", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => "closed" as const);
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -826,16 +828,26 @@ describe("widget while a request waits", () => {
 
   it("reads the status once at a stop for decisions, and follows only a new stream of the response", async () => {
     const { widget, api } = sendingWidget();
+    const attachables: ((stream: ChatStream) => boolean)[] = [];
+    api.waitForSessionIdle = mock(
+      async (
+        _session: string,
+        _signal: AbortSignal,
+        _onUnconfirmed: () => void,
+        attachable: (stream: ChatStream) => boolean = () => false
+      ) => {
+        attachables.push(attachable);
+        return idle();
+      }
+    );
 
     await widget["sendMessage"]();
 
     expect(widget["isStreaming"]).toBe(false);
     expect(widget["pendingApproval"]?.request.approval_id).toBe("a");
     // The new chat's baseline read, then the read after the stop.
-    expect(api.waitForSessionIdle).toHaveBeenCalledTimes(2);
-    const attachable = api.waitForSessionIdle.mock.calls[1]?.[3] as (
-      stream: ChatStream
-    ) => boolean;
+    expect(attachables).toHaveLength(2);
+    const attachable = attachables[1] ?? (() => true);
     expect(attachable(chatStream(2, [2]))).toBe(false);
     expect(attachable(chatStream(9, [8]))).toBe(false);
     expect(attachable(chatStream(9, [2]))).toBe(true);
@@ -984,7 +996,7 @@ describe("widget while a request waits", () => {
     api.streamMessage = mock(async function* () {
       throw new ApiError("waiting", 409, APPROVAL_PENDING_ERROR_CODE);
     });
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -1058,7 +1070,7 @@ describe("widget while a request waits", () => {
     api.waitForSessionIdle = mock(async () =>
       idle({ approvals_version: version })
     );
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       approvals_version: version,
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
@@ -1095,11 +1107,20 @@ describe("widget while a request waits", () => {
   it("follows a continuation decided while the saved session loads", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => continuation(9));
+    const resumedStreams: (number | null)[] = [];
+    api.resumeStream = mock(async function* (
+      _session: string,
+      _signal: AbortSignal,
+      from?: { streamId: number; cursor: number } | null
+    ): AsyncGenerator<Packet | StreamCursor, ResumeEnd> {
+      resumedStreams.push(from?.streamId ?? null);
+      return "noBuffer";
+    });
     let loaded: () => void = () => {};
     const loading = new Promise<void>((resolve) => {
       loaded = resolve;
     });
-    api.getChatSession = mock(async () => {
+    const getChatSession = mock(async (): Promise<ChatSessionDetail> => {
       await loading;
       // The snapshot from before the decision
       return {
@@ -1110,18 +1131,15 @@ describe("widget while a request waits", () => {
         packets: [[{ obj: request("a") }, { obj: request("b") }]],
       };
     });
+    api.getChatSession = getChatSession;
 
     const resumed = widget["resumeStream"]("session", { streamId: null });
-    await waitUntil(() => api.getChatSession.mock.calls.length > 0);
+    await waitUntil(() => getChatSession.mock.calls.length > 0);
     await widget["decideApproval"](request("a"), "approve_once");
     loaded();
     await resumed;
 
-    expect(
-      api.resumeStream.mock.calls.some(
-        (call) => (call[2] as { streamId: number } | null)?.streamId === 9
-      )
-    ).toBe(true);
+    expect(resumedStreams).toContain(9);
   });
 
   it("reads the status again after an agent decision made while the saved session loads", async () => {
@@ -1152,7 +1170,7 @@ describe("widget while a request waits", () => {
       loaded = resolve;
     });
     let loads = 0;
-    api.getChatSession = mock(async () => {
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => {
       loads += 1;
       if (loads === 1) await loading;
       return {
@@ -1222,7 +1240,7 @@ describe("widget while a request waits", () => {
     ];
     // The agent's result started answer 9, which finished before this read.
     api.waitForSessionIdle = mock(async () => idle({ latest_response_id: 9 }));
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
         {
@@ -1258,6 +1276,49 @@ describe("widget while a request waits", () => {
     });
   });
 
+  it("checks the status after a stop even when the transport fails before its end", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [{ ...streamingMessage([]), isStreaming: false }];
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      yield { stream_id: 5, next_cursor: 0, replay_complete: false };
+      yield { obj: { user_message_id: 6, reserved_assistant_message_id: 7 } };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Done." } };
+      yield { obj: { type: "stop" } };
+      throw new TypeError("network connection lost");
+    });
+    // The stopped turn started a background agent.
+    const statuses = [idle({ has_active_subagents: true }), idle()];
+    const waitForSessionIdle = mock(async () => statuses.shift() ?? idle());
+    api.waitForSessionIdle = waitForSessionIdle;
+
+    await widget["resumeStream"]("session", { streamId: 5 });
+
+    expect(widget["error"]).toBeUndefined();
+    expect(waitForSessionIdle).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows an error packet of a resumed stream as an error", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [{ ...streamingMessage([]), isStreaming: false }];
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      yield { stream_id: 5, next_cursor: 0, replay_complete: false };
+      yield { obj: { user_message_id: 6, reserved_assistant_message_id: 7 } };
+      yield { obj: { type: "error", exception: "boom" } };
+      return "ended";
+    });
+
+    await widget["resumeStream"]("session", { streamId: 5 });
+
+    expect(widget["error"]).toBe("Stream error: boom");
+  });
+
   it("refreshes the saved session after approving for the chat with no continuation", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => ({
@@ -1265,14 +1326,14 @@ describe("widget while a request waits", () => {
       decided_via: "USER",
       continuation: null,
     }));
-    const resolved = (id: string) => ({
+    const resolved = (id: string): Packet => ({
       obj: {
         type: "tool_approval_resolved",
         approval_id: id,
         outcome: "approved_for_chat",
       },
     });
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -1310,7 +1371,7 @@ describe("widget while a request waits", () => {
       identity: "shared",
     });
     stored.set("onyx-widget-session", initial);
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
@@ -1352,7 +1413,7 @@ describe("widget while a request waits", () => {
           ],
         });
       return new Response("none", { status: 404 });
-    }) as typeof fetch;
+    });
     skipPollPauses();
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
@@ -1385,7 +1446,7 @@ describe("widget while a request waits", () => {
     api.waitForSessionIdle = mock(async () =>
       idle({ approvals_version: "v1" })
     );
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       approvals_version: "v1",
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
@@ -1428,7 +1489,7 @@ describe("widget while a request waits", () => {
       idle({ approvals_version: "v1" })
     );
     let fails = true;
-    api.getChatSession = mock(async () => {
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => {
       if (fails) throw new Error("unavailable");
       return {
         approvals_version: "v1",
@@ -1486,7 +1547,7 @@ describe("widget while a request waits", () => {
     }));
     const urls: string[] = [];
     let version = "v0";
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       urls.push(url);
       if (url.endsWith("/status")) {
@@ -1519,7 +1580,7 @@ describe("widget while a request waits", () => {
         ],
         approvals_version: version,
       });
-    }) as typeof fetch;
+    });
     const count = (part: string) =>
       urls.filter((url) => url.includes(part)).length;
     return { widget, count };
@@ -1636,7 +1697,7 @@ describe("widget while a request waits", () => {
 
   it("shows a waiting request that the restored snapshot lacks from the saved session", async () => {
     const { widget, api } = waitingWidget();
-    api.getChatSession = mock(async () => ({
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
@@ -1678,7 +1739,7 @@ describe("widget while a request waits", () => {
   it("finishes a restored response from the saved session when replay is gone", async () => {
     const { stored, restore } = fakeSessionStorage();
     const urls: string[] = [];
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       urls.push(url);
       if (url.endsWith("/status"))
@@ -1707,7 +1768,7 @@ describe("widget while a request waits", () => {
         });
       }
       return new Response("none", { status: 404 });
-    }) as typeof fetch;
+    });
     const widget = restoredWidget();
 
     try {
@@ -1736,7 +1797,7 @@ describe("widget while a request waits", () => {
 
   it("restores a missing question from the saved session before its answer", async () => {
     const { stored, restore } = fakeSessionStorage();
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
@@ -1760,7 +1821,7 @@ describe("widget while a request waits", () => {
         });
       }
       return new Response("none", { status: 404 });
-    }) as typeof fetch;
+    });
     const widget = restoredWidget();
 
     try {
@@ -1793,13 +1854,13 @@ describe("widget while a request waits", () => {
       identity: "shared",
     });
     stored.set("onyx-widget-session", initial);
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
       if (url.includes("/get-chat-session/")) return Response.json(session);
       return new Response("none", { status: 404 });
-    }) as typeof fetch;
+    });
     const widget = restoredWidget();
     widget["messages"] = [];
     widget["currentIdentity"] = async () => "shared";
@@ -1894,7 +1955,7 @@ describe("widget while a request waits", () => {
       identity: "shared",
     });
     stored.set("onyx-widget-session", initial);
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
@@ -1944,7 +2005,7 @@ describe("widget while a request waits", () => {
           ],
         });
       return new Response("none", { status: 404 });
-    }) as typeof fetch;
+    });
     const widget = restoredWidget();
     widget["messages"] = [];
     widget["currentIdentity"] = async () => "shared";
@@ -2032,7 +2093,9 @@ describe("widget while a request waits", () => {
     widget["inputValue"] = "third";
     const api = widget["apiService"];
     api.waitForSessionIdle = mock(async () => idle());
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    api.getChatSession = mock(
+      async (): Promise<ChatSessionDetail> => ({ messages: [], packets: [] })
+    );
     api.streamMessage = mock(async function* (): AsyncGenerator<Packet> {
       yield { obj: { type: "stop" } };
     });
@@ -2044,16 +2107,101 @@ describe("widget while a request waits", () => {
     );
   });
 
+  it("sends under an agent's answer that finished after the last read, and shows it", async () => {
+    const { restore } = fakeSessionStorage();
+    const widget = restoredWidget();
+    widget["chatSessionId"] = "session";
+    widget["messages"] = [
+      { id: 6, role: "user", content: "Research it", timestamp: 0 },
+      { id: 7, role: "assistant", content: "Started.", timestamp: 0 },
+    ];
+    widget["inputValue"] = "Next";
+    const api = widget["apiService"];
+    // The agent's result started answer 9, which finished before the send.
+    let sent = false;
+    api.waitForSessionIdle = mock(async () =>
+      idle({ latest_response_id: sent ? 11 : 9 })
+    );
+    api.streamMessage = mock(async function* (): AsyncGenerator<Packet> {
+      sent = true;
+      yield { obj: { user_message_id: 10, reserved_assistant_message_id: 11 } };
+      yield { obj: { type: "message_start" } };
+      yield { obj: { type: "message_delta", content: "Next answer." } };
+      yield { obj: { type: "stop" } };
+    });
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
+      messages: [
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
+        {
+          message_id: 7,
+          message_type: "assistant",
+          parent_message: 6,
+          latest_child_message: 8,
+        },
+        {
+          message_id: 8,
+          message_type: "agent_results",
+          parent_message: 7,
+          latest_child_message: 9,
+        },
+        {
+          message_id: 9,
+          message_type: "assistant",
+          parent_message: 8,
+          latest_child_message: 10,
+        },
+        {
+          message_id: 10,
+          message_type: "user",
+          parent_message: 9,
+          latest_child_message: 11,
+        },
+        { message_id: 11, message_type: "assistant", parent_message: 10 },
+      ],
+      packets: [
+        [{ obj: { type: "stop" } }],
+        [
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "Agent done." } },
+          { obj: { type: "stop" } },
+        ],
+        [
+          { obj: { type: "message_start" } },
+          { obj: { type: "message_delta", content: "Next answer." } },
+          { obj: { type: "stop" } },
+        ],
+      ],
+    }));
+
+    try {
+      await widget["sendMessage"]();
+      await waitUntil(() => widget["abortController"] === undefined);
+    } finally {
+      restore();
+    }
+
+    expect(api.streamMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ parentMessageId: 9 })
+    );
+    expect(widget["messages"].map((m) => [m.id, m.content])).toEqual([
+      [6, "Research it"],
+      [7, "Started."],
+      [9, "Agent done."],
+      [10, "Next"],
+      [11, "Next answer."],
+    ]);
+  });
+
   it("keeps a restored response unfinished when the saved session cannot load", async () => {
     const { stored, restore } = fakeSessionStorage();
-    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+    mockFetch(async (input: RequestInfo | URL) => {
       const url = String(input);
       if (url.endsWith("/status"))
         return Response.json({ is_processing: false });
       return new Response("none", {
         status: url.includes("/get-chat-session/") ? 403 : 404,
       });
-    }) as typeof fetch;
+    });
     const widget = restoredWidget();
 
     try {
@@ -2103,10 +2251,11 @@ describe("widget while a request waits", () => {
       yield { obj: { type: "stop" } };
       yield { stream_id: 4, next_cursor: 6, replay_complete: true };
     });
-    api.waitForSessionIdle = mock(async () => idle());
+    const waitForSessionIdle = mock(async () => idle());
+    api.waitForSessionIdle = waitForSessionIdle;
 
     await widget["decideApproval"](request("a"), "approve_once");
-    await waitUntil(() => api.waitForSessionIdle.mock.calls.length > 0);
+    await waitUntil(() => waitForSessionIdle.mock.calls.length > 0);
 
     expect(api.resumeStream).toHaveBeenCalledTimes(1);
     expect(api.resumeStream).toHaveBeenCalledWith(
@@ -2137,19 +2286,27 @@ describe("widget while a request waits", () => {
     widget["messages"] = [];
     const api = widget["apiService"];
     widget["currentIdentity"] = async () => "shared";
-    let pending: ApprovalEntry | null = null;
-    api.resumeStream = mock(async function* (): AsyncGenerator<Packet> {
+    // Read while the stream waits, before the saved session loads
+    const seen: { pending: ApprovalEntry | null } = { pending: null };
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 7 } };
       yield { obj: request("a") };
-      pending = widget["pendingApproval"];
+      seen.pending = widget["pendingApproval"];
+      return "ended";
     });
     api.waitForSessionIdle = mock(async () => idle());
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    const getChatSession = mock(
+      async (): Promise<ChatSessionDetail> => ({ messages: [], packets: [] })
+    );
+    api.getChatSession = getChatSession;
 
     try {
       widget["restoreSession"]();
       // The follow ends at the saved session.
-      await waitUntil(() => api.getChatSession.mock.calls.length > 0);
+      await waitUntil(() => getChatSession.mock.calls.length > 0);
     } finally {
       restore();
     }
@@ -2159,7 +2316,7 @@ describe("widget while a request waits", () => {
       expect.anything(),
       null
     );
-    expect(pending?.request.approval_id).toBe("a");
+    expect(seen.pending?.request.approval_id).toBe("a");
   });
 
   it("restores the question of a turn accepted before the reload saved it", async () => {
@@ -2192,12 +2349,15 @@ describe("widget while a request waits", () => {
       yield { stream_id: 5, next_cursor: 3, replay_complete: true };
     });
     api.waitForSessionIdle = mock(async () => idle());
-    api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+    const getChatSession = mock(
+      async (): Promise<ChatSessionDetail> => ({ messages: [], packets: [] })
+    );
+    api.getChatSession = getChatSession;
 
     try {
       widget["restoreSession"]();
       // The follow ends at the saved session, which finishes the answer.
-      await waitUntil(() => api.getChatSession.mock.calls.length > 0);
+      await waitUntil(() => getChatSession.mock.calls.length > 0);
       await waitUntil(() => saved()?.at(-1)?.isStreaming === false);
     } finally {
       restore();

@@ -17,6 +17,7 @@ export interface StreamCursor {
 export type PacketType =
   | MessageResponseIDInfo
   | UserMessagePacket
+  | ReplayEnd
   | MessageStart
   | MessageDelta
   | CitationInfo
@@ -53,6 +54,14 @@ export interface UserMessagePacket {
   type: "user_message";
   id: string;
   message: string;
+}
+
+/**
+ * Ends the replayed prefix of a stream that continues a suspended response;
+ * the packets after it are live.
+ */
+export interface ReplayEnd {
+  type: "replay_end";
 }
 
 export interface MessageStart {

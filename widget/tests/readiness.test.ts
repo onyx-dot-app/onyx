@@ -4,12 +4,18 @@ import {
   ApiService,
   type ResumeEnd,
 } from "../src/services/api-service";
+import {
+  isTemplateResult,
+  TemplateResultType,
+} from "lit/directive-helpers.js";
 import type {
+  ChatSessionDetail,
   ChatSessionStatus,
   ChatStream,
   Packet,
   StreamCursor,
 } from "../src/types/api-types";
+import { mockFetch, mockTimeouts } from "./mocks";
 import { chatStream, idle, offer, runs } from "./session-status";
 import { OnyxChatWidget } from "../src/widget";
 
@@ -23,12 +29,12 @@ describe("widget readiness", () => {
   it("waits through server cleanup and uses the current credential for polls", async () => {
     const tokens = ["first", "renewed"];
     const headers: string[] = [];
-    globalThis.fetch = mock(
+    mockFetch(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         headers.push(new Headers(init?.headers).get("Authorization") ?? "");
         return Response.json({ is_processing: headers.length === 1 });
       }
-    ) as typeof fetch;
+    );
     const api = new ApiService("https://onyx.test/api", async () =>
       tokens.shift()!
     );
@@ -42,12 +48,12 @@ describe("widget readiness", () => {
 
   it("does not treat failed or malformed status responses as idle", async () => {
     let calls = 0;
-    globalThis.fetch = mock(async () => {
+    mockFetch(async () => {
       calls++;
       if (calls === 1) return new Response("unavailable", { status: 401 });
       if (calls === 2) return Response.json({});
       return Response.json({ is_processing: false });
-    }) as typeof fetch;
+    });
     const unconfirmed = mock(() => {});
     const api = new ApiService("https://onyx.test/api", async () => "key");
     await api.waitForSessionIdle(
@@ -62,9 +68,9 @@ describe("widget readiness", () => {
   it.each([403, 404])(
     "ends readiness polling for unavailable sessions (%s)",
     async (status) => {
-      globalThis.fetch = mock(
+      mockFetch(
         async () => new Response("unavailable", { status })
-      ) as typeof fetch;
+      );
       const api = new ApiService("https://onyx.test/api", async () => "key");
       const unconfirmed = mock(() => {});
       await expect(
@@ -80,13 +86,9 @@ describe("widget readiness", () => {
   );
 
   it("retries a stalled status request without releasing Send early", async () => {
-    const setTimer = globalThis.setTimeout;
-    const timeout = spyOn(globalThis, "setTimeout").mockImplementation(
-      (callback, delay, ...args) =>
-        setTimer(callback, delay === 10_000 ? 0 : delay, ...args)
-    );
+    const timeout = mockTimeouts((ms) => (ms === 10_000 ? 0 : ms));
     let calls = 0;
-    globalThis.fetch = mock(
+    mockFetch(
       async (_input: RequestInfo | URL, init?: RequestInit) => {
         calls++;
         if (calls > 1) return Response.json({ is_processing: false });
@@ -98,7 +100,7 @@ describe("widget readiness", () => {
           );
         });
       }
-    ) as typeof fetch;
+    );
     const unconfirmed = mock(() => {});
     const api = new ApiService("https://onyx.test/api", async () => "key");
     await api.waitForSessionIdle(
@@ -118,9 +120,9 @@ describe("widget readiness", () => {
     spyOn(AbortSignal, "timeout").mockImplementation(() => {
       throw new TypeError("AbortSignal.timeout is unavailable");
     });
-    globalThis.fetch = mock(async () =>
+    mockFetch(async () =>
       Response.json({ is_processing: false })
-    ) as typeof fetch;
+    );
     const controller = new AbortController();
     const api = new ApiService("https://onyx.test/api", async () => "key");
 
@@ -131,11 +133,7 @@ describe("widget readiness", () => {
   });
 
   it("retries credential resolution after the readiness deadline", async () => {
-    const setTimer = globalThis.setTimeout;
-    spyOn(globalThis, "setTimeout").mockImplementation(
-      (callback, delay, ...args) =>
-        setTimer(callback, delay === 10_000 ? 0 : delay, ...args)
-    );
+    mockTimeouts((ms) => (ms === 10_000 ? 0 : ms));
     let resolveToken!: (token: string) => void;
     const firstToken = new Promise<string>((resolve) => {
       resolveToken = resolve;
@@ -143,9 +141,9 @@ describe("widget readiness", () => {
     const tokenProvider = mock(async () => "renewed").mockImplementationOnce(
       () => firstToken
     );
-    globalThis.fetch = mock(async () =>
+    mockFetch(async () =>
       Response.json({ is_processing: false })
-    ) as typeof fetch;
+    );
     const unconfirmed = mock(() => {});
     const api = new ApiService("https://onyx.test/api", tokenProvider);
     await api.waitForSessionIdle(
@@ -172,9 +170,9 @@ describe("widget readiness", () => {
     const token = new Promise<string>((resolve) => {
       resolveToken = resolve;
     });
-    globalThis.fetch = mock(async () =>
+    mockFetch(async () =>
       Response.json({ is_processing: false })
-    ) as typeof fetch;
+    );
     const controller = new AbortController();
     const unconfirmed = mock(() => {});
     const api = new ApiService("https://onyx.test/api", () => token);
@@ -193,10 +191,10 @@ describe("widget readiness", () => {
 
   it("cancels polling when a reset replaces the conversation", async () => {
     const controller = new AbortController();
-    globalThis.fetch = mock(async () => {
+    mockFetch(async () => {
       controller.abort();
       return Response.json({ is_processing: true });
-    }) as typeof fetch;
+    });
     const api = new ApiService("https://onyx.test/api", async () => "key");
     await expect(
       api.waitForSessionIdle("session", controller.signal, () => {})
@@ -285,8 +283,6 @@ describe("widget readiness", () => {
       apiKey: "key",
       mode: "inline",
     };
-    const compactInput = spyOn(widget, "renderCompactInput");
-    const messages = spyOn(widget, "renderMessages");
     widget["inputValue"] = "retry me";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
@@ -299,14 +295,26 @@ describe("widget readiness", () => {
     expect(widget["messages"]).toHaveLength(0);
     expect(widget["inputValue"]).toBe("retry me");
     expect(widget["error"]).toBe("offline");
-    widget.render();
-    expect(compactInput).not.toHaveBeenCalled();
-    expect(messages).toHaveBeenCalled();
+    // The static markup of the rendered template and the ones in it
+    const markup = (value: unknown): string =>
+      isTemplateResult(value, TemplateResultType.HTML)
+        ? value.strings.join("") + value.values.map(markup).join("")
+        : Array.isArray(value)
+          ? value.map(markup).join("")
+          : "";
+    const shown = markup(widget.render());
+    expect(shown).not.toContain("compact-input-container");
+    expect(shown).toContain('class="messages"');
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
     });
-    api.resumeStream = mock(async function* () {});
-    api.getChatSession = mock(async () => ({
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      return "ended";
+    });
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
@@ -320,11 +328,7 @@ describe("widget readiness", () => {
   });
 
   it("keeps an acknowledged prompt and finishes its response from the saved session", async () => {
-    const setTimer = globalThis.setTimeout;
-    spyOn(globalThis, "setTimeout").mockImplementation(
-      (callback, delay, ...args) =>
-        setTimer(callback, delay === 1_000 ? 0 : delay, ...args)
-    );
+    mockTimeouts((ms) => (ms === 1_000 ? 0 : ms));
     const widget = new OnyxChatWidget();
     widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
     widget["inputValue"] = "accepted question";
@@ -336,8 +340,13 @@ describe("widget readiness", () => {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       throw new Error("delivery failed");
     });
-    api.resumeStream = mock(async function* () {});
-    api.getChatSession = mock(async () => ({
+    api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      return "ended";
+    });
+    api.getChatSession = mock(async (): Promise<ChatSessionDetail> => ({
       messages: [
         { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
@@ -403,7 +412,12 @@ describe("widget readiness", () => {
         if (afterSending && reads++ === 0) return idle();
         throw new Error("Session unavailable");
       });
-      api.resumeStream = mock(async function* () {});
+      api.resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      return "ended";
+    });
       widget["apiService"] = api;
       await widget["sendMessage"]();
       expect(widget["error"]).toBe("Session unavailable");
@@ -420,20 +434,19 @@ describe("widget readiness", () => {
       widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
       widget["currentIdentity"] = async () => "user";
       const api = new ApiService("https://onyx.test/api", async () => "key");
-      api.getChatSession = mock(async () => ({ messages: [], packets: [] }));
+      api.getChatSession = mock(
+        async (): Promise<ChatSessionDetail> => ({ messages: [], packets: [] })
+      );
       widget["apiService"] = api;
       return { widget, api };
     }
 
     /** Pauses of the poll interval end at once and are logged. */
     function logPauses(log: string[]) {
-      const setTimer = globalThis.setTimeout;
-      spyOn(globalThis, "setTimeout").mockImplementation(
-        (callback, delay, ...args) => {
-          if (delay === 1_000) log.push("pause");
-          return setTimer(callback, delay === 1_000 ? 0 : delay, ...args);
-        }
-      );
+      mockTimeouts((ms) => {
+        if (ms === 1_000) log.push("pause");
+        return ms === 1_000 ? 0 : ms;
+      });
     }
 
     it("waits the poll interval before each status read, also after progress", async () => {
@@ -792,7 +805,7 @@ describe("widget readiness", () => {
 });
 
 it.each([401, 405])("reports permanent readiness failure (%s)", async (status) => {
-  globalThis.fetch = mock(async () => new Response(null, {status})) as typeof fetch;
+  mockFetch(async () => new Response(null, {status}));
   const api = new ApiService("https://onyx.test/api", async () => "key");
   await expect(api.waitForSessionIdle("session", new AbortController().signal, () => {})).rejects.toThrow(
     status === 401 ? "Authentication failed" : "does not support"

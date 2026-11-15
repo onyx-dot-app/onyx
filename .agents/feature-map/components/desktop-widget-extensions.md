@@ -82,7 +82,9 @@ session.
 send → ApiService                                   services/api-service.ts
   ├─ createChatSession   (first message only)
   ├─ waitForSessionIdle → GET /chat/chat-session/{id}/status; for a new chat
-  │    its approvals_version is the baseline (create returns none)
+  │    its approvals_version is the baseline (create returns none); a
+  │    latest_response_id the transcript lacks loads the saved session
+  │    first, and the question goes under that answer
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
@@ -117,8 +119,9 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
   │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
   │    same stream → reattach from the last cursor; new stream → from 0
-  ├─ after its stop → waitForSessionIdle, then enable Send; a new stream id
-  │    → follow from 0
+  ├─ after its stop (a transport failure after the stop counts; an error
+  │    packet ends the follow with its error) → waitForSessionIdle, then
+  │    enable Send; a new stream id → follow from 0
   └─ idle with a response unfinished or waiting for decisions, a sent
        answer or a status read's latest_response_id not shown, a question
        with no answer after it, or a changed approvals_version (restore and
