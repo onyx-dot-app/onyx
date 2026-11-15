@@ -3,7 +3,9 @@ the run saves it, and any process continues it after the answer."""
 
 import gc
 import json
+import sys
 import threading
+import time
 from collections.abc import Callable, Mapping
 
 import pydantic_monty
@@ -550,3 +552,119 @@ def test_a_restored_store_applies_the_writes_that_shrink_it_first(
 
     assert agents.sent == ["x"]
     assert "580 None" in output
+
+
+def test_a_suspended_program_parks_on_the_reservation_that_it_holds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The program gives up its worker while its call's approval request is
+    being opened, and parks once the call waits for the answer. Its dump fits
+    the budget once, and the park counts it once."""
+
+    class OneDump(sandbox._SuspendedBytes):
+        """A budget that holds exactly the first dump reserved."""
+
+        def __init__(self) -> None:
+            super().__init__(0)
+            self.reservations = 0
+
+        def reserve(self, size: int) -> bool:
+            self.reservations += 1
+            if self.reservations == 1:
+                self.release(size)
+            return super().reserve(size)
+
+    budget = OneDump()
+    monkeypatch.setattr(sandbox, "suspended_bytes", budget)
+    monkeypatch.setattr(
+        "onyx.tools.tool_implementations.code_mode.cells.suspended_bytes", budget
+    )
+    monkeypatch.setattr(sandbox._worker_demand, "gives_up", lambda _wake: True)
+    opening = threading.Event()
+    ask = _ask_for_send
+
+    def ask_when_opened(context: ToolCallContext) -> PendingToolInput | None:
+        if context.call.name == "send":
+            assert opening.wait(10)
+        return ask(context)
+
+    monkeypatch.setattr(sys.modules[__name__], "_ask_for_send", ask_when_opened)
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    try:
+        deadline = time.monotonic() + 10
+        while budget.reservations == 0 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert budget.reservations == 1
+        opening.set()
+        _suspended(run)
+
+        run.submit(_answer(InputDecision.APPROVE))
+        output = run.result(timeout=20).output.text
+        assert agents.sent == ["x"]
+        assert "sent {'sent': 'x'}" in output
+    finally:
+        opening.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
+def test_a_restored_call_keeps_arguments_whose_names_collide() -> None:
+    """`repo-name` and `repo_name` become the keywords `repo_name` and
+    `repo_name_2`. After the park, the approved call gets both values."""
+    received: list[JsonValue] = []
+
+    def send(invocation: ToolInvocation, _context: ToolContext) -> ToolOutcome:
+        received.append(dict(invocation.arguments))
+        return ToolResult(content=json.dumps({"sent": True}))
+
+    def agent(state: AgentState | None = None) -> Agent:
+        cells = CodeCells()
+        tool = FakeTool(
+            "send",
+            send,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "repo-name": {"type": "string"},
+                    "repo_name": {"type": "string"},
+                },
+                "required": ["repo-name", "repo_name"],
+            },
+        )
+        execute = CodeModeTool([tool], cells=cells, limits=PARKING_LIMITS)
+        return Agent(
+            FakeModelClient(
+                _reply(
+                    (
+                        _execute(
+                            "program",
+                            'print(await send(repo_name="A", repo_name_2="B"))',
+                        ),
+                    ),
+                    threading.Event(),
+                )
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=state,
+            tools=[
+                execute.bind(ToolContext),
+                WaitCodeTool(cells, execute.program).bind(ToolContext),
+            ],
+            before_tool_call=_ask_for_send,
+            on_suspend=cells.suspend,
+            on_finish=cells.finish,
+            restoration=CellsFeature(cells),
+        )
+
+    run = agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    checkpoint = _transferred(run)
+    resumed = agent(checkpoint.agent_state).resume(
+        checkpoint.run_state, answers=[_answer(InputDecision.APPROVE)]
+    )
+    resumed.result(timeout=20)
+    assert resumed.wait_for_idle(10)
+
+    assert received == [{"repo-name": "A", "repo_name": "B"}]

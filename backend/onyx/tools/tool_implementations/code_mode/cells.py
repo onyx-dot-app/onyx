@@ -103,10 +103,12 @@ from onyx.tools.tool_implementations.code_mode.store import (
     ProgramStore,
     changed_writes,
     commit_limit_error,
+    json_value,
     lost_store_writes,
     store_snapshot,
 )
 from onyx.tools.tool_implementations.code_mode.stubs import (
+    MAX_TOOL_ARGUMENT_BYTES,
     ToolFunction,
     ToolStubs,
     program_value,
@@ -1337,23 +1339,26 @@ class CodeCell:
 
     def _park(self, parked: ParkedProgram | None) -> bool:
         """Keep the program while it waits only for calls that wait for input.
-        Refuse it when it could not be dumped (None), its dump does not fit
-        MAX_SUSPENDED_BYTES, or the cell stops: then each such call ends its
-        request and fails, and the program continues. The dump counts against
-        that budget until nothing holds the saved program."""
+        Refuse it when it could not be dumped or its dump does not fit
+        MAX_SUSPENDED_BYTES (None), or the cell stops: then each such call ends
+        its request and fails, and the program continues. The dump's
+        reservation of that budget, which the sandbox passes on, ends when
+        nothing holds the saved program."""
         with self._lock:
             if parked is not None and not self._stopping.cancelled:
                 functions = self._program.stubs.functions
                 saved = SavedProgram(
-                    # The JSON copy of each call's arguments, to save.
+                    # A JSON copy of each call's keyword arguments, to save;
+                    # the resumed call converts them to tool arguments.
                     state=parked.state.model_copy(
                         update={
                             "waiting": {
                                 call_id: external.model_copy(
                                     update={
-                                        "kwargs": tool_arguments(
-                                            functions[external.function_name],
+                                        "kwargs": json_value(
                                             external.kwargs,
+                                            f"The arguments of {external.function_name}()",
+                                            MAX_TOOL_ARGUMENT_BYTES,
                                         ).value
                                     }
                                 )
@@ -1372,14 +1377,11 @@ class CodeCell:
                         for record in (self._calls[index] for index in self._requests)
                     },
                 )
-                if suspended_bytes.reserve(len(parked.snapshot)):
-                    weakref.finalize(
-                        saved, suspended_bytes.release, len(parked.snapshot)
-                    )
-                    self._parked = saved
-                    self._release_slot()
-                    self._changed.notify_all()
-                    return True
+                weakref.finalize(saved, suspended_bytes.release, len(parked.snapshot))
+                self._parked = saved
+                self._release_slot()
+                self._changed.notify_all()
+                return True
             requests = list(self._requests.values())
             for index in self._requests:
                 self._answers[index] = ToolResult(

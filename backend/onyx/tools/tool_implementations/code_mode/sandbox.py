@@ -1309,14 +1309,31 @@ def _suspend(
 
 
 def _offered(
-    run: _Run, snapshot: bytes | None, park: Callable[[ParkedProgram | None], bool]
+    run: _Run,
+    snapshot: bytes | None,
+    park: Callable[[ParkedProgram | None], bool],
+    *,
+    reserved: bool,
 ) -> ParkedProgram | None:
     """Offer a parkable program to `park`; None when it does not park. Then its
-    calls that wait for input run again, and the handler answers them."""
+    calls that wait for input run again, and the handler answers them.
+
+    The dump counts against MAX_SUSPENDED_BYTES: its existing reservation when
+    `reserved`, else a new one, and a dump that does not fit is not offered.
+    A parked program's reservation passes to `park`, which releases it."""
     parked = run.parked(snapshot) if snapshot is not None else None
+    if (
+        parked is not None
+        and not reserved
+        and not suspended_bytes.reserve(len(parked.snapshot))
+    ):
+        metrics.count_suspension("over_budget")
+        parked = None
     if park(parked) and parked is not None:
         metrics.count_suspension("parked")
         return parked
+    if parked is not None and not reserved:
+        suspended_bytes.release(len(parked.snapshot))
     metrics.count_suspension("park_refused")
     run.requeue_waiting()
     return None
@@ -1585,6 +1602,7 @@ def _drive(
                                 run,
                                 _dump(run, step, worker, PARK_MEMORY_MESSAGE),
                                 park,
+                                reserved=False,
                             )
                             if offered is not None:
                                 return offered
@@ -1602,8 +1620,10 @@ def _drive(
                         == "park"
                         and park is not None
                     ):
-                        offered = _offered(run, suspended.snapshot, park)
+                        offered = _offered(run, suspended.snapshot, park, reserved=True)
                         if offered is not None:
+                            # The parked program holds the reservation now.
+                            suspended = None
                             return offered
     finally:
         if suspended is not None:
