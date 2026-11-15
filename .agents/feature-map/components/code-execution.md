@@ -174,7 +174,17 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         observation is running
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
                                         the same when the run suspends, with
-                                        reason="suspended"; later calls can start cells
+                                        reason="suspended"; later calls can start cells. A
+                                        cell whose observation waits for input stays parked
+  ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
+                                        SavedCodeCell in ChatFeatureState.code_cells; its
+                                        dump goes to the file store at handoff, under a
+                                        unique ID (chat/restoration.py:persist_checkpoint_files)
+  CodeModeTool / WaitCodeTool.resume_with_input -> CodeCells.resume
+                                        build the saved cell with the current tools and
+                                        continue the observation that waited, with the
+                                        answers, in any process (sandbox.execute_program
+                                        with `parked`)
   chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
                                         a closing record follows the card section end
 ```
@@ -426,13 +436,45 @@ health calls are not retried.
     `build_chat_prompt` asks each offered tool for `Tool.operation_names`, and
     `CodeModeTool` answers with its functions, so the reminder names a nested
     tool as a function of `execute_code` programs.
-    Nested calls go through the run's `before_tool_call` hook as direct calls
-    do (`ToolInvocation.before_call`,
-    `tools/tool_implementations/code_mode/cells.py:_decided_result`): a
+    Nested calls get the run's `before_tool_call` hook and approval gate as
+    direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
+    `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does, and a `PendingToolInput` decision fails the
-    call, since a program cannot wait for approval. A hook that raises fails
-    the run, as for a direct call: `before_call` raises
+    program as a tool error does. A request decision shows the request at once,
+    also for a cell that runs in the background, and the call waits without a
+    thread (the handler returns
+    `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program
+    waits only for such calls and no other call or sleep of it runs
+    (`tools/tool_implementations/code_mode/sandbox.py:_Run.parkable`), it parks: the sandbox dumps it, returns its
+    worker, and the cell gives back its running-cell slot (`CodeCell._park`).
+    An observation that sees the park ends with `NestedInputWait`, which the
+    run saves; its stdout and calls so far stay in the cell's window. A dump
+    that the memory share forbids (`MAX_DUMP_MEMORY_SHARE`, about 34 MB of
+    heap with the default limits) is refused, and so is a dump that does not fit
+    in `MAX_SUSPENDED_BYTES`, which counts a parked dump until nothing holds the
+    cell's saved program, and a program that holds a
+    result it has not received: each waiting call ends its request and fails with
+    `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. A dump that
+    still runs out of memory loses the worker, so the program stops with
+    `tools/tool_implementations/code_mode/sandbox.py:PARK_MEMORY_MESSAGE`. When the run
+    suspends, a parked cell whose observation waits is saved with the Monty
+    version that dumped it; other cells close. The cell keeps only the request
+    ID of each waiting call (`SavedCodeCell.requests`); the run's
+    `NestedInputWait` holds the requests.
+    After the answers, the observation's continuation builds the cell, takes a
+    running-cell slot, waiting for one, and loads the dump on a new worker.
+    A dump from another Monty version stops the program with
+    `tools/tool_implementations/code_mode/cells.py:PROGRAM_VERSION_MESSAGE`. An approved call runs then, unless its
+    tool is gone, its function name now names another tool, or its parameters
+    changed (`UNAVAILABLE_CALL_MESSAGE`); a
+    rejected call raises the rejection in the program. The program's lifetime
+    counts the time it ran before it parked, not the wait. A run that ends
+    while a cell is parked closes it; a restored run that ends before a saved
+    cell resumes gives that cell's observation the same cancelled record. The
+    cells never delete a dump: the checkpoint row that saved it owns it and
+    deletes it when it ends or is replaced
+    ([[chat-persistence#checkpoints-for-approvals]]). A hook that
+    raises fails the run, as for a direct call: `NestedCallGate.decide` raises
     `agents/tools.py:BeforeToolCallFailed`, a `BaseException` that the program
     cannot catch; the cell stops its program, and the observation that reports
     the end raises it out of the tool. When no observation reports it, closing

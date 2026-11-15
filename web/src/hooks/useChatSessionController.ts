@@ -301,7 +301,7 @@ export default function useChatSessionController({
           ? restoreIncognitoMessages(
               savedMessages,
               localMessages,
-              chatSession.current_stream?.stream_id
+              chatSession.current_stream?.response_ids[0]
             )
           : preserveFailedMessages(savedMessages, localMessages);
       }
@@ -311,13 +311,13 @@ export default function useChatSessionController({
         useChatSessionStore
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
-            sendAcknowledged: Promise.resolve(currentStream.stream_id),
+            sendAcknowledged: Promise.resolve(currentStream),
           });
       }
-      const { messageTree: newMessageMap, replayStreamId } = prepareSavedChat(
+      const { messageTree: newMessageMap, replayStream } = prepareSavedChat(
         savedMessages,
         localMessages,
-        currentStream?.stream_id
+        currentStream
       );
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
@@ -344,6 +344,7 @@ export default function useChatSessionController({
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
             hasOlderMessages: chatSession.has_older_messages ?? false,
+            approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
@@ -352,7 +353,7 @@ export default function useChatSessionController({
 
       if (
         sessionOwner &&
-        (replayStreamId !== null ||
+        (replayStream !== null ||
           sessionBusy ||
           useChatSessionStore
             .getState()
@@ -363,7 +364,7 @@ export default function useChatSessionController({
           controller: sessionOwner,
           errorMessage: tReadiness("checkFailed"),
           mode: recovering ? "recovery" : "completion",
-          streamId: replayStreamId,
+          stream: replayStream,
           messageMap: newMessageMap,
         });
       }

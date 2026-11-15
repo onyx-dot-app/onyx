@@ -43,6 +43,7 @@ covers new files that match it.
 | `backend/onyx/chat/incognito_context.py` | chat-persistence, context-assembly |
 | `backend/onyx/prompts/`, `backend/ee/onyx/prompts/` | context-assembly |
 | `backend/onyx/chat/citation_processor.py`, `backend/onyx/chat/citation_utils.py` | citations |
+| `backend/onyx/chat/tool_approvals.py`, `backend/onyx/db/approval_request.py` | mcp-and-custom-tools |
 | `backend/onyx/db/chat_response.py`, `backend/onyx/db/chat_subagents.py`, `backend/onyx/db/chat_inputs.py` | chat-persistence |
 | `backend/onyx/db/chat.py`, `backend/onyx/db/chat_search.py`, `backend/onyx/db/feedback.py` | chat-persistence |
 | `backend/ee/onyx/background/celery/tasks/ttl_management/` | chat-persistence, background-jobs |
@@ -137,6 +138,7 @@ covers new files that match it.
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
 | `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py`, `backend/ee/onyx/db/mcp.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
@@ -235,6 +237,7 @@ covers new files that match it.
 | `backend/onyx/server/features/build/connect_app.py`, `backend/onyx/server/features/build/sandbox/image/opencode-plugins/connect-app.ts` | craft-external-apps |
 | `backend/onyx/server/features/build/db/action_approval.py` | craft-external-apps |
 | `backend/onyx/db/action_policy.py`, `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
+| `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
 | `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
 | `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
@@ -405,4 +408,4 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |

@@ -12654,6 +12654,9 @@
         "alreadyAccepted": "此消息已被接受，不再处于待处理状态。",
         "interruptFailed": "暂时无法发送此消息。消息仍处于待处理状态。",
         "stopSubagentsFailed": "无法停止子代理。"
+      },
+      "pendingToolApproval": {
+        "toast": "请先批准或拒绝待处理的工具调用。"
       }
     },
     "mcpApiKey": {
@@ -13096,6 +13099,9 @@
           },
           "working": {
             "label": "处理中"
+          },
+          "waitingForApproval": {
+            "label": "正在等待你的批准"
           }
         },
         "internalSearch": {
@@ -13232,6 +13238,9 @@
             "status": "正在搜索网页"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} 想要运行 {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14450,6 +14459,54 @@
         "decision": "决策",
         "vision": "视觉"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "无载荷。"
+      },
+      "showLess": {
+        "button": "收起"
+      },
+      "showMore": {
+        "button": "展开"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "在此聊天中批准",
+        "tooltip": "立即批准，并在此聊天的剩余时间内运行此工具而不再询问"
+      },
+      "approveOnce": {
+        "ariaLabel": "仅批准此操作一次",
+        "button": "批准一次"
+      },
+      "approveSession": {
+        "button": "批准整个会话",
+        "tooltip": "批准此会话中的匹配操作"
+      },
+      "deadline": "请在 {time} 前批准",
+      "header": {
+        "required": "已请求批准：{headline}"
+      },
+      "headline": {
+        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
+        "singleAction": "{app} 中的 {action}"
+      },
+      "reject": {
+        "ariaLabel": "拒绝此操作",
+        "button": "拒绝"
+      },
+      "record": {
+        "approved": "已批准：{headline}",
+        "closed": "不再等待：{headline}",
+        "disabled": "已禁用：{headline}",
+        "expired": "已超时：{headline}",
+        "rejected": "未批准：{headline}",
+        "approvedForChat": "已在此聊天中批准：{headline}",
+        "approvedForSession": "已在此会话中批准：{headline}"
+      },
+      "submitError": "无法提交你的决定。请重试。",
+      "actionWithDescription": "{action}：{description}"
     }
   },
   "craft": {
@@ -14462,50 +14519,6 @@
       },
       "switch": {
         "ariaLabel": "切换代理"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "仅批准此操作一次",
-        "button": "批准一次"
-      },
-      "approveSession": {
-        "button": "批准整个会话",
-        "tooltip": "批准此会话中的匹配操作"
-      },
-      "details": {
-        "hideAriaLabel": "隐藏详情",
-        "showAriaLabel": "显示详情"
-      },
-      "header": {
-        "required": "需要批准：{headline}"
-      },
-      "headline": {
-        "multiAction": "{app} 中的 {count, plural, one {# 个操作} other {# 个操作}}",
-        "singleAction": "{app} 中的 {action}"
-      },
-      "payload": {
-        "empty": {
-          "label": "无载荷。"
-        },
-        "showLess": {
-          "button": "收起"
-        },
-        "showMore": {
-          "button": "展开"
-        }
-      },
-      "reject": {
-        "ariaLabel": "拒绝此操作",
-        "button": "拒绝"
-      },
-      "status": {
-        "approved": "已批准",
-        "rejected": "已拒绝",
-        "expired": "已过期"
-      },
-      "submit": {
-        "errorFallback": "提交决定失败"
       }
     },
     "apps": {
@@ -14643,7 +14656,7 @@
         "duplicateSkillName": "应用“{appName}”已有名为“{skillName}”的关联技能。请上传其他名称的技能。"
       },
       "mcpPolicy": {
-        "description": "配置 Craft 智能体可以使用此 MCP 服务器的工具执行的操作。",
+        "description": "选择在聊天和 Craft 中哪些工具自动运行、请求批准或被禁用。",
         "emptyPolicies": "此服务器上没有已启用的工具。请先在 MCP 操作页面启用工具。",
         "saveButton": "保存",
         "title": "编辑 {name}"
@@ -15840,7 +15853,7 @@
     "actionPolicies": {
       "appTitle": "{name} 审批设置",
       "title": "审批设置",
-      "personalDescription": "这些设置决定 Craft 对话和新任务中的操作是自动运行还是需要批准；现有任务保留各自的设置。",
+      "personalDescription": "这些设置决定 Craft 对话、新任务和聊天中的 MCP 工具调用是自动运行还是需要批准；现有任务保留各自的设置。",
       "taskDescription": "选择此任务可使用的插件，并管理哪些操作可自动执行。更改仅适用于此任务。",
       "newTaskDescription": "启用插件后，将以您当前的操作设置为初始设置。",
       "workspace_disabled": "工作区已禁用",
@@ -15856,9 +15869,6 @@
       "saveError": "无法保存审批设置。",
       "emptyActions": "没有已知操作。未知操作需要审批。",
       "emptyApps": "没有可用应用。",
-      "expired": "审批已超时。操作未执行。",
-      "rejected": "请求已拒绝。此请求未执行。",
-      "deadline": "请在 {time} 前批准",
       "agentPermissionRequired": "某项操作需要审批，因此本次运行已停止。请检查权限，然后重新运行任务。",
       "enableForTask": "为此任务启用",
       "enableAppForTask": "为此任务启用 {app}",

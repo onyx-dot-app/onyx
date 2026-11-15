@@ -6,18 +6,52 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.action_policy import (
+    get_active_scheduled_task_context,
+    get_gated_app_id,
+    get_mcp_tool_default_policies,
     get_or_create_gated_app_id,
     get_task_action_policies,
+    get_workspace_action_policies,
     list_action_policies,
+    mcp_tool_default_policy,
     replace_workspace_action_policies,
     resolve_action_policies,
+    resolve_user_action_policies,
     save_user_action_policies,
+    task_app_enabled,
 )
-from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
-from onyx.db.models import ExternalApp, User
+from onyx.db.enums import (
+    ActionPolicy,
+    ExternalAppType,
+    GatedAppKind,
+    ScheduledTaskRunStatus,
+    ScheduledTaskTriggerSource,
+    SessionOrigin,
+)
+from onyx.db.mcp import (
+    create_mcp_server__no_commit,
+    get_craft_enabled_mcp_servers,
+    update_mcp_server__no_commit,
+    upsert_mcp_server_user_preferences__no_commit,
+)
+from onyx.db.models import (
+    BuildSession,
+    ExternalApp,
+    GatedApp,
+    ScheduledTaskRun,
+    Tool,
+    User,
+    UserActionPolicy,
+)
 from onyx.db.scheduled_task import create_scheduled_task, update_scheduled_task
 from onyx.error_handling.exceptions import OnyxError
-from onyx.external_apps.models import AppActionPolicies, TaskAppActionPolicies
+from onyx.external_apps.models import (
+    AppActionPolicies,
+    SaveActionPolicies,
+    TaskAppActionPolicies,
+)
+from onyx.server.features.action_policies import api
+from onyx.tools.models import ToolConfiguration
 
 ASK = ActionPolicy.ASK
 ALLOW = ActionPolicy.ALWAYS
@@ -255,13 +289,6 @@ def test_unknown_action_and_foreign_task_are_rejected(
 def test_mcp_uses_same_settings_and_access_rules(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.mcp import (
-        create_mcp_server__no_commit,
-        get_craft_enabled_mcp_servers,
-        update_mcp_server__no_commit,
-        upsert_mcp_server_user_preferences__no_commit,
-    )
-    from onyx.db.models import Tool
 
     user, _ = owner_and_app
     server = create_mcp_server__no_commit(
@@ -337,19 +364,82 @@ def test_mcp_uses_same_settings_and_access_rules(
     update_mcp_server__no_commit(
         server_id=server.id, db_session=db_session, available_in_craft=False
     )
+    save_user_action_policies(
+        db_session, user, _settings(app_id, {"send_report": ALLOW})
+    )
+    assert (
+        list_action_policies(
+            db_session, user, target=(GatedAppKind.MCP_SERVER, server.id)
+        )[0]
+        .actions[0]
+        .effective_policy
+        == ALLOW
+    )
+    assert not any(
+        view.kind == "mcp_server" and view.target_id == server.id
+        for view in list_action_policies(db_session, user)
+    )
+    with pytest.raises(OnyxError, match="App is unavailable"):
+        update_scheduled_task(
+            db_session=db_session,
+            user_id=user.id,
+            task_id=task.id,
+            action_policies=_task_settings(app_id, {"send_report": ASK}),
+        )
+
+
+def test_personal_mcp_settings_require_server_access(
+    db_session: Session, owner_and_app: tuple[User, int]
+) -> None:
+
+    owner, _ = owner_and_app
+    outsider = User(
+        id=uuid4(),
+        email=f"permissions-outsider-{uuid4()}@example.com",
+        hashed_password="unused",
+        is_active=True,
+        is_verified=True,
+    )
+    db_session.add(outsider)
+    server = create_mcp_server__no_commit(
+        owner_email=owner.email,
+        name="Private MCP",
+        description=None,
+        server_url="https://example.com/private-mcp",
+        auth_type=None,
+        transport=None,
+        auth_performer=None,
+        db_session=db_session,
+        is_public=False,
+    )
+    db_session.add(
+        Tool(name="send_report", description="Send report", mcp_server_id=server.id)
+    )
+    db_session.flush()
+    app_id = get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
+
+    with pytest.raises(OnyxError, match="App is unavailable"):
+        list_action_policies(
+            db_session, outsider, target=(GatedAppKind.MCP_SERVER, server.id)
+        )
     with pytest.raises(OnyxError, match="App is unavailable"):
         save_user_action_policies(
-            db_session, user, _settings(app_id, {"send_report": ASK})
+            db_session, outsider, _settings(app_id, {"send_report": ALLOW})
+        )
+    save_user_action_policies(
+        db_session, owner, _settings(app_id, {"send_report": ALLOW})
+    )
+
+    replace_workspace_action_policies(db_session, app_id, None, users_can_manage=False)
+    with pytest.raises(OnyxError, match="Workspace settings prevent"):
+        save_user_action_policies(
+            db_session, owner, _settings(app_id, {"send_report": ASK})
         )
 
 
 def test_mcp_read_only_tool_defaults_to_always_until_an_admin_asks(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_mcp_tool_default_policies
-    from onyx.db.mcp import create_mcp_server__no_commit, update_mcp_server__no_commit
-    from onyx.db.models import Tool
-
     user, _ = owner_and_app
     server = create_mcp_server__no_commit(
         owner_email=user.email,
@@ -365,10 +455,11 @@ def test_mcp_read_only_tool_defaults_to_always_until_an_admin_asks(
     update_mcp_server__no_commit(
         server_id=server.id, db_session=db_session, available_in_craft=True
     )
-    db_session.add_all(
+    tools = [
         Tool(name=name, description=name, mcp_server_id=server.id, mcp_read_only=hint)
         for name, hint in (("read", True), ("write", False), ("plain", None))
-    )
+    ]
+    db_session.add_all(tools)
     db_session.flush()
     app_id = get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
 
@@ -380,17 +471,35 @@ def test_mcp_read_only_tool_defaults_to_always_until_an_admin_asks(
             catalog_policies=get_mcp_tool_default_policies(db_session, server.id),
         )
 
+    def chat_resolved() -> dict[str, ActionPolicy]:
+        # Chat tool construction reads the hint from the captured configuration.
+        configured = [ToolConfiguration.model_validate(tool) for tool in tools]
+        return resolve_user_action_policies(
+            db_session,
+            user_id=user.id,
+            app_kind=GatedAppKind.MCP_SERVER,
+            default_policies_by_target={
+                server.id: {
+                    tool.name: mcp_tool_default_policy(tool.mcp_read_only)
+                    for tool in configured
+                }
+            },
+        )[server.id]
+
     def admin_view() -> dict[str, ActionPolicy]:
         (app,) = list_action_policies(db_session, user, gated_app_id=app_id, admin=True)
         return {a.action_id: a.workspace_policy for a in app.actions}
 
     defaults = {"read": ALLOW, "write": ASK, "plain": ASK}
     assert resolved() == defaults
+    assert chat_resolved() == defaults
     assert admin_view() == defaults
 
     replace_workspace_action_policies(db_session, app_id, {"read": ASK})
-    assert resolved() == {"read": ASK, "write": ASK, "plain": ASK}
-    assert admin_view() == {"read": ASK, "write": ASK, "plain": ASK}
+    asked = {"read": ASK, "write": ASK, "plain": ASK}
+    assert resolved() == asked
+    assert chat_resolved() == asked
+    assert admin_view() == asked
 
 
 def test_reviewed_disabled_choice_is_copied_and_stays_independent(
@@ -427,9 +536,6 @@ def test_reviewed_disabled_choice_is_copied_and_stays_independent(
 def test_active_run_keeps_task_context_until_completion(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_active_scheduled_task_context
-    from onyx.db.enums import ScheduledTaskRunStatus, ScheduledTaskTriggerSource
-    from onyx.db.models import BuildSession, ScheduledTaskRun
 
     user, _ = owner_and_app
     task = create_scheduled_task(
@@ -470,7 +576,6 @@ def test_active_run_keeps_task_context_until_completion(
 def test_reset_clears_inactive_and_hidden_personal_choices(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.models import UserActionPolicy
 
     user, app_id = owner_and_app
     save_user_action_policies(db_session, user, _settings(app_id, {WRITE: ALLOW}))
@@ -542,7 +647,6 @@ def test_reset_then_edit_removes_omitted_locked_choice(
 def test_single_app_save_does_not_create_unrelated_app_identities(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_gated_app_id
 
     user, app_id = owner_and_app
     unrelated = ExternalApp(
@@ -566,8 +670,6 @@ def test_single_app_save_does_not_create_unrelated_app_identities(
 def test_workspace_save_uses_catalog_inheritance(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_workspace_action_policies
-    from onyx.db.models import GatedApp
 
     user, app_id = owner_and_app
     app = db_session.get(GatedApp, app_id)
@@ -592,9 +694,6 @@ def test_workspace_save_uses_catalog_inheritance(
 def test_task_apps_start_disabled_and_keep_independent_saved_choices(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import (
-        get_task_action_policies,
-    )
 
     user, app_id = owner_and_app
     task = create_scheduled_task(
@@ -692,7 +791,6 @@ def test_task_apps_start_disabled_and_keep_independent_saved_choices(
 def test_task_can_enable_app_without_catalog_actions(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_task_action_policies, task_app_enabled
 
     user, _ = owner_and_app
     app = ExternalApp(
@@ -778,9 +876,6 @@ def test_empty_task_choices_do_not_copy_personal_settings(
 def test_scheduled_session_without_active_run_cannot_use_personal_policies(
     db_session: Session, owner_and_app: tuple[User, int]
 ) -> None:
-    from onyx.db.action_policy import get_active_scheduled_task_context
-    from onyx.db.enums import SessionOrigin
-    from onyx.db.models import BuildSession
 
     user, _ = owner_and_app
     session = BuildSession(user_id=user.id, origin=SessionOrigin.SCHEDULED)
@@ -791,3 +886,59 @@ def test_scheduled_session_without_active_run_cannot_use_personal_policies(
     session.origin = SessionOrigin.INTERACTIVE
     db_session.flush()
     assert get_active_scheduled_task_context(db_session, session.id) is None
+
+
+def test_personal_routes_require_craft_only_for_external_apps(
+    db_session: Session,
+    owner_and_app: tuple[User, int],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+
+    user, external_app_id = owner_and_app
+    monkeypatch.setattr(api, "is_craft_enabled_for_user", lambda _user: False)
+    server = create_mcp_server__no_commit(
+        owner_email=user.email,
+        name="Chat MCP",
+        description=None,
+        server_url="https://example.com/chat-mcp",
+        auth_type=None,
+        transport=None,
+        auth_performer=None,
+        db_session=db_session,
+        is_public=True,
+    )
+    db_session.add(
+        Tool(name="send_report", description="Send report", mcp_server_id=server.id)
+    )
+    db_session.flush()
+    get_or_create_gated_app_id(db_session, GatedAppKind.MCP_SERVER, server.id)
+
+    saved = api.save_personal_action_policies(
+        "mcp_server",
+        server.id,
+        SaveActionPolicies(action_policies={"send_report": ALLOW}),
+        user,
+        db_session,
+    )
+    assert saved.actions[0].effective_policy == ALLOW
+    assert (
+        api.get_personal_action_policies("mcp_server", server.id, user, db_session)
+        .actions[0]
+        .stored_policy
+        == ALLOW
+    )
+    external_target = list_action_policies(
+        db_session, user, gated_app_id=external_app_id
+    )[0].target_id
+    with pytest.raises(OnyxError, match="Onyx Craft is not available"):
+        api.get_personal_action_policies(
+            "external_app", external_target, user, db_session
+        )
+    with pytest.raises(OnyxError, match="Onyx Craft is not available"):
+        api.save_personal_action_policies(
+            "external_app",
+            external_target,
+            SaveActionPolicies(action_policies={READ: ALLOW}),
+            user,
+            db_session,
+        )

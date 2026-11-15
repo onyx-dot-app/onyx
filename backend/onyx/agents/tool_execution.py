@@ -21,6 +21,10 @@ from onyx.agents.tools import (
     ChildRunWait,
     InputDecision,
     InputMode,
+    NestedCallGate,
+    NestedInputAnswer,
+    NestedInputRequest,
+    NestedInputWait,
     PendingToolInput,
     ToolExecutionMode,
     ToolInvocation,
@@ -52,6 +56,11 @@ def _tool_view(message: Message) -> Message:
 
 
 MAX_TOOL_CALLS_PER_STEP = 64
+# What the model sees for a call whose request was denied without a result.
+DENIED_CALL_MESSAGE = "The tool call was not approved, so it did not run."
+# What the model sees for an approved call whose tool was removed, or whose
+# parameters changed, while the call waited.
+UNAVAILABLE_CALL_MESSAGE = "This tool is no longer available, so this call did not run."
 
 
 class ToolBatch:
@@ -102,23 +111,33 @@ class ToolBatch:
             messages=[_tool_view(item) for item in self.context_messages],
         )
 
-    def _before_tool_call(self, call: ToolCall) -> ToolResult | PendingToolInput | None:
-        """The run's before_tool_call decision on a call of this step, or on a
-        call that one of its tools makes for the model, such as a program's."""
-        before_tool_call = self.run.before_tool_call
-        return (
-            None if before_tool_call is None else before_tool_call(self._context(call))
-        )
-
-    def _before_nested_call(
-        self, call: ToolCall
+    def decide_call(
+        self, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> ToolResult | PendingToolInput | None:
-        """`_before_tool_call` for a call that a tool makes for the model; a hook
-        that raises fails the run, as for a direct call."""
-        try:
-            return self._before_tool_call(call)
-        except Exception as error:
-            raise BeforeToolCallFailed(error) from error
+        """The decision on `tool_call`, a call of this step, or on `nested_call`,
+        a call that its tool makes for the model, such as a program's: the
+        run's before_tool_call hook, then the user's approval when the call
+        requires it."""
+        call = nested_call or tool_call
+        if self.run.before_tool_call is not None:
+            decision = self.run.before_tool_call(self._context(call))
+            if decision is not None:
+                return decision
+        if call.name not in self.run.approval_required:
+            return None
+        approvals = self.run.approvals
+        if approvals is None:
+            return ToolResult(
+                content=(
+                    f"The {call.name} call needs the user's approval, and this "
+                    "run cannot ask for it, so it did not run."
+                ),
+                is_error=True,
+            )
+        decision = approvals.request_approval(self.run, tool_call, nested_call)
+        if isinstance(decision, PendingToolInput):
+            return decision.model_copy(update={"approval": True})
+        return decision
 
     def _recorded_before(self) -> tuple[ToolResultMessage, ...]:
         """Recorded tool results before a call: earlier steps, then this step's
@@ -150,6 +169,7 @@ class ToolBatch:
         *,
         approved: bool = False,
         children: list[RunState] | None = None,
+        nested_answers: list[NestedInputAnswer] | None = None,
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> None:
 
@@ -158,6 +178,7 @@ class ToolBatch:
                 calls=calls,
                 approved=approved,
                 children=children,
+                nested_answers=nested_answers,
                 merged_arguments=merged_arguments,
             )
             if len(calls) > 1 and not isinstance(outcome, ToolResult):
@@ -220,24 +241,10 @@ class ToolBatch:
                         with self.run.execution_lock:
                             pending = self.progress.pending_tool_calls.get(call.id)
                             suspend = self.run.suspension_requested
-                            answer = (
-                                self.progress.human_tool_answers.get(pending.request_id)
-                                if isinstance(pending, PendingToolInput)
-                                else None
-                            )
                         if suspend:
                             continue
-                        if isinstance(pending, PendingToolInput):
-                            if answer is None:
-                                continue
-                            self.run.resolve_tool_wait(call)
-                            if answer.decision == InputDecision.APPROVE:
-                                self._start([call], approved=True)
-                            else:
-                                output = answer.result or ToolResult(
-                                    content="Tool execution was denied.", is_error=True
-                                )
-                                self.run.record_tool_results(output, [call])
+                        if isinstance(pending, (PendingToolInput, NestedInputWait)):
+                            self._continue_input_wait(call, pending)
                             continue
                         if isinstance(pending, ChildRunWait):
                             if self.run.coordination is None:
@@ -266,6 +273,49 @@ class ToolBatch:
             self.run.notify_tool_activity()
             raise
 
+    def _continue_input_wait(
+        self, call: ToolCall, pending: PendingToolInput | NestedInputWait
+    ) -> None:
+        """Continue a call once each of its requests has an answer: run it,
+        record its denial, or continue its tool with the answers."""
+        requests = (
+            [nested.request for nested in pending.requests]
+            if isinstance(pending, NestedInputWait)
+            else [pending]
+        )
+        with self.run.execution_lock:
+            answers = self.progress.human_tool_answers
+            found = [
+                answer
+                for request in requests
+                if (answer := answers.get(request.request_id)) is not None
+            ]
+        if len(found) < len(requests):
+            return
+        self.run.resolve_tool_wait(call)
+        if isinstance(pending, PendingToolInput) and (
+            found[0].decision != InputDecision.APPROVE
+        ):
+            self.run.record_tool_results(
+                found[0].result
+                or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True),
+                [call],
+            )
+        elif call.name not in self.tools:
+            self.run.record_tool_results(
+                ToolResult(content=UNAVAILABLE_CALL_MESSAGE, is_error=True), [call]
+            )
+        elif isinstance(pending, PendingToolInput):
+            self._start([call], approved=True)
+        else:
+            self._start(
+                [call],
+                nested_answers=[
+                    NestedInputAnswer(request=request, answer=answer)
+                    for request, answer in zip(pending.requests, found, strict=True)
+                ],
+            )
+
     def _start_compatible_calls(
         self, call: ToolCall, index: int, completed_call_ids: set[str]
     ) -> None:
@@ -283,6 +333,7 @@ class ToolBatch:
             tool is None
             or tool.merge_arguments is None
             or self.run.before_tool_call is not None
+            or call.name in self.run.approval_required
             or not call.arguments_complete
             or call.argument_error
             or self.message.stop_reason == "length"
@@ -325,8 +376,12 @@ class ToolBatch:
         calls: list[ToolCall],
         approved: bool = False,
         children: list[RunState] | None = None,
+        nested_answers: list[NestedInputAnswer] | None = None,
         merged_arguments: dict[str, JsonValue] | None = None,
     ) -> ToolOutcome:
+        """`approved` starts a call whose request the user approved.
+        `nested_answers` continue a call that waited for the requests of calls
+        that its tool made."""
         call = calls[0]
         cancellation_signal = self.run.cancellation_signal
         step = self.step
@@ -355,8 +410,8 @@ class ToolBatch:
                 content=call.argument_error or "Tool arguments were truncated.",
                 is_error=True,
             )
-        if not approved and children is None:
-            decision = self._before_tool_call(call)
+        if not approved and children is None and nested_answers is None:
+            decision = self.decide_call(call, None)
             if decision is not None:
                 return decision
         cancellation_signal.check()
@@ -393,8 +448,8 @@ class ToolBatch:
             agents=self.run.coordination.for_tool(call.id, self.message_id, active)
             if self.run.coordination
             else None,
-            before_call=self._before_nested_call
-            if self.run.before_tool_call is not None
+            nested_calls=_NestedCallGate(self, call)
+            if self.run.before_tool_call is not None or self.run.approval_required
             else None,
         )
         try:
@@ -416,7 +471,12 @@ class ToolBatch:
                     )
                 return result
             try:
-                outcome = tool.execute(invocation)
+                if nested_answers is None:
+                    outcome = tool.execute(invocation)
+                elif tool.resume_with_input is None:
+                    raise ValueError("Tool does not support continuing after input")
+                else:
+                    outcome = tool.resume_with_input(invocation, nested_answers)
             except BeforeToolCallFailed as failed:
                 # As when the hook raises for a direct call: the run fails.
                 raise failed.error
@@ -434,3 +494,33 @@ class ToolBatch:
         finally:
             with self.run.execution_lock:
                 active.clear()
+
+
+class _NestedCallGate(NestedCallGate):
+    """Decides the calls that one direct call of a step makes for the model."""
+
+    def __init__(self, batch: ToolBatch, call: ToolCall) -> None:
+        self._batch = batch
+        self._call = call
+
+    def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
+        batch = self._batch
+        try:
+            decision = batch.decide_call(self._call, call)
+        except Exception as error:
+            # As when the hook raises for a direct call: the run fails.
+            raise BeforeToolCallFailed(error) from error
+        if not isinstance(decision, PendingToolInput):
+            return decision
+        request = NestedInputRequest(
+            message_id=batch.message_id,
+            step_index=batch.step.index,
+            tool_call=self._call,
+            nested_call=call,
+            request=decision,
+        )
+        batch.run.open_nested_input(request)
+        return request
+
+    def withdraw(self, request: NestedInputRequest) -> None:
+        self._batch.run.withdraw_nested_input(request)

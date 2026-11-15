@@ -7,7 +7,13 @@ from typing import TYPE_CHECKING, final
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
+from onyx.agents.tools import (
+    AgentTool,
+    NestedInputAnswer,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolOutcome,
+)
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
@@ -17,6 +23,7 @@ from onyx.tools.models import (
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultSpec,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
@@ -169,17 +176,24 @@ def _invoke_tool[T: ToolOutcome](
 ToolResultFromChildren = Callable[
     [ToolInvocation, ToolContext, list["RunState"]], ToolResult
 ]
+ToolResumeWithInput = Callable[
+    [ToolInvocation, ToolContext, list[NestedInputAnswer]], ToolOutcome
+]
 
 
 class Tool(abc.ABC):
     """An application tool with context, tracing, and an SDK binding."""
 
     result_from_children: ToolResultFromChildren | None = None
+    # Continues a call that returned NestedInputWait; see AgentTool.
+    resume_with_input: ToolResumeWithInput | None = None
     # Set by tools that must not run twice: the saved result of a call that
     # stopped before it finished. See AgentTool.
     interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
+    # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
+    approval: ToolApprovalScope | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -275,6 +289,20 @@ class Tool(abc.ABC):
                     lambda: convert_child_results(invocation, context, children),
                 )
 
+        continue_with_input = self.resume_with_input
+        resume_with_input = None
+        if continue_with_input is not None:
+
+            def resume_with_input(
+                invocation: ToolInvocation, answers: list[NestedInputAnswer]
+            ) -> ToolOutcome:
+                context = get_context()
+                return _invoke_tool(
+                    self.name,
+                    invocation,
+                    lambda: continue_with_input(invocation, context, answers),
+                )
+
         return AgentTool(
             definition=self.tool_definition(),
             execute=lambda invocation: self.run(invocation, get_context()),
@@ -287,8 +315,14 @@ class Tool(abc.ABC):
             if self.merge_list_argument is not None
             else None,
             result_from_children=result_from_children,
+            resume_with_input=resume_with_input,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
+            approval_required=[
+                tool.name
+                for tool in (self, *self.inner_tools)
+                if tool.approval is not None
+            ],
         )
 
 

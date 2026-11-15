@@ -215,8 +215,11 @@ preview.
     suspended, the resumed run fails when it loads that image. Inline bytes become
     `agent-checkpoint/<root session id>/<sha256>` blobs with
     `FileOrigin.OTHER` and no `UserFile`
-    (`chat/restoration.py:persist_checkpoint_files`); session hard delete
-    removes them by that prefix ([[chat-persistence#checkpoints-not-written]]).
+    (`chat/restoration.py:persist_checkpoint_files`). The dumps of parked code
+    mode programs use `agent-checkpoint/<root session id>/<unique id>`
+    instead, and the checkpoint row that saved them deletes them when it ends
+    or is replaced; session hard delete removes every blob by that prefix
+    ([[chat-persistence#checkpoints-for-approvals]]).
 13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
@@ -287,7 +290,9 @@ preview.
   `upsert_filerecord` so incognito blobs get their cleanup stamp, and keep
   [[#file-id-write-once]]. An object-store backend subclasses
   `PresignableFileStore` and implements its signing hooks, because the Craft
-  Firecracker runtime will move files through presigned URLs.
+  Firecracker runtime will move files through presigned URLs. Override
+  `FileStore.is_transient_error` for the service's throttling and connection
+  errors, so a chat run that parks retries them instead of ending.
 - `investigate-file-404` **Investigate a 404 on `/chat/file/{file_id}`.** Find which id the caller
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,

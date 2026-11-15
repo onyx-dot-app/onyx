@@ -43,7 +43,7 @@ export interface MCPServer {
   default_chat_enabled?: boolean | null;
   user_enabled_in_chat?: boolean;
   user_enabled_in_craft?: boolean;
-  // Sparse per-tool Craft approval overrides (unlisted tools default to ASK).
+  // Sparse per-tool approval overrides for chat and Craft; unlisted tools use their default.
   // Present on owner/admin views only.
   action_policies?: Record<string, ActionPolicy> | null;
   users_can_manage_policies?: boolean;

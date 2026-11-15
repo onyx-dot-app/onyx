@@ -12,6 +12,7 @@ from pydantic_monty import FunctionSnapshot, FutureSnapshot
 from onyx.agents.tools import ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
+from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
@@ -398,6 +399,9 @@ class PendingCall(BaseModel):
     external: ExternalCall
     # The call's thread; None while the call waits in the queue.
     future: Future[object] | None = None
+    # The handler returned AWAITS_INPUT: the call waits for the user's input,
+    # without a thread, until the caller runs it again (`_Run.requeue_waiting`).
+    awaits_input: bool = False
 
 
 class ProgramWaiting(BaseModel):
@@ -423,6 +427,42 @@ class ProgramSuspended(BaseModel):
 
     snapshot: bytes
     call_ids: list[int]
+
+
+class ProgramState(BaseModel):
+    """What a parked program needs besides its dump to continue."""
+
+    model_config = ConfigDict(frozen=True)
+
+    # The calls that wait for input, by sandbox call id. Resuming runs them
+    # again through the handler.
+    waiting: dict[int, ExternalCall]
+    tool_calls: int
+    elapsed_seconds: float
+    type_check_notes: str | None = None
+
+
+class ParkedProgram(BaseModel):
+    """A program dumped while it waits only for calls that wait for the user's
+    input, so it can continue in any process (`sandbox.execute_program`)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    state: ProgramState
+    snapshot: bytes
+
+
+class SavedProgram(BaseModel):
+    """A parked program as its cell keeps it. The dump stays in memory until
+    the run's checkpoint saves it in the file store (`persist_checkpoint_files`)."""
+
+    state: ProgramState
+    dump: SavedChatFile
+    # The Monty version that made the dump; another version cannot load it.
+    monty_version: str
+    # The parameters schema of each waiting call's tool, by tool name; a
+    # restored call runs only with an unchanged schema.
+    parameters: dict[str, dict[str, JsonValue]]
 
 
 class ProgramCompleted(BaseModel):
@@ -564,3 +604,34 @@ class ObservationCut(BaseModel):
     end: SandboxResult | None
     discarded: DiscardedWrites | None
     elided_chars: int
+
+
+class SavedCodeCell(BaseModel):
+    """A cell whose program parked while an observation of it waits for the
+    user's input, saved with the suspended run (`CodeCells.saved`)."""
+
+    cell_id: int
+    # The execute_code call that started the cell; nested call ids use it.
+    call_id: str
+    code: str
+    limits: SandboxLimits
+    observations: int
+    window: int
+    # The observation that waits: its call, number and output budget.
+    observer_call_id: str
+    observer_number: int
+    observer_max_tokens: int
+    calls: list[CellCallRecord]
+    # The input request that each waiting call waits for, by call index.
+    requests: dict[int, str]
+    saved_chars: int
+    # The printed text of the current window.
+    stdout: str
+    lost_store_writes: LostStoreWrites | None
+    # The store that the program started with, and its writes since.
+    store: StoreSnapshot
+    store_writes: dict[str, JsonValue]
+    # Citation numbers that the response's nested calls used.
+    citations: dict[int, str]
+    staged_files: list[SavedChatFile]
+    program: SavedProgram

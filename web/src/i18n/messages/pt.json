@@ -12654,6 +12654,9 @@
         "alreadyAccepted": "Esta mensagem já foi aceita e não está mais pendente.",
         "interruptFailed": "Não foi possível enviar esta mensagem agora. Ela continua pendente.",
         "stopSubagentsFailed": "Não foi possível parar os subagentes."
+      },
+      "pendingToolApproval": {
+        "toast": "Primeiro aprove ou rejeite as chamadas de ferramenta pendentes."
       }
     },
     "mcpApiKey": {
@@ -13096,6 +13099,9 @@
           },
           "working": {
             "label": "Trabalhando"
+          },
+          "waitingForApproval": {
+            "label": "Aguardando sua aprovação"
           }
         },
         "internalSearch": {
@@ -13232,6 +13238,9 @@
             "status": "Pesquisando na web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} quer executar {tool}"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14450,6 +14459,54 @@
         "decision": "Decisão",
         "vision": "Visão"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Sem conteúdo."
+      },
+      "showLess": {
+        "button": "Mostrar menos"
+      },
+      "showMore": {
+        "button": "Mostrar mais"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Aprovar para este chat",
+        "tooltip": "Aprove agora e execute esta ferramenta sem perguntar novamente pelo resto deste chat"
+      },
+      "approveOnce": {
+        "ariaLabel": "Aprovar esta ação uma vez",
+        "button": "Aprovar uma vez"
+      },
+      "approveSession": {
+        "button": "Aprovar para a sessão",
+        "tooltip": "Aprovar ações correspondentes para esta sessão"
+      },
+      "deadline": "Aprovar até {time}",
+      "header": {
+        "required": "Aprovação solicitada: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# ação} other {# ações}} em {app}",
+        "singleAction": "{action} em {app}"
+      },
+      "reject": {
+        "ariaLabel": "Rejeitar esta ação",
+        "button": "Rejeitar"
+      },
+      "record": {
+        "approved": "Aprovado: {headline}",
+        "closed": "Não aguarda mais: {headline}",
+        "disabled": "Desativado: {headline}",
+        "expired": "Tempo esgotado: {headline}",
+        "rejected": "Não aprovado: {headline}",
+        "approvedForChat": "Aprovado para este chat: {headline}",
+        "approvedForSession": "Aprovado para esta sessão: {headline}"
+      },
+      "submitError": "Não foi possível enviar sua decisão. Tente novamente.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14462,50 +14519,6 @@
       },
       "switch": {
         "ariaLabel": "Trocar de agente"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Aprovar esta ação uma vez",
-        "button": "Aprovar uma vez"
-      },
-      "approveSession": {
-        "button": "Aprovar para a sessão",
-        "tooltip": "Aprovar ações correspondentes para esta sessão"
-      },
-      "details": {
-        "hideAriaLabel": "Ocultar detalhes",
-        "showAriaLabel": "Mostrar detalhes"
-      },
-      "header": {
-        "required": "Aprovação necessária: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# ação} other {# ações}} em {app}",
-        "singleAction": "{action} em {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Sem conteúdo."
-        },
-        "showLess": {
-          "button": "Mostrar menos"
-        },
-        "showMore": {
-          "button": "Mostrar mais"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Rejeitar esta ação",
-        "button": "Rejeitar"
-      },
-      "status": {
-        "approved": "Aprovado",
-        "rejected": "Rejeitado",
-        "expired": "Expirada"
-      },
-      "submit": {
-        "errorFallback": "Falha ao enviar a decisão"
       }
     },
     "apps": {
@@ -14643,7 +14656,7 @@
         "duplicateSkillName": "O app “{appName}” já tem uma habilidade associada chamada “{skillName}”. Envie uma habilidade com outro nome."
       },
       "mcpPolicy": {
-        "description": "Configure o que o agente do Craft pode fazer com as ferramentas deste servidor MCP.",
+        "description": "Escolha quais ferramentas são executadas automaticamente, pedem aprovação ou ficam desativadas no chat e no Craft.",
         "emptyPolicies": "Nenhuma ferramenta habilitada neste servidor. Habilite as ferramentas primeiro na página de ações MCP.",
         "saveButton": "Salvar",
         "title": "Editar {name}"
@@ -15840,7 +15853,7 @@
     "actionPolicies": {
       "appTitle": "Configurações de aprovação de {name}",
       "title": "Configurações de aprovação",
-      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft e nas novas tarefas; as tarefas existentes mantêm suas próprias configurações.",
+      "personalDescription": "Estas configurações definem se as ações são executadas automaticamente ou exigem aprovação nas conversas do Craft, nas novas tarefas e nas chamadas de ferramentas MCP no chat; as tarefas existentes mantêm suas próprias configurações.",
       "taskDescription": "Escolha os plugins que esta tarefa pode usar e quais ações serão executadas automaticamente. As alterações valem apenas para esta tarefa.",
       "newTaskDescription": "Ative um plugin para começar com suas configurações atuais de ações.",
       "workspace_disabled": "Desativada para o espaço de trabalho",
@@ -15856,9 +15869,6 @@
       "saveError": "Não foi possível salvar as configurações de aprovação.",
       "emptyActions": "Nenhuma ação conhecida. Ações desconhecidas exigem aprovação.",
       "emptyApps": "Nenhum aplicativo disponível.",
-      "expired": "O prazo de aprovação expirou. A ação não foi executada.",
-      "rejected": "Solicitação rejeitada. Esta solicitação não foi executada.",
-      "deadline": "Aprovar até {time}",
       "agentPermissionRequired": "Esta execução parou porque uma ação precisava de aprovação. Revise as permissões e execute a tarefa novamente.",
       "enableForTask": "Ativar para esta tarefa",
       "enableAppForTask": "Ativar {app} para esta tarefa",

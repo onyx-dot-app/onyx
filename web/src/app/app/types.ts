@@ -195,8 +195,11 @@ export interface Message {
   packets: Packet[];
   packetCount?: number; // Tracks packet count for React memo comparison (avoids reading from mutated array)
 
-  // Retained only with this response's packet prefix; never persisted alone.
-  replayCursor?: number;
+  // The replay position in the stream that writes this row. Retained only
+  // with the packet prefix it covers; never persisted alone.
+  replay?: { streamId: number; cursor: number };
+  /** This client lost the response's stream; the server may still run it. */
+  streamLost?: boolean;
   restoredPacketCount?: number;
 
   // cached values for easy access
@@ -208,6 +211,13 @@ export interface Message {
 
   // Duration in seconds for processing this message (agent messages only)
   processingDurationSeconds?: number;
+}
+
+/** A live stream and the response rows it writes. A multi-model turn lists
+ * its answers in model-index order. The stream ID is not a message ID. */
+export interface ChatStream {
+  stream_id: number;
+  response_ids: number[];
 }
 
 export interface BackendChatSession {
@@ -226,7 +236,7 @@ export interface BackendChatSession {
   owner_name: string | null;
   packets: Packet[][];
   // Set while a run is in flight and resumable via the resume-stream endpoint
-  current_stream?: { stream_id: number } | null;
+  current_stream?: ChatStream | null;
   is_processing?: boolean;
   // True for sessions pinned to an incognito record mode.
   incognito?: boolean;
@@ -234,6 +244,8 @@ export interface BackendChatSession {
   has_older_messages?: boolean;
   // The owner's saved tools and search filters; null means the agent's tools.
   tool_selection?: ChatToolSelection | null;
+  // The status route's `approvals_version` for the requests this load shows.
+  approvals_version?: string;
 }
 
 export function toChatSession(backend: BackendChatSession): ChatSession {
@@ -334,6 +346,8 @@ export interface StreamingError {
 // error_code emitted by the backend usage rate-limiter (429). Branch on this to
 // show the dedicated usage-limit banner instead of the generic chat error.
 export const RATE_LIMITED_ERROR_CODE = "RATE_LIMITED";
+// The chat waits for an approval, so it cannot start a new turn.
+export const APPROVAL_PENDING_ERROR_CODE = "APPROVAL_PENDING";
 
 // Shape of StreamingError.details for a RATE_LIMITED error — mirrors the 429
 // JSON body so the banner can compute a human-friendly reset time.

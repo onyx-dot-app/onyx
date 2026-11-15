@@ -1,4 +1,4 @@
-import type { Message } from "@/app/app/types";
+import type { ChatStream, Message } from "@/app/app/types";
 import type { LLMOverride } from "@/app/app/services/lib";
 import type { ProjectFile } from "@/lib/projects/types";
 
@@ -73,11 +73,14 @@ export interface ChatHistoryPage {
 
 export interface ChatSessionStatus {
   is_processing: boolean;
-  current_stream: { stream_id: number } | null;
+  current_stream: ChatStream | null;
   has_active_subagents: boolean;
   /** Pending input can start a run now; false while the queue is paused. */
   has_startable_input: boolean;
   latest_response_id: number | null;
+  /** Changes when any approval request of the chat session opens or
+   * resolves, on any branch, a reply's or a background subagent's. */
+  approvals_version: string;
 }
 
 export interface ChatSessionQueue {
@@ -104,4 +107,13 @@ export interface ChatSessionQueue {
   interrupt: (id: string) => Promise<void>;
   /** Interrupts every running subagent on the selected branch. */
   stopSubagents: () => Promise<void>;
+}
+
+export interface ApprovalDecisionResponse {
+  approval_id: string;
+  decision: "APPROVED" | "REJECTED";
+  // "POLICY": the action policy disabled the tool, so the approval rejected it.
+  decided_via: "USER" | "SESSION_GRANT" | "POLICY";
+  /** The stream that continues the suspended response, when it runs. */
+  continuation: ChatStream | null;
 }

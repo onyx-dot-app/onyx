@@ -32,7 +32,9 @@
   After a reload, the caller gets the stream ID from `current_stream` in the
   session detail response. To resume, the caller calls
   `GET /chat/chat-session/{id}/resume-stream?stream_id=<id>&cursor=0`. A 404
-  means that no run with that stream ID can be resumed. While the turn is in
+  means that nothing can be served at that cursor: no run with that stream ID,
+  or a buffer that is gone or has a gap there. A 200 stream starts with a
+  `StreamCursor` line. While the turn is in
   preparation, the session reports `is_processing: true` but `current_stream`
   is null, and resume returns 404. Before the next send,
   the caller waits until `GET /chat/chat-session/{id}/status` reports
@@ -80,7 +82,9 @@ send-chat-message -> chat/process_message.py:_stream_chat_turn   prepare, start_
             -> StreamBufferWriter                   zlib chunks in the cache
 
 resume-stream: get_processing_stream_id (must match stream_id) -> read_stream_chunks(cursor, 32 per read)
-  -> blocks + StreamCursor line per batch -> poll until done or the owner lapses, with heartbeats
+  before the response starts (404 when it finds no buffer or a gap)
+  -> StreamCursor line, then blocks + StreamCursor line per batch
+  -> poll until done or the owner lapses, with heartbeats
 ```
 
 `chat/execution.py:start_chat_turn` publishes the ID lines and starts the turn
@@ -100,7 +104,7 @@ details and on replayed `user_message` packets. Packets and ID lines carry
 only the record of a pick (type, name and version id), never its skill text. A
 per-model error puts `model_index` in `StreamingError.details`. The resume
 endpoint adds a sixth kind,
-`backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, after each batch. It
+`backend/onyx/server/query_and_chat/streaming_models.py:StreamCursor`, first and after each batch. It
 is never buffered. When the send route itself fails
 (`server/query_and_chat/chat_backend.py:handle_send_chat_message`), it writes
 one `StreamingError` line from `chat/errors.py:unhandled_stream_error`. Only an
@@ -129,8 +133,60 @@ sub-turn indexes.
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is
 validated against. Families are control (`stop`, `section_end`, `error`,
 `chat_heartbeat`), reasoning, answer (`message_start`, `message_delta`),
-citations, one family per tool, deep research, and the coding agent with the
-bash tool. `ToolCallArgumentDelta` streams the code of the tools in
+citations, one family per tool, tool approval, deep research, and the coding
+agent with the bash tool. `tool_approval_request` and `tool_approval_resolved`
+come from the runtime's `input_required` and `input_ended` events
+(`chat/renderer.py:ToolRenderer.consume`) at the call's placement, only for
+requests that `ToolApprovals` opened (`PendingToolInput.approval`). A
+background agent's request shows at the card of the root response's call that
+started the agent, with `agent_name` set
+([[mcp-and-custom-tools#chat-approval-records-replay]]).
+`tool_approval_resolved` carries an `outcome`
+(`chat/renderer.py:approval_outcome`): `approved`,
+`approved_for_chat` (a session grant decided it, from this request or an
+earlier one), `rejected` (also a user Stop of a live turn), `disabled` (an
+approval of a tool that the policy now disables, or a request deleted with its
+tool's server), or `cancelled` for a call that stopped waiting without a
+decision. Requests have no deadline. A turn whose run has nothing left but
+approval waits ends its stream with its requests, then
+`stop(awaiting_approval)` (`chat/presentation.py:overall_stop` maps
+`SUSPENDED`); after the decisions the response continues in a new stream,
+under a new stream ID, that clients follow from cursor 0: it replays the saved
+response, then the decisions and the rest live
+([[mcp-and-custom-tools#chat-approval-durable-wait]]). A `replay_end` packet
+(`ReplayEnd`, top-level placement) ends the replayed prefix, also when the
+resume fails before its run starts
+(`chat/presentation.py:ResponsePresenter.replay`). The replay sends every saved
+resolution, so a decision that the run then applies sends its resolution again
+live; clients read resolutions by `approval_id`. The replay also shows the
+requests of the background agents that the response started, with their
+resolutions; only a live stream never sends an agent's request. The decision
+route names the new stream in its `continuation` only when the processing
+stream is a resume turn that writes the response
+(`chat/chat_processing_checker.py:ProcessingStream.resumed`). That can be the
+stream that the client already reads, when a resumed answer asks again and is
+decided during its resident wait; clients ignore a continuation that names
+their current stream. A decision while the response's first turn still runs,
+or while a multi-model sibling still runs, gets null. A response that parks stays in its stream's `response_ids`,
+which keep the turn's model order for the stream's life, so a packet's
+`model_index` indexes them; the parked response's packets end with its
+`stop(awaiting_approval)`. A run that ends publishes
+`input_ended` for every request still open, direct or nested, before
+`agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
+that the run recorded, such as a Stop's rejection. Every request that the
+server ends gets its `tool_approval_resolved`, live and in replay, `cancelled`
+when it has no decision, so clients read outcomes from the server and never
+from a stop. A turn-level Stop drops packets after it, except
+`tool_approval_resolved` (`chat/execution.py:ChatTurnExecution._publish`), so
+each request's resolution precedes the `stop` packet. For a code mode
+program's call, the events carry `nested_call`, and
+the packet sits on the `execute_code` or `wait_code` card with the nested
+call's name and arguments. Every client gets them
+([[mcp-and-custom-tools#chat-approval-needs-waiting-client]]); web, mobile,
+the widget and the CLI mirror them. Saved-session replay sends the request,
+and its resolution once decided, for each request of an ended or suspended
+response from its `approval_request` row, and a suspended response ends with
+`stop(awaiting_approval)` ([[mcp-and-custom-tools#chat-approval-records-replay]]). `ToolCallArgumentDelta` streams the code of the tools in
 `chat/renderer.py:CODE_ARGUMENT_TOOLS` (`run_python`, `execute_code`) while the
 model writes it, with the tool name as `tool_type`; the configured reasoning
 tool streams as reasoning packets instead
@@ -231,8 +287,33 @@ its background task end ([[#pure-asgi-middleware]]).
    `web/src/app/app/services/lib.tsx:resumeStream` keeps them, because its
    caller uses them as liveness ticks, and also yields `StreamCursor` lines. A
    new consumer of `web/src/lib/search/streamingUtils.ts:handleSSEStream` sees
-   both. Mobile resumes without `stream_id` and skips `StreamCursor` lines
-   because they have no `obj`.
+   both. `mobile/src/api/chat/stream.ts:resumeChatMessage` sends `stream_id`
+   and yields `StreamCursor` lines, which
+   `mobile/src/hooks/useChatSessionController.ts:recoverChatSession` uses to
+   commit packets and to reattach from the last cursor; only a 404 stops it
+   from requesting that stream again ([[#buffer-gap-ends-resume]]).
+   `cli/internal/api/stream.go:ResumeChatStream` delivers events only in
+   complete batches, each ending with its `StreamCursor` line, so the CLI chat
+   can continue from the last cursor without a repeated packet. It reports a
+   404 as `StreamUnavailableEvent`; only that stops the CLI from requesting
+   the response again, and a clean end before the first cursor is retried.
+   After a `stop` with `stop_reason` `awaiting_approval`, `cli/cmd/ask.go`
+   and `cli/internal/tui/app.go` keep the approval cards and stop reading.
+   They follow the stream that a decision response names in `continuation`
+   from cursor 0. When it is `null`, or after another client's decision, and
+   no stream that they read writes the response,
+   `cli/internal/api/client.go:FollowResponse` reads the status while
+   `is_processing` until a `current_stream` lists the response in
+   `response_ids`, and they follow it. When the session goes idle first, the
+   saved session shows the response. `ask` drops the replayed events up to
+   the `replay_end` packet, except outcomes of requests it asked, and keeps
+   the replayed text as the text it showed. From the saved session it shows
+   only the text after that prefix, because the saved packets render the
+   response as a replay does. The TUI loads the session. The TUI keeps a card until a
+   resolution or a session load gives its outcome, and loads the session
+   again when the status reports a new `approvals_version`. After a decision
+   on a background agent's card, it reads the status at once and again while
+   `has_active_subagents` is true.
 6. `turn-index-is-not-a-turn` **`turn_index` is not a backend turn.** It is a
    rendering block. `chat/renderer.py:ResponseLayout.next_section` gives each
    answer, reasoning or tool section its own index, so reasoning and the tool
@@ -292,8 +373,16 @@ its background task end ([[#pure-asgi-middleware]]).
 11. `buffer-gap-ends-resume` **A buffer gap ends the resume, and the cursor
     counts chunks.** `chat/stream_buffer.py:read_stream_chunks` reports `gap`
     for a missing chunk, a bad chunk or a truncated buffer.
-    `server/query_and_chat/chat_backend.py:resume_chat_stream` then ends the
-    stream, and the client refetches the session. A capped read can say `done` with
+    `server/query_and_chat/chat_backend.py:resume_chat_stream` reads once
+    before the response starts and returns 404 for a gap at the requested
+    cursor, so a 200 stream always starts with a `StreamCursor` line and only
+    a 404 means "do not resume this stream again". For that to hold,
+    `chat/execution.py:start_chat_turn` saves the empty buffer
+    (`StreamBufferWriter.open`) before `ChatTurnAdmission.publish` makes the
+    stream ID visible, so a missing buffer always means expired or deleted. A
+    failed open makes the run non-resumable (truncated). A later gap ends the
+    stream without the stop packet; a resume from its last cursor then gets
+    output or 404, and after a 404 the client refetches the session. A capped read can say `done` with
     chunks still pending: read until `blocks` is empty. The cursor counts chunks,
     not packets. A client may keep a `StreamCursor.next_cursor` only together
     with every packet before it, and must send the matching `stream_id`, or it
@@ -314,12 +403,24 @@ its background task end ([[#pure-asgi-middleware]]).
     `web/src/lib/chat/sessionReadiness.ts:waitForChatResponseEnd`.
     Background children can remain active after the root response becomes
     idle. `has_active_subagents` controls the activity indicator, not input
-    availability; it is true while a child on the selected branch runs or its
-    results are about to wake the root. When a running child has no owner, the
+    availability; it is true while a child on the selected branch runs, its
+    results are about to wake the root, or a parked agent run of the chat
+    whose waits all ended waits to resume (`ChatInbox.resumable_runs`). A
+    decision commits before its route returns, so the next status read after
+    it shows the decided agent. When a running child has no owner, the
     endpoint schedules dispatch, which saves the child as failed so its result
     wakes the root. `has_startable_input` is true when queued text or unread
     root results can start a turn now; a queue that Stop or a failure paused
-    reports false. The
+    reports false. `approvals_version` is an opaque marker that changes when a
+    request of the chat opens, is decided or is removed
+    (`db/approval_request.py:approvals_version`); the session load returns the
+    same value, and clients reload the session when it changes. It is empty
+    while the chat has no request, and a client that loaded nothing compares
+    against the empty value, so a clean send never reloads. A parked agent
+    that still waits for the user does not count as active. `current_stream`
+    carries the stream ID and the `response_ids` the stream writes; a stream
+    that continues a parked response has an ID that no message has. The route
+    is in the public API (`PUBLIC_API_TAGS`). The
     endpoint always reads the selected branch, and it reads inputs before
     admission. A turn claims admission before it consumes
     input, so a starting turn shows as startable input or as processing. Web
@@ -329,10 +430,16 @@ its background task end ([[#pure-asgi-middleware]]).
     finish between polls. An automatic reply's
     `MessageResponseIDInfo` has no `user_message_id`; session history returns
     its hidden parent with `message_type: "agent_results"`.
-    Other clients wait for the session to become idle:
-    `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle`,
-    `cli/internal/api/client.go:IsChatSessionProcessing` and
-    `widget/src/services/api-service.ts`. The CLI and widget stop with an error
+    Other clients wait for the session to become idle. Mobile's
+    `mobile/src/chat/sessionReadiness.ts:waitForSessionIdle` also reports
+    `current_stream` (stream id and `response_ids`), so mobile follows a
+    stream that runs instead of its send. Its idle result counts
+    `has_startable_input` as background work and reloads when the chat does
+    not show `latest_response_id` ([[mobile-app]]). The others are
+    `cli/internal/api/client.go:ChatSessionStatus` and
+    `widget/src/services/api-service.ts`. The CLI chat also reads
+    `current_stream` to follow a response whose stream it lost or that started
+    after a 404 from `resume-stream`. The CLI and widget stop with an error
     when an older server has no status endpoint. An old client in the field
     that sends as soon as the stream closes can meet the `CONFLICT` error.
 13. `pure-asgi-middleware` **API middleware must be pure ASGI.** Each middleware
@@ -428,7 +535,9 @@ its background task end ([[#pure-asgi-middleware]]).
   6. Update the other consumers from [[#vocabulary-mirrored-by-hand]]. The
      non-streaming API (`chat/process_message.py:gather_stream_full`) builds
      `ChatFullResponse` from the saved response snapshot, not from packets, so
-     decide whether the snapshot needs the new data.
+     decide whether the snapshot needs the new data. It reads the approval
+     packets and the last `stop`: when that is `awaiting_approval`, the
+     unresolved requests become `pending_tool_approvals`.
   7. If a test mocks the stream, update `web/tests/e2e/utils/chatMock.ts`.
 - `cli-packet-type` **A packet type in the CLI.** Copy the search start event:
   list every place that knows it with `git grep -n SearchStartEvent -- cli`. A
@@ -454,8 +563,9 @@ its background task end ([[#pure-asgi-middleware]]).
   `/api/chat/chat-session/<id>/resume-stream?cursor=0` while the run is live. A
   404 means the session owner key or the processing fence is missing, the
   `stream_id` does not match the fence, or the buffer meta key
-  (`chatstream_<session_id>_<stream_id>:meta`) is missing. A stream that ends
-  early means a gap ([[#buffer-gap-ends-resume]]). If the input stays busy
+  (`chatstream_<session_id>_<stream_id>:meta`) is missing or has a gap at the
+  cursor. A stream that ends early without the stop packet means a later gap
+  ([[#buffer-gap-ends-resume]]). If the input stays busy
   after the stream ends, call `/api/chat/chat-session/<id>/status`
   ([[#stream-end-is-not-idle]]).
 

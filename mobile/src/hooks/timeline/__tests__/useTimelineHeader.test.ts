@@ -120,3 +120,24 @@ describe("useTimelineHeader — userStopped", () => {
     ).toBe(false);
   });
 });
+
+describe("useTimelineHeader — approvals", () => {
+  it("shows the wait for an approval over the step's activity", () => {
+    const turn = makeTurn(0, [
+      makeStep(0, 0, [
+        makePacket(
+          PacketType.CUSTOM_TOOL_START,
+          { turn_index: 0 },
+          { tool_name: "lookup", display_name: "Lookup" },
+        ),
+      ]),
+    ]);
+    expect(
+      renderHook(() => useTimelineHeader([turn], undefined, false, true)).result
+        .current.headerText,
+    ).toBe("Waiting for your approval");
+    expect(
+      renderHook(() => useTimelineHeader([turn])).result.current.headerText,
+    ).toBe("Executing Lookup");
+  });
+});

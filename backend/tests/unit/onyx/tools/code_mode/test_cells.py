@@ -37,6 +37,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeCallStarted,
     CodeModeExecutionResult,
     CodeModeStdout,
+    ParkedProgram,
     SandboxLimits,
     SandboxResult,
 )
@@ -77,7 +78,7 @@ class Response:
             cells=self.cells,
             limits=limits,
         )
-        self.wait_tool = WaitCodeTool(self.cells)
+        self.wait_tool = WaitCodeTool(self.cells, self.execute.program)
         self.cancellation = CancellationSignal()
         self.recorded: list[Message] = list(history)
         self.events: dict[str, list[BaseModel]] = {}
@@ -933,7 +934,7 @@ def test_a_cell_that_ends_after_its_closing_record_commits_nothing(
     release = threading.Event()
     execute = cells_module.execute_program
 
-    def late_end(code: str, **kwargs: Any) -> SandboxResult:
+    def late_end(code: str, **kwargs: Any) -> SandboxResult | ParkedProgram:
         """Ignores the stop, then completes after its cell closed."""
         if code != "late":
             return execute(code, **kwargs)

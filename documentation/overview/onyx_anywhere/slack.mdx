@@ -39,6 +39,12 @@ For each channel, your admin can set:
 OnyxBot answers as a shared Onyx service identity. The documents it can cite depend on the channel configuration,
 not on the Slack user who asked.
 
+<Warning>
+  The Slack bot can use the MCP Actions that its agent has,
+  without asking for [approval](/admins/plugins/mcp#approvals-in-chat).
+  It cannot use Actions with the **Disabled** policy.
+</Warning>
+
 <Note>
   The Slack bot is available on all editions. Standard answers, which return a pre-written reply for matching questions,
   are an Enterprise Edition feature. Onyx Cloud includes all Enterprise Edition features.

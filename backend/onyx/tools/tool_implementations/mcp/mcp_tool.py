@@ -43,6 +43,7 @@ from onyx.tools.models import (
     CodeModeResultKind,
     CodeModeResultSpec,
     CustomToolCallSummary,
+    ToolApprovalScope,
     ToolContext,
 )
 from onyx.tools.tool_name import normalize_external_tool_name, sanitize_tool_name
@@ -115,9 +116,11 @@ class MCPTool(Tool):
         user_oauth_token: str | None = None,
         additional_headers: dict[str, str] | None = None,
         resolved_credentials: ResolvedMCPCredentials | None = None,
+        approval: ToolApprovalScope | None = None,
     ) -> None:
 
         self._id = tool_id
+        self.approval = approval
         self.mcp_server = MCPServerConnection.model_validate(mcp_server)
         self._auth_performer = mcp_server.auth_performer
         self._user_id = user_id

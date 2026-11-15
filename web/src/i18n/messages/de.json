@@ -12654,6 +12654,9 @@
         "alreadyAccepted": "Diese Nachricht wurde bereits angenommen und ist nicht mehr ausstehend.",
         "interruptFailed": "Diese Nachricht konnte nicht sofort gesendet werden. Sie bleibt ausstehend.",
         "stopSubagentsFailed": "Die Unteragenten konnten nicht gestoppt werden."
+      },
+      "pendingToolApproval": {
+        "toast": "Geben Sie zuerst die ausstehenden Tool-Aufrufe frei oder lehnen Sie sie ab."
       }
     },
     "mcpApiKey": {
@@ -13096,6 +13099,9 @@
           },
           "working": {
             "label": "In Arbeit"
+          },
+          "waitingForApproval": {
+            "label": "Wartet auf Ihre Freigabe"
           }
         },
         "internalSearch": {
@@ -13232,6 +13238,9 @@
             "status": "Durchsucht das Web"
           }
         }
+      },
+      "toolApproval": {
+        "agentRequest": "{agent} möchte {tool} ausführen"
       },
       "toolbar": {
         "dislikeButton": {
@@ -14450,6 +14459,54 @@
         "decision": "Entscheidung",
         "vision": "Vision"
       }
+    },
+    "payloadView": {
+      "empty": {
+        "label": "Keine Nutzdaten."
+      },
+      "showLess": {
+        "button": "Weniger anzeigen"
+      },
+      "showMore": {
+        "button": "Mehr anzeigen"
+      }
+    },
+    "approvalCard": {
+      "approveChat": {
+        "button": "Für diesen Chat freigeben",
+        "tooltip": "Jetzt freigeben und dieses Tool für den Rest dieses Chats ohne erneute Nachfrage ausführen"
+      },
+      "approveOnce": {
+        "ariaLabel": "Diese Aktion einmalig genehmigen",
+        "button": "Einmalig genehmigen"
+      },
+      "approveSession": {
+        "button": "Für Sitzung genehmigen",
+        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
+      },
+      "deadline": "Bis {time} genehmigen",
+      "header": {
+        "required": "Freigabe angefordert: {headline}"
+      },
+      "headline": {
+        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
+        "singleAction": "{action} in {app}"
+      },
+      "reject": {
+        "ariaLabel": "Diese Aktion ablehnen",
+        "button": "Ablehnen"
+      },
+      "record": {
+        "approved": "Freigegeben: {headline}",
+        "closed": "Wartet nicht mehr: {headline}",
+        "disabled": "Deaktiviert: {headline}",
+        "expired": "Zeitüberschreitung: {headline}",
+        "rejected": "Nicht freigegeben: {headline}",
+        "approvedForChat": "Für diesen Chat freigegeben: {headline}",
+        "approvedForSession": "Für diese Sitzung freigegeben: {headline}"
+      },
+      "submitError": "Ihre Entscheidung konnte nicht gesendet werden. Versuchen Sie es erneut.",
+      "actionWithDescription": "{action}: {description}"
     }
   },
   "craft": {
@@ -14462,50 +14519,6 @@
       },
       "switch": {
         "ariaLabel": "Agent wechseln"
-      }
-    },
-    "approvals": {
-      "approveOnce": {
-        "ariaLabel": "Diese Aktion einmalig genehmigen",
-        "button": "Einmalig genehmigen"
-      },
-      "approveSession": {
-        "button": "Für Sitzung genehmigen",
-        "tooltip": "Übereinstimmende Aktionen für diese Sitzung genehmigen"
-      },
-      "details": {
-        "hideAriaLabel": "Details ausblenden",
-        "showAriaLabel": "Details anzeigen"
-      },
-      "header": {
-        "required": "Genehmigung erforderlich: {headline}"
-      },
-      "headline": {
-        "multiAction": "{count, plural, one {# Aktion} other {# Aktionen}} in {app}",
-        "singleAction": "{action} in {app}"
-      },
-      "payload": {
-        "empty": {
-          "label": "Keine Nutzdaten."
-        },
-        "showLess": {
-          "button": "Weniger anzeigen"
-        },
-        "showMore": {
-          "button": "Mehr anzeigen"
-        }
-      },
-      "reject": {
-        "ariaLabel": "Diese Aktion ablehnen",
-        "button": "Ablehnen"
-      },
-      "status": {
-        "approved": "Genehmigt",
-        "rejected": "Abgelehnt",
-        "expired": "Abgelaufen"
-      },
-      "submit": {
-        "errorFallback": "Entscheidung konnte nicht übermittelt werden"
       }
     },
     "apps": {
@@ -14643,7 +14656,7 @@
         "duplicateSkillName": "Die App „{appName}“ hat bereits einen verknüpften Skill namens „{skillName}“. Laden Sie einen Skill mit anderem Namen hoch."
       },
       "mcpPolicy": {
-        "description": "Legen Sie fest, was der Craft-Agent mit den Tools dieses MCP-Servers tun darf.",
+        "description": "Legen Sie fest, welche Tools im Chat und in Craft automatisch ausgeführt werden, eine Freigabe anfordern oder deaktiviert sind.",
         "emptyPolicies": "Keine aktivierten Tools auf diesem Server. Aktivieren Sie Tools zuerst auf der MCP-Aktionsseite.",
         "saveButton": "Speichern",
         "title": "{name} bearbeiten"
@@ -15840,7 +15853,7 @@
     "actionPolicies": {
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
-      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen und neuen Aufgaben automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
+      "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
       "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
       "newTaskDescription": "Aktivieren Sie ein Plugin, um mit Ihren aktuellen Aktionseinstellungen zu beginnen.",
       "workspace_disabled": "Für den Arbeitsbereich deaktiviert",
@@ -15856,9 +15869,6 @@
       "saveError": "Genehmigungseinstellungen konnten nicht gespeichert werden.",
       "emptyActions": "Keine bekannten Aktionen. Unbekannte Aktionen erfordern eine Genehmigung.",
       "emptyApps": "Keine Apps verfügbar.",
-      "expired": "Die Genehmigungsfrist ist abgelaufen. Die Aktion wurde nicht ausgeführt.",
-      "rejected": "Anfrage abgelehnt. Diese Anfrage wurde nicht ausgeführt.",
-      "deadline": "Bis {time} genehmigen",
       "agentPermissionRequired": "Dieser Lauf wurde gestoppt, weil eine Aktion eine Genehmigung benötigte. Prüfen Sie die Berechtigungen und starten Sie erneut.",
       "enableForTask": "Für diese Aufgabe aktivieren",
       "enableAppForTask": "{app} für diese Aufgabe aktivieren",

@@ -6,6 +6,7 @@ from urllib.parse import parse_qs, urlparse
 import httpx
 
 from onyx.db.enums import (
+    ActionPolicy,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -273,6 +274,13 @@ def test_mcp_oauth_cimd_only_flow(
             for tool in db_tools_response.json()["tools"]
             if tool["name"] == MCP_TOOL_NAME
         )
+        # The tool runs without asking, so the chat call does not wait for approval.
+        client.patch(
+            f"{API_SERVER_URL}/admin/mcp/server/{server_id}",
+            json={"action_policies": {MCP_TOOL_NAME: ActionPolicy.ALWAYS.value}},
+            headers=admin_user.headers,
+            cookies=admin_user.cookies,
+        ).raise_for_status()
         persona = PersonaManager.create(
             name="integration-mcp-cimd-persona",
             tool_ids=[tool_id],

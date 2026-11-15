@@ -1,3 +1,4 @@
+import asyncio
 import sys
 
 import uvicorn
@@ -16,6 +17,15 @@ def make_many_tools(mcp: FastMCP) -> None:
 
     for i in range(100):
         make_tool(i)
+
+
+def make_slow_tool(mcp: FastMCP) -> None:
+    # Keeps a chat turn live while a sibling call waits for approval. The sleep
+    # ends when the client cancels the call.
+    @mcp.tool(name="slow_tool", description="Wait, then return a fixed value")
+    async def slow_tool(seconds: float = 60) -> str:
+        await asyncio.sleep(seconds)
+        return "Slow value ready!"
 
 
 if __name__ == "__main__":
@@ -40,6 +50,7 @@ if __name__ == "__main__":
     # Create FastMCP instance - it will handle /mcp path internally
     mcp = FastMCP("My HTTP MCP", auth=auth)
     make_many_tools(mcp)
+    make_slow_tool(mcp)
 
     # Get the MCP HTTP app (configured to serve at /mcp)
     mcp_app = mcp.http_app()

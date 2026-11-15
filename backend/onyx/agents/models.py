@@ -13,7 +13,12 @@ from pydantic import (
 )
 
 from onyx.agents.execution_records import messages_for_model
-from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.agents.tools import (
+    ChildRunWait,
+    HumanToolAnswer,
+    NestedInputWait,
+    PendingToolInput,
+)
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import (
     AssistantMessage,
@@ -365,17 +370,32 @@ class RunProgress(BaseModel):
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
     allowed_tool_names: frozenset[str] | None = None
-    tool_configuration_digest: str
     previous_options: GenerationOptions | None = None
     finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None
-    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
-        default_factory=dict
+    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait | NestedInputWait] = (
+        Field(default_factory=dict)
     )
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
+
+    @property
+    def input_requests(self) -> list[PendingToolInput]:
+        """The saved input requests: of direct calls, and of calls that tools
+        made for the model."""
+        return [
+            request
+            for pending in self.pending_tool_calls.values()
+            for request in (
+                [pending]
+                if isinstance(pending, PendingToolInput)
+                else [nested.request for nested in pending.requests]
+                if isinstance(pending, NestedInputWait)
+                else []
+            )
+        ]
 
     @field_serializer("allowed_tool_names", when_used="json")
     def serialize_allowed_tool_names(
