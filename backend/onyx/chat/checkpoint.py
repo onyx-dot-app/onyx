@@ -147,6 +147,7 @@ class CheckpointSerializer:
             result=self._decode_tool_result(encoded.result)
             if encoded.result is not None
             else None,
+            standing=encoded.standing,
         )
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
@@ -160,6 +161,8 @@ class CheckpointSerializer:
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
         answers = raw.pop("human_tool_answers", {})
+        # Saved checkpoints of deployed servers carry this unused key.
+        raw.pop("tool_configuration_digest", None)
         progress = RunProgress.model_validate(raw)
         progress.human_tool_answers = {
             key: self.decode_answer(answer) for key, answer in _object(answers).items()

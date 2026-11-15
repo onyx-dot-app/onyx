@@ -260,6 +260,7 @@ class ChatAgent(Agent, RestorableFeature):
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
+            code_cells=self.code_cells.saved() if self.code_cells is not None else [],
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
@@ -287,6 +288,8 @@ class ChatAgent(Agent, RestorableFeature):
         self.gathered_documents = saved.gathered_documents
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
+        if self.code_cells is not None:
+            self.code_cells.restore(saved.code_cells)
 
     def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""

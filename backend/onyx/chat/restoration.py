@@ -4,7 +4,7 @@ import hashlib
 from collections.abc import Callable
 from io import BytesIO
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, JsonValue, TypeAdapter
 
@@ -169,16 +169,21 @@ def persist_checkpoint_files(
 ) -> None:
     """Replace transient file contents with tenant-scoped file-store references."""
 
-    def save(file: SavedChatFile) -> None:
+    def save(file: SavedChatFile, *, unique: bool = False) -> None:
+        """Save under a content ID, or a `unique` one for content that only
+        this checkpoint owns."""
         if file.file_id is not None:
             file.content = None
             return
         if file.content is None:
             raise ValueError("Checkpoint file is missing its contents")
-        file_id = f"{AGENT_CHECKPOINT_FILE_PREFIX}{session_id}/{hashlib.sha256(file.content).hexdigest()}"
+        name = uuid4().hex if unique else hashlib.sha256(file.content).hexdigest()
+        file_id = f"{AGENT_CHECKPOINT_FILE_PREFIX}{session_id}/{name}"
         store = get_default_file_store()
         # Concurrent saves use identical bytes for this session-scoped content ID.
-        if not store.has_file(file_id, FileOrigin.OTHER, "application/octet-stream"):
+        if unique or not store.has_file(
+            file_id, FileOrigin.OTHER, "application/octet-stream"
+        ):
             store.save_file(
                 content=BytesIO(file.content),
                 display_name=file.filename,
@@ -210,9 +215,20 @@ def persist_checkpoint_files(
             progress = record.progress
             if progress.feature_state is not None:
                 state = _FEATURE_STATE.validate_python(progress.feature_state)
-                if isinstance(state, ChatFeatureState) and state.chat_files:
-                    for file in state.chat_files:
+                if isinstance(state, ChatFeatureState):
+                    # Chat files, and each parked program's files for later
+                    # calls and its dump, which each park makes anew.
+                    for file in [
+                        *state.chat_files,
+                        *(
+                            file
+                            for cell in state.code_cells
+                            for file in cell.staged_files
+                        ),
+                    ]:
                         save(file)
+                    for cell in state.code_cells:
+                        save(cell.program.dump, unique=True)
                     progress.feature_state = _JSON_OBJECT.validate_python(
                         state.model_dump(mode="json")
                     )

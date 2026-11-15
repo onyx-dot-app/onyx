@@ -16,7 +16,9 @@ from onyx.tools.tool_implementations.code_mode.models import ClosedStatus
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
 WorkerLossReason = Literal["crashed", "killed", "out_of_memory"]
-SuspensionOutcome = Literal["dumped", "over_budget", "over_memory"]
+SuspensionOutcome = Literal[
+    "dumped", "over_budget", "over_memory", "parked", "park_refused"
+]
 
 SANDBOX_WORKERS_BUSY = Gauge(
     "onyx_code_mode_sandbox_workers_busy",
@@ -57,7 +59,8 @@ SUSPENDED_BYTES_LIMIT = Gauge(
 SUSPENSIONS = Counter(
     "onyx_code_mode_suspensions_total",
     "Waiting programs dumped to free their worker, or kept on it: over the dump "
-    "byte budget, or with too much memory in the worker to dump.",
+    "byte budget, or with too much memory in the worker to dump. Programs that "
+    "wait for the user's input are parked, or refused when they cannot pause.",
     ["outcome"],
 )
 TOOL_CALL_THREADS_IN_USE = Gauge(

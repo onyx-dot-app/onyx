@@ -1,11 +1,18 @@
 """Executable tools and their invocation-scoped services."""
 
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
 
-from pydantic import BaseModel, ConfigDict, JsonValue, SerializeAsAny, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    SerializeAsAny,
+    model_validator,
+)
 
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -51,19 +58,34 @@ class PendingToolInput(BaseModel):
     request_id: str
     prompt: str
     mode: InputMode
+    # The run's ToolApprovals opened the request; only that owner answers or
+    # withdraws it. The runtime sets it.
+    approval: bool = False
+    # How the requester names the action, for display.
+    display_name: str | None = None
 
 
 class HumanToolAnswer(BaseModel):
-    """A human approval, denial, or supplied result for a pending tool input request."""
+    """A human approval, denial, or supplied result for a pending tool input request.
+
+    A denial can carry the result the model sees in place of the default one.
+    """
 
     request_id: str
     decision: InputDecision
     result: ToolResult | None = None
+    # A standing approval also approves later calls of the same action; the
+    # application that answers applies it to those calls.
+    standing: bool = False
 
     @model_validator(mode="after")
     def validate_result(self) -> "HumanToolAnswer":
-        if (self.decision == InputDecision.RESULT) != (self.result is not None):
-            raise ValueError("Only a result answer requires a tool result")
+        if self.decision == InputDecision.RESULT and self.result is None:
+            raise ValueError("A result answer requires a tool result")
+        if self.decision == InputDecision.APPROVE and self.result is not None:
+            raise ValueError("An approval cannot supply a tool result")
+        if self.standing and self.decision != InputDecision.APPROVE:
+            raise ValueError("Only an approval can be standing")
         return self
 
 
@@ -74,7 +96,36 @@ class ChildRunWait(BaseModel):
     run_ids: list[str]
 
 
-ToolOutcome = ToolResult | PendingToolInput | ChildRunWait
+class NestedInputRequest(BaseModel):
+    """An input request that a call of the run waits for, with the place of
+    the call that shows it.
+
+    `nested_call` is the call that a tool makes for the model, such as a
+    program's; `tool_call` is then the call whose tool made it, or an earlier
+    call of the same tool. It is None when `tool_call` itself waits.
+    """
+
+    message_id: str
+    step_index: int
+    tool_call: ToolCall
+    nested_call: ToolCall | None
+    request: PendingToolInput
+
+
+class NestedInputWait(BaseModel):
+    """Continue a call once every request of the calls that its tool made for
+    the model has an answer; `AgentTool.resume_with_input` continues it."""
+
+    kind: Literal["nested_input"] = "nested_input"
+    requests: list[NestedInputRequest] = Field(min_length=1)
+
+
+class NestedInputAnswer(BaseModel):
+    request: NestedInputRequest
+    answer: HumanToolAnswer
+
+
+ToolOutcome = ToolResult | PendingToolInput | ChildRunWait | NestedInputWait
 
 
 class SpawnResult(BaseModel):
@@ -156,6 +207,29 @@ class BeforeToolCallFailed(BaseException):
         self.error = error
 
 
+class NestedCallGate(Protocol):
+    """Decides the calls that a tool makes for the model, such as a program's
+    tool calls, as the run decides its direct calls: the before_tool_call hook,
+    then the user's approval.
+
+    A request that the gate returns is open: the run shows it at once. The call
+    does not block on it. The tool returns it in a `NestedInputWait`, which the
+    run saves and answers, or withdraws it. A request that is neither ends
+    when the run suspends or ends. An approved request runs its call. Raises
+    BeforeToolCallFailed when the hook or the approval gate raises.
+    """
+
+    def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
+        """A result that replaces the call, a request that the call waits for,
+        or None to run it."""
+        ...
+
+    def withdraw(self, request: NestedInputRequest) -> None:
+        """End an open request whose call stopped waiting without an answer,
+        for example because its program ended."""
+        ...
+
+
 class ToolInvocation:
     """Tool inputs and runtime services.
 
@@ -175,8 +249,7 @@ class ToolInvocation:
         recorded_results: Sequence[ToolResultMessage] = (),
         agents: AgentControl | None = None,
         trace_metadata: Mapping[str, JsonValue] | None = None,
-        before_call: Callable[[ToolCall], ToolResult | PendingToolInput | None]
-        | None = None,
+        nested_calls: NestedCallGate | None = None,
     ) -> None:
         self.call_id = call_id
         self.call_index = call_index
@@ -193,10 +266,9 @@ class ToolInvocation:
         self.recorded_results = recorded_results
         # Attributes of the call's tracing span.
         self.trace_metadata = trace_metadata
-        # The run's before_tool_call hook, for calls that the tool makes for the
-        # model, such as a program's tool calls; None when the run has no hook.
-        # It raises BeforeToolCallFailed when the hook raises.
-        self.before_call = before_call
+        # Decides the calls that the tool makes for the model, such as a
+        # program's tool calls; None when no hook or approval decides calls.
+        self.nested_calls = nested_calls
         self._agents = agents
 
     @property
@@ -231,6 +303,10 @@ class AgentTool:
         execute: Callable[[ToolInvocation], ToolOutcome],
         result_from_children: Callable[[ToolInvocation, list["RunState"]], ToolResult]
         | None = None,
+        resume_with_input: Callable[
+            [ToolInvocation, list[NestedInputAnswer]], ToolOutcome
+        ]
+        | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
         merge_arguments: Callable[
             [dict[str, JsonValue], dict[str, JsonValue]], dict[str, JsonValue] | None
@@ -238,14 +314,21 @@ class AgentTool:
         | None = None,
         interrupted_result: ToolResult | None = None,
         display_name: str | None = None,
+        approval_required: Collection[str] = (),
     ) -> None:
         self.definition = definition
         self.execute = execute
         self.result_from_children = result_from_children
+        # Continues a call that returned NestedInputWait, with the answers to
+        # its requests in their order; it does not repeat `execute`.
+        self.resume_with_input = resume_with_input
         self.execution_mode = execution_mode
         self.merge_arguments = merge_arguments
         self.interrupted_result = interrupted_result
         self.display_name = display_name
+        # Names of calls, this tool's own or those it makes for the model, that
+        # wait for the user's approval before they run.
+        self.approval_required = frozenset(approval_required)
 
     def snapshot(self) -> "AgentTool":
         definition = self.definition.model_copy(deep=True)
@@ -253,10 +336,12 @@ class AgentTool:
             definition=definition,
             execute=self.execute,
             result_from_children=self.result_from_children,
+            resume_with_input=self.resume_with_input,
             execution_mode=self.execution_mode,
             merge_arguments=self.merge_arguments,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
+            approval_required=self.approval_required,
         )
 
     @property

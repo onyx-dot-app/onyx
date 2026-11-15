@@ -296,7 +296,6 @@ def test_every_step_receives_a_bounded_number_of_child_results(
             progress=RunProgress(
                 step_index=3 if final_step else 2,
                 step_limit=4,
-                tool_configuration_digest="",
             ),
         )
     )

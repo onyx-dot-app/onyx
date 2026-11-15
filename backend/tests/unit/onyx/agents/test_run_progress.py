@@ -39,7 +39,6 @@ from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership
 
 def test_finalized_tool_ids_serialize_in_stable_order() -> None:
     progress = RunProgress(
-        tool_configuration_digest="test-tool-configuration",
         step_limit=1,
         finalized_tool_call_ids={"z", "a"},
     )
@@ -49,7 +48,6 @@ def test_finalized_tool_ids_serialize_in_stable_order() -> None:
         RunProgress.model_validate(
             {
                 "step_limit": 1,
-                "tool_configuration_digest": "test-tool-configuration",
                 "finalized_tools": 1,
             }
         )
@@ -81,7 +79,6 @@ def test_resume_rejects_invalid_finalized_tool_ids(invalid: str) -> None:
             )
         ],
         progress=RunProgress(
-            tool_configuration_digest="test-tool-configuration",
             step_limit=2,
             action=RunAction.TOOLS,
             finalized_tool_call_ids={"search"},

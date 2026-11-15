@@ -947,7 +947,6 @@ def test_checkpoint_files_use_durable_references_and_session_cleanup(
                     agent_id=str(branch[0]),
                     status=RunStatus.SUSPENDED,
                     progress=RunProgress(
-                        tool_configuration_digest="test-tool-configuration",
                         step_limit=2,
                         feature_state=feature.capture_state().model_dump(mode="json"),
                     ),

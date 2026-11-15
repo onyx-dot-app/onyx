@@ -472,7 +472,9 @@ def test_parameters_come_from_arguments() -> None:
         },
         "required": ["code"],
     }
-    assert WaitCodeTool(CodeCells()).tool_definition().parameters == {
+    assert WaitCodeTool(
+        CodeCells(), _make_tool().program
+    ).tool_definition().parameters == {
         "type": "object",
         "properties": {
             "cell_id": {
