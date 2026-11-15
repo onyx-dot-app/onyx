@@ -63,10 +63,12 @@ export async function readChatSessionStatus(
   return status;
 }
 
+/** The chat's latest page, or the page before `beforeMessageId`. */
 export async function fetchSettledChatSession(
-  sessionId: string
+  sessionId: string,
+  beforeMessageId?: number
 ): Promise<BackendChatSession> {
-  const response = await fetch(chatPageUrl(sessionId), {
+  const response = await fetch(chatPageUrl(sessionId, beforeMessageId), {
     cache: "no-store",
     signal: AbortSignal.timeout(10_000),
   });

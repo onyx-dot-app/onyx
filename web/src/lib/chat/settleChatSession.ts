@@ -10,7 +10,10 @@ import { mergeLatestChatPage } from "@/lib/chat/pagedSession";
 import type { ChatHistoryPage } from "@/lib/chat/types";
 import type { Packet } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { readToolApprovals } from "@/lib/chat/toolApprovals";
+import {
+  readToolApprovals,
+  readWaitingToolApprovals,
+} from "@/lib/chat/toolApprovals";
 import {
   CHAT_STATUS_POLL_MS,
   fetchSettledChatSession,
@@ -249,11 +252,32 @@ export function refreshChatSession(
       const current = store.sessions.get(sessionId);
       if (!current || !ownsRefresh()) return;
       if (current.incognito) {
-        const messageTree = new Map(current.messageTree);
         const answers = [...current.messageTree.values()].filter(
           (message) => message.type === "assistant" || message.type === "error"
         );
-        for (const [nodeId, copy] of savedAnswers(saved, answers))
+        const copies = savedAnswers(saved, answers);
+        // The latest page holds every reply with a waiting card, so a loaded
+        // older reply outside it that still shows one was resolved
+        // elsewhere: it is read again from the page that ends at it.
+        const stale = new Set(
+          readWaitingToolApprovals(current.messageTree)
+            .map(({ response }) => response)
+            .filter((response) => !copies.has(response.nodeId))
+        );
+        for (const answer of stale) {
+          const next =
+            answer.latestChildNodeId == null
+              ? undefined
+              : current.messageTree.get(answer.latestChildNodeId)?.messageId;
+          if (next == null) continue;
+          const page = await fetchSettledChatSession(sessionId, next);
+          for (const [nodeId, copy] of savedAnswers(page, [answer]))
+            copies.set(nodeId, copy);
+        }
+        const latest = useChatSessionStore.getState().sessions.get(sessionId);
+        if (!latest || !ownsRefresh()) return;
+        const messageTree = new Map(latest.messageTree);
+        for (const [nodeId, copy] of copies)
           if (readToolApprovals(copy.packets).entries.length > 0)
             messageTree.set(nodeId, copy);
         store.updateSessionData(sessionId, {

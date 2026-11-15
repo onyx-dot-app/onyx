@@ -1005,6 +1005,79 @@ describe("with stubbed server checks", () => {
     ).toBe("input");
   });
 
+  test("an incognito refresh re-reads an older answer whose card the latest page no longer holds", async () => {
+    const asked = approvalRequest("agent");
+    const resolved: Packet = {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_resolved",
+        approval_id: "agent",
+        outcome: "approved",
+      },
+    };
+    const older: Message = {
+      ...message(2, "assistant", "Started the agent"),
+      messageId: 85,
+      parentNodeId: 1,
+      childrenNodeIds: [3],
+      latestChildNodeId: 3,
+      packets: [asked],
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      incognito: true,
+      messageTree: new Map<number, Message>([
+        [
+          1,
+          {
+            ...message(1, "user", "Private question"),
+            childrenNodeIds: [2],
+            latestChildNodeId: 2,
+          },
+        ],
+        [2, older],
+        [
+          3,
+          {
+            ...message(3, "user", "Next question"),
+            messageId: 86,
+            parentNodeId: 2,
+            childrenNodeIds: [4],
+            latestChildNodeId: 4,
+          },
+        ],
+        [
+          4,
+          {
+            ...message(4, "assistant", "Next answer"),
+            messageId: 87,
+            parentNodeId: 3,
+          },
+        ],
+      ]),
+    });
+    jest
+      .mocked(processRawChatHistory)
+      // The latest page no longer holds the older answer.
+      .mockReturnValueOnce(
+        new Map([
+          [4, { ...message(4, "assistant", "Next answer"), messageId: 87 }],
+        ])
+      )
+      .mockReturnValueOnce(
+        new Map([[2, { ...older, packets: [asked, resolved] }]])
+      );
+
+    await refreshChatSession("session", errorMessage);
+
+    expect(fetchSettledChatSession).toHaveBeenCalledWith("session", 86);
+    expect(
+      useChatSessionStore.getState().sessions.get("session")!.messageTree.get(2)
+        ?.packets
+    ).toEqual([asked, resolved]);
+    expect(waitingApprovalIds()).toEqual([]);
+  });
+
   test("an answer that a newer stream took over stays with it after that stream ends", () => {
     expect(claimStreamReader(stream(992, [79]))).toBe(true);
     expect(claimStreamReader(stream(993, [79]))).toBe(true);

@@ -92,7 +92,10 @@
   so a background agent's request also refreshes it. An incognito refresh
   keeps local content: only answers whose saved copies hold approval
   requests take those copies, since only a chat that saves content can ask
-  for approval. A stream that ends
+  for approval. A loaded older answer outside the latest page that still
+  shows a waiting card was resolved elsewhere, so the refresh reads it again
+  from the page that ends at it (`fetchSettledChatSession` with
+  `beforeMessageId`). A stream that ends
   with `stop(awaiting_approval)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`
