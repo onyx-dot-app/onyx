@@ -1,6 +1,7 @@
 """parse_tool_arguments and tool_definition_from_arguments on generic models."""
 
 from enum import Enum
+from typing import List, Literal
 
 import pytest
 from pydantic import BaseModel
@@ -21,6 +22,19 @@ def test_null_selects_the_default_only_when_the_type_rejects_null() -> None:
     )
     assert arguments.defaulted == 5
     assert arguments.nullable is None
+
+
+class _LiteralAndListDefaults(BaseModel):
+    choice: Literal["auto", None] = "auto"
+    items: List[None] = []  # noqa: UP006
+
+
+def test_null_selects_the_default_by_what_the_type_accepts() -> None:
+    arguments = parse_tool_arguments(
+        _LiteralAndListDefaults, {"choice": None, "items": None}
+    )
+    assert arguments.choice is None
+    assert arguments.items == []
 
 
 def test_null_for_a_required_argument_is_an_error() -> None:

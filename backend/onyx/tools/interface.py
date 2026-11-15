@@ -1,11 +1,10 @@
 import abc
 import traceback
 from collections.abc import Callable
-from functools import partial
-from types import NoneType
-from typing import TYPE_CHECKING, final, get_args
+from functools import cache, partial
+from typing import TYPE_CHECKING, final
 
-from pydantic import BaseModel, JsonValue, ValidationError
+from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
@@ -57,6 +56,15 @@ def tool_message_history(messages: list[Message]) -> list[ChatMinimalTextMessage
     ]
 
 
+@cache
+def _accepts_null(annotation: object) -> bool:
+    try:
+        TypeAdapter(annotation).validate_python(None)
+    except ValidationError:
+        return False
+    return True
+
+
 def parse_tool_arguments[T: BaseModel](
     model: type[T], arguments: dict[str, JsonValue]
 ) -> T:
@@ -71,7 +79,7 @@ def parse_tool_arguments[T: BaseModel](
                 if value is not None
                 or (field := model.model_fields.get(key)) is None
                 or field.is_required()
-                or NoneType in get_args(field.annotation)
+                or _accepts_null(field.annotation)
             }
         )
     except ValidationError as error:
