@@ -15,6 +15,7 @@ def mock_source_operations() -> MagicMock:
     """Return an autospecced mock JiraSourceOperations gateway."""
     gateway = cast(MagicMock, create_autospec(JiraSourceOperations, instance=True))
     gateway._is_cloud.return_value = False
+    gateway.get_project.return_value = {}
     gateway.get_service_desk_request.return_value = None
     gateway.get_service_desk_sla.return_value = None
     return gateway

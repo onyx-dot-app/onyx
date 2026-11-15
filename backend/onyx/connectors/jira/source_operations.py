@@ -490,7 +490,7 @@ class JiraSourceOperations(SourceOperations):
         Best effort by design: enrichment must never fail an indexing run."""
         try:
             with _translate_errors(fast=fast):
-                return self._client(fast=fast)._get_json(
+                payload = self._client(fast=fast)._get_json(
                     f"request/{issue_key}",
                     # Without the expand the response carries only
                     # requestTypeId, not the requestType object.
@@ -508,6 +508,7 @@ class JiraSourceOperations(SourceOperations):
             requests.RequestException,
         ):
             return None
+        return dict(payload) if isinstance(payload, Mapping) else None
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
