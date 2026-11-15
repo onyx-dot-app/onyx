@@ -635,6 +635,20 @@ describe("with stubbed server checks", () => {
     ).toMatchObject({ chatState: "input" });
   });
 
+  test("a named stream without rows here leaves the chat as it was", () => {
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "input",
+      messageTree: new Map([[1, message(1, "user", "Question")]]),
+    });
+
+    followChatStream("session", stream(972, [73]), errorMessage);
+
+    expect(
+      useChatSessionStore.getState().sessions.get("session")?.chatState
+    ).toBe("input");
+    expect(resumeStream).not.toHaveBeenCalled();
+  });
+
   test("an old rejected attempt does not hide the latest saved answer", async () => {
     const user = {
       ...message(1, "user", "Question"),

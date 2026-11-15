@@ -10,7 +10,10 @@ import type { MultiModelResponse } from "@/app/app/message/types";
 import { FetchError } from "@/lib/fetcher";
 import { postChatApprovalDecision } from "@/lib/chat/svc";
 import { followChatStream } from "@/lib/chat/settleChatSession";
-import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
+import {
+  readChatSessionStatus,
+  waitForChatResponseEnd,
+} from "@/lib/chat/sessionReadiness";
 import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -62,7 +65,8 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   // Without one, the response continues in a later turn or in a live reader,
   // or an agent continues in the background: a status read hands the chat to
   // its status subscriber, which follows server turns until the chat is idle
-  // and then loads the saved session.
+  // and then loads the saved session. Incognito has no status subscriber: it
+  // waits for the next stream and follows it when it writes its answers.
   async function submit(decision: ApprovalSubmitDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
@@ -98,7 +102,12 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
     if (sessionId === null) return;
     if (continuation)
       followChatStream(sessionId, continuation, tReadiness("checkFailed"));
-    else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
+    else if (
+      useChatSessionStore.getState().sessions.get(sessionId)?.incognito
+    ) {
+      const next = await waitForChatResponseEnd(sessionId);
+      if (next) followChatStream(sessionId, next, tReadiness("checkFailed"));
+    } else void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 
   const agentRequest =

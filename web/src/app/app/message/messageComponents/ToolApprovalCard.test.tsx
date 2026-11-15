@@ -15,7 +15,10 @@ import {
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { followChatStream } from "@/lib/chat/settleChatSession";
-import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
+import {
+  readChatSessionStatus,
+  waitForChatResponseEnd,
+} from "@/lib/chat/sessionReadiness";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
@@ -27,6 +30,7 @@ jest.mock("@/lib/chat/settleChatSession", () => ({
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   readChatSessionStatus: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
 }));
 
 const continuation: ChatStream = { stream_id: 900, response_ids: [82] };
@@ -114,9 +118,13 @@ beforeEach(() => {
     nudge: null,
   });
   statusReads.mockClear();
-  useChatSessionStore.setState({ currentSessionId: "session" });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
   jest.mocked(followChatStream).mockReset();
   jest.mocked(readChatSessionStatus).mockReset();
+  jest.mocked(waitForChatResponseEnd).mockReset();
 });
 afterEach(() => jest.restoreAllMocks());
 
@@ -165,6 +173,27 @@ describe("Continuation", () => {
       );
     else expect(followChatStream).not.toHaveBeenCalled();
     expect(readChatSessionStatus).not.toHaveBeenCalled();
+  });
+
+  it("in incognito, follows the next stream when the server names none", async () => {
+    useChatSessionStore
+      .getState()
+      .createSession("session", { incognito: true, chatState: "input" });
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(continuation);
+    respond(200, decided("APPROVED", "USER", null));
+    render(<Harness />);
+
+    await clickApprove();
+
+    await waitFor(() =>
+      expect(followChatStream).toHaveBeenCalledWith(
+        "session",
+        continuation,
+        expect.any(String)
+      )
+    );
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session");
+    expect(statusReads).not.toHaveBeenCalled();
   });
 
   it.each([

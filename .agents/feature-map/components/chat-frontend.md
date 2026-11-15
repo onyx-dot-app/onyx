@@ -80,8 +80,11 @@
   for this chat" can also approve sibling requests on the server. When
   `continuation` is set, `lib/chat/settleChatSession.ts:followChatStream`
   follows that stream from cursor 0 into the rows that its `response_ids`
-  name, unless this browser already reads it: the send reader and every
-  replay reader claim their stream (`claimStreamReader`). A stream that ends
+  name, unless this browser already reads it (the send reader and every
+  replay reader claim their stream, `claimStreamReader`) or those rows are
+  not loaded. Without a `continuation`, an incognito chat, which has no
+  status subscriber, waits for the next stream (`waitForChatResponseEnd`)
+  and follows it. A stream that ends
   with `stop(awaiting_approval)` settles like any other: the status reads
   follow a new `current_stream` until the session is idle. After a 409 or
   404 decision, the card reads the status once and follows `current_stream`

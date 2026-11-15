@@ -450,7 +450,8 @@ export function releaseStreamReader(streamId: number): void {
 /**
  * Follows a stream that the server named, such as the continuation of a
  * response after its approval decisions, from its start into its rows. A
- * stream that this browser already reads keeps its reader.
+ * stream that this browser already reads keeps its reader, and a stream
+ * without rows here is not followed.
  */
 export function followChatStream(
   sessionId: string,
@@ -462,7 +463,8 @@ export function followChatStream(
   if (
     !session ||
     session.chatState === "cancelling" ||
-    streamReaders.has(stream.stream_id)
+    streamReaders.has(stream.stream_id) ||
+    !streamResponses(session.messageTree, stream)
   )
     return;
   const { messageTree, replayStream } = prepareSavedChat(
