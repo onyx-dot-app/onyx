@@ -330,7 +330,6 @@ async function runChatStream(
         sessionId,
         server.serverUrl,
         server.queryClient,
-        true,
       );
     // name a new session once it streamed output; skip stop/abort and thrown transport failures
     if (isNewSession && !signal.aborted && sawStreaming && !hadError) {

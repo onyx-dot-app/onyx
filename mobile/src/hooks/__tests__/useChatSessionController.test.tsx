@@ -47,6 +47,11 @@ jest.mock("@/state/session", () => ({
   useSession: (selector: (s: { serverUrl: string | null }) => unknown) =>
     selector({ serverUrl: "https://example.test" }),
 }));
+// Status polls wait this long instead of the real interval, so tests do not sleep.
+jest.mock("@/chat/constants", () => ({
+  ...jest.requireActual<typeof import("@/chat/constants")>("@/chat/constants"),
+  SESSION_POLL_INTERVAL_MS: 10,
+}));
 jest.mock("@/hooks/useToast", () => ({ toast: { error: jest.fn() } }));
 jest.mock("@/api/chat/stream", () => ({
   resumeChatMessage: jest.fn(),
@@ -1072,6 +1077,8 @@ describe("useChatSessionController", () => {
       .mockReturnValueOnce(
         scripted([
           startPacket("asked"),
+          // The continuation marks where its replayed prefix ends; this reader ignores it.
+          { type: "replay_end" } as unknown as StreamEvent,
           deltaPacket(" done"),
           stopPacket(),
           { stream_id: 7, next_cursor: 3, replay_complete: true },
@@ -1443,9 +1450,8 @@ describe("watchBackgroundAgents", () => {
     jest.useRealTimers();
   });
 
-  // A decided agent card resumes the agent without a stream, and a parked agent does not count
-  // as running, so its next request shows only once the version changes.
-  it("loads an agent's later request after a decision resumes it, then stops once agents settle", async () => {
+  // A decided agent that waits to resume counts as active, so reads go on until it stops.
+  it("loads an agent's later request while the decided agent runs, then stops once it stops", async () => {
     getSessionMock.mockResolvedValueOnce(saved([historyPacket("asked")], "v1"));
     const baseline = await loadChatSession("s1");
     useChatSessionStore
@@ -1459,13 +1465,13 @@ describe("watchBackgroundAgents", () => {
       .mocked(getChatSessionStatus)
       .mockResolvedValueOnce({
         is_processing: false,
-        has_active_subagents: false,
+        has_active_subagents: true,
         approvals_version: "v1",
       })
       .mockResolvedValueOnce({
         is_processing: false,
         has_active_subagents: true,
-        approvals_version: "v1",
+        approvals_version: "v2",
       })
       .mockResolvedValueOnce({
         is_processing: false,
@@ -1476,21 +1482,20 @@ describe("watchBackgroundAgents", () => {
       saved([historyPacket("asked"), agentRequest], "v2"),
     );
 
-    const watch = watchBackgroundAgents("s1", SERVER_URL, client, false);
+    const watch = watchBackgroundAgents("s1", SERVER_URL, client);
     await jest.advanceTimersByTimeAsync(3000);
     await watch;
 
     expect(waitingIds()).toEqual(["agent-2"]);
     expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
-    // The baseline load and one reload for the changed version.
-    expect(getSessionMock).toHaveBeenCalledTimes(2);
+    // The baseline load, the reload for the changed version and the last reload.
+    expect(getSessionMock).toHaveBeenCalledTimes(3);
     await jest.advanceTimersByTimeAsync(3000);
     expect(getChatSessionStatus).toHaveBeenCalledTimes(3);
   });
 
-  // A later decision replaces the watch, so the first agent settling does not end it.
-  it("keeps reading for a second agent that a later decision resumes", async () => {
-    getSessionMock.mockResolvedValueOnce(saved([historyPacket("asked")], "v1"));
+  it("stops after one read when no background agent runs or waits to resume", async () => {
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
     const baseline = await loadChatSession("s1");
     useChatSessionStore
       .getState()
@@ -1499,51 +1504,18 @@ describe("watchBackgroundAgents", () => {
         processRawChatHistory(baseline.messages, baseline.packets),
       );
     useChatSessionStore.setState({ currentSessionId: "s1" });
-    const status = jest.mocked(getChatSessionStatus);
-    status.mockResolvedValueOnce({
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
       is_processing: false,
-      has_active_subagents: true,
+      has_active_subagents: false,
       approvals_version: "v1",
     });
-    getSessionMock.mockResolvedValue(
-      saved([historyPacket("asked"), agentRequest], "v2"),
-    );
 
-    // Agent A's decision: its watch sees A run.
-    const first = watchBackgroundAgents("s1", SERVER_URL, client, false);
-    await jest.advanceTimersByTimeAsync(1000);
-    expect(status).toHaveBeenCalledTimes(1);
+    const watch = watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(6000);
+    await watch;
 
-    // Agent B's decision before A settles. A has stopped; B starts two reads later.
-    status
-      .mockResolvedValueOnce({
-        is_processing: false,
-        has_active_subagents: false,
-        approvals_version: "v1",
-      })
-      .mockResolvedValueOnce({
-        is_processing: false,
-        has_active_subagents: false,
-        approvals_version: "v1",
-      })
-      .mockResolvedValueOnce({
-        is_processing: false,
-        has_active_subagents: true,
-        approvals_version: "v1",
-      })
-      .mockResolvedValueOnce({
-        is_processing: false,
-        has_active_subagents: false,
-        approvals_version: "v2",
-      });
-    const second = watchBackgroundAgents("s1", SERVER_URL, client, false);
-    await jest.advanceTimersByTimeAsync(5000);
-    await Promise.all([first, second]);
-
-    expect(status).toHaveBeenCalledTimes(5);
-    expect(waitingIds()).toEqual(["agent-2"]);
-    await jest.advanceTimersByTimeAsync(3000);
-    expect(status).toHaveBeenCalledTimes(5);
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(1);
+    expect(getSessionMock).toHaveBeenCalledTimes(2);
   });
 
   it("follows a stream that starts while it watches", async () => {
@@ -1561,7 +1533,7 @@ describe("watchBackgroundAgents", () => {
       .mockResolvedValue({ is_processing: false });
     getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
 
-    void watchBackgroundAgents("s1", SERVER_URL, client, true);
+    void watchBackgroundAgents("s1", SERVER_URL, client);
     await jest.advanceTimersByTimeAsync(3000);
 
     expect(resumeMock.mock.calls[0]?.[1]).toBe(9);

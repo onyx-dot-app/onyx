@@ -69,6 +69,11 @@ jest.mock("@/api/chat/sessions", () => ({
   renameChatSession: jest.fn(),
   stopChatSession: jest.fn(),
 }));
+// Status polls wait this long instead of the real interval, so tests do not sleep.
+jest.mock("@/chat/constants", () => ({
+  ...jest.requireActual<typeof import("@/chat/constants")>("@/chat/constants"),
+  SESSION_POLL_INTERVAL_MS: 10,
+}));
 jest.mock("@/hooks/useToast", () => ({
   toast: { info: jest.fn(), error: jest.fn(), warning: jest.fn() },
 }));

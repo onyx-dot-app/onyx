@@ -141,7 +141,7 @@ returns to `input`. So does a send that the server refuses with
 `chat/sessionReadiness.ts` keeps the last version per session. A session
 load (`loadChatSession`) sets it, and `waitForSessionIdle` reports a change
 from it as `approvalsChanged`. An idle chat polls only while background agents
-run: `mobile/src/hooks/useChatSessionController.ts:watchBackgroundAgents` reads status,
+run or wait to resume: `mobile/src/hooks/useChatSessionController.ts:watchBackgroundAgents` reads status,
 reloads the saved session when the version changes, follows a stream that
 starts, and ends once `has_active_subagents` is false. Recovery follows a stream into the response that
 `current_stream.response_ids` names, never into a message with the stream id.
@@ -164,14 +164,17 @@ device shows until then (`chat/toolApprovals.ts:useToolApprovalUi`). The
 client clears the response's `streamingStartedAt`, so the wait is not timed.
 After a decision, `components/chat/ToolApprovalCard.tsx` follows the
 `continuation` that the decision response names, from cursor 0, when no
-reader runs. A 404 or 409 decision starts `recoverChatSession` with no
+reader runs. The server names one only for a suspended response; for a live
+response it is null and the running reader keeps its stream. A reader whose
+stream stops with `awaiting_approval` reads status and follows a new
+`current_stream` from cursor 0. A 404 or 409 decision starts `recoverChatSession` with no
 stream, which reads status once and follows `current_stream` or reloads the
 saved session. A subagent's request (`agent_name`) shows the label "{agent}
 wants to run {tool}". It and its outcome arrive only in the session replay,
-never live in the answer's stream, and it never blocks a send. A parked agent
-does not count in `has_active_subagents`, so a decision on an agent's card,
-which names no `continuation`, starts `watchBackgroundAgents`; a newer watch replaces the older one. It gives the
-agent a few reads to start and then shows its later requests.
+never live in the answer's stream, and it never blocks a send. A decided agent
+that waits to resume counts in `has_active_subagents`, so a decision on an
+agent's card, which names no `continuation`, starts `watchBackgroundAgents`.
+It reads status until the agents stop and shows their later requests.
 
 **Timeline.** `chat/messageProcessor.ts` and `hooks/timeline/` port the packet
 processor of the web app. Packets group by `getGroupKey` (`turn_index` and

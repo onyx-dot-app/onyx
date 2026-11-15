@@ -274,9 +274,7 @@ describe("ToolApprovalCard continuation", () => {
     fireEvent.press(view.getByText("Approve once"));
 
     await waitFor(() => expect(watchBackgroundAgents).toHaveBeenCalled());
-    const [sessionId, , , running] =
-      jest.mocked(watchBackgroundAgents).mock.calls[0] ?? [];
-    expect([sessionId, running]).toEqual(["s", false]);
+    expect(jest.mocked(watchBackgroundAgents).mock.calls[0]?.[0]).toBe("s");
     expect(recoverMock).not.toHaveBeenCalled();
   });
 

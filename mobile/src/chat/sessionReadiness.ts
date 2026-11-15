@@ -1,8 +1,7 @@
 import { getChatSession, getChatSessionStatus } from "@/api/chat/sessions";
 import { isApiError, isAuthError } from "@/api/errors";
+import { SESSION_POLL_INTERVAL_MS } from "@/chat/constants";
 import { BackendChatSession, ChatStream } from "@/chat/interfaces";
-
-export const SESSION_POLL_INTERVAL_MS = 1000;
 
 export type SessionWait =
   // `approvalsChanged`: a tool approval request opened or resolved since the last session load or
