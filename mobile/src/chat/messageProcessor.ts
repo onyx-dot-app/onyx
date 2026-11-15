@@ -40,6 +40,9 @@ import { parseToolKey } from "@/chat/timeline/toolDisplay";
 export interface ProcessedMessageState {
   nodeId: number;
   nextPacketIndex: number; // cursor — process only packets past this index
+  // The packet at nextPacketIndex - 1. Streams append the same objects; a replay or a reload
+  // brings new ones, which restarts processing.
+  lastPacket: Packet | null;
 
   citationMap: CitationMap;
   citations: StreamingCitation[];
@@ -88,6 +91,7 @@ export function createInitialState(nodeId: number): ProcessedMessageState {
   return {
     nodeId,
     nextPacketIndex: 0,
+    lastPacket: null,
     citationMap: {},
     citations: [],
     seenCitationDocIds: new Set(),
@@ -276,8 +280,13 @@ function handleStreamingStatusPacket(
   }
 }
 
+// A stop that waits for approval pauses the response; it does not end it.
 function handleStopPacket(state: ProcessedMessageState, packet: Packet): void {
-  if (packet.obj.type !== PacketType.STOP || state.stopPacketSeen) {
+  if (
+    packet.obj.type !== PacketType.STOP ||
+    packet.obj.stop_reason === StopReason.AWAITING_APPROVAL ||
+    state.stopPacketSeen
+  ) {
     return;
   }
 
@@ -413,8 +422,13 @@ export function processPackets(
   state: ProcessedMessageState,
   rawPackets: Packet[],
 ): ProcessedMessageState {
-  // Array shrank (regenerate / history reload) -> rebuild so we never double-count a re-streamed turn.
-  if (state.nextPacketIndex > rawPackets.length) {
+  // A shorter or replaced list (regenerate, replay, history reload) rebuilds, so a re-streamed
+  // turn is never double-counted and a dropped packet never lingers.
+  if (
+    state.nextPacketIndex > rawPackets.length ||
+    (state.nextPacketIndex > 0 &&
+      rawPackets[state.nextPacketIndex - 1] !== state.lastPacket)
+  ) {
     state = createInitialState(state.nodeId);
   }
 
@@ -428,6 +442,7 @@ export function processPackets(
   }
 
   state.nextPacketIndex = rawPackets.length;
+  state.lastPacket = rawPackets.at(-1) ?? null;
 
   // Rebuild only when new packets arrived, to preserve array identity for memoized consumers.
   if (prevProcessedIndex !== rawPackets.length) {
