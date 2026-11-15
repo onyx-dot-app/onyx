@@ -184,7 +184,9 @@ def get_response_approval_requests(
 
 def approvals_version(db_session: Session, chat_session_id: UUID) -> str:
     """A marker that changes when a request of the chat opens, is decided or is
-    deleted, for clients that show the requests of a saved chat."""
+    deleted, for clients that show the requests of a saved chat. It is empty
+    while the chat has no request, so a client that loaded nothing takes the
+    empty marker as its baseline."""
     marker = db_session.execute(
         select(
             func.count(),
@@ -193,4 +195,4 @@ def approvals_version(db_session: Session, chat_session_id: UUID) -> str:
             func.max(ApprovalRequest.decided_at),
         ).where(ApprovalRequest.chat_session_id == chat_session_id)
     ).one()
-    return "/".join(str(value) for value in marker)
+    return "/".join(str(value) for value in marker) if marker[0] else ""

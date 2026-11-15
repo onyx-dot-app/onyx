@@ -389,7 +389,9 @@ its background task end ([[#pure-asgi-middleware]]).
     reports false. `approvals_version` is an opaque marker that changes when a
     request of the chat opens, is decided or is removed
     (`db/approval_request.py:approvals_version`); the session load returns the
-    same value, and clients reload the session when it changes. A parked agent
+    same value, and clients reload the session when it changes. It is empty
+    while the chat has no request, and a client that loaded nothing compares
+    against the empty value, so a clean send never reloads. A parked agent
     that still waits for the user does not count as active. `current_stream`
     carries the stream ID and the `response_ids` the stream writes; a stream
     that continues a parked response has an ID that no message has. The route

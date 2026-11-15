@@ -422,7 +422,9 @@ class ChatSessionProcessingStatus(BaseModel):
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
     # Changes when an approval request of the chat opens, is decided or is
-    # removed; reload the session to show the requests. Opaque.
+    # removed; reload the session to show the requests. Opaque, and empty
+    # while the chat has no request: a client that loaded nothing compares
+    # against the empty version.
     approvals_version: str = ""
 
 

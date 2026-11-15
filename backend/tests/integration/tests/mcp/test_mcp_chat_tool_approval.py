@@ -492,6 +492,8 @@ def test_a_reload_while_the_turn_waits_shows_the_request_and_the_stop(
     reloaded: list[list[tuple[Placement, PacketObj]]] = []
     stops: list[list[str | None]] = []
     versions: list[object] = [_status(admin_user, chat_session_id)["approvals_version"]]
+    # A chat with no request has the empty version, every client's baseline.
+    assert versions == [""]
 
     def on_request(
         _packet: Packet, request: ToolApprovalRequest
