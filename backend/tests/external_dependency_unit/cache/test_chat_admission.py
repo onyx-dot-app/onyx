@@ -119,9 +119,13 @@ def test_the_fence_keeps_the_stream_id_that_every_server_version_reads(
         raw = cache.get(fence)
         assert raw is not None and int(raw.decode("utf-8")) == 31
         assert get_processing_stream(session_id, cache) == (31, [5, 6], True)
-        # A response that parks leaves the stream.
+        # A response that parks leaves the stream, and the responses keep
+        # their expiry, so they never outlive the fence.
+        responses = f"chatprocessing_responses_{session_id}"
+        cache.expire(responses, 7)
         turn.drop_response(5)
         assert get_processing_stream(session_id, cache) == (31, [6], True)
+        assert 0 < cache.ttl(responses) <= 7
         turn.release()
         assert get_processing_stream(session_id, cache) is None
         # An older server's turn publishes no responses.

@@ -290,7 +290,9 @@ preview.
   `upsert_filerecord` so incognito blobs get their cleanup stamp, and keep
   [[#file-id-write-once]]. An object-store backend subclasses
   `PresignableFileStore` and implements its signing hooks, because the Craft
-  Firecracker runtime will move files through presigned URLs.
+  Firecracker runtime will move files through presigned URLs. Override
+  `FileStore.is_transient_error` for the service's throttling and connection
+  errors, so a chat run that parks retries them instead of ending.
 - `investigate-file-404` **Investigate a 404 on `/chat/file/{file_id}`.** Find which id the caller
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,

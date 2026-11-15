@@ -8,6 +8,7 @@ from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
 from functools import partial
 from typing import Protocol
+from uuid import UUID
 
 from onyx.agents.agent_coordination import AgentCoordinator, RunStore
 from onyx.agents.concurrency import WorkTracker
@@ -50,7 +51,7 @@ from onyx.configs.chat_configs import (
     SKIP_DEEP_RESEARCH_CLARIFICATION,
 )
 from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
-from onyx.db.chat_checkpoint import resumable_parked_runs
+from onyx.db.chat_checkpoint import chat_has_checkpoint, resumable_parked_runs
 from onyx.db.chat_inputs import pause_chat_queue__no_commit
 from onyx.db.chat_response import read_suspended_response_replay
 from onyx.db.chat_subagents import load_chat_branch
@@ -111,9 +112,29 @@ chat_turn_work = WorkTracker()
 
 class DispatchPendingMessages(Protocol):
     """Start the chat's queued work (`dispatch_pending_chat_messages`), with
-    the admission that an ending turn hands over, if any."""
+    the admission that an ending turn hands over, if any. With `retry_resume`,
+    a resume failed to start for a moment, and the dispatch runs after a
+    backoff."""
 
-    def __call__(self, *, admission: ChatTurnAdmission | None = None) -> None: ...
+    def __call__(
+        self,
+        *,
+        admission: ChatTurnAdmission | None = None,
+        retry_resume: bool = False,
+    ) -> None: ...
+
+
+def root_response_resumes(chat_session_id: UUID) -> bool:
+    """Whether a parked root response of the chat waits only to continue."""
+    try:
+        with get_session_with_current_tenant() as session:
+            # Most chats have no parked root, and one EXISTS read shows it.
+            return chat_has_checkpoint(session, chat_session_id) and any(
+                run.is_root for run in resumable_parked_runs(session, chat_session_id)
+            )
+    except Exception:
+        logger.exception("Could not read the chat's parked responses")
+        return False
 
 
 def start_chat_turn(
@@ -242,9 +263,8 @@ class ChatTurnExecution:
         )
         self._auto_filters = False
         self._admission_released = False
-        # A resume that storage failed to start defers to a later dispatch.
+        # A resume that storage failed to start retries after a backoff.
         self._resume_deferred = False
-        self._parked_root = False
         self._stopped_by_user = False
         # Each model gets one stop, including models still preparing at cancellation.
         self._stopped_models: set[int] = set()
@@ -464,7 +484,6 @@ class ChatTurnExecution:
         stops it with `awaiting_approval`, and the decisions resume it on any
         pod."""
         persistence.report_suspended(run)
-        self._parked_root = True
         try:
             # Its decisions continue it in a new stream, not in this one.
             self.setup.admission.drop_response(persistence.message_id)
@@ -497,11 +516,11 @@ class ChatTurnExecution:
         try:
             successor = self.setup.admission.release(
                 settle=save_late_stop,
-                # The resume of a response that parked here takes admission
-                # over, so the chat does not show idle in between.
-                hand_off=self._root_resumes
-                if self._parked_root
-                and not self._resume_deferred
+                # The resume of a parked root response takes admission over,
+                # whichever turn parked it, so the chat does not show idle in
+                # between. A deferred resume retries after a backoff instead.
+                hand_off=partial(root_response_resumes, self.setup.chat_session_id)
+                if not self._resume_deferred
                 and self._dispatch_pending_messages is not None
                 else None,
             )
@@ -511,32 +530,17 @@ class ChatTurnExecution:
             return
         self._dispatch_after_release(successor)
 
-    def _root_resumes(self) -> bool:
-        """Whether a parked root response of the chat waits only to continue."""
-        chat_session_id = self.setup.chat_session_id
-        try:
-            with get_session_with_current_tenant() as session:
-                return any(
-                    run.agent_id == str(chat_session_id)
-                    for run in resumable_parked_runs(session, chat_session_id)
-                )
-        except Exception:
-            logger.exception("Could not read the chat's parked responses")
-            return False
-
     def _dispatch_after_release(
         self, admission: ChatTurnAdmission | None = None
     ) -> None:
         """Start queued input or a follow-up on child results once the chat is
         idle, or with the `admission` that this turn handed over."""
-        if (
-            not self._admission_released
-            or self._resume_deferred
-            or self._dispatch_pending_messages is None
-        ):
+        if not self._admission_released or self._dispatch_pending_messages is None:
             return
         try:
-            self._dispatch_pending_messages(admission=admission)
+            self._dispatch_pending_messages(
+                admission=admission, retry_resume=self._resume_deferred
+            )
         except Exception:
             logger.exception("Could not dispatch queued chat input")
 
@@ -687,8 +691,8 @@ class ChatTurnExecution:
                             Packet(placement=Placement(turn_index=0), obj=ReplayEnd())
                         )
                     if isinstance(failure, RETRYABLE_START_ERRORS):
-                        # The response stays suspended for a later dispatch,
-                        # such as a status read's, not this turn's release.
+                        # The response stays suspended, and this turn's
+                        # release dispatches it again after a backoff.
                         self._resume_deferred = True
                     else:
                         # The response ends as failed, so no later dispatch
@@ -842,12 +846,15 @@ def bind_run_store(
 
 
 def host_agent_work(
-    setup: ChatTurnSetup, user: User, dispatch_pending_messages: Callable[[], None]
+    setup: ChatTurnSetup,
+    user: User,
+    dispatch_pending_messages: DispatchPendingMessages,
 ) -> None:
     """Start agents' queued work on the selected branch when no chat turn hosts it.
 
     The host starts no root run. It holds chat admission through its first
-    scan, so hosts and turns do not start the same work. It runs on the calling
+    scan, so hosts and turns do not start the same work, then hands it to the
+    resume of a parked root response that can continue. It runs on the calling
     thread until the agents it started release their leases.
     """
     # The trace makes hosted model calls count toward usage records and limits.
@@ -883,12 +890,16 @@ def host_agent_work(
                 on_child_released=dispatch_pending_messages,
             )
             store.poll_control()
-        finally:
+        except BaseException:
             setup.admission.release()
+            raise
+        successor = setup.admission.release(
+            hand_off=partial(root_response_resumes, setup.chat_session_id)
+        )
         # A child that finished during the first scan dispatched while the host
         # held admission, so its results wait for this dispatch.
         try:
-            dispatch_pending_messages()
+            dispatch_pending_messages(admission=successor)
         except Exception:
             logger.exception("Could not dispatch queued chat input")
         while store.has_owned_work:

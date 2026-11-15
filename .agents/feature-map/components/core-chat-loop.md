@@ -256,11 +256,12 @@ child work only while its response is on the selected branch, and resumes the
 parked agent runs of its own branch whether or not it is selected. A dispatch
 failure never cancels the turn. Only the approval decision route prepares a
 turn on the calling thread; the dispatch after a release, after a child's
-release and after a status read start work on a thread. A turn that parked a
-root response, and ends while a parked root of the chat can continue, hands
-its admission to that resume instead of releasing it
-(`chat/chat_processing_checker.py:ChatTurnAdmission.release`), so the chat
-shows processing throughout. When child work or a parked agent run can
+release and after a status read start work on a thread. Any turn or agent
+host that ends while a parked root of the chat can continue hands its
+admission to that resume instead of releasing it
+(`chat/chat_processing_checker.py:ChatTurnAdmission.release`,
+`chat/execution.py:root_response_resumes`), so the chat shows processing
+throughout. When child work or a parked agent run can
 start but no running child keeps a store scanning, dispatch starts an agent
 host (`chat/execution.py:host_agent_work`): the setup of the selected
 response, or of a parked run's root response, without a root run, which starts
@@ -269,8 +270,9 @@ that wait only on people ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 A single-model turn offers agent tools for a client that shows follow-ups
 (`SendMessageRequest.accepts_follow_ups`, which the web chat and
 server-started turns set); `run_chat_turn` clears that flag, since its callers
-read one response. An agent host that the owner's token budget rejects saves
-the work as failed runs, so it does not retry on every poll. Foreground children still drain with their parent. API shutdown
+read one response. An agent host that cannot start, other than for a
+transient error or a conflict, saves its child work as failed runs and ends
+the decided agents that it would resume, so it does not retry on every poll. Foreground children still drain with their parent. API shutdown
 waits up to `CHAT_EXECUTION_TIMEOUT_S` for `chat/execution.py:chat_turn_work`,
 then closes database and tracing services; it does not cancel turns. The pod's
 termination grace period is much shorter, so it ends running turns first

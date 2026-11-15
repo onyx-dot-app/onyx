@@ -389,6 +389,11 @@ class ParkedRun(BaseModel):
     # The root response whose branch the run belongs to.
     root_response_id: int
 
+    @property
+    def is_root(self) -> bool:
+        """Whether the run is a root response, which continues in a turn."""
+        return self.response_id == self.root_response_id
+
 
 class ChatBranch(BaseModel):
     chat_session_id: UUID
@@ -1018,11 +1023,11 @@ class AgentToolApproval(BaseModel):
 
 
 class ChatApprovals(BaseModel):
-    """The approval requests of a chat, read once for the replays of its
-    responses."""
+    """The approval requests of a page of chat responses, read once for the
+    replays of those responses."""
 
-    # Every request of the chat and its agents, by response (the request's
-    # chat message), in the order they were made.
+    # The requests of the responses and of the runs that they started, by
+    # response (the request's chat message), in the order they were made.
     requests: dict[int, list[SavedToolApproval]] = Field(default_factory=dict)
     # The agent names of the responses of background agents.
     agent_names: dict[int, str] = Field(default_factory=dict)

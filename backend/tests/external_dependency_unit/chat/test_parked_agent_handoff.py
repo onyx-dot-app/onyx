@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import UUID
 
+import pytest
 from fastapi import BackgroundTasks
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,8 @@ from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
+from onyx.chat.execution import chat_turn_work
+from onyx.chat.process_message import dispatch_pending_chat_messages
 from onyx.chat.run_store import ChatRunStore
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import GatedAppKind
@@ -31,6 +34,7 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.llm.override_models import LLMOverride
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.query_and_chat.chat_backend import (
     get_chat_session_processing_status,
@@ -157,10 +161,11 @@ def _resume_agent_in_process(
             SqlEngine.reset_engine()
 
 
-def test_a_parked_agent_resumes_in_another_process(
-    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
-) -> None:
-    sent: list[str] = []
+def _park_agent(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun], sent: list[str]
+) -> int:
+    """Start a root whose background agent's program call waits for approval;
+    returns the agent's response once it parked and this process let go."""
     tool = _gated(chat.server.id, sent)
     owned = _start(
         chat,
@@ -181,8 +186,6 @@ def test_a_parked_agent_resumes_in_another_process(
         ],
         gated=[tool],
     )
-    file_store = get_default_file_store()
-    prefix = f"agent-checkpoint/{chat.chat_session_id}/"
 
     def parked_agent() -> int | None:
         owned.owner.poll_control()
@@ -197,32 +200,43 @@ def test_a_parked_agent_resumes_in_another_process(
             parked = session.get(ChatResponseCheckpoint, agent_id) is not None
         return agent_id if parked else None
 
+    until(lambda: parked_agent() is not None, timeout=30)
+    agent_response_id = parked_agent()
+    assert agent_response_id is not None
+    assert owned.run.result(timeout=10).output.text == "done"
+    # Every object of this process lets go of the agent.
+    owned.run.cancel()
+    assert owned.coordinator.close(timeout=10)
+    owned_runs.remove(owned)
+    return agent_response_id
+
+
+def _has_active_subagents(chat: ApprovalChat) -> bool:
+    return get_chat_session_processing_status(
+        chat.chat_session_id,
+        BackgroundTasks(),
+        MagicMock(headers={}),
+        user=chat.user,
+    ).has_active_subagents
+
+
+def test_a_parked_agent_resumes_in_another_process(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    sent: list[str] = []
+    file_store = get_default_file_store()
+    prefix = f"agent-checkpoint/{chat.chat_session_id}/"
     try:
-        until(lambda: parked_agent() is not None, timeout=30)
-        agent_response_id = parked_agent()
-        assert agent_response_id is not None
-        assert owned.run.result(timeout=10).output.text == "done"
+        agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
         # The program's dump is saved under the root session, as a root's is.
         assert len(file_store.list_files_by_prefix(prefix)) == 1
-        # Every object of this process lets go of the agent.
-        owned.run.cancel()
-        assert owned.coordinator.close(timeout=10)
-        owned_runs.remove(owned)
-
-        def has_active_subagents() -> bool:
-            return get_chat_session_processing_status(
-                chat.chat_session_id,
-                BackgroundTasks(),
-                MagicMock(headers={}),
-                user=chat.user,
-            ).has_active_subagents
 
         # A parked agent that waits for the user is not active; once decided,
         # it is, from the decision's commit until it resumes and ends.
-        assert not has_active_subagents()
+        assert not _has_active_subagents(chat)
         [row] = chat.rows(db_session)
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-        assert has_active_subagents()
+        assert _has_active_subagents(chat)
         completed = subprocess.run(
             [
                 sys.executable,
@@ -250,6 +264,62 @@ def test_a_parked_agent_resumes_in_another_process(
         assert db_session.get(ChatResponseCheckpoint, agent_response_id) is None
         db_session.rollback()
         # The resumed program deleted its dump once it loaded it.
+        assert file_store.list_files_by_prefix(prefix) == []
+    finally:
+        for record in file_store.list_files_by_prefix(prefix):
+            file_store.delete_file(record.file_id, error_on_missing=False)
+
+
+def test_a_decided_agent_whose_host_cannot_start_ends(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The agent host asks for the model that the decided agent ran. When it
+    fails to start for a reason that every attempt meets, such as that model
+    being gone, it ends the agents that it would resume, as a root
+    continuation that cannot start ends its response. The chat then has no
+    active agents, so status reads stop dispatching."""
+    sent: list[str] = []
+    file_store = get_default_file_store()
+    prefix = f"agent-checkpoint/{chat.chat_session_id}/"
+    requested: list[LLMOverride | None] = []
+
+    def model_gone(*, llm_override: LLMOverride | None, **_kwargs: object) -> None:
+        requested.append(llm_override)
+        raise ValueError("The model is no longer available")
+
+    monkeypatch.setattr("onyx.chat.process_message.get_llm_for_persona", model_gone)
+    try:
+        agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+        # The agent ran on a model other than the chat's current one.
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            checkpoint = session.get_one(ChatResponseCheckpoint, agent_response_id)
+            checkpoint.state = {**checkpoint.state, "model_configuration_id": 4242}
+            session.commit()
+        [row] = chat.rows(db_session)
+        chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+        assert _has_active_subagents(chat)
+
+        dispatch_pending_chat_messages(chat.chat_session_id, chat.user.id)
+
+        def agent_status() -> RunStatus | None:
+            with get_session_with_tenant(
+                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+            ) as session:
+                return session.get_one(ChatMessage, agent_response_id).response_status
+
+        until(lambda: agent_status() == RunStatus.ERROR, timeout=30)
+        assert chat_turn_work.wait_idle(timeout=30)
+        assert [
+            override and override.model_configuration_id for override in requested
+        ] == [4242]
+        assert not _has_active_subagents(chat)
+        assert sent == []
+        # Its checkpoint and its program's dump go with it.
         assert file_store.list_files_by_prefix(prefix) == []
     finally:
         for record in file_store.list_files_by_prefix(prefix):

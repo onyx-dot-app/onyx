@@ -695,8 +695,8 @@ class TestRunModels:
         self, error: Exception, lasting: bool
     ) -> None:
         """The stream still ends its (empty) replay. A transient error keeps
-        the response suspended, and the turn dispatches nothing at its end,
-        so a later dispatch tries again; a lasting one fails the response."""
+        the response suspended, and the turn's end asks dispatch to retry it
+        after a backoff; a lasting one fails the response."""
         setup = _make_setup(n_models=1)
         setup.resumed_response_id = setup.responses[0].message_id
         dispatch = MagicMock()
@@ -728,7 +728,8 @@ class TestRunModels:
             if isinstance(packet, Packet) and isinstance(packet.obj, ReplayEnd)
         ] == [Packet(placement=Placement(turn_index=0, model_index=0), obj=ReplayEnd())]
         assert fail.called is lasting
-        assert dispatch.called is lasting
+        [dispatched] = dispatch.call_args_list
+        assert dispatched.kwargs["retry_resume"] is not lasting
 
     def test_idle_gap_emits_chat_heartbeat(self) -> None:
         """Idle gaps in the drain loop emit ChatHeartbeat packets."""
@@ -3770,6 +3771,6 @@ def test_an_agent_host_runs_its_agents_inside_a_trace() -> None:
         patch("onyx.chat.execution.bind_run_store", return_value=(store, None)),
         patch("onyx.chat.execution.load_settings"),
     ):
-        host_agent_work(setup, MagicMock(), lambda: None)
+        host_agent_work(setup, MagicMock(), MagicMock())
     assert traces and traces[0] is not None
     setup.admission.release.assert_called_once()

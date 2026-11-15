@@ -45,6 +45,7 @@ from onyx.db.chat import (
     session_ancestors,
 )
 from onyx.db.chat_checkpoint import (
+    chat_has_checkpoint,
     check_checkpoint_owner__no_commit,
     resumable_parked_runs,
 )
@@ -76,6 +77,7 @@ logger = setup_logger()
 
 MAX_PENDING_MESSAGES = 64
 MAX_PENDING_MESSAGE_BYTES = 1024 * 1024
+START_FAILED_MESSAGE = "The response could not start"
 # A root response reserved for a turn has no status until its run starts.
 _ACCEPTING_STATUSES = (None, RunStatus.RUNNING, RunStatus.SUSPENDED)
 
@@ -461,13 +463,7 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     has_inputs = has_chat_inputs(session, chat_session_id)
     # A parked agent has a result row, so only a parked root response can wait
     # in a chat without inbox rows.
-    if has_inputs or session.scalar(
-        select(
-            exists()
-            .where(ChatResponseCheckpoint.chat_message_id == ChatMessage.id)
-            .where(ChatMessage.chat_session_id == chat_session_id)
-        )
-    ):
+    if has_inputs or chat_has_checkpoint(session, chat_session_id):
         inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
     # A selected response that is active and not parked has, or had, an owner.
     if selected is not None and (
@@ -1113,7 +1109,7 @@ def reserve_inbox_run__no_commit(
 def fail_response_start__no_commit(
     session: Session,
     response_id: int,
-    failure_message: str = "The response could not start",
+    failure_message: str = START_FAILED_MESSAGE,
 ) -> None:
     """Record that reserved work could not start, so it does not retry forever."""
     response = session.get(ChatMessage, response_id)
@@ -1134,7 +1130,7 @@ def fail_inbox_start__no_commit(
     branch: ChatBranch,
     agent_id: str,
     message_id: str | None,
-    failure_message: str = "The response could not start",
+    failure_message: str = START_FAILED_MESSAGE,
 ) -> None:
     """Consume inbox work that could not start, so it does not retry.
 

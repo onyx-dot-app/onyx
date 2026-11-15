@@ -1521,10 +1521,10 @@ def get_chat_session_processing_status(
     # input, so a starting turn shows as startable input or as processing.
     cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
     stream = get_processing_stream(session_id, cache)
-    resumes_root = any(run.agent_id == str(session_id) for run in inbox.resumable_runs)
+    resumes_root = any(run.is_root for run in inbox.resumable_runs)
     # Decided agents wait to resume; a parked agent that still waits for the
     # user does not count.
-    resumes_agents = len(inbox.resumable_runs) > resumes_root
+    resumes_agents = any(not run.is_root for run in inbox.resumable_runs)
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
         has_active_subagents=any(result.is_running for result in inbox.results)

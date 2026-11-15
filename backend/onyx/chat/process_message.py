@@ -87,6 +87,7 @@ from onyx.db.chat import (
 )
 from onyx.db.chat_checkpoint import parked_response_model
 from onyx.db.chat_inputs import (
+    START_FAILED_MESSAGE,
     accept_queued_turn__no_commit,
     fail_inbox_start__no_commit,
     fail_response_start__no_commit,
@@ -154,12 +155,14 @@ from onyx.tracing.framework.scope import Scope
 from onyx.utils.fleet_query_telemetry import QueryObservation, telemetry_chat
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import mt_cloud_telemetry
-from onyx.utils.threadpool_concurrency import start_thread_future
+from onyx.utils.threadpool_concurrency import call_later, start_thread_future
 from onyx.utils.timing import log_function_time, log_generator_function_time
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 ERROR_TYPE_CANCELLED = "cancelled"
+# Delays before each retry of a resume whose start failed for a moment.
+RESUME_RETRY_DELAYS_S = (1.0, 2.0, 4.0, 8.0, 16.0)
 
 
 def _load_session(
@@ -922,6 +925,8 @@ def dispatch_pending_chat_messages(
     mcp_headers: dict[str, str] | None = None,
     decided_response_id: int | None = None,
     admission: ChatTurnAdmission | None = None,
+    retry_resume: bool = False,
+    resume_retries: int = 0,
 ) -> None:
     """Start the chat's next queued work through chat admission.
 
@@ -933,8 +938,15 @@ def dispatch_pending_chat_messages(
     publishes its stream ID before this returns, so the decision can name it;
     its admission claim, not an earlier processing check, decides whether a
     turn that is still ending starts it instead. Other callers start work on
-    a thread. A turn that ended with a parked root response that can continue
-    hands its `admission` over, so the chat never shows idle in between.
+    a thread. A turn or agent host that ends while a parked root response can
+    continue hands its `admission` over, so the chat never shows idle in
+    between.
+
+    A resume whose start fails for a moment (`RETRYABLE_START_ERRORS`) asks
+    for `retry_resume`: the dispatch then runs after the next of
+    `RESUME_RETRY_DELAYS_S`, and `resume_retries` counts the retries in a row.
+    After the last one, the response waits for a later dispatch, such as a
+    status read's.
 
     Then the selected branch's next root turn starts. Otherwise, parked agent
     runs whose waits ended and idle agents' work start in an agent host when
@@ -946,6 +958,26 @@ def dispatch_pending_chat_messages(
     # Released here unless a thread that starts the work takes it over.
     handed = admission
     try:
+        if retry_resume:
+            if resume_retries >= len(RESUME_RETRY_DELAYS_S):
+                logger.warning("A parked response could not continue; retries ended")
+                return
+            retry = partial(
+                dispatch_pending_chat_messages,
+                chat_session_id,
+                user_id,
+                litellm_additional_headers,
+                custom_tool_additional_headers,
+                mcp_headers=mcp_headers,
+                resume_retries=resume_retries + 1,
+            )
+
+            def start_retry() -> None:
+                # The shared timer thread only starts the dispatch, which reads.
+                start_thread_future(retry, name="chat-resume-retry")
+
+            call_later(RESUME_RETRY_DELAYS_S[resume_retries], start_retry)
+            return
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         if (
             admission is None
@@ -955,37 +987,40 @@ def dispatch_pending_chat_messages(
             return
         inbox = read_repaired_chat_inbox(chat_session_id, cache)
         resumable = min(
-            (
-                run.response_id
-                for run in inbox.resumable_runs
-                if run.agent_id == str(chat_session_id)
-            ),
+            (run.response_id for run in inbox.resumable_runs if run.is_root),
             key=lambda response_id: response_id != decided_response_id,
             default=None,
         )
-        parked_agent_roots = [
-            run.root_response_id
-            for run in inbox.resumable_runs
-            if run.agent_id != str(chat_session_id)
-        ]
+        parked_agents = [run for run in inbox.resumable_runs if not run.is_root]
         queued_turn = inbox.next_turn
         if (
             resumable is None
             and queued_turn is None
             and not (
-                (inbox.child_work or parked_agent_roots)
-                and not inbox.running_response_ids
+                (inbox.child_work or parked_agents) and not inbox.running_response_ids
             )
         ):
             return
         # The selected branch's host also resumes its parked agent runs.
+        on_selected_branch = bool(
+            inbox.child_work
+            or not parked_agents
+            or {run.root_response_id for run in parked_agents}
+            & set(inbox.branch.message_ids)
+        )
         host_response_id = (
             inbox.selected_response_id
-            if inbox.child_work
-            or not parked_agent_roots
-            or set(parked_agent_roots) & set(inbox.branch.message_ids)
-            else parked_agent_roots[0]
+            if on_selected_branch
+            else parked_agents[0].root_response_id
         )
+        host_roots = (
+            set(inbox.branch.message_ids)
+            if on_selected_branch
+            else {parked_agents[0].root_response_id}
+        )
+        hosted_agents = [
+            run for run in parked_agents if run.root_response_id in host_roots
+        ]
 
         def start_pending_work() -> None:
             # Released unless a preparation takes it over.
@@ -1006,6 +1041,8 @@ def dispatch_pending_chat_messages(
                     litellm_additional_headers,
                     custom_tool_additional_headers,
                     mcp_headers=mcp_headers,
+                    # A resume that fails again retries after a longer delay.
+                    resume_retries=resume_retries if resumable is not None else 0,
                 )
                 if resumable is not None:
                     if not has_global_permission(user, Permission.WRITE_CHAT):
@@ -1029,11 +1066,15 @@ def dispatch_pending_chat_messages(
                             handed_admission=admission,
                         )
                     except Exception as error:
-                        # Another turn holds the chat, the owner's budget is
-                        # spent, or storage failed for a moment: a later
-                        # dispatch tries again. Otherwise it cannot continue,
-                        # for example because its model or agent is gone.
-                        if not isinstance(error, RETRYABLE_START_ERRORS) and not (
+                        # Storage failed for a moment: the resume retries after
+                        # a backoff. Another turn holds the chat, which hands
+                        # it over when it ends, or the owner's budget is
+                        # spent: a later dispatch tries again. Otherwise it
+                        # cannot continue, for example because its model or
+                        # agent is gone.
+                        if isinstance(error, RETRYABLE_START_ERRORS):
+                            dispatch(retry_resume=True)
+                        elif not (
                             isinstance(error, OnyxError)
                             and error.error_code
                             in (OnyxErrorCode.CONFLICT, OnyxErrorCode.RATE_LIMITED)
@@ -1050,6 +1091,15 @@ def dispatch_pending_chat_messages(
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("Agent work waits for its owner's write access")
                         return
+                    # Parked agents continue on the model that they ran.
+                    with get_session_with_current_tenant() as db_session:
+                        host_model = (
+                            parked_response_model(
+                                db_session, hosted_agents[0].response_id
+                            )
+                            if hosted_agents
+                            else None
+                        )
                     unused = None
                     try:
                         host_setup = prepare_chat_turn(
@@ -1057,6 +1107,7 @@ def dispatch_pending_chat_messages(
                                 message="",
                                 chat_session_id=chat_session_id,
                                 parent_message_id=host_response_id,
+                                llm_override=host_model,
                             ),
                             user=user,
                             llm_overrides=None,
@@ -1066,12 +1117,16 @@ def dispatch_pending_chat_messages(
                             agent_host=True,
                             handed_admission=admission,
                         )
-                    except OnyxError as error:
-                        if error.error_code is not OnyxErrorCode.RATE_LIMITED:
+                    except Exception as error:
+                        if isinstance(error, RETRYABLE_START_ERRORS) or (
+                            isinstance(error, OnyxError)
+                            and error.error_code is OnyxErrorCode.CONFLICT
+                        ):
                             raise
                         # Like a queued turn's error response, failed runs keep
                         # the work from retrying on every poll; their results
-                        # reach the agents that sent it.
+                        # reach the agents that sent it. The parked agents end
+                        # as a root response that cannot continue does.
                         with get_session_with_current_tenant() as db_session:
                             for work in inbox.child_work:
                                 fail_inbox_start__no_commit(
@@ -1079,10 +1134,21 @@ def dispatch_pending_chat_messages(
                                     inbox.branch,
                                     work.agent_id,
                                     work.message.id if work.message else None,
-                                    error.detail,
+                                    error.detail
+                                    if isinstance(error, OnyxError)
+                                    else START_FAILED_MESSAGE,
                                 )
                             db_session.commit()
-                        return
+                        for run in hosted_agents:
+                            fail_suspended_response(
+                                cache, get_current_tenant_id(), run.response_id
+                            )
+                        if (
+                            isinstance(error, OnyxError)
+                            and error.error_code is OnyxErrorCode.RATE_LIMITED
+                        ):
+                            return
+                        raise
                     host_agent_work(host_setup, user, dispatch)
                     return
                 unused = None

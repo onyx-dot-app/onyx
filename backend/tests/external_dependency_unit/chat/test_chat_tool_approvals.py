@@ -15,7 +15,9 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
+from azure.core.exceptions import HttpResponseError, ServiceResponseError
 from botocore.exceptions import ClientError
+from google.api_core.exceptions import Forbidden, ServiceUnavailable
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select, update
 from sqlalchemy.exc import OperationalError
@@ -68,7 +70,9 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.azure_blob_file_store import AzureBlobBackedFileStore
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.gcs_file_store import GCSBackedFileStore
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -1151,26 +1155,56 @@ def _storage_error(code: str, status: int) -> ClientError:
     )
 
 
+def _azure_forbidden() -> HttpResponseError:
+    error = HttpResponseError(message="This request is not authorized")
+    error.status_code = 403
+    return error
+
+
 @pytest.mark.parametrize(
-    "error, retries",
+    "error, retries, file_store",
     [
-        (OperationalError("SELECT 1", {}, Exception("connection lost")), True),
-        (_storage_error("SlowDown", 503), True),
-        (_storage_error("AccessDenied", 403), False),
+        (OperationalError("SELECT 1", {}, Exception("connection lost")), True, None),
+        (_storage_error("SlowDown", 503), True, None),
+        (_storage_error("AccessDenied", 403), False, None),
+        (ServiceResponseError("connection reset"), True, "azure"),
+        (_azure_forbidden(), False, "azure"),
+        (ServiceUnavailable("backend busy"), True, "gcs"),
+        (Forbidden("access denied"), False, "gcs"),
     ],
-    ids=["database", "throttled", "access_denied"],
+    ids=[
+        "database",
+        "throttled",
+        "access_denied",
+        "azure_no_response",
+        "azure_forbidden",
+        "gcs_unavailable",
+        "gcs_forbidden",
+    ],
 )
 def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     chat: ApprovalChat,
     owned_runs: list[OwnedRun],
     dumps: Callable[[], list[str]],
+    monkeypatch: pytest.MonkeyPatch,
     error: Exception,
     retries: bool,
+    file_store: str | None,
 ) -> None:
     """A transient storage error while a run parks keeps the run waiting,
     deletes the dump that the attempt saved, and a later control poll parks
     it. A storage error that every attempt gets ends the run instead of
-    retrying each second."""
+    retrying each second. The configured file store tells the two apart."""
+    if file_store is not None:
+        # Only the park's error check reads this store; dumps use the default.
+        store = (
+            AzureBlobBackedFileStore(
+                container_name="parks", connection_string="UseDevelopmentStorage=true"
+            )
+            if file_store == "azure"
+            else GCSBackedFileStore(bucket_name="parks")
+        )
+        monkeypatch.setattr(run_store, "get_default_file_store", lambda: store)
     owned = _program(chat, owned_runs, [])
     assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
     assert owned.run.wait_for_idle(10)

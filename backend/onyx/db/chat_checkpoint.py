@@ -4,7 +4,7 @@ from collections.abc import Collection
 from uuid import UUID
 
 from pydantic import JsonValue, TypeAdapter
-from sqlalchemy import any_, select, true
+from sqlalchemy import any_, exists, select, true
 from sqlalchemy.orm import Session, aliased
 
 from onyx.agents.models import InputSource, RunFailure, RunFailureKind, RunStatus
@@ -205,6 +205,20 @@ def interrupt_response__no_commit(
         )
     )
     return finish_checkpoint__no_commit(session, message_id)
+
+
+def chat_has_checkpoint(session: Session, chat_session_id: UUID) -> bool:
+    """Whether a response of the chat itself, not of its agents, has a
+    checkpoint; a root response can be parked only then."""
+    return bool(
+        session.scalar(
+            select(
+                exists()
+                .where(ChatResponseCheckpoint.chat_message_id == ChatMessage.id)
+                .where(ChatMessage.chat_session_id == chat_session_id)
+            )
+        )
+    )
 
 
 def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[ParkedRun]:

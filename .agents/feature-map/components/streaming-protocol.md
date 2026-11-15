@@ -163,9 +163,11 @@ requests of the background agents that the response started, with their
 resolutions; only a live stream never sends an agent's request. The decision
 route names the new stream in its `continuation` only when the processing
 stream is a resume turn that writes the response
-(`chat/chat_processing_checker.py:ProcessingStream.resumed`); a decision while
-the response still runs, or while a multi-model sibling still runs, gets
-null. A response that parks leaves its stream's `response_ids`
+(`chat/chat_processing_checker.py:ProcessingStream.resumed`). That can be the
+stream that the client already reads, when a resumed answer asks again and is
+decided during its resident wait; clients ignore a continuation that names
+their current stream. A decision while the response's first turn still runs,
+or while a multi-model sibling still runs, gets null. A response that parks leaves its stream's `response_ids`
 (`ChatTurnAdmission.drop_response`), so the session status's
 `current_stream` names only the responses that a stream still writes. A run that ends publishes
 `input_ended` for every request still open, direct or nested, before

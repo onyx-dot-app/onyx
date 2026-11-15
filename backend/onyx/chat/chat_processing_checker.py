@@ -191,15 +191,15 @@ class ChatTurnAdmission:
             if self.cache.get(self._owner_key(session_id)) != self._token:
                 return
             raw = self.cache.get(_responses_key(session_id))
-            if raw is None:
+            # The key keeps its expiry, so it never outlives the fence.
+            remaining = self.cache.ttl(_responses_key(session_id))
+            if raw is None or remaining <= 0:
                 return
             value = json.loads(raw)
             value["response_ids"] = [
                 item for item in value["response_ids"] if item != response_id
             ]
-            self.cache.set(
-                _responses_key(session_id), json.dumps(value), ex=self._lease_seconds
-            )
+            self.cache.set(_responses_key(session_id), json.dumps(value), ex=remaining)
         finally:
             lock.release()
 

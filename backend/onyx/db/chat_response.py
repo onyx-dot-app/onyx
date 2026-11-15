@@ -2,7 +2,7 @@ import json
 from collections.abc import Collection
 from uuid import UUID
 
-from sqlalchemy import delete, inspect, select
+from sqlalchemy import delete, exists, inspect, select
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens, is_input_context
@@ -1289,8 +1289,9 @@ def read_response_replay_data(
 ) -> ResponseReplayData:
     """Load detached display data for an already authorized response execution.
 
-    `chat_approvals` holds the chat's requests (`load_chat_approvals`); it is
-    read for this response when not given."""
+    `chat_approvals` holds the requests of a page of responses that includes
+    this one (`load_chat_approvals`); it is read for this response when not
+    given."""
     root = db_session.get(ChatMessage, int(execution.response.run_id))
     if root is None:
         raise ValueError("Chat response is unavailable")
@@ -1423,25 +1424,64 @@ def read_response_replay_data(
 def load_chat_approvals(
     db_session: Session, chat_session_id: UUID, response_ids: Collection[int]
 ) -> ChatApprovals:
-    """The approval requests of the chat, with the runs that `response_ids`
-    started, for the replays of those responses. Requests always belong to
-    the root chat session; a chat without requests reads nothing else."""
+    """The approval requests of `response_ids` and of the runs that they
+    started, directly or through the runs they started, for the replays of
+    those responses. Requests always belong to the root chat session; a chat
+    without requests reads nothing else."""
+    approvals = ChatApprovals()
+    if not response_ids or not db_session.scalar(
+        select(exists().where(ApprovalRequest.chat_session_id == chat_session_id))
+    ):
+        return approvals
+    question = aliased(ChatMessage)
+    started = (
+        select(
+            ChatMessage.id.label("response_id"),
+            ToolCall.parent_chat_message_id.label("root_id"),
+            ToolCall.tool_call_id.label("anchor_call_id"),
+        )
+        .join(question, question.id == ChatMessage.parent_message_id)
+        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
+        .where(ToolCall.parent_chat_message_id.in_(response_ids))
+        .cte("agent_runs_started", recursive=True)
+    )
+    child = aliased(ChatMessage)
+    child_question = aliased(ChatMessage)
+    child_call = aliased(ToolCall)
+    started = started.union_all(
+        select(child.id, started.c.root_id, started.c.anchor_call_id)
+        .join(child_question, child_question.id == child.parent_message_id)
+        .join(child_call, child_call.id == child_question.invoking_tool_call_id)
+        .join(started, child_call.parent_chat_message_id == started.c.response_id)
+        .where(child.id > started.c.response_id)
+    )
+    started_runs = db_session.execute(
+        select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
+    ).all()
     rows = db_session.execute(
         select(ApprovalRequest, ChatMessage.chat_session_id, ChatSession.agent_name)
         .join(ChatMessage, ChatMessage.id == ApprovalRequest.chat_message_id)
         .join(ChatSession, ChatSession.id == ChatMessage.chat_session_id)
-        .where(ApprovalRequest.chat_session_id == chat_session_id)
+        .where(
+            ApprovalRequest.chat_session_id == chat_session_id,
+            ApprovalRequest.chat_message_id.in_(
+                {*response_ids, *(run.response_id for run in started_runs)}
+            ),
+        )
         .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
     ).all()
-    approvals = ChatApprovals()
     for request, session_id, agent_name in rows:
         approvals.requests.setdefault(request.chat_message_id, []).append(
             SavedToolApproval.model_validate(request)
         )
         if session_id != chat_session_id:
             approvals.agent_names[request.chat_message_id] = agent_name or ""
-    if not approvals.agent_names or not response_ids:
-        return approvals
+    for response_id, root_id, anchor_call_id in started_runs:
+        if response_id in approvals.requests:
+            approvals.started_runs.setdefault(root_id, []).append(
+                (response_id, anchor_call_id)
+            )
+    return approvals
     question = aliased(ChatMessage)
     started = (
         select(

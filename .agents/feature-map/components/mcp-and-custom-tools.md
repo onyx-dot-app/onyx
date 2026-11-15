@@ -215,11 +215,13 @@ ChatRunStore.poll_control   one park pass over every owned run, once a second
      -> db/chat_checkpoint.py:publish_checkpoint__no_commit   SUSPENDED, with
         child_run_ids and dump_file_ids; dumps of a replaced checkpoint go
      a failed save deletes its dumps; RunNotTransferable and transient storage
-     errors keep the run, and a later poll tries again (_park_retries); a
-     deleted chat parks nothing
+     errors (FileStore.is_transient_error) keep the run, and a later poll
+     tries again; a deleted chat parks nothing
   root -> on_root_parked -> chat/execution.py:ChatTurnExecution._root_parked
-     -> drop_response, stop(awaiting_approval); at its end the turn hands its
-     admission to the resume of a parked root that can continue, else releases
+     -> drop_response, stop(awaiting_approval)
+every turn and agent host, at its end: hands its admission to the resume of a
+  parked root that can continue (chat/execution.py:root_response_resumes),
+  else releases
 POST /chat/approvals/{id}/decision (public)   db/approval_request.py:record_approval_decision__no_commit
   -> chat/process_message.py:dispatch_pending_chat_messages(mcp_headers,
      decided_response_id)   the decided response's resume starts first, inline
@@ -231,9 +233,13 @@ dispatch: ChatInbox.resumable_runs (db/chat_checkpoint.py:resumable_parked_runs)
   ChatRunStore.resume: claim, answers from the rows (tool_answer)
      -> Agent.resume(answers) -> input_ended (answer) -> tool_approval_resolved
      (a SESSION_GRANT decision is a standing answer -> "approved_for_chat")
-  resume turn: the response's own model (db/chat_checkpoint.py:parked_response_model)
+  resume turn and agent host: the parked run's own model
+     (db/chat_checkpoint.py:parked_response_model)
   a resume turn that fails before its run exists -> fail_suspended_response,
-     except a transient error (RETRYABLE_START_ERRORS): a later dispatch retries
+     except a transient error (RETRYABLE_START_ERRORS): dispatch retries it
+     after RESUME_RETRY_DELAYS_S
+  an agent host that cannot start -> fail_suspended_response for the agents
+     it would resume, except a transient error or a conflict
 user Stop: chat/execution.py:ChatTurnExecution._poll_control
   -> ChatRunStore.reject_waiting_approvals   REJECTED by USER where decision IS
      NULL, for the root and its foreground descendants; each run takes its
@@ -411,9 +417,11 @@ calls run with no row unless the policy is now DENY.
     an agent run's release dispatches. A parked root leaves its stream's
     `response_ids` (`ChatTurnAdmission.drop_response`). A park that raises
     `RunNotTransferable` (the run changed), a transient cache, database or
-    object store error keeps the run, and a later poll tries again
-    (`chat/run_store.py:_park_retries`; AccessDenied or NoSuchBucket do not
-    retry); another error cancels the run. A deleted chat parks nothing
+    file store error keeps the run, and a later poll tries again; the
+    configured file store classifies its own errors
+    (`file_store/file_store.py:FileStore.is_transient_error`, for S3, Azure
+    and GCS; a denied access or a missing bucket does not retry). Another
+    error cancels the run. A deleted chat parks nothing
     (`publish_checkpoint__no_commit` locks the root chat row), and a soft
     delete ends the parked responses that it reads after its commit. `ChatRunStore.handoff` saves the
     checkpoint with the foreground child runs it waits for and the dumps of its
@@ -432,9 +440,11 @@ calls run with no row unless the policy is now DENY.
     they end; a resume that a status read starts has none. The route returns
     `continuation` (`ApprovalDecisionResponse`: the stream ID and its
     response IDs) only when, after the dispatch, a resume turn writes the
-    request's response (`ProcessingStream.resumed`); a decision while the
-    response or a multi-model sibling still runs gets null, and the resume
-    follows when that turn ends. Dispatch reads `db/chat_inputs.py:read_chat_inbox`, whose
+    request's response (`ProcessingStream.resumed`). That can be the stream
+    that already ran: a resume turn whose answer asks again, decided during
+    its resident wait, or with one of two requests decided. A decision while
+    the first turn of the response, or a multi-model sibling, still runs gets
+    null, and the resume follows when that turn ends. Dispatch reads `db/chat_inputs.py:read_chat_inbox`, whose
     `resumable_runs` come from one query,
     `db/chat_checkpoint.py:resumable_parked_runs`, over every branch of the
     chat: a response is parked only while it is `SUSPENDED` with a
@@ -448,14 +458,20 @@ calls run with no row unless the policy is now DENY.
     other callers start it on a thread. The decision route skips the
     processing check and lets the admission claim decide. Admission runs one
     turn at a time, so the parked responses of a multi-model turn continue one
-    after another, each turn's end dispatching the next. A turn that parked a
-    root hands its admission over when a parked root can continue
-    (`ChatTurnAdmission.release(hand_off=...)`, the check under the admission
-    lock), so the chat shows processing from the park to the resume. A resume
-    turn runs on the model that the response ran: its checkpoint saves the
-    model configuration (`ResponseCheckpoint.model_configuration_id`), and
-    `prepare_chat_turn` resolves it as the turn's `llm_override`, not the
-    chat's current model.
+    after another, each turn's end dispatching the next. Every turn and agent
+    host hands its admission over at its end when a parked root can continue
+    (`ChatTurnAdmission.release(hand_off=...)`, with the check
+    `chat/execution.py:root_response_resumes` under the admission lock; a
+    chat with no checkpoint row answers it with one EXISTS read). Examples
+    are the turn that parked the root, a resume that ends while a sibling's
+    decision waits, and an agent host that held the chat during a root
+    decision. So after any release the chat shows processing until the
+    resume publishes its stream. A resume turn runs on the model that the
+    response ran: its checkpoint saves the model configuration
+    (`ResponseCheckpoint.model_configuration_id`), and `prepare_chat_turn`
+    resolves it as the turn's `llm_override`, not the chat's current model.
+    An agent host runs on the saved model of the first parked agent that it
+    resumes.
     Resumable agent runs resume in the store of their branch, selected or not
     (`ChatRunStore._dispatch_messages`), with no stream; dispatch starts an
     agent host (`chat/execution.py:host_agent_work`) for the selected branch,
@@ -478,11 +494,19 @@ calls run with no row unless the policy is now DENY.
     ends the response through `chat/run_store.py:fail_suspended_response`:
     failed, its rows ended, its checkpoint and its parked programs' dumps
     deleted, so no retry repeats it. A transient error
-    (`RETRYABLE_START_ERRORS`) keeps the response suspended, and the turn
-    dispatches nothing when it ends, so a later dispatch, such as a status
-    read's, retries. A dispatch that cannot prepare the turn does the same,
-    except for a conflict, a rate limit or a transient storage error, which a
-    later dispatch retries. A user Stop of a live
+    (`RETRYABLE_START_ERRORS`) keeps the response suspended; the turn does not
+    hand off, and its release asks dispatch for `retry_resume`, which
+    dispatches again after the next of
+    `chat/process_message.py:RESUME_RETRY_DELAYS_S` (on the shared
+    `call_later` timer). A dispatch that cannot prepare the turn ends the
+    response the same way, except for a transient storage error, which
+    retries the same way, and a conflict or a rate limit, which a later
+    dispatch retries: the turn that holds the chat hands it over when it
+    ends. After the last retry, a status read's dispatch tries again. An
+    agent host that cannot start for any other reason than a transient error
+    or a conflict ends the decided agents that it would resume with
+    `fail_suspended_response`, and its child work as failed runs, so the
+    status stops reporting active agents. A user Stop of a live
     turn (the chat's stream Stop key, read by
     `chat/execution.py:ChatTurnExecution._poll_control`) first calls
     `ChatRunStore.reject_waiting_approvals`, which saves `REJECTED` by `USER`

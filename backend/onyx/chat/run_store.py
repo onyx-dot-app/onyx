@@ -8,12 +8,6 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
-from botocore.exceptions import BotoCoreError, ClientError
-from botocore.retries.standard import (
-    RetryContext,
-    ThrottledRetryableChecker,
-    TransientRetryableChecker,
-)
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
@@ -121,6 +115,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import User
 from onyx.db.skill import list_chat_skills
+from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
@@ -160,28 +155,7 @@ RETRYABLE_START_ERRORS = (
 )
 # A park that fails with these keeps the run resident, and a later control
 # poll tries again: the run changed, or storage failed for a moment.
-_RETRYABLE_PARK_ERRORS = (
-    RunNotTransferable,
-    *RETRYABLE_START_ERRORS,
-    BotoCoreError,
-)
-_TRANSIENT_STORAGE_STATUS = frozenset({429, 500, 502, 503, 504})
-
-
-def _park_retries(error: Exception) -> bool:
-    """Whether a later poll tries a failed park again. An object store error
-    retries only when the store throttled or failed for a moment, as
-    botocore's retry checks decide; AccessDenied or NoSuchBucket fail every
-    attempt."""
-    if not isinstance(error, ClientError):
-        return isinstance(error, _RETRYABLE_PARK_ERRORS)
-    context = RetryContext(attempt_number=1, parsed_response=error.response)
-    return (
-        error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-        in _TRANSIENT_STORAGE_STATUS
-        or TransientRetryableChecker().is_retryable(context)
-        or ThrottledRetryableChecker().is_retryable(context)
-    )
+_RETRYABLE_PARK_ERRORS = (RunNotTransferable, *RETRYABLE_START_ERRORS)
 
 
 def _owner_key(response_id: int) -> str:
@@ -759,8 +733,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             parked = [
                 run
                 for run in inbox.resumable_runs
-                if run.agent_id != str(self.chat_session_id)
-                and run.root_response_id in self.visible_response_ids
+                if not run.is_root and run.root_response_id in self.visible_response_ids
             ]
             for run in parked:
                 lock = self.cache.lock(
@@ -1358,7 +1331,11 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 try:
                     self.handoff(run.id)
                 except Exception as error:
-                    if _park_retries(error):
+                    # A file store error retries only when the store
+                    # throttled or failed for a moment.
+                    if isinstance(
+                        error, _RETRYABLE_PARK_ERRORS
+                    ) or get_default_file_store().is_transient_error(error):
                         logger.info(
                             "Run %s did not park; a later poll tries again",
                             run.id,
