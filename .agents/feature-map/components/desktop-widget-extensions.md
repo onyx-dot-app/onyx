@@ -108,6 +108,8 @@ decision → POST /chat/approvals/{id}/decision       widget.ts, services/approv
   a follow runs: a continuation is stored, and the follow takes it before it
     ends (never a stream it just read); with none, the follow reads the
     status once more before it ends
+  a reset or another chat opened during the request → the result changes
+    nothing in the open chat
 restore / sent stream / decision / 409 → resumeStream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
   │    stream; cursor lines track stream_id and next_cursor; only a 404 stops

@@ -515,15 +515,20 @@ export class OnyxChatWidget extends LitElement {
   ) {
     const id = request.approval_id;
     if (this.localApprovals.get(id) === "submitting") return;
+    // A reset or another chat can open while the request runs; the result
+    // then changes nothing in the chat that is open.
+    const sessionId = this.chatSessionId;
     this.localApprovals = new Map(this.localApprovals).set(id, "submitting");
     let result: ApprovalDecisionResponse | "closed";
     try {
       result = await this.apiService.submitApprovalDecision(id, decision);
     } catch (err) {
       console.error("Failed to submit approval decision:", err);
+      if (this.chatSessionId !== sessionId) return;
       this.localApprovals = new Map(this.localApprovals).set(id, "failed");
       return;
     }
+    if (this.chatSessionId !== sessionId) return;
     // The decided status shows until the server's resolution arrives.
     this.localApprovals = new Map(this.localApprovals).set(
       id,
@@ -539,20 +544,20 @@ export class OnyxChatWidget extends LitElement {
     // held the chat: the follow reads the current stream, then each stream
     // the status reports, and the saved session when the session is idle.
     const continuation = result === "closed" ? null : result.continuation;
-    if (this.chatSessionId && !this.abortController) {
+    if (sessionId && !this.abortController) {
       if (continuation) {
-        void this.resumeStream(this.chatSessionId, {
+        void this.resumeStream(sessionId, {
           streamId: continuation.stream_id,
         });
       } else if (result === "closed" || request.agent_name) {
-        void this.resumeStream(this.chatSessionId, null);
+        void this.resumeStream(sessionId, null);
       } else if (decision === "approve_session") {
         // The server also approved this chat's other requests for the tool,
         // which only the saved session shows.
         this.approvalsChanged = true;
-        void this.resumeStream(this.chatSessionId, { streamId: null });
+        void this.resumeStream(sessionId, { streamId: null });
       } else if (this.pendingApproval === null) {
-        void this.resumeStream(this.chatSessionId, { streamId: null });
+        void this.resumeStream(sessionId, { streamId: null });
       }
     } else if (continuation) {
       this.continuationStreamId = continuation.stream_id;

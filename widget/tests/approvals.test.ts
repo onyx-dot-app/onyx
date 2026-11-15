@@ -1104,6 +1104,36 @@ describe("widget while a request waits", () => {
     expect(status(widget, "c")).toBe("approved");
   });
 
+  it("changes nothing in a new chat when a reset lands during a decision", async () => {
+    const { widget, api } = waitingWidget();
+    let decided: () => void = () => {};
+    const deciding = new Promise<void>((resolve) => {
+      decided = resolve;
+    });
+    api.submitApprovalDecision = mock(async () => {
+      await deciding;
+      return continuation(9);
+    });
+    const resumeStream = mock(async function* (): AsyncGenerator<
+      Packet | StreamCursor,
+      ResumeEnd
+    > {
+      return "noBuffer";
+    });
+    api.resumeStream = resumeStream;
+
+    const decision = widget["decideApproval"](request("a"), "approve_once");
+    widget.resetConversation();
+    decided();
+    await decision;
+
+    expect(resumeStream).not.toHaveBeenCalled();
+    expect(widget["abortController"]).toBeUndefined();
+    expect(widget["localApprovals"].size).toBe(0);
+    expect(widget["continuationStreamId"]).toBeNull();
+    expect(widget["statusRecheck"]).toBe(false);
+  });
+
   it("follows a continuation decided while the saved session loads", async () => {
     const { widget, api } = waitingWidget();
     api.submitApprovalDecision = mock(async () => continuation(9));
