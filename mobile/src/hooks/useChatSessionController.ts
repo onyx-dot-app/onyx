@@ -355,10 +355,11 @@ export async function recoverChatSession(
 }
 
 // Background agents' requests and outcomes arrive only through the saved session. While the chat
-// stays open and idle, this reads status until the server is idle and no background agent runs or
-// waits to resume: a changed `approvals_version` reloads the session, and a stream that starts,
-// such as the root answer that an agent's result continues, is followed. When the agents stop, a
-// last reload shows their outcomes. A failed status read retries on the next poll.
+// stays open and idle, this reads status until the server is idle, no turn can start and no
+// background agent runs or waits to resume: a changed `approvals_version` reloads the session, and
+// a stream that starts, such as the root answer that an agent's result continues, is followed.
+// When the agents stop, a last reload shows their outcomes. A failed status read retries on the
+// next poll.
 //
 // `knownWork`: the caller knows of agent work, such as a decision it made. Without it, as when a
 // chat opens, the last reload follows only work that a read or a later call found.
@@ -423,8 +424,11 @@ export async function watchBackgroundAgents(
         return;
       }
       // A root that an agent's result continues processes before it publishes its stream.
+      // A finished agent's unread result starts the root's turn before the root processes.
       const busy =
-        status.is_processing === true || status.has_active_subagents === true;
+        status.is_processing === true ||
+        status.has_active_subagents === true ||
+        status.has_startable_input === true;
       watch.sawWork ||= busy;
       const settled = !busy && !watch.again;
       reload =

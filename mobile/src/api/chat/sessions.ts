@@ -40,6 +40,8 @@ export interface ChatSessionStatus {
   // Background agents run, or their queued work waits. A parked agent waits for the user, so it
   // does not count.
   has_active_subagents?: boolean;
+  // Queued input or unread agent results can start a turn now; the server schedules it.
+  has_startable_input?: boolean;
   // Changes when a tool approval request of the session opens, is decided or is removed.
   approvals_version?: string;
 }

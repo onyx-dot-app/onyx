@@ -1960,6 +1960,35 @@ describe("watchBackgroundAgents", () => {
     expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
   });
 
+  // A finished agent's unread result starts the root's turn, which the server dispatches later.
+  it("follows a root turn that starts after a read reports startable input", async () => {
+    await openIdle("v1");
+    jest
+      .mocked(getChatSessionStatus)
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: false,
+        has_startable_input: true,
+        approvals_version: "v1",
+      })
+      .mockResolvedValueOnce({
+        is_processing: true,
+        has_active_subagents: false,
+        current_stream: { stream_id: 9, response_ids: [2] },
+        approvals_version: "v1",
+      })
+      .mockResolvedValue({ is_processing: false, approvals_version: "v1" });
+    resumeMock.mockReturnValueOnce(
+      scripted([startPacket("done"), stopPacket(), cursor(2)]),
+    );
+    getSessionMock.mockResolvedValue(saved([historyPacket("done")], "v1"));
+
+    void watchBackgroundAgents("s1", SERVER_URL, client);
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(resumeMock.mock.calls[0]?.[1]).toBe(9);
+  });
+
   it("follows a stream that starts while it watches", async () => {
     seedLiveSession(null);
     jest.mocked(getChatSessionStatus).mockResolvedValueOnce({
