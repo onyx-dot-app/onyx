@@ -1482,32 +1482,3 @@ def load_chat_approvals(
                 (response_id, anchor_call_id)
             )
     return approvals
-    question = aliased(ChatMessage)
-    started = (
-        select(
-            ChatMessage.id.label("response_id"),
-            ToolCall.parent_chat_message_id.label("root_id"),
-            ToolCall.tool_call_id.label("anchor_call_id"),
-        )
-        .join(question, question.id == ChatMessage.parent_message_id)
-        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
-        .where(ToolCall.parent_chat_message_id.in_(response_ids))
-        .cte("agent_runs_started", recursive=True)
-    )
-    child = aliased(ChatMessage)
-    child_question = aliased(ChatMessage)
-    child_call = aliased(ToolCall)
-    started = started.union_all(
-        select(child.id, started.c.root_id, started.c.anchor_call_id)
-        .join(child_question, child_question.id == child.parent_message_id)
-        .join(child_call, child_call.id == child_question.invoking_tool_call_id)
-        .join(started, child_call.parent_chat_message_id == started.c.response_id)
-        .where(child.id > started.c.response_id)
-    )
-    for response_id, root_id, anchor_call_id in db_session.execute(
-        select(started.c.response_id, started.c.root_id, started.c.anchor_call_id)
-    ).all():
-        approvals.started_runs.setdefault(root_id, []).append(
-            (response_id, anchor_call_id)
-        )
-    return approvals

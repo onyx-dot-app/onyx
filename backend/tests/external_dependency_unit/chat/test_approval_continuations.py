@@ -28,7 +28,8 @@ from onyx.chat.process_message import (
     handle_stream_message_objects,
 )
 from onyx.chat.run_store import ChatRunStore
-from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource
+from onyx.context.search.models import BaseFilters
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.mcp import create_mcp_server__no_commit
@@ -64,6 +65,8 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
 )
+from onyx.tools.models import ChatToolSelection
+from onyx.tools.tool_constructor import SearchToolConfig
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
     ScriptedLLM,
@@ -120,6 +123,8 @@ class ApprovalTurns:
         self.chat_session_id = chat_session_id
         self.sent: list[str] = []
         self.tool = _gated(server_id, self.sent)
+        # The tool limits and search filters that each turn built its tools with.
+        self.tool_limits: list[tuple[list[int] | None, BaseFilters | None]] = []
 
     def start(
         self,
@@ -127,19 +132,32 @@ class ApprovalTurns:
         script: Script,
         *,
         models: list[LLMOverride] | None = None,
+        selection: ChatToolSelection | None = None,
     ) -> list[OverallStop]:
-        """Send a message, to several `models` if given; returns the stops of
-        the turn."""
-        monkeypatch.setattr(
-            "onyx.chat.execution.construct_tools",
-            lambda **_kwargs: {self.tool.id: [self.tool]},
-        )
+        """Send a message, to several `models` if given and limited to the
+        tools and search filters of `selection`; returns the stops of the
+        turn."""
+
+        def construct_tools(
+            *,
+            allowed_tool_ids: list[int] | None,
+            search_tool_config: SearchToolConfig,
+            **_kwargs: object,
+        ) -> dict[int, list[FakeMCPTool]]:
+            self.tool_limits.append(
+                (allowed_tool_ids, search_tool_config.user_selected_filters)
+            )
+            return {self.tool.id: [self.tool]}
+
+        monkeypatch.setattr("onyx.chat.execution.construct_tools", construct_tools)
         model = ScriptedLLM(script.generate)
         monkeypatch.setattr(
             "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
         )
         request = SendMessageRequest(
-            message="Email the team", chat_session_id=self.chat_session_id
+            message="Email the team",
+            chat_session_id=self.chat_session_id,
+            **(selection.model_dump() if selection else {}),
         )
         return [
             packet.obj
@@ -319,6 +337,31 @@ def test_a_continuation_that_fails_to_start_for_a_moment_retries_alone(
     )
     assert failures == []
     assert turns.sent == ["team"]
+
+
+def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
+    turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A request limits its turn to some tools and search filters that the
+    chat does not save. Its response parks for approval and continues after
+    the decision with the same limits, not with every tool of the agent."""
+    selection = ChatToolSelection(
+        allowed_tool_ids=[turns.tool.id],
+        internal_search_filters=BaseFilters(source_type=[DocumentSource.WEB]),
+    )
+    stops = turns.start(monkeypatch, Script(turns.tool), selection=selection)
+    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    [request] = turns.requests()
+
+    turns.decide(request)
+
+    _wait_until(
+        lambda: turns.response_status(request.chat_message_id) == RunStatus.COMPLETE,
+        "the response completes",
+    )
+    assert turns.sent == ["team"]
+    limits = (selection.allowed_tool_ids, selection.internal_search_filters)
+    assert turns.tool_limits == [limits, limits]
 
 
 def test_two_decided_roots_are_not_agents(

@@ -123,7 +123,7 @@ from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import ToolApprovalScope
+from onyx.tools.models import ChatToolSelection, ToolApprovalScope
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -355,10 +355,13 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         answers_agent_results: bool = False,
         on_root_parked: Callable[[Run], None] | None = None,
         model_configuration_id: int | None = None,
+        tool_selection: ChatToolSelection | None = None,
     ) -> None:
         self.tenant_id = tenant_id
-        # The model of the branch's runs, which parked runs continue on.
+        # The model, tools and search filters of the branch's runs, which
+        # parked runs continue with.
         self._model_configuration_id = model_configuration_id
+        self._tool_selection = tool_selection
         # The root response answers unread agent results under a hidden
         # AGENT_RESULTS question, as a released wait's follow-up does.
         self._answers_agent_results = answers_agent_results
@@ -1553,6 +1556,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 record,
                 self._binding(response_id),
                 model_configuration_id=self._model_configuration_id,
+                tool_selection=self._tool_selection,
             )
             owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
         except BaseException:

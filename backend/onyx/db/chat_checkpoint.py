@@ -25,6 +25,7 @@ from onyx.db.models import (
     ChatSession,
 )
 from onyx.llm.override_models import LLMOverride
+from onyx.tools.models import ChatToolSelection
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
@@ -102,20 +103,32 @@ def publish_checkpoint__no_commit(
     return replaced
 
 
-def parked_response_model(session: Session, message_id: int) -> LLMOverride | None:
+def parked_response_settings(
+    session: Session, message_id: int
+) -> tuple[LLMOverride | None, ChatToolSelection | None]:
     """The model that a parked response ran, by its saved configuration and
-    with its display name; None when its checkpoint names none."""
+    with its display name, and the tools and search filters of its request;
+    each is None when its checkpoint names none."""
     row = session.execute(
         select(
             ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
+            ChatResponseCheckpoint.state["tool_selection"],
             ChatMessage.model_display_name,
         )
         .join(ChatMessage, ChatMessage.id == ChatResponseCheckpoint.chat_message_id)
         .where(ChatResponseCheckpoint.chat_message_id == message_id)
     ).one_or_none()
-    if row is None or row[0] is None:
-        return None
-    return LLMOverride(model_configuration_id=row[0], display_name=row[1])
+    if row is None:
+        return None, None
+    configuration_id, tool_selection, display_name = row
+    return (
+        LLMOverride(model_configuration_id=configuration_id, display_name=display_name)
+        if configuration_id is not None
+        else None,
+        ChatToolSelection.model_validate(tool_selection)
+        if tool_selection is not None
+        else None,
+    )
 
 
 def claim_checkpoint__no_commit(

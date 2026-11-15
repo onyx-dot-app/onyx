@@ -150,8 +150,9 @@ document-set access, saves only the fields the body sets, and stores nothing
 for a chat whose record mode keeps no content. The chat-session detail returns
 the selection to its owner. The chat's model is `current_alternate_model`,
 which the web writes through `PUT /chat/update-chat-session-model` on each
-send. A turn that resumes a suspended response runs on that response's own
-model instead (`db/chat_checkpoint.py:parked_response_model`). Pending human submissions run the same hook before queue storage;
+send. A turn that resumes a suspended response, and an agent host that
+resumes parked agent runs, use the model, tools and search filters that the
+parked run's checkpoint saved instead (`db/chat_checkpoint.py:parked_response_settings`). Pending human submissions run the same hook before queue storage;
 setup reuses that processed text without rewriting it again. Then setup resolves the custom agent prompt, memories, the
 reserved tokens, the tool configuration and the branch summary, and copies the
 history out of the ORM rows. It closes the DB session before slow file loading,

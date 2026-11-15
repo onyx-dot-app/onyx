@@ -69,6 +69,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles, SavedLoadedFile
 from onyx.tools.models import (
     ChatFile,
+    ChatToolSelection,
     GeneratedImage,
     PersonaToolConfiguration,
     SearchToolUsage,
@@ -978,9 +979,10 @@ class ResponseCheckpoint(BaseModel):
     message_payloads: list[MessagePayload]
     input_messages: list[Message]
     input_payloads: list[MessagePayload]
-    # The saved model configuration that the response runs; a parked response
-    # continues on it.
+    # The saved model configuration that the response runs, and the tools and
+    # search filters of its request; a parked response continues with them.
     model_configuration_id: int | None = None
+    tool_selection: ChatToolSelection | None = None
 
 
 class SavedCheckpoint(BaseModel):

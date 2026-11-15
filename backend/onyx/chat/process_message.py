@@ -85,7 +85,7 @@ from onyx.db.chat import (
     reserve_stream_id,
     set_response_model_names__no_commit,
 )
-from onyx.db.chat_checkpoint import parked_response_model
+from onyx.db.chat_checkpoint import parked_response_settings
 from onyx.db.chat_inputs import (
     START_FAILED_MESSAGE,
     accept_queued_turn__no_commit,
@@ -285,6 +285,7 @@ def prepare_chat_turn(
     agent_host: bool = False,
     ask_for_approval: bool = True,
     resumed_response_id: int | None = None,
+    parked_agent_response_id: int | None = None,
     handed_admission: ChatTurnAdmission | None = None,
     on_reserved: Callable[
         [CreateChatSessionID | MessageResponseIDInfo | MultiModelMessageResponseIDInfo],
@@ -305,6 +306,10 @@ def prepare_chat_turn(
     A turn that continues the suspended `resumed_response_id`, the request's
     parent, adds no messages either. It prepares that response's question
     again, and streams under a new stream ID.
+
+    A parked run continues with the model, tools and search filters that its
+    checkpoint saved: the resumed response, or `parked_agent_response_id`, an
+    agent run that the agent host resumes.
 
     `handed_admission` is the admission that the previous turn handed over
     when it ended (`ChatTurnAdmission.release`); the turn claims none.
@@ -330,20 +335,32 @@ def prepare_chat_turn(
                 admission.claim(chat_session.id)
             else:
                 admission.check_owner(chat_session.id)
-            if server_started and chat_session.tool_selection is not None:
-                # A turn the server starts, or its agent host, uses the chat's
-                # current tools and filters.
+            parked_response_id = (
+                resumed_response_id
+                if resumed_response_id is not None
+                else parked_agent_response_id
+            )
+            parked_model, parked_selection = (
+                parked_response_settings(db_session, parked_response_id)
+                if parked_response_id is not None
+                else (None, None)
+            )
+            # Other turns that the server starts use the chat's current tools
+            # and filters.
+            saved_selection = parked_selection or chat_session.tool_selection
+            if server_started and saved_selection is not None:
                 new_msg_req = SendMessageRequest.model_validate(
-                    new_msg_req.model_dump() | chat_session.tool_selection.model_dump()
+                    new_msg_req.model_dump() | saved_selection.model_dump()
                 )
-            if resumed_response_id is not None and new_msg_req.llm_override is None:
-                # A parked response continues on its own model.
+            if parked_selection is not None:
+                # Document-set access can end while a run is parked.
+                filters = parked_selection.internal_search_filters
+                require_document_set_access(
+                    db_session, filters.document_set if filters else None, user
+                )
+            if new_msg_req.llm_override is None and parked_model is not None:
                 new_msg_req = new_msg_req.model_copy(
-                    update={
-                        "llm_override": parked_response_model(
-                            db_session, resumed_response_id
-                        )
-                    }
+                    update={"llm_override": parked_model}
                 )
             alternate_model = (
                 (chat_session.current_alternate_model or "").split("__")
@@ -870,7 +887,7 @@ def prepare_chat_turn(
             all_injected_file_metadata=history.all_injected_file_metadata,
             available_files=available_files,
             preferred_tool_id=preferred_tool_id,
-            preferred_tool_saved=queued_turn is not None,
+            preferred_tool_saved=server_started and saved_selection is not None,
             chat_files_for_tools=chat_files_for_tools,
             custom_agent_prompt=custom_prompt,
             user_memory_context=memory,
@@ -1091,15 +1108,6 @@ def dispatch_pending_chat_messages(
                     if not has_global_permission(user, Permission.WRITE_CHAT):
                         logger.info("Agent work waits for its owner's write access")
                         return
-                    # Parked agents continue on the model that they ran.
-                    with get_session_with_current_tenant() as db_session:
-                        host_model = (
-                            parked_response_model(
-                                db_session, hosted_agents[0].response_id
-                            )
-                            if hosted_agents
-                            else None
-                        )
                     unused = None
                     try:
                         host_setup = prepare_chat_turn(
@@ -1107,7 +1115,6 @@ def dispatch_pending_chat_messages(
                                 message="",
                                 chat_session_id=chat_session_id,
                                 parent_message_id=host_response_id,
-                                llm_override=host_model,
                             ),
                             user=user,
                             llm_overrides=None,
@@ -1115,6 +1122,9 @@ def dispatch_pending_chat_messages(
                             custom_tool_additional_headers=custom_tool_additional_headers,
                             mcp_headers=mcp_headers,
                             agent_host=True,
+                            parked_agent_response_id=hosted_agents[0].response_id
+                            if hosted_agents
+                            else None,
                             handed_admission=admission,
                         )
                     except Exception as error:

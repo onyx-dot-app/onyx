@@ -233,8 +233,8 @@ dispatch: ChatInbox.resumable_runs (db/chat_checkpoint.py:resumable_parked_runs)
   ChatRunStore.resume: claim, answers from the rows (tool_answer)
      -> Agent.resume(answers) -> input_ended (answer) -> tool_approval_resolved
      (a SESSION_GRANT decision is a standing answer -> "approved_for_chat")
-  resume turn and agent host: the parked run's own model
-     (db/chat_checkpoint.py:parked_response_model)
+  resume turn and agent host: the parked run's own model, tools and filters
+     (db/chat_checkpoint.py:parked_response_settings)
   a resume turn that fails before its run exists -> fail_suspended_response,
      except a transient error (RETRYABLE_START_ERRORS): dispatch retries it
      after RESUME_RETRY_DELAYS_S
@@ -467,12 +467,13 @@ calls run with no row unless the policy is now DENY.
     are the turn that parked the root, a resume that ends while a sibling's
     decision waits, and an agent host that held the chat during a root
     decision. So after any release the chat shows processing until the
-    resume publishes its stream. A resume turn runs on the model that the
-    response ran: its checkpoint saves the model configuration
-    (`ResponseCheckpoint.model_configuration_id`), and `prepare_chat_turn`
-    resolves it as the turn's `llm_override`, not the chat's current model.
-    An agent host runs on the saved model of the first parked agent that it
-    resumes.
+    resume publishes its stream. A resume turn runs on the model, tools and
+    search filters that the response ran with: its checkpoint saves the model
+    configuration and the request's tool selection
+    (`ResponseCheckpoint.model_configuration_id`, `.tool_selection`), and
+    `prepare_chat_turn` uses them instead of the chat's current model and
+    saved selection. It checks document-set access again. An agent host
+    uses those of the first parked agent that it resumes.
     Resumable agent runs resume in the store of their branch, selected or not
     (`ChatRunStore._dispatch_messages`), with no stream; dispatch starts an
     agent host (`chat/execution.py:host_agent_work`) for the selected branch,

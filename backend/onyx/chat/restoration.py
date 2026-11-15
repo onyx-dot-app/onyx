@@ -20,6 +20,7 @@ from onyx.chat.models import (
     StagedChatFiles,
 )
 from onyx.configs.constants import FileOrigin
+from onyx.db.chat_response import CHECKPOINT_DUMP_CLEANUP
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.deep_research.models import (
     DeepResearchFeatureState,
@@ -29,6 +30,7 @@ from onyx.deep_research.models import (
 from onyx.deep_research.research_agent import ResearchAgent
 from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, LLMUserIdentity
 from onyx.llm.models import AssistantMessage, Message, ToolResult
@@ -183,7 +185,7 @@ def persist_checkpoint_files(
     """Replace transient file contents with tenant-scoped file-store references.
 
     Returns the file IDs of the parked programs' dumps that it saved, which
-    only this checkpoint holds."""
+    only this checkpoint holds; a failed save deletes the dumps saved before it."""
     dumps: list[str] = []
 
     def save(file: SavedChatFile, *, unique: bool = False) -> str:
@@ -259,6 +261,10 @@ def persist_checkpoint_files(
         for child in record.child_runs:
             snapshot(child)
 
-    messages(checkpoint.agent_state.messages)
-    snapshot(checkpoint.run_state)
+    try:
+        messages(checkpoint.agent_state.messages)
+        snapshot(checkpoint.run_state)
+    except BaseException:
+        delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+        raise
     return dumps

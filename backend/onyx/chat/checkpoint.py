@@ -36,6 +36,7 @@ from onyx.db.models import SAVED_TOOL_RESULT_TYPES
 from onyx.deep_research.models import ResearchMessageMetadata
 from onyx.llm.models import Message, ToolResult
 from onyx.tools.file_snapshot import SavedLoadedFile
+from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
@@ -245,6 +246,7 @@ def serialize_checkpoint(
     binding: CheckpointBinding,
     *,
     model_configuration_id: int | None = None,
+    tool_selection: ChatToolSelection | None = None,
 ) -> ResponseCheckpoint:
     """Build resume data for storage alongside the response and verify it can reconstruct the run."""
     snapshot = checkpoint.run_state
@@ -279,6 +281,7 @@ def serialize_checkpoint(
         input_messages=snapshot.input_messages,
         input_payloads=[payload(message) for message in snapshot.input_messages],
         model_configuration_id=model_configuration_id,
+        tool_selection=tool_selection,
     )
     restored = _restore_checkpoint_state(
         data, response, checkpoint.agent_state, serializer

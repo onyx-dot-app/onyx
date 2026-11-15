@@ -81,6 +81,7 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import CODING_AGENT_TOOL_ID
 from onyx.tools.interface import Tool
+from onyx.tools.models import ChatToolSelection
 from onyx.tools.tool_constructor import (
     CustomToolConfig,
     FileReaderToolConfig,
@@ -823,6 +824,11 @@ def bind_run_store(
         answers_agent_results=setup.user_message_id is None,
         on_root_parked=on_root_parked,
         model_configuration_id=llm.config.model_configuration_id,
+        tool_selection=ChatToolSelection(
+            allowed_tool_ids=setup.new_msg_req.allowed_tool_ids,
+            preferred_tool_id=setup.new_msg_req.preferred_tool_id,
+            internal_search_filters=setup.new_msg_req.internal_search_filters,
+        ),
     )
     view = store.bind(
         coordinator,

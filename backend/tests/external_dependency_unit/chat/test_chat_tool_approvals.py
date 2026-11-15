@@ -34,9 +34,10 @@ from onyx.agents.tools import (
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.chat import run_store
+from onyx.chat import restoration, run_store
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
+    ChatFeatureState,
     ChatInbox,
 )
 from onyx.chat.presentation import ResponsePresenter
@@ -1233,6 +1234,48 @@ def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
     # Each attempt saved one dump; the first one's is gone.
     assert saved_before_publish == [1, 1]
     assert len(dumps()) == 1
+
+
+def test_a_failed_dump_save_deletes_the_dumps_saved_before_it(
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    dumps: Callable[[], list[str]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A checkpoint with two parked programs saves a dump for each. When the
+    second save fails, the first dump is deleted and the error reaches the
+    park, which never learns that dump's ID."""
+    owned = _program(chat, owned_runs, [])
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    assert owned.run.wait_for_idle(10)
+    captured = owned.run.capture()
+    progress = captured.run_state.progress
+    assert progress is not None and progress.feature_state is not None
+    state = ChatFeatureState.model_validate(progress.feature_state)
+    [cell] = state.code_cells
+    state.code_cells.append(
+        cell.model_copy(
+            update={"cell_id": cell.cell_id + 1, "observer_call_id": "second"},
+            deep=True,
+        )
+    )
+    progress.feature_state = state.model_dump(mode="json")
+    store = get_default_file_store()
+    save_file = store.save_file
+    saves: list[str] = []
+
+    def flaky_save(**kwargs: Any) -> str:
+        saves.append(kwargs["file_id"])
+        if len(saves) == 2:
+            raise _storage_error("SlowDown", 503)
+        return save_file(**kwargs)
+
+    monkeypatch.setattr(store, "save_file", flaky_save)
+    monkeypatch.setattr(restoration, "get_default_file_store", lambda: store)
+    with pytest.raises(ClientError):
+        restoration.persist_checkpoint_files(captured, session_id=chat.chat_session_id)
+    assert len(saves) == 2
+    assert dumps() == []
 
 
 def test_a_response_that_parks_after_its_chat_was_deleted_ends(
