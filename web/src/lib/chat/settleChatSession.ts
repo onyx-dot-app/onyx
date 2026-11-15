@@ -332,10 +332,14 @@ export async function settleChatSession({
     if (!ownsSettlement()) return;
     // Incognito keeps output locally, so it replays no history. It follows a
     // later stream of its own answers, such as an approved answer's
-    // continuation, and waits through other turns.
+    // continuation, and waits through other turns. A Stop waits through it.
     while (next && session?.incognito) {
       const local = useChatSessionStore.getState().sessions.get(sessionId);
-      if (local && streamResponses(local.messageTree, next)) {
+      if (
+        local &&
+        local.chatState !== "cancelling" &&
+        streamResponses(local.messageTree, next)
+      ) {
         followChatStream(sessionId, next, errorMessage);
         return;
       }

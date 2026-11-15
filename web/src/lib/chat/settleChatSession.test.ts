@@ -603,6 +603,38 @@ describe("with stubbed server checks", () => {
     expect(fetchSettledChatSession).not.toHaveBeenCalled();
   });
 
+  test("a stopping incognito chat waits through its answer's continuation and releases input", async () => {
+    const tree = new Map<number, Message>([
+      [1, message(1, "user", "Private question")],
+      [
+        2,
+        {
+          ...message(2, "assistant", ""),
+          messageId: 72,
+          parentNodeId: 1,
+          packets: [approvalRequest("approval")],
+        },
+      ],
+    ]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "cancelling",
+      incognito: true,
+      messageTree: tree,
+    });
+    jest
+      .mocked(waitForChatResponseEnd)
+      .mockResolvedValueOnce(stream(971, [72]))
+      .mockResolvedValue(null);
+
+    await settle();
+
+    expect(resumeStream).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).toHaveBeenLastCalledWith("session", 971);
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+    ).toMatchObject({ chatState: "input" });
+  });
+
   test("an old rejected attempt does not hide the latest saved answer", async () => {
     const user = {
       ...message(1, "user", "Question"),
