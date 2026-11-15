@@ -1515,6 +1515,51 @@ describe("with a scripted fetch", () => {
     }
   );
 
+  test("refresh drops loaded history whose waiting card the latest page no longer holds", async () => {
+    const history = Array.from({ length: 40 }, (_, index) =>
+      savedMessage(
+        index + 1,
+        index % 2 ? "assistant" : "user",
+        `Message ${index + 1}`
+      )
+    );
+    const all = savedSession(history, null);
+    all.packets[1] = [
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: {
+          type: "tool_approval_request",
+          approval_id: "approval",
+          tool_call_id: "call",
+          tool_name: "mcp__3__github__create_issue",
+          display_name: "Create issue",
+          arguments: {},
+          agent_name: "researcher",
+        },
+      },
+    ];
+    // The request was decided elsewhere: the latest page holds every reply
+    // with a waiting card, and this one is not among them.
+    const page = {
+      ...savedSession(history.slice(20), null),
+      has_older_messages: true,
+    };
+    useChatSessionStore.getState().updateSessionData("session", {
+      messageTree: processRawChatHistory(all.messages, all.packets),
+      hasOlderMessages: false,
+    });
+    jest.spyOn(global, "fetch").mockResolvedValue(Response.json(page));
+    await refreshChatSession("session", "Check again");
+    const session = useChatSessionStore.getState().sessions.get("session")!;
+    expect(
+      getLatestMessageChain(session.messageTree).map(
+        (message) => message.messageId
+      )
+    ).toEqual(history.slice(20).map((message) => message.message_id));
+    expect(readWaitingToolApprovals(session.messageTree)).toEqual([]);
+    expect(session.hasOlderMessages).toBe(true);
+  });
+
   // A queued or interrupting turn starts on the server; this browser loads
   // its saved question, then follows the running response.
   test("refresh shows the skills a turn from the queue mentioned", async () => {

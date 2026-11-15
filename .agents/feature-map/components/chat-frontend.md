@@ -249,7 +249,9 @@ nodes keyed by `nodeId`, each with `latestChildNodeId`.
 `getLatestMessageChain` walks it to get what the page shows. On load,
 `app/app/services/lib.tsx:processRawChatHistory` builds the tree from the
 session response and its replay packets ([[chat-persistence]]). Refreshing the
-latest page preserves loaded history that connects to that page. Incognito
+latest page preserves loaded history that connects to that page, unless an
+older loaded reply still shows a waiting approval card: the latest page holds
+every such reply, so that history is stale and is dropped. Incognito
 recovery checks execution status and retains local content. A saved
 failure becomes an `error` node with `errorMessage`, `errorCode` and
 `isRetryable` from `error_info`; `message` holds only answer text.
