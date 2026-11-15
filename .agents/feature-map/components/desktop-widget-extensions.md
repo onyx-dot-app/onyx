@@ -80,28 +80,30 @@ session.
 <onyx-chat-widget backend-url=... api-key=...>      widget/src/widget.ts
   └─ resolveConfig (attributes win over VITE_* build values)  config/config.ts
 send → ApiService                                   services/api-service.ts
-  ├─ waitForSessionIdle  (existing session) → GET /chat/chat-session/{id}/status
-  ├─ createChatSession   (first message only), then one status read: its
-  │    approvals_version is the new chat's baseline
+  ├─ createChatSession   (first message only)
+  ├─ waitForSessionIdle → GET /chat/chat-session/{id}/status; for a new chat
+  │    its approvals_version is the baseline (create returns none)
   ├─ streamMessage → POST /chat/send-chat-message, origin "widget"
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
   ├─ stream over → resumeStream({sent}): the one follow path below
   └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
-       (shows the session's latest saved answer), point at the waiting card
+       from the status (replays the latest saved answer), point at the card
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
   ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
-  │    (stored for the active follow when a stream is followed)
-  ├─ continuation null, root request → follow nothing; other requests wait
-  ├─ continuation null, background agent request → poll the agents (below)
-  └─ 404/409 → card shows "No longer waiting"; resumeStream follows the
-       current stream, and the saved session shows the outcome
+  │    (stored for the active follow, which never reads a stream twice)
+  ├─ continuation null, root request → keep reading; nothing else starts
+  ├─ continuation null, background agent request → resumeStream from the
+  │    status (agents polled, below)
+  └─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
+       and the saved session shows the outcome
 restore / sent stream / decision / 409 → resumeStream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
   │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
   │    requests for that stream)
-  ├─ stop with "awaiting_approval" → stop following, unless a decision named
-  │    a continuation during the stream
+  ├─ stop with "awaiting_approval" → a continuation a decision named during
+  │    the stream, else one status read: a new stream whose response_ids
+  │    include the response → follow from 0; else stop following
   ├─ a replayed user_message whose question the transcript lacks inserts it
   │    before the answer (ids from the response-ID packet)
   ├─ ended before its stop → wait 1s, waitForSessionIdle reports current_stream:
@@ -116,12 +118,10 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
        removed; a version change replays answers with agent requests and
        the latest answer); the load's approvals_version becomes the baseline;
        on failure it stays unfinished for the next load
-after a send or a restore (agents counted as seen running), or an agent
-  decision → read the status every 1s; each approvals_version change loads
-  the session again and the watch goes on; a new stream is followed; the
-  watch ends when has_active_subagents is false after it was true once (a
-  parked agent does not count), or after 5 reads that never saw it true; a
-  later decision restarts the counts
+  replay_end and a resolution sent again (replay, then live) change nothing
+any status read with has_active_subagents (a decided agent that waits to
+  resume counts) → read the status every 1s until it is false; each
+  approvals_version change loads the session again; a new stream is followed
 card status = the server's tool_approval_resolved outcome ("cancelled" →
   "No longer waiting"), else this widget's decision until the outcome
   arrives; no stop changes a card

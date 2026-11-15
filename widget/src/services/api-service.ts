@@ -18,19 +18,6 @@ import { TokenProvider } from "@/types/widget-types";
 import type { ApprovalDecision } from "@/services/approvals";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
-/** A watch that never sees an agent run ends after this many status reads. */
-export const AGENT_WATCH_UNSEEN_READS = 5;
-
-/**
- * Status reads of one watch on background agents. A newer watch resets the
- * counts in place.
- */
-export interface AgentWatch {
-  /** `has_active_subagents` was true at least once. */
-  seenRunning: boolean;
-  /** Idle status reads so far. */
-  reads: number;
-}
 export const READINESS_POLL_INTERVAL_MS = 1_000;
 
 /** Resolves after `ms`, or at once when `signal` aborts. */
@@ -123,22 +110,16 @@ export class ApiService {
   }
 
   /**
-   * Polls the session status until the session is idle (null), or until it
-   * runs a stream that `attachable` accepts (that stream's id). Each status
-   * read reports its `approvals_version` to `onApprovalsVersion`, which
-   * returns true when the version changed. With an agent `watch`, an idle
-   * read returns when the version changed, so the caller can reload, or once
-   * the agents settle: they stop running after the watch saw them run, or
-   * they never ran in `AGENT_WATCH_UNSEEN_READS` reads.
+   * Polls the session status until the session is idle, or until it runs a
+   * stream that `attachable` accepts. Returns the status read that ended the
+   * wait.
    */
   async waitForSessionIdle(
     sessionId: string,
     signal: AbortSignal,
     onUnconfirmed: () => void,
-    attachable: (streamId: number) => boolean = () => false,
-    onApprovalsVersion: (version: string) => boolean = () => false,
-    watch: AgentWatch | null = null
-  ): Promise<number | null> {
+    attachable: (stream: ChatStream) => boolean = () => false
+  ): Promise<ChatSessionStatus> {
     let authenticationFailures = 0;
     while (!signal.aborted) {
       const controller = new AbortController();
@@ -182,26 +163,11 @@ export class ApiService {
         }
         if (!response.ok) throw new Error("Cannot confirm chat readiness");
         const status = readChatSessionStatus(await response.json());
-        const approvalsChanged =
-          status.approvals_version !== null &&
-          onApprovalsVersion(status.approvals_version) === true;
-        if (!status.is_processing) {
-          if (!watch) return null;
-          watch.reads += 1;
-          if (status.has_active_subagents) watch.seenRunning = true;
-          // A changed version has requests or outcomes to show.
-          if (approvalsChanged) return null;
-          if (
-            !status.has_active_subagents &&
-            (watch.seenRunning || watch.reads >= AGENT_WATCH_UNSEEN_READS)
-          )
-            return null;
-        } else if (
-          status.current_stream !== null &&
-          attachable(status.current_stream.stream_id)
-        ) {
-          return status.current_stream.stream_id;
-        }
+        if (
+          !status.is_processing ||
+          (status.current_stream !== null && attachable(status.current_stream))
+        )
+          return status;
       } catch (error) {
         if (signal.aborted || error instanceof SessionUnavailableError)
           throw error;

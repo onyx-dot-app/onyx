@@ -4,7 +4,13 @@ import {
   ApiService,
   type ResumeEnd,
 } from "../src/services/api-service";
-import type { Packet, StreamCursor } from "../src/types/api-types";
+import type {
+  ChatSessionStatus,
+  ChatStream,
+  Packet,
+  StreamCursor,
+} from "../src/types/api-types";
+import { chatStream, idle, offer, runs } from "./session-status";
 import { OnyxChatWidget } from "../src/widget";
 
 const originalFetch = globalThis.fetch;
@@ -208,14 +214,14 @@ describe("widget readiness", () => {
     });
     let resolveIdle!: () => void;
     let reads = 0;
-    // The new chat's baseline read and the agents' read return at once; the
-    // idle wait after the stop holds the send.
+    // The new chat's baseline read returns at once; the idle wait after the
+    // stop holds the send.
     api.waitForSessionIdle = mock(() =>
       reads++ === 1
-        ? new Promise<null>((resolve) => {
-            resolveIdle = () => resolve(null);
+        ? new Promise<ChatSessionStatus>((resolve) => {
+            resolveIdle = () => resolve(idle());
           })
-        : Promise.resolve(null)
+        : Promise.resolve(idle())
     );
     widget["apiService"] = api;
     const pending = widget["sendMessage"]();
@@ -240,8 +246,8 @@ describe("widget readiness", () => {
     let resolveIdle!: () => void;
     api.waitForSessionIdle = mock(
       () =>
-        new Promise<void>((resolve) => {
-          resolveIdle = resolve;
+        new Promise<ChatSessionStatus>((resolve) => {
+          resolveIdle = () => resolve(idle());
         })
     );
     widget["apiService"] = api;
@@ -284,7 +290,7 @@ describe("widget readiness", () => {
     widget["inputValue"] = "retry me";
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
-    api.waitForSessionIdle = mock(async () => {});
+    api.waitForSessionIdle = mock(async () => idle());
     api.streamMessage = mock(async function* () {
       throw new Error("offline");
     });
@@ -325,7 +331,7 @@ describe("widget readiness", () => {
     const api = new ApiService("https://onyx.test/api", async () => "key");
     api.createChatSession = mock(async () => "session");
     // The server ran the turn on and is idle; nothing is left to replay.
-    api.waitForSessionIdle = mock(async () => null);
+    api.waitForSessionIdle = mock(async () => idle());
     api.streamMessage = mock(async function* () {
       yield { obj: { user_message_id: 1, reserved_assistant_message_id: 2 } };
       throw new Error("delivery failed");
@@ -394,7 +400,7 @@ describe("widget readiness", () => {
       let reads = 0;
       // A new chat's baseline read passes; the read after the send fails.
       api.waitForSessionIdle = mock(async () => {
-        if (afterSending && reads++ === 0) return null;
+        if (afterSending && reads++ === 0) return idle();
         throw new Error("Session unavailable");
       });
       api.resumeStream = mock(async function* () {});
@@ -460,14 +466,14 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
+          attachable: (stream: ChatStream) => boolean = () => false
         ) => {
           log.push("status");
-          return attachable(5) ? 5 : null;
+          return offer(attachable, 5);
         }
       );
 
-      await widget["resumeStream"]("session");
+      await widget["resumeStream"]("session", { streamId: null });
 
       expect(log).toEqual([
         "attempt 1",
@@ -517,11 +523,11 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
-        ) => (attachable(5) ? 5 : null)
+          attachable: (stream: ChatStream) => boolean = () => false
+        ) => (offer(attachable, 5))
       );
 
-      await widget["resumeStream"]("session");
+      await widget["resumeStream"]("session", { streamId: null });
 
       const from = { streamId: 5, cursor: 2 };
       expect(attempts).toEqual([null, from, from, from, from]);
@@ -570,16 +576,16 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
+          attachable: (stream: ChatStream) => boolean = () => false
         ) => {
-          if (attempts.length > 1) return null;
+          if (attempts.length > 1) return idle();
           // Stream 5 still saves; another client started stream 6.
-          offered.push(attachable(5));
-          return attachable(6) ? 6 : null;
+          offered.push(attachable(chatStream(5)));
+          return offer(attachable, 6);
         }
       );
 
-      await widget["resumeStream"]("session");
+      await widget["resumeStream"]("session", { streamId: null });
 
       expect(offered).toEqual([false]);
       expect(attempts).toEqual([null, { streamId: 6, cursor: 0 }]);
@@ -629,14 +635,14 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable?: (streamId: number) => boolean
+          attachable?: (stream: ChatStream) => boolean
         ) => {
           // The new chat's baseline read offers no stream.
-          if (!attachable || attempts.length > 0) return null;
+          if (!attachable || attempts.length > 0) return idle();
           // The sent response's stream 2 still saves; another client
           // started stream 4.
-          offered.push(attachable(2));
-          return attachable(4) ? 4 : null;
+          offered.push(attachable(chatStream(2)));
+          return offer(attachable, 4);
         }
       );
 
@@ -697,11 +703,11 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
-        ) => (attachable(5) ? 5 : null)
+          attachable: (stream: ChatStream) => boolean = () => false
+        ) => (offer(attachable, 5))
       );
 
-      await widget["resumeStream"]("session");
+      await widget["resumeStream"]("session", { streamId: null });
 
       expect(attempts).toEqual([null, { streamId: 5, cursor: 3 }]);
       expect(pendingAfterReattach).toBe("later");
@@ -755,18 +761,18 @@ describe("widget readiness", () => {
           _session: string,
           _signal: AbortSignal,
           _onUnconfirmed: () => void,
-          attachable: (streamId: number) => boolean = () => false
+          attachable: (stream: ChatStream) => boolean = () => false
         ) => {
           // The status reports stream 5 until it reports stream 6.
           if (attempts.length < 3) {
-            offered.push(attachable(5));
-            if (attachable(5)) return 5;
+            offered.push(attachable(chatStream(5)));
+            if (attachable(chatStream(5))) return runs(chatStream(5));
           }
-          return attachable(6) ? 6 : null;
+          return offer(attachable, 6);
         }
       );
 
-      await widget["resumeStream"]("session");
+      await widget["resumeStream"]("session", { streamId: null });
 
       expect(attempts).toEqual([
         null,

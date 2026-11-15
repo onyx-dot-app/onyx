@@ -240,8 +240,8 @@ export interface ChatSessionDetail {
 /** The fields of `/chat/chat-session/{id}/status` that the widget reads. */
 export interface ChatSessionStatus {
   is_processing: boolean;
-  // Background agents run or their queued work waits; a parked agent that
-  // waits for a decision does not count
+  // Background agents run, their queued work waits, or a decided agent
+  // waits to resume; an agent that waits for a decision does not count
   has_active_subagents: boolean;
   current_stream: ChatStream | null;
   // Changes when a request of the chat opens, is decided or is removed
