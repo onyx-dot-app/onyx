@@ -61,10 +61,12 @@ func ParseStreamLine(line string) models.StreamEvent {
 			if v, ok := data["is_retryable"].(bool); ok {
 				isRetryable = v
 			}
+			errorCode, _ := data["error_code"].(string)
 			return models.ErrorEvent{
 				Error:       errStr,
 				StackTrace:  stackTrace,
 				IsRetryable: isRetryable,
+				ErrorCode:   errorCode,
 			}
 		}
 	}

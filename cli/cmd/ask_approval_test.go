@@ -71,6 +71,8 @@ type approvalServerOptions struct {
 	// Another client decides; the status names the continuation and a new
 	// approvals version.
 	decidedElsewhere bool
+	// The saved session cannot load.
+	savedFails bool
 }
 
 // newApprovalServer streams some text and the response's tool approval
@@ -237,6 +239,10 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 	mux.HandleFunc("/api/chat/get-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
+		if opts.savedFails {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		// The saved session renders the response as a continuation's replay
 		// does. A response that no stream continued keeps its live text.
 		text := []string{"Filing.", "done"}
@@ -767,6 +773,17 @@ func TestAsk_SavedResponseThatParksAgainLoadsAfterTheNextDecision(t *testing.T) 
 	}
 	if out.String() != "Filing. Checking. done\n" {
 		t.Errorf("stdout = %q, want the finished answer", out.String())
+	}
+}
+
+func TestAsk_QuietRunThatFailsAfterADecisionPrintsItsOutput(t *testing.T) {
+	newApprovalServer(t, approvalServerOptions{unbuffered: true, savedFails: true})
+	ios, out, _ := pipedIOS()
+	if err := runApprovalAsk(t, ios, "--approve=once", "--quiet"); err == nil {
+		t.Fatal("the run did not fail")
+	}
+	if out.String() != "Filing. \n" {
+		t.Errorf("stdout = %q, want the text received before the failure", out.String())
 	}
 }
 

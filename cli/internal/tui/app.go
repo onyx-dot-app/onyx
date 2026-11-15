@@ -274,9 +274,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err == nil {
 			m, reload = m.reloadUnseenResponse(msg.sessionID, msg.status)
 		}
-		if msg.err == nil && (msg.status.HasActiveSubagents || msg.status.HasStartableInput || len(m.approvals) > 0) {
-			// Background agents' requests, decisions that other clients send,
-			// and turns that the server starts show only in status reads.
+		if msg.err == nil && m.watchesStatus(msg.status) {
 			m.approvalsPoll++
 			poll = pollApprovals(m.client, msg.sessionID, m.approvalsPoll, api.StatusPollInterval)
 		}
@@ -1068,9 +1066,7 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		}
 		return m.followRunningResponse(streamID)
 	}
-	if msg.Status.HasActiveSubagents || msg.Status.HasStartableInput || len(m.approvals) > 0 {
-		// Background agents' requests, decisions that other clients send,
-		// and turns that the server starts show only in status reads.
+	if m.watchesStatus(msg.Status) {
 		m.approvalsPoll++
 		return m, pollApprovals(m.client, detail.ChatSessionID, m.approvalsPoll, api.StatusPollInterval)
 	}

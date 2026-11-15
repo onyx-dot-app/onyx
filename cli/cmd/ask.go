@@ -160,29 +160,7 @@ waiting for another client.`,
 				reported: map[string]bool{},
 				ended:    map[string]bool{},
 			}
-			for {
-				for {
-					var event models.StreamEvent
-					if len(run.deferred) > 0 {
-						event, run.deferred = run.deferred[0], run.deferred[1:]
-					} else if next, ok := <-run.ch; ok {
-						event = next
-					} else {
-						break
-					}
-					if err := run.handle(event); err != nil {
-						return err
-					}
-				}
-				more, err := run.continueResponse()
-				if err != nil {
-					return err
-				}
-				if !more {
-					break
-				}
-			}
-			return run.result()
+			return run.result(run.follow())
 		},
 	}
 
@@ -263,6 +241,30 @@ type askRun struct {
 	deferred []models.StreamEvent
 	// Requests that the server ended while a prompt waited.
 	ended map[string]bool
+}
+
+// follow reads the response through its streams and saved states to its end.
+// It returns the error that ends the run.
+func (r *askRun) follow() error {
+	for {
+		for {
+			var event models.StreamEvent
+			if len(r.deferred) > 0 {
+				event, r.deferred = r.deferred[0], r.deferred[1:]
+			} else if next, ok := <-r.ch; ok {
+				event = next
+			} else {
+				break
+			}
+			if err := r.handle(event); err != nil {
+				return err
+			}
+		}
+		more, err := r.continueResponse()
+		if err != nil || !more {
+			return err
+		}
+	}
 }
 
 // handle applies one event to the run and shows it. It returns the error
@@ -401,7 +403,6 @@ func (r *askRun) render(event models.StreamEvent) error {
 			fmt.Fprintf(ios.ErrOut, "%s: %s\n", approval.OutcomeLabel(e.Outcome), title)
 		}
 	case models.ErrorEvent:
-		r.ow.Finish()
 		if e.StatusCode != 0 {
 			return exitcodes.Newf(exitcodes.ForHTTPStatus(e.StatusCode), "%s", sanitize.Terminal(e.Error))
 		}
@@ -601,11 +602,14 @@ func (r *askRun) continueResponse() (bool, error) {
 	return true, nil
 }
 
-// result finishes the output and returns the run's exit after the conversation
-// is ready, naming a new chat.
-func (r *askRun) result() error {
+// result finishes the output, the run's one exit, and returns followErr or
+// the run's exit after the conversation is ready, naming a new chat.
+func (r *askRun) result(followErr error) error {
 	if !r.json {
 		r.ow.Finish()
+	}
+	if followErr != nil {
+		return followErr
 	}
 	if r.approvalErr != nil {
 		return r.approvalErr

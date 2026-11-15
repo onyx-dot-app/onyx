@@ -501,3 +501,11 @@ func mustJSON(v interface{}) string {
 	}
 	return string(b)
 }
+
+func TestStreamedErrorKeepsItsErrorCode(t *testing.T) {
+	event := ParseStreamLine(`{"error":"Approve or reject","error_code":"APPROVAL_PENDING","is_retryable":false}`)
+	e, ok := event.(models.ErrorEvent)
+	if !ok || e.ErrorCode != "APPROVAL_PENDING" || e.Error != "Approve or reject" || e.IsRetryable {
+		t.Fatalf("event = %#v", event)
+	}
+}

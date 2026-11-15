@@ -13,6 +13,7 @@ import (
 	"github.com/onyx-dot-app/onyx/cli/internal/api"
 	"github.com/onyx-dot-app/onyx/cli/internal/config"
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
+	"github.com/onyx-dot-app/onyx/cli/internal/parser"
 )
 
 type decidingClient struct {
@@ -459,6 +460,20 @@ func run(t *testing.T, m Model, cmd tea.Cmd) (Model, tea.Cmd) {
 }
 
 func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
+	for name, rejection := range map[string]models.StreamEvent{
+		// The route rejects the message before it streams.
+		"http": models.ErrorEvent{Error: "HTTP 409: Approve or reject", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending},
+		// The response parked after the route's check; the turn rejects it.
+		"stream": parser.ParseStreamLine(`{"error":"Approve or reject the pending requests before you send a message","error_code":"APPROVAL_PENDING","is_retryable":false}`),
+	} {
+		t.Run(name, func(t *testing.T) { approvalPendingShowsTheWaitingRequest(t, rejection) })
+	}
+}
+
+// approvalPendingShowsTheWaitingRequest sends a message that rejection
+// rejects, and checks that the draft and the waiting request show.
+func approvalPendingShowsTheWaitingRequest(t *testing.T, rejection models.StreamEvent) {
+	t.Helper()
 	client := &resumingClient{sent: make(chan models.StreamEvent, 1), saved: waitingSession(t)}
 	m, ch := streamingModel(client)
 	session := waitingSessionID
@@ -474,7 +489,7 @@ func TestApprovalPendingErrorShowsTheWaitingRequestAndKeepsDraft(t *testing.T) {
 		t.Fatal("the message was not sent")
 	}
 	m.input.textInput.SetValue("")
-	updated, cmd := m.handleStreamEvent(StreamEventMsg{Channel: client.sent, Event: models.ErrorEvent{Error: "HTTP 409: Approve or reject", StatusCode: 409, ErrorCode: api.ErrorCodeApprovalPending}})
+	updated, cmd := m.handleStreamEvent(StreamEventMsg{Channel: client.sent, Event: rejection})
 	m = updated.(Model)
 	var warning string
 	for _, e := range m.viewport.entries {
@@ -1297,6 +1312,26 @@ func TestAgentsFirstRequestFoundBetweenReadsKeepsTheWatch(t *testing.T) {
 		},
 	}
 	m, cmd := answerEnds(t, client, models.ChatSessionStatus{HasActiveSubagents: true})
+	m = runAll(t, m, cmd)
+	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" || len(m.approvals) != 0 {
+		t.Fatalf("b1 = %q, want the other client's outcome", got)
+	}
+}
+
+func TestReadinessReadThatFindsAnAgentsFirstRequestKeepsTheWatch(t *testing.T) {
+	approved := map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "approved"}
+	client := &pollingClient{
+		resumingClient: &resumingClient{},
+		// Another client approves b1 after the answer ends.
+		statuses: []models.ChatSessionStatus{{ApprovalsVersion: "v3"}},
+		sessions: map[string]*models.ChatSessionDetailResponse{
+			"":   agentSession(t, "v2", agentAsks("b1")),
+			"v3": agentSession(t, "v3", agentAsks("b1"), approved),
+		},
+	}
+	// The agent parked at b1 before the read that confirms the answer: no
+	// agent is active and no card shows yet.
+	m, cmd := answerEnds(t, client, models.ChatSessionStatus{ApprovalsVersion: "v2"})
 	m = runAll(t, m, cmd)
 	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" || len(m.approvals) != 0 {
 		t.Fatalf("b1 = %q, want the other client's outcome", got)

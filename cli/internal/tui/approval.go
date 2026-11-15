@@ -312,9 +312,7 @@ func pollApprovals(client api.ClientAPI, sessionID string, poll int, delay time.
 
 // handleApprovalsPoll loads the session cards when the approvals version
 // changes, and follows a response that runs while no stream does, such as a
-// root turn that agent results start. It reads again while background agents
-// run or wait to resume, while a card waits or a session load runs; without
-// a stream, also while a turn can start or a response prepares.
+// root turn that agent results start. It reads again while watchesStatus.
 func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	if msg.poll != m.approvalsPoll || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
 		return m, nil
@@ -332,12 +330,20 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	} else {
 		m, follow = m.reloadUnseenResponse(msg.sessionID, msg.status)
 	}
-	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
-	// A load in flight can add cards, such as an agent's first request.
-	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable && m.approvalsLoadVersion == "" {
+	if !m.watchesStatus(msg.status) {
 		return m, tea.Batch(load, follow)
 	}
 	return m, tea.Batch(load, follow, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
+}
+
+// watchesStatus reports whether status reads continue after status. Background
+// agents' requests, decisions that other clients send, and turns that the
+// server starts show only in status reads, so they continue while agents run
+// or wait to resume, while a card waits or a session load runs, which can add
+// one, and, without a stream, while a turn can start or a response prepares.
+func (m Model) watchesStatus(status models.ChatSessionStatus) bool {
+	return status.HasActiveSubagents || len(m.approvals) > 0 || m.approvalsLoadVersion != "" ||
+		(!m.isStreaming && (status.HasStartableInput || status.IsProcessing))
 }
 
 // reloadUnseenResponse loads the saved session when a status read, while no
