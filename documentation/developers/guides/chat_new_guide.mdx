@@ -192,20 +192,20 @@ A stop without a `stream_id` still pauses the queue of the chat session:
 queued messages and results of background agents do not start a turn until the next message starts one.
 Do not offer Stop for an answer that waits for approval. To end the wait, reject each request.
 
-Treat a request with no resolution as ended when its response stops for a reason other than `awaiting_approval`,
-unless it has an `agent_name`. Ignore an `outcome` that you do not recognize.
+The server sends a `tool_approval_resolved` packet for every request that it ends, live and in replay.
+An ended request with no decision gets `cancelled`. Ignore an `outcome` that you do not recognize.
 
 ### Approvals of background agents
 
 When a send-message request sets `accepts_follow_ups` to `true`, the answer can start background agents.
-An agent's call can also need approval. Its request has an `agent_name`,
-and it shows at the card of the answer's call that started the agent. The request waits on its own:
+An agent's call can also need approval. Its request has an `agent_name`. The request waits on its own:
 it stays open when the answer stops for any reason, a stop of the answer does not reject it,
-and it does not block new messages. While the answer streams, its stream sends the request at once.
-The stream does not send a `tool_approval_resolved` packet for an agent's request.
+and it does not block new messages. The answer's stream does not send an agent's request or its resolution.
 `GET /chat/chat-session/{chat_session_id}/status` has `approvals_version`,
 an opaque string that changes when the approval requests that wait in the chat session change. When it changes,
 read `GET /chat/get-chat-session/{chat_session_id}` again.
+`GET /chat/get-chat-session/{chat_session_id}` returns the same `approvals_version` for the requests it shows,
+so take the first value from the session load.
 The chat session returns each agent request in the answer that started the agent, with its resolution if it has one.
 After the decision, the agent continues in the background, with no new stream for the answer.
 Its record and its result arrive with the chat session, as for any background agent.
