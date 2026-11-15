@@ -114,25 +114,39 @@ describe("useChatSessionQueue", () => {
     );
   }
 
-  it("takes a started chat's first approvals version as its baseline without a refresh", async () => {
+  function startChat(sessionId: string) {
     useChatSessionStore.setState({
       sessions: new Map(),
-      currentSessionId: "started-session",
+      currentSessionId: sessionId,
     });
     useChatSessionStore
       .getState()
-      .createSession("started-session", { chatState: "input" });
-    serveStatus("0/0/None/None");
+      .createSession(sessionId, { chatState: "input" });
+  }
+
+  it("does not refresh a started chat that has no approval request", async () => {
+    startChat("clean-session");
+    const fetchMock = serveStatus("");
+
+    renderHook(() => useChatSessionQueue(true));
+
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(refreshChatSession).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a started chat whose first status read already holds a request", async () => {
+    startChat("asked-session");
+    serveStatus("1/0/2026-11-15 05:00:00/None");
 
     renderHook(() => useChatSessionQueue(true));
 
     await waitFor(() =>
-      expect(
-        useChatSessionStore.getState().sessions.get("started-session")
-          ?.approvalsVersion
-      ).toBe("0/0/None/None")
+      expect(refreshChatSession).toHaveBeenCalledWith(
+        "asked-session",
+        expect.any(String)
+      )
     );
-    expect(refreshChatSession).not.toHaveBeenCalled();
   });
 
   it("refreshes an incognito chat whose approvals changed, without its server queue", async () => {

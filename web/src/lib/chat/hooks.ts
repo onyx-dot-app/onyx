@@ -232,19 +232,13 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
 
   // Background agents' requests and their resolutions arrive only through a
   // load. A status version that differs from the loaded one refreshes. A chat
-  // that this browser started has no loaded version: its first status read,
-  // which comes before its agents can ask, is the baseline, so a clean send
-  // keeps its streamed messages.
+  // that this browser started loaded nothing, so it compares against the
+  // empty version of a chat with no request: a clean send keeps its streamed
+  // messages, and any request refreshes.
   const approvalsVersion = status?.approvals_version;
   useEffect(() => {
-    if (!sessionId || approvalsVersion === undefined) return;
-    if (loadedApprovalsVersion === undefined) {
-      useChatSessionStore
-        .getState()
-        .updateSessionData(sessionId, { approvalsVersion });
-      return;
-    }
-    if (idle && approvalsVersion !== loadedApprovalsVersion)
+    if (!sessionId || approvalsVersion === undefined || !idle) return;
+    if (approvalsVersion !== (loadedApprovalsVersion ?? ""))
       void refreshChatSession(sessionId, checkFailed);
   }, [sessionId, approvalsVersion, loadedApprovalsVersion, idle, checkFailed]);
 

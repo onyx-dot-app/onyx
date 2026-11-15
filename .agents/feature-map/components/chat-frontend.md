@@ -101,10 +101,10 @@
   `send_message` card, through a load or a continuation's replay, never in a
   live stream. Each load records its `approvals_version` in the session
   store; in an idle chat `useChatSessionQueue` calls `refreshChatSession`
-  when the status's version differs from the loaded one. A chat that this
-  browser started has no loaded version: its first status read, which comes
-  before its agents can ask, becomes the baseline, so a clean send keeps
-  its streamed messages. A decided agent
+  when the status's version differs from the loaded one. The version is
+  empty while the chat has no request, and a chat that this browser started
+  compares against that empty version: a clean send keeps its streamed
+  messages, and any request refreshes the chat. A decided agent
   request sets `has_active_subagents` until the agent finishes or waits
   again, so a decision on a subagent's card reads the status once; the
   status then polls while background work runs, and each version change
