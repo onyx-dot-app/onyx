@@ -265,7 +265,12 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
         )
     )
     rows = session.execute(
-        select(ChatMessage.id, ChatMessage.chat_session_id)
+        select(
+            ChatMessage.id,
+            ChatMessage.chat_session_id,
+            ChatResponseCheckpoint.state["model_configuration_id"].as_integer(),
+            ChatResponseCheckpoint.state["tool_selection"],
+        )
         .join(
             ChatResponseCheckpoint,
             ChatResponseCheckpoint.chat_message_id == ChatMessage.id,
@@ -287,9 +292,43 @@ def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[Parke
             root_response_id=response_id
             if agent_id == chat_session_id
             else response_invocation_chain(session, response_id)[-1].message_id,
+            model_configuration_id=configuration_id,
+            tool_selection=ChatToolSelection.model_validate(tool_selection)
+            if tool_selection is not None
+            else None,
         )
-        for response_id, agent_id in rows
+        for response_id, agent_id, configuration_id, tool_selection in rows
     ]
+
+
+def parked_tree_approval_ids(
+    session: Session, response_ids: Collection[int]
+) -> list[UUID]:
+    """The undecided approval requests of parked runs and of the foreground
+    children that their checkpoints name, at any depth."""
+    tree: set[int] = set()
+    frontier = set(response_ids)
+    while frontier:
+        tree |= frontier
+        frontier = {
+            child_id
+            for child_ids in session.scalars(
+                select(ChatResponseCheckpoint.child_run_ids).where(
+                    ChatResponseCheckpoint.chat_message_id.in_(frontier)
+                )
+            )
+            for child_id in child_ids
+        } - tree
+    if not tree:
+        return []
+    return list(
+        session.scalars(
+            select(ApprovalRequest.id).where(
+                ApprovalRequest.chat_message_id.in_(tree),
+                ApprovalRequest.decision.is_(None),
+            )
+        )
+    )
 
 
 def parked_response_ids(

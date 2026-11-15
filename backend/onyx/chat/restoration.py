@@ -182,7 +182,8 @@ def restore_chat_agent(
 def persist_checkpoint_files(
     checkpoint: ExecutionCheckpoint, *, session_id: UUID
 ) -> list[str]:
-    """Replace transient file contents with tenant-scoped file-store references.
+    """Replace transient file contents with tenant-scoped file-store references,
+    and drop the request context, which is never stored.
 
     Returns the file IDs of the parked programs' dumps that it saved, which
     only this checkpoint holds; a failed save deletes the dumps saved before it."""
@@ -251,13 +252,20 @@ def persist_checkpoint_files(
                         save(cell.program.dump, unique=True)
                         for cell in state.code_cells
                     )
-                    progress.feature_state = _JSON_OBJECT.validate_python(
-                        state.model_dump(mode="json")
-                    )
-            for answer in progress.human_tool_answers.values():
-                if answer.result is not None:
-                    payload(answer.result.details)
-                    payload(answer.result.metadata)
+                if not isinstance(state, ResearchFeatureState):
+                    # The request's context is never stored; a run that
+                    # continues from storage continues without it.
+                    state.request_context = None
+                progress.feature_state = _JSON_OBJECT.validate_python(
+                    state.model_dump(mode="json")
+                )
+            for result in [
+                answer.result
+                for answer in progress.human_tool_answers.values()
+                if answer.result is not None
+            ]:
+                payload(result.details)
+                payload(result.metadata)
         for child in record.child_runs:
             snapshot(child)
 

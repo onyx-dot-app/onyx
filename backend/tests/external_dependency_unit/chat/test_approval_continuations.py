@@ -6,6 +6,7 @@ continuation, a continuation whose start fails for a moment retries without a
 client, and the chat status reads several parked roots as roots. Integration
 tests cover the same flows over HTTP, where these timings cannot be held."""
 
+import json
 from collections.abc import Generator
 from threading import Event, Lock
 from typing import Any
@@ -36,6 +37,7 @@ from onyx.db.mcp import create_mcp_server__no_commit
 from onyx.db.models import (
     ApprovalRequest,
     ChatMessage,
+    ChatResponseCheckpoint,
     ChatSession,
     MCPServer,
     User,
@@ -133,10 +135,11 @@ class ApprovalTurns:
         *,
         models: list[LLMOverride] | None = None,
         selection: ChatToolSelection | None = None,
+        additional_context: str | None = None,
     ) -> list[OverallStop]:
-        """Send a message, to several `models` if given and limited to the
-        tools and search filters of `selection`; returns the stops of the
-        turn."""
+        """Send a message, to several `models` if given, limited to the tools
+        and search filters of `selection` and with the request-only
+        `additional_context`; returns the stops of the turn."""
 
         def construct_tools(
             *,
@@ -157,6 +160,7 @@ class ApprovalTurns:
         request = SendMessageRequest(
             message="Email the team",
             chat_session_id=self.chat_session_id,
+            additional_context=additional_context,
             **(selection.model_dump() if selection else {}),
         )
         return [
@@ -305,7 +309,8 @@ def test_a_continuation_that_fails_to_start_for_a_moment_retries_alone(
     """A continuation whose preparation, or whose run's resume, fails once
     with a transient storage error keeps its response parked, and the server
     retries it after a backoff. No status read or other client request is
-    needed for the response to complete."""
+    needed for the response to complete, and the chat shows processing
+    until then."""
     script = Script(turns.tool)
     stops = turns.start(monkeypatch, script)
     assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
@@ -330,12 +335,22 @@ def test_a_continuation_that_fails_to_start_for_a_moment_retries_alone(
         monkeypatch.setattr(ChatRunStore, "resume", flaky_resume)
 
     turns.decide(request)
+    idle_reads: list[ChatSessionProcessingStatus] = []
 
-    _wait_until(
-        lambda: turns.response_status(request.chat_message_id) == RunStatus.COMPLETE,
-        "the response completes",
-    )
+    def completed() -> bool:
+        if turns.response_status(request.chat_message_id) == RunStatus.COMPLETE:
+            return True
+        status = turns.status()
+        if (
+            not status.is_processing
+            and turns.response_status(request.chat_message_id) != RunStatus.COMPLETE
+        ):
+            idle_reads.append(status)
+        return False
+
+    _wait_until(completed, "the response completes")
     assert failures == []
+    assert idle_reads == []
     assert turns.sent == ["team"]
 
 
@@ -362,6 +377,29 @@ def test_a_continuation_keeps_the_tools_and_search_filters_of_its_request(
     assert turns.sent == ["team"]
     limits = (selection.allowed_tool_ids, selection.internal_search_filters)
     assert turns.tool_limits == [limits, limits]
+
+
+def test_a_parked_response_saves_no_request_context(
+    turns: ApprovalTurns, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The request's additional context is never stored: the checkpoint of a
+    response that parks for approval leaves it out, and the response still
+    continues after the decision."""
+    context = f"open tab {uuid4().hex}"
+    stops = turns.start(monkeypatch, Script(turns.tool), additional_context=context)
+    assert [stop.stop_reason for stop in stops] == [AWAITING_APPROVAL]
+    [request] = turns.requests()
+    with get_session_with_current_tenant() as session:
+        checkpoint = session.get_one(ChatResponseCheckpoint, request.chat_message_id)
+        assert context not in json.dumps(checkpoint.state)
+
+    turns.decide(request)
+
+    _wait_until(
+        lambda: turns.response_status(request.chat_message_id) == RunStatus.COMPLETE,
+        "the response completes",
+    )
+    assert turns.sent == ["team"]
 
 
 def test_two_decided_roots_are_not_agents(

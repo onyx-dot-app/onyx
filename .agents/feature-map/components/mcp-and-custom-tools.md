@@ -218,7 +218,7 @@ ChatRunStore.poll_control   one park pass over every owned run, once a second
      errors (FileStore.is_transient_error) keep the run, and a later poll
      tries again; a deleted chat parks nothing
   root -> on_root_parked -> chat/execution.py:ChatTurnExecution._root_parked
-     -> drop_response, stop(awaiting_approval)
+     -> stop(awaiting_approval); the stream keeps naming the response
 every turn and agent host, at its end: hands its admission to the resume of a
   parked root that can continue (chat/execution.py:root_response_resumes),
   else releases
@@ -415,8 +415,8 @@ calls run with no row unless the policy is now DENY.
     through the store's `on_root_parked` callback
     (`chat/execution.py:ChatTurnExecution._root_parked`), and its stream ends
     with `OverallStop(awaiting_approval)` (`chat/presentation.py:overall_stop`);
-    an agent run's release dispatches. A parked root leaves its stream's
-    `response_ids` (`ChatTurnAdmission.drop_response`). A park that raises
+    an agent run's release dispatches. A parked root stays in its stream's
+    `response_ids`, so `model_index` still indexes them. A park that raises
     `RunNotTransferable` (the run changed), a transient cache, database or
     file store error keeps the run, and a later poll tries again; the
     configured file store classifies its own errors

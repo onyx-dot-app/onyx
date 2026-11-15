@@ -389,6 +389,10 @@ class ParkedRun(BaseModel):
     response_id: int
     # The root response whose branch the run belongs to.
     root_response_id: int
+    # The model and the request's tools and search filters that the run's
+    # checkpoint saved, which it continues with.
+    model_configuration_id: int | None = None
+    tool_selection: ChatToolSelection | None = None
 
     @property
     def is_root(self) -> bool:

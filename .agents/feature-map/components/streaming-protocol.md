@@ -167,9 +167,10 @@ stream is a resume turn that writes the response
 stream that the client already reads, when a resumed answer asks again and is
 decided during its resident wait; clients ignore a continuation that names
 their current stream. A decision while the response's first turn still runs,
-or while a multi-model sibling still runs, gets null. A response that parks leaves its stream's `response_ids`
-(`ChatTurnAdmission.drop_response`), so the session status's
-`current_stream` names only the responses that a stream still writes. A run that ends publishes
+or while a multi-model sibling still runs, gets null. A response that parks stays in its stream's `response_ids`,
+which keep the turn's model order for the stream's life, so a packet's
+`model_index` indexes them; the parked response's packets end with its
+`stop(awaiting_approval)`. A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
 `agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
 that the run recorded, such as a Stop's rejection. Every request that the

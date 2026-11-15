@@ -180,29 +180,6 @@ class ChatTurnAdmission:
         finally:
             lock.release()
 
-    def drop_response(self, response_id: int) -> None:
-        """Stop naming a response that no longer writes to this turn's stream,
-        such as one that parked to wait for people."""
-        session_id = self._session_id
-        if session_id is None:
-            return
-        lock = _admission_lock(self.cache, session_id)
-        try:
-            if self.cache.get(self._owner_key(session_id)) != self._token:
-                return
-            raw = self.cache.get(_responses_key(session_id))
-            # The key keeps its expiry, so it never outlives the fence.
-            remaining = self.cache.ttl(_responses_key(session_id))
-            if raw is None or remaining <= 0:
-                return
-            value = json.loads(raw)
-            value["response_ids"] = [
-                item for item in value["response_ids"] if item != response_id
-            ]
-            self.cache.set(_responses_key(session_id), json.dumps(value), ex=remaining)
-        finally:
-            lock.release()
-
     def check_owner(self, session_id: UUID) -> None:
         """Validate ownership; callers serialize history writes against newer turns."""
         if self._session_id != session_id:

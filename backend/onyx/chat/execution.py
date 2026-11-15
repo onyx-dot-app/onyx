@@ -485,11 +485,8 @@ class ChatTurnExecution:
         stops it with `awaiting_approval`, and the decisions resume it on any
         pod."""
         persistence.report_suspended(run)
-        try:
-            # Its decisions continue it in a new stream, not in this one.
-            self.setup.admission.drop_response(persistence.message_id)
-        except Exception:
-            logger.exception("Could not remove a parked response from its stream")
+        # The stream keeps naming it, so `model_index` still indexes the
+        # stream's responses; its decisions continue it in a new stream.
         self._publish(
             Packet(
                 placement=Placement(turn_index=0, model_index=persistence.model_index),

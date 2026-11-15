@@ -2079,8 +2079,9 @@ def test_a_decision_while_a_sibling_model_runs_names_no_continuation(
     assert decision.json()["continuation"] is None
     [during] = while_sibling_runs
     current = CurrentStreamInfo.model_validate(during["current_stream"])
-    assert response_id not in current.response_ids
-    assert len(current.response_ids) == 1
+    # The stream keeps naming the parked response, in model order.
+    assert response_id in current.response_ids
+    assert len(current.response_ids) == 2
     assert after_turn["is_processing"] is True
     assert resumed.response_ids == [response_id]
     # The question selects model b's response, so model a's is off-branch.

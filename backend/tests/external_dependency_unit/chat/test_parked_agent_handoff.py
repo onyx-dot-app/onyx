@@ -4,6 +4,7 @@ decision, another process resumes it through the inbox and dispatch."""
 import json
 import subprocess
 import sys
+import time
 from pathlib import Path
 from unittest.mock import MagicMock
 from uuid import UUID
@@ -20,7 +21,7 @@ from onyx.cache.factory import get_cache_backend
 from onyx.chat.agent import ChatAgent
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import dispatch_pending_chat_messages
-from onyx.chat.run_store import ChatRunStore
+from onyx.chat.run_store import INPUT_POLL_SECONDS, ChatRunStore
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import GatedAppKind
 from onyx.db.models import ChatMessage, ChatResponseCheckpoint, User
@@ -270,6 +271,76 @@ def test_a_parked_agent_resumes_in_another_process(
     finally:
         for record in file_store.list_files_by_prefix(prefix):
             file_store.delete_file(record.file_id, error_on_missing=False)
+
+
+def test_a_decided_agent_resumes_only_in_a_store_with_its_saved_model(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A store of a turn that runs on another model leaves a decided agent
+    parked, so an agent host continues it with its saved model and tools
+    instead of the turn's. A store with the saved ones resumes it."""
+    sent: list[str] = []
+    agent_response_id = _park_agent(db_session, chat, owned_runs, sent)
+    [row] = chat.rows(db_session)
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    tool = _gated(chat.server.id, sent)
+    rebuilt: list[int] = []
+
+    def rebuild(checkpoint: ExecutionCheckpoint, depth: int) -> Agent:
+        rebuilt.append(depth)
+        return _agent(tool, checkpoint)
+
+    def agent_status() -> RunStatus | None:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            return session.get_one(ChatMessage, agent_response_id).response_status
+
+    def bound_store(model_configuration_id: int | None) -> ChatRunStore:
+        store = ChatRunStore(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            chat_session_id=chat.chat_session_id,
+            response_id=chat.response_id,
+            visible_response_ids=[],
+            cache=get_cache_backend(),
+            follow_up_steps=3,
+            user=chat.user,
+            tools=[tool],
+            model_configuration_id=model_configuration_id,
+        )
+        coordinator = AgentCoordinator()
+        store.bind(coordinator, build_agent=rebuild)
+        coordinators.append(coordinator)
+        return store
+
+    coordinators: list[AgentCoordinator] = []
+    try:
+        other = bound_store(4242)
+        # Polls through several dispatch scans.
+        deadline = time.monotonic() + 3 * INPUT_POLL_SECONDS
+
+        def polled_past_scans() -> bool:
+            other.poll_control()
+            return time.monotonic() > deadline
+
+        until(polled_past_scans)
+        assert rebuilt == []
+        assert agent_status() == RunStatus.SUSPENDED
+
+        same = bound_store(None)
+        until(
+            lambda: (
+                same.poll_control() is None
+                and agent_status() == RunStatus.COMPLETE
+                and not same.has_owned_work
+            ),
+            timeout=60,
+        )
+        assert rebuilt == [1]
+        assert sent == ["team"]
+    finally:
+        for coordinator in coordinators:
+            assert coordinator.close(timeout=10)
 
 
 def test_a_decided_agent_whose_host_cannot_start_ends(

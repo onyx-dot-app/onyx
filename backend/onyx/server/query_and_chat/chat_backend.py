@@ -1525,14 +1525,16 @@ def get_chat_session_processing_status(
     # Decided agents wait to resume; a parked agent that still waits for the
     # user does not count.
     resumes_agents = any(not run.is_root for run in inbox.resumable_runs)
+    busy = stream is not None or is_chat_session_processing(session_id, cache)
     status = ChatSessionProcessingStatus(
         latest_response_id=inbox.selected_response_id,
         has_active_subagents=any(result.is_running for result in inbox.results)
         or bool(inbox.child_work)
         or resumes_agents,
         has_startable_input=inbox.next_turn is not None,
-        is_processing=stream is not None
-        or is_chat_session_processing(session_id, cache),
+        # A decided root that waits to resume, such as after a failed start
+        # that retries, keeps the chat processing.
+        is_processing=busy or resumes_root,
         current_stream=CurrentStreamInfo(
             stream_id=stream.stream_id, response_ids=stream.response_ids
         )
@@ -1542,7 +1544,7 @@ def get_chat_session_processing_status(
     )
 
     if (
-        not status.is_processing
+        not busy
         and chat_session.user_id == user.id
         and user.id is not None
         and (

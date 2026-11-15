@@ -675,10 +675,15 @@ def test_a_request_creates_the_missing_app_identity(
 
 
 def _foreground_agent(
-    chat: ApprovalChat, owned_runs: list[OwnedRun], sent: list[str]
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    sent: list[str],
+    *,
+    alongside: AgentTool | None = None,
 ) -> OwnedRun:
     """A root that waits for a foreground agent, which calls the gated tool,
-    and answers with its answer."""
+    and answers with its answer. The root calls `alongside` in the same step,
+    if given."""
     tool = chat.tool()
 
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
@@ -705,7 +710,20 @@ def _foreground_agent(
         owned_runs,
         reply=_replies(
             AssistantMessage(
-                content=[ToolCall(id="delegate", name="delegate", arguments={})]
+                content=[
+                    ToolCall(id="delegate", name="delegate", arguments={}),
+                    *(
+                        [
+                            ToolCall(
+                                id="alongside",
+                                name=alongside.definition.name,
+                                arguments={},
+                            )
+                        ]
+                        if alongside
+                        else []
+                    ),
+                ]
             )
         ),
         tools=[
@@ -717,7 +735,8 @@ def _foreground_agent(
                 result_from_children=lambda _invocation, states: ToolResult(
                     content=states[0].messages[-1].text
                 ),
-            )
+            ),
+            *([alongside] if alongside else []),
         ],
         gated=[tool],
     )
@@ -827,6 +846,44 @@ def test_a_foreground_agent_asks_parks_and_resumes_in_a_fresh_store(
     assert resumed is not None
     assert resumed.run.result(timeout=10).output.text == "done"
     assert resumed.first_result("delegate") == "done"
+
+
+def test_a_stop_rejects_the_requests_of_a_foreground_agent_that_parked(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A foreground agent parks while another call keeps the root live, so
+    the store no longer owns the agent's run. The user's Stop still saves the
+    rejection of the agent's request, rather than leaving it to expire."""
+    release = threading.Event()
+
+    def slow(_invocation: ToolInvocation) -> ToolResult:
+        assert release.wait(30)
+        return ToolResult(content="slow")
+
+    owned = _foreground_agent(
+        chat,
+        owned_runs,
+        [],
+        alongside=AgentTool(
+            definition=ToolDefinition(name="slow", description="", parameters={}),
+            execute=slow,
+        ),
+    )
+    try:
+        until(lambda: _poll(owned) and len(chat.rows(db_session)) == 1)
+        [row] = chat.rows(db_session)
+        until(lambda: _poll(owned) and _parked(row.chat_message_id))
+        assert not _parked(chat.response_id)
+
+        owned.owner.reject_waiting_approvals()
+
+        [row] = chat.rows(db_session)
+        assert row.decision == ApprovalDecision.REJECTED
+        assert row.decided_via == ApprovalDecidedVia.USER
+    finally:
+        release.set()
+    # The cancelled root ends once its other call returns.
+    until(lambda: _poll(owned) and not owned.owner.has_owned_work)
 
 
 def test_ownerless_repair_keeps_a_parked_response(

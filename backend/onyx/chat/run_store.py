@@ -78,6 +78,7 @@ from onyx.db.chat_checkpoint import (
     check_checkpoint_owner__no_commit,
     claim_checkpoint__no_commit,
     interrupt_response__no_commit,
+    parked_tree_approval_ids,
     publish_checkpoint__no_commit,
     release_checkpoint_claim__no_commit,
 )
@@ -709,8 +710,9 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         return inbox, self._follow_selected_branch(inbox.branch)
 
     def _dispatch_messages(self) -> None:
-        """Resume parked agent runs of this store's branch whose waits ended,
-        then start idle children's queued messages and result follow-ups.
+        """Resume parked agent runs of this store's branch whose waits ended
+        and that saved this store's model and tools, then start idle children's
+        queued messages and result follow-ups.
 
         Scans run after a notification and while children run on the branch.
         Parked runs resume on the store's branch, selected or not; other work
@@ -733,10 +735,15 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
         try:
             inbox, selected = self._read_inbox()
+            # A run saved with another model or tool selection waits for an
+            # agent host, which continues it with them.
             parked = [
                 run
                 for run in inbox.resumable_runs
-                if not run.is_root and run.root_response_id in self.visible_response_ids
+                if not run.is_root
+                and run.root_response_id in self.visible_response_ids
+                and run.model_configuration_id == self._model_configuration_id
+                and run.tool_selection == self._tool_selection
             ]
             for run in parked:
                 lock = self.cache.lock(
@@ -1418,12 +1425,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
     def reject_waiting_approvals(self) -> None:
         """Save the user's Stop as the rejection of the approval requests that
         the root run and its foreground descendants wait on, the runs that the
-        Stop cancels, and give each run its answers as it cancels. A decision
-        saved first wins. Background agents keep running and keep their
-        requests."""
+        Stop cancels, and give each live run its answers as it cancels. A
+        foreground descendant that parked has no live run; its saved requests
+        are rejected too. A decision saved first wins. Background agents keep
+        running and keep their requests."""
         with self._lock:
             owned = {response_id: item.run for response_id, item in self._owned.items()}
         runs: list[Run] = []
+        parked: list[int] = []
         pending = [owned.get(self.response_id)]
         while pending:
             run = pending.pop()
@@ -1431,10 +1440,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 continue
             runs.append(run)
             if run.coordination is not None:
-                pending.extend(
-                    owned.get(int(child_id))
-                    for child_id in run.coordination.pending_children()
-                )
+                for child_id in run.coordination.pending_children():
+                    child = owned.get(int(child_id))
+                    if child is None:
+                        parked.append(int(child_id))
+                    else:
+                        pending.append(child)
         waits = {
             run.id: [
                 UUID(request.request_id)
@@ -1445,9 +1456,10 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         }
         approval_ids = [approval_id for ids in waits.values() for approval_id in ids]
         answers: dict[UUID, HumanToolAnswer] = {}
-        if approval_ids:
+        if approval_ids or parked:
             try:
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    approval_ids += parked_tree_approval_ids(session, parked)
                     close_pending_approval_requests__no_commit(
                         session,
                         ApprovalDecision.REJECTED,
