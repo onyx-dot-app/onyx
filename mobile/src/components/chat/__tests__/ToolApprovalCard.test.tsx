@@ -237,26 +237,6 @@ describe("ToolApprovalCard continuation", () => {
     expect(recoverMock.mock.calls[0]?.slice(0, 2)).toEqual(["s", continuation]);
   });
 
-  it("starts nothing when the decision names no continuation", async () => {
-    openPausedResponse([request]);
-    postMock.mockResolvedValue({
-      decision: "APPROVED",
-      decided_via: "USER",
-      continuation: null,
-    });
-    const view = render(<ToolApprovalCard approval={approval()} />);
-
-    fireEvent.press(view.getByText("Approve once"));
-
-    await waitFor(() =>
-      expect(useToolApprovalUi.getState().localStatuses.get("a1")).toBe(
-        "approved",
-      ),
-    );
-    expect(recoverMock).not.toHaveBeenCalled();
-    expect(watchBackgroundAgents).not.toHaveBeenCalled();
-  });
-
   it("watches the background agents after deciding an agent's request", async () => {
     const agentRequest = { ...request, agent_name: "Researcher" };
     openPausedResponse([agentRequest]);
@@ -278,11 +258,21 @@ describe("ToolApprovalCard continuation", () => {
     expect(recoverMock).not.toHaveBeenCalled();
   });
 
-  it.each([404, 409])(
-    "reads the session status for the running stream after a %i",
-    async (statusCode) => {
+  // With no continuation, another turn can hold the chat until this response resumes.
+  it.each(["no continuation", "a 404", "a 409"])(
+    "follows the session's streams and then reloads after %s",
+    async (outcome) => {
       openPausedResponse([request]);
-      postMock.mockRejectedValue(new ApiError({ status: statusCode }));
+      if (outcome === "no continuation")
+        postMock.mockResolvedValue({
+          decision: "APPROVED",
+          decided_via: "USER",
+          continuation: null,
+        });
+      else
+        postMock.mockRejectedValue(
+          new ApiError({ status: outcome === "a 404" ? 404 : 409 }),
+        );
       const view = render(<ToolApprovalCard approval={approval()} />);
 
       fireEvent.press(view.getByText("Approve once"));
@@ -292,6 +282,7 @@ describe("ToolApprovalCard continuation", () => {
       expect(useChatSessionStore.getState().sessions.get("s")?.chatState).toBe(
         "settling",
       );
+      expect(watchBackgroundAgents).not.toHaveBeenCalled();
     },
   );
 

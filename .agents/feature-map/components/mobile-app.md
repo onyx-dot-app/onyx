@@ -170,9 +170,11 @@ stream stops with `awaiting_approval` reads status while the server
 processes, such as for a sibling response, and follows the next new
 `current_stream` from cursor 0. It never reads the paused stream again. The
 recovery reader drops a continuation's `replay_end` packet. A repeated
-`tool_approval_resolved` is harmless, since cards key outcomes by `approval_id`. A 404 or 409 decision starts `recoverChatSession` with no
-stream, which reads status once and follows `current_stream` or reloads the
-saved session. A subagent's request (`agent_name`) shows the label "{agent}
+`tool_approval_resolved` is harmless, since cards key outcomes by `approval_id`. A root decision with no `continuation`, or a 404 or 409,
+starts `recoverChatSession` with no stream when no reader runs. Another turn
+can hold the chat until this response resumes, such as a multi-model sibling's
+resume. The recovery reads status while the server processes, follows each new
+`current_stream`, and reloads the saved session once the server is idle. A subagent's request (`agent_name`) shows the label "{agent}
 wants to run {tool}". It and its outcome arrive only in the session replay,
 never live in the answer's stream, and it never blocks a send. A decided agent
 that waits to resume counts in `has_active_subagents`, so a decision on an

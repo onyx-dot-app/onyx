@@ -77,10 +77,11 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
   }, [message, record]);
 
   // The decided status shows at once; the resolution packet then confirms it. The server names a
-  // continuation only for a suspended response; a live response goes on in the stream a reader
-  // already follows. When the request no longer waits, recovery reads the session status for a
-  // stream instead, or reloads the saved outcome. A background agent's decision has no stream, so
-  // status reads reload the session while the agent runs or waits to resume.
+  // continuation only for a suspended response that resumes at once; a live response goes on in
+  // the stream a reader already follows. Otherwise, as when another turn holds the chat or the
+  // request no longer waits, recovery follows the session's streams while it processes and then
+  // reloads the saved outcome. A background agent's decision has no stream, so status reads reload
+  // the session while the agent runs or waits to resume.
   async function decide(decision: ApprovalDecision) {
     const { recordStatus } = useToolApprovalUi.getState();
     setSubmitting(true);
@@ -116,7 +117,6 @@ function ToolApprovalCardComponent({ approval }: { approval: ToolApproval }) {
       void watchBackgroundAgents(sessionId, serverUrl, queryClient);
       return;
     }
-    if (continuation === null && !gone) return;
     if (continuation === null) store.updateChatState(sessionId, "settling");
     void recoverChatSession(
       sessionId,
