@@ -99,9 +99,9 @@ describe("pending", () => {
     expect(screen.getByText("Delete message")).toBeVisible();
   });
 
-  it("hides the session approval when it is not allowed", () => {
-    const { rerender, onDecide } = renderCard();
-    expect(screen.getByText(copy.approveSession.button)).toBeInTheDocument();
+  it("labels the session approval for a chat and hides it when not allowed", () => {
+    const { rerender, onDecide } = renderCard({ sessionScope: "chat" });
+    expect(screen.getByText(copy.approveChat.button)).toBeInTheDocument();
 
     rerender(
       <ApprovalCard
@@ -112,6 +112,7 @@ describe("pending", () => {
         onDecide={onDecide}
       />
     );
+    expect(screen.queryByText(copy.approveChat.button)).not.toBeInTheDocument();
     expect(
       screen.queryByText(copy.approveSession.button)
     ).not.toBeInTheDocument();
@@ -218,8 +219,15 @@ describe("pending", () => {
 
 describe("decided", () => {
   it.each([
+    ["chat", "Approved for this chat: Send message in Slack"],
+    ["session", "Approved for this session: Send message in Slack"],
+  ] as const)("records an approval for the %s", (sessionScope, text) => {
+    renderCard({ status: "approvedForSession", sessionScope });
+    expect(screen.getByRole("status")).toHaveTextContent(text);
+  });
+
+  it.each([
     ["approved", "Approved: Send message in Slack"],
-    ["approvedForSession", "Approved for this session: Send message in Slack"],
     ["rejected", "Not approved: Send message in Slack"],
     ["expired", "Timed out: Send message in Slack"],
     ["closed", "No longer waiting: Send message in Slack"],

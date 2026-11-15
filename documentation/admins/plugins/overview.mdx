@@ -83,7 +83,7 @@ Changes stay as a draft until you click **Save Changes**.
 | --- | --- | --- | --- |
 | **Configuration** | Name, description, access control, availability | Name, descriptions, schema, default Chat | Name, availability |
 | **Authentication** | Authentication method, custom headers, transport | Authentication method | Provider credentials or header patterns |
-| **Tools** | Tool list and Craft approval settings | Read-only list of operations | Action approval policies |
+| **Tools** | Tool list and approval settings | Read-only list of operations | Action approval policies |
 | **Skills** | — | — | Skills that teach Craft how to use the app |
 
 ## Availability and personal defaults
@@ -118,25 +118,29 @@ The status icon on each card shows where the plugin is available. Each segment o
 | Orange | Off, or the user must sign in |
 | Gray | The plugin type does not support this surface |
 
-## Approvals in Craft
+## Approvals
 
-Craft can ask a user to approve an action before it runs.
-Admins set the policy for each MCP tool and each Craft App action:
+Onyx can ask a user to approve an action before it runs.
+Admins set the policy for each MCP tool and each Craft App action. MCP tool policies apply in Chat, in custom agents,
+and in Craft. Craft App policies apply in Craft.
 
 | Policy | Effect |
 | --- | --- |
 | **Auto-approve** | The action runs without a prompt. |
-| **Ask** | Craft shows an approval card. The user can approve once, approve for the session, or reject. |
+| **Ask** | Onyx shows an approval card. The user can approve once, approve for the chat or Craft session, or reject. |
 | **Disabled** | The action never runs. Users and scheduled tasks cannot override it. |
 
 Turn on **Let users manage approval settings** to let users choose a stricter or more permissive policy for actions that
-the admin did not disable. For MCP plugins, users can change their policies without access to Craft. For Craft Apps,
-users need Craft.
+the admin did not disable. For MCP plugins, users can change personal approval settings with or without Craft.
+For Craft Apps, users need Craft.
+
+The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval. In some other chats,
+a tool call cannot wait for approval, and an MCP tool with the **Ask** policy does not run.
+See [Approvals in Chat](/admins/plugins/mcp#approvals-in-chat).
 
 <Warning>
-  Approval policies apply only in Craft. In default Chat and custom agents,
-  an agent calls MCP and OpenAPI tools without an approval prompt.
-  Turn off tools in Chat that must not run without review.
+  OpenAPI plugins have no approval policies. In Chat and custom agents,
+  an agent calls OpenAPI tools without an approval prompt. Turn off tools in Chat that must not run without review.
 </Warning>
 
 ## Next steps

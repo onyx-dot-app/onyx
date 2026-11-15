@@ -78,6 +78,10 @@ export function usePacketProcessor(
   // Optional override to force showing answer
   const [forceShowAnswer, setForceShowAnswer] = useState(false);
 
+  // The last processed packet. Streams append to the array; a replay or a
+  // reload replaces it, so the packet at that index changes.
+  const lastProcessedRef = useRef<Packet | undefined>(undefined);
+
   // Reset on nodeId change
   if (stateRef.current.nodeId !== nodeId) {
     stateRef.current = createInitialState(nodeId);
@@ -90,17 +94,23 @@ export function usePacketProcessor(
   const prevFinalAnswerComing = stateRef.current.finalAnswerComing;
   const previousDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);
 
-  // Detect stream reset (packets shrunk)
-  if (prevNextPacketIndex > rawPackets.length) {
+  // Detect stream reset (packets shrunk or replaced)
+  if (
+    prevNextPacketIndex > rawPackets.length ||
+    (prevNextPacketIndex > 0 &&
+      rawPackets[prevNextPacketIndex - 1] !== lastProcessedRef.current)
+  ) {
     stateRef.current = createInitialState(nodeId);
-    setRenderComplete(false);
-    setForceShowAnswer(false);
+    // A render-phase update always renders again, so skip unchanged state.
+    if (renderComplete) setRenderComplete(false);
+    if (forceShowAnswer) setForceShowAnswer(false);
   }
 
   // Process packets synchronously (incremental) - only if new packets arrived
   if (rawPackets.length > stateRef.current.nextPacketIndex) {
     stateRef.current = processPackets(stateRef.current, rawPackets);
   }
+  lastProcessedRef.current = rawPackets[stateRef.current.nextPacketIndex - 1];
 
   // Each new answer must finish rendering before the response toolbar appears.
   const latestDisplayGroup = stateRef.current.potentialDisplayGroups.at(-1);

@@ -17,6 +17,7 @@ import {
   MultiModelMessageResponseIDInfo,
   RateLimitDetails,
   RATE_LIMITED_ERROR_CODE,
+  APPROVAL_PENDING_ERROR_CODE,
   ResearchType,
   RetrievalType,
   StreamingError,
@@ -25,7 +26,7 @@ import {
 } from "@/app/app/types";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import { isSessionEndedResponse } from "@/lib/auth/utils";
 import { revalidateCurrentUser } from "@/lib/users/svc";
 
@@ -201,6 +202,9 @@ export interface SendMessageParams {
 
 export class ChatSendRejectedError extends Error {}
 
+/** The chat waits for a tool approval; the server saved nothing. */
+export class ApprovalPendingError extends ChatSendRejectedError {}
+
 export async function* sendMessage({
   message,
   fileDescriptors,
@@ -295,6 +299,9 @@ export async function* sendMessage({
     }
 
     const message = data.detail ?? `HTTP error! status: ${response.status}`;
+    if (data.error_code === APPROVAL_PENDING_ERROR_CODE) {
+      throw new ApprovalPendingError(message);
+    }
     if (response.status < 500 && response.status !== 408) {
       throw new ChatSendRejectedError(message);
     }
@@ -352,7 +359,11 @@ export async function* resumeStream(
 
   if (!response.ok) {
     const data: ErrorResponseBody = await response.json().catch(() => ({}));
-    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+    throw new FetchError(
+      data.detail ?? `HTTP error! status: ${response.status}`,
+      response.status,
+      data
+    );
   }
 
   yield* readChatStream<PacketType | StreamCursor>(

@@ -41,8 +41,8 @@
   policy: Auto-approve, Ask or Disabled. When unset it is Auto-approve for a
   tool the server marks read-only, else Ask, as in Craft
   (`db/action_policy.py:mcp_tool_default_policy`). A Disabled tool
-  is not offered to the model. For an Ask tool the call's card shows an
-  approval request with the call's arguments, and when nothing but such
+  is not offered to the model. For an Ask tool the chat shows an approval
+  card with the call's arguments, and when nothing but such
   requests remains, the response stops: its stream ends with the stop reason
   `awaiting_approval`, and the response waits, saved, with no server holding
   it and no time limit. The user picks Approve once, Approve for this chat, or
