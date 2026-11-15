@@ -3610,6 +3610,16 @@ class ChatResponseCheckpoint(Base):
         BigInteger, default=0, server_default="0"
     )
     state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+    # The foreground child runs that the parked run waits for, by response ID,
+    # so finding resumable runs reads no state.
+    child_run_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, default=list, server_default="{}"
+    )
+    # The file IDs of the parked programs' dumps that this checkpoint saved.
+    # They are deleted when the checkpoint ends or a new one replaces it.
+    dump_file_ids: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
 
 
 class ApprovalRequest(Base):
@@ -3657,6 +3667,8 @@ class ApprovalRequest(Base):
     # request's record and the result the model sees.
     tool_name: Mapped[str] = mapped_column(String, nullable=False)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # The arguments of the call that waits, as its card shows them.
+    arguments: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB, nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

@@ -6,7 +6,7 @@ A row is pending until a step or a new run consumes it; consuming deletes it.
 from collections.abc import Callable, Collection, Iterable
 from uuid import UUID, uuid4
 
-from sqlalchemy import Select, and_, delete, func, or_, select, type_coerce
+from sqlalchemy import Select, and_, delete, exists, func, or_, select, type_coerce
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Session, aliased, selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -29,7 +29,6 @@ from onyx.chat.models import (
     AgentWait,
     ChatBranch,
     ChatInbox,
-    ParkedAgentRun,
     PendingChatMessage,
     QueuedChatTurn,
 )
@@ -59,6 +58,7 @@ from onyx.db.chat_subagents import (
 from onyx.db.models import (
     ChatInput,
     ChatMessage,
+    ChatResponseCheckpoint,
     ChatResponseItem,
     ChatSession,
     ToolCall,
@@ -448,37 +448,26 @@ def read_chat_inbox(session: Session, chat_session_id: UUID) -> ChatInbox:
     inbox = ChatInbox(
         branch=branch, selected_response_id=selected.id if selected else None
     )
-    # Only conversations with inbox rows have queued turns or child work. Every
-    # background agent run has its result row until its spawner reads it.
-    has_inputs = has_chat_inputs(session, chat_session_id)
-    if has_inputs:
-        inbox.results = agent_result_states(session, branch.message_ids)
-    # A parked run continues once no request of its response waits and no run
-    # that it waits for is unfinished: its foreground children, and a
-    # subagent's delegated runs; the root does not wait for delegated runs.
-    # Parked foreground children are found through their parents' checkpoints.
-    parked = {
-        result.response_id: str(result.agent_id)
-        for result in inbox.results
-        if result.status == RunStatus.SUSPENDED
-        and not any(
-            other.recipient_id == result.agent_id and other.is_active
-            for other in inbox.results
-        )
-    }
-    if selected is not None and selected.response_status == RunStatus.SUSPENDED:
-        parked[selected.id] = str(chat_session_id)
-    for response_id, agent_id in resumable_parked_runs(session, parked).items():
-        if selected is not None and response_id == selected.id:
-            inbox.resumable_response_id = response_id
-        else:
-            inbox.resumable_agent_runs.append(
-                ParkedAgentRun(agent_id=agent_id, response_id=response_id)
+    inbox.resumable_runs = resumable_parked_runs(session, chat_session_id)
+    # A selected response that is active and not parked has, or had, an owner.
+    if selected is not None and (
+        selected.response_status == RunStatus.RUNNING
+        or (
+            selected.response_status == RunStatus.SUSPENDED
+            and not session.scalar(
+                select(
+                    exists().where(
+                        ChatResponseCheckpoint.chat_message_id == selected.id
+                    )
+                )
             )
-    if not has_inputs:
-        return inbox
-    if selected is not None and selected.response_status == RunStatus.RUNNING:
+        )
+    ):
         inbox.running_response_ids.append(selected.id)
+    # Only conversations with inbox rows have queued turns or child work.
+    if not has_chat_inputs(session, chat_session_id):
+        return inbox
+    inbox.results = agent_result_states(session, branch.message_ids)
     inbox.running_response_ids.extend(
         result.response_id for result in inbox.results if result.is_running
     )
@@ -617,8 +606,16 @@ def agent_result_states(
             ChatInput.root_response_id.label("root_response_id"),
             ChatMessage.response_status.label("status"),
             ChatMessage.response_failure.label("failure"),
+            and_(
+                ChatMessage.response_status == RunStatus.SUSPENDED,
+                ChatResponseCheckpoint.chat_message_id.is_not(None),
+            ).label("parked"),
         )
         .join(ChatMessage, ChatMessage.id == ChatInput.source_response_id)
+        .outerjoin(
+            ChatResponseCheckpoint,
+            ChatResponseCheckpoint.chat_message_id == ChatMessage.id,
+        )
         .where(_results_on_branch(visible_ids))
         .order_by(ChatInput.id)
     )

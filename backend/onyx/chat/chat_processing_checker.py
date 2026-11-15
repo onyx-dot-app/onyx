@@ -1,5 +1,7 @@
+import json
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from typing import NamedTuple
 from uuid import UUID, uuid4
 
 from onyx.cache.interface import (
@@ -38,6 +40,13 @@ def _get_fence_key(chat_session_id: UUID) -> str:
         by the cache backend (Redis key-prefixing or Postgres schema routing).
     """
     return f"{FENCE_PREFIX}_{chat_session_id}"
+
+
+class ProcessingStream(NamedTuple):
+    """The stream that a session's turn publishes, and the responses it writes."""
+
+    stream_id: int
+    response_ids: list[int]
 
 
 def _preparation_stop_key(chat_session_id: UUID) -> str:
@@ -124,7 +133,7 @@ class ChatTurnAdmission:
             self._last_refresh = started
             return
 
-    def publish(self, stream_id: int) -> None:
+    def publish(self, stream_id: int, response_ids: Sequence[int]) -> None:
         session_id = self._session_id
         if session_id is None:
             raise RuntimeError("Chat turn has no admission")
@@ -133,7 +142,9 @@ class ChatTurnAdmission:
         try:
             self._renew_owner(session_id, ACTIVE_LEASE_SECONDS)
             self.cache.set(
-                _get_fence_key(session_id), stream_id, ex=self._lease_seconds
+                _get_fence_key(session_id),
+                json.dumps([stream_id, list(response_ids)]),
+                ex=self._lease_seconds,
             )
             # A Stop that arrived during preparation applies to this stream.
             if self.cache.exists(_preparation_stop_key(session_id)):
@@ -210,9 +221,9 @@ def stop_current_turn(
         current = current_turn_owner(chat_session_id, cache)
         if current is None or (owner is not None and current != owner):
             return
-        stream_id = get_processing_stream_id(chat_session_id, cache)
-        if stream_id is not None:
-            request_stop(chat_session_id, cache, stream_id=stream_id)
+        stream = get_processing_stream(chat_session_id, cache)
+        if stream is not None:
+            request_stop(chat_session_id, cache, stream_id=stream.stream_id)
         else:
             cache.set(
                 _preparation_stop_key(chat_session_id),
@@ -223,24 +234,30 @@ def stop_current_turn(
         lock.release()
 
 
-def get_processing_stream_id(chat_session_id: UUID, cache: CacheBackend) -> int | None:
-    """Stream ID of the session's in-flight stream buffer, or None when idle or the
-    fence carries no stream ID."""
+def get_processing_stream(
+    chat_session_id: UUID, cache: CacheBackend
+) -> ProcessingStream | None:
+    """The session's in-flight stream and its responses; None when idle or the
+    fence carries no stream."""
     if not is_chat_session_processing(chat_session_id, cache):
         return None
     raw = cache.get(_get_fence_key(chat_session_id))
     if raw is None:
         return None
     try:
-        stream_id = int(raw.decode("utf-8") if isinstance(raw, bytes) else str(raw))
-    except (TypeError, ValueError, UnicodeDecodeError):
+        value = json.loads(raw)
+        # A fence that a server without response IDs wrote holds the stream ID.
+        stream = (
+            ProcessingStream(int(value[0]), [int(item) for item in value[1]])
+            if isinstance(value, list)
+            else ProcessingStream(int(value), [])
+        )
+    except (TypeError, ValueError, IndexError):
         logger.warning(
-            "invalid processing stream ID for session %s: %r",
-            chat_session_id,
-            raw,
+            "invalid processing stream for session %s: %r", chat_session_id, raw
         )
         return None
-    return stream_id if stream_id > 0 else None
+    return stream if stream.stream_id > 0 else None
 
 
 def is_chat_session_processing(chat_session_id: UUID, cache: CacheBackend) -> bool:

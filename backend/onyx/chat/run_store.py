@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from uuid import UUID, uuid4
 
+from botocore.exceptions import BotoCoreError, ClientError
 from redis.exceptions import RedisError
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.exc import TimeoutError as DatabaseTimeoutError
@@ -64,7 +65,6 @@ from onyx.chat.response import (
 )
 from onyx.chat.restoration import persist_checkpoint_files
 from onyx.chat.tool_approvals import (
-    ended_answer,
     open_tool_approval,
     tool_answer,
 )
@@ -97,7 +97,6 @@ from onyx.db.chat_inputs import (
 )
 from onyx.db.chat_response import (
     abort_response_start__no_commit,
-    agent_approval_anchor,
     find_response__no_commit,
     finish_checkpoint__no_commit,
     read_response__no_commit,
@@ -116,10 +115,9 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
 from onyx.db.models import User
 from onyx.db.skill import list_chat_skills
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
-from onyx.server.query_and_chat.streaming_models import ToolApprovalRequest
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import SPAWN_AGENT_TOOL_NAME
@@ -137,6 +135,8 @@ OWNER_EXPIRY_MARGIN_SECONDS = 5.0
 OWNER_LOCK_SECONDS = 30
 OWNER_LOCK_WAIT_SECONDS = 10
 STOP_TTL_SECONDS = 600
+# The context of logs about parked programs' dumps that checkpoints owned.
+_DUMP_CLEANUP = "parked program dumps"
 RESUME_FAILED_MESSAGE = (
     "This response could not continue after the approval. Send the message again."
 )
@@ -147,12 +147,20 @@ MAX_RUNNING_AGENTS = 10
 MAX_AGENT_COMPLETIONS_PER_STEP = 8
 RESPONSE_OWNER_KEY_PREFIX = "chat_response_owner:"
 # Start failures that a later poll retries; other failures end the inbox work.
-_RETRYABLE_START_ERRORS = (
+RETRYABLE_START_ERRORS = (
     OperationalError,
     DatabaseTimeoutError,
     RedisError,
     TimeoutError,
     AgentBusy,
+)
+# A park that fails with these keeps the run resident, and a later control
+# poll tries again: the run changed, or storage failed for a moment.
+_RETRYABLE_PARK_ERRORS = (
+    RunNotTransferable,
+    *RETRYABLE_START_ERRORS,
+    BotoCoreError,
+    ClientError,
 )
 
 
@@ -181,15 +189,6 @@ def ownerless_response_ids(
     )
 
 
-def _delete_dumps(file_ids: Collection[str]) -> None:
-    """Delete the dumps of the parked programs of responses that ended."""
-    for file_id in file_ids:
-        try:
-            get_default_file_store().delete_file(file_id, error_on_missing=False)
-        except Exception:
-            logger.exception("Could not delete the dump of a parked program")
-
-
 def interrupt_ownerless_responses(
     cache: CacheBackend, tenant_id: str, response_ids: Collection[int]
 ) -> set[int]:
@@ -206,13 +205,13 @@ def interrupt_ownerless_responses(
                 continue
             with get_session_with_tenant(tenant_id=tenant_id) as session:
                 ended = interrupt_response__no_commit(
-                    session, response_id, running_only=True
+                    session, response_id, keep_parked=True
                 )
                 session.commit()
         if ended is not None:
             interrupted.add(response_id)
             dumps.extend(ended)
-    _delete_dumps(dumps)
+    delete_files_best_effort(dumps, _DUMP_CLEANUP)
     return interrupted
 
 
@@ -234,7 +233,7 @@ def fail_suspended_response(
                 ),
             )
             session.commit()
-    _delete_dumps(dumps or [])
+    delete_files_best_effort(dumps or [], _DUMP_CLEANUP)
 
 
 def _stop_key(response_id: int) -> str:
@@ -268,7 +267,7 @@ def stop_response(
                 failure=cancellation_failure(reason),
             )
             session.commit()
-    _delete_dumps(dumps or [])
+    delete_files_best_effort(dumps or [], _DUMP_CLEANUP)
 
 
 def agent_result_message(completion: AgentCompletion) -> UserMessage:
@@ -351,8 +350,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         on_child_released: Callable[[], None] | None = None,
         tools: Sequence[Tool] = (),
         answers_agent_results: bool = False,
-        on_agent_approval: Callable[[tuple[str, str, str], ToolApprovalRequest], None]
-        | None = None,
+        on_root_parked: Callable[[Run], None] | None = None,
     ) -> None:
         self.tenant_id = tenant_id
         # The root response answers unread agent results under a hidden
@@ -377,28 +375,26 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._root_response = root_response
         self._restore_subagent = restore_subagent
         self._on_child_released = on_child_released
-        # Shows a background agent's request at once in the live stream of the
-        # root response that started the agent, at that call's card (by run,
-        # message and call ID).
-        self._on_agent_approval = on_agent_approval
+        # Reports that the root run parked, so its turn ends.
+        self._on_root_parked = on_root_parked
         self._lock = threading.Lock()
         self._owned: dict[int, _OwnedRun] = {}
         self._leases: dict[int, _OwnerLease] = {}
         self._coordinator: AgentCoordinator | None = None
         self._build_agent: Callable[[ExecutionCheckpoint, int], Agent] | None = None
         self._pending_dispatch = False
-        # Child runs that wait on other runs park after a storage read, so the
+        # Runs that wait on other runs park after a storage read, so the
         # control poll checks them at the inbox poll interval.
         self._next_park_poll = 0.0
         # Children still running on the branch can finish in another store. The
         # first poll scans, which also finds inbox work left by earlier turns.
         self._has_running_children = True
         self._next_input_poll = 0.0
-        # The gated actions of the tools whose calls wait for approval.
+        # The gated actions of the tools whose calls wait for approval, and
+        # the display names that their requests save.
         self._approval_scopes: dict[str, ToolApprovalScope] = {
             tool.name: tool.approval for tool in tools if tool.approval is not None
         }
-        # The approval records of calls name their tools' display names.
         self._display_names = {tool.name: tool.display_name for tool in tools}
         # Result follow-ups use the step limit of this store's chat agent.
         self._follow_up_steps = follow_up_steps
@@ -696,20 +692,22 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
     def _is_follow_up(self, run: Run) -> bool:
         return self._answers_agent_results and run.agent_id == str(self.chat_session_id)
 
-    def _read_inbox(self) -> ChatInbox | None:
-        """Read the inbox; None when this store's response left the selected branch."""
+    def _read_inbox(self) -> tuple[ChatInbox, bool]:
+        """Read the inbox, and whether this store's response is on the
+        selected branch."""
         with get_session_with_tenant(tenant_id=self.tenant_id) as session:
             inbox = read_chat_inbox(session, self.chat_session_id)
-        return inbox if self._follow_selected_branch(inbox.branch) else None
+        return inbox, self._follow_selected_branch(inbox.branch)
 
     def _dispatch_messages(self) -> None:
-        """Resume parked children whose waits ended, then start idle children's
-        queued messages and result follow-ups.
+        """Resume parked agent runs of this store's branch whose waits ended,
+        then start idle children's queued messages and result follow-ups.
 
-        Scans run after a notification and while children run on the branch,
-        while this store's response stays selected. A failure here never stops
-        the turn: transient errors retry at a later poll, and work that cannot
-        start becomes a failed run.
+        Scans run after a notification and while children run on the branch.
+        Parked runs resume on the store's branch, selected or not; other work
+        starts only while this store's response stays selected. A failure here
+        never stops the turn: transient errors retry at a later poll, and work
+        that cannot start becomes a failed run.
         """
         coordinator = self._coordinator
         if coordinator is None:
@@ -725,14 +723,41 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             self._pending_dispatch = False
             self._next_input_poll = time.monotonic() + INPUT_POLL_SECONDS
         try:
-            inbox = self._read_inbox()
-            if inbox is not None and interrupt_ownerless_responses(
+            inbox, selected = self._read_inbox()
+            parked = [
+                run
+                for run in inbox.resumable_runs
+                if run.agent_id != str(self.chat_session_id)
+                and run.root_response_id in self.visible_response_ids
+            ]
+            for run in parked:
+                lock = self.cache.lock(
+                    f"chat_agent_dispatch:{run.agent_id}", timeout=OWNER_LOCK_SECONDS
+                )
+                if not lock.acquire(blocking_timeout=0):
+                    continue
+                try:
+                    # None: another store claimed it first.
+                    self.resume(
+                        str(run.response_id),
+                        deadline_at=datetime.now(timezone.utc)
+                        + timedelta(seconds=CHAT_EXECUTION_TIMEOUT_S),
+                    )
+                except RETRYABLE_START_ERRORS:
+                    raise
+                except Exception:
+                    logger.exception("Could not resume a parked agent run")
+                    fail_suspended_response(self.cache, self.tenant_id, run.response_id)
+                finally:
+                    lock.release()
+            if selected and interrupt_ownerless_responses(
                 self.cache, self.tenant_id, inbox.unfinished_response_ids
             ):
-                inbox = self._read_inbox()
-            if inbox is None:
+                inbox, selected = self._read_inbox()
+            if not selected:
                 with self._lock:
                     self._has_running_children = False
+                    self._pending_dispatch = self._pending_dispatch or bool(parked)
                 return
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 spawners = (
@@ -750,34 +775,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 # Starting one run per agent can leave more work for the next scan.
                 self._pending_dispatch = (
                     self._pending_dispatch
-                    or bool(inbox.child_work or inbox.resumable_agent_runs)
+                    or bool(inbox.child_work or parked)
                     or waiting
                 )
                 self._has_running_children = any(
                     result.is_active for result in inbox.results
                 )
-            for parked in inbox.resumable_agent_runs:
-                lock = self.cache.lock(
-                    f"chat_agent_dispatch:{parked.agent_id}", timeout=OWNER_LOCK_SECONDS
-                )
-                if not lock.acquire(blocking_timeout=0):
-                    continue
-                try:
-                    # None: another store claimed it first.
-                    self.resume(
-                        str(parked.response_id),
-                        deadline_at=datetime.now(timezone.utc)
-                        + timedelta(seconds=CHAT_EXECUTION_TIMEOUT_S),
-                    )
-                except _RETRYABLE_START_ERRORS:
-                    raise
-                except Exception:
-                    logger.exception("Could not resume a parked agent run")
-                    fail_suspended_response(
-                        self.cache, self.tenant_id, parked.response_id
-                    )
-                finally:
-                    lock.release()
             for work in inbox.child_work:
                 # Stores of several turns on one branch scan the same inbox. This
                 # lock keeps them from restoring one agent twice; the reservation's
@@ -807,7 +810,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     )
                 except _MessageChanged:
                     continue
-                except _RETRYABLE_START_ERRORS:
+                except RETRYABLE_START_ERRORS:
                     raise
                 except Exception:
                     logger.exception("Could not start agent inbox work")
@@ -821,7 +824,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         session.commit()
                 finally:
                     lock.release()
-        except _RETRYABLE_START_ERRORS:
+        except RETRYABLE_START_ERRORS:
             with self._lock:
                 self._pending_dispatch |= pending
             logger.exception(
@@ -897,6 +900,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         record = display.response if display is not None else self._record(snapshot)
         if record is None:
             raise ValueError("Response projection has no accepted content")
+        dumps: list[str] = []
         with _ownership_lock(self.cache, response_id):
             self._require_owner(owned)
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -904,28 +908,29 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     session, response_id, owned.owner.ownership_version
                 )
                 if snapshot.status.is_terminal:
-                    finish_checkpoint__no_commit(session, response_id)
+                    dumps = finish_checkpoint__no_commit(session, response_id)
                 if display is None:
                     save_response_record__no_commit(
                         session, owned.owner.root_message_id, record
                     )
                     session.commit()
-                    return
-                response = find_response__no_commit(session, response_id)
-                if response is None:
-                    raise ValueError("Child response is unavailable")
-                save_chat_turn(
-                    message_text=display.answer or "",
-                    reasoning_tokens=display.reasoning,
-                    tool_calls=display.tool_calls,
-                    citation_to_doc=display.citation_to_doc,
-                    all_search_docs=display.all_search_docs,
-                    db_session=session,
-                    assistant_message=response,
-                    request_params=display.request_params,
-                    response_record=record,
-                    presentation=display.presentation,
-                )
+                else:
+                    response = find_response__no_commit(session, response_id)
+                    if response is None:
+                        raise ValueError("Child response is unavailable")
+                    save_chat_turn(
+                        message_text=display.answer or "",
+                        reasoning_tokens=display.reasoning,
+                        tool_calls=display.tool_calls,
+                        citation_to_doc=display.citation_to_doc,
+                        all_search_docs=display.all_search_docs,
+                        db_session=session,
+                        assistant_message=response,
+                        request_params=display.request_params,
+                        response_record=record,
+                        presentation=display.presentation,
+                    )
+        delete_files_best_effort(dumps, _DUMP_CLEANUP)
 
     def _claim_reservation(
         self,
@@ -1314,23 +1319,27 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if time.monotonic() >= self._next_park_poll:
             self._next_park_poll = time.monotonic() + INPUT_POLL_SECONDS
             with self._lock:
-                children = [
-                    owned.run
-                    for response_id, owned in self._owned.items()
-                    if response_id != self.response_id
-                ]
-            for child in children:
-                # Its release dispatches, as every child release does.
-                if not self.may_park(child):
+                runs = [owned.run for owned in self._owned.values()]
+            for run in runs:
+                if not self.may_park(run):
                     continue
                 try:
-                    self.handoff(child.id)
-                except RunNotTransferable:
-                    logger.debug("A waiting agent run changed before it parked")
+                    self.handoff(run.id)
+                except _RETRYABLE_PARK_ERRORS:
+                    logger.info(
+                        "Run %s did not park; a later poll tries again",
+                        run.id,
+                        exc_info=True,
+                    )
+                    continue
                 except Exception:
                     # The run ends instead, and its requests end with it.
-                    logger.exception("Could not park a waiting agent run")
-                    child.cancel()
+                    logger.exception("Could not park a waiting run")
+                    run.cancel()
+                    continue
+                # A child's release dispatches, as every child release does.
+                if int(run.id) == self.response_id and self._on_root_parked:
+                    self._on_root_parked(run)
         self._dispatch_messages()
 
     def may_park(self, run: Run) -> bool:
@@ -1367,7 +1376,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self, run: Run, tool_call: ToolCall, nested_call: ToolCall | None
     ) -> PendingToolInput | ToolResult | None:
         call = nested_call or tool_call
-        result = open_tool_approval(
+        return open_tool_approval(
             tenant_id=self.tenant_id,
             chat_session_id=self.chat_session_id,
             response_id=int(run.id),
@@ -1375,61 +1384,31 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             tool_call_id=tool_call.id,
             tool_name=call.name,
             display_name=self._display_names.get(call.name, call.name),
+            arguments=tool_arguments_for_display(call),
             scope=self._approval_scopes[call.name],
             # Only the chat's signed-in owner can decide.
             signed_out=self._user.is_anonymous,
         )
-        if (
-            isinstance(result, PendingToolInput)
-            and self._on_agent_approval is not None
-            and run.parent_run_id is not None
-        ):
-            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                anchor = agent_approval_anchor(session, int(run.id))
-            registration = (
-                self._coordinator.registration(run.agent_id)
-                if self._coordinator
-                else None
-            )
-            if anchor is not None and registration is not None:
-                self._on_agent_approval(
-                    anchor,
-                    ToolApprovalRequest(
-                        approval_id=result.request_id,
-                        tool_call_id=anchor[2],
-                        tool_name=call.name,
-                        display_name=self._display_names.get(call.name, call.name),
-                        arguments=tool_arguments_for_display(call),
-                        agent_name=registration.path.rsplit("/", 1)[-1],
-                    ),
-                )
-        return result
 
-    def withdraw_approval(self, request_id: str) -> HumanToolAnswer | None:
-        approval_id = UUID(request_id)
+    def withdraw_approval(self, request_id: str) -> None:
         try:
             with get_session_with_tenant(tenant_id=self.tenant_id) as session:
                 close_pending_approval_requests__no_commit(
                     session,
                     ApprovalDecision.EXPIRED,
                     None,
-                    approval_ids=[approval_id],
+                    approval_ids=[UUID(request_id)],
                 )
-                row = get_approval_requests(session, [approval_id]).get(approval_id)
-                # A deleted request has no decision; its call just stops waiting.
-                ended = SavedToolApproval.model_validate(row) if row else None
                 session.commit()
         except Exception:
             logger.exception("Could not end a tool approval request")
-            return None
-        return ended_answer(ended) if ended is not None else None
 
     def reject_waiting_approvals(self) -> None:
         """Save the user's Stop as the rejection of the approval requests that
-        the root run and its foreground descendants wait on: the runs that the
-        Stop cancels. They then end, and their requests end with the rejection
-        (`withdraw_approval`). A decision saved first wins. Background agents
-        keep running and keep their requests."""
+        the root run and its foreground descendants wait on, the runs that the
+        Stop cancels, and give each run its answers as it cancels. A decision
+        saved first wins. Background agents keep running and keep their
+        requests."""
         with self._lock:
             owned = {response_id: item.run for response_id, item in self._owned.items()}
         runs: list[Run] = []
@@ -1444,31 +1423,57 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     owned.get(int(child_id))
                     for child_id in run.coordination.pending_children()
                 )
-        approval_ids = [
-            UUID(request.request_id)
+        waits = {
+            run.id: [
+                UUID(request.request_id)
+                for request in run.pending_inputs
+                if request.approval
+            ]
             for run in runs
-            for request in run.pending_inputs
-            if request.approval
-        ]
-        if not approval_ids:
-            return
-        try:
-            with get_session_with_tenant(tenant_id=self.tenant_id) as session:
-                close_pending_approval_requests__no_commit(
-                    session,
-                    ApprovalDecision.REJECTED,
-                    ApprovalDecidedVia.USER,
-                    approval_ids=approval_ids,
-                )
-                session.commit()
-        except Exception:
-            logger.exception("Could not reject the tool approvals of a Stop")
+        }
+        approval_ids = [approval_id for ids in waits.values() for approval_id in ids]
+        answers: dict[UUID, HumanToolAnswer] = {}
+        if approval_ids:
+            try:
+                with get_session_with_tenant(tenant_id=self.tenant_id) as session:
+                    close_pending_approval_requests__no_commit(
+                        session,
+                        ApprovalDecision.REJECTED,
+                        ApprovalDecidedVia.USER,
+                        approval_ids=approval_ids,
+                    )
+                    rows = get_approval_requests(session, approval_ids)
+                    session.commit()
+                answers = {
+                    approval_id: tool_answer(
+                        approval_id, SavedToolApproval.model_validate(row)
+                    )
+                    for approval_id, row in rows.items()
+                    if row.decision is not None
+                }
+            except Exception:
+                logger.exception("Could not reject the tool approvals of a Stop")
+        for run in runs:
+            # The run applies its answers only after it sees the Stop.
+            with run.execution_lock:
+                for approval_id in waits[run.id]:
+                    answer = answers.get(approval_id)
+                    if answer is None:
+                        continue
+                    try:
+                        run.submit(answer)
+                    except Exception:
+                        logger.exception("Run %s did not take a Stop's answer", run.id)
+                run.cancel()
 
     def handoff(self, run_id: str) -> None:
         """Save a paused run before releasing ownership for another API pod.
 
         Its foreground children must have ended or parked. A child run's
-        checkpoint binds to its agent's saved history (`_child_context`).
+        checkpoint binds to its agent's saved history (`_child_context`). The
+        checkpoint owns the dumps of the run's parked programs: they are
+        deleted when the save fails, and when the checkpoint ends or a new one
+        replaces it. Raises RunNotTransferable when the run changed.
         """
         response_id = int(run_id)
         with self._lock:
@@ -1476,7 +1481,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         if owned.run.status != RunStatus.SUSPENDED or not owned.run.wait_for_idle(
             timeout=OPERATION_TIMEOUT_SECONDS
         ):
-            raise ValueError("Response must be suspended and idle before release")
+            raise RunNotTransferable("Response must be suspended and idle")
         captured = owned.run.capture()
         progress = captured.run_state.progress
         if progress is None:
@@ -1493,13 +1498,14 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                     "agent_state": self._child_context(owned.run.agent_id, response_id)
                 }
             )
-        self._with_tenant(
+        dumps = self._with_tenant(
             lambda: persist_checkpoint_files(captured, session_id=self.chat_session_id)
         )
-        record = self._record(captured.run_state)
-        data = serialize_checkpoint(captured, record, self._binding(response_id))
+        # The dumps of the checkpoint that this one replaced, once it is saved.
+        replaced: list[str] | None = None
 
         def save(_checkpoint: ExecutionCheckpoint) -> None:
+            nonlocal replaced
             with _ownership_lock(self.cache, response_id):
                 self._require_owner(owned)
                 with get_session_with_tenant(tenant_id=self.tenant_id) as session:
@@ -1520,15 +1526,26 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                         captured.agent_state,
                         self._binding(response_id),
                     )
-                    publish_checkpoint__no_commit(
+                    dropped = publish_checkpoint__no_commit(
                         session,
                         response_id,
                         data,
                         expected_ownership_version=owned.owner.ownership_version,
+                        child_run_ids=[int(child) for child in progress.child_run_ids],
+                        dump_file_ids=dumps,
                     )
                     session.commit()
+                    replaced = dropped
 
-        owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
+        try:
+            record = self._record(captured.run_state)
+            data = serialize_checkpoint(captured, record, self._binding(response_id))
+            owned.run.handoff(expected_revision=captured.run_state.revision, save=save)
+        except BaseException:
+            if replaced is None:
+                delete_files_best_effort(dumps, _DUMP_CLEANUP)
+            raise
+        delete_files_best_effort(replaced or [], _DUMP_CLEANUP)
 
     def resume(
         self,

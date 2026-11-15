@@ -12,7 +12,7 @@ from onyx.cache.interface import CacheBackend, CacheLockLostError
 from onyx.chat.chat_processing_checker import (
     ChatTurnAdmission,
     current_turn_owner,
-    get_processing_stream_id,
+    get_processing_stream,
     is_chat_session_processing,
     stop_current_turn,
 )
@@ -44,7 +44,7 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
             outcomes = [cast(bool, task.result()) for task in tasks]
         assert sorted(outcomes) == [False, True]
         old = admissions[outcomes.index(True)]
-        old.publish(11)
+        old.publish(11, [])
         old.check_owner(session_id)
         assert is_chat_session_processing(session_id, cache)
         # Remove both expired records before another process claims the session.
@@ -53,16 +53,16 @@ def test_concurrent_claim_and_stale_owner_cleanup(cache: CacheBackend) -> None:
         new = ChatTurnAdmission(cache)
         admissions.append(new)
         new.claim(session_id)
-        new.publish(12)
+        new.publish(12, [])
         new.check_owner(session_id)
         with pytest.raises(CacheLockLostError):
             old.check_owner(session_id)
         with pytest.raises(CacheLockLostError):
-            old.publish(11)
+            old.publish(11, [])
         with pytest.raises(CacheLockLostError):
             old.refresh()
         old.release()
-        assert get_processing_stream_id(session_id, cache) == 12
+        assert get_processing_stream(session_id, cache) == (12, [])
         new.refresh()
         new.release()
         assert not is_chat_session_processing(session_id, cache)
@@ -91,7 +91,7 @@ def test_stop_targets_the_turn_that_holds_admission(cache: CacheBackend) -> None
         assert cache.ttl(preparation_stop) > 5
         first.release()
         second.claim(session_id)
-        second.publish(21)
+        second.publish(21, [])
         assert not is_stop_requested(session_id, cache, stream_id=21)
         # A Stop aimed at the finished turn does not reach the next one.
         stop_current_turn(session_id, cache, owner=finished)

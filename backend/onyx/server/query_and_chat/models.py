@@ -315,10 +315,23 @@ class ChatApprovalDecisionRequest(DecisionBody):
     mcp_headers: dict[str, str] | None = None
 
 
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
+
+    stream_id: int
+    # The responses that the stream writes. A stream that continues a response
+    # after its approvals has an ID that no message has.
+    response_ids: list[int] = Field(default_factory=list)
+
+
 class ApprovalDecisionResponse(BaseModel):
     approval_id: UUID
     decision: Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]
     decided_via: ApprovalDecidedVia
+    # The stream that continues the request's response, when the decision
+    # started it or found it running; None while the response still waits, or
+    # for a background agent's request, which continues without a stream.
+    continuation: CurrentStreamInfo | None = None
 
 
 class StopSubagentsResponse(BaseModel):
@@ -399,12 +412,6 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentStreamInfo(BaseModel):
-    """Unfinished response available for stream reconnection."""
-
-    stream_id: int
-
-
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
     # Background agents are active on the selected branch, or their queued work waits.
@@ -414,9 +421,9 @@ class ChatSessionProcessingStatus(BaseModel):
     # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
-    # The approval requests on the selected branch that wait for the user,
-    # from the root and from background agents.
-    pending_approval_ids: list[UUID] = Field(default_factory=list)
+    # Changes when an approval request of the chat opens, is decided or is
+    # removed; reload the session to show the requests. Opaque.
+    approvals_version: str = ""
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -445,6 +452,8 @@ class ChatSessionDetailResponse(BaseModel):
     has_older_messages: bool = False
     # The owner's saved tools and search filters; NULL means the agent's tools.
     tool_selection: ChatToolSelection | None = None
+    # The status route's `approvals_version` for the requests this load shows.
+    approvals_version: str = ""
 
 
 class AdminSearchRequest(BaseModel):

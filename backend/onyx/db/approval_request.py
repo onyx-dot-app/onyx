@@ -3,6 +3,7 @@
 from collections.abc import Collection
 from uuid import UUID
 
+from pydantic import JsonValue
 from sqlalchemy import and_, exists, func, insert, or_, select, update
 from sqlalchemy.orm import Session
 
@@ -31,6 +32,7 @@ def create_approval_request__no_commit(
     tool_call_id: str,
     tool_name: str,
     display_name: str,
+    arguments: dict[str, JsonValue],
 ) -> UUID:
     return db_session.execute(
         insert(ApprovalRequest)
@@ -42,6 +44,7 @@ def create_approval_request__no_commit(
             tool_call_id=tool_call_id,
             tool_name=tool_name,
             display_name=display_name,
+            arguments=arguments,
         )
         .returning(ApprovalRequest.id)
     ).scalar_one()
@@ -176,33 +179,15 @@ def get_response_approval_requests(
     )
 
 
-def pending_approval_ids(
-    db_session: Session, chat_message_ids: Collection[int]
-) -> list[UUID]:
-    """The pending requests of these responses, in the order they were made."""
-    return list(
-        db_session.scalars(
-            select(ApprovalRequest.id)
-            .where(
-                ApprovalRequest.chat_message_id.in_(chat_message_ids),
-                ApprovalRequest.decision.is_(None),
-            )
-            .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
-        )
-    )
-
-
-def responses_waiting_for_approval(
-    db_session: Session, chat_message_ids: Collection[int]
-) -> set[int]:
-    """The responses among `chat_message_ids` with a pending request."""
-    return set(
-        db_session.scalars(
-            select(ApprovalRequest.chat_message_id)
-            .where(
-                ApprovalRequest.chat_message_id.in_(chat_message_ids),
-                ApprovalRequest.decision.is_(None),
-            )
-            .distinct()
-        )
-    )
+def approvals_version(db_session: Session, chat_session_id: UUID) -> str:
+    """A marker that changes when a request of the chat opens, is decided or is
+    deleted, for clients that show the requests of a saved chat."""
+    marker = db_session.execute(
+        select(
+            func.count(),
+            func.count(ApprovalRequest.decision),
+            func.max(ApprovalRequest.created_at),
+            func.max(ApprovalRequest.decided_at),
+        ).where(ApprovalRequest.chat_session_id == chat_session_id)
+    ).one()
+    return "/".join(str(value) for value in marker)

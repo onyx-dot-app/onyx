@@ -658,8 +658,10 @@ class TestRunModels:
         setup.cache = setup.admission.cache = FakeCache()
         setup.stream_id = 7
         at_publish: list[StreamChunkRead | None] = []
-        setup.admission.publish.side_effect = lambda stream_id: at_publish.append(
-            read_stream_chunks(setup.cache, setup.chat_session_id, stream_id, 0)
+        setup.admission.publish.side_effect = lambda stream_id, _responses: (
+            at_publish.append(
+                read_stream_chunks(setup.cache, setup.chat_session_id, stream_id, 0)
+            )
         )
 
         with (
@@ -1699,7 +1701,9 @@ def test_message_ids_match_replay_prefix_before_response_output(
     def emit_response(
         *, emitter: Emitter, **_kwargs: LLM | Future[ChatResponseOutcome]
     ) -> None:
-        setup.admission.publish.assert_called_once_with(setup.stream_id)
+        setup.admission.publish.assert_called_once_with(
+            setup.stream_id, [response.message_id for response in setup.responses]
+        )
         emitter.emit(response)
 
     with (
@@ -1722,7 +1726,9 @@ def test_message_ids_match_replay_prefix_before_response_output(
         )
         try:
             assert [next(stream) for _ in expected] == expected
-            setup.admission.publish.assert_called_once_with(setup.stream_id)
+            setup.admission.publish.assert_called_once_with(
+                setup.stream_id, [response.message_id for response in setup.responses]
+            )
             packets = list(stream)
             assert len(packets) == len(setup.responses)
             assert all(isinstance(packet, Packet) for packet in packets)

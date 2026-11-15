@@ -3,18 +3,23 @@
 Tool construction materializes each tool's action policy: a tool whose policy
 asks carries a `ToolApprovalScope`, and the runtime gates its calls. The
 store of the run that calls, the root's or a subagent's, opens each request
-here (`ChatRunStore.request_approval`). A run whose waits are all on people,
-on its requests or on runs that wait the same way, hands off: its checkpoint
-is saved and its pod is free. The user decides through the decision API,
-which saves the decision; once no request of the response waits, dispatch
-resumes the run on any pod (`ChatRunStore.resume`), which answers each
-waiting call from its saved decision. The user's Stop of a live turn saves a
-rejection of the requests that the turn's runs wait on
-(`ChatRunStore.reject_waiting_approvals`). A saved request gives the same
-answer to its call, and to its record in the saved response.
+here (`ChatRunStore.request_approval`). The request row holds what the card
+shows: the tool's display name and the call's arguments. A run whose waits
+are all on people, on its requests or on runs that wait the same way, hands
+off: its checkpoint is saved and its pod is free. The user decides through
+the decision API, which saves the decision; once no request of the response
+waits, dispatch resumes the run on any pod (`ChatRunStore.resume`), which
+answers each waiting call from its saved decision. The user's Stop of a live
+turn saves a rejection of the requests that the turn's runs wait on and
+gives it to those runs (`ChatRunStore.reject_waiting_approvals`). The store
+closes the requests of a run that ends when it releases the run. A saved
+request gives the same answer to its call, and to its record in the saved
+response.
 """
 
 from uuid import UUID
+
+from pydantic import JsonValue
 
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
@@ -49,6 +54,7 @@ def open_tool_approval(
     tool_call_id: str,
     tool_name: str,
     display_name: str,
+    arguments: dict[str, JsonValue],
     scope: ToolApprovalScope,
     signed_out: bool,
 ) -> PendingToolInput | ToolResult | None:
@@ -92,12 +98,14 @@ def open_tool_approval(
             tool_call_id=tool_call_id,
             tool_name=tool_name,
             display_name=display_name,
+            arguments=arguments,
         )
         db_session.commit()
     return PendingToolInput(
         request_id=str(approval_id),
         prompt=f"Allow {tool_name} to run?",
         mode=InputMode.EXECUTE,
+        display_name=display_name,
     )
 
 

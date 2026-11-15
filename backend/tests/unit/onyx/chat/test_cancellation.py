@@ -24,7 +24,7 @@ from onyx.chat.chat_processing_checker import (
     ACTIVE_LEASE_SECONDS,
     PREPARATION_LEASE_SECONDS,
     ChatTurnAdmission,
-    get_processing_stream_id,
+    get_processing_stream,
     is_chat_session_processing,
 )
 from onyx.chat.stop_signal_checker import (
@@ -169,7 +169,7 @@ def test_delayed_stop_and_cleanup_cannot_affect_next_request() -> None:
     session_id = uuid4()
     admission = ChatTurnAdmission(cache)
     admission.claim(session_id)
-    admission.publish(11)
+    admission.publish(11, [])
     request_stop(session_id, cache, stream_id=10)
     assert not is_stop_requested(session_id, cache, stream_id=11)
     request_stop(session_id, cache, stream_id=11)
@@ -273,10 +273,10 @@ def test_concurrent_admission_rejects_one_turn_before_stream_assignment() -> Non
         results = [cast(bool, task.result()) for task in tasks]
     assert sorted(results) == [False, True]
     assert is_chat_session_processing(session_id, cache)
-    assert get_processing_stream_id(session_id, cache) is None
+    assert get_processing_stream(session_id, cache) is None
     winner = admissions[results.index(True)]
-    winner.publish(17)
-    assert get_processing_stream_id(session_id, cache) == 17
+    winner.publish(17, [])
+    assert get_processing_stream(session_id, cache) == (17, [])
     winner.release()
     assert not is_chat_session_processing(session_id, cache)
 
@@ -286,19 +286,19 @@ def test_stale_turn_cannot_publish_refresh_or_release_new_admission() -> None:
     session_id = uuid4()
     old = ChatTurnAdmission(cache)
     old.claim(session_id)
-    old.publish(17)
+    old.publish(17, [])
     # Simulate expiry before a different pod admits the next turn.
     cache._store.clear()
     new = ChatTurnAdmission(cache)
     new.claim(session_id)
-    new.publish(18)
+    new.publish(18, [])
     with pytest.raises(CacheLockLostError):
-        old.publish(17)
+        old.publish(17, [])
     with pytest.raises(CacheLockLostError):
         old.refresh()
     old.release()
     assert is_chat_session_processing(session_id, cache)
-    assert get_processing_stream_id(session_id, cache) == 18
+    assert get_processing_stream(session_id, cache) == (18, [])
     new.refresh()
     new.release()
     assert not is_chat_session_processing(session_id, cache)
@@ -448,7 +448,7 @@ def test_published_turn_renews_both_keys_with_short_lease() -> None:
     marker_key = f"chatprocessing_fence_{session_id}"
     assert cache.ttl(owner_key) == PREPARATION_LEASE_SECONDS
     assert cache.ttl(marker_key) == PREPARATION_LEASE_SECONDS
-    admission.publish(17)
+    admission.publish(17, [])
     assert cache.ttl(owner_key) == ACTIVE_LEASE_SECONDS
     assert cache.ttl(marker_key) == ACTIVE_LEASE_SECONDS
     cache.expire(owner_key, 20)
@@ -470,16 +470,16 @@ def test_expired_owner_ignores_stale_marker_and_allows_next_turn() -> None:
     session_id = uuid4()
     old = ChatTurnAdmission(cache)
     old.claim(session_id)
-    old.publish(17)
+    old.publish(17, [])
     # Publication can shorten the owner lease before its marker write completes.
     cache.expire(f"chatprocessing_fence_{session_id}", PREPARATION_LEASE_SECONDS)
     cache.delete(f"chatprocessing_owner_{session_id}")
     assert not is_chat_session_processing(session_id, cache)
-    assert get_processing_stream_id(session_id, cache) is None
+    assert get_processing_stream(session_id, cache) is None
     new = ChatTurnAdmission(cache)
     new.claim(session_id)
-    assert get_processing_stream_id(session_id, cache) is None
-    new.publish(18)
+    assert get_processing_stream(session_id, cache) is None
+    new.publish(18, [])
     old.release()
-    assert get_processing_stream_id(session_id, cache) == 18
+    assert get_processing_stream(session_id, cache) == (18, [])
     new.release()

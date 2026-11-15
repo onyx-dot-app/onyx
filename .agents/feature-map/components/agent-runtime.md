@@ -174,9 +174,10 @@ agent suspend the parent on `ChildRunWait`, and it continues in the same
 process. Checkpoint transfer is live for chat tool approvals only: the runtime
 gates calls of `AgentTool.approval_required` through the coordinator's
 `ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
-run whose waits are all on people hands off: the root through
-`chat/execution.py:ChatTurnExecution._hand_off`, an agent run through
-`ChatRunStore.poll_control`, both after `ChatRunStore.may_park`. A parent
+run whose waits are all on people hands off in one park pass of
+`ChatRunStore.poll_control` after `ChatRunStore.may_park`, the root included;
+the root reports its park to its turn through the store's `on_root_parked`
+callback. A parent
 hands off after its waiting foreground children hand off
 (`agents/agent_coordination.py:RunCoordination.validate_handoff`). Decisions
 resume each run on any pod through chat dispatch (`ChatRunStore.resume` with
@@ -184,16 +185,18 @@ the saved answers), the leaf first
 ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A code mode program's
 call waits in a saved `NestedInputWait`
 ([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
-`Run.suspend` or `Run.submit`. `chat/run_store.py:ChatRunStore.restore_agent`
+`Run.suspend`. Only a user Stop calls `Run.submit`:
+`ChatRunStore.reject_waiting_approvals` gives each live run that the Stop
+cancels its saved rejections, then cancels it, under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
 loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
 rebuilds it with the current request's tools and settings. Product saves lock
 the response, check the checkpoint owner and delete any row at a terminal
 status.
 To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
-and ignore thread-pool `submit` calls and code mode `state.resume`. Expect
-only `chat/execution.py` (`handoff`, `resume`) and
-`chat/tool_approvals.py:open_tool_approval`.
+and ignore thread-pool and job `submit` calls and the code mode `resume`
+calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
+(`resume`) and `chat/tool_approvals.py:open_tool_approval`.
 
 ---
 

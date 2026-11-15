@@ -324,6 +324,8 @@ class AgentResultState(BaseModel):
     root_response_id: int
     status: RunStatus
     failure: RunFailure | None = None
+    # SUSPENDED with a checkpoint: the run waits for people, without an owner.
+    parked: bool = False
 
     @property
     def wakes_recipient(self) -> bool:
@@ -347,8 +349,8 @@ class AgentResultState(BaseModel):
 
     @property
     def is_running(self) -> bool:
-        """An active run that has, or had, an owner; a parked run has none."""
-        return self.status == RunStatus.RUNNING
+        """An active run that is not parked: it has, or had, an owner."""
+        return self.is_active and not self.parked
 
 
 class AgentWait(BaseModel):
@@ -378,11 +380,14 @@ class AgentInboxWork(BaseModel):
     parent_tool_call_id: str
 
 
-class ParkedAgentRun(BaseModel):
-    """A background agent's parked run whose waits have all ended."""
+class ParkedRun(BaseModel):
+    """A parked run whose waits have all ended, on any branch of the chat."""
 
+    # The agent's conversation; the chat session itself for a root response.
     agent_id: str
     response_id: int
+    # The root response whose branch the run belongs to.
+    root_response_id: int
 
 
 class ChatBranch(BaseModel):
@@ -403,11 +408,10 @@ class ChatInbox(BaseModel):
     child_work: list[AgentInboxWork] = Field(default_factory=list)
     # Unfinished latest runs of agents whose messages wait for them.
     waiting_response_ids: list[int] = Field(default_factory=list)
-    # The selected response, parked while its waits were on people, once none
-    # of them waits; it continues before any queued turn.
-    resumable_response_id: int | None = None
-    # Parked background agent runs that can continue; agent stores resume them.
-    resumable_agent_runs: list[ParkedAgentRun] = Field(default_factory=list)
+    # Parked runs whose waits have all ended, on any branch: root responses
+    # continue in a turn before any queued turn, and the stores of their
+    # branches resume agent runs.
+    resumable_runs: list[ParkedRun] = Field(default_factory=list)
 
     @property
     def unfinished_response_ids(self) -> list[int]:
@@ -849,9 +853,6 @@ class ChatFeatureState(BaseModel):
     search_context: SearchContext
     # Cells whose observations wait for the user's input.
     code_cells: list[SavedCodeCell] = Field(default_factory=list)
-    # Whether the agent has the agent tools: a root only when its client
-    # offered them, every subagent.
-    agent_tools: bool
 
 
 class ReservedChatResponse(BaseModel):
@@ -998,6 +999,7 @@ class SavedToolApproval(BaseModel):
     tool_call_id: str
     tool_name: str
     display_name: str
+    arguments: dict[str, JsonValue]
     created_at: datetime
     decision: ApprovalDecision | None
     decided_via: ApprovalDecidedVia | None
@@ -1010,7 +1012,6 @@ class AgentToolApproval(BaseModel):
 
     approval: SavedToolApproval
     agent_name: str
-    arguments: dict[str, JsonValue]
 
 
 class ResponseReplayData(BaseModel):

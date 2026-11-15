@@ -1,7 +1,9 @@
 """How a tool call that waits for approval ends, as its card shows it."""
 
+from collections.abc import Iterator
+from concurrent.futures import Future
 from datetime import UTC, datetime
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -21,8 +23,16 @@ from onyx.agents.tools import (
     ToolOutcome,
 )
 from onyx.chat.emitter import Emitter
-from onyx.chat.models import ResponseRecord, SavedToolApproval
+from onyx.chat.models import (
+    AnswerStreamPart,
+    ChatResponseOutcome,
+    ChatResponseSnapshot,
+    PersistenceStatus,
+    ResponseRecord,
+    SavedToolApproval,
+)
 from onyx.chat.presentation import ResponsePresenter, replay_response
+from onyx.chat.process_message import gather_stream_full
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.tool_approvals import tool_answer
 from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision
@@ -37,6 +47,8 @@ from onyx.llm.models import (
     ToolResult,
     ToolResultMessage,
 )
+from onyx.server.query_and_chat.models import MessageResponseIDInfo
+from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     CustomToolStart,
     OverallStop,
@@ -85,6 +97,7 @@ def _saved(
         tool_call_id=CALL.id,
         tool_name=CALL.name,
         display_name="Send email",
+        arguments={"to": "team"},
         created_at=created_at,
         decision=decision,
         decided_via=decided_via,
@@ -327,3 +340,63 @@ def test_a_suspended_response_replays_as_its_stream_stopped(decided: bool) -> No
     assert list(open_calls) == [("1", "message", CALL.id)]
     assert continued[-1].obj == _REQUEST
     assert not any(isinstance(packet.obj, OverallStop) for packet in continued)
+
+
+def test_a_non_streaming_response_returns_the_requests_that_wait() -> None:
+    """The requests streamed without a resolution before the stop that waits
+    for the decisions."""
+    approval_ids = [str(uuid4()) for _ in range(3)]
+    ended = approval_ids[2]
+
+    def request(approval_id: str) -> Packet:
+        return Packet(
+            placement=Placement(turn_index=0),
+            obj=ToolApprovalRequest(
+                approval_id=approval_id,
+                tool_call_id=f"call_{approval_id}",
+                tool_name=CALL.name,
+                display_name="Send email",
+                arguments={"to": "team"},
+            ),
+        )
+
+    def packets() -> Iterator[AnswerStreamPart]:
+        yield MessageResponseIDInfo(
+            user_message_id=None, reserved_assistant_message_id=1
+        )
+        yield request(approval_ids[0])
+        # A program's request that ended when its program stopped.
+        yield request(ended)
+        yield Packet(
+            placement=Placement(turn_index=0),
+            obj=ToolApprovalResolved(approval_id=ended, outcome="cancelled"),
+        )
+        yield request(approval_ids[1])
+        yield Packet(
+            placement=Placement(turn_index=0),
+            obj=OverallStop(stop_reason="awaiting_approval"),
+        )
+
+    outcome = Future[ChatResponseOutcome]()
+    outcome.set_result(
+        ChatResponseOutcome(
+            response=ChatResponseSnapshot(
+                answer=None,
+                reasoning=None,
+                request_params=None,
+                citation_to_doc={},
+                tool_calls=[],
+                is_clarification=False,
+                all_search_docs={},
+                pre_answer_processing_time=None,
+                response=None,
+                cancelled=False,
+            ),
+            persistence_status=PersistenceStatus.SAVED,
+        )
+    )
+    response = gather_stream_full(packets(), outcome)
+
+    assert [
+        pending.approval_id for pending in response.pending_tool_approvals
+    ] == approval_ids[:2]

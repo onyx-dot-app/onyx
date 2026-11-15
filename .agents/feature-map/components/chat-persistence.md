@@ -374,7 +374,10 @@ deletes the context, then deletes the buffered stream keys. When the lock is
 busy, it queues a retry, and the periodic incognito cleanup task drains the
 pending set (`retry_incognito_teardowns`).
 
-**Deletion and retention.** Soft delete sets `deleted`. Hard delete
+**Deletion and retention.** Soft delete sets `deleted` and ends the chat's
+parked responses, which nothing can decide anymore
+(`server/query_and_chat/chat_backend.py:_end_parked_responses`): their
+requests, checkpoints and program dumps go. Hard delete
 (`HARD_DELETE_CHATS` or the `hard_delete` parameter) runs
 `db/chat.py:delete_messages_and_files_from_chat_session` over the session and
 its child sessions: message files, checkpoint blobs, then messages (tool calls,
@@ -411,12 +414,12 @@ Community downgrade clears it ([[billing]]).
    not delivered again.
    `chat/run_store.py:ChatRunStore._load_status` marks a `RUNNING` response
    with no live owner as `ERROR` (`cancel_run`: `CANCELLED`) only when a later
-   run reads it as a sub-agent. A root response left `RUNNING` is repaired
-   only in a conversation with an inbox row: dispatch saves it as `ERROR`
+   run reads it as a sub-agent. The inbox lists a selected root response that
+   is `RUNNING`, or `SUSPENDED` without a checkpoint row, and dispatch saves it
+   as `ERROR` when it has no owner
    (`chat/run_store.py:interrupt_ownerless_responses`), which pauses the queue.
-   Otherwise a reload replays it as is. Repair skips a `SUSPENDED` response:
-   a parked run has no owner by design
-   ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
+   Repair skips a parked response, `SUSPENDED` with a checkpoint row: it has
+   no owner by design ([[mcp-and-custom-tools#chat-approval-durable-wait]]).
 3. `reserved-row-resolves` **A reserved assistant row must resolve.** Once
    `ChatTurnExecution.run` starts, `chat/persistence.py:ChatResponsePersistence`
    saves every outcome: an answer, a stop, a run failure, and a startup
@@ -540,19 +543,28 @@ Community downgrade clears it ([[billing]]).
     display grouping. `db/chat_response.py:write_response_items` also refuses
     an update that drops a saved item or tool result, so a run must keep its
     step ids stable across saves.
-15. `checkpoints-for-approvals` **Only a chat turn that waits for approval
-    writes a checkpoint.** `chat/execution.py:ChatTurnExecution._hand_off`
-    calls `chat/run_store.py:ChatRunStore.handoff`, which writes
-    `chat_response_checkpoint`, sets the response `SUSPENDED`, and saves
-    `agent-checkpoint/<root session id>/` blobs
-    (`chat/restoration.py:persist_checkpoint_files`), parked programs' dumps
-    included. The continuation's `ChatRunStore.resume` claims it once and runs
+15. `checkpoints-for-approvals` **Only a run whose waits are all on people
+    writes a checkpoint.** One park pass in
+    `chat/run_store.py:ChatRunStore.poll_control` hands off each owned run,
+    the root or an agent run, that `ChatRunStore.may_park` accepts; the root
+    reports its park through the store's `on_root_parked` callback.
+    `ChatRunStore.handoff` saves `agent-checkpoint/<root session id>/` blobs
+    (`chat/restoration.py:persist_checkpoint_files`; parked programs' dumps
+    under unique IDs, other files under content IDs), then writes
+    `chat_response_checkpoint` with the foreground child runs it waits for
+    (`child_run_ids`) and the dumps it owns (`dump_file_ids`), and sets the
+    response `SUSPENDED` (`db/chat_checkpoint.py:publish_checkpoint__no_commit`).
+    A response is parked only while it is `SUSPENDED` with that row; ownerless
+    repair keeps it, and ends a `SUSPENDED` response without the row. The
+    continuation's `ChatRunStore.resume` claims it once and runs
     `chat/restoration.py:restore_chat_agent`; completion deletes it
-    ([[mcp-and-custom-tools#chat-approval-durable-wait]]). A turn that a
-    restart interrupts mid-step is never resumed
-    ([[#save-chat-turn-one-commit]]). A feature that suspends runs must keep
-    blobs under the root session id, because hard delete finds them only by
-    that prefix.
+    ([[mcp-and-custom-tools#chat-approval-durable-wait]]). The row owns its
+    dumps: deleting the row (`db/chat_response.py:finish_checkpoint__no_commit`)
+    or replacing it returns them, and the caller deletes them after commit; a
+    failed handoff deletes the dumps it saved. A turn that a restart
+    interrupts mid-step is never resumed ([[#save-chat-turn-one-commit]]). A
+    feature that suspends runs must keep blobs under the root session id,
+    because hard delete finds them only by that prefix.
 16. `code-mode-replay-content` **A code mode result is replayed as saved, so
     its content must carry what the next turn needs**
     (`tools/tool_implementations/code_mode/prompt.py:format_content`). An

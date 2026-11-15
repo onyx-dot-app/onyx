@@ -35,6 +35,7 @@ from onyx.llm.models import AssistantMessage, Message, ToolResult
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.interface import Tool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
+from onyx.tools.tool_implementations.subagents.subagent_tools import ListAgentsTool
 
 _FEATURE_STATE = TypeAdapter(
     Annotated[
@@ -103,8 +104,9 @@ def restore_chat_agent(
     """Build feature code and resources; Agent.resume restores saved execution state.
 
     `depth` counts the agent's levels below the root. A chat agent gets the
-    agent tools when it had them, with children one level deeper
-    (`subagent_factory`); an agent at `MAX_CHILD_DEPTH` cannot start agents.
+    agent tools when it had them: every subagent, and a root whose saved step
+    declared them. Its children are one level deeper (`subagent_factory`); an
+    agent at `MAX_CHILD_DEPTH` cannot start agents.
     """
     snapshot = checkpoint.run_state
     if snapshot.progress is None:
@@ -138,7 +140,10 @@ def restore_chat_agent(
             checkpoint=context.checkpoint,
             previous_run_id=snapshot.previous_run_id,
             agent_id=snapshot.agent_id,
-            create_subagent=subagent_factory(depth + 1) if state.agent_tools else None,
+            create_subagent=subagent_factory(depth + 1)
+            if depth > 0
+            or any(tool.name == ListAgentsTool.name for tool in snapshot.progress.tools)
+            else None,
             can_spawn=depth < MAX_CHILD_DEPTH,
         )
     if isinstance(state, ResearchFeatureState):
@@ -174,15 +179,19 @@ def restore_chat_agent(
 
 def persist_checkpoint_files(
     checkpoint: ExecutionCheckpoint, *, session_id: UUID
-) -> None:
-    """Replace transient file contents with tenant-scoped file-store references."""
+) -> list[str]:
+    """Replace transient file contents with tenant-scoped file-store references.
 
-    def save(file: SavedChatFile, *, unique: bool = False) -> None:
+    Returns the file IDs of the parked programs' dumps that it saved, which
+    only this checkpoint holds."""
+    dumps: list[str] = []
+
+    def save(file: SavedChatFile, *, unique: bool = False) -> str:
         """Save under a content ID, or a `unique` one for content that only
-        this checkpoint owns."""
+        this checkpoint owns; returns the file ID."""
         if file.file_id is not None:
             file.content = None
-            return
+            return file.file_id
         if file.content is None:
             raise ValueError("Checkpoint file is missing its contents")
         name = uuid4().hex if unique else hashlib.sha256(file.content).hexdigest()
@@ -202,6 +211,7 @@ def persist_checkpoint_files(
             )
         file.file_id = file_id
         file.content = None
+        return file_id
 
     def payload(value: BaseModel | None) -> None:
         if isinstance(value, StagedChatFiles):
@@ -235,8 +245,10 @@ def persist_checkpoint_files(
                         ),
                     ]:
                         save(file)
-                    for cell in state.code_cells:
+                    dumps.extend(
                         save(cell.program.dump, unique=True)
+                        for cell in state.code_cells
+                    )
                     progress.feature_state = _JSON_OBJECT.validate_python(
                         state.model_dump(mode="json")
                     )
@@ -249,3 +261,4 @@ def persist_checkpoint_files(
 
     messages(checkpoint.agent_state.messages)
     snapshot(checkpoint.run_state)
+    return dumps

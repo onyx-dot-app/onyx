@@ -1390,7 +1390,7 @@ def test_late_send_after_a_finished_response_starts_the_next_turn(
     if admission_held:
         admission.claim(chat_id)
         # The finished turn published its stream before it releases the chat.
-        admission.publish(1)
+        admission.publish(1, [])
     try:
         sent = client.post(
             path,

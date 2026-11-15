@@ -519,7 +519,6 @@ class ToolRenderer:
         | ToolEndEvent
         | InputRequiredEvent
         | InputEndedEvent,
-        display_names: Mapping[str, str],
     ) -> list[packets.Packet]:
         if isinstance(event, ToolStartEvent):
             self.display_name = event.display_name
@@ -540,7 +539,7 @@ class ToolRenderer:
                 approval_id=event.request.request_id,
                 tool_call_id=call.id,
                 tool_name=call.name,
-                display_name=display_names.get(call.name, call.name),
+                display_name=event.request.display_name or call.name,
                 arguments=tool_arguments_for_display(call),
             )
         else:

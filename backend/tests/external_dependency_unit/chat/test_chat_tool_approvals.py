@@ -5,15 +5,19 @@ and which requests a non-streaming response returns. Integration tests cover
 the decision API, dispatch, policies, session grants and blocked sends."""
 
 import json
+import subprocess
+import sys
 import threading
-from collections.abc import Callable, Generator, Iterator, Sequence
-from concurrent.futures import Future
+from collections.abc import Callable, Generator, Sequence
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from onyx.agents.agent_coordination import AgentCoordinator
@@ -22,25 +26,17 @@ from onyx.agents.models import AgentState, ExecutionCheckpoint, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
 from onyx.agents.tools import (
-    AgentLifetime,
     AgentTool,
     ChildRunWait,
-    InputMode,
-    PendingToolInput,
     ToolInvocation,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import run_store
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
-    AnswerStreamPart,
     ChatInbox,
-    ChatResponseOutcome,
-    ChatResponseSnapshot,
-    PersistenceStatus,
 )
 from onyx.chat.presentation import ResponsePresenter
-from onyx.chat.process_message import gather_stream_full
 from onyx.chat.run_store import (
     RESUME_FAILED_MESSAGE,
     ChatRunStore,
@@ -51,7 +47,7 @@ from onyx.db.action_policy import replace_workspace_action_policies
 from onyx.db.approval_request import create_approval_request__no_commit
 from onyx.db.chat import delete_messages_and_files_from_chat_session
 from onyx.db.chat_inputs import read_chat_inbox
-from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.engine.sql_engine import SqlEngine, get_session_with_tenant
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
@@ -85,34 +81,36 @@ from onyx.llm.models import (
     UserMessage,
 )
 from onyx.server.features.action_policies.models import ApprovalChoice
-from onyx.server.query_and_chat.chat_backend import decide_approval
+from onyx.server.query_and_chat.chat_backend import (
+    _reject_while_approval_waits,
+    decide_approval,
+    delete_chat_session_by_id,
+)
 from onyx.server.query_and_chat.models import (
     ApprovalDecisionResponse,
     ChatApprovalDecisionRequest,
-    MessageResponseIDInfo,
 )
-from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
-    OverallStop,
     Packet,
     ToolApprovalRequest,
     ToolApprovalResolved,
 )
 from onyx.tools.interface import Tool as ChatTool
 from onyx.tools.models import ToolApprovalScope, ToolContext
-from onyx.tools.tool_implementations.code_mode.cells import CodeCells
+from onyx.tools.tool_implementations.code_mode import sandbox
+from onyx.tools.tool_implementations.code_mode.cells import (
+    PARK_REFUSED_MESSAGE,
+    CodeCells,
+)
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
     CodeModeTool,
     WaitCodeTool,
 )
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
-from onyx.tools.tool_implementations.subagents.subagent_tools import SpawnAgentTool
 from onyx.tracing.flows import LLMFlow
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.chat.test_run_store import (
-    calls,
     chat_agent,
-    replies,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.unit.onyx.agents.fakes import FakeModelClient
@@ -412,14 +410,62 @@ def _recording(tool: MCPTool, sent: list[str]) -> AgentTool:
     )
 
 
-def _resumable(db_session: Session, chat: ApprovalChat) -> int | None:
+def _resumable(db_session: Session, chat: ApprovalChat) -> list[int]:
+    """The chat's resumable parked runs, by response ID."""
     db_session.expire_all()
     inbox = read_chat_inbox(db_session, chat.chat_session_id)
     db_session.rollback()
-    return inbox.resumable_response_id
+    return [run.response_id for run in inbox.resumable_runs]
 
 
-def test_a_waiting_run_hands_off_and_a_fresh_store_resumes_it(
+def _resume_direct_call_in_process(
+    chat_session_id: str, response_id: str, user_id: str, server_id: str
+) -> None:
+    """Resume the handed-off response with fresh objects and its saved
+    decision, as another API pod does."""
+    SqlEngine.init_engine(pool_size=5, max_overflow=5)
+    try:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            user = session.get_one(User, UUID(user_id))
+            server = session.get_one(MCPServer, int(server_id))
+            gated_app_id = session.scalar(
+                select(GatedApp.id).where(GatedApp.mcp_server_id == server.id)
+            )
+            assert gated_app_id is not None
+            session.expunge_all()
+        chat = ApprovalChat(
+            user=user,
+            server=server,
+            gated_app_id=gated_app_id,
+            chat_session_id=UUID(chat_session_id),
+            question=UserMessage(content="Email the team"),
+            response_id=int(response_id),
+        )
+        tool = chat.tool()
+        sent: list[str] = []
+        owned_runs: list[OwnedRun] = []
+        resumed = _resume(
+            chat,
+            owned_runs,
+            reply=_calls(tool, "send"),
+            tools=[_recording(tool, sent)],
+            gated=[tool],
+        )
+        assert resumed is not None
+        try:
+            assert resumed.run.result(timeout=30).output.text == "done"
+            assert resumed.run.wait_for_idle(30)
+            assert resumed.first_result("send") == "sent"
+            assert sent == ["send"]
+        finally:
+            assert resumed.coordinator.close(timeout=10)
+    finally:
+        SqlEngine.reset_engine()
+
+
+def test_a_waiting_direct_call_hands_off_and_another_process_resumes_it(
     db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
     tool = chat.tool()
@@ -442,25 +488,40 @@ def test_a_waiting_run_hands_off_and_a_fresh_store_resumes_it(
     db_session.rollback()
     [row] = chat.rows(db_session)
     assert row.decision is None
-    assert _resumable(db_session, chat) is None
+    assert row.arguments == {}
+    assert _resumable(db_session, chat) == []
 
     chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-    assert _resumable(db_session, chat) == chat.response_id
-    resumed = _resume(
-        chat,
-        owned_runs,
-        reply=_calls(tool, "send"),
-        tools=[_recording(tool, sent)],
-        gated=[tool],
+    assert _resumable(db_session, chat) == [chat.response_id]
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; from tests.external_dependency_unit.chat."
+            "test_chat_tool_approvals import _resume_direct_call_in_process; "
+            "_resume_direct_call_in_process(*sys.argv[1:])",
+            str(chat.chat_session_id),
+            str(chat.response_id),
+            str(chat.user.id),
+            str(chat.server.id),
+        ],
+        cwd=Path(__file__).resolve().parents[3],
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
+    assert completed.returncode == 0, completed.stdout + completed.stderr
 
-    assert resumed is not None
-    assert resumed.run.result(timeout=10).output.text == "done"
-    assert resumed.run.wait_for_idle(10)
-    assert resumed.first_result("send") == "sent"
-    assert sent == ["send"]
+    # This process ran nothing; the other one ran the approved call.
+    assert sent == []
     db_session.expire_all()
+    response = db_session.get(ChatMessage, chat.response_id)
+    assert response is not None and response.response_status == RunStatus.COMPLETE
     assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [
+        ApprovalDecision.APPROVED
+    ]
 
 
 def test_a_session_grant_decides_every_request_and_the_run_resumes_once(
@@ -483,7 +544,7 @@ def test_a_session_grant_decides_every_request_and_the_run_resumes_once(
     assert [(row.decision, row.decided_via) for row in chat.rows(db_session)] == [
         (ApprovalDecision.APPROVED, ApprovalDecidedVia.SESSION_GRANT)
     ] * 2
-    assert _resumable(db_session, chat) == chat.response_id
+    assert _resumable(db_session, chat) == [chat.response_id]
     resumed = _resume(
         chat,
         owned_runs,
@@ -505,20 +566,6 @@ def test_a_session_grant_decides_every_request_and_the_run_resumes_once(
     )
     assert resumed.run.result(timeout=10).output.text == "done"
     assert sorted(sent) == ["first", "second"]
-
-
-def test_a_response_does_not_resume_while_one_of_its_requests_waits(
-    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
-) -> None:
-    owned = _direct_call(chat, owned_runs, "first", "second")
-    _hand_off(owned)
-    first, second = chat.rows(db_session)
-
-    chat.decide(db_session, first.id, ApprovalChoice.APPROVE_ONCE)
-    assert _resumable(db_session, chat) is None
-
-    chat.decide(db_session, second.id, ApprovalChoice.REJECT)
-    assert _resumable(db_session, chat) == chat.response_id
 
 
 @pytest.mark.parametrize("first", ["decision", "stop"])
@@ -549,9 +596,10 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
 
     if first == "decision":
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    # Saves the rejection, gives it to the run, and cancels the run.
     owned.owner.reject_waiting_approvals()
-    owned.run.cancel("user")
     assert owned.run.wait_for_idle(10)
+    assert owned.run.status == RunStatus.CANCELLED
     if first == "stop":
         with pytest.raises(OnyxError) as conflict:
             chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
@@ -567,10 +615,11 @@ def test_a_decision_and_a_stop_of_the_live_turn_keep_the_first(
     ]
 
 
-@pytest.mark.parametrize("change", ["tool_removed", "server_deleted"])
-def test_a_call_whose_tool_is_gone_gets_no_longer_available(
-    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun], change: str
+def test_a_call_whose_server_was_deleted_gets_no_longer_available(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
+    """Deleting the server deletes the request; the response resumes, and the
+    call gets no tool."""
     tool = chat.tool()
     sent: list[str] = []
     owned = _start(
@@ -582,23 +631,20 @@ def test_a_call_whose_tool_is_gone_gets_no_longer_available(
     )
     _hand_off(owned)
     [row] = chat.rows(db_session)
-    if change == "tool_removed":
+    # Deletes the server's app identity and its requests.
+    db_session.execute(delete(MCPServer).where(MCPServer.id == chat.server.id))
+    db_session.commit()
+    with pytest.raises(OnyxError) as missing:
         chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-    else:
-        # Deletes the server's app identity and its requests.
-        db_session.execute(delete(MCPServer).where(MCPServer.id == chat.server.id))
-        db_session.commit()
-        with pytest.raises(OnyxError) as missing:
-            chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-        assert missing.value.error_code == OnyxErrorCode.NOT_FOUND
-    assert _resumable(db_session, chat) == chat.response_id
+    assert missing.value.error_code == OnyxErrorCode.NOT_FOUND
+    assert _resumable(db_session, chat) == [chat.response_id]
 
     resumed = _resume(
         chat,
         owned_runs,
         reply=_calls(tool, "send"),
-        tools=[] if change == "tool_removed" else [_recording(tool, sent)],
-        gated=[] if change == "tool_removed" else [tool],
+        tools=[_recording(tool, sent)],
+        gated=[tool],
     )
 
     assert resumed is not None
@@ -622,51 +668,24 @@ def test_a_request_creates_the_missing_app_identity(
     )
 
 
-def _agent_runs(
-    chat: ApprovalChat,
-    owned_runs: list[OwnedRun],
-    lifetime: AgentLifetime,
-    sent: list[str],
-    *,
-    root_reply: Callable[..., AssistantMessage] | None = None,
+def _foreground_agent(
+    chat: ApprovalChat, owned_runs: list[OwnedRun], sent: list[str]
 ) -> OwnedRun:
-    """A root whose agent calls the gated tool. A background agent comes from
-    `spawn_agent`, and the root answers; a foreground agent's root waits for
-    it and answers with its answer."""
+    """A root that waits for a foreground agent, which calls the gated tool,
+    and answers with its answer."""
     tool = chat.tool()
-
-    def child() -> Agent:
-        return Agent(
-            FakeModelClient(_calls(tool, "send")),
-            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
-            tools=[_recording(tool, sent)],
-        )
-
-    if lifetime == AgentLifetime.BACKGROUND:
-        return _start(
-            chat,
-            owned_runs,
-            reply=root_reply
-            or _replies(
-                AssistantMessage(
-                    content=[
-                        ToolCall(
-                            id="spawn",
-                            name=SpawnAgentTool.name,
-                            arguments={"name": "mailer", "instruction": "Email"},
-                        )
-                    ]
-                )
-            ),
-            tools=[SpawnAgentTool(child, max_steps=3).bind(ToolContext), _hold()],
-            gated=[tool],
-        )
 
     def delegate(invocation: ToolInvocation) -> ChildRunWait:
         return ChildRunWait(
             run_ids=[
                 invocation.agents.spawn_agent(
-                    child(),
+                    Agent(
+                        FakeModelClient(_calls(tool, "send")),
+                        generation_context=GenerationContext(
+                            flow=LLMFlow.CHAT_RESPONSE
+                        ),
+                        tools=[_recording(tool, sent)],
+                    ),
                     name="mailer",
                     description="Email",
                     messages=[UserMessage(content="Email the team")],
@@ -695,17 +714,6 @@ def _agent_runs(
             )
         ],
         gated=[tool],
-    )
-
-
-def _hold() -> AgentTool:
-    """A call that waits for a person's answer that is not an approval, so
-    its root stays live and owned."""
-    return AgentTool(
-        definition=ToolDefinition(name="hold", description="", parameters={}),
-        execute=lambda _invocation: PendingToolInput(
-            request_id="hold", prompt="Hold", mode=InputMode.RESULT
-        ),
     )
 
 
@@ -740,35 +748,24 @@ def _inbox(chat: ApprovalChat) -> ChatInbox:
         return read_chat_inbox(session, chat.chat_session_id)
 
 
-@pytest.mark.parametrize("lifetime", list(AgentLifetime))
-def test_an_agent_run_asks_parks_and_resumes_in_a_fresh_store(
-    db_session: Session,
-    chat: ApprovalChat,
-    owned_runs: list[OwnedRun],
-    lifetime: AgentLifetime,
+def test_a_foreground_agent_asks_parks_and_resumes_in_a_fresh_store(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
 ) -> None:
-    """An agent's call waits durably: the agent's run parks, and a foreground
-    agent's parent parks after it. After the decision, a fresh store resumes
-    the agent at its depth, then the parent once the agent ended."""
+    """An agent's call waits durably: the agent's run parks, and its parent
+    parks after it, in one control poll of the store. After the decision, a
+    fresh store resumes the agent at its depth, then the parent once the
+    agent ended."""
     sent: list[str] = []
-    owned = _agent_runs(chat, owned_runs, lifetime, sent)
+    owned = _foreground_agent(chat, owned_runs, sent)
     until(lambda: _poll(owned) and len(chat.rows(db_session)) == 1)
     [row] = chat.rows(db_session)
     child_id = row.chat_message_id
     assert child_id != chat.response_id
-    until(lambda: _poll(owned) and _parked(child_id))
-    if lifetime == AgentLifetime.FOREGROUND:
-        until(lambda: owned.owner.may_park(owned.run))
-        owned.owner.handoff(owned.run.id)
-        assert _parked(chat.response_id)
-    else:
-        assert owned.run.result(timeout=10).output.text == "done"
-    inbox = _inbox(chat)
-    assert inbox.resumable_agent_runs == []
-    assert inbox.resumable_response_id is None
+    until(lambda: _poll(owned) and _parked(child_id) and _parked(chat.response_id))
+    assert _inbox(chat).resumable_runs == []
 
     chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
-    assert [run.response_id for run in _inbox(chat).resumable_agent_runs] == [child_id]
+    assert [run.response_id for run in _inbox(chat).resumable_runs] == [child_id]
 
     tool = chat.tool()
     depths: dict[str, int] = {}
@@ -801,63 +798,29 @@ def test_an_agent_run_asks_parks_and_resumes_in_a_fresh_store(
     assert sent == ["send"]
     assert list(depths.values()) == [1]
     assert db_session.get(ChatResponseCheckpoint, child_id) is None
-    if lifetime == AgentLifetime.FOREGROUND:
-        assert _inbox(chat).resumable_response_id == chat.response_id
-        resumed = _resume(
-            chat,
-            owned_runs,
-            reply=_replies(AssistantMessage(content=[TextContent(text="done")])),
-            tools=[
-                AgentTool(
-                    definition=ToolDefinition(
-                        name="delegate", description="", parameters={}
-                    ),
-                    execute=lambda _invocation: pytest.fail("The agent started once"),
-                    result_from_children=lambda _invocation, states: ToolResult(
-                        content=states[0].messages[-1].text
-                    ),
-                )
-            ],
-            gated=[tool],
-        )
-        assert resumed is not None
-        assert resumed.run.result(timeout=10).output.text == "done"
-        assert resumed.first_result("delegate") == "done"
-
-
-def test_root_stop_keeps_a_background_agents_request(
-    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
-) -> None:
-    """The user's Stop of a live turn rejects only the requests of the runs it
-    cancels; a background agent keeps running and keeps its request."""
-    sent: list[str] = []
-    owned = _agent_runs(
+    assert [run.response_id for run in _inbox(chat).resumable_runs] == [
+        chat.response_id
+    ]
+    resumed = _resume(
         chat,
         owned_runs,
-        AgentLifetime.BACKGROUND,
-        sent,
-        root_reply=replies(
-            calls(
-                ToolCall(
-                    id="spawn",
-                    name=SpawnAgentTool.name,
-                    arguments={"name": "mailer", "instruction": "Email"},
-                )
-            ),
-            calls(ToolCall(id="hold", name="hold", arguments={})),
-        ),
+        reply=_replies(AssistantMessage(content=[TextContent(text="done")])),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="delegate", description="", parameters={}
+                ),
+                execute=lambda _invocation: pytest.fail("The agent started once"),
+                result_from_children=lambda _invocation, states: ToolResult(
+                    content=states[0].messages[-1].text
+                ),
+            )
+        ],
+        gated=[tool],
     )
-    # The agent asks and stays owned: no control poll parks it.
-    until(lambda: len(chat.rows(db_session)) == 1)
-    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
-
-    owned.owner.reject_waiting_approvals()
-    owned.run.cancel("user")
-    assert owned.run.wait_for_idle(10)
-
-    [row] = chat.rows(db_session)
-    assert row.chat_message_id != chat.response_id
-    assert row.decision is None
+    assert resumed is not None
+    assert resumed.run.result(timeout=10).output.text == "done"
+    assert resumed.first_result("delegate") == "done"
 
 
 def test_ownerless_repair_keeps_a_parked_response(
@@ -950,13 +913,14 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
             call_waits.set()
 
     presenter = ResponsePresenter(Emitter(live.append))
+    code_tool = CodeModeTool([tool], cells=cells, limits=PARKING_LIMITS)
     owned = _start(
         chat,
         owned_runs,
         reply=reply,
         tools=[
-            CodeModeTool([tool], cells=cells, limits=PARKING_LIMITS).bind(ToolContext),
-            WaitCodeTool(cells).bind(ToolContext),
+            code_tool.bind(ToolContext),
+            WaitCodeTool(cells, code_tool.program).bind(ToolContext),
         ],
         gated=[tool],
         on_event=on_event,
@@ -974,12 +938,10 @@ def test_a_stopped_program_call_ends_its_request_and_its_card_closes(
     ]
 
 
-def test_an_unresumable_response_fails_and_drops_its_saved_state(
-    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
-) -> None:
-    """A response whose model or saved state is gone cannot continue: it is
-    saved as failed, and its checkpoint and its parked program's dump go."""
-    sent: list[str] = []
+def _program(
+    chat: ApprovalChat, owned_runs: list[OwnedRun], sent: list[str]
+) -> OwnedRun:
+    """A chat response whose code mode program calls the gated tool."""
     tool = _gated_function(chat, sent)
     code = f"await mcp__1__acme__{ACTION}(value='team')\n"
     owner = _store(chat, [tool])
@@ -1007,35 +969,53 @@ def test_an_unresumable_response_fails_and_drops_its_saved_state(
         run=agent.start(messages=[chat.question], max_steps=3, coordinator=view),
     )
     owned_runs.append(owned)
-    _hand_off(owned)
+    return owned
+
+
+@pytest.fixture
+def dumps(chat: ApprovalChat) -> Generator[Callable[[], list[str]], None, None]:
+    """The file IDs of the chat's checkpoint files; teardown deletes them."""
     file_store = get_default_file_store()
     prefix = f"agent-checkpoint/{chat.chat_session_id}/"
+
+    def listed() -> list[str]:
+        return [record.file_id for record in file_store.list_files_by_prefix(prefix)]
+
     try:
-        assert len(file_store.list_files_by_prefix(prefix)) == 1
-
-        fail_suspended_response(
-            get_cache_backend(),
-            POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            chat.response_id,
-        )
-
-        db_session.expire_all()
-        response = db_session.get(ChatMessage, chat.response_id)
-        assert response is not None and response.response_status == RunStatus.ERROR
-        assert (
-            response.response_failure is not None
-            and response.response_failure.message == RESUME_FAILED_MESSAGE
-        )
-        assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
-        db_session.rollback()
-        assert [row.decision for row in chat.rows(db_session)] == [
-            ApprovalDecision.EXPIRED
-        ]
-        assert file_store.list_files_by_prefix(prefix) == []
-        assert sent == []
+        yield listed
     finally:
-        for record in file_store.list_files_by_prefix(prefix):
-            file_store.delete_file(record.file_id, error_on_missing=False)
+        for file_id in listed():
+            file_store.delete_file(file_id, error_on_missing=False)
+
+
+def test_an_unresumable_response_fails_and_drops_its_saved_state(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    dumps: Callable[[], list[str]],
+) -> None:
+    """A response whose model or saved state is gone cannot continue: it is
+    saved as failed, and its checkpoint and its parked program's dump go."""
+    sent: list[str] = []
+    _hand_off(_program(chat, owned_runs, sent))
+    assert len(dumps()) == 1
+
+    fail_suspended_response(
+        get_cache_backend(), POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, chat.response_id
+    )
+
+    db_session.expire_all()
+    response = db_session.get(ChatMessage, chat.response_id)
+    assert response is not None and response.response_status == RunStatus.ERROR
+    assert (
+        response.response_failure is not None
+        and response.response_failure.message == RESUME_FAILED_MESSAGE
+    )
+    assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
+    assert dumps() == []
+    assert sent == []
 
 
 def test_a_response_whose_owner_is_lost_ends_its_requests(
@@ -1055,9 +1035,8 @@ def test_a_response_whose_owner_is_lost_ends_its_requests(
     assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
 
 
-@pytest.mark.parametrize("policy", ["unchanged", "denied"])
-def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
-    db_session: Session, chat: ApprovalChat, policy: str
+def test_a_saved_decision_repeated_after_the_tool_is_disabled_returns_it(
+    db_session: Session, chat: ApprovalChat
 ) -> None:
     """A retry whose first attempt saved the decision, but lost its HTTP
     response, gets the saved decision, also after an admin disables the tool."""
@@ -1070,6 +1049,7 @@ def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
         tool_call_id="send",
         tool_name=ACTION,
         display_name="Send email",
+        arguments={"to": "team"},
     )
     db_session.execute(
         update(ApprovalRequest)
@@ -1079,10 +1059,9 @@ def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
             decided_via=ApprovalDecidedVia.SESSION_GRANT,
         )
     )
-    if policy == "denied":
-        replace_workspace_action_policies(
-            db_session, chat.gated_app_id, {ACTION: ActionPolicy.DENY}
-        )
+    replace_workspace_action_policies(
+        db_session, chat.gated_app_id, {ACTION: ActionPolicy.DENY}
+    )
     db_session.commit()
 
     repeated = chat.decide(db_session, approval_id, ApprovalChoice.APPROVE_ONCE)
@@ -1101,63 +1080,166 @@ def test_a_saved_decision_repeated_after_the_response_ends_returns_it(
     )
 
 
-def test_a_non_streaming_response_returns_the_requests_that_wait(
+def test_a_park_refused_for_its_size_ends_the_request_and_does_not_block_sends(
+    db_session: Session,
     chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The requests streamed without a resolution before the stop that waits
-    for the decisions."""
-    approval_ids = [str(uuid4()) for _ in range(3)]
-    ended = approval_ids[2]
+    """A program too large to pause ends its call's request: the request's
+    row ends, its card resolves, the program continues without the call, and
+    no response waits for the user."""
+    # Any growth of the worker is over this share, so the dump is refused.
+    monkeypatch.setattr(sandbox, "MAX_DUMP_MEMORY_SHARE", -1)
+    sent: list[str] = []
+    tool = _gated_function(chat, sent)
+    live: list[Packet] = []
+    owned = _start(
+        chat,
+        owned_runs,
+        reply=_replies(
+            AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="program",
+                        name="execute_code",
+                        arguments={
+                            "code": f"await mcp__1__acme__{ACTION}(value='team')\n"
+                        },
+                    )
+                ]
+            )
+        ),
+        tools=[
+            CodeModeTool([tool], cells=CodeCells(), limits=PARKING_LIMITS).bind(
+                ToolContext
+            )
+        ],
+        gated=[tool],
+        on_event=ResponsePresenter(Emitter(live.append)).consume,
+    )
 
-    def request(approval_id: str) -> Packet:
-        return Packet(
-            placement=Placement(turn_index=0),
-            obj=ToolApprovalRequest(
-                approval_id=approval_id,
-                tool_call_id=f"call_{approval_id}",
-                tool_name=ACTION,
-                display_name="Send email",
-                arguments={"to": "team"},
-            ),
-        )
+    assert owned.run.result(timeout=20).output.text == "done"
+    assert owned.run.wait_for_idle(10)
+    assert PARK_REFUSED_MESSAGE.format(name=f"mcp__1__acme__{ACTION}") in (
+        owned.first_result("program")
+    )
+    assert sent == []
+    [row] = chat.rows(db_session)
+    assert row.decision == ApprovalDecision.EXPIRED
+    [request] = [p.obj for p in live if isinstance(p.obj, ToolApprovalRequest)]
+    assert [p.obj for p in live if isinstance(p.obj, ToolApprovalResolved)] == [
+        ToolApprovalResolved(approval_id=request.approval_id, outcome="cancelled")
+    ]
+    _reject_while_approval_waits(db_session, chat.chat_session_id)
 
-    def packets() -> Iterator[AnswerStreamPart]:
-        yield MessageResponseIDInfo(
-            user_message_id=None, reserved_assistant_message_id=chat.response_id
-        )
-        yield request(approval_ids[0])
-        # A program's request that ended when its program stopped.
-        yield request(ended)
-        yield Packet(
-            placement=Placement(turn_index=0),
-            obj=ToolApprovalResolved(approval_id=ended, outcome="cancelled"),
-        )
-        yield request(approval_ids[1])
-        yield Packet(
-            placement=Placement(turn_index=0),
-            obj=OverallStop(stop_reason="awaiting_approval"),
-        )
 
-    outcome = Future[ChatResponseOutcome]()
-    outcome.set_result(
-        ChatResponseOutcome(
-            response=ChatResponseSnapshot(
-                answer=None,
-                reasoning=None,
-                request_params=None,
-                citation_to_doc={},
-                tool_calls=[],
-                is_clarification=False,
-                all_search_docs={},
-                pre_answer_processing_time=None,
-                response=None,
-                cancelled=False,
-            ),
-            persistence_status=PersistenceStatus.SAVED,
+def test_a_park_that_fails_for_a_moment_keeps_the_run_and_its_dump_goes(
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    dumps: Callable[[], list[str]],
+) -> None:
+    """A storage error while a run parks keeps the run waiting, deletes the
+    dump that the attempt saved, and a later control poll parks it."""
+    owned = _program(chat, owned_runs, [])
+    assert owned.run.wait_until_settled(10).status == RunStatus.SUSPENDED
+    assert owned.run.wait_for_idle(10)
+    publish = run_store.publish_checkpoint__no_commit
+    saved_before_publish: list[int] = []
+
+    def flaky_publish(*args: Any, **kwargs: Any) -> list[str]:
+        saved_before_publish.append(len(dumps()))
+        if len(saved_before_publish) == 1:
+            raise OperationalError("SELECT 1", {}, Exception("connection lost"))
+        return publish(*args, **kwargs)
+
+    with patch.object(run_store, "publish_checkpoint__no_commit", flaky_publish):
+        owned.owner.poll_control()
+        # The run waits, owned and not cancelled, without the saved dump.
+        assert owned.run.status == RunStatus.SUSPENDED
+        assert not owned.run.cancellation_signal.cancelled
+        assert not _parked(chat.response_id)
+        assert dumps() == []
+        until(lambda: _poll(owned) and _parked(chat.response_id))
+    # Each attempt saved one dump; the first one's is gone.
+    assert saved_before_publish == [1, 1]
+    assert len(dumps()) == 1
+
+
+def test_soft_deleting_a_chat_ends_its_parked_response_and_its_dump(
+    db_session: Session,
+    chat: ApprovalChat,
+    owned_runs: list[OwnedRun],
+    dumps: Callable[[], list[str]],
+) -> None:
+    """Nothing can decide the requests of a deleted chat, so its parked
+    responses end: the requests end and the checkpoint and its dump go."""
+    _hand_off(_program(chat, owned_runs, []))
+    assert len(dumps()) == 1
+
+    delete_chat_session_by_id(
+        chat.chat_session_id, hard_delete=False, user=chat.user, db_session=db_session
+    )
+
+    db_session.expire_all()
+    response = db_session.get(ChatMessage, chat.response_id)
+    assert response is not None and response.response_status == RunStatus.CANCELLED
+    assert db_session.get(ChatResponseCheckpoint, chat.response_id) is None
+    db_session.rollback()
+    assert [row.decision for row in chat.rows(db_session)] == [ApprovalDecision.EXPIRED]
+    assert dumps() == []
+
+
+def test_a_parked_response_off_the_selected_branch_still_resumes(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A parked response resumes after its decisions on any branch, such as
+    a reply of another model or a branch that the user left; it does not
+    block sends on the selected branch."""
+    _hand_off(_direct_call(chat, owned_runs))
+    response = db_session.get_one(ChatMessage, chat.response_id)
+    question = db_session.get_one(ChatMessage, response.parent_message_id)
+    sibling = ChatMessage(
+        chat_session_id=chat.chat_session_id,
+        parent_message_id=question.id,
+        message="Another answer",
+        token_count=2,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(sibling)
+    db_session.flush()
+    question.latest_child_message_id = sibling.id
+    db_session.commit()
+    _reject_while_approval_waits(db_session, chat.chat_session_id)
+    [row] = chat.rows(db_session)
+    assert _resumable(db_session, chat) == []
+
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+
+    assert _resumable(db_session, chat) == [chat.response_id]
+
+
+def test_a_suspended_response_without_its_checkpoint_is_repaired(
+    db_session: Session, chat: ApprovalChat, owned_runs: list[OwnedRun]
+) -> None:
+    """A response is parked only while its checkpoint exists. One whose
+    checkpoint is gone cannot resume; ownerless repair ends it, so it blocks
+    neither sends nor anything that would resume it."""
+    _hand_off(_direct_call(chat, owned_runs))
+    [row] = chat.rows(db_session)
+    chat.decide(db_session, row.id, ApprovalChoice.APPROVE_ONCE)
+    db_session.execute(
+        delete(ChatResponseCheckpoint).where(
+            ChatResponseCheckpoint.chat_message_id == chat.response_id
         )
     )
-    response = gather_stream_full(packets(), outcome)
+    db_session.commit()
 
-    assert [
-        pending.approval_id for pending in response.pending_tool_approvals
-    ] == approval_ids[:2]
+    assert _resumable(db_session, chat) == []
+    unfinished = _inbox(chat).unfinished_response_ids
+    assert chat.response_id in unfinished
+    assert run_store.interrupt_ownerless_responses(
+        get_cache_backend(), POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, unfinished
+    ) == {chat.response_id}
+    assert _status(chat.response_id) == RunStatus.ERROR
+    _reject_while_approval_waits(db_session, chat.chat_session_id)

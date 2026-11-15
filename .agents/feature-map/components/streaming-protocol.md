@@ -153,13 +153,21 @@ approval waits ends its stream with its requests, then
 `SUSPENDED`); after the decisions the response continues in a new stream,
 under a new stream ID, that clients follow from cursor 0: it replays the saved
 response, then the decisions and the rest live
-([[mcp-and-custom-tools#chat-approval-durable-wait]]). A run that ends publishes
+([[mcp-and-custom-tools#chat-approval-durable-wait]]). The replay withholds the
+resolutions of the requests that the continued run waits for; the run's live
+events send them, or the turn sends the withheld ones when the resume fails
+before its run starts (`chat/presentation.py:ResponsePresenter.replay`). The
+decision route names the new stream in its `continuation` when the decision
+starts it or finds it running, and the session status names it in
+`current_stream` with its `response_ids`. A run that ends publishes
 `input_ended` for every request still open, direct or nested, before
 `agent_end` (`agents/runtime.py:Run._withdraw_pending_inputs`), with the answer
-of a decision saved first. A turn-level Stop drops packets after it, except
+that the run recorded, such as a Stop's rejection. Every request that the
+server ends gets its `tool_approval_resolved`, live and in replay, `cancelled`
+when it has no decision, so clients read outcomes from the server and never
+from a stop. A turn-level Stop drops packets after it, except
 `tool_approval_resolved` (`chat/execution.py:ChatTurnExecution._publish`), so
-each request's resolution precedes the `stop` packet; a client that cuts the
-stream at Stop records its waiting requests as rejected. For a code mode
+each request's resolution precedes the `stop` packet. For a code mode
 program's call, the events carry `nested_call`, and
 the packet sits on the `execute_code` or `wait_code` card with the nested
 call's name and arguments. Every client gets them
@@ -364,10 +372,14 @@ its background task end ([[#pure-asgi-middleware]]).
     endpoint schedules dispatch, which saves the child as failed so its result
     wakes the root. `has_startable_input` is true when queued text or unread
     root results can start a turn now; a queue that Stop or a failure paused
-    reports false. `pending_approval_ids` lists the requests on the selected
-    branch that wait for the user, from the root and from background agents;
-    web reloads the session when it changes while the chat is idle. A parked
-    agent counts as active. The
+    reports false. `approvals_version` is an opaque marker that changes when a
+    request of the chat opens, is decided or is removed
+    (`db/approval_request.py:approvals_version`); the session load returns the
+    same value, and clients reload the session when it changes. A parked agent
+    waits for the user, so it does not count as active. `current_stream`
+    carries the stream ID and the `response_ids` the stream writes; a stream
+    that continues a parked response has an ID that no message has. The route
+    is in the public API (`PUBLIC_API_TAGS`). The
     endpoint always reads the selected branch, and it reads inputs before
     admission. A turn claims admission before it consumes
     input, so a starting turn shows as startable input or as processing. Web

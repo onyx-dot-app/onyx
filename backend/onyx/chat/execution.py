@@ -18,7 +18,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
 )
-from onyx.agents.runtime import Run, RunNotTransferable
+from onyx.agents.runtime import Run
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLockLostError
 from onyx.chat.agent import ChatAgent, build_chat_agent, chat_subagent_factory
@@ -33,7 +33,11 @@ from onyx.chat.persistence import ChatResponsePersistence
 from onyx.chat.presentation import ResponsePresenter, overall_stop
 from onyx.chat.prompt_utils import build_language_section
 from onyx.chat.restoration import restore_chat_agent, restore_subagent
-from onyx.chat.run_store import ChatRunStore, fail_suspended_response
+from onyx.chat.run_store import (
+    RESUME_FAILED_MESSAGE,
+    ChatRunStore,
+    fail_suspended_response,
+)
 from onyx.chat.stop_signal_checker import clear_stop, is_stop_requested
 from onyx.chat.stream_buffer import ChatDelivery, ChatStream, StreamBufferWriter
 from onyx.configs.chat_configs import (
@@ -64,7 +68,6 @@ from onyx.server.query_and_chat.streaming_models import (
     OverallStop,
     Packet,
     StreamingError,
-    ToolApprovalRequest,
     ToolApprovalResolved,
 )
 from onyx.server.settings.store import load_settings
@@ -145,7 +148,9 @@ def start_chat_turn(
             # A published stream ID always has a buffer that resume can serve.
             stream_buffer.open()
             # Stop must identify this response before the client receives its IDs.
-            setup.admission.publish(setup.stream_id)
+            setup.admission.publish(
+                setup.stream_id, [response.message_id for response in setup.responses]
+            )
         except Exception as error:
             startup_error = error
         if setup.new_msg_req.chat_session_id is None:
@@ -211,8 +216,6 @@ class ChatTurnExecution:
         self._query_observation = query_observation
         self._dispatch_pending_messages = dispatch_pending_messages
         self._stores: list[ChatRunStore] = []
-        # The store of each response, by model index, to hand off its run.
-        self._response_stores: dict[int, ChatRunStore] = {}
         self.cancellation = CancellationSignal()
         self._response_future = response_future
         self._response_workers: dict[Future[Run | None], ChatResponsePersistence] = {}
@@ -404,9 +407,8 @@ class ChatTurnExecution:
                 if not worker_done:
                     continue
                 if run is not None:
-                    if not run.status.is_terminal and not self._hand_off(
-                        run, persistence
-                    ):
+                    # A parked run resolved its outcome when it handed off.
+                    if not run.status.is_terminal and not persistence.outcome.done():
                         continue
                     try:
                         if not run.wait_for_idle(timeout=0):
@@ -438,18 +440,10 @@ class ChatTurnExecution:
                     )
             del self._response_workers[worker]
 
-    def _hand_off(self, run: Run, persistence: ChatResponsePersistence) -> bool:
-        """Save a suspended run whose waits are all on people and release it,
-        so the turn ends with `awaiting_approval`; the decisions resume it on
-        any pod. True once it handed off."""
-        store = self._response_stores.get(persistence.model_index)
-        if store is None or not store.may_park(run):
-            return False
-        try:
-            store.handoff(run.id)
-        except RunNotTransferable:
-            # The run changed before it parked; a later poll checks again.
-            return False
+    def _root_parked(self, persistence: ChatResponsePersistence, run: Run) -> None:
+        """End a response whose run handed off to wait for people: the turn
+        stops it with `awaiting_approval`, and the decisions resume it on any
+        pod."""
         persistence.report_suspended(run)
         self._publish(
             Packet(
@@ -457,7 +451,6 @@ class ChatTurnExecution:
                 obj=overall_stop(RunStatus.SUSPENDED, None),
             )
         )
-        return True
 
     def _clear_processing_status(self) -> None:
         def save_late_stop() -> None:
@@ -501,6 +494,10 @@ class ChatTurnExecution:
         startup_error: BaseException | None = None,
     ) -> Run | None:
         index = persistence.model_index
+        resumed_id = self.setup.resumed_response_id
+        run: Run | None = None
+        # The resolutions that a continued response's replay leaves to its run.
+        withheld: list[Packet] = []
         cancellation = CancellationSignal()
         links = ExitStack()
         links.enter_context(
@@ -543,13 +540,7 @@ class ChatTurnExecution:
             else:
                 configured_tools = chat_agent.configured_tools
                 persistence.initial_citations = dict(chat_agent.initial_citations)
-            presenter = ResponsePresenter(
-                emitter,
-                tool_ids=tool_ids,
-                display_names={
-                    tool.name: tool.display_name for tool in configured_tools
-                },
-            )
+            presenter = ResponsePresenter(emitter, tool_ids=tool_ids)
             store: ChatRunStore | None = None
             if record_mode_persists_content(self.setup.incognito_record_mode):
                 store, coordinator = bind_run_store(
@@ -562,16 +553,14 @@ class ChatTurnExecution:
                     follow_up_steps=chat_agent.max_steps,
                     root_response=persistence,
                     on_child_released=self._dispatch_after_release,
-                    on_agent_approval=presenter.agent_approval,
+                    on_root_parked=partial(self._root_parked, persistence),
                 )
                 with self._lock:
                     self._stores.append(store)
-                    self._response_stores[index] = store
             else:
                 # Incognito chats have no child agents to find, restore, or own,
                 # and no approvals.
                 coordinator = persistence.coordinator.view(store=persistence)
-            resumed_id = self.setup.resumed_response_id
             if resumed_id is None:
                 coordinator.register(
                     AgentInfo(
@@ -602,23 +591,19 @@ class ChatTurnExecution:
                     execution, replay = read_suspended_response_replay(
                         db_session, resumed_id
                     )
-                presenter.replay(execution.response, replay, execution.presentation)
-                try:
-                    resumed = store.resume(
-                        str(resumed_id),
-                        context=AgentState(
-                            messages=list(self.setup.messages),
-                            checkpoint=self.setup.checkpoint,
-                        ),
-                        deadline_at=self._deadline_at,
-                        on_event=presenter.consume,
-                        event_dispatcher=self.delivery.events,
-                    )
-                except Exception:
-                    fail_suspended_response(
-                        self.setup.cache, get_current_tenant_id(), resumed_id
-                    )
-                    raise
+                withheld = presenter.replay(
+                    execution.response, replay, execution.presentation
+                )
+                resumed = store.resume(
+                    str(resumed_id),
+                    context=AgentState(
+                        messages=list(self.setup.messages),
+                        checkpoint=self.setup.checkpoint,
+                    ),
+                    deadline_at=self._deadline_at,
+                    on_event=presenter.consume,
+                    event_dispatcher=self.delivery.events,
+                )
                 if resumed is None:
                     raise RuntimeError("The response no longer waits to continue")
                 run = resumed
@@ -644,7 +629,21 @@ class ChatTurnExecution:
             return run
         except BaseException as failure:
             try:
-                persistence.save_failure(failure, cancellation.reason)
+                if resumed_id is not None and run is None:
+                    # The response ends as failed, so no later dispatch tries
+                    # it again.
+                    fail_suspended_response(
+                        self.setup.cache, get_current_tenant_id(), resumed_id
+                    )
+                    for packet in withheld:
+                        emitter.emit(packet)
+                    persistence.report_worker_failure(
+                        failure
+                        if isinstance(failure, Exception)
+                        else RuntimeError(RESUME_FAILED_MESSAGE)
+                    )
+                else:
+                    persistence.save_failure(failure, cancellation.reason)
             except Exception:
                 logger.exception(
                     "Response startup finalization failed for model %d", index
@@ -733,8 +732,7 @@ def bind_run_store(
     follow_up_steps: int,
     root_response: RunStore | None,
     on_child_released: Callable[[], None] | None,
-    on_agent_approval: Callable[[tuple[str, str, str], ToolApprovalRequest], None]
-    | None = None,
+    on_root_parked: Callable[[Run], None] | None = None,
 ) -> tuple[ChatRunStore, AgentCoordinator]:
     """Bind the run store of a response's branch and register the visible agents."""
     branch = load_chat_branch(response_id)
@@ -760,7 +758,7 @@ def bind_run_store(
         tools=tools,
         # Child-result delivery saves no user message.
         answers_agent_results=setup.user_message_id is None,
-        on_agent_approval=on_agent_approval,
+        on_root_parked=on_root_parked,
     )
     view = store.bind(
         coordinator,

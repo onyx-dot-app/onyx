@@ -312,8 +312,10 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
             agent_id=agent.id,
             status=RunStatus.SUSPENDED,
             steps=[],
+            # The suspended step declared the agent's tools.
             progress=RunProgress(
                 step_limit=3,
+                tools=[tool.definition for tool in agent.tools],
                 feature_state=state,
             ),
         ),

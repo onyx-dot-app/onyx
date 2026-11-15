@@ -189,6 +189,8 @@ def test_a_parked_program_resumes_in_another_process(
         assert saved_result is not None and saved_result.status == RunStatus.COMPLETE
         db_session.expire_all()
         assert db_session.get(ChatResponseCheckpoint, branch[1]) is None
+        # The checkpoint owned the dump, which went when the response ended.
+        assert file_store.list_files_by_prefix(prefix) == []
     finally:
         coordinator.close(timeout=1)
         for record in file_store.list_files_by_prefix(prefix):

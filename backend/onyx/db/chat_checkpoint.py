@@ -1,24 +1,30 @@
 """Conditional checkpoint transitions. Callers own transactions."""
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from collections.abc import Collection
+from uuid import UUID
 
-from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
-from onyx.chat.models import ChatFeatureState, ResponseCheckpoint, SavedCheckpoint
-from onyx.db.approval_request import (
-    close_pending_approval_requests__no_commit,
-    responses_waiting_for_approval,
+from pydantic import JsonValue, TypeAdapter
+from sqlalchemy import any_, select, true
+from sqlalchemy.orm import Session, aliased
+
+from onyx.agents.models import InputSource, RunFailure, RunFailureKind, RunStatus
+from onyx.chat.models import ParkedRun, ResponseCheckpoint, SavedCheckpoint
+from onyx.db.approval_request import close_pending_approval_requests__no_commit
+from onyx.db.chat import (
+    configure_response_transaction__no_commit,
+    response_invocation_chain,
+    session_descendants,
 )
-from onyx.db.chat import configure_response_transaction__no_commit
-from onyx.db.chat_response import (
-    finish_checkpoint__no_commit,
-)
+from onyx.db.chat_response import finish_checkpoint__no_commit
 from onyx.db.enums import ApprovalDecision, record_mode_persists_content
-from onyx.db.models import ChatMessage, ChatResponseCheckpoint
-from onyx.utils.logger import setup_logger
+from onyx.db.models import (
+    ApprovalRequest,
+    ChatInput,
+    ChatMessage,
+    ChatResponseCheckpoint,
+    ChatSession,
+)
 
-logger = setup_logger()
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 
 
@@ -40,7 +46,12 @@ def publish_checkpoint__no_commit(
     data: ResponseCheckpoint,
     *,
     expected_ownership_version: int | None,
-) -> int:
+    child_run_ids: Collection[int] = (),
+    dump_file_ids: Collection[str] = (),
+) -> list[str]:
+    """Save a paused response's checkpoint, with the foreground child runs it
+    waits for and the program dumps it owns. Returns the dumps of the
+    checkpoint that it replaces, which the caller deletes after commit."""
     if data.binding.response_id != str(message_id):
         raise ValueError("Checkpoint binding does not match its response")
     response = _lock_response(session, message_id)
@@ -53,7 +64,11 @@ def publish_checkpoint__no_commit(
         if expected_ownership_version is not None:
             raise ValueError("Checkpoint was removed")
         row = ChatResponseCheckpoint(
-            chat_message_id=message_id, ownership_version=1, state={}
+            chat_message_id=message_id,
+            ownership_version=1,
+            state={},
+            child_run_ids=[],
+            dump_file_ids=[],
         )
         session.add(row)
     else:
@@ -63,10 +78,15 @@ def publish_checkpoint__no_commit(
         ):
             raise ValueError("Checkpoint ownership changed")
         row.ownership_version += 1
+    replaced = [
+        file_id for file_id in row.dump_file_ids if file_id not in dump_file_ids
+    ]
     row.state = _JSON_OBJECT.validate_python(data.model_dump(mode="json"))
+    row.child_run_ids = list(child_run_ids)
+    row.dump_file_ids = list(dump_file_ids)
     response.response_status = RunStatus.SUSPENDED
     session.flush()
-    return row.ownership_version
+    return replaced
 
 
 def claim_checkpoint__no_commit(
@@ -83,11 +103,6 @@ def claim_checkpoint__no_commit(
         ownership_version=row.ownership_version,
         data=ResponseCheckpoint.model_validate(row.state),
     )
-
-
-def read_checkpoint(session: Session, message_id: int) -> ResponseCheckpoint | None:
-    row = session.get(ChatResponseCheckpoint, message_id)
-    return ResponseCheckpoint.model_validate(row.state) if row is not None else None
 
 
 def check_checkpoint_owner__no_commit(
@@ -125,46 +140,28 @@ def interrupt_response__no_commit(
     *,
     cancelled: bool = False,
     failure: RunFailure | None = None,
-    running_only: bool = False,
+    keep_parked: bool = False,
 ) -> list[str] | None:
     """Caller holds the response's cache lock and has verified that no owner remains.
 
     A cancelled response keeps `failure`, the reason its Stop gave, if any; a
     failed one keeps `failure`, or says that its owner stopped. Its approval
-    requests end, since no call waits for them anymore. With `running_only`, a
-    parked response stays as it is. Returns the file IDs of the dumps of its
-    parked programs, which the caller deletes after commit; None when the
-    response did not end here.
+    requests end, since no call waits for them anymore. With `keep_parked`, a
+    parked response, SUSPENDED with a checkpoint, stays as it is. Returns the dumps that its checkpoint
+    owned, which the caller deletes after commit; None when the response did
+    not end here.
     """
     response = _lock_response(session, message_id)
     if (
         response.response_status is None
         or response.response_status.is_terminal
-        or (running_only and response.response_status != RunStatus.RUNNING)
+        or (
+            keep_parked
+            and response.response_status == RunStatus.SUSPENDED
+            and session.get(ChatResponseCheckpoint, message_id) is not None
+        )
     ):
         return None
-    row = session.get(ChatResponseCheckpoint, message_id)
-    dumps: list[str] = []
-    if row is not None:
-        try:
-            feature_state = ResponseCheckpoint.model_validate(row.state).progress.get(
-                "feature_state"
-            )
-            # Only chat agents run programs.
-            if (
-                isinstance(feature_state, dict)
-                and feature_state.get("kind")
-                == ChatFeatureState.model_fields["kind"].default
-            ):
-                dumps = [
-                    file_id
-                    for cell in ChatFeatureState.model_validate(
-                        feature_state
-                    ).code_cells
-                    if (file_id := cell.program.dump.file_id) is not None
-                ]
-        except ValidationError:
-            logger.exception("Could not read the parked programs of a response")
     close_pending_approval_requests__no_commit(
         session, ApprovalDecision.EXPIRED, None, chat_message_ids=[message_id]
     )
@@ -178,67 +175,95 @@ def interrupt_response__no_commit(
             message="The response owner stopped reporting progress",
         )
     )
-    finish_checkpoint__no_commit(session, message_id)
-    return dumps
+    return finish_checkpoint__no_commit(session, message_id)
 
 
-def resumable_parked_runs(session: Session, parked: dict[int, str]) -> dict[int, str]:
-    """The parked runs, by response ID with their agent IDs, whose waits all
-    ended: no request of the response waits and no foreground child run that
-    its checkpoint waits for is unfinished. `parked` gives the runs whose other
-    waits ended; their parked foreground children are added."""
-    parked = dict(parked)
-    waiting: set[int] = set()
-    unread = list(parked)
-    while unread:
-        children: dict[int, list[int]] = {
-            message_id: [int(child_id) for child_id in child_ids]
-            for message_id, child_ids in session.execute(
-                select(
-                    ChatResponseCheckpoint.chat_message_id,
-                    ChatResponseCheckpoint.state["progress"]["child_run_ids"],
-                ).where(ChatResponseCheckpoint.chat_message_id.in_(unread))
-            )
-            if child_ids
-        }
-        unread = []
-        child_rows = (
-            session.execute(
-                select(
-                    ChatMessage.id,
-                    ChatMessage.chat_session_id,
-                    ChatMessage.response_status,
-                ).where(
-                    ChatMessage.id.in_(
-                        [
-                            child
-                            for child_ids in children.values()
-                            for child in child_ids
-                        ]
-                    )
-                )
-            ).all()
-            if children
-            else []
+def resumable_parked_runs(session: Session, chat_session_id: UUID) -> list[ParkedRun]:
+    """The parked runs of the chat, on any branch, whose waits all ended.
+
+    A run is parked while its response is SUSPENDED with a checkpoint. Its
+    waits are its approval requests, the foreground child runs that its
+    checkpoint names and, for a subagent, the runs that it delegated, whose
+    result rows it has not read. It resumes once none is undecided or
+    unfinished; a request whose row was deleted, with its tool's server, gives
+    its call no tool.
+    """
+    sessions = session_descendants(chat_session_id)
+    child = aliased(ChatMessage)
+    delegated = aliased(ChatMessage)
+    unfinished = (RunStatus.RUNNING, RunStatus.SUSPENDED)
+    requests = select(ApprovalRequest.id).where(
+        ApprovalRequest.chat_message_id == ChatMessage.id
+    )
+    children = select(child.id).where(
+        child.id == any_(ChatResponseCheckpoint.child_run_ids)
+    )
+    # The root does not wait for the runs that it delegates.
+    delegations = (
+        select(delegated.id)
+        .join(ChatInput, ChatInput.source_response_id == delegated.id)
+        .where(
+            ChatMessage.chat_session_id != chat_session_id,
+            ChatInput.source == InputSource.AGENT_RESULT,
+            ChatInput.recipient_session_id == ChatMessage.chat_session_id,
         )
-        rows = {row.id: row for row in child_rows}
-        for parent_id, child_ids in children.items():
-            for child_id in child_ids:
-                row = rows.get(child_id)
-                if row is None or row.response_status is None:
-                    continue
-                if not row.response_status.is_terminal:
-                    waiting.add(parent_id)
-                if (
-                    row.response_status == RunStatus.SUSPENDED
-                    and child_id not in parked
-                ):
-                    parked[child_id] = str(row.chat_session_id)
-                    unread.append(child_id)
-    if parked:
-        waiting |= responses_waiting_for_approval(session, parked)
-    return {
-        response_id: agent_id
-        for response_id, agent_id in parked.items()
-        if response_id not in waiting
-    }
+    )
+    rows = session.execute(
+        select(ChatMessage.id, ChatMessage.chat_session_id)
+        .join(
+            ChatResponseCheckpoint,
+            ChatResponseCheckpoint.chat_message_id == ChatMessage.id,
+        )
+        .join(sessions, sessions.c.id == ChatMessage.chat_session_id)
+        .where(
+            ChatMessage.response_status == RunStatus.SUSPENDED,
+            ~requests.where(ApprovalRequest.decision.is_(None)).exists(),
+            ~children.where(child.response_status.in_(unfinished)).exists(),
+            ~delegations.where(delegated.response_status.in_(unfinished)).exists(),
+        )
+        .order_by(ChatMessage.id)
+    ).all()
+    return [
+        ParkedRun(
+            agent_id=str(agent_id),
+            response_id=response_id,
+            # Resumable runs are few; each is found only after its waits end.
+            root_response_id=response_id
+            if agent_id == chat_session_id
+            else response_invocation_chain(session, response_id)[-1].message_id,
+        )
+        for response_id, agent_id in rows
+    ]
+
+
+def parked_response_ids(
+    session: Session, user_id: UUID, chat_session_id: UUID | None = None
+) -> list[int]:
+    """The parked responses of the user's chats, or of one chat. A parked tree
+    always waits on a request somewhere, so only chats with requests are read."""
+    roots = session.scalars(
+        select(ApprovalRequest.chat_session_id)
+        .join(ChatSession, ChatSession.id == ApprovalRequest.chat_session_id)
+        .where(
+            ChatSession.user_id == user_id,
+            ApprovalRequest.chat_session_id == chat_session_id
+            if chat_session_id is not None
+            else true(),
+        )
+        .distinct()
+    ).all()
+    parked: list[int] = []
+    for root in roots:
+        sessions = session_descendants(root)
+        parked.extend(
+            session.scalars(
+                select(ChatMessage.id)
+                .join(
+                    ChatResponseCheckpoint,
+                    ChatResponseCheckpoint.chat_message_id == ChatMessage.id,
+                )
+                .join(sessions, sessions.c.id == ChatMessage.chat_session_id)
+                .where(ChatMessage.response_status == RunStatus.SUSPENDED)
+            )
+        )
+    return parked

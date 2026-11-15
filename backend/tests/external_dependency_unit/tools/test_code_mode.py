@@ -25,7 +25,7 @@ from onyx.agents.models import (
     messages_from_steps,
 )
 from onyx.cache.factory import get_cache_backend
-from onyx.chat.chat_processing_checker import get_processing_stream_id
+from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.chat_utils import create_chat_session_from_request
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.stop_signal_checker import request_stop
@@ -312,9 +312,9 @@ def _assert_code_mode_block(packets: Sequence[object], program: str) -> None:
 
 def _press_stop(chat_session_id: UUID) -> None:
     cache = get_cache_backend()
-    stream_id = get_processing_stream_id(chat_session_id, cache)
-    assert stream_id is not None
-    request_stop(chat_session_id, cache, stream_id=stream_id)
+    stream = get_processing_stream(chat_session_id, cache)
+    assert stream is not None
+    request_stop(chat_session_id, cache, stream_id=stream.stream_id)
 
 
 def _stop_on_stdout(chat_session_id: UUID, text: str) -> Callable[[object], None]:

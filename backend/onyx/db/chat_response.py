@@ -34,7 +34,7 @@ from onyx.chat.models import (
     recorded_mentions,
     skill_message_id,
 )
-from onyx.chat.response import restore_response_sources, tool_arguments_for_display
+from onyx.chat.response import restore_response_sources
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import SearchDoc
 from onyx.db.approval_request import get_response_approval_requests
@@ -75,13 +75,11 @@ from onyx.db.models import (
 )
 from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.models import (
     GenerationRequestParams,
     Message,
     UserMessage,
-)
-from onyx.llm.models import (
-    ToolCall as LLMToolCall,
 )
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
@@ -369,7 +367,7 @@ def save_chat_response_to_db(
             if response.error is not None
             else None
         )
-        finish_checkpoint__no_commit(session, message_id)
+        dumps = finish_checkpoint__no_commit(session, message_id)
         save_chat_turn(
             message_text=answer,
             reasoning_tokens=response.reasoning,
@@ -388,6 +386,7 @@ def save_chat_response_to_db(
             response_record=response.response,
             presentation=response.presentation,
         )
+    delete_files_best_effort(dumps, "parked program dumps")
     return answer
 
 
@@ -1123,10 +1122,14 @@ def write_response_items(
     return tools
 
 
-def finish_checkpoint__no_commit(session: Session, message_id: int) -> None:
+def finish_checkpoint__no_commit(session: Session, message_id: int) -> list[str]:
+    """Delete the response's checkpoint. Returns the dumps that it owned, which
+    the caller deletes after commit."""
     row = session.get(ChatResponseCheckpoint, message_id)
-    if row is not None:
-        session.delete(row)
+    if row is None:
+        return []
+    session.delete(row)
+    return list(row.dump_file_ids)
 
 
 def read_response_status__no_commit(
@@ -1434,68 +1437,12 @@ def _agent_approvals(
         )
         .order_by(ApprovalRequest.created_at, ApprovalRequest.id)
     ).all()
-    # The arguments of each request's call, from its run's saved steps; a call
-    # that a program made is not saved.
-    calls: dict[int, dict[str, LLMToolCall]] = {}
-    for request, _, _ in rows:
-        if request.chat_message_id not in calls:
-            message = db_session.get(ChatMessage, request.chat_message_id)
-            execution = read_chat_execution(message) if message else None
-            calls[request.chat_message_id] = {
-                call.id: call
-                for step in (execution.response.steps if execution else [])
-                for call in step.message.tool_calls
-            }
     approvals: dict[tuple[str, str], list[AgentToolApproval]] = {}
     for request, anchor_call_id, agent_name in rows:
-        call = calls[request.chat_message_id].get(request.tool_call_id)
         approvals.setdefault((str(response_id), anchor_call_id), []).append(
             AgentToolApproval(
                 approval=SavedToolApproval.model_validate(request),
                 agent_name=agent_name or "",
-                arguments=tool_arguments_for_display(call)
-                if call is not None and call.name == request.tool_name
-                else {},
             )
         )
     return approvals
-
-
-def agent_approval_anchor(
-    db_session: Session, response_id: int
-) -> tuple[str, str, str] | None:
-    """Where a background agent run's requests show: the run, message and call
-    IDs of the root response's call that started the agent, directly or
-    through its spawners. None for a run that is not a background agent's,
-    which has no result row."""
-    if (
-        db_session.scalar(
-            select(ChatInput.id)
-            .where(
-                ChatInput.source == InputSource.AGENT_RESULT,
-                ChatInput.source_response_id == response_id,
-            )
-            .limit(1)
-        )
-        is None
-    ):
-        return None
-    chain = response_invocation_chain(db_session, response_id)
-    if len(chain) < 2:
-        return None
-    question = aliased(ChatMessage)
-    anchor = db_session.execute(
-        select(ChatResponseItem.id, ToolCall.tool_call_id)
-        .select_from(ChatMessage)
-        .join(question, question.id == ChatMessage.parent_message_id)
-        .join(ToolCall, ToolCall.id == question.invoking_tool_call_id)
-        .join(
-            ChatResponseItem,
-            (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
-            & (ChatResponseItem.step_index == ToolCall.turn_number),
-        )
-        .where(ChatMessage.id == chain[-2].message_id)
-    ).first()
-    if anchor is None:
-        return None
-    return str(chain[-1].message_id), anchor[0], anchor[1]

@@ -427,12 +427,8 @@ class ResponsePresenter:
         emitter: Emitter,
         *,
         tool_ids: Mapping[str, int | None] | None = None,
-        display_names: Mapping[str, str] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
-        # Tool display names by call name, for approval requests of calls that
-        # a tool makes for the model.
-        self.display_names = display_names or {}
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
@@ -443,9 +439,12 @@ class ResponsePresenter:
         response: ResponseRecord,
         replay: ResponseReplayData,
         settings: dict[str, MessageRendering],
-    ) -> None:
+    ) -> list[Packet]:
         """Send the saved output of a suspended response that this stream
-        continues; its calls that wait stay open for their live events."""
+        continues; its calls that wait stay open for their live events.
+        Returns the resolutions of their requests, which those events send;
+        the stream sends them itself when the run does not start."""
+        withheld: list[Packet] = []
         for packet in replay_response(
             response,
             replay.tools,
@@ -455,18 +454,10 @@ class ResponsePresenter:
             approvals=replay.approvals,
             agent_approvals=replay.agent_approvals,
             open_calls=self.tools,
+            withheld=withheld,
         ):
             self.emitter.emit(packet)
-
-    def agent_approval(
-        self, anchor: tuple[str, str, str], request: ToolApprovalRequest
-    ) -> None:
-        """Show a background agent's request in the card of the call that
-        started the agent (by run, message and call ID), when this stream
-        shows that call. Any thread can call it."""
-        tool = self.tools.get(anchor)
-        if tool is not None:
-            self.emitter.emit(Packet(placement=tool.placement, obj=request))
+        return withheld
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
@@ -525,7 +516,7 @@ class ResponsePresenter:
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
-            output = tool.consume(event, self.display_names)
+            output = tool.consume(event)
         elif isinstance(event, ToolResultAmendedEvent):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return
@@ -589,6 +580,7 @@ def replay_response(
         tuple[str, str], Sequence[AgentToolApproval]
     ] = _NO_AGENT_APPROVALS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
+    withheld: list[Packet] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
@@ -599,8 +591,8 @@ def replay_response(
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
     response: it collects those calls' renderers, by run, message and call ID,
-    for their live events, leaves their decisions to those events, and sends
-    no stop. The session response carries the saved message error separately.
+    for their live events, leaves their decisions to those events (adding them
+    to `withheld`), and sends no stop. The session response carries the saved message error separately.
     Stop packets close rendering; they do not classify execution success or
     failure.
     """
@@ -655,20 +647,13 @@ def replay_response(
             packets.extend(renderer_of_call.start())
             waits = result is None and response.status == RunStatus.SUSPENDED
             shown = [
-                (
-                    approval,
-                    # A call that a program made is not saved.
-                    tool_arguments_for_display(call)
-                    if approval.tool_name == call.name
-                    else {},
-                    None,
-                )
+                (approval, None)
                 for approval in approvals.get((response.run_id, call.id), ())
             ] + [
-                (agent.approval, agent.arguments, agent.agent_name)
+                (agent.approval, agent.agent_name)
                 for agent in agent_approvals.get((response.run_id, call.id), ())
             ]
-            for approval, arguments, agent_name in shown:
+            for approval, agent_name in shown:
                 approval_id = str(approval.id)
                 packets.append(
                     Packet(
@@ -678,25 +663,27 @@ def replay_response(
                             tool_call_id=call.id,
                             tool_name=approval.tool_name,
                             display_name=approval.display_name,
-                            arguments=arguments,
+                            arguments=approval.arguments,
                             agent_name=agent_name,
                         ),
                     )
                 )
+                if approval.decision is None:
+                    continue
+                resolved = Packet(
+                    placement=tool_placement,
+                    obj=ToolApprovalResolved(
+                        approval_id=approval_id,
+                        outcome=approval_outcome(ended_answer(approval)),
+                    ),
+                )
                 # A continued stream's own waiting calls get their decisions
                 # from their live events; an agent's request has none.
-                if approval.decision is not None and not (
-                    waits and open_calls is not None and agent_name is None
-                ):
-                    packets.append(
-                        Packet(
-                            placement=tool_placement,
-                            obj=ToolApprovalResolved(
-                                approval_id=approval_id,
-                                outcome=approval_outcome(ended_answer(approval)),
-                            ),
-                        )
-                    )
+                if waits and open_calls is not None and agent_name is None:
+                    if withheld is not None:
+                        withheld.append(resolved)
+                else:
+                    packets.append(resolved)
             for child in response.child_runs:
                 # Agent tools start background runs, whose output arrives separately.
                 if (

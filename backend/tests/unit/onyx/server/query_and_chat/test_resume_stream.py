@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
 from fastapi.testclient import TestClient
 
+from onyx.chat.chat_processing_checker import ProcessingStream
 from onyx.chat.stream_buffer import (
     StreamBufferMeta,
     StreamBufferWriter,
@@ -65,7 +66,11 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
         patch.object(chat_backend, "get_session_with_current_tenant"),
         patch.object(chat_backend, "get_chat_session_by_id"),
         patch.object(chat_backend, "get_cache_backend", return_value=cache),
-        patch.object(chat_backend, "get_processing_stream_id", return_value=42),
+        patch.object(
+            chat_backend,
+            "get_processing_stream",
+            return_value=ProcessingStream(42, []),
+        ),
         patch.object(chat_backend, "_RESUME_MAX_CHUNKS_PER_READ", 1),
         patch.object(
             chat_backend, "read_stream_chunks", side_effect=read_with_concurrent_write
@@ -105,7 +110,11 @@ def test_resume_rejects_cursor_for_a_different_stream() -> None:
         patch.object(chat_backend, "get_session_with_current_tenant"),
         patch.object(chat_backend, "get_chat_session_by_id"),
         patch.object(chat_backend, "get_cache_backend", return_value=FakeCache()),
-        patch.object(chat_backend, "get_processing_stream_id", return_value=43),
+        patch.object(
+            chat_backend,
+            "get_processing_stream",
+            return_value=ProcessingStream(43, []),
+        ),
         patch.object(chat_backend, "read_stream_chunks") as read,
         pytest.raises(OnyxError, match="No resumable stream"),
     ):
@@ -135,7 +144,11 @@ def test_resume_is_not_found_when_the_cursor_cannot_be_served(gap: str) -> None:
         patch.object(chat_backend, "get_session_with_current_tenant"),
         patch.object(chat_backend, "get_chat_session_by_id"),
         patch.object(chat_backend, "get_cache_backend", return_value=cache),
-        patch.object(chat_backend, "get_processing_stream_id", return_value=42),
+        patch.object(
+            chat_backend,
+            "get_processing_stream",
+            return_value=ProcessingStream(42, []),
+        ),
         pytest.raises(OnyxError, match="No resumable stream"),
     ):
         chat_backend.resume_chat_stream(

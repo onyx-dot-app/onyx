@@ -63,6 +63,7 @@ from onyx.chat.prompt_utils import (
     get_default_base_system_prompt,
 )
 from onyx.chat.run_store import (
+    RETRYABLE_START_ERRORS,
     fail_suspended_response,
     interrupt_ownerless_responses,
 )
@@ -886,35 +887,55 @@ def dispatch_pending_chat_messages(
     custom_tool_additional_headers: dict[str, str] | None = None,
     *,
     mcp_headers: dict[str, str] | None = None,
-    start_agent_host: bool = True,
 ) -> None:
-    """Start the selected branch's next queued work through chat admission.
+    """Start the chat's next queued work through chat admission.
 
-    A parked root response whose waits all ended continues first; its turn
-    publishes its stream ID before this returns, so a status read right after
-    sees it. Then the next root turn starts. Otherwise, parked agent runs whose
-    waits ended and idle agents' work start in an agent host when no running
-    child keeps a run store scanning. Chat turns pass `start_agent_host=False`: their own run
-    stores start that work. Started work uses the pass-through headers of the
-    request that led to it.
+    A parked root response whose waits all ended continues first, on any
+    branch; its turn publishes its stream ID before this returns, so a status
+    read right after sees it. Then the selected branch's next root turn
+    starts. Otherwise, parked agent runs whose waits ended and idle agents'
+    work start in an agent host when no running child keeps a run store
+    scanning; the host serves the selected branch, or the branch of a parked
+    run. Started work, and the work that it dispatches when it ends, uses the
+    pass-through headers of the request that led to it, such as a decision's
+    `mcp_headers`. Work that a status read starts has none.
     """
     try:
         cache = get_cache_backend(operation_timeout_s=ADMISSION_CACHE_TIMEOUT_S)
         if is_chat_session_processing(chat_session_id, cache):
             return
         inbox = read_repaired_chat_inbox(chat_session_id, cache)
-        resumable = inbox.resumable_response_id
+        resumable = next(
+            (
+                run.response_id
+                for run in inbox.resumable_runs
+                if run.agent_id == str(chat_session_id)
+            ),
+            None,
+        )
+        parked_agent_roots = [
+            run.root_response_id
+            for run in inbox.resumable_runs
+            if run.agent_id != str(chat_session_id)
+        ]
         queued_turn = inbox.next_turn
         if (
             resumable is None
             and queued_turn is None
             and not (
-                start_agent_host
-                and (inbox.child_work or inbox.resumable_agent_runs)
+                (inbox.child_work or parked_agent_roots)
                 and not inbox.running_response_ids
             )
         ):
             return
+        # The selected branch's host also resumes its parked agent runs.
+        host_response_id = (
+            inbox.selected_response_id
+            if inbox.child_work
+            or not parked_agent_roots
+            or set(parked_agent_roots) & set(inbox.branch.message_ids)
+            else parked_agent_roots[0]
+        )
 
         def start_pending_work() -> None:
             # Queued work starts a new root trace while retaining tenant context.
@@ -932,7 +953,7 @@ def dispatch_pending_chat_messages(
                     user_id,
                     litellm_additional_headers,
                     custom_tool_additional_headers,
-                    start_agent_host=False,
+                    mcp_headers=mcp_headers,
                 )
                 if resumable is not None:
                     if not has_global_permission(user, Permission.WRITE_CHAT):
@@ -953,11 +974,15 @@ def dispatch_pending_chat_messages(
                             mcp_headers=mcp_headers,
                             resumed_response_id=resumable,
                         )
-                    except OnyxError as error:
-                        # Its model or agent is gone: it cannot continue.
-                        if error.error_code not in (
-                            OnyxErrorCode.CONFLICT,
-                            OnyxErrorCode.RATE_LIMITED,
+                    except Exception as error:
+                        # Another turn holds the chat, the owner's budget is
+                        # spent, or storage failed for a moment: a later
+                        # dispatch tries again. Otherwise it cannot continue,
+                        # for example because its model or agent is gone.
+                        if not isinstance(error, RETRYABLE_START_ERRORS) and not (
+                            isinstance(error, OnyxError)
+                            and error.error_code
+                            in (OnyxErrorCode.CONFLICT, OnyxErrorCode.RATE_LIMITED)
                         ):
                             fail_suspended_response(
                                 cache, get_current_tenant_id(), resumable
@@ -976,13 +1001,12 @@ def dispatch_pending_chat_messages(
                             new_msg_req=SendMessageRequest(
                                 message="",
                                 chat_session_id=chat_session_id,
-                                parent_message_id=inbox.selected_response_id,
+                                parent_message_id=host_response_id,
                             ),
                             user=user,
                             llm_overrides=None,
                             litellm_additional_headers=litellm_additional_headers,
                             custom_tool_additional_headers=custom_tool_additional_headers,
-                            # A decision's headers reach a resumed agent's calls.
                             mcp_headers=mcp_headers,
                             agent_host=True,
                         )
@@ -1083,13 +1107,12 @@ def _stream_chat_turn(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    delivers_follow_ups: bool = True,
     ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Prepare one request, then read its independently owned agent stream.
 
-    `delivers_follow_ups` is false for one-shot callers. Their turns start no
-    queued work and offer no agent tools.
+    When the turn ends, it starts the chat's queued work, such as a response
+    whose approvals were decided while it handed off.
     """
     setup: ChatTurnSetup | None = None
     stream: ChatStream | None = None
@@ -1120,9 +1143,9 @@ def _stream_chat_turn(
                 user.id,
                 litellm_additional_headers,
                 custom_tool_additional_headers,
-                start_agent_host=False,
+                mcp_headers=mcp_headers,
             )
-            if delivers_follow_ups and setup.incognito_record_mode is None
+            if setup.incognito_record_mode is None
             else None,
         )
         yield from stream
@@ -1162,7 +1185,6 @@ def handle_stream_message_objects(
     slack_context: SlackContext | None = None,
     response_future: Future[ChatResponseOutcome] | None = None,
     query_observation: QueryObservation | None = None,
-    delivers_follow_ups: bool = True,
     ask_for_approval: bool = True,
 ) -> AnswerStream:
     """Single-model streaming entrypoint. For multi-model comparison, use ``handle_multi_model_stream``.
@@ -1182,7 +1204,6 @@ def handle_stream_message_objects(
         slack_context=slack_context,
         response_future=response_future,
         query_observation=query_observation,
-        delivers_follow_ups=delivers_follow_ups,
         ask_for_approval=ask_for_approval,
     )
 
@@ -1360,7 +1381,7 @@ def run_chat_turn(
     """
     response_future = Future[ChatResponseOutcome]()
     packets = handle_stream_message_objects(
-        new_msg_req=new_msg_req,
+        new_msg_req=new_msg_req.model_copy(update={"accepts_follow_ups": False}),
         user=user,
         litellm_additional_headers=litellm_additional_headers,
         custom_tool_additional_headers=custom_tool_additional_headers,
@@ -1368,7 +1389,6 @@ def run_chat_turn(
         additional_context=additional_context,
         slack_context=slack_context,
         response_future=response_future,
-        delivers_follow_ups=False,
         ask_for_approval=ask_for_approval,
     )
     return gather_stream_full(packets, response_future)

@@ -191,7 +191,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.persona = persona
         self.base_system_prompt = base_system_prompt
         self.reminders_enabled = reminders_enabled
-        self.agent_tools = create_subagent is not None
 
         if create_subagent is not None:
             # A new list: code mode can return the configured tools themselves.
@@ -262,7 +261,6 @@ class ChatAgent(Agent, RestorableFeature):
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
             code_cells=self.code_cells.saved() if self.code_cells is not None else [],
-            agent_tools=self.agent_tools,
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:

@@ -215,8 +215,10 @@ preview.
     suspended, the resumed run fails when it loads that image. Inline bytes become
     `agent-checkpoint/<root session id>/<sha256>` blobs with
     `FileOrigin.OTHER` and no `UserFile`
-    (`chat/restoration.py:persist_checkpoint_files`), as do the dumps of
-    parked code mode programs; session hard delete removes them by that prefix
+    (`chat/restoration.py:persist_checkpoint_files`). The dumps of parked code
+    mode programs use `agent-checkpoint/<root session id>/<unique id>`
+    instead, and the checkpoint row that saved them deletes them when it ends
+    or is replaced; session hard delete removes every blob by that prefix
     ([[chat-persistence#checkpoints-for-approvals]]).
 13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO

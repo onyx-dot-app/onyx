@@ -653,10 +653,11 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
 
             def slow_files(
                 checkpoint: ExecutionCheckpoint, *, session_id: UUID
-            ) -> None:
-                persist_checkpoint_files(checkpoint, session_id=session_id)
+            ) -> list[str]:
+                dumps = persist_checkpoint_files(checkpoint, session_id=session_id)
                 threading.Event().wait(1.5)
                 assert remote.read_run_status(run.id, "") == RunStatus.RUNNING
+                return dumps
 
             with patch(
                 "onyx.chat.run_store.persist_checkpoint_files", side_effect=slow_files
@@ -1267,7 +1268,9 @@ def test_root_start_failure_releases_reserved_response_for_retry(
 def test_resumed_child_keeps_its_original_response_tree(
     branch: tuple[UUID, int], db_session: Session, user_message: UserMessage
 ) -> None:
-    owner = store(branch)
+    # Neither store polls: a polled store resumes a parked run once no approval
+    # request of it waits, and this child waits for an answer.
+    owner = unpolled_store(branch)
     first, second = AgentCoordinator(), AgentCoordinator()
     child_ids: list[str] = []
     grandchild_ids: list[str] = []
@@ -1338,7 +1341,7 @@ def test_resumed_child_keeps_its_original_response_tree(
         )
         db_session.add(sibling)
         db_session.commit()
-        remote = store(
+        remote = unpolled_store(
             (branch[0], next_response.id), visible_response_ids=[original.id]
         )
         remote.bind(second, build_agent=rebuild)
