@@ -7,7 +7,11 @@ import {
 import { useToolApprovals } from "@/lib/chat/hooks";
 import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
 
-function request(approvalId: string, turnIndex: number): Packet {
+function request(
+  approvalId: string,
+  turnIndex: number,
+  agentName: string | null = null
+): Packet {
   return {
     placement: { turn_index: turnIndex, tab_index: 0 },
     obj: {
@@ -17,6 +21,7 @@ function request(approvalId: string, turnIndex: number): Packet {
       tool_name: "mcp__3__github__create_issue",
       display_name: "Create issue",
       arguments: { title: "Bug" },
+      agent_name: agentName,
     },
   };
 }
@@ -44,28 +49,38 @@ beforeEach(() =>
 );
 
 describe("useToolApprovals", () => {
-  it("gives each request of the response its status", () => {
+  it("keeps records of decided requests and leaves waiting ones out", () => {
     const first = request("first", 1);
-    const second = request("second", 2);
-    const packets = [first, second, resolved("first", 1)];
+    const packets = [first, request("second", 2), resolved("first", 1)];
 
     const { result } = renderHook(() => useToolApprovals(packets));
 
-    expect(result.current).toEqual([
-      { turnIndex: 1, request: requestObj(first), status: "approved" },
-      { turnIndex: 2, request: requestObj(second), status: "pending" },
-    ]);
+    expect(result.current).toEqual({
+      records: [
+        { turnIndex: 1, request: requestObj(first), status: "approved" },
+      ],
+      awaitingApproval: true,
+    });
   });
 
   it("follows packets appended to the same array", () => {
     const packets: Packet[] = [request("first", 1)];
     const { result, rerender } = renderHook(() => useToolApprovals(packets));
-    expect(result.current[0]?.status).toBe("pending");
+    expect(result.current.records).toEqual([]);
 
     // Streams append to the array they already passed.
     packets.push(resolved("first", 1));
     rerender();
 
-    expect(result.current[0]?.status).toBe("approved");
+    expect(result.current.records[0]?.status).toBe("approved");
+    expect(result.current.awaitingApproval).toBe(false);
+  });
+
+  it("does not wait on a background agent's request", () => {
+    const packets = [request("agent", 1, "Researcher")];
+
+    const { result } = renderHook(() => useToolApprovals(packets));
+
+    expect(result.current).toEqual({ records: [], awaitingApproval: false });
   });
 });

@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "يريد {agent} تشغيل {tool}"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "إزالة عدم الإعجاب",

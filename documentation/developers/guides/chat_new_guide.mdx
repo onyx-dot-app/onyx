@@ -165,6 +165,7 @@ The packet has these fields:
 | `tool_name` | The name of the tool that the model called. |
 | `display_name` | The tool name to show to the user. |
 | `arguments` | The arguments of the call. Show them to the user before they decide. |
+| `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
 When only approval requests remain, Onyx saves the answer,
@@ -188,8 +189,20 @@ If you close the stream after you send the stop, record the requests that wait a
 After the stream ends with `awaiting_approval`, no answer runs, so a stop has no effect and the requests still wait.
 To end the wait, reject each request.
 
-Treat a request with no resolution as ended when its response stops for a reason other than `awaiting_approval`.
-Ignore an `outcome` that you do not recognize.
+Treat a request with no resolution as ended when its response stops for a reason other than `awaiting_approval`,
+unless it has an `agent_name`. Ignore an `outcome` that you do not recognize.
+
+### Approvals of background agents
+
+When a send-message request sets `accepts_follow_ups` to `true`, the answer can start background agents.
+An agent's call can also need approval. Its request has an `agent_name`,
+and it shows at the card of the answer's call that started the agent. The request waits on its own:
+it stays open when the answer stops for any reason, a stop of the answer does not reject it,
+and it does not block new messages. While the answer streams, its stream sends the request at once. Later,
+`pending_approval_ids` in `GET /chat/chat-session/{chat_session_id}/status` lists it,
+and `GET /chat/get-chat-session/{chat_session_id}` returns it in that answer. After the decision,
+the agent continues in the background, with no new stream for the answer.
+Its record and its result arrive with the chat session, as for any background agent.
 
 ### Approvals in saved answers
 
@@ -244,7 +257,7 @@ Onyx starts that stream before the decision call returns. To follow it:
 
 A decision that leaves other requests of the answer open does not continue the answer.
 
-While a call in a chat session waits for a decision,
+While a call of the latest answer waits for a decision,
 a new message to that session gets a `409` with the `error_code` `APPROVAL_PENDING`. Send the decision first.
 Turns that start from queued messages can also wait for approval.
 

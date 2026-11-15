@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent} quiere ejecutar {tool}"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "Quitar no me gusta",

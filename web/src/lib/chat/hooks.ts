@@ -45,8 +45,10 @@ import { getUnresolvedMultiModelTurn } from "@/app/app/message/multiModel";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
+  awaitsDecision,
   findPendingToolApprovalId,
   readToolApprovals,
+  readWaitingToolApprovals,
   type ToolApproval,
   toolApprovalStatus,
   useToolApprovalUi,
@@ -85,14 +87,19 @@ function isApprovalPendingError(error: unknown): boolean {
   );
 }
 
-/** The approval requests of one response, each with its final status. */
-export function useToolApprovals(rawPackets: Packet[]): ToolApproval[] {
-  // Streams append to the same array, so its length keys the result too.
-  const packetCount = rawPackets.length;
-  const { entries, stopped } = useMemo(
-    () => readToolApprovals(rawPackets.slice(0, packetCount)),
-    [rawPackets, packetCount]
-  );
+export interface ResponseToolApprovals {
+  /** Requests that wait no more, as one-line records in the reply's timeline. */
+  records: ToolApproval[];
+  /** One of the reply's own requests waits for this user's decision. */
+  awaitingApproval: boolean;
+}
+
+/**
+ * The approval requests of one response, as its timeline shows them. Cards
+ * that wait for a decision show in the transcript's trailing region.
+ */
+export function useToolApprovals(rawPackets: Packet[]): ResponseToolApprovals {
+  const { entries, stopped } = readToolApprovals(rawPackets);
   // Only this response's statuses, so other decisions do not re-render it.
   const localStatuses = useToolApprovalUi(
     useShallow((state) =>
@@ -107,15 +114,22 @@ export function useToolApprovals(rawPackets: Packet[]): ToolApproval[] {
     if (resolvedIds)
       useToolApprovalUi.getState().forgetStatuses(resolvedIds.split(" "));
   }, [resolvedIds]);
-  return useMemo(
-    () =>
-      entries.map((entry, index) => ({
-        turnIndex: entry.turnIndex,
-        request: entry.request,
-        status: toolApprovalStatus(entry, localStatuses[index], stopped),
-      })),
-    [entries, localStatuses, stopped]
-  );
+  return useMemo(() => {
+    const records: ToolApproval[] = [];
+    let awaitingApproval = false;
+    entries.forEach((entry, index) => {
+      const status = toolApprovalStatus(entry, localStatuses[index], stopped);
+      if (!awaitsDecision(entry, stopped))
+        records.push({
+          turnIndex: entry.turnIndex,
+          request: entry.request,
+          status,
+        });
+      else if (entry.request.agent_name === null && status === "pending")
+        awaitingApproval = true;
+    });
+    return { records, awaitingApproval };
+  }, [entries, localStatuses, stopped]);
 }
 
 export interface ToolApprovalSendGuard {
@@ -216,6 +230,38 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     if (status.is_processing || missingResponse)
       void refreshChatSession(sessionId, checkFailed);
   }, [sessionId, status, idle, checkFailed]);
+
+  // An idle chat streams nothing, so a background subagent's request and its
+  // resolution arrive through a refresh. Refresh once per open set that
+  // differs from the requests the chat shows.
+  const openApprovals = useMemo(
+    () => status && [...status.pending_approval_ids].sort().join(" "),
+    [status]
+  );
+  const handledApprovals = useRef<{
+    sessionId: string | null;
+    openApprovals: string | undefined;
+  }>({ sessionId: null, openApprovals: undefined });
+  useEffect(() => {
+    if (!sessionId || openApprovals === undefined || !idle) return;
+    const handled = handledApprovals.current;
+    if (
+      handled.sessionId === sessionId &&
+      handled.openApprovals === openApprovals
+    )
+      return;
+    handledApprovals.current = { sessionId, openApprovals };
+    const tree = useChatSessionStore
+      .getState()
+      .sessions.get(sessionId)?.messageTree;
+    if (!tree) return;
+    const shown = readWaitingToolApprovals(tree)
+      .map((approval) => approval.request.approval_id)
+      .sort()
+      .join(" ");
+    if (shown !== openApprovals)
+      void refreshChatSession(sessionId, checkFailed);
+  }, [sessionId, openApprovals, idle, checkFailed]);
 
   // Every turn saves a new response, so a new latest response means a turn
   // may have taken pending input, whoever started it and whether or not this

@@ -1,16 +1,31 @@
 import { type Locator, type Page, expect } from "@playwright/test";
 
-/** The approval card a chat answer shows when a tool call needs a decision. */
+/**
+ * The approval cards of a chat. A card that waits for a decision shows in the
+ * region after the last message; a decided request leaves a one-line record
+ * in its reply.
+ */
 export class ToolApprovalCard {
   readonly page: Page;
+  /** Every card and record in the chat. */
   readonly cards: Locator;
+  readonly region: Locator;
+  /** The newest card that waits for a decision. */
   readonly card: Locator;
+  /** The newest record in a reply. */
+  readonly record: Locator;
   readonly approveButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.cards = page.getByTestId("tool-approval-card");
-    this.card = this.cards.last();
+    this.region = page.getByTestId("tool-approvals-region");
+    this.card = this.region.getByTestId("tool-approval-card").last();
+    this.record = page
+      .getByTestId("chat-scroll-container")
+      .locator('[id^="message-"]')
+      .getByTestId("tool-approval-card")
+      .last();
     this.approveButton = this.card.getByRole("button", {
       name: "Approve this action once",
       exact: true,
@@ -25,6 +40,11 @@ export class ToolApprovalCard {
         exact: true,
       })
     ).toBeVisible({ timeout: 30_000 });
+  }
+
+  /** The input bar does not cover the waiting card. */
+  async expectPendingInView(): Promise<void> {
+    await expect(this.card).toBeInViewport();
   }
 
   async expectArgument(value: string): Promise<void> {
@@ -58,24 +78,25 @@ export class ToolApprovalCard {
         exact: true,
       })
     ).toBeVisible();
-    await expect(this.card).toBeInViewport();
+    await this.expectPendingInView();
   }
 
   /**
-   * A decided request leaves a one-line record that names the tool. The
-   * saved response shows the same record after the answer settles and after
-   * a reload.
+   * A decided request leaves a one-line record that names the tool, in its
+   * reply once the resolution arrives. The saved response shows the same
+   * record after the answer settles and after a reload. Nothing waits after
+   * it.
    */
   async expectRecord(
     record: string,
     toolName: string,
-    timeout?: number
+    timeout = 30_000
   ): Promise<void> {
-    await expect(this.card.getByRole("status")).toHaveText(
+    await expect(this.record.getByRole("status")).toHaveText(
       `${record}: ${toolName}`,
       { timeout }
     );
-    await expect(this.approveButton).toHaveCount(0);
+    await expect(this.region).toHaveCount(0);
   }
 
   async expectApproved(toolName: string): Promise<void> {

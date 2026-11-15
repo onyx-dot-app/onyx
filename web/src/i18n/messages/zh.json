@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent} 想要运行 {tool}"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "取消踩",

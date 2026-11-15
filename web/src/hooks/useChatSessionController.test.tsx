@@ -43,6 +43,7 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
     is_processing: false,
     current_stream: null,
     has_startable_input: false,
+    pending_approval_ids: [],
     has_active_subagents: false,
     latest_response_id: null,
   })),
@@ -88,6 +89,7 @@ beforeEach(() => {
       is_processing: true,
       current_stream: null,
       has_startable_input: false,
+      pending_approval_ids: [],
       has_active_subagents: false,
       latest_response_id: null,
     };

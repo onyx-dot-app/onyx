@@ -78,6 +78,9 @@ export interface ChatSessionStatus {
   /** Pending input can start a run now; false while the queue is paused. */
   has_startable_input: boolean;
   latest_response_id: number | null;
+  /** Open approval requests on the selected branch, the reply's and its
+   * background subagents'. */
+  pending_approval_ids: string[];
 }
 
 export interface ChatSessionQueue {

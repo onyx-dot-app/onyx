@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent}이(가) {tool}을(를) 실행하려고 합니다"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "싫어요 취소",

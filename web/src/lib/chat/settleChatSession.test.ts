@@ -54,6 +54,7 @@ function approvalRequest(approvalId: string, modelIndex?: number): Packet {
       tool_name: "mcp__3__github__create_issue",
       display_name: "Create issue",
       arguments: {},
+      agent_name: null,
     },
   };
 }
@@ -720,6 +721,7 @@ describe("with a scripted fetch", () => {
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: {},
+        agent_name: null,
       },
     });
     const stop: Packet = {
@@ -1262,6 +1264,7 @@ describe("with a scripted fetch", () => {
             tool_name: "mcp__3__github__create_issue",
             display_name: "Create issue",
             arguments: {},
+            agent_name: null,
           },
         },
         { placement: { turn_index: 0, tab_index: 0 }, obj: { type: "stop" } },

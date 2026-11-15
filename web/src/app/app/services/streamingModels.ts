@@ -543,6 +543,9 @@ export interface ToolApprovalRequest extends BaseObj {
   tool_name: string;
   display_name: string;
   arguments: Record<string, unknown>;
+  /** The background subagent that made the request; null for the reply's own
+   * calls. Such a request waits on its own: no stop of the reply closes it. */
+  agent_name: string | null;
 }
 
 export interface ToolApprovalResolved extends BaseObj {

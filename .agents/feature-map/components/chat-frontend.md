@@ -54,31 +54,42 @@
   agent results do not become user message bubbles. A "Subagent results received" divider shows above each
   automatic follow-up response. That response shows its model label but
   cannot be regenerated.
-- **A tool call needs approval.** An approval card shows in the answer with
-  the tool's arguments. The request has no deadline. The user approves once,
-  approves for the chat, or rejects; the card then becomes a one-line record
-  of the outcome, or of "No longer waiting" when the server returns 409 or
-  404. While the turn waits, its stream ends with `stop(awaiting_approval)` and
-  the chat goes idle. That stop pauses the answer: `processPackets` does not
-  count it, and it never closes a card. A server stop with another reason
-  closes a card without a resolution
-  (`lib/chat/toolApprovals.ts:readToolApprovals`); a stop that the client adds
-  has no reason and never does. After the last decision,
+- **A tool call needs approval.** An approval card shows the tool's
+  arguments. Every card that waits for a decision shows in one region after
+  the last message (`sections/chat/ToolApprovalsRegion.tsx`, rendered by
+  `ChatUI`), oldest response first and in packet order, from the replies and
+  from their background subagents alike. A multi-model card names its model;
+  a subagent's card (`agent_name` set) names the subagent. The request has no
+  deadline. The user approves once, approves for the chat, or rejects; the
+  card then becomes a one-line record of the outcome, or of "No longer
+  waiting" when the server returns 409 or 404. The record shows in the region
+  until the resolution packet arrives; from then on the reply's timeline
+  shows it next to its tool call (`AgentMessage`, `orderApprovalsByTurn`), and
+  a reload replays it there. While the turn waits, its stream ends with
+  `stop(awaiting_approval)` and the chat goes idle. That stop pauses the
+  answer: `processPackets` does not count it, and it never closes a card. A
+  server stop with another reason closes the reply's own unresolved cards
+  (`lib/chat/toolApprovals.ts:awaitsDecision`) but not a subagent's, which
+  waits on its own; a stop that the client adds has no reason and never
+  does. After the last decision on the reply's own cards,
   `lib/chat/settleChatSession.ts:followApprovalContinuation` follows the new
   stream that continues the answer, from cursor 0 into the same rows. A
-  suspended turn has no Stop: the user decides each card. Stop shows only
-  while the turn is live; the server then rejects every open request, and the
-  record reads "Not approved". A reload replays the request
-  and the stop the same way. The saved answer replays the records, so they
-  stay after the answer settles and after a reload.
-  While the card waits, the timeline header reads "Waiting for your approval",
-  also after a preamble and for parallel tool calls.
-  While a card waits, the user can type but not send: the composer keeps
-  the draft, scrolls to the card, shakes it and shows a toast
-  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). In a multi-model turn,
-  `MultiModelResponseView` first shows the card's panel: it unhides a hidden
-  panel and moves the narrow carousel to it. A 409
-  `APPROVAL_PENDING` from the server, for example for a turn that
+  subagent's decision starts no stream: the subagent resumes in the
+  background. A subagent's requests and resolutions arrive in the root reply
+  that started it, at its `spawn_agent` or `send_message` card. In an idle
+  chat they arrive through a refresh: `useChatSessionQueue` compares the
+  status's `pending_approval_ids` with the requests the chat shows
+  (`readWaitingToolApprovals`) and calls `refreshChatSession` once for each
+  open set that differs. A suspended turn has no Stop: the user decides each
+  card. Stop shows only while the turn is live; the server then rejects every
+  open request of the reply, and the record reads "Not approved". A reload
+  replays the request and the stop the same way.
+  While a reply's own card waits, the timeline header reads "Waiting for your
+  approval", also after a preamble and for parallel tool calls, and the user
+  can type but not send: the composer keeps the draft, scrolls to the card
+  in the region, shakes it and shows a toast
+  (`lib/chat/hooks.ts:useToolApprovalSendGuard`). A subagent's card blocks no
+  send. A 409 `APPROVAL_PENDING` from the server, for example for a turn that
   another tab started, gets the same treatment.
   What each decision does is in [[mcp-and-custom-tools]].
 - **A user edits or regenerates** an earlier message. A switcher then moves

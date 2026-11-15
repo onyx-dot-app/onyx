@@ -687,7 +687,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
   }
 });
 
-test("a program call whose stream stopped for approval shows the nested tool and a waiting header", async () => {
+test("a program call whose stream stopped for approval shows a waiting header and, once decided, the record", async () => {
   seedSessionAwaitingAnswer();
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
   const cell = { turn_index: 0, tab_index: 0 };
@@ -715,6 +715,7 @@ test("a program call whose stream stopped for approval shows the nested tool and
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: { title: "Fix login" },
+        agent_name: null,
       },
     },
     // The stream ends while the call waits; the response is not finished.
@@ -736,11 +737,10 @@ test("a program call whose stream stopped for approval shows the nested tool and
   );
   try {
     expect(
-      await screen.findByRole("button", {
-        name: /^Approval requested: Create issue/,
-      })
+      await screen.findByText("Waiting for your approval")
     ).toBeInTheDocument();
-    expect(screen.getByText("Waiting for your approval")).toBeInTheDocument();
+    // The waiting card shows in the transcript's trailing region.
+    expect(screen.queryByTestId("tool-approval-card")).not.toBeInTheDocument();
     expect(screen.queryByText("Working")).not.toBeInTheDocument();
 
     // A decision this client made ends the wait before its packet arrives.

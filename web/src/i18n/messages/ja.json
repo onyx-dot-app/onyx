@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent} が {tool} を実行しようとしています"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "低評価を取り消す",

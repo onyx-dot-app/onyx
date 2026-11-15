@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent} quer executar {tool}"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "Remover descurtida",

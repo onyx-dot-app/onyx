@@ -281,7 +281,7 @@ const AgentMessage = React.memo(function AgentMessage({
         .findLast((section) => section.turnIndex < error.turnIndex)!
         .authErrors.push(error);
     }
-    for (const approval of toolApprovals) {
+    for (const approval of toolApprovals.records) {
       sections
         .findLast((section) => section.turnIndex < approval.turnIndex)!
         .toolApprovals.push(approval);
@@ -292,7 +292,7 @@ const AgentMessage = React.memo(function AgentMessage({
     pacedTurnGroups,
     generatedImages,
     authErrors,
-    toolApprovals,
+    toolApprovals.records,
   ]);
   const lastAnswerGroup = sections.at(-1)!.displayGroups.at(-1);
 
@@ -481,12 +481,7 @@ const AgentMessage = React.memo(function AgentMessage({
               finalAnswerComing={!isLastSection || pacedFinalAnswerComing}
               toolProcessingDuration={toolProcessingDuration}
               codeModeWorking={isLastSection && codeModeWorking}
-              awaitingApproval={
-                isLastSection &&
-                section.toolApprovals.some(
-                  (approval) => approval.status === "pending"
-                )
-              }
+              awaitingApproval={isLastSection && toolApprovals.awaitingApproval}
             />
 
             {/* Row 2: Display content + MessageToolbar */}

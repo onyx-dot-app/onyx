@@ -87,6 +87,7 @@ jest.mock("@/lib/chat/sessionReadiness", () => ({
     is_processing: false,
     current_stream: null,
     has_startable_input: false,
+    pending_approval_ids: [],
     has_active_subagents: false,
     latest_response_id: null,
   })),
@@ -450,6 +451,7 @@ test("a lost stream keeps its waiting approval open after the server is idle", a
         tool_name: "mcp__3__github__create_issue",
         display_name: "Create issue",
         arguments: {},
+        agent_name: null,
       },
     };
     throw new Error("network error");
@@ -533,6 +535,7 @@ test("a send refused for a waiting approval restores the draft and points at the
               tool_name: "mcp__3__github__create_issue",
               display_name: "Create issue",
               arguments: {},
+              agent_name: null,
             },
           },
         ],

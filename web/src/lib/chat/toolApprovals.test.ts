@@ -19,19 +19,17 @@ import {
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
 
-function request(
-  approvalId: string,
-  toolName = "mcp__3__github__create_issue"
-): Packet {
+function request(approvalId: string, agentName: string | null = null): Packet {
   return {
     placement: { turn_index: 1, tab_index: 0 },
     obj: {
       type: PacketType.TOOL_APPROVAL_REQUEST,
       approval_id: approvalId,
       tool_call_id: `call-${approvalId}`,
-      tool_name: toolName,
+      tool_name: "mcp__3__github__create_issue",
       display_name: "Create issue",
       arguments: {},
+      agent_name: agentName,
     },
   };
 }
@@ -105,6 +103,22 @@ beforeEach(() =>
   useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null })
 );
 
+describe("readToolApprovals", () => {
+  it("keeps the same read while appended packets cannot change it", () => {
+    const packets = [request("a")];
+    const first = readToolApprovals(packets);
+
+    packets.push({
+      placement: { turn_index: 2, tab_index: 0 },
+      obj: { type: PacketType.MESSAGE_DELTA, content: "text" },
+    });
+    expect(readToolApprovals(packets)).toBe(first);
+
+    packets.push(resolved("a", "approved"));
+    expect(readToolApprovals(packets).entries[0]?.outcome).toBe("approved");
+  });
+});
+
 describe("toolApprovalStatus", () => {
   it.each([
     ["approved", "approved"],
@@ -143,6 +157,10 @@ describe("toolApprovalStatus", () => {
     expect(statuses([request("a"), stop])).toEqual(["closed"]);
   });
 
+  it("keeps a background agent's request pending after the server ends the response", () => {
+    expect(statuses([request("a", "Researcher"), stop])).toEqual(["pending"]);
+  });
+
   it.each([
     ["the approval wait's stop", StopReason.AWAITING_APPROVAL],
     ["a stop this client added", undefined],
@@ -167,6 +185,12 @@ describe("findPendingToolApprovalId", () => {
     ["stopped", [request("a"), stop]],
   ])("ignores a %s request", (_, packets) => {
     expect(findPendingToolApprovalId(chat(packets))).toBeNull();
+  });
+
+  it("ignores a background agent's request, which does not block a send", () => {
+    expect(
+      findPendingToolApprovalId(chat([request("a", "Researcher")]))
+    ).toBeNull();
   });
 
   it("ignores a request this client decided before its resolution arrived", () => {

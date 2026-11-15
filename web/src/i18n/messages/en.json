@@ -13239,6 +13239,9 @@
           }
         }
       },
+      "toolApproval": {
+        "agentRequest": "{agent} wants to run {tool}"
+      },
       "toolbar": {
         "dislikeButton": {
           "removeTooltip": "Remove Dislike",

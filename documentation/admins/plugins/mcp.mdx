@@ -168,7 +168,9 @@ with one exception: a tool that you set to **Disabled** does not run, even if th
 ### Approvals in Chat
 
 When an agent in the Onyx web app calls a tool with the **Ask** policy, the answer pauses.
-An approval card shows the tool name and the arguments of the call. The user selects one of these options:
+An approval card shows the tool name and the arguments of the call. The card shows below the last message of the chat.
+If more cards wait, they show in the order of the requests. In a chat that compares models, each card names its model.
+The user selects one of these options:
 
 | Option | Effect |
 | --- | --- |
@@ -177,8 +179,8 @@ An approval card shows the tool name and the arguments of the call. The user sel
 | **Reject** | The call does not run. The agent is told that the user rejected the call. |
 
 After the decision, the card becomes a one-line record: **Approved**, **Approved for this chat**, **Not approved**,
-**Disabled**, or **No longer waiting**.
-The record stays in the answer after the answer finishes and when the user opens the chat again.
+**Disabled**, or **No longer waiting**. The record shows in the answer, at the tool call.
+It stays after the answer finishes and when the user opens the chat again.
 
 A request has no time limit. It waits until the user decides. When only approval requests remain,
 Onyx saves the answer and stops it. No API server holds the answer while it waits, so a closed tab, a reload,
@@ -200,10 +202,15 @@ If the tool is removed or its parameters change while the card waits, the call d
 The agent is told that the tool is no longer available, and the answer continues.
 
 When `CODE_MODE_ENABLED` is `true`, the agent calls MCP tools from a Python program.
-A call to a tool with the **Ask** policy pauses the program, and the approval card shows on the program's card.
+A call to a tool with the **Ask** policy pauses the program. After the decision, the record shows on the program's card.
 Onyx saves the paused program with the answer. After the decision, the program continues from the call.
 The rules above apply in the same way. If the program holds too much data to pause, the call does not run,
 and the record shows **No longer waiting**. The agent is told to make the call from a program that keeps less data.
+
+A subagent that works in the background can also call a tool with the **Ask** policy. Its card names the subagent.
+The request waits on its own: it stays open after the answer that started the subagent finishes or stops,
+and it does not block new messages. After the decision, the subagent continues in the background,
+and the record shows in the answer that started the subagent.
 
 The mobile app, the widget, the [Onyx CLI](/overview/onyx_anywhere/cli),
 and [Chat API](/developers/guides/chat_new_guide#tool-approvals) clients also show approval requests.

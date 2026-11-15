@@ -17,7 +17,7 @@ import {
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { useChatSessionQueue } from "@/lib/chat/hooks";
 import { flushToolSelection } from "@/lib/tools/hooks";
-import type { PendingChatMessage } from "@/lib/chat/types";
+import type { ChatSessionStatus, PendingChatMessage } from "@/lib/chat/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { toast } from "@opal/layouts";
 import { PacketType } from "@/app/app/services/streamingModels";
@@ -127,6 +127,23 @@ jest.mock("@/components/voice/Waveform", () => ({
 }));
 jest.mock("@/sections/cards/FileCard", () => ({ FileCard: () => null }));
 
+const IDLE_STATUS: ChatSessionStatus = {
+  is_processing: false,
+  current_stream: null,
+  has_active_subagents: false,
+  has_startable_input: false,
+  pending_approval_ids: [],
+  latest_response_id: 2,
+};
+let chatStatus = IDLE_STATUS;
+
+/** The chat's status, or its pending messages for any other read. */
+function readResponse(url: RequestInfo | URL): Response {
+  return new Response(
+    JSON.stringify(String(url).endsWith("/status") ? chatStatus : pending)
+  );
+}
+
 type ComposerProps = Omit<AppInputBarProps, "queue">;
 
 /** The composer as chat pages mount it, with the session-level queue. */
@@ -162,6 +179,7 @@ function props(chatState: AppInputBarProps["chatState"]): ComposerProps {
 }
 
 beforeEach(() => {
+  chatStatus = IDLE_STATUS;
   mockChatId = "session";
   mockSearchMode = false;
   mockIncognito = false;
@@ -182,16 +200,6 @@ beforeEach(() => {
     .spyOn(global, "fetch")
     .mockImplementation(async (url, init) => {
       const method = init?.method ?? "GET";
-      if (String(url).endsWith("/status"))
-        return new Response(
-          JSON.stringify({
-            is_processing: false,
-            current_stream: null,
-            has_active_subagents: false,
-            has_startable_input: false,
-            latest_response_id: 2,
-          })
-        );
       if (method === "POST" && String(url).endsWith("/interrupt")) {
         const id = String(url).split("/").at(-2);
         const item = pending.find((message) => message.id === id);
@@ -218,7 +226,7 @@ beforeEach(() => {
           { status: item ? 200 : 409 }
         );
       }
-      return new Response(JSON.stringify(pending));
+      return readResponse(url);
     });
   mockClearDraft.mockClear();
   mockWriteDraft.mockClear();
@@ -451,12 +459,12 @@ test.each(["{Enter}", "{Control>}{Enter}{/Control}", "{Meta>}{Enter}{/Meta}"])(
 
 test("a failed submission returns its text to the composer", async () => {
   const user = setupUser();
-  fetchSpy.mockImplementation(async (_url, init) =>
+  fetchSpy.mockImplementation(async (url, init) =>
     init?.method === "POST"
       ? new Response(JSON.stringify({ detail: "Response has finished" }), {
           status: 409,
         })
-      : new Response(JSON.stringify(pending))
+      : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -470,10 +478,8 @@ test("a failed submission returns its text to the composer", async () => {
 test("a failed submission keeps text typed while it was pending", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -507,11 +513,13 @@ function awaitToolApproval() {
           tool_name: "mcp__3__github__create_issue",
           display_name: "Create issue",
           arguments: {},
+          agent_name: null,
         },
       },
     ],
   });
   store.updateSessionMessageTree("session", tree);
+  chatStatus = { ...IDLE_STATUS, pending_approval_ids: ["approval-1"] };
 }
 
 test.each(["input", "streaming"] as const)(
@@ -546,7 +554,7 @@ test("a server refusal for a waiting approval returns the text to the composer",
   const warning = jest.spyOn(toast, "warning");
   const error = jest.spyOn(toast, "error");
   const user = setupUser();
-  fetchSpy.mockImplementation(async (_url, init) =>
+  fetchSpy.mockImplementation(async (url, init) =>
     init?.method === "POST"
       ? new Response(
           JSON.stringify({
@@ -555,7 +563,7 @@ test("a server refusal for a waiting approval returns the text to the composer",
           }),
           { status: 409 }
         )
-      : new Response(JSON.stringify(pending))
+      : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -578,12 +586,12 @@ test("a queued message waits for the chat's tool selection to save", async () =>
   const flush = jest.mocked(flushToolSelection);
   flush.mockReturnValueOnce(saved.promise);
   const posted = jest.fn();
-  fetchSpy.mockImplementation(async (_url, init) => {
+  fetchSpy.mockImplementation(async (url, init) => {
     if (init?.method === "POST") {
       posted();
       return new Response(JSON.stringify(pending[0]));
     }
-    return new Response(JSON.stringify(pending));
+    return readResponse(url);
   });
   render(<ChatInput {...props("streaming")} />);
   await user.click(screen.getByRole("textbox", { name: "Message input" }));
@@ -629,10 +637,8 @@ test("incognito keeps text in the composer while an answer is running", async ()
 test("a successful queue request keeps text typed while it was pending", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   render(<ChatInput {...props("streaming")} />);
   const textbox = screen.getByRole("textbox", { name: "Message input" });
@@ -669,10 +675,11 @@ test.each([true, false])(
                 current_stream: null,
                 has_active_subagents: false,
                 has_startable_input: startable,
+                pending_approval_ids: [],
                 latest_response_id: 2,
               })
             )
-          : new Response(JSON.stringify(pending))
+          : readResponse(url)
       );
       // An accepted "Send now" leaves the list before its turn starts; a
       // paused queue keeps its messages.
@@ -695,8 +702,8 @@ test("input sent during a slow request stays in the composer until it ends", asy
   const user = setupUser();
   const accepted = deferred<void>();
   const posted: string[] = [];
-  fetchSpy.mockImplementation(async (_url, init) => {
-    if (init?.method !== "POST") return new Response(JSON.stringify(pending));
+  fetchSpy.mockImplementation(async (url, init) => {
+    if (init?.method !== "POST") return readResponse(url);
     const body: Omit<PendingChatMessage, "id"> = JSON.parse(String(init.body));
     posted.push(body.message);
     if (posted.length === 1) await accepted.promise;
@@ -729,10 +736,11 @@ test("a turn found by a readiness check during completion loads once the chat is
             current_stream: null,
             has_active_subagents: false,
             has_startable_input: false,
+            pending_approval_ids: [],
             latest_response_id: latestResponseId,
           })
         )
-      : new Response(JSON.stringify(pending))
+      : readResponse(url)
   );
   await act(async () => {
     await mutate(() => true, undefined, { revalidate: false });
@@ -1035,10 +1043,8 @@ test("an edited queued message keeps its picks, and a send carries them into the
 test("an edit that finishes after a chat switch returns its text to its own chat", async () => {
   const user = setupUser();
   const withdrawal = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "DELETE"
-      ? withdrawal.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "DELETE" ? withdrawal.promise : readResponse(url)
   );
   const store = useChatSessionStore.getState();
   store.createSession("other");
@@ -1075,10 +1081,8 @@ test.each([
     mockChatId = chatId;
     const user = setupUser();
     const submission = deferred<Response>();
-    fetchSpy.mockImplementation(async (_url, init) =>
-      init?.method === "POST"
-        ? submission.promise
-        : new Response(JSON.stringify(pending))
+    fetchSpy.mockImplementation(async (url, init) =>
+      init?.method === "POST" ? submission.promise : readResponse(url)
     );
     useChatSessionStore.getState().createSession("other");
     render(<ChatInput {...props("streaming")} />);
@@ -1105,10 +1109,8 @@ test.each([
 test("a failed submission that ends after the composer closes goes to the chat's draft", async () => {
   const user = setupUser();
   const submission = deferred<Response>();
-  fetchSpy.mockImplementation(async (_url, init) =>
-    init?.method === "POST"
-      ? submission.promise
-      : new Response(JSON.stringify(pending))
+  fetchSpy.mockImplementation(async (url, init) =>
+    init?.method === "POST" ? submission.promise : readResponse(url)
   );
   // The page keeps the chat's queue while the composer closes.
   function Page({ composerOpen }: { composerOpen: boolean }) {
@@ -1148,6 +1150,7 @@ test("Stop subagents interrupts background work and refreshes the status", async
           current_stream: null,
           has_active_subagents: active,
           has_startable_input: false,
+          pending_approval_ids: [],
           latest_response_id: 2,
         })
       );
@@ -1169,4 +1172,26 @@ test("Stop subagents interrupts background work and refreshes the status", async
         init?.method === "POST"
     )
   ).toHaveLength(1);
+});
+
+describe("open approval requests in the status", () => {
+  test("an idle chat loads a background agent's request that it does not show", async () => {
+    chatStatus = { ...IDLE_STATUS, pending_approval_ids: ["agent-approval"] };
+    render(<ChatInput {...props("input")} initialMessage="" />);
+
+    await waitFor(() => expect(fetchSettledChatSession).toHaveBeenCalled());
+  });
+
+  test("an idle chat that shows every open request does not reload", async () => {
+    awaitToolApproval();
+    render(<ChatInput {...props("input")} initialMessage="" />);
+
+    await waitFor(() =>
+      expect(
+        fetchSpy.mock.calls.some(([url]) => String(url).endsWith("/status"))
+      ).toBe(true)
+    );
+    await act(async () => {});
+    expect(fetchSettledChatSession).not.toHaveBeenCalled();
+  });
 });

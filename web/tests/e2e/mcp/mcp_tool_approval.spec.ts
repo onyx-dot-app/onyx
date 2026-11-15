@@ -29,8 +29,9 @@ const SLOW_TOOL_NAME = "slow_tool";
 
 /**
  * An MCP tool on the default (ASK) policy pauses the chat run until the user
- * approves or rejects the call in the answer's approval card. The turn's
- * stream ends while it waits, and the reply continues after the decision.
+ * approves or rejects the call in its approval card, which waits after the
+ * last message. The turn's stream ends while it waits, and the reply
+ * continues after the decision. The decision's record stays in the reply.
  */
 test.describe("MCP tool approval in chat @code-mode", () => {
   test.describe.configure({ mode: "serial" });
@@ -266,6 +267,7 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
     // The saved response replays the request; no stream runs.
     await card.expectPending(toolDisplayName);
+    await card.expectPendingInView();
     await chat.inputBar.expectAcceptsSend();
     await card.approve();
     await card.expectApproved(toolDisplayName);
@@ -273,6 +275,73 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await expect(chat.answerText(answer)).toBeVisible();
     await expect(chat.aiMessages).toHaveCount(1);
     await chat.expectCustomToolResult(toolDisplayName, TOOL_OUTPUT);
+  });
+
+  test("A background agent's card waits after the last message and does not block sends", async ({
+    page,
+  }) => {
+    await page.context().clearCookies();
+    await loginAs(page, "admin");
+    const nonce = mockLlmNonce();
+    const task = `Greet ${nonce} in the background`;
+    const callId = `agent-call-${nonce}`;
+    const report = `Mailer report ${nonce}`;
+    const followUp = `The mailer reported ${nonce}`;
+    await addMockLlmConversation({
+      name: `root-${nonce}`,
+      conditions: { prompt_contains: [`Start a mailer ${nonce}`] },
+      replies: [
+        {
+          // Agent tools stay direct tools in code mode.
+          tool_calls: [
+            {
+              id: `spawn-${nonce}`,
+              name: "spawn_agent",
+              arguments: { name: "mailer", instruction: task },
+            },
+          ],
+          conditions: { offers: ["spawn_agent"] },
+        },
+        {
+          text: `Started ${nonce}`,
+          conditions: { has_results_for: [`spawn-${nonce}`] },
+        },
+        { text: followUp, conditions: { prompt_contains: [report] } },
+      ],
+    });
+    await addMockLlmConversation({
+      name: `agent-${nonce}`,
+      conditions: { prompt_contains: [task] },
+      replies: [
+        mockLlmToolCallReply([
+          { id: callId, name: qualifiedToolName, arguments: { name: nonce } },
+        ]),
+        { text: report, conditions: { has_results_for: [callId] } },
+      ],
+    });
+    const chat = new ChatPage(page);
+    await chat.gotoAgent(agentId, agentName);
+    await chat.inputBar.fill(`Start a mailer ${nonce}`);
+    await chat.inputBar.send();
+
+    const card = new ToolApprovalCard(page);
+    await card.expectPending(toolDisplayName);
+    await expect(
+      card.card.getByText(`mailer wants to run ${toolDisplayName}`, {
+        exact: true,
+      })
+    ).toBeVisible();
+    await card.expectPendingInView();
+    await chat.inputBar.expectAcceptsSend();
+
+    await card.approve();
+    // The agent continues in the background; its result wakes the chat.
+    await expect(chat.answerText(followUp, 1)).toBeVisible({
+      timeout: 60_000,
+    });
+    await card.expectApproved(toolDisplayName);
+    await chat.reload();
+    await card.expectApproved(toolDisplayName);
   });
 
   // Stop shows only while the turn is live. A lone gated call suspends the turn
