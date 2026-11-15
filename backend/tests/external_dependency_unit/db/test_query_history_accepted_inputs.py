@@ -123,6 +123,7 @@ def test_export_lists_accepted_inputs_in_model_order(
     # The export keeps the record of a pick, not the skill text.
     assert pair.accepted_inputs[0].mentions == [picked]
     assert "Time it." not in snapshot.model_dump_json()
+    assert "skill_messages" not in snapshot.model_dump_json()
     assert pair.to_json()["accepted_inputs"] == (
         "[human] Focus on latency\n\n[agent_result] Vendor A is faster\n\n"
         "[human] Then cost"

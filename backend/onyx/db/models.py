@@ -3792,15 +3792,20 @@ class ChatMessage(Base):
     )
 
 
-class AcceptedChatInput(BaseModel):
-    """A message a model generation accepted, with its provenance."""
+class AcceptedChatInputRecord(BaseModel):
+    """A message a model generation accepted, with its provenance and the
+    records of what a user message picked."""
 
     id: str
     source: InputSource
     source_run_id: str | None = None
     content: str
-    # What a user message picked, and the `<skill>` message of each pick.
     mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class AcceptedChatInput(AcceptedChatInputRecord):
+    """An accepted message as stored, with the `<skill>` message of each pick."""
+
     skill_messages: list[PickedSkillMessage] = Field(default_factory=list)
 
 

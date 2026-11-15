@@ -9,7 +9,7 @@ from onyx.background.task_utils import extract_task_id_from_query_history_report
 from onyx.configs.constants import MessageType, QAFeedbackType, SessionType
 from onyx.db.enums import TaskStatus
 from onyx.db.models import (
-    AcceptedChatInput,
+    AcceptedChatInputRecord,
     ChatMessage,
     ChatSession,
     FileRecord,
@@ -37,7 +37,7 @@ class MessageSnapshot(BaseModel):
     feedback_text: str | None
     time_created: datetime
     # Messages a response accepted while it ran, in model order.
-    accepted_inputs: list[AcceptedChatInput] = []
+    accepted_inputs: list[AcceptedChatInputRecord] = []
 
     @classmethod
     def build(cls, message: ChatMessage) -> "MessageSnapshot":
@@ -75,9 +75,12 @@ class MessageSnapshot(BaseModel):
             feedback_type=feedback_type,
             feedback_text=feedback_text,
             time_created=message.time_sent,
-            # Query history shows what a message picked, not the skill text.
             accepted_inputs=[
-                accepted.model_copy(update={"skill_messages": []})
+                AcceptedChatInputRecord.model_validate(
+                    accepted.model_dump(
+                        include=set(AcceptedChatInputRecord.model_fields)
+                    )
+                )
                 for item in sorted(
                     message.response_items, key=lambda item: item.step_index
                 )
@@ -176,7 +179,7 @@ class QuestionAnswerPairSnapshot(BaseModel):
     # e.g. the first message pair in the chat_session is 1, the second is 2, etc.
     message_pair_num: int
     user_message: str
-    accepted_inputs: list[AcceptedChatInput]
+    accepted_inputs: list[AcceptedChatInputRecord]
     ai_response: str
     retrieved_documents: list[AbridgedSearchDoc]
     feedback_type: QAFeedbackType | None
