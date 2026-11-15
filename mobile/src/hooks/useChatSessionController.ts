@@ -293,11 +293,13 @@ export async function recoverChatSession(
         node?.messageId !== undefined
           ? getMessageByMessageId(messages, node.messageId)
           : undefined;
+      // A parked answer is saved too: its packets hold the requests that wait for a decision.
       const hasSavedAnswer =
         saved?.type === "assistant" &&
         (saved.responseStatus === undefined
           ? saved.message.length > 0 || saved.files.length > 0
           : saved.responseStatus === "complete" ||
+            saved.responseStatus === "suspended" ||
             saved.responseStatus === "limit" ||
             saved.responseStatus === "cancelled");
       // Reserved fallback text is not a saved answer; saved failures remain authoritative.

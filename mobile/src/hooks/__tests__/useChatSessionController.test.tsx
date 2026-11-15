@@ -752,8 +752,7 @@ describe("useChatSessionController", () => {
       savedAnswer:
         "Response was terminated prior to completion, try regenerating.",
       status,
-      retainsError:
-        status === null || status === "running" || status === "suspended",
+      retainsError: status === null || status === "running",
     })),
   ])(
     "settles error $errorCode with saved status $status and answer '$savedAnswer'",
@@ -797,6 +796,63 @@ describe("useChatSessionController", () => {
       );
     },
   );
+
+  // A send that dropped before the request arrived failed locally; the server parked the answer.
+  it("shows the waiting card of a parked answer over a failed local copy", async () => {
+    seedLiveSession(2);
+    resumeMock.mockReturnValue(
+      scripted([streamError("connection lost", "STREAM_GAP")]),
+    );
+    const waiting: Packet = {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.TOOL_APPROVAL_REQUEST,
+        approval_id: "parked-1",
+        tool_call_id: "c1",
+        tool_name: "lookup",
+        display_name: "Lookup",
+        arguments: {},
+      },
+    };
+    getSessionMock.mockResolvedValue({
+      chat_session_id: "s1",
+      description: "",
+      persona_id: 0,
+      messages: backendMessages("").map((message) =>
+        message.message_type === "assistant"
+          ? { ...message, response_status: "suspended" }
+          : message,
+      ),
+      packets: [
+        [
+          waiting,
+          {
+            placement: { turn_index: 0 },
+            obj: {
+              type: PacketType.STOP,
+              stop_reason: StopReason.AWAITING_APPROVAL,
+            },
+          },
+        ],
+      ],
+      time_created: "",
+      current_stream: null,
+    });
+
+    renderHook(() => useChatSessionController("s1"), { wrapper });
+    await waitFor(() =>
+      expect(useChatSessionStore.getState().sessions.get("s1")?.chatState).toBe(
+        "input",
+      ),
+    );
+    expect(
+      getMessageByMessageId(
+        useChatSessionStore.getState().sessions.get("s1")!.messageTree,
+        2,
+      )?.type,
+    ).toBe("assistant");
+    expect(waitingIds()).toEqual(["parked-1"]);
+  });
 
   it("replaces a replay error with the saved response failure", async () => {
     seedLiveSession(2);
