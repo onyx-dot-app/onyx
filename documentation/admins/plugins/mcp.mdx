@@ -187,14 +187,15 @@ Onyx saves the answer and stops it. No API server holds the answer while it wait
 or an API server restart does not end the request. After the user decides every request of the answer,
 the answer continues on any API server, and the web app shows it in the same message.
 
-While a card waits for a decision, the user can type a message but cannot send it.
+After the answer stops to wait for approval, the user can type a message but cannot send it.
 Onyx keeps the draft and shows the card that waits. If the user reloads the page or opens the chat again,
 the card that waits shows again.
 
 The user can stop the answer only while it runs. If the user stops the answer while a card waits,
 Onyx saves the stop as a rejection. The call does not run, and the record shows **Not approved**. In the next message,
 the agent sees that the user rejected the call. After the answer stops to wait for approval, **Stop** is not available.
-To end the wait, the user rejects the call.
+To end the wait, the user rejects the call. An API client that sends a stop there does not end the wait.
+The stop pauses the chat's queued messages until the user sends a new message.
 
 If a tool becomes **Disabled** while its card waits, an approval saves a rejection. The call does not run,
 the record shows **Disabled**, and the agent is told that the tool is disabled.
@@ -214,6 +215,11 @@ and the record shows in the answer that started the subagent.
 
 The mobile app, the widget, the [Onyx CLI](/overview/onyx_anywhere/cli),
 and [Chat API](/developers/guides/chat_new_guide#tool-approvals) clients also show approval requests.
+A Chat API client can send headers for MCP servers, such as an end-user token, in `mcp_headers`.
+Onyx does not save them. After the decisions,
+the answer gets these headers only if the client sends them again with the decision,
+and only when that decision call continues the answer.
+See [Send a decision](/developers/guides/chat_new_guide#send-a-decision).
 
 <Note>
   The Slack and Discord bots can use the MCP tools that their agent has, without asking for approval.
@@ -225,9 +231,8 @@ and the agent gets an error that explains why:
 
 - incognito chats when **Incognito Chat Records** is **Usage Only**
 - users who are not signed in
-- subagents that run in the background
 
-Agents that run in the foreground, such as Deep Research, can wait for approval.
+Subagents can wait for approval, in the foreground, such as Deep Research, and in the background.
 
 ## Configuration tab
 
