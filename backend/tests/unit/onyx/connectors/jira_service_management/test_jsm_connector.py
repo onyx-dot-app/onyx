@@ -149,6 +149,36 @@ def test_sla_breached_summary() -> None:
     assert _sla_breached_summary({"values": []}) is None
     assert _sla_breached_summary({}) is None
 
+    # Incomplete pagination without a breach must not record "false".
+    assert (
+        _sla_breached_summary(
+            {
+                "values": [{"ongoingCycle": {"breached": False}}],
+                "isLastPage": False,
+            }
+        )
+        is None
+    )
+    assert (
+        _sla_breached_summary(
+            {
+                "values": [{"ongoingCycle": {"breached": False}}],
+                "_links": {"next": "https://example.atlassian.net/sla?start=1"},
+            }
+        )
+        is None
+    )
+    # A known breach remains "true" even if later pages are incomplete.
+    assert (
+        _sla_breached_summary(
+            {
+                "values": [{"completedCycles": [{"breached": True}]}],
+                "isLastPage": False,
+            }
+        )
+        == "true"
+    )
+
 
 def test_service_desk_url_is_not_under_the_versioned_jira_root() -> None:
     """Regression: the SDK's default base would resolve the Service Desk
@@ -206,6 +236,116 @@ def test_service_desk_ops_swallow_lookup_errors() -> None:
 
         assert ops.get_service_desk_request(issue_key="IT-1") is None
         assert ops.get_service_desk_sla(issue_key="IT-1") is None
+
+
+def test_get_service_desk_sla_paginates_all_pages() -> None:
+    """get_service_desk_sla must follow pages so a breach on a later page is seen."""
+    from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+    client = MagicMock()
+    client._get_json.side_effect = [
+        {
+            "start": 0,
+            "isLastPage": False,
+            "values": [{"ongoingCycle": {"breached": False}}],
+        },
+        {
+            "start": 1,
+            "isLastPage": True,
+            "values": [{"completedCycles": [{"breached": True}]}],
+        },
+    ]
+    ops = JiraSourceOperations.__new__(JiraSourceOperations)
+    ops._cached_client = client
+    ops._cached_fast_client = client
+
+    sla = ops.get_service_desk_sla(issue_key="IT-1")
+    assert sla == {
+        "values": [
+            {"ongoingCycle": {"breached": False}},
+            {"completedCycles": [{"breached": True}]},
+        ],
+        "isLastPage": True,
+    }
+    assert _sla_breached_summary(sla) == "true"
+    assert client._get_json.call_args_list == [
+        call("request/IT-1/sla", base=_SERVICEDESK_BASE_URL),
+        call("request/IT-1/sla", params={"start": 1}, base=_SERVICEDESK_BASE_URL),
+    ]
+
+
+def test_get_service_desk_sla_marks_partial_failure_incomplete() -> None:
+    """If page 2 fails, unbreached partial results must not report 'false',
+    while an already-seen breach still reports 'true'."""
+    import requests
+
+    from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+    # Unbreached page 1 + error on page 2 -> incomplete -> summary is None.
+    client = MagicMock()
+    client._get_json.side_effect = [
+        {
+            "start": 0,
+            "isLastPage": False,
+            "values": [{"ongoingCycle": {"breached": False}}],
+        },
+        requests.RequestException("boom"),
+    ]
+    ops = JiraSourceOperations.__new__(JiraSourceOperations)
+    ops._cached_client = client
+    ops._cached_fast_client = client
+
+    partial_unbreached = ops.get_service_desk_sla(issue_key="IT-1")
+    assert partial_unbreached == {
+        "values": [{"ongoingCycle": {"breached": False}}],
+        "isLastPage": False,
+    }
+    assert _sla_breached_summary(partial_unbreached) is None
+
+    # Breached page 1 + error on page 2 -> still incomplete, summary is "true".
+    client._get_json.side_effect = [
+        {
+            "start": 0,
+            "isLastPage": False,
+            "values": [{"ongoingCycle": {"breached": True}}],
+        },
+        requests.RequestException("boom"),
+    ]
+    partial_breached = ops.get_service_desk_sla(issue_key="IT-1")
+    assert partial_breached == {
+        "values": [{"ongoingCycle": {"breached": True}}],
+        "isLastPage": False,
+    }
+    assert _sla_breached_summary(partial_breached) == "true"
+
+
+def test_get_service_desk_sla_stops_on_stalled_pagination() -> None:
+    """Zero-progress or rewound offsets must stop and mark result incomplete."""
+    from onyx.connectors.jira.source_operations import JiraSourceOperations
+
+    client = MagicMock()
+    client._get_json.side_effect = [
+        {
+            "start": 0,
+            "_links": {"next": "https://example.atlassian.net/sla?start=1"},
+            "values": [{"ongoingCycle": {"breached": False}}],
+        },
+        {
+            "start": 0,
+            "_links": {"next": "https://example.atlassian.net/sla?start=1"},
+            "values": [{"ongoingCycle": {"breached": False}}],
+        },
+    ]
+    ops = JiraSourceOperations.__new__(JiraSourceOperations)
+    ops._cached_client = client
+    ops._cached_fast_client = client
+
+    sla = ops.get_service_desk_sla(issue_key="IT-1")
+    assert sla == {
+        "values": [{"ongoingCycle": {"breached": False}}],
+        "isLastPage": False,
+    }
+    assert _sla_breached_summary(sla) is None
 
 
 def test_everything_scope_skips_non_service_desk_projects(

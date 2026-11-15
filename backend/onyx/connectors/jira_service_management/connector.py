@@ -17,13 +17,16 @@ Jira project of type ``service_desk``. Only two things change here:
    the ticket still indexes with the regular Jira fields.
 """
 
-from collections.abc import Generator
+from collections.abc import Generator, Mapping
 from typing import Any, ClassVar
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.jira.connector import JiraConnector
-from onyx.connectors.jira.source_operations import JiraSourceOperations
+from onyx.connectors.jira.source_operations import (
+    JiraSourceOperations,
+    sla_payload_has_more_pages,
+)
 from onyx.connectors.jira.utils import get_issue_field
 from onyx.connectors.models import Document, HierarchyNode
 from onyx.utils.logger import setup_logger
@@ -41,22 +44,31 @@ META_PORTAL_STATUS = "portal_status"
 META_SLA_BREACHED = "sla_breached"
 
 
-def _sla_breached_summary(sla_payload: dict[str, Any]) -> str | None:
+def _sla_breached_summary(sla_payload: Mapping[str, Any]) -> str | None:
     """Summarizes the SLA payload as "true"/"false" when it contains any
-    cycle with a known breached state; None when nothing is known."""
+    cycle with a known breached state; None when nothing is known or when
+    pagination is incomplete without a known breach."""
     cycles: list[bool] = []
-    for value in sla_payload.get("values") or []:
-        ongoing = value.get("ongoingCycle") or {}
-        if "breached" in ongoing:
-            cycles.append(bool(ongoing["breached"]))
-        cycles.extend(
-            bool(completed["breached"])
-            for completed in value.get("completedCycles") or []
-            if "breached" in completed
-        )
-    if not cycles:
+    values = sla_payload.get("values")
+    if isinstance(values, list):
+        for value in values:
+            if not isinstance(value, Mapping):
+                continue
+            ongoing = value.get("ongoingCycle")
+            if isinstance(ongoing, Mapping) and "breached" in ongoing:
+                cycles.append(bool(ongoing["breached"]))
+            completed_cycles = value.get("completedCycles")
+            if isinstance(completed_cycles, list):
+                cycles.extend(
+                    bool(completed["breached"])
+                    for completed in completed_cycles
+                    if isinstance(completed, Mapping) and "breached" in completed
+                )
+    if any(cycles):
+        return "true"
+    if not cycles or sla_payload_has_more_pages(sla_payload):
         return None
-    return "true" if any(cycles) else "false"
+    return "false"
 
 
 class JiraServiceManagementConnector(JiraConnector):

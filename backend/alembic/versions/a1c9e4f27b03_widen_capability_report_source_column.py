@@ -5,7 +5,7 @@ member names (VARCHAR sized to the longest name). JIRA_SERVICE_MANAGEMENT is
 longer than the names that sized it.
 
 Revision ID: a1c9e4f27b03
-Revises: 414dfccc5e24
+Revises: 7c00f53ab75f
 Create Date: 2026-11-05 00:15:00.000000
 
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a1c9e4f27b03"
-down_revision = "414dfccc5e24"
+down_revision = "7c00f53ab75f"
 branch_labels = None
 depends_on = None
 
@@ -44,9 +44,7 @@ def downgrade() -> None:
     # The older code does not know the new source; capability reports are
     # regenerable, so drop rows the old column cannot hold.
     op.execute(
-        sa.text(
-            f"DELETE FROM {_TABLE} WHERE {_COLUMN} = 'JIRA_SERVICE_MANAGEMENT'"
-        )
+        sa.text(f"DELETE FROM {_TABLE} WHERE {_COLUMN} = 'JIRA_SERVICE_MANAGEMENT'")
     )
     op.alter_column(
         _TABLE,
