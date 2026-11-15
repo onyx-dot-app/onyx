@@ -525,6 +525,11 @@ export class OnyxChatWidget extends LitElement {
         });
       } else if (result === "closed" || request.agent_name) {
         void this.resumeStream(this.chatSessionId, null);
+      } else if (decision === "approve_session") {
+        // The server also approved this chat's other requests for the tool,
+        // which only the saved session shows.
+        this.approvalsChanged = true;
+        void this.resumeStream(this.chatSessionId, { streamId: null });
       } else if (this.pendingApproval === null) {
         void this.resumeStream(this.chatSessionId, { streamId: null });
       }
@@ -835,6 +840,8 @@ export class OnyxChatWidget extends LitElement {
             current.message = current.messageAtCursor;
           } else {
             follow = newFollow(next.stream_id);
+            if (this.continuationStreamId === next.stream_id)
+              this.continuationStreamId = null;
           }
         }
         // The response ended or stopped for decisions before this widget saw
@@ -884,12 +891,31 @@ export class OnyxChatWidget extends LitElement {
           // The load's version is the baseline for the requests it shows.
           if (session.approvals_version !== undefined)
             this.approvalsVersion = session.approvals_version;
+          // Packet lists follow every assistant message, on every branch.
           const assistants = session.messages.filter(
             (message) => message.message_type === "assistant"
           );
+          // The selected branch runs from the root along each latest child;
+          // a message's position on it is its place in the conversation.
+          const byId = new Map(
+            session.messages.map((message) => [message.message_id, message])
+          );
+          const savedOrder = new Map<number, number>();
+          let onBranch = session.messages.find(
+            (message) =>
+              message.parent_message == null ||
+              !byId.has(message.parent_message)
+          );
+          while (onBranch && !savedOrder.has(onBranch.message_id)) {
+            savedOrder.set(onBranch.message_id, savedOrder.size);
+            const child = onBranch.latest_child_message;
+            onBranch = child == null ? undefined : byId.get(child);
+          }
           for (const questionId of unanswered) {
             const answer = assistants.find(
-              (message) => message.parent_message === questionId
+              (message) =>
+                message.parent_message === questionId &&
+                savedOrder.has(message.message_id)
             );
             if (!answer) {
               this.messages = this.messages.filter(
@@ -905,6 +931,7 @@ export class OnyxChatWidget extends LitElement {
             // accepted after the transcript was saved is missing from it.
             assistants.forEach((message, index) => {
               if (
+                savedOrder.has(message.message_id) &&
                 !recoverIds.includes(message.message_id) &&
                 (!this.messages.some(
                   (shown) => shown.id === message.message_id
@@ -946,14 +973,8 @@ export class OnyxChatWidget extends LitElement {
           }
           this.approvalsChanged = false;
           // Recovered turns take their saved place in the conversation, so a
-          // later send answers the latest saved turn. A message the session
-          // does not list stays after the message before it.
-          const savedOrder = new Map(
-            session.messages.map((message, index) => [
-              message.message_id,
-              index,
-            ])
-          );
+          // later send answers the latest saved turn. A message off the
+          // selected branch stays after the message before it.
           let position = -1;
           this.messages = this.messages
             .map((message) => {
@@ -972,6 +993,14 @@ export class OnyxChatWidget extends LitElement {
           saveSession(sessionId, this.messages, identity);
         }
         reservedAssistantId = null;
+        // A decision made during this pass, for example while the saved
+        // session loaded, names a continuation that no stream followed.
+        const queued = this.continuationStreamId;
+        this.continuationStreamId = null;
+        if (queued !== null && queued !== lastStreamId) {
+          follow = newFollow(queued);
+          continue;
+        }
         if (!agentsRun) return;
         // Agents never hold the chat: a send can end this poll. The poll
         // leaves the streaming state alone until it follows a stream.

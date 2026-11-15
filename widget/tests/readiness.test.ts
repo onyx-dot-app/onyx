@@ -308,7 +308,7 @@ describe("widget readiness", () => {
     api.resumeStream = mock(async function* () {});
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 1, message_type: "user" },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
       ],
       packets: [[]],
@@ -339,7 +339,7 @@ describe("widget readiness", () => {
     api.resumeStream = mock(async function* () {});
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 1, message_type: "user" },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
       ],
       packets: [

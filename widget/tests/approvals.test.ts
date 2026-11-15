@@ -717,7 +717,7 @@ describe("widget while a request waits", () => {
     });
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 1, message_type: "user" },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
       ],
       packets: [
@@ -756,7 +756,7 @@ describe("widget while a request waits", () => {
     api.submitApprovalDecision = mock(async () => "closed" as const);
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 6, message_type: "user" },
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
       ],
       packets: [
@@ -986,7 +986,7 @@ describe("widget while a request waits", () => {
     });
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 6, message_type: "user" },
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
       ],
       packets: [
@@ -1061,7 +1061,7 @@ describe("widget while a request waits", () => {
     api.getChatSession = mock(async () => ({
       approvals_version: version,
       messages: [
-        { message_id: 6, message_type: "user" },
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
       ],
       packets: [
@@ -1092,6 +1092,153 @@ describe("widget while a request waits", () => {
     expect(status(widget, "c")).toBe("approved");
   });
 
+  it("follows a continuation decided while the saved session loads", async () => {
+    const { widget, api } = waitingWidget();
+    api.submitApprovalDecision = mock(async () => continuation(9));
+    let loaded: () => void = () => {};
+    const loading = new Promise<void>((resolve) => {
+      loaded = resolve;
+    });
+    api.getChatSession = mock(async () => {
+      await loading;
+      // The snapshot from before the decision
+      return {
+        messages: [
+          { message_id: 6, message_type: "user", latest_child_message: 7 },
+          { message_id: 7, message_type: "assistant", parent_message: 6 },
+        ],
+        packets: [[{ obj: request("a") }, { obj: request("b") }]],
+      };
+    });
+
+    const resumed = widget["resumeStream"]("session", { streamId: null });
+    await waitUntil(() => api.getChatSession.mock.calls.length > 0);
+    await widget["decideApproval"](request("a"), "approve_once");
+    loaded();
+    await resumed;
+
+    expect(
+      api.resumeStream.mock.calls.some(
+        (call) => (call[2] as { streamId: number } | null)?.streamId === 9
+      )
+    ).toBe(true);
+  });
+
+  it("refreshes the saved session after approving for the chat with no continuation", async () => {
+    const { widget, api } = waitingWidget();
+    api.submitApprovalDecision = mock(async () => ({
+      decision: "APPROVED" as const,
+      decided_via: "USER",
+      continuation: null,
+    }));
+    const resolved = (id: string) => ({
+      obj: {
+        type: "tool_approval_resolved",
+        approval_id: id,
+        outcome: "approved_for_chat",
+      },
+    });
+    api.getChatSession = mock(async () => ({
+      messages: [
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
+        { message_id: 7, message_type: "assistant", parent_message: 6 },
+      ],
+      packets: [
+        [
+          { obj: request("a") },
+          { obj: request("b") },
+          resolved("a"),
+          resolved("b"),
+          { obj: { type: "stop" } },
+        ],
+      ],
+    }));
+
+    await widget["decideApproval"](request("a"), "approve_session");
+    await waitUntil(() => widget["abortController"] === undefined);
+
+    expect(api.getChatSession).toHaveBeenCalledTimes(1);
+    expect(status(widget, "b")).not.toBe("pending");
+    expect(widget["pendingApproval"]).toBeNull();
+  });
+
+  it("recovers only the turns of the selected branch", async () => {
+    const { stored, saved, restore } = fakeSessionStorage();
+    const initial = JSON.stringify({
+      sessionId: "session",
+      messages: [
+        { id: 1, role: "user", content: "first", timestamp: 0 },
+        { id: 2, role: "assistant", content: "first answer", timestamp: 0 },
+        { id: 5, role: "user", content: "resent", timestamp: 0 },
+        { id: 6, role: "assistant", content: "resent answer", timestamp: 0 },
+      ],
+      timestamp: Date.now(),
+      identity: "shared",
+    });
+    stored.set("onyx-widget-session", initial);
+    globalThis.fetch = mock(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/status"))
+        return Response.json({ is_processing: false });
+      if (url.includes("/get-chat-session/"))
+        // Answer 2 has the abandoned question 3 and the selected question 5.
+        return Response.json({
+          messages: [
+            { message_id: 1, message_type: "user", latest_child_message: 2 },
+            {
+              message_id: 2,
+              message_type: "assistant",
+              parent_message: 1,
+              latest_child_message: 5,
+            },
+            {
+              message_id: 3,
+              message_type: "user",
+              parent_message: 2,
+              latest_child_message: 4,
+            },
+            { message_id: 4, message_type: "assistant", parent_message: 3 },
+            {
+              message_id: 5,
+              message_type: "user",
+              parent_message: 2,
+              latest_child_message: 6,
+            },
+            { message_id: 6, message_type: "assistant", parent_message: 5 },
+          ],
+          packets: [
+            [{ obj: { type: "stop" } }],
+            [
+              { obj: { type: "user_message", id: "sdk-3", message: "lost" } },
+              { obj: { type: "message_start" } },
+              { obj: { type: "message_delta", content: "lost answer" } },
+              { obj: { type: "stop" } },
+            ],
+            [{ obj: { type: "stop" } }],
+          ],
+        });
+      return new Response("none", { status: 404 });
+    }) as typeof fetch;
+    skipPollPauses();
+    const widget = new OnyxChatWidget();
+    widget["config"] = { backendUrl: "https://onyx.test/api", apiKey: "key" };
+    widget["apiService"] = new ApiService(
+      "https://onyx.test/api",
+      async () => "key"
+    );
+    widget["currentIdentity"] = async () => "shared";
+    try {
+      widget["restoreSession"]();
+      await waitUntil(() => stored.get("onyx-widget-session") !== initial);
+      await waitUntil(() => widget["abortController"] === undefined);
+    } finally {
+      restore();
+    }
+
+    expect(widget["messages"].map((m) => m.id)).toEqual([1, 2, 5, 6]);
+    expect(saved()?.map((m) => m.id)).toEqual([1, 2, 5, 6]);
+  });
+
   it("replays an earlier answer whose agent asks after a later question", async () => {
     const { widget, api } = waitingWidget();
     widget["messages"] = [
@@ -1107,9 +1254,19 @@ describe("widget while a request waits", () => {
     api.getChatSession = mock(async () => ({
       approvals_version: "v1",
       messages: [
-        { message_id: 6, message_type: "user" },
-        { message_id: 7, message_type: "assistant", parent_message: 6 },
-        { message_id: 8, message_type: "user", parent_message: 7 },
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
+        {
+          message_id: 7,
+          message_type: "assistant",
+          parent_message: 6,
+          latest_child_message: 8,
+        },
+        {
+          message_id: 8,
+          message_type: "user",
+          parent_message: 7,
+          latest_child_message: 9,
+        },
         { message_id: 9, message_type: "assistant", parent_message: 8 },
       ],
       packets: [
@@ -1142,7 +1299,7 @@ describe("widget while a request waits", () => {
       return {
         approvals_version: "v1",
         messages: [
-          { message_id: 6, message_type: "user" },
+          { message_id: 6, message_type: "user", latest_child_message: 7 },
           { message_id: 7, message_type: "assistant", parent_message: 6 },
         ],
         packets: [
@@ -1215,7 +1372,7 @@ describe("widget while a request waits", () => {
       };
       return Response.json({
         messages: [
-          { message_id: 6, message_type: "user" },
+          { message_id: 6, message_type: "user", latest_child_message: 7 },
           { message_id: 7, message_type: "assistant", parent_message: 6 },
         ],
         packets: [
@@ -1347,7 +1504,7 @@ describe("widget while a request waits", () => {
     const { widget, api } = waitingWidget();
     api.getChatSession = mock(async () => ({
       messages: [
-        { message_id: 6, message_type: "user" },
+        { message_id: 6, message_type: "user", latest_child_message: 7 },
         { message_id: 7, message_type: "assistant", parent_message: 6 },
       ],
       packets: [
@@ -1395,7 +1552,7 @@ describe("widget while a request waits", () => {
       if (url.includes("/get-chat-session/")) {
         return Response.json({
           messages: [
-            { message_id: 6, message_type: "user" },
+            { message_id: 6, message_type: "user", latest_child_message: 7 },
             { message_id: 7, message_type: "assistant" },
           ],
           packets: [
@@ -1452,7 +1609,7 @@ describe("widget while a request waits", () => {
       if (url.includes("/get-chat-session/")) {
         return Response.json({
           messages: [
-            { message_id: 6, message_type: "user" },
+            { message_id: 6, message_type: "user", latest_child_message: 7 },
             { message_id: 7, message_type: "assistant", parent_message: 6 },
           ],
           packets: [
@@ -1528,11 +1685,31 @@ describe("widget while a request waits", () => {
   it("restores a turn accepted after the transcript was saved when its replay is gone", async () => {
     const { shown, saved } = await restoreUnanswered({
       messages: [
-        { message_id: 1, message_type: "user" },
-        { message_id: 2, message_type: "assistant", parent_message: 1 },
-        { message_id: 3, message_type: "user", parent_message: 2 },
-        { message_id: 4, message_type: "assistant", parent_message: 3 },
-        { message_id: 5, message_type: "user", parent_message: 4 },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
+        {
+          message_id: 2,
+          message_type: "assistant",
+          parent_message: 1,
+          latest_child_message: 3,
+        },
+        {
+          message_id: 3,
+          message_type: "user",
+          parent_message: 2,
+          latest_child_message: 4,
+        },
+        {
+          message_id: 4,
+          message_type: "assistant",
+          parent_message: 3,
+          latest_child_message: 5,
+        },
+        {
+          message_id: 5,
+          message_type: "user",
+          parent_message: 4,
+          latest_child_message: 6,
+        },
         { message_id: 6, message_type: "assistant", parent_message: 5 },
       ],
       packets: [
@@ -1590,11 +1767,31 @@ describe("widget while a request waits", () => {
       if (url.includes("/get-chat-session/"))
         return Response.json({
           messages: [
-            { message_id: 1, message_type: "user" },
-            { message_id: 2, message_type: "assistant", parent_message: 1 },
-            { message_id: 3, message_type: "user", parent_message: 2 },
-            { message_id: 4, message_type: "assistant", parent_message: 3 },
-            { message_id: 5, message_type: "user", parent_message: 4 },
+            { message_id: 1, message_type: "user", latest_child_message: 2 },
+            {
+              message_id: 2,
+              message_type: "assistant",
+              parent_message: 1,
+              latest_child_message: 3,
+            },
+            {
+              message_id: 3,
+              message_type: "user",
+              parent_message: 2,
+              latest_child_message: 4,
+            },
+            {
+              message_id: 4,
+              message_type: "assistant",
+              parent_message: 3,
+              latest_child_message: 5,
+            },
+            {
+              message_id: 5,
+              message_type: "user",
+              parent_message: 4,
+              latest_child_message: 6,
+            },
             { message_id: 6, message_type: "assistant", parent_message: 5 },
           ],
           packets: [
@@ -1640,9 +1837,19 @@ describe("widget while a request waits", () => {
   it("answers a stored question from the saved session when its replay is gone", async () => {
     const { shown, saved } = await restoreUnanswered({
       messages: [
-        { message_id: 1, message_type: "user" },
-        { message_id: 2, message_type: "assistant", parent_message: 1 },
-        { message_id: 3, message_type: "user", parent_message: 2 },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
+        {
+          message_id: 2,
+          message_type: "assistant",
+          parent_message: 1,
+          latest_child_message: 3,
+        },
+        {
+          message_id: 3,
+          message_type: "user",
+          parent_message: 2,
+          latest_child_message: 4,
+        },
         { message_id: 4, message_type: "assistant", parent_message: 3 },
       ],
       packets: [
@@ -1667,7 +1874,7 @@ describe("widget while a request waits", () => {
   it("removes a stored question the saved session has no answer for", async () => {
     const { shown, saved } = await restoreUnanswered({
       messages: [
-        { message_id: 1, message_type: "user" },
+        { message_id: 1, message_type: "user", latest_child_message: 2 },
         { message_id: 2, message_type: "assistant", parent_message: 1 },
       ],
       packets: [[]],

@@ -230,6 +230,8 @@ export interface ChatSessionDetail {
     message_type: string;
     // The question an assistant message answers
     parent_message?: number | null;
+    // The child on the selected branch; the load returns every branch
+    latest_child_message?: number | null;
   }[];
   // One replay packet list for each assistant message, in message order
   packets: Packet[][];
