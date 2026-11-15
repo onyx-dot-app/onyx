@@ -48,6 +48,9 @@ type ChatSessionDetailResponse struct {
 	Messages      []ChatMessageDetail `json:"messages"`
 	// One replay packet list for each assistant message, in message order.
 	Packets [][]json.RawMessage `json:"packets"`
+	// ApprovalsVersion is the status's approvals version for the requests
+	// that this load shows.
+	ApprovalsVersion string `json:"approvals_version"`
 }
 
 // ChatStream is a running response stream and the response rows it writes.
@@ -67,6 +70,9 @@ type ChatSessionStatus struct {
 	// ApprovalsVersion changes when the session's waiting approval requests
 	// change. A session load shows the requests of the version.
 	ApprovalsVersion string
+	// HasActiveSubagents reports background agents that run or have queued
+	// work. A parked agent, which waits for a decision, does not count.
+	HasActiveSubagents bool
 }
 
 // ChatFileType represents a file type for uploads.

@@ -53,6 +53,9 @@ type Model struct {
 	// approvalsVersion is the session's approvals version that the cards
 	// reflect.
 	approvalsVersion string
+	// approvalsPoll numbers the status polls that follow a background
+	// agent's decision; a newer poll replaces an older one.
+	approvalsPoll int
 	// following marks a stream that follows a running response of the
 	// session instead of a new message.
 	following bool
@@ -194,6 +197,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCurrentStream(msg)
 	case approvalsLoadedMsg:
 		return m.handleApprovalsLoaded(msg)
+	case approvalsPollMsg:
+		return m.handleApprovalsPoll(msg)
 	case sessionReadyMsg:
 		if msg.channel != m.streamCh || !m.isStreaming {
 			return m, nil
@@ -243,10 +248,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.following && !m.stopReceived {
 			m.reloading = true
 			return cmdResume(m, msg.sessionID, m.streamCh)
-		}
-		if load == nil && m.stopRequested && len(m.approvals) > 0 {
-			// A stopped stream drops the resolutions that its Stop caused.
-			load = loadApprovals(m.client, msg.sessionID)
 		}
 		var finish tea.Cmd
 		m, finish = m.finishStream(nil)
@@ -954,7 +955,7 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 	detail := msg.Detail
 	m.chatSessionID = &detail.ChatSessionID
 	m.approvals = nil
-	m.approvalsVersion = msg.Status.ApprovalsVersion
+	m.approvalsVersion = detail.ApprovalsVersion
 	m.viewport.clearDisplay()
 	m.status.setSession(detail.ChatSessionID)
 

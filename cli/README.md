@@ -92,6 +92,7 @@ connection to a running response drops, the chat connects to it again.
 A request from a background agent names the agent, for example
 `triage wants to run Create issue`. It does not pause the chat: you can send
 messages while it waits, and its card stays after the response ends or stops.
+After you decide, the chat shows the outcome and the agent's later requests.
 
 ### One-shot question
 

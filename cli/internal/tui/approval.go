@@ -45,8 +45,10 @@ type approvalDecidedMsg struct {
 	// sessionID is the chat that showed the request, or empty.
 	sessionID  string
 	approvalID string
-	result     models.ApprovalDecisionResult
-	err        error
+	// agent marks a background agent's request.
+	agent  bool
+	result models.ApprovalDecisionResult
+	err    error
 }
 
 // renderApprovalCard renders a request. Only the active card, the oldest
@@ -144,8 +146,10 @@ func (m Model) renderApprovals() {
 }
 
 // showSavedApprovals shows the waiting requests of a session load, including
-// the requests of background agents, and the outcomes of shown requests.
+// the requests of background agents, and the outcomes of shown requests. The
+// load's approvals version becomes the version that the cards reflect.
 func (m Model) showSavedApprovals(detail *models.ChatSessionDetailResponse) Model {
+	m.approvalsVersion = detail.ApprovalsVersion
 	var requests []models.ToolApprovalRequestEvent
 	outcomes := map[string]string{}
 	for _, packets := range detail.Packets {
@@ -230,6 +234,58 @@ func (m Model) noteApprovalsVersion(status models.ChatSessionStatus) (Model, tea
 	return m, loadApprovals(m.client, *m.chatSessionID)
 }
 
+// approvalsPollUnseenReads bounds the status reads that follow a background
+// agent's decision while no agent shows as running. The agent host starts
+// asynchronously, so the first reads can precede the resumed run.
+const approvalsPollUnseenReads = 5
+
+// approvalsPollInterval paces the status reads that follow a decision.
+var approvalsPollInterval = time.Second
+
+// approvalsPollMsg carries a status read that follows a background agent's
+// decision.
+type approvalsPollMsg struct {
+	sessionID string
+	poll      int
+	// seenRunning marks a watch that saw a background agent run.
+	seenRunning bool
+	reads       int
+	status      models.ChatSessionStatus
+	err         error
+}
+
+func pollApprovals(client api.ClientAPI, sessionID string, msg approvalsPollMsg) tea.Cmd {
+	return func() tea.Msg {
+		time.Sleep(approvalsPollInterval)
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		msg.status, msg.err = client.ChatSessionStatus(ctx, sessionID)
+		msg.reads++
+		return msg
+	}
+}
+
+// handleApprovalsPoll loads the session cards when the approvals version
+// changes. It reads while a background agent runs, and stops once no agent
+// runs after one ran, or after a few reads that never saw one run.
+func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
+	if msg.poll != m.approvalsPoll || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
+		return m, nil
+	}
+	var load tea.Cmd
+	running := false
+	if msg.err == nil {
+		m, load = m.noteApprovalsVersion(msg.status)
+		running = msg.status.HasActiveSubagents
+		msg.seenRunning = msg.seenRunning || running
+	}
+	settled := msg.err == nil && msg.seenRunning && !running
+	if settled || (!msg.seenRunning && msg.reads >= approvalsPollUnseenReads) {
+		return m, load
+	}
+	return m, tea.Batch(load, pollApprovals(m.client, msg.sessionID, msg))
+}
+
 // resolveApproval replaces a card with a one-line record of how it ended.
 func (m Model) resolveApproval(index int, label string) Model {
 	m.viewport.setApproval(m.approvals[index].request.ApprovalID, approvalRecord(m.approvals[index].request, label))
@@ -242,6 +298,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 	m.approvals[index].sending = decision
 	m.renderApprovals()
 	client, approvalID := m.client, m.approvals[index].request.ApprovalID
+	agent := m.approvals[index].request.AgentName != ""
 	sessionID := ""
 	if m.chatSessionID != nil {
 		sessionID = *m.chatSessionID
@@ -250,7 +307,7 @@ func (m Model) decideApproval(index int, decision models.ApprovalDecision) (Mode
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		result, err := client.DecideApproval(ctx, approvalID, decision)
-		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, result: result, err: err}
+		return approvalDecidedMsg{sessionID: sessionID, approvalID: approvalID, agent: agent, result: result, err: err}
 	}
 }
 
@@ -276,6 +333,11 @@ func (m Model) handleApprovalDecided(msg approvalDecidedMsg) (tea.Model, tea.Cmd
 	switch {
 	case msg.err == nil && msg.result.Continuation != nil:
 		return m.followContinuation(*msg.result.Continuation)
+	case msg.err == nil && msg.agent:
+		// A background agent continues without a stream, and its outcome and
+		// later requests show only in a session load.
+		m.approvalsPoll++
+		return m, pollApprovals(m.client, msg.sessionID, approvalsPollMsg{sessionID: msg.sessionID, poll: m.approvalsPoll})
 	case noLongerWaiting:
 		// Another client decided; the status names the stream it started.
 		client, sessionID := m.client, msg.sessionID

@@ -281,10 +281,12 @@ func TestStopLeavesTheOutcomeToTheServer(t *testing.T) {
 	saved := waitingSession(t)
 	// The Stop rejected the request.
 	saved.Packets[0] = append(saved.Packets[0][:2], savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "rejected"}))
+	saved.ApprovalsVersion = "v2"
 	client := &resumingClient{saved: saved}
 	m, ch := streamingModel(client)
 	session := waitingSessionID
 	m.chatSessionID = &session
+	m.approvalsVersion = "v1"
 	m = receive(t, m, ch, approvalRequest("a1"))
 	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEscape}, {Code: 'c', Mod: tea.ModCtrl}} {
 		cancelled := false
@@ -298,9 +300,10 @@ func TestStopLeavesTheOutcomeToTheServer(t *testing.T) {
 		t.Fatalf("Stop marked the card before the server reported its outcome: %q", got)
 	}
 
-	// The cut stream drops the resolution; the session load reports it.
+	// The cut stream drops the resolution; the status reports the version of
+	// the saved rejection, and the session load shows it.
 	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
-	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch})
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{ApprovalsVersion: "v2"}})
 	m = updated.(Model)
 	if m.isStreaming {
 		t.Fatal("the stopped response keeps input blocked")
@@ -856,6 +859,7 @@ func TestApprovalsVersionChangeLoadsTheSessionCards(t *testing.T) {
 	saved := waitingSession(t)
 	request := map[string]any{"type": "tool_approval_request", "approval_id": "b1", "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
 	saved.Packets[0] = []json.RawMessage{savedPacket(t, request)}
+	saved.ApprovalsVersion = "v2"
 	client := &resumingClient{saved: saved}
 	m, ch := streamingModel(client)
 	session := waitingSessionID
@@ -874,6 +878,7 @@ func TestApprovalsVersionChangeLoadsTheSessionCards(t *testing.T) {
 
 	// The agent's request ends with no live resolution; the next version shows it.
 	saved.Packets[0] = append(saved.Packets[0], savedPacket(t, map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "cancelled"}))
+	saved.ApprovalsVersion = "v3"
 	ch = make(chan models.StreamEvent)
 	m.streamCh, m.isStreaming = ch, true
 	updated, _ = m.Update(StreamDoneMsg{Channel: ch})
@@ -904,5 +909,116 @@ func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	m, _ = run(t, m, cmd)
 	if len(client.requests) != 0 || m.isStreaming {
 		t.Fatalf("a new chat followed the old chat's response: %+v", client.requests)
+	}
+}
+
+// pollingClient answers status reads in order, then repeats the last one. A
+// session load shows the saved session of the last status's version.
+type pollingClient struct {
+	*resumingClient
+	statuses []models.ChatSessionStatus
+	sessions map[string]*models.ChatSessionDetailResponse
+	reads    int
+	version  string
+}
+
+func (c *pollingClient) ChatSessionStatus(context.Context, string) (models.ChatSessionStatus, error) {
+	status := c.statuses[min(c.reads, len(c.statuses)-1)]
+	c.reads++
+	c.version = status.ApprovalsVersion
+	return status, nil
+}
+
+func (c *pollingClient) GetChatSession(context.Context, string) (*models.ChatSessionDetailResponse, error) {
+	return c.sessions[c.version], nil
+}
+
+// watchAgentDecision decides the agent card b1 of a resumed session and runs
+// every command that the decision starts until none is left.
+func watchAgentDecision(t *testing.T, client *pollingClient) Model {
+	t.Helper()
+	interval := approvalsPollInterval
+	approvalsPollInterval = 0
+	t.Cleanup(func() { approvalsPollInterval = interval })
+	m := NewModel(config.DefaultConfig(), client)
+	updated, _ := m.Update(SessionResumedMsg{Detail: client.sessions["v1"], Status: models.ChatSessionStatus{ApprovalsVersion: "v0"}})
+	m = updated.(Model)
+	if m.approvalsVersion != "v1" {
+		t.Fatalf("baseline = %q, want the session load's version", m.approvalsVersion)
+	}
+	// The decision continues the agent without a stream.
+	m, cmd := press(t, m, tea.KeyPressMsg{Code: 'y', Text: "y"})
+	m, cmd = run(t, m, cmd)
+	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" {
+		t.Fatalf("b1 = %q, want the local decided state", got)
+	}
+	pending := []tea.Cmd{cmd}
+	for len(pending) > 0 {
+		next := pending[0]
+		pending = pending[1:]
+		for _, msg := range messages(t, next) {
+			updated, follow := m.Update(msg)
+			m = updated.(Model)
+			if follow != nil {
+				pending = append(pending, follow)
+			}
+		}
+	}
+	return m
+}
+
+func agentSession(t *testing.T, version string, packets ...map[string]any) *models.ChatSessionDetailResponse {
+	t.Helper()
+	saved := &models.ChatSessionDetailResponse{ChatSessionID: waitingSessionID, ApprovalsVersion: version, Packets: [][]json.RawMessage{{}}}
+	for _, obj := range packets {
+		saved.Packets[0] = append(saved.Packets[0], savedPacket(t, obj))
+	}
+	return saved
+}
+
+func agentAsks(id string) map[string]any {
+	return map[string]any{"type": "tool_approval_request", "approval_id": id, "tool_name": "create_issue", "display_name": "Create issue", "agent_name": "triage"}
+}
+
+func TestAgentDecisionWatchStopsAfterReadsThatNeverSeeTheAgentRun(t *testing.T) {
+	client := &pollingClient{
+		resumingClient: &resumingClient{},
+		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v1"}},
+		sessions:       map[string]*models.ChatSessionDetailResponse{"v1": agentSession(t, "v1", agentAsks("b1"))},
+	}
+	watchAgentDecision(t, client)
+	if client.reads != approvalsPollUnseenReads {
+		t.Fatalf("reads = %d, want %d", client.reads, approvalsPollUnseenReads)
+	}
+}
+
+func TestAgentDecisionWatchFollowsTheResumedAgentUntilItSettles(t *testing.T) {
+	resolved := map[string]any{"type": "tool_approval_resolved", "approval_id": "b1", "outcome": "approved"}
+	client := &pollingClient{
+		resumingClient: &resumingClient{},
+		statuses: []models.ChatSessionStatus{
+			// The decision changes the version before the agent host starts.
+			{ApprovalsVersion: "v2"},
+			{ApprovalsVersion: "v2", HasActiveSubagents: true},
+			// The resumed agent asks again, then parks.
+			{ApprovalsVersion: "v3", HasActiveSubagents: true},
+			{ApprovalsVersion: "v3"},
+			{ApprovalsVersion: "v3"},
+		},
+		sessions: map[string]*models.ChatSessionDetailResponse{
+			"v1": agentSession(t, "v1", agentAsks("b1")),
+			"v2": agentSession(t, "v2", agentAsks("b1"), resolved),
+			"v3": agentSession(t, "v3", agentAsks("b1"), resolved, agentAsks("b2")),
+		},
+	}
+	m := watchAgentDecision(t, client)
+	if client.reads != 4 {
+		t.Fatalf("reads = %d, want the watch to stop once the agent that ran settled", client.reads)
+	}
+	if got := approvalEntry(t, m, "b1"); got != "● Approved: Create issue" {
+		t.Fatalf("b1 = %q, want the server's outcome", got)
+	}
+	if !strings.Contains(approvalEntry(t, m, "b2"), "triage wants to run Create issue") || len(m.approvals) != 1 || m.approvalsVersion != "v3" {
+		t.Fatal("the resumed agent's later request does not show")
 	}
 }

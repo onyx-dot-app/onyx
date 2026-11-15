@@ -437,9 +437,10 @@ func (c *Client) DecideApproval(ctx context.Context, approvalID string, decision
 // failed query reports a running session.
 func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (models.ChatSessionStatus, error) {
 	var status struct {
-		IsProcessing     *bool              `json:"is_processing"`
-		CurrentStream    *models.ChatStream `json:"current_stream"`
-		ApprovalsVersion string             `json:"approvals_version"`
+		IsProcessing       *bool              `json:"is_processing"`
+		CurrentStream      *models.ChatStream `json:"current_stream"`
+		ApprovalsVersion   string             `json:"approvals_version"`
+		HasActiveSubagents bool               `json:"has_active_subagents"`
 	}
 	unknown := models.ChatSessionStatus{IsProcessing: true}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
@@ -453,9 +454,10 @@ func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (model
 		return unknown, fmt.Errorf("invalid chat readiness response")
 	}
 	return models.ChatSessionStatus{
-		IsProcessing:     *status.IsProcessing,
-		CurrentStream:    status.CurrentStream,
-		ApprovalsVersion: status.ApprovalsVersion,
+		IsProcessing:       *status.IsProcessing,
+		CurrentStream:      status.CurrentStream,
+		ApprovalsVersion:   status.ApprovalsVersion,
+		HasActiveSubagents: status.HasActiveSubagents,
 	}, nil
 }
 
