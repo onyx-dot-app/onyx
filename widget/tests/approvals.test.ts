@@ -1092,6 +1092,77 @@ describe("widget while a request waits", () => {
     expect(status(widget, "c")).toBe("approved");
   });
 
+  it("replays an earlier answer whose agent asks after a later question", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [
+      { id: 6, role: "user", content: "Research it", timestamp: 0 },
+      { ...streamingMessage([]), isStreaming: false },
+      { id: 8, role: "user", content: "Another question", timestamp: 0 },
+      { ...streamingMessage([]), id: 9, isStreaming: false },
+    ];
+    widget["approvalsVersion"] = "v0";
+    api.waitForSessionIdle = mock(async () =>
+      idle({ approvals_version: "v1" })
+    );
+    api.getChatSession = mock(async () => ({
+      approvals_version: "v1",
+      messages: [
+        { message_id: 6, message_type: "user" },
+        { message_id: 7, message_type: "assistant", parent_message: 6 },
+        { message_id: 8, message_type: "user", parent_message: 7 },
+        { message_id: 9, message_type: "assistant", parent_message: 8 },
+      ],
+      packets: [
+        [
+          { obj: { ...request("c"), agent_name: "Research" } },
+          { obj: { type: "stop" } },
+        ],
+        [{ obj: { type: "stop" } }],
+      ],
+    }));
+
+    await widget["resumeStream"]("session", { streamId: null });
+
+    expect(status(widget, "c")).toBe("pending");
+    expect(widget["messages"][1]?.approvals).toMatchObject([
+      { request: { approval_id: "c" } },
+    ]);
+  });
+
+  it("keeps a version change pending until a session load succeeds", async () => {
+    const { widget, api } = waitingWidget();
+    widget["messages"] = [{ ...streamingMessage([]), isStreaming: false }];
+    widget["approvalsVersion"] = "v0";
+    api.waitForSessionIdle = mock(async () =>
+      idle({ approvals_version: "v1" })
+    );
+    let fails = true;
+    api.getChatSession = mock(async () => {
+      if (fails) throw new Error("unavailable");
+      return {
+        approvals_version: "v1",
+        messages: [
+          { message_id: 6, message_type: "user" },
+          { message_id: 7, message_type: "assistant", parent_message: 6 },
+        ],
+        packets: [
+          [
+            { obj: { ...request("c"), agent_name: "Research" } },
+            { obj: { type: "stop" } },
+          ],
+        ],
+      };
+    });
+
+    await widget["resumeStream"]("session", { streamId: null }).catch(() => {});
+    expect(api.getChatSession).toHaveBeenCalledTimes(1);
+
+    fails = false;
+    await widget["resumeStream"]("session", { streamId: null });
+    expect(api.getChatSession).toHaveBeenCalledTimes(2);
+    expect(status(widget, "c")).toBe("pending");
+  });
+
   /**
    * A widget whose answer 7 holds agent request c, shown by the load of
    * version v0. Each status read takes the next of `statuses`, then reports

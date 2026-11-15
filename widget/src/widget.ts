@@ -235,7 +235,7 @@ export class OnyxChatWidget extends LitElement {
       this.chatSessionId = stored.sessionId;
       this.messages = stored.messages;
       // The stored transcript can predate request outcomes, so the load
-      // replays the answers that hold agent requests, and the latest answer.
+      // replays the answers that hold approval requests.
       this.approvalsChanged = true;
       // A response that still runs or waits for a decision shows again, even
       // when the page closed before it saved any of it.
@@ -841,12 +841,10 @@ export class OnyxChatWidget extends LitElement {
         // was closed), or the replay buffer ended early. The server's saved
         // copy finishes the response or shows its waiting requests, and
         // answers or removes a saved question with no answer after it. A
-        // changed approvals version replays the answers that hold agent
-        // requests, and the latest answer, which can hold new requests.
-        // On a failure the snapshot stays unfinished, so the next load tries
-        // again.
+        // changed approvals version replays every saved answer that holds an
+        // approval request. On a failure the snapshot stays unfinished and
+        // the version change stays pending, so the next load tries again.
         const approvalsChanged = this.approvalsChanged;
-        this.approvalsChanged = false;
         const unanswered = this.messages
           .filter(
             (message, index) =>
@@ -858,10 +856,7 @@ export class OnyxChatWidget extends LitElement {
         const recoverIds = this.messages
           .filter(
             (message) =>
-              message.isStreaming ||
-              message.awaitingApproval ||
-              (approvalsChanged &&
-                message.approvals?.some((entry) => entry.request.agent_name))
+              message.isStreaming || message.awaitingApproval
           )
           .map((message) => message.id)
           .filter((id): id is number => typeof id === "number");
@@ -902,13 +897,21 @@ export class OnyxChatWidget extends LitElement {
               recoverIds.push(answer.message_id);
             }
           }
-          const latest = assistants[assistants.length - 1]?.message_id;
-          if (
-            latest !== undefined &&
-            !recoverIds.includes(latest) &&
-            approvalsChanged
-          ) {
-            recoverIds.push(latest);
+          if (approvalsChanged) {
+            // A background agent's request is saved under the answer that
+            // started the agent, which can be any earlier answer.
+            assistants.forEach((message, index) => {
+              if (
+                !recoverIds.includes(message.message_id) &&
+                session.packets[index]?.some(
+                  (packet) =>
+                    "type" in packet.obj &&
+                    packet.obj.type === "tool_approval_request"
+                )
+              ) {
+                recoverIds.push(message.message_id);
+              }
+            });
           }
           for (const assistantMessageId of recoverIds) {
             const index = assistants.findIndex(
@@ -935,6 +938,7 @@ export class OnyxChatWidget extends LitElement {
             );
             if (!stillOurs()) return;
           }
+          this.approvalsChanged = false;
           // A response the server has no saved copy of keeps its snapshot.
           this.messages = this.messages.map((message) =>
             message.isStreaming ? { ...message, isStreaming: false } : message
