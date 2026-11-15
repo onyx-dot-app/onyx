@@ -555,13 +555,17 @@ func TestDecisionsFollowTheContinuationThatTheServerNames(t *testing.T) {
 	if len(client.requests) != 1 || *client.requests[0].streamID != 3 || client.requests[0].cursor != 0 || m.streamCh != client.running {
 		t.Fatalf("requests = %+v, want stream 3 from cursor 0", client.requests)
 	}
-	// The continuation replays the response, then resolves the requests.
+	// The continuation replays the response with the saved outcomes, then
+	// sends the same outcomes again live.
 	for _, event := range []models.StreamEvent{
 		models.StreamCursorEvent{StreamID: 3},
 		models.MessageIDEvent{ReservedAgentMessageID: 2},
 		models.MessageDeltaEvent{Content: "Filing the ticket."},
 		approvalRequest("a1"),
+		models.ToolApprovalResolvedEvent{ApprovalID: "a1", Outcome: "approved"},
 		approvalRequest("a2"),
+		models.ToolApprovalResolvedEvent{ApprovalID: "a2", Outcome: "rejected"},
+		models.ReplayEndEvent{},
 	} {
 		m = receive(t, m, client.running, event)
 	}

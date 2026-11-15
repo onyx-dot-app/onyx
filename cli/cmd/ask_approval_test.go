@@ -56,6 +56,8 @@ type approvalServerOptions struct {
 	// The server has no buffer for the continuation, and the saved session
 	// shows the finished answer.
 	unbuffered bool
+	// The continuation fails after its replay, before the run starts.
+	resumeFails bool
 }
 
 // newApprovalServer streams some text and the response's tool approval
@@ -161,16 +163,25 @@ func newApprovalServer(t *testing.T, opts approvalServerOptions) *approvalRun {
 		}
 		fmt.Fprintln(w, streamLine("search_tool_start", nil))
 		for _, request := range requests {
+			id := request["approval_id"]
 			fmt.Fprintln(w, streamLine("tool_approval_request", request))
+			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
 		}
 		fmt.Fprintln(w, streamLine("replay_end", nil))
+		if opts.resumeFails {
+			fmt.Fprintln(w, streamLine("error", map[string]any{"exception": "resume failed"}))
+			fmt.Fprintln(w, streamLine("stop", nil))
+			fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 6+2*len(all))
+			continuing = false
+			return
+		}
 		for _, request := range requests {
 			id := request["approval_id"]
 			fmt.Fprintln(w, streamLine("tool_approval_resolved", map[string]any{"approval_id": id, "outcome": outcomes[id.(string)]}))
 		}
 		fmt.Fprintln(w, streamLine("message_delta", map[string]any{"content": "done"}))
 		fmt.Fprintln(w, streamLine("stop", nil))
-		fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 7+2*len(all))
+		fmt.Fprintf(w, "{\"stream_id\":3,\"next_cursor\":%d,\"replay_complete\":true}\n", 7+2*len(all)+len(requests))
 		continuing = false
 	})
 	mux.HandleFunc("/api/chat/get-chat-session/"+testSessionID, func(w http.ResponseWriter, r *http.Request) {
@@ -354,6 +365,21 @@ func TestAsk_ContinuationShowsNothingBeforeItsReplayEnd(t *testing.T) {
 		if strings.Count(stderr, once) != 1 {
 			t.Errorf("stderr shows %q other than once: %q", once, stderr)
 		}
+	}
+}
+
+func TestAsk_ContinuationThatFailsAfterItsReplayShowsTheError(t *testing.T) {
+	newApprovalServer(t, approvalServerOptions{resumeFails: true})
+	ios, out, errOut := pipedIOS()
+	err := runApprovalAsk(t, ios, "--approve=once")
+	if err == nil || !strings.Contains(err.Error(), "resume failed") {
+		t.Fatalf("err = %v, want the continuation's error", err)
+	}
+	if out.String() != "Filing. \n" {
+		t.Errorf("stdout = %q, want only the live text", out.String())
+	}
+	if strings.Count(errOut.String(), "Approved: Create issue") != 1 {
+		t.Errorf("the replayed outcome does not show once: %q", errOut.String())
 	}
 }
 
