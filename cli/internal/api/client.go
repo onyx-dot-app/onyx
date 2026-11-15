@@ -442,6 +442,7 @@ func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (model
 		CurrentStream      *models.ChatStream `json:"current_stream"`
 		ApprovalsVersion   string             `json:"approvals_version"`
 		HasActiveSubagents bool               `json:"has_active_subagents"`
+		HasStartableInput  bool               `json:"has_startable_input"`
 	}
 	unknown := models.ChatSessionStatus{IsProcessing: true}
 	if err := c.doJSON(ctx, "GET", "/chat/chat-session/"+sessionID+"/status", nil, &status); err != nil {
@@ -459,6 +460,7 @@ func (c *Client) ChatSessionStatus(ctx context.Context, sessionID string) (model
 		CurrentStream:      status.CurrentStream,
 		ApprovalsVersion:   status.ApprovalsVersion,
 		HasActiveSubagents: status.HasActiveSubagents,
+		HasStartableInput:  status.HasStartableInput,
 	}, nil
 }
 

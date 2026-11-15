@@ -304,8 +304,10 @@ func pollApprovals(client api.ClientAPI, sessionID string, poll int, delay time.
 }
 
 // handleApprovalsPoll loads the session cards when the approvals version
-// changes, and reads again while background agents run or wait to resume, or
-// while a card waits.
+// changes, and follows a response that runs while no stream does, such as a
+// root turn that agent results start. It reads again while background agents
+// run or wait to resume, or while a card waits; without a stream, also while
+// a turn can start or a response prepares.
 func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 	if msg.poll != m.approvalsPoll || m.chatSessionID == nil || msg.sessionID != *m.chatSessionID {
 		return m, nil
@@ -317,10 +319,15 @@ func (m Model) handleApprovalsPoll(msg approvalsPollMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m, load := m.noteApprovalsVersion(msg.status)
-	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 {
-		return m, load
+	var follow tea.Cmd
+	if stream := msg.status.CurrentStream; stream != nil && !m.isStreaming {
+		m, follow = m.followContinuation(*stream)
 	}
-	return m, tea.Batch(load, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
+	startable := !m.isStreaming && (msg.status.HasStartableInput || msg.status.IsProcessing)
+	if !msg.status.HasActiveSubagents && len(m.approvals) == 0 && !startable {
+		return m, tea.Batch(load, follow)
+	}
+	return m, tea.Batch(load, follow, pollApprovals(m.client, msg.sessionID, msg.poll, api.StatusPollInterval))
 }
 
 // resolveApproval replaces a card with a one-line record of how it ended.

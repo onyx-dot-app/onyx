@@ -1075,6 +1075,32 @@ func TestEarlierFollowCannotReplaceANewMessage(t *testing.T) {
 	}
 }
 
+func TestRootTurnThatAgentResultsStartIsFollowed(t *testing.T) {
+	client := &pollingClient{
+		resumingClient: &resumingClient{running: make(chan models.StreamEvent, 8)},
+		statuses: []models.ChatSessionStatus{
+			// The root's turn for the agent's result prepares, then streams.
+			{IsProcessing: true},
+			{IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 7, ResponseIDs: []int{9}}},
+		},
+	}
+	m, ch := streamingModel(client)
+	session := waitingSessionID
+	m.chatSessionID = &session
+	m = receive(t, m, ch, models.StopEvent{})
+	updated, _ := m.Update(StreamDoneMsg{Channel: ch})
+	// A finished agent's unread result can start a turn; no agent is active.
+	updated, cmd := updated.(Model).Update(sessionReadyMsg{sessionID: waitingSessionID, channel: ch, status: models.ChatSessionStatus{HasStartableInput: true}})
+	m = updated.(Model)
+	if m.isStreaming {
+		t.Fatal("the answer did not finish")
+	}
+	m = runUntilStreaming(t, m, cmd)
+	if len(client.requests) != 1 || *client.requests[0].streamID != 7 || client.requests[0].cursor != 0 || m.streamCh != client.running {
+		t.Fatalf("requests = %+v, want stream 7 from cursor 0", client.requests)
+	}
+}
+
 func TestContinuationIsNotFollowedAfterTheUserLeavesTheChat(t *testing.T) {
 	client := &resumingClient{running: make(chan models.StreamEvent, 8)}
 	m := stoppedForDecisions(t, client)
@@ -1203,7 +1229,8 @@ func TestAgentDecisionPollsWhileTheAgentRuns(t *testing.T) {
 }
 
 // rootDecidedElsewhere answers status reads as if another client decided
-// a1 and a2 of response 2, which continues on stream 3.
+// a1 and a2 of response 2, which prepares its continuation and then
+// continues on stream 3.
 func rootDecidedElsewhere(t *testing.T) *pollingClient {
 	t.Helper()
 	decided := waitingSession(t)
@@ -1214,8 +1241,11 @@ func rootDecidedElsewhere(t *testing.T) *pollingClient {
 	decided.ApprovalsVersion = "v2"
 	return &pollingClient{
 		resumingClient: &resumingClient{running: make(chan models.StreamEvent, 8)},
-		statuses:       []models.ChatSessionStatus{{ApprovalsVersion: "v2", IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}}},
-		sessions:       map[string]*models.ChatSessionDetailResponse{"v2": decided},
+		statuses: []models.ChatSessionStatus{
+			{ApprovalsVersion: "v2", IsProcessing: true},
+			{ApprovalsVersion: "v2", IsProcessing: true, CurrentStream: &models.ChatStream{StreamID: 3, ResponseIDs: []int{2}}},
+		},
+		sessions: map[string]*models.ChatSessionDetailResponse{"v2": decided},
 	}
 }
 

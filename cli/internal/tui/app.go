@@ -260,9 +260,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		var finish, poll tea.Cmd
 		m, finish = m.finishStream(nil)
-		if msg.err == nil && (msg.status.HasActiveSubagents || len(m.approvals) > 0) {
-			// Background agents' requests, and decisions that other clients
-			// send, show only in a session load.
+		if msg.err == nil && (msg.status.HasActiveSubagents || msg.status.HasStartableInput || len(m.approvals) > 0) {
+			// Background agents' requests, decisions that other clients send,
+			// and turns that the server starts show only in status reads.
 			m.approvalsPoll++
 			poll = pollApprovals(m.client, msg.sessionID, m.approvalsPoll, api.StatusPollInterval)
 		}
@@ -1028,9 +1028,9 @@ func (m Model) handleSessionResumed(msg SessionResumedMsg) (tea.Model, tea.Cmd) 
 		}
 		return m.followRunningResponse(streamID)
 	}
-	if msg.Status.HasActiveSubagents || len(m.approvals) > 0 {
-		// Background agents' requests, and decisions that other clients
-		// send, show only in a session load.
+	if msg.Status.HasActiveSubagents || msg.Status.HasStartableInput || len(m.approvals) > 0 {
+		// Background agents' requests, decisions that other clients send,
+		// and turns that the server starts show only in status reads.
 		m.approvalsPoll++
 		return m, pollApprovals(m.client, detail.ChatSessionID, m.approvalsPoll, api.StatusPollInterval)
 	}

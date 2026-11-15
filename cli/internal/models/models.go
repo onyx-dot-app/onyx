@@ -74,6 +74,9 @@ type ChatSessionStatus struct {
 	// work, or have their decisions and wait to resume. An agent that waits
 	// for a decision does not count.
 	HasActiveSubagents bool
+	// HasStartableInput reports input that the server starts a root turn
+	// for, such as a finished agent's unread result.
+	HasStartableInput bool
 }
 
 // ChatFileType represents a file type for uploads.
