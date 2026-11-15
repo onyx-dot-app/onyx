@@ -85,7 +85,11 @@ import type { MemberPlugin } from "@/lib/plugins/member";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { settleChatSession } from "@/lib/chat/settleChatSession";
+import {
+  claimStreamReader,
+  releaseStreamReader,
+  settleChatSession,
+} from "@/lib/chat/settleChatSession";
 import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import {
   stopChatSession,
@@ -1017,6 +1021,10 @@ export default function useChatController({
       const readerFinished = new Promise<void>((resolve) => {
         resolveReaderFinished = resolve;
       });
+      // The send reads its own stream, so a decision that names it as the
+      // continuation does not start a second reader.
+      let claimedStreamId: number | null = null;
+      let readerDone = false;
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1060,6 +1068,13 @@ export default function useChatController({
           sendAcknowledged: stack.acknowledged,
           readerFinished,
         });
+        stack.acknowledged.then(
+          (stream) => {
+            if (stream && !readerDone && claimStreamReader(stream.stream_id))
+              claimedStreamId = stream.stream_id;
+          },
+          () => {}
+        );
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
@@ -1528,6 +1543,8 @@ export default function useChatController({
           }
         } finally {
           controller.signal.removeEventListener("abort", discardUnsentTurn);
+          readerDone = true;
+          if (claimedStreamId !== null) releaseStreamReader(claimedStreamId);
           resolveReaderFinished();
         }
       }

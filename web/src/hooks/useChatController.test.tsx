@@ -5,6 +5,7 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   createChatSession,
   processRawChatHistory,
+  resumeStream,
   sendMessage,
   setPreferredResponse,
   ApprovalPendingError,
@@ -15,7 +16,10 @@ import {
   readWaitingToolApprovals,
   useToolApprovalUi,
 } from "@/lib/chat/toolApprovals";
-import { refreshChatSession } from "@/lib/chat/settleChatSession";
+import {
+  followChatStream,
+  refreshChatSession,
+} from "@/lib/chat/settleChatSession";
 import type { MinimalAgent } from "@/lib/agents/types";
 import type { LlmManager } from "@/lib/hooks";
 import {
@@ -78,6 +82,7 @@ jest.mock("@/app/app/services/lib", () => {
     updateLlmOverrideForChatSession: jest.fn(),
     processRawChatHistory: jest.fn(() => new Map()),
     sendMessage: jest.fn(),
+    resumeStream: jest.fn(),
     setPreferredResponse: jest.fn(),
     createChatSession: jest.fn(),
     buildChatUrl: () => "/app?chatId=session",
@@ -501,6 +506,72 @@ test("a lost stream keeps its waiting approval open after the server is idle", a
   });
   // An idle server can still wait for the decision.
   expect(waitingIds()).toEqual(["approval"]);
+});
+
+test("a continuation that names the send's own stream keeps the send as its only reader", async () => {
+  jest.spyOn(console, "log").mockImplementation(() => {});
+  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useChatSessionStore.setState({
+    sessions: new Map(),
+    currentSessionId: "session",
+  });
+  useChatSessionStore.getState().createSession("session");
+  const answerEnds = Promise.withResolvers<void>();
+  jest.mocked(sendMessage).mockImplementation(async function* () {
+    yield { user_message_id: 11, reserved_assistant_message_id: 12 };
+    yield {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_request",
+        approval_id: "approval",
+        tool_call_id: "call",
+        tool_name: "mcp__3__github__create_issue",
+        display_name: "Create issue",
+        arguments: {},
+        agent_name: null,
+      },
+    };
+    await answerEnds.promise;
+  });
+  const { result } = renderHook(() =>
+    useChatController({
+      llmManager: createLlmManager(),
+      toolConfiguration,
+      activeAgent: undefined,
+      availableAgents: [],
+      existingChatSessionId: "session",
+      selectedDocuments: [],
+      searchParams: new ReadonlyURLSearchParams(),
+      resetInputBar: jest.fn(),
+      restoreInputBar: jest.fn(),
+    })
+  );
+  const tree = () =>
+    useChatSessionStore.getState().sessions.get("session")!.messageTree;
+  const waitingIds = () =>
+    readWaitingToolApprovals(tree()).map(({ request }) => request.approval_id);
+
+  let sending: Promise<void> | undefined;
+  act(() => {
+    sending = result.current.onSubmit({
+      message: "Open an issue",
+      currentMessageFiles: [],
+      deepResearch: false,
+    });
+  });
+  await waitFor(() => expect(waitingIds()).toEqual(["approval"]));
+
+  act(() =>
+    followChatStream("session", { stream_id: 12, response_ids: [12] }, "Check")
+  );
+
+  expect(resumeStream).not.toHaveBeenCalled();
+  // The answer keeps the output its send reader received.
+  expect(waitingIds()).toEqual(["approval"]);
+  await act(async () => {
+    answerEnds.resolve();
+    await sending;
+  });
 });
 
 test("a send refused for a waiting approval restores the draft and points at the card", async () => {

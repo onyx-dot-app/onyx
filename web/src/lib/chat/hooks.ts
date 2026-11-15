@@ -57,7 +57,6 @@ import { APPROVAL_PENDING_ERROR_CODE } from "@/app/app/types";
 
 const EMPTY_PENDING_MESSAGES: PendingChatMessage[] = [];
 const SERVER_WORK_POLL_MS = 2000;
-const AGENT_WATCH_POLL_MS = 1000;
 
 /** The response new input continues. Without a saved ID the server targets the running one. */
 function pendingInputTarget(tree: MessageTreeState | undefined) {
@@ -181,9 +180,6 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
         };
       })
     );
-  const watchingAgents = useToolApprovalUi(
-    (state) => sessionId !== null && state.agentWatch?.sessionId === sessionId
-  );
   const pendingKey =
     enabled && sessionId ? SWR_KEYS.pendingChatMessages(sessionId) : null;
   const statusKey =
@@ -201,25 +197,15 @@ export function useChatSessionQueue(enabled: boolean): ChatSessionQueue {
     errorHandlingFetcher,
     {
       // Pending input and background work can start a turn this client did
-      // not send. A decided agent request resumes its agent after the
-      // decision returns.
+      // not send. A decided agent request counts as background work until
+      // its agent settles.
       refreshInterval: (current) =>
-        watchingAgents
-          ? AGENT_WATCH_POLL_MS
-          : current?.has_startable_input || current?.has_active_subagents
-            ? SERVER_WORK_POLL_MS
-            : 0,
-      onSuccess: (current) => {
-        if (sessionId)
-          useToolApprovalUi.getState().noteAgentStatus(sessionId, current);
-      },
+        current?.has_startable_input || current?.has_active_subagents
+          ? SERVER_WORK_POLL_MS
+          : 0,
       onErrorRetry: skipRetryOnAuthError,
     }
   );
-
-  useEffect(() => {
-    if (watchingAgents && statusKey) void mutate(statusKey);
-  }, [watchingAgents, statusKey, mutate]);
 
   // A reader owns a busy session; an idle one attaches to turns the server
   // started, whichever status read found them.

@@ -39,6 +39,8 @@ jest.mock("@/app/app/services/lib", () => ({
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
   ...jest.requireActual("@/lib/chat/sessionReadiness"),
+  // Status checks run without real waits between them.
+  CHAT_STATUS_POLL_MS: 0,
   fetchSettledChatSession: jest.fn(),
   waitForChatResponseEnd: jest.fn(),
 }));
@@ -991,6 +993,104 @@ describe("with a scripted fetch", () => {
     });
   });
 
+  // Readers left open by earlier tests keep their streams, so this test uses
+  // its own stream IDs.
+  test("a stream that stops for an approval hands its response to the next stream from cursor 0", async () => {
+    const raw = [
+      { ...savedMessage(91, "user", "Question"), latest_child_message: 92 },
+      savedMessage(92, "assistant", ""),
+    ];
+    const tree = processRawChatHistory(raw, [[]]);
+    useChatSessionStore.getState().updateSessionData("session", {
+      chatState: "streaming",
+      messageTree: tree,
+    });
+    const continuation = stream(920, [92]);
+    jest.spyOn(global, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      // The decision arrived while the response was live, so it named no
+      // continuation; the status names the stream that resumes it.
+      if (url.endsWith("/status"))
+        return Response.json({
+          is_processing: true,
+          current_stream: continuation,
+          has_active_subagents: false,
+          has_startable_input: false,
+          approvals_version: "2",
+          latest_response_id: 92,
+        });
+      return Response.json(savedSession(raw, continuation));
+    });
+    const awaitingStop: Packet = {
+      placement: { turn_index: 0 },
+      obj: { type: "stop", stop_reason: StopReason.AWAITING_APPROVAL },
+    };
+    const resolved: Packet = {
+      placement: { turn_index: 1, tab_index: 0 },
+      obj: {
+        type: "tool_approval_resolved",
+        approval_id: "approval",
+        outcome: "approved",
+      },
+    };
+    const replayEnd: Packet = {
+      placement: { turn_index: 1 },
+      obj: { type: "replay_end" },
+    };
+    const answerText: Packet = {
+      placement: { turn_index: 2 },
+      obj: { type: "message_delta", content: "Created the issue." },
+    };
+    jest
+      .mocked(resumeStream)
+      .mockImplementation(async function* (_session, streamId) {
+        if (streamId === 92) {
+          yield approvalRequest("approval");
+          yield awaitingStop;
+          yield { stream_id: 92, next_cursor: 2, replay_complete: true };
+          return;
+        }
+        yield approvalRequest("approval");
+        yield resolved;
+        yield replayEnd;
+        yield answerText;
+        yield { stream_id: 920, next_cursor: 4, replay_complete: true };
+        await new Promise<never>(() => {});
+      });
+    const controller = useChatSessionStore
+      .getState()
+      .sessions.get("session")!.abortController;
+
+    await followChatSession({
+      sessionId: "session",
+      controller,
+      errorMessage,
+      stream: stream(92),
+      messageMap: tree,
+    });
+
+    const answer = () =>
+      useChatSessionStore
+        .getState()
+        .sessions.get("session")!
+        .messageTree.get(92);
+    await waitFor(() =>
+      expect(answer()?.replay).toEqual({ streamId: 920, cursor: 4 })
+    );
+    expect(resumeStream).toHaveBeenLastCalledWith(
+      "session",
+      920,
+      0,
+      expect.anything()
+    );
+    // The replay end marks a position and never renders.
+    expect(answer()?.packets).toEqual([
+      approvalRequest("approval"),
+      resolved,
+      answerText,
+    ]);
+  });
+
   test("a resume stream the server cannot find is not retried", async () => {
     const log = jest.spyOn(console, "error").mockImplementation(() => {});
     const raw = [
@@ -1002,13 +1102,10 @@ describe("with a scripted fetch", () => {
       chatState: "streaming",
       messageTree: tree,
     });
-    const statuses = [
-      { is_processing: true, current_stream: stream(32) },
-      { is_processing: false, current_stream: null },
-    ];
+    // The run ends while the client checks the status after the 404.
+    jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
     jest.spyOn(global, "fetch").mockImplementation(async (input) => {
       const url = String(input);
-      if (url.endsWith("/status")) return Response.json(statuses.shift());
       if (url.includes("resume-stream"))
         return Response.json(
           { detail: "No resumable stream for this chat session" },
@@ -1033,7 +1130,7 @@ describe("with a scripted fetch", () => {
     await waitFor(() => expect(chatState()).toBe("input"));
     log.mockRestore();
     expect(chatState()).toBe("input");
-    expect(statuses).toEqual([]);
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", 32);
     expect(resumeStream).toHaveBeenCalledTimes(1);
   });
 

@@ -13,10 +13,7 @@ import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { GroupedPacket } from "@/app/app/message/messageComponents/timeline/hooks/packetProcessor";
-import type {
-  ApprovalDecisionResponse,
-  ChatSessionStatus,
-} from "@/lib/chat/types";
+import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 
 /** What one response's packets say about an approval request. */
 export interface ToolApprovalEntry {
@@ -213,35 +210,6 @@ export function decidedStatus(
     : "approved";
 }
 
-/**
- * Status reads after a decision on a background agent's request. The decision
- * starts no stream, and the agent resumes in an agent host that starts after
- * the decision returns, so its later requests show only after a reload.
- */
-export interface AgentWatch {
-  sessionId: string;
-  reads: number;
-  /** A read saw the chat's background agents run. */
-  sawRunning: boolean;
-}
-
-/** Reads that end a watch whose agents never showed as running. */
-export const AGENT_WATCH_GRACE_READS = 5;
-
-/**
- * The watch after one status read, or null once it ends: the agents ran and
- * settled, or they never ran within the grace reads.
- */
-export function nextAgentWatch(
-  watch: AgentWatch,
-  status: Pick<ChatSessionStatus, "has_active_subagents">
-): AgentWatch | null {
-  const reads = watch.reads + 1;
-  if (status.has_active_subagents) return { ...watch, reads, sawRunning: true };
-  if (watch.sawRunning || reads >= AGENT_WATCH_GRACE_READS) return null;
-  return { ...watch, reads };
-}
-
 // A nudge whose card is not on screen is dropped instead of firing later.
 const NUDGE_TTL_MS = 2000;
 let lastNudgeSeq = 0;
@@ -251,7 +219,6 @@ interface ToolApprovalUiState {
   localStatuses: ReadonlyMap<string, ApprovalStatus>;
   /** The card to bring into view; `seq` repeats the nudge for the same card. */
   nudge: { approvalId: string; seq: number } | null;
-  agentWatch: AgentWatch | null;
   /** Records the status a decision produced until its resolution arrives. */
   recordStatus: (approvalId: string, status: ApprovalStatus) => void;
   /** Drops statuses that resolution packets now report. */
@@ -259,19 +226,11 @@ interface ToolApprovalUiState {
   nudgeApproval: (approvalId: string) => void;
   /** Called once the card handled the nudge, so a remount does not repeat it. */
   clearNudge: (seq: number) => void;
-  /** Starts a watch, which replaces any earlier one. */
-  watchAgents: (sessionId: string) => void;
-  /** Applies a status read of the chat to its watch. */
-  noteAgentStatus: (
-    sessionId: string,
-    status: Pick<ChatSessionStatus, "has_active_subagents">
-  ) => void;
 }
 
 export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   localStatuses: new Map(),
   nudge: null,
-  agentWatch: null,
   recordStatus: (approvalId, status) =>
     set((state) => ({
       localStatuses: new Map(state.localStatuses).set(approvalId, status),
@@ -291,12 +250,4 @@ export const useToolApprovalUi = create<ToolApprovalUiState>()((set, get) => ({
   },
   clearNudge: (seq) =>
     set((state) => (state.nudge?.seq === seq ? { nudge: null } : {})),
-  watchAgents: (sessionId) =>
-    set({ agentWatch: { sessionId, reads: 0, sawRunning: false } }),
-  noteAgentStatus: (sessionId, status) =>
-    set((state) =>
-      state.agentWatch?.sessionId === sessionId
-        ? { agentWatch: nextAgentWatch(state.agentWatch, status) }
-        : {}
-    ),
 }));

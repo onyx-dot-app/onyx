@@ -19,6 +19,8 @@ import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
 import type { ChatSessionStatus } from "@/lib/chat/types";
 import type { ChatStream } from "@/app/app/types";
 import messages from "@/i18n/messages/en.json";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 
 jest.mock("@/lib/chat/settleChatSession", () => ({
   followChatStream: jest.fn(),
@@ -58,12 +60,18 @@ const request: ToolApprovalRequest = {
 };
 const approval: ToolApproval = { turnIndex: 1, status: "pending", request };
 
+/** Status reads of the chat's status subscriber, as the chat queue mounts it. */
+const statusReads = jest.fn(async () => status(false));
+
 /** A waiting card as the trailing region renders it: a decision this client
  * made decides its status. */
 function Harness({ agentName = null }: { agentName?: string | null }) {
   const status = useToolApprovalUi((state) =>
     state.localStatuses.get(request.approval_id)
   );
+  useSWR(SWR_KEYS.chatSessionStatus("session"), statusReads, {
+    revalidateOnMount: false,
+  });
   return (
     <ToolApprovalCard
       approval={{
@@ -104,8 +112,8 @@ beforeEach(() => {
   useToolApprovalUi.setState({
     localStatuses: new Map(),
     nudge: null,
-    agentWatch: null,
   });
+  statusReads.mockClear();
   useChatSessionStore.setState({ currentSessionId: "session" });
   jest.mocked(followChatStream).mockReset();
   jest.mocked(readChatSessionStatus).mockReset();
@@ -160,7 +168,7 @@ describe("Continuation", () => {
   });
 
   it.each([
-    ["watches the chat for the resumed agent", "Researcher", null],
+    ["reads the chat's status for the resumed agent", "Researcher", null],
     ["leaves a root request to its continuation", null, null],
     ["follows the agent's named stream instead", "Researcher", continuation],
   ] as const)("after a decision, %s", async (_, agentName, next) => {
@@ -172,10 +180,9 @@ describe("Continuation", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent(record("approved"))
     );
-    expect(useToolApprovalUi.getState().agentWatch).toEqual(
-      agentName !== null && next === null
-        ? { sessionId: "session", reads: 0, sawRunning: false }
-        : null
+    const agentWithoutStream = agentName !== null && next === null;
+    await waitFor(() =>
+      expect(statusReads).toHaveBeenCalledTimes(agentWithoutStream ? 1 : 0)
     );
   });
 

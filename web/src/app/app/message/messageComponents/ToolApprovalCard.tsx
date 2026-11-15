@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
 import { cn } from "@opal/utils";
 import { Content, Section } from "@opal/layouts";
 import { getModelIcon } from "@/lib/languageModels/utils";
@@ -12,6 +13,7 @@ import { followChatStream } from "@/lib/chat/settleChatSession";
 import { readChatSessionStatus } from "@/lib/chat/sessionReadiness";
 import type { ChatStream } from "@/app/app/types";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 import {
   decidedStatus,
@@ -34,6 +36,7 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   const nudge = useToolApprovalUi((state) =>
     state.nudge?.approvalId === request.approval_id ? state.nudge.seq : null
   );
+  const { mutate } = useSWRConfig();
   const cardRef = useRef<HTMLDivElement>(null);
   const [shaking, setShaking] = useState(false);
 
@@ -55,11 +58,12 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
   }, [nudge]);
 
   // The decided status shows until the resolution packet confirms it. The
-  // client follows the stream that the server names as the continuation. A
-  // background agent's request continues without a stream, so the chat
-  // watches its status for the agent's outcome and later requests.
+  // client follows the stream that the server names as the continuation; a
+  // live response has none and its reader keeps reading. A background
+  // agent's request continues without a stream: one status read starts the
+  // chat's background work polling, which shows the agent's later requests.
   async function submit(decision: ApprovalSubmitDecision) {
-    const { recordStatus, watchAgents } = useToolApprovalUi.getState();
+    const { recordStatus } = useToolApprovalUi.getState();
     const sessionId = useChatSessionStore.getState().currentSessionId;
     let continuation: ChatStream | null = null;
     try {
@@ -87,7 +91,8 @@ function ToolApprovalCard({ approval, model }: ToolApprovalCardProps) {
     if (sessionId === null) return;
     if (continuation)
       followChatStream(sessionId, continuation, tReadiness("checkFailed"));
-    else if (request.agent_name !== null) watchAgents(sessionId);
+    else if (request.agent_name !== null)
+      void mutate(SWR_KEYS.chatSessionStatus(sessionId));
   }
 
   const agentRequest =

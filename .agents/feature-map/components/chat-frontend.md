@@ -71,24 +71,30 @@
   server sends `tool_approval_resolved` for every request that it ends, live
   and in replay, with `cancelled` when there is no decision. A card's status
   comes only from that outcome, or from this client's decision until the
-  outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). The decision response names the stream that continues the answer
-  in `continuation` (`ToolApprovalCard`). The client does not decide which
-  decision was the last: "Approve for this chat" can also approve sibling
-  requests on the server. When `continuation` is set,
-  `lib/chat/settleChatSession.ts:followChatStream` follows that stream from
-  cursor 0 into the rows that its `response_ids` name. After a 409 or 404
-  decision, the card reads the status once and follows `current_stream`
+  outcome arrives (`lib/chat/toolApprovals.ts:toolApprovalStatus`). A
+  continuation sends a resolution again live after its replay sent it; the
+  read keeps one entry per `approval_id`. The decision response names the
+  resume stream of a suspended answer in `continuation` (`ToolApprovalCard`);
+  for an answer that still runs it is null and the current reader keeps
+  reading. The client does not decide which decision was the last: "Approve
+  for this chat" can also approve sibling requests on the server. When
+  `continuation` is set, `lib/chat/settleChatSession.ts:followChatStream`
+  follows that stream from cursor 0 into the rows that its `response_ids`
+  name, unless this browser already reads it: the send reader and every
+  replay reader claim their stream (`claimStreamReader`). A stream that ends
+  with `stop(awaiting_approval)` settles like any other: the status reads
+  follow a new `current_stream` until the session is idle. After a 409 or
+  404 decision, the card reads the status once and follows `current_stream`
   while the server processes it. A subagent's requests and resolutions
   arrive in the root reply that started it, at its `spawn_agent` or
-  `send_message` card, and only through a load, never in a live stream. Each
-  load records its `approvals_version` in the session store; in an idle chat
-  `useChatSessionQueue` calls `refreshChatSession` when the status's version
-  differs from the loaded one. A parked agent does not set
-  `has_active_subagents`, so a decision on a subagent's card that names no
-  continuation starts an agent watch (`useToolApprovalUi.watchAgents`,
-  `nextAgentWatch`): the status is read every second until the agents ran
-  and settled, or for 5 reads that never saw them run, and each version
-  change refreshes the chat with the agent's later cards. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
+  `send_message` card, through a load or a continuation's replay, never in a
+  live stream. Each load records its `approvals_version` in the session
+  store; in an idle chat `useChatSessionQueue` calls `refreshChatSession`
+  when the status's version differs from the loaded one. A decided agent
+  request sets `has_active_subagents` until the agent finishes or waits
+  again, so a decision on a subagent's card reads the status once; the
+  status then polls while background work runs, and each version change
+  refreshes the chat with the agent's later cards. A suspended turn has no Stop: the user decides each card. Stop shows only while the turn is live; the server then rejects every
   open request of the reply, and the record reads "Not approved". A reload
   replays the request and the stop the same way.
   While a reply's own card waits, the timeline header reads "Waiting for your
@@ -370,7 +376,8 @@ and the packets it covers are stored together
 ([[streaming-protocol#buffer-gap-ends-resume]]). It holds the backlog until
 `replay_complete`, and marks it with `restoredPacketCount` so that
 `AgentMessage` shows it without animation. `resumeStream` does not drop
-heartbeats, so `followChatSession` drops `chat_heartbeat` itself. A resumed
+heartbeats, so `followChatSession` drops `chat_heartbeat` itself, and the
+`replay_end` marker of a continuation stream. A resumed
 error packet turns its answer into an `error` node. The backend decides whether
 queued input can run. When
 the reader ends, it settles the session.

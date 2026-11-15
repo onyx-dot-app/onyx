@@ -6,10 +6,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
 import {
-  AGENT_WATCH_GRACE_READS,
-  type AgentWatch,
   decidedStatus,
-  nextAgentWatch,
   orderApprovalsByTurn,
   readToolApprovals,
   type ToolApproval,
@@ -69,7 +66,6 @@ beforeEach(() =>
   useToolApprovalUi.setState({
     localStatuses: new Map(),
     nudge: null,
-    agentWatch: null,
   })
 );
 
@@ -86,6 +82,15 @@ describe("readToolApprovals", () => {
 
     packets.push(resolved("a", "approved"));
     expect(readToolApprovals(packets).entries[0]?.outcome).toBe("approved");
+  });
+
+  it("reads a resolution that the replay and the live stream both send once", () => {
+    const packets = [request("a"), resolved("a", "approved")];
+    const replayed = readToolApprovals(packets).entries;
+
+    packets.push(resolved("a", "approved"));
+    expect(readToolApprovals(packets).entries).toEqual(replayed);
+    expect(replayed).toHaveLength(1);
   });
 });
 
@@ -144,40 +149,6 @@ describe("toolApprovalStatus", () => {
     expect(
       statuses([request("a"), stopPacket(StopReason.FINISHED)], local)
     ).toEqual(["rejected"]);
-  });
-});
-
-describe("nextAgentWatch", () => {
-  const start: AgentWatch = { sessionId: "s", reads: 0, sawRunning: false };
-  const read = (watch: AgentWatch | null, running: boolean) =>
-    watch && nextAgentWatch(watch, { has_active_subagents: running });
-
-  it("waits for the resumed agent, then ends once it settles", () => {
-    let watch: AgentWatch | null = start;
-    // The decision returns before the agent host starts.
-    watch = read(watch, false);
-    watch = read(watch, false);
-    watch = read(watch, true);
-    watch = read(watch, true);
-    expect(watch).toEqual({ sessionId: "s", reads: 4, sawRunning: true });
-    expect(read(watch, false)).toBeNull();
-  });
-
-  it("ends after the grace reads when the agent never runs", () => {
-    let watch: AgentWatch | null = start;
-    for (let index = 1; index < AGENT_WATCH_GRACE_READS; index++) {
-      watch = read(watch, false);
-      expect(watch?.reads).toBe(index);
-    }
-    expect(read(watch, false)).toBeNull();
-  });
-
-  it("applies a status read only to the watched chat", () => {
-    useToolApprovalUi.getState().watchAgents("s");
-    useToolApprovalUi
-      .getState()
-      .noteAgentStatus("other", { has_active_subagents: true });
-    expect(useToolApprovalUi.getState().agentWatch).toEqual(start);
   });
 });
 

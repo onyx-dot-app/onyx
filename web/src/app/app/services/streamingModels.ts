@@ -431,6 +431,11 @@ export interface ChatHeartbeat extends BaseObj {
 
 export type ChatHeartbeatObj = ChatHeartbeat;
 
+// Ends the replayed prefix of a continuation stream; carries no run state
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
+}
+
 export type SectionEndObj = SectionEnd;
 
 export type PacketErrorObj = PacketError;
@@ -573,6 +578,7 @@ export type ObjTypes =
   | ReasoningObj
   | StopObj
   | ChatHeartbeatObj
+  | ReplayEnd
   | SectionEndObj
   | CitationObj
   | DeepResearchPlanObj

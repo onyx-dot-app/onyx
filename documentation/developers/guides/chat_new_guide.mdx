@@ -65,6 +65,7 @@ class StreamingType(Enum):
     STOP = "stop"
     ERROR = "error"
     CHAT_HEARTBEAT = "chat_heartbeat"
+    REPLAY_END = "replay_end"
 
     MESSAGE_START = "message_start"
     MESSAGE_DELTA = "message_delta"
@@ -171,7 +172,9 @@ A request waits until the user decides. Other calls of the answer can continue w
 When only approval requests remain, Onyx saves the answer,
 and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_approval`.
 That stop does not end the requests. Keep them open for a decision. After the decisions,
-the answer continues in a new stream. See [Send a decision](#send-a-decision).
+the answer continues in a new stream. See [Send a decision](#send-a-decision). In a turn that compares models,
+one answer can wait while the other answers continue in the same stream.
+Its new stream starts after the stream of the turn ends.
 
 A `tool_approval_resolved` packet with `approval_id` and `outcome` ends each request:
 
@@ -194,13 +197,16 @@ Do not offer Stop for an answer that waits for approval. To end the wait, reject
 
 The server sends a `tool_approval_resolved` packet for every request that it ends, live and in replay.
 An ended request with no decision gets `cancelled`. Ignore an `outcome` that you do not recognize.
+A continuation stream can send the same resolution two times: in its replay, and again live when the call continues.
+Keep one record for each `approval_id`, with the last outcome.
 
 ### Approvals of background agents
 
 When a send-message request sets `accepts_follow_ups` to `true`, the answer can start background agents.
 An agent's call can also need approval. Its request has an `agent_name`. The request waits on its own:
 it stays open when the answer stops for any reason, a stop of the answer does not reject it,
-and it does not block new messages. The answer's stream does not send an agent's request or its resolution.
+and it does not block new messages. The live stream of the answer does not send an agent's request or its resolution.
+The replay of a continuation stream can send them, as the chat session does.
 `GET /chat/chat-session/{chat_session_id}/status` has `approvals_version`,
 an opaque string that changes when the approval requests that wait in the chat session change. When it changes,
 read `GET /chat/get-chat-session/{chat_session_id}` again.
@@ -209,10 +215,9 @@ so take the first value from the session load.
 The chat session returns each agent request in the answer that started the agent, with its resolution if it has one.
 After the decision, the agent continues in the background, with no new stream for the answer.
 Its record and its result arrive with the chat session, as for any background agent.
-An agent that waits for approval does not count in `has_active_subagents`,
-and it can start again a few seconds after the decision. To show its later requests,
-read the status about once a second after the decision. Stop when `has_active_subagents` changes from `true` to `false`,
-or after a few reads where it stays `false`. Read the chat session again each time `approvals_version` changes.
+From the decision until the agent finishes or waits for approval again, `has_active_subagents` is `true`.
+To show the agent's later requests, read the status once after the decision. While `has_active_subagents` is `true`,
+read the status again every few seconds. Read the chat session again each time `approvals_version` changes.
 
 ### Approvals in saved answers
 
@@ -262,7 +267,7 @@ Only the user who owns the chat session can decide. Other users get a `404`.
 A repeated decision returns `200` with the saved decision, also after the answer ends or the tool's policy changes.
 A `409` means that the request has a different decision or no longer waits, for example because its answer ended.
 
-When the last request of an answer has a decision, the answer continues in a new stream.
+When the last request of a waiting answer has a decision, the answer continues in a new stream.
 Onyx starts that stream before the decision call returns, and `continuation` in the response names it:
 
 | Field | Description |
@@ -270,11 +275,26 @@ Onyx starts that stream before the decision call returns, and `continuation` in 
 | `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
 | `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
 
-`continuation` is `null` when the decision leaves other requests of the answer open, or when no answer continues,
-for example for a background agent's request. To follow the continuation,
+`continuation` names a stream only when the decision starts or finds the new stream of a waiting answer.
+It is `null` in these cases:
+
+- The decision leaves other requests of the answer open.
+- The answer still runs. For example, the decision came before the stream ended with `awaiting_approval`,
+  or another answer of a turn that compares models still runs. Keep reading the current stream.
+- The request is a background agent's request.
+
+To follow the continuation,
 read `GET /chat/chat-session/{chat_session_id}/resume-stream` with `stream_id` set to `continuation.stream_id` and
-`cursor=0`. The stream replays the saved answer, then continues it.
+`cursor=0`. The stream replays the saved answer, sends a `replay_end` packet, then continues the answer live.
 Show its packets in place of the saved messages in `response_ids`.
+The `replay_end` packet has only a `type` in its `obj`.
+It also comes before the `error` or `stop` packet when the answer cannot continue. A send stream does not send it.
+
+When any stream ends with `awaiting_approval`,
+the new stream of an answer can start without a `continuation` in your decision response. Read the status.
+While `is_processing` is `true`, read it again until `current_stream.response_ids` includes the answer,
+then read that stream from `cursor=0`. Stop when `is_processing` is `false`.
+Do not open a second reader for a stream that you already read.
 
 After a `409` or `404` from the decision call, or when you open the chat session again,
 read `GET /chat/chat-session/{chat_session_id}/status` once. While an answer runs, `is_processing` is `true`,

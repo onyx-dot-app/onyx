@@ -424,12 +424,25 @@ export async function settleChatSession({
   }
 }
 
-// A stream has one replay reader even if navigation and refresh overlap.
-const resumingStreams = new Set<number>();
+// Streams this browser reads: a send's own stream or a replay. A stream has
+// one reader even if a send, navigation, refresh and decisions overlap.
+const streamReaders = new Set<number>();
+
+/** Claims the stream for one reader; false when another reader has it. */
+export function claimStreamReader(streamId: number): boolean {
+  if (streamReaders.has(streamId)) return false;
+  streamReaders.add(streamId);
+  return true;
+}
+
+export function releaseStreamReader(streamId: number): void {
+  streamReaders.delete(streamId);
+}
 
 /**
  * Follows a stream that the server named, such as the continuation of a
- * response after its approval decisions, from its start into its rows.
+ * response after its approval decisions, from its start into its rows. A
+ * stream that this browser already reads keeps its reader.
  */
 export function followChatStream(
   sessionId: string,
@@ -441,7 +454,7 @@ export function followChatStream(
   if (
     !session ||
     session.chatState === "cancelling" ||
-    resumingStreams.has(stream.stream_id)
+    streamReaders.has(stream.stream_id)
   )
     return;
   const { messageTree, replayStream } = prepareSavedChat(
@@ -492,14 +505,11 @@ export async function followChatSession({
   const responses = streamResponses(messageMap, stream)?.map((response) => ({
     ...response,
   }));
-  if (!responses || resumingStreams.has(streamId)) {
+  if (!responses || !claimStreamReader(streamId)) {
     return;
   }
   // Each answer of a multi-model turn has its model index in the packets.
   const multiModel = responses.length > 1;
-  // Added and deleted in this function only, so an entry can never
-  // outlive its tail.
-  resumingStreams.add(streamId);
   let resolveReaderFinished: () => void = () => {};
   const readerFinished = new Promise<void>((resolve) => {
     resolveReaderFinished = resolve;
@@ -596,9 +606,12 @@ export async function followChatSession({
         continue;
       }
       const packet = rawPacket;
-      // Heartbeats are liveness ticks for the ownership check above,
-      // not run state — never render them.
-      if (packet.obj.type === "chat_heartbeat") {
+      // Heartbeats are liveness ticks for the ownership check above, and the
+      // replay end marks a position. Neither is run state, so never render them.
+      if (
+        packet.obj.type === "chat_heartbeat" ||
+        packet.obj.type === "replay_end"
+      ) {
         continue;
       }
       const modelIndex = packet.placement.model_index;
@@ -618,7 +631,7 @@ export async function followChatSession({
       // A lost tail must not discard earlier acknowledged cache batches.
       if (pendingRestore) publishResponses(pendingRestore);
     } finally {
-      resumingStreams.delete(streamId);
+      releaseStreamReader(streamId);
       resolveReaderFinished();
       void settleChatSession({
         sessionId,
