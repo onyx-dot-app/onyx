@@ -116,16 +116,54 @@ function createSvgIcon(
   return svg;
 }
 
-export interface RichTileConfig {
-  type: string;
+const TILE_TITLE_MAX_CHARS = 200;
+
+/** Text-derived content of a tile. */
+export interface RichTileText {
   text: string;
   preview: string;
   meta: string;
+  /** Translated accessible name of the tile. */
+  label: string;
+}
+
+export function getPasteTileText(
+  text: string,
+  formatLabel: (values: { preview: string; meta: string }) => string
+): RichTileText {
+  const preview = getPasteTilePreview(text);
+  const meta = getPasteTileMeta(text);
+  return { text, preview, meta, label: formatLabel({ preview, meta }) };
+}
+
+/** Writes a tile's text-derived attributes and preview/meta spans. Create and
+ * edit both use it so the two cannot drift. */
+export function setRichTileText(
+  tile: HTMLElement,
+  content: RichTileText
+): void {
+  tile.setAttribute("data-text", content.text);
+  tile.title =
+    content.text.length > TILE_TITLE_MAX_CHARS
+      ? content.text.slice(0, TILE_TITLE_MAX_CHARS) + "…"
+      : content.text;
+  tile.setAttribute("aria-label", content.label);
+  const previewEl = tile.querySelector(".rich-input-tile-preview");
+  if (previewEl) {
+    previewEl.textContent = content.preview;
+  }
+  const metaEl = tile.querySelector(".rich-input-tile-meta");
+  if (metaEl) {
+    metaEl.textContent = content.meta;
+  }
+}
+
+export interface RichTileConfig extends RichTileText {
+  type: string;
   /** Set for mention tiles. Stored as data-mention-type and
    * data-mention-name. */
   mention?: Mention;
-  /** Translated accessible names of the tile and its remove button. */
-  label: string;
+  /** Translated accessible name of the remove button. */
   removeLabel: string;
 }
 
@@ -138,7 +176,6 @@ export function createRichInputTileNode(
   tile.contentEditable = "false";
   tile.setAttribute("data-rich-tile", "");
   tile.setAttribute("data-tile-type", config.type);
-  tile.setAttribute("data-text", config.text);
   if (mention !== undefined) {
     tile.setAttribute("data-mention-type", mention.type);
     tile.setAttribute("data-mention-name", mention.name);
@@ -149,12 +186,6 @@ export function createRichInputTileNode(
   const tagColor = BADGE_COLORS[spec.tagColor];
   const textClass = badgeTextClass(spec.tagColor);
   tile.classList.add(...tagColor.bg.split(" "));
-  tile.title = mention
-    ? config.preview
-    : config.text.length > 200
-      ? config.text.slice(0, 200) + "…"
-      : config.text;
-  tile.setAttribute("aria-label", config.label);
 
   const icon = createSvgIcon(
     spec.icon.paths,
@@ -170,7 +201,6 @@ export function createRichInputTileNode(
   const previewSpan = document.createElement("span");
   previewSpan.className = "rich-input-tile-preview";
   previewSpan.classList.add(...textClass.split(" "));
-  previewSpan.textContent = config.preview;
   tile.appendChild(previewSpan);
 
   // Mention tiles pass an empty meta — only render it when present.
@@ -178,7 +208,6 @@ export function createRichInputTileNode(
     const metaSpan = document.createElement("span");
     metaSpan.className = "rich-input-tile-meta";
     metaSpan.classList.add(...textClass.split(" "));
-    metaSpan.textContent = config.meta;
     tile.appendChild(metaSpan);
   }
 
@@ -190,6 +219,7 @@ export function createRichInputTileNode(
   removeBtn.appendChild(createSvgIcon([X_PATH], "0 0 28 28", 10, 2.5));
   tile.appendChild(removeBtn);
 
+  setRichTileText(tile, config);
   return tile;
 }
 

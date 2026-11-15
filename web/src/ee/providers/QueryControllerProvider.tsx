@@ -183,15 +183,15 @@ export function QueryControllerProvider({
       onChat: (query: string) => void,
       { filters, chatOnly = false }: SubmitQueryOptions = {}
     ): Promise<void> => {
+      // A search or classification from an earlier submit must not write
+      // its results or phase after this query.
+      abortPendingRequests();
       setQuery(submitQuery);
       setError(null);
 
       const currentAppMode = appModeRef.current;
 
-      // A search or classification still in flight must not write its
-      // results or phase after the query went to chat.
       const routeToChat = () => {
-        abortPendingRequests();
         setState({ phase: "chat" });
         setSearchResults([]);
         setLlmSelectedDocIds(null);

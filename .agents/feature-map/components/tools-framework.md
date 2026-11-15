@@ -180,7 +180,7 @@ a short JSON summary, not the SKILL.md text.
 `tools/interface.py:tool_definition_from_arguments` makes the tool's
 definition from its JSON schema without titles. The skill and subagent tools
 use it, so their schema and parser cannot drift. Other tools, such as
-`SearchTool`, still write their schema by hand.
+`SearchTool`, write their schema by hand.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
 `tools/tool_implementations/subagents/subagent_tools.py` when it receives a child factory.

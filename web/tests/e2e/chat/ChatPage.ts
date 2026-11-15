@@ -102,28 +102,30 @@ export class ChatPage {
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async goto(sessionId?: string, { skills = false } = {}): Promise<void> {
-    const skillsLoaded = skills && this.chatSkillsLoaded();
     await this.page.goto(sessionId ? `/app?chatId=${sessionId}` : "/app");
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
-    if (skillsLoaded) await skillsLoaded;
+    if (skills) await this.waitForChatSkills();
   }
 
   /** With `skills`, also waits until the composer has the user's chat
    * skills, so that `@` opens the picker at once. */
   async reload({ skills = false } = {}): Promise<void> {
-    const skillsLoaded = skills && this.chatSkillsLoaded();
     await this.page.reload();
     await this.inputBar.textbox.waitFor({ state: "visible", timeout: 15000 });
-    if (skillsLoaded) await skillsLoaded;
+    if (skills) await this.waitForChatSkills();
   }
 
-  private async chatSkillsLoaded(): Promise<void> {
-    const response = await this.page.waitForResponse(
-      (response) => new URL(response.url()).pathname === "/api/skills/chat"
-    );
-    expect(response.ok()).toBe(true);
-    // The wait resolves on the headers; the skills arrive with the body.
-    await response.body();
+  /** The picker reads the skills only on input, so `@` is typed again until
+   * it opens. The input is left empty. */
+  private async waitForChatSkills(): Promise<void> {
+    await expect(async () => {
+      await this.inputBar.clear();
+      await this.inputBar.typeText("@");
+      await expect(this.inputBar.skillPicker).toBeVisible({ timeout: 1000 });
+    }).toPass({ timeout: 15000 });
+    await this.inputBar.clear();
+    await expect(this.inputBar.skillPicker).toBeHidden();
+    await expect(this.inputBar.textbox).toHaveText("");
   }
 
   async scrollTo(position: "top" | "bottom"): Promise<void> {

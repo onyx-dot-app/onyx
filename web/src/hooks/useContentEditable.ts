@@ -21,10 +21,11 @@ import {
   createRichInputTileNode,
   getAdjacentRichTile,
   shouldCreatePasteTile,
-  getPasteTilePreview,
-  getPasteTileMeta,
+  getPasteTileText,
   isMentionTile,
   MENTION_TILE_TYPE,
+  setRichTileText,
+  type RichTileText,
 } from "@/lib/richInputTile";
 import { MENTION_TRIGGER, placeMentions } from "@/lib/chat/mentions";
 import type { ComposedMention, Mention, PlacedMention } from "@/lib/chat/types";
@@ -549,18 +550,19 @@ export function useContentEditable({
     [syncFromDOM, resize, pushUndoSnapshot]
   );
 
+  const pasteTileText = useCallback(
+    (text: string): RichTileText =>
+      getPasteTileText(text, (values) => t("pasteTile.ariaLabel", values)),
+    [t]
+  );
+
   const insertTileAtCursor = useCallback(
     (text: string): HTMLElement | null => {
       if (!ref.current) return null;
       pushUndoSnapshot();
-      const preview = getPasteTilePreview(text);
-      const meta = getPasteTileMeta(text);
       const tile = createRichInputTileNode({
         type: "paste",
-        text,
-        preview,
-        meta,
-        label: t("pasteTile.ariaLabel", { preview, meta }),
+        ...pasteTileText(text),
         removeLabel: t("pasteTile.removeButton.ariaLabel"),
       });
       insertNodeAtCursorUtil(ref.current, tile);
@@ -570,7 +572,7 @@ export function useContentEditable({
       resize();
       return tile;
     },
-    [syncFromDOM, resize, pushUndoSnapshot, t]
+    [syncFromDOM, resize, pushUndoSnapshot, pasteTileText, t]
   );
 
   const expandTile = useCallback(
@@ -760,26 +762,17 @@ export function useContentEditable({
       }
 
       noteEdit("tile-edit");
-      tile.setAttribute("data-text", newText);
-      tile.title = newText.length > 200 ? newText.slice(0, 200) + "…" : newText;
-
-      const preview = getPasteTilePreview(newText);
-      const meta = getPasteTileMeta(newText);
-      tile.setAttribute(
-        "aria-label",
-        t("pasteTile.ariaLabel", { preview, meta })
-      );
-      const previewEl = tile.querySelector(".rich-input-tile-preview");
-      if (previewEl) {
-        previewEl.textContent = preview;
-      }
-      const metaEl = tile.querySelector(".rich-input-tile-meta");
-      if (metaEl) {
-        metaEl.textContent = meta;
-      }
+      setRichTileText(tile, pasteTileText(newText));
       syncFromDOM();
     },
-    [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit, t]
+    [
+      tilePopover,
+      syncFromDOM,
+      resize,
+      pushUndoSnapshot,
+      noteEdit,
+      pasteTileText,
+    ]
   );
 
   const handleTileKeyDown = useCallback(

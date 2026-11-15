@@ -5,7 +5,7 @@ import {
   type QueryControllerValue,
 } from "@/providers/QueryControllerProvider";
 import type { SearchFullResponse } from "@/lib/search/types";
-import { searchDocuments } from "@/ee/lib/search/svc";
+import { classifyQuery, searchDocuments } from "@/ee/lib/search/svc";
 
 const mockAppPosition = { isNewSession: () => true };
 jest.mock("@/lib/navigation/hooks", () => ({
@@ -98,4 +98,60 @@ test("a chat-only query drops a search that is still pending", async () => {
 
   expect(screen.getByLabelText("Query phase")).toHaveTextContent("chat:0");
   expect(onChat).toHaveBeenCalledWith("use @code-review");
+});
+
+test("a new query drops the search that an earlier auto-mode query started", async () => {
+  let resolveSearch: (response: SearchFullResponse) => void = () => undefined;
+  jest.mocked(searchDocuments).mockImplementationOnce(
+    (_query, options) =>
+      new Promise<SearchFullResponse>((resolve, reject) => {
+        resolveSearch = resolve;
+        options?.signal?.addEventListener("abort", () =>
+          reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+        );
+      })
+  );
+  jest
+    .mocked(classifyQuery)
+    .mockResolvedValueOnce({ is_search_flow: true })
+    .mockImplementationOnce(
+      (_query, signal) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(Object.assign(new Error("aborted"), { name: "AbortError" }))
+          );
+        })
+    );
+  render(
+    <QueryControllerProvider>
+      <Probe />
+    </QueryControllerProvider>
+  );
+  act(() => controller!.setAppMode("auto"));
+  const onChat = jest.fn();
+  let pendingSearch: Promise<void> = Promise.resolve();
+  await act(async () => {
+    pendingSearch = controller!.submit("find the docs", onChat);
+  });
+  expect(screen.getByLabelText("Query phase")).toHaveTextContent("searching:0");
+
+  act(() => {
+    void controller!.submit("find other docs", onChat);
+  });
+  await act(async () => {
+    resolveSearch({
+      all_executed_queries: ["find the docs"],
+      search_docs: [
+        { document_id: "doc" } as SearchFullResponse["search_docs"][number],
+      ],
+      llm_selected_doc_ids: null,
+      error: null,
+    });
+    await pendingSearch;
+  });
+
+  expect(screen.getByLabelText("Query phase")).toHaveTextContent(
+    "classifying:0"
+  );
+  expect(onChat).not.toHaveBeenCalled();
 });
