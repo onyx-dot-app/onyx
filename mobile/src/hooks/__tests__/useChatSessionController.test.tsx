@@ -1858,6 +1858,57 @@ describe("watchBackgroundAgents", () => {
     view.unmount();
   });
 
+  it("retries a failed status read of a chat that opens idle", async () => {
+    await openIdle("v1");
+    client.setQueryData(
+      QUERY_KEYS.chatSession(SERVER_URL, "s1"),
+      saved([historyPacket("asked")], "v1"),
+    );
+    jest
+      .mocked(getChatSessionStatus)
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        is_processing: false,
+        has_active_subagents: true,
+        approvals_version: "v2",
+      })
+      .mockResolvedValue({
+        is_processing: false,
+        has_active_subagents: false,
+        approvals_version: "v2",
+      });
+    getSessionMock.mockResolvedValue(
+      saved([historyPacket("asked"), agentRequest], "v2"),
+    );
+
+    const view = renderHook(() => useChatSessionController("s1"), { wrapper });
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(waitingIds()).toEqual(["agent-2"]);
+    view.unmount();
+  });
+
+  it("reads status once and loads nothing for a chat that opens with no agent work", async () => {
+    await openIdle("v1");
+    client.setQueryData(
+      QUERY_KEYS.chatSession(SERVER_URL, "s1"),
+      saved([historyPacket("asked")], "v1"),
+    );
+    jest.mocked(getChatSessionStatus).mockResolvedValue({
+      is_processing: false,
+      has_active_subagents: false,
+      approvals_version: "v1",
+    });
+
+    const view = renderHook(() => useChatSessionController("s1"), { wrapper });
+    await jest.advanceTimersByTimeAsync(3000);
+
+    expect(getChatSessionStatus).toHaveBeenCalledTimes(1);
+    // Only the baseline load.
+    expect(getSessionMock).toHaveBeenCalledTimes(1);
+    view.unmount();
+  });
+
   it("watches an agent that parked after the chat opened idle", async () => {
     await openIdle("v1");
     client.setQueryData(

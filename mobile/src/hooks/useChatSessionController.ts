@@ -358,23 +358,28 @@ export async function recoverChatSession(
 // stays open and idle, this reads status until the server is idle and no background agent runs or
 // waits to resume: a changed `approvals_version` reloads the session, and a stream that starts,
 // such as the root answer that an agent's result continues, is followed. When the agents stop, a
-// last reload shows their outcomes.
+// last reload shows their outcomes. A failed status read retries on the next poll.
+//
+// `knownWork`: the caller knows of agent work, such as a decision it made. Without it, as when a
+// chat opens, the last reload follows only work that a read or a later call found.
 
 // The running watch of each session. A later call only marks it `again`, so a decision made while
 // a read or reload is in flight gets one more read before the watch can end.
-const agentWatches = new Map<string, { again: boolean }>();
+const agentWatches = new Map<string, { again: boolean; sawWork: boolean }>();
 
 export async function watchBackgroundAgents(
   sessionId: string,
   serverUrl: string | null,
   queryClient: QueryClient,
+  knownWork = true,
 ): Promise<void> {
   const running = agentWatches.get(sessionId);
   if (running) {
     running.again = true;
+    running.sawWork ||= knownWork;
     return;
   }
-  const watch = { again: false };
+  const watch = { again: false, sawWork: knownWork };
   agentWatches.set(sessionId, watch);
   // A changed version or the last reload whose load failed; later reads retry it.
   let reload = false;
@@ -418,14 +423,14 @@ export async function watchBackgroundAgents(
         return;
       }
       // A root that an agent's result continues processes before it publishes its stream.
-      const settled =
-        status.is_processing !== true &&
-        status.has_active_subagents !== true &&
-        !watch.again;
+      const busy =
+        status.is_processing === true || status.has_active_subagents === true;
+      watch.sawWork ||= busy;
+      const settled = !busy && !watch.again;
       reload =
         approvalsChangedSince(sessionId, status.approvals_version) ||
         reload ||
-        settled;
+        (settled && watch.sawWork);
       if (reload) {
         try {
           const saved = await loadChatSession(sessionId);
@@ -486,23 +491,7 @@ export function useChatSessionController(sessionId: string | null): void {
       session.abortController
     )
       return;
-    let open = true;
-    getChatSessionStatus(sessionId)
-      .then((status) => {
-        if (
-          open &&
-          (status.has_active_subagents === true ||
-            status.is_processing === true ||
-            approvalsChangedSince(sessionId, status.approvals_version))
-        )
-          void watchBackgroundAgents(sessionId, serverUrl, queryClient);
-      })
-      .catch((error: unknown) => {
-        console.warn("Could not read background agent status", error);
-      });
-    return () => {
-      open = false;
-    };
+    void watchBackgroundAgents(sessionId, serverUrl, queryClient, false);
   }, [sessionId, loaded, serverUrl, queryClient]);
 
   useEffect(() => {
